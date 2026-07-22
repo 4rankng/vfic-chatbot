@@ -16,7 +16,7 @@ from app.services.zalo_bot_service import (
     _classify_transport_error,
     _split_long_plain_text,
 )
-from app.graph.outbound_telemetry import OutboundTelemetry
+from app.shared.application.outbound import OutboundTelemetry
 
 logger = logging.getLogger(__name__)
 

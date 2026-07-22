@@ -8,7 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.workers import chatbot_worker
-from app.workers.chatbot_worker import run_chat_turn_job, start_direct_chat_turn
+from app.workers.chatbot_worker import (
+    drain_direct_chat_turns,
+    run_chat_turn_job,
+    start_direct_chat_turn,
+)
 
 
 @pytest.mark.asyncio
@@ -23,8 +27,34 @@ async def test_direct_launcher_runs_the_shared_turn_executor(monkeypatch) -> Non
 
     assert start_direct_chat_turn(job) is True
     await asyncio.sleep(0)
+    await asyncio.sleep(0)
 
     assert observed == [(job, "direct")]
+    assert chatbot_worker._direct_turn_tasks == set()
+
+
+@pytest.mark.asyncio
+async def test_direct_turn_drain_cancels_straggler_before_resource_shutdown(monkeypatch) -> None:
+    started = asyncio.Event()
+    finalized = asyncio.Event()
+
+    async def blocked_run(job: dict, *, source: str) -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            finalized.set()
+
+    monkeypatch.setattr("app.workers.chatbot_worker._run_job_async", blocked_run)
+
+    assert start_direct_chat_turn({"conversation_id": "turn-pending"}) is True
+    await started.wait()
+    assert len(chatbot_worker._direct_turn_tasks) == 1
+
+    await drain_direct_chat_turns(timeout_seconds=0)
+
+    assert finalized.is_set()
+    assert chatbot_worker._direct_turn_tasks == set()
 
 
 def test_rq_entrypoint_preserves_queued_execution_source(monkeypatch) -> None:

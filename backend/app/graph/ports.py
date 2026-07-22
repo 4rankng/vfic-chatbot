@@ -211,6 +211,7 @@ class RetrievalPort(Protocol):
         company: str | None = None,
         location: str | None = None,
         top_k: int = 3,
+        sort_by: str | None = None,
     ) -> Any: ...
 
 

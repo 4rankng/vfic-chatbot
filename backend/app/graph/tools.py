@@ -537,6 +537,7 @@ async def list_active_jobs(
     company: str | None = None,
     location: str | None = None,
     top_k: int = 3,
+    sort_by: str | None = None,
 ) -> str:
     """Return bounded, status-labelled evidence from scoped ACTIVE Job rows."""
     try:
@@ -550,6 +551,7 @@ async def list_active_jobs(
             company=company,
             location=location,
             top_k=k,
+            sort_by=sort_by,
         )
     except Exception:
         logger.warning("list_active_jobs failed", exc_info=True)

@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import httpx
 
-from app.graph.send_classification import (
-    AMBIGUOUS_SEND_CLASSES,
-    classify_transport_error,
-)
+from app.channels.http_error_classification import classify_transport_error
+from app.shared.application.outbound import AMBIGUOUS_SEND_CLASSES
 
 
 def test_connect_error_is_retryable():
@@ -50,3 +48,10 @@ def test_ambiguous_set_excludes_connect_error():
     assert "remote_protocol_error" in AMBIGUOUS_SEND_CLASSES
     assert "read_error" in AMBIGUOUS_SEND_CLASSES
     assert "unknown" in AMBIGUOUS_SEND_CLASSES
+
+
+def test_graph_compatibility_facade_preserves_classifier_and_taxonomy_identity():
+    from app.graph import send_classification as legacy
+
+    assert legacy.classify_transport_error is classify_transport_error
+    assert legacy.AMBIGUOUS_SEND_CLASSES is AMBIGUOUS_SEND_CLASSES

@@ -10,6 +10,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import bump_cache_version
+from app.core.text import normalize_vietnamese_text
 from app.models.company import Company, Project
 from app.models.job import Job, JobStatus
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeStatus
@@ -68,9 +69,7 @@ async def rebuild_project_jobs(
     location = str((project.index_card or {}).get("location") or "").strip() or None
     highlights = (project.index_card or {}).get("highlights") or []
     benefits = "\n".join(str(item).strip() for item in highlights if str(item).strip()) or None
-    salary = features.get("take_home_income", {}).get("value_json") or {}
-    salary_min = _optional_int(salary.get("min"))
-    salary_max = _optional_int(salary.get("max"))
+    salary_min, salary_max = salary_from_feature(features.get("take_home_income"))
     now = datetime.now(UTC)
 
     for role in roles:
@@ -168,9 +167,56 @@ def _feature_text(features: dict[str, dict[str, Any]], key: str) -> str | None:
     return value or None
 
 
-def _optional_int(value: object) -> int | None:
+def salary_from_feature(
+    feature: dict[str, Any] | None,
+) -> tuple[int | None, int | None]:
+    """Project ``take_home_income`` value_json into VND ``(min, max)`` integers.
+
+    Robust to the shapes seen in practice:
+    - ``{"min": 10000000, "max": 13000000}`` (full VND ints — canonical)
+    - ``{"min": "10000000", "max": "13000000"}`` (LLM-returned strings)
+    - ``{"min": 7, "max": 12, "unit": "triệu VNĐ"}`` (seed-style small ints)
+    - ``{}`` / missing → ``(None, None)``
+
+    A ``unit``/``currency`` marker containing "triệu" or "million" scales small
+    values (< 1000) by 1_000_000 so they reach VND. Larger values are assumed
+    to already be VND.
+    """
+    payload = (feature or {}).get("value_json") or {}
+    if not isinstance(payload, dict):
+        return None, None
+    # Strip Vietnamese diacritics before matching so "triệu" / "trieu" align.
+    unit = normalize_vietnamese_text(str(payload.get("unit") or payload.get("currency") or ""))
+    scale = 1_000_000 if ("trieu" in unit or "million" in unit) else 1
+    minimum = _coerce_salary_value(payload.get("min"), scale)
+    maximum = _coerce_salary_value(payload.get("max"), scale)
+    if minimum is not None and maximum is not None and minimum > maximum:
+        minimum, maximum = maximum, minimum
+    return minimum, maximum
+
+
+def _coerce_salary_value(value: object, scale: int = 1) -> int | None:
+    """Coerce a salary scalar to a VND int, tolerating strings and separators.
+
+    Handles ints, floats, numeric strings (``"10000000"``, ``"10.000.000"``,
+    ``"10,000,000"``). ``bool`` is rejected (a Python bool is an int subclass but
+    is never a valid salary). Returns ``None`` when no number can be parsed.
+    """
     if isinstance(value, bool):
         return None
     if isinstance(value, int | float):
-        return int(value)
-    return None
+        parsed = int(value)
+    elif isinstance(value, str):
+        digits = value.replace(".", "").replace(",", "").replace(" ", "").replace("₫", "")
+        sign = 1
+        if digits.startswith("-"):
+            sign = -1
+            digits = digits[1:]
+        if not digits.isdigit():
+            return None
+        parsed = sign * int(digits)
+    else:
+        return None
+    if parsed < 0:
+        return None
+    return parsed * scale if scale != 1 and parsed < 1000 else parsed

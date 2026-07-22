@@ -165,6 +165,11 @@ does not add tenant identifiers, tenant-scoped repositories, or tenant-aware
 runtime abstractions; multi-tenancy is deferred for three months and must later
 consume these boundaries rather than reshape them prematurely.
 
+Phase 2 keeps the shared kernel intentionally narrow: the only new cross-context
+contracts are framework-free domain errors and provider-neutral outbound
+telemetry. Everything else stays with its owning context or composition root so
+the next slice can replace one layer without forcing unrelated layer changes.
+
 The normative context/package map, inward dependency rules, exact legacy-edge
 baseline, runtime contract inventory, and layer-removal ownership are recorded
 in [`decisions/ddd-context-boundaries.md`](./decisions/ddd-context-boundaries.md).
@@ -624,6 +629,66 @@ load_conversation_state -> typing -> direct_context?
 - rq-scheduler runs in its own container; the FastAPI lifespan also registers
   unique ticks via `register_unique_tick`: `run_proactive_followup_tick` (1800s),
   `run_reconcile_tick` (60s), and `run_outbound_dispatch_tick` (60s).
+
+### 4.1 Composition roots and runtime lifetimes
+
+Construction is explicit: `app.main.lifespan` owns web-process resources,
+`graph/factories.py:build_deps` binds one bot turn, and worker entrypoints bind
+one RQ job on the persistent loop from `workers/async_runner.py`. No dependency
+container or service locator is used.
+
+Direct and realtime ownership split at the boundary, not by transport. The bot
+turn owns the database session, provider call, classification, and outbox write
+for that turn. The realtime path owns only a committed, JSON-safe snapshot for
+Socket.IO fanout; it never owns ORM objects or business decisions.
+
+| Lifetime | Current owner | Invariant |
+|---|---|---|
+| Process | FastAPI app, RQ `SimpleWorker`, settings, Socket.IO | Never retains an `AsyncSession` or DB-bound service |
+| Event loop | Worker loop, loop-owned engine/sessionmaker, async client pools and locks | Never crosses an event loop or fork boundary |
+| Request/job | `get_db()` / `worker_session()` | Closed after the request/job and rolled back on exception |
+| Turn | `GraphDeps`, conversation/retrieval/lead/direct-context adapters, Zalo sender | Rebuilt per turn; may reference only that turn's session |
+| Transaction | Explicit service commits and rollbacks | Audit, state, outbox, event, and enqueue durability boundaries stay visible; no generic unit of work |
+| Session | Repositories/services bound to one `AsyncSession` | Never used concurrently |
+| Operation | `worker_session_factory()` contexts | Fresh isolated session for parallel retrieval/profile operations |
+
+MiniMax/OpenRouter clients and the embedder may be cached by credential version.
+When credentials change, the next build uses a fresh pool and the prior pool is
+retired from new turns. Zalo configuration and sender objects remain per-turn so
+a token rotation is visible on the next turn. DB-bound adapters, repositories,
+`GraphDeps`, and sessions are never placed in the client cache. Worker shutdown
+first cancels and drains pending loop tasks, then closes cached LLM pools,
+database engines, and shared HTTP clients on that same loop before closing it.
+Web shutdown likewise drains or cancels direct ASGI turns before disposing the
+engine and provider clients, so a graceful restart never tears resources out
+from under an owned turn.
+
+Queue and event results deliberately remain operation-specific until their
+owning context migrates. Chat enqueue returns a backpressure/failure boolean;
+category and version ingestion use a stable receipt and can still report
+indeterminate acceptance; single-page sync returns an optional receipt with its
+own retry policy; persistence and follow-up are best-effort schedules;
+reconciliation returns a recovery boolean over already-durable state. Realtime
+publishes are separate post-commit snapshot events, not durability claims.
+These shapes must not be flattened behind one generic job port.
+
+| Boundary | Commit/enqueue/event guarantee |
+|---|---|
+| Chat turn enqueue | Backpressure-aware boolean; no claim that rejection was accepted |
+| Category/version ingestion | Stable receipt; callers can represent indeterminate acceptance |
+| Single-page external sync | Optional receipt with operation-owned retry policy |
+| Persistence/follow-up scheduling | Best effort after the owning state transition |
+| Reconciliation | Recovery boolean for an already durable conversation/outbox state |
+| Conversation realtime | Eager immutable snapshot, post-commit, best effort; never substitutes for audit/outbox durability |
+| Audit and outbound outbox | Written in the protected mutation's explicit transaction |
+
+`ConversationEventBus.schedule_realtime` is a post-commit, best-effort event
+boundary. It eagerly serializes immutable JSON-safe payload snapshots before
+creating the background publish task, never passes ORM objects across the
+session boundary, does not delay the committed response, and is cancelled and
+drained before its event loop closes. Durable audit and outbound-outbox evidence remain in
+the same explicit transactions as their protected mutations; realtime publish
+failure cannot roll those transactions back.
 
 ---
 

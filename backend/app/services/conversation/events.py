@@ -14,6 +14,19 @@ from app.schemas.conversation import ConversationOut, MessageOut
 from app.services.realtime import publish_event
 
 logger = logging.getLogger(__name__)
+_background_tasks: set[asyncio.Task[None]] = set()
+
+
+def _release_background_task(task: asyncio.Task[None]) -> None:
+    _background_tasks.discard(task)
+    if task.cancelled():
+        return
+    try:
+        error = task.exception()
+    except asyncio.CancelledError:
+        return
+    if error is not None:
+        logger.warning("realtime background publish failed", exc_info=error)
 
 
 def _conv_payload(conv) -> dict:
@@ -83,4 +96,6 @@ class ConversationEventBus:
             await publish_event("message.created", message_payload)
             await publish_event("conversation.updated", conversation_payload)
 
-        loop.create_task(_emit())
+        task = loop.create_task(_emit())
+        _background_tasks.add(task)
+        task.add_done_callback(_release_background_task)

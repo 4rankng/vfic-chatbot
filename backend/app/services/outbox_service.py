@@ -27,7 +27,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.outbox import OutboxStatus, OutboundOutbox
-from app.graph.outbound_telemetry import OutboundTelemetry
+from app.shared.application.outbound import OutboundTelemetry
 
 logger = logging.getLogger(__name__)
 

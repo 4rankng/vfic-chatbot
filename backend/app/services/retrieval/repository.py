@@ -909,6 +909,7 @@ class RetrievalRepository:
         company: str | None = None,
         location: str | None = None,
         top_k: int = 3,
+        sort_by: str | None = None,
     ):
         """List structured vacancies within the active Agent knowledge base."""
         from app.services.recommendation import ActiveJobLookup, RecommendationRepository
@@ -928,6 +929,7 @@ class RetrievalRepository:
             location=location,
             top_k=top_k,
             project_ids=project_ids,
+            sort_by=sort_by,  # type: ignore[arg-type]
         )
 
 

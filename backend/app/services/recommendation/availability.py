@@ -11,6 +11,8 @@ from app.core.text import normalize_vietnamese_text
 
 ActiveJobLookupStatus = Literal["matched", "no_match", "catalog_empty", "unavailable"]
 
+SortBy = Literal["updated_at", "salary_desc", "salary_asc"]
+
 _IDENTITY_FUZZY_MIN_LENGTH = 5
 _IDENTITY_FUZZY_THRESHOLD = 0.86
 _MAX_RESULTS = 10
@@ -101,12 +103,19 @@ def select_matching_active_jobs(
     company: str | None = None,
     location: str | None = None,
     top_k: int = 3,
+    sort_by: SortBy | None = None,
 ) -> ActiveJobLookup:
     """Apply explicit semantic filters to a scoped ACTIVE-job catalog.
 
     The caller, normally the LLM tool dispatcher, owns interpretation of candidate
     wording. This function only compares supplied role/company/location values with
     their corresponding structured fields; it has no conversational stopword list.
+
+    ``sort_by`` optionally reorders matches: ``salary_desc`` / ``salary_asc`` rank by
+    the highest available salary figure (``salary_max`` with ``salary_min`` fallback),
+    so DIRECT_CONTEXT jobs and structured Job rows sort uniformly. Jobs with no
+    salary always sort last (stable by title) so they remain visible rather than
+    disappearing from a bounded ``top_k`` window.
     """
     if not jobs:
         return ActiveJobLookup("catalog_empty")
@@ -132,8 +141,23 @@ def select_matching_active_jobs(
             and _matches_filter(location_terms, location_fields, allow_identity_typo=True)
         ):
             matches.append(job)
+    if sort_by in {"salary_desc", "salary_asc"}:
+        matches.sort(
+            key=lambda job: (_salary_sort_key(job), job.title),
+            reverse=sort_by == "salary_desc",
+        )
     return (
         ActiveJobLookup("matched", tuple(matches[:limit]))
         if matches
         else ActiveJobLookup("no_match")
     )
+
+
+def _salary_sort_key(job: ActiveJob) -> float:
+    """Return a salary magnitude for sorting; jobs without salary sort last.
+
+    Uses ``salary_max`` when present, falling back to ``salary_min``. ``None`` maps
+    to ``-1.0`` so unsalaried jobs sink below any real VND figure (always >= 0).
+    """
+    magnitude = job.salary_max if job.salary_max is not None else job.salary_min
+    return float(magnitude) if magnitude is not None else -1.0

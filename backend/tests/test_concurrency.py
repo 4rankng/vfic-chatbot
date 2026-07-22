@@ -371,9 +371,11 @@ async def test_schedule_realtime_publishes_prebuilt_payloads_off_greenlet(monkey
     conv = SimpleNamespace(id="conv-7")
 
     bus.schedule_realtime(msg, conv)
+    assert len(events_mod._background_tasks) == 1
     # Payloads are built synchronously before the task runs, so nothing is
     # published until the loop is pumped.
     assert published == []
+    await asyncio.sleep(0)
     await asyncio.sleep(0)
 
     assert published == [
@@ -383,6 +385,7 @@ async def test_schedule_realtime_publishes_prebuilt_payloads_off_greenlet(monkey
         ),
         ("conversation.updated", {"conv": "serialized"}),
     ]
+    assert events_mod._background_tasks == set()
 
 
 @pytest.mark.asyncio

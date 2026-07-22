@@ -30,7 +30,7 @@ from typing import Any, Awaitable, Callable, Literal
 
 
 from app.core.config import Settings, ZALO_BOT_API_BASE, get_settings
-from app.graph.outbound_telemetry import (
+from app.shared.application.outbound import (
     OutboundTelemetry,
     combine_outbound_telemetry,
 )
@@ -98,16 +98,14 @@ ZALO_VISIBLE_BUBBLE_CHARS = 420
 
 
 # ---------------------------------------------------------------------------
-# Transport-error classification (re-exported from the graph layer)
+# Transport-error classification (owned by the channel adapter edge)
 # ---------------------------------------------------------------------------
 #
-# The classifier + AMBIGUOUS_SEND_CLASSES live in app.graph.send_classification
-# (a leaf utility with no service deps) so the graph runner can import the
-# constant without re-introducing the graph<->services cycle. The services
-# layer imports it here (services → graph is the allowed direction) and the
-# senders' ``_post`` swallows stamp the error_class onto the returned envelope.
+# HTTP exception inspection stays at the channel adapter edge. The provider-
+# neutral ambiguity policy lives inward in ``app.shared.application.outbound``;
+# senders stamp only its stable error class onto the returned envelope.
 
-from app.graph.send_classification import (  # noqa: E402 — after constants for grouping
+from app.channels.http_error_classification import (  # noqa: E402 — after constants for grouping
     classify_transport_error as _classify_transport_error,
 )
 

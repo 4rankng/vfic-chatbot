@@ -14,6 +14,7 @@ both supported knowledge modes can advertise their current opportunities.
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any, Literal
@@ -25,6 +26,8 @@ from app.models.company import Company, Project
 from app.models.job import Job
 from app.models.job import JobStatus
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseDirectFile, KnowledgeBaseMode
+from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
+from app.services.knowledge.derived_jobs import salary_from_feature
 from app.services.recommendation.availability import (
     ActiveJob,
     ActiveJobLookup,
@@ -77,13 +80,18 @@ def _card_items(value: object) -> list[str]:
     return [text for item in values if (text := " ".join(item.split()))]
 
 
-def _direct_project_active_job(project: Project) -> ActiveJob | None:
+def _direct_project_active_job(
+    project: Project,
+    *,
+    salary: tuple[int | None, int | None] | None = None,
+) -> ActiveJob | None:
     """Expose one ready single-page Project through the vacancy catalog.
 
-    The discovery card is the compact, recruiter-authored catalog authority. The
-    full page remains the authority for salary, shifts, benefits, and follow-up
-    details, so this projection intentionally leaves unknown structured fields
-    empty instead of parsing or inventing them.
+    The discovery card is the compact, recruiter-authored catalog authority. Salary
+    comes from the caller-resolved source (``job_feature_values`` projected via
+    :func:`salary_from_feature`, or the discovery card's ``salary_min_vnd`` /
+    ``salary_max_vnd`` fallback). Other structured fields stay empty rather than
+    parsed from free text.
     """
     card = project.index_card or {}
     roles = _card_items(card.get("roles") or card.get("key_roles"))
@@ -93,12 +101,15 @@ def _direct_project_active_job(project: Project) -> ActiveJob | None:
     highlights = _card_items(card.get("highlights"))
     eligibility = _card_items(card.get("eligibility"))
     title = " / ".join(roles)
+    salary_min, salary_max = _resolve_direct_salary(project, card, salary)
     return ActiveJob(
         id=str(project.id),
         title=title,
         company_name=project.name,
         factory_name=project.name,
         province=location,
+        salary_min=salary_min,
+        salary_max=salary_max,
         company_aliases=tuple(project.aliases or ()),
         project_name=project.name,
         project_slug=project.slug,
@@ -107,6 +118,42 @@ def _direct_project_active_job(project: Project) -> ActiveJob | None:
         requirements="\n".join(eligibility),
         benefits="\n".join(highlights),
     )
+
+
+def _resolve_direct_salary(
+    project: Project,
+    card: dict[str, Any],
+    salary: tuple[int | None, int | None] | None,
+) -> tuple[int | None, int | None]:
+    """Pick a salary source for a DIRECT_CONTEXT project.
+
+    Priority: caller-provided feature-derived salary > discovery card VND fields.
+    Returns ``(None, None)`` when neither source has data — the agent then answers
+    "tin tuyển dụng chưa ghi rõ" instead of inventing a figure.
+    """
+    if salary is not None:
+        minimum, maximum = salary
+        if minimum is not None or maximum is not None:
+            return minimum, maximum
+    card_min = _int_or_none(card.get("salary_min_vnd"))
+    card_max = _int_or_none(card.get("salary_max_vnd"))
+    return card_min, card_max
+
+
+def _int_or_none(value: Any) -> int | None:
+    """Best-effort int coercion for discovery-card salary fields."""
+    try:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, str):
+            digits = value.replace(".", "").replace(",", "").strip()
+            return int(digits) if digits.isdigit() else None
+        if isinstance(value, int | float):
+            parsed = int(value)
+            return parsed if parsed >= 0 else None
+    except (TypeError, ValueError):
+        return None
+    return None
 
 
 def _interleave_catalog_sources(
@@ -120,6 +167,42 @@ def _interleave_catalog_sources(
         if index < len(structured_jobs):
             combined.append(structured_jobs[index])
     return combined
+
+
+async def _direct_project_salaries(
+    db: AsyncSession, project_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, tuple[int | None, int | None]]:
+    """Batch-fetch ``take_home_income`` salaries for DIRECT_CONTEXT projects.
+
+    Returns ``{project_id: (salary_min, salary_max)}`` parsed via
+    :func:`salary_from_feature`, robust to string-typed or unit-marked values.
+    """
+    if not project_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(
+                JobFeatureValue.project_id,
+                JobFeatureValue.value_json,
+            )
+            .join(
+                WorkerFeatureCatalog,
+                WorkerFeatureCatalog.id == JobFeatureValue.feature_id,
+            )
+            .where(
+                JobFeatureValue.project_id.in_(project_ids),
+                WorkerFeatureCatalog.feature_key == "take_home_income",
+                JobFeatureValue.is_missing.is_(False),
+            )
+        )
+    ).all()
+    salaries: dict[uuid.UUID, tuple[int | None, int | None]] = {}
+    for row in rows:
+        pid = row.project_id
+        if pid in salaries:
+            continue
+        salaries[pid] = salary_from_feature({"value_json": row.value_json or {}})
+    return salaries
 
 
 class RecommendationRepository:
@@ -163,6 +246,7 @@ class RecommendationRepository:
         location: str | None = None,
         top_k: int = 3,
         project_ids: Sequence[str] | None = None,
+        sort_by: SortBy | None = None,
     ) -> ActiveJobLookup:
         """List scoped open opportunities satisfying explicit semantic filters.
 
@@ -233,11 +317,19 @@ class RecommendationRepository:
                 .all()
             )
             structured_project_ids = {str(row[5]) for row in rows}
+            direct_salaries = await _direct_project_salaries(
+                self.db, [project.id for project in direct_projects]
+            )
             direct_jobs = [
                 job
                 for project in direct_projects
                 if str(project.id) not in structured_project_ids
-                and (job := _direct_project_active_job(project)) is not None
+                and (
+                    job := _direct_project_active_job(
+                        project, salary=direct_salaries.get(project.id)
+                    )
+                )
+                is not None
             ]
             if not rows and not direct_jobs:
                 catalog_query = (
@@ -313,6 +405,7 @@ class RecommendationRepository:
             company=company,
             location=location,
             top_k=top_k,
+            sort_by=sort_by,
         )
 
 

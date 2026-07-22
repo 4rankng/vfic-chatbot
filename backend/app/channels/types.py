@@ -14,7 +14,7 @@ Design rules (Phase 1 contract):
    carries ``text`` only. Non-text events are acknowledged and ignored at the
    provider edge and never reach these types.
 3. **Ambiguous transport maps to SEND_UNKNOWN.** ``ChannelSendResult.error_class``
-   reuses the existing ``app.graph.send_classification`` taxonomy so the
+   reuses the inward ``app.shared.application.outbound`` taxonomy so the
    shared delivery state machine does not branch on provider.
 4. **Redacted repr.** External identifiers are masked in diagnostics so a stray
    ``repr()`` in a log line cannot leak a PSID or chat id.
@@ -26,8 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from app.graph.outbound_telemetry import OutboundTelemetry
-from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES
+from app.shared.application.outbound import AMBIGUOUS_SEND_CLASSES, OutboundTelemetry
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +252,7 @@ class ChannelSendResult:
     """Result of one outbound send attempt.
 
     Reuses the existing ``error_class`` taxonomy so the shared delivery state
-    machine (``app.graph.send_classification``) needs no provider branching.
+    machine needs no provider branching.
     ``suppressed`` marks a policy or stale-authority suppression: not a
     provider failure, not retriable as a transport error.
 

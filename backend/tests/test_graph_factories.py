@@ -11,6 +11,7 @@ from app.graph.factories import (
     _LeadContextAdapter,
     _asks_to_explore,
     _build_fast_llm,
+    aclose_client_cache,
     build_deps,
     make_minimax_llm_json,
     reset_client_cache,
@@ -287,6 +288,41 @@ def test_openrouter_fast_tier_requests_returned_reasoning(monkeypatch):
 
 
 # ── US-001: LLM client cache ────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_aclose_client_cache_isolates_failures_and_closes_embedder_pool():
+    from app.graph import factories
+
+    closed: list[str] = []
+
+    class _RootClient:
+        def __init__(self, name: str, *, fails: bool = False) -> None:
+            self.name = name
+            self.fails = fails
+
+        async def close(self) -> None:
+            closed.append(self.name)
+            if self.fails:
+                raise RuntimeError("close failed")
+
+    class _EmbedAio:
+        async def aclose(self) -> None:
+            closed.append("embedder")
+
+    failing_client = SimpleNamespace(root_async_client=_RootClient("agent", fails=True))
+    fast_client = SimpleNamespace(root_async_client=_RootClient("fast"))
+    embedder = SimpleNamespace(_client=SimpleNamespace(aio=_EmbedAio()))
+    factories._client_cache["test"] = factories._CachedClients(
+        agent_llm=failing_client,
+        fast_llm=fast_client,
+        embedder=embedder,
+    )
+
+    await aclose_client_cache()
+
+    assert closed == ["agent", "fast", "embedder"]
+    assert factories._client_cache == {}
 
 
 @pytest.mark.asyncio

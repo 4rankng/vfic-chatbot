@@ -31,7 +31,7 @@ if TYPE_CHECKING:
         Message,
     )
     from app.models.user import User
-    from app.graph.outbound_telemetry import OutboundTelemetry
+    from app.shared.application.outbound import OutboundTelemetry
     from app.services.zalo_bot_service import SendResult
 
 __all__ = ["ConversationConflict", "ConversationService"]

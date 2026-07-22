@@ -15,6 +15,7 @@ from typing import Any
 
 from app.schemas.knowledge_categories import CategoryDocument, KnowledgeCategoryKey
 from app.services.knowledge.category_contracts import validate_category_payload
+from app.services.knowledge.derived_jobs import _coerce_salary_value
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,9 +144,9 @@ def build_legacy_category_documents(
                 {
                     "id": "legacy-compensation",
                     "job_ids": [job_id],
-                    "base_salary_vnd": _int_or_none(salary_json.get("base_salary")),
-                    "estimated_income_min_vnd": _int_or_none(total.get("min")),
-                    "estimated_income_max_vnd": _int_or_none(total.get("max")),
+                    "base_salary_vnd": _coerce_salary_value(salary_json.get("base_salary")),
+                    "estimated_income_min_vnd": _coerce_salary_value(total.get("min")),
+                    "estimated_income_max_vnd": _coerce_salary_value(total.get("max")),
                     "allowances": allowances,
                     "bonuses": [],
                     "overtime_notes": overtime.value_text if overtime else None,
@@ -467,10 +468,6 @@ def _join_unique(values, *, limit: int = 3000) -> str:
 
 def _normalize(value: str) -> str:
     return " ".join(value.casefold().split())
-
-
-def _int_or_none(value: Any) -> int | None:
-    return value if isinstance(value, int) and value >= 0 else None
 
 
 def _as_text_list(value: Any) -> list[str]:

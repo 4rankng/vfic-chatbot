@@ -13,7 +13,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.services.errors import (
+from app.shared.domain.errors import (
     ConflictError,
     DeliveryEligibilityError,
     ForbiddenError,

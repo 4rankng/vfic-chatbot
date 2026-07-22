@@ -28,7 +28,11 @@ from inspect import Parameter, iscoroutinefunction, signature
 
 from app.core.config import get_settings
 from app.graph.decision_trace import DecisionTraceBuilder
-from app.graph.outbound_telemetry import OutboundTelemetry
+from app.shared.application.outbound import (
+    AMBIGUOUS_SEND_CLASSES,
+    OutboundTelemetry,
+    is_ambiguous_send,
+)
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.direct_context import (
@@ -37,13 +41,13 @@ from app.graph.direct_context import (
 )
 from app.graph.prompts import ERROR_REPLY
 from app.graph.router import (
+    detect_salary_sort_intent,
     is_vacancy_lookup,
     route_turn,
     routing_instruction,
     should_use_fast_model,
 )
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
-from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES, delivery_status_for_send_error
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.models.conversation import DeliveryStatus, Message
 
@@ -54,6 +58,10 @@ OA_PROFILE_LOOKUP_TIMEOUT_SECONDS = 2.0
 VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
     "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
 )
+
+
+def _delivery_status_for_send_error(error_class: str | None, *, ok: bool):
+    return DeliveryStatus.SEND_UNKNOWN if is_ambiguous_send(error_class, ok=ok) else None
 
 def _remaining(state: BotRunState) -> float:
     """Seconds left until the propagated turn deadline (``inf`` if unset).
@@ -222,7 +230,7 @@ async def _agent_turn(
             allowed_tools=allowed_tools,
             lookup_query=evidence_query or user_text,
             required_tool="list_active_jobs" if vacancy_catalog_required else None,
-            required_tool_args={"top_k": 10} if vacancy_catalog_required else None,
+            required_tool_args=_vacancy_required_args(user_text) if vacancy_catalog_required else None,
             metrics=timings,
             retry_empty_generation=True,
             trace_sink=trace_sink,
@@ -400,7 +408,7 @@ async def _agent_turn(
         agent_kwargs["forced_project_slug"] = project_context.project_slug
     if vacancy_catalog_required:
         agent_kwargs["required_tool"] = "list_active_jobs"
-        required_args = {"top_k": 10}
+        required_args = _vacancy_required_args(user_text)
         agent_kwargs["required_tool_args"] = required_args
     elif focused_rag:
         agent_kwargs["required_tool"] = "search_knowledge"
@@ -603,7 +611,9 @@ async def _finish_terminal_reply(
     _override = (
         DeliveryStatus.SUPPRESSED
         if _suppressed
-        else delivery_status_for_send_error(_error_class, ok=bool(send_result and send_result.ok))
+        else _delivery_status_for_send_error(
+            _error_class, ok=bool(send_result and send_result.ok)
+        )
     )
     await svc.record_bot_outcome(
         conv,

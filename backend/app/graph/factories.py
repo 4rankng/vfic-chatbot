@@ -11,6 +11,7 @@ stays langchain-free.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 import uuid
@@ -454,8 +455,61 @@ class _CachedClients:
     embedder: object
 
 
-_client_cache: dict[str, object] = {}
+_client_cache: dict[str, _CachedClients] = {}
 _client_cache_lock = asyncio.Lock()
+_retired_client_bundles: list[_CachedClients] = []
+_client_retirement_tasks: set[asyncio.Task[None]] = set()
+_CLIENT_RETIREMENT_GRACE_SECONDS = 600.0
+
+
+async def _close_client_bundles(bundles: list[_CachedClients]) -> None:
+    cancellation: asyncio.CancelledError | None = None
+    close_callbacks: list[tuple[str, object, object]] = []
+    for bundle in bundles:
+        for name, client in (("agent LLM", bundle.agent_llm), ("fast LLM", bundle.fast_llm)):
+            root = getattr(client, "root_async_client", None)
+            close = getattr(root, "close", None)
+            if close is not None:
+                close_callbacks.append((name, root, close))
+        embed_client = getattr(bundle.embedder, "_client", None)
+        embed_aio = getattr(embed_client, "aio", None)
+        embed_close = getattr(embed_aio, "aclose", None)
+        if embed_close is not None:
+            close_callbacks.append(("embedder", embed_aio, embed_close))
+
+    closed_owners: set[int] = set()
+    for name, owner, close in close_callbacks:
+        if id(owner) in closed_owners:
+            continue
+        closed_owners.add(id(owner))
+        try:
+            result = close()  # type: ignore[operator]
+            if inspect.isawaitable(result):
+                await result
+        except asyncio.CancelledError as exc:
+            cancellation = cancellation or exc
+            logger.warning("client pool close cancelled resource=%s", name, exc_info=True)
+        except Exception:  # noqa: BLE001 - close remaining independent pools
+            logger.warning("client pool close failed resource=%s", name, exc_info=True)
+    if cancellation is not None:
+        raise cancellation
+
+
+def _schedule_client_retirement(bundles: list[_CachedClients]) -> None:
+    if not bundles:
+        return
+    _retired_client_bundles.extend(bundles)
+
+    async def retire_after_grace() -> None:
+        await asyncio.sleep(_CLIENT_RETIREMENT_GRACE_SECONDS)
+        await _close_client_bundles(bundles)
+        for bundle in bundles:
+            if bundle in _retired_client_bundles:
+                _retired_client_bundles.remove(bundle)
+
+    task = asyncio.create_task(retire_after_grace())
+    _client_retirement_tasks.add(task)
+    task.add_done_callback(_client_retirement_tasks.discard)
 
 
 async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for lock)
@@ -479,13 +533,13 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
 
     cached = _client_cache.get(cache_key)
     if cached is not None:
-        return cached  # type: ignore[return-value]
+        return cached
 
     async with _client_cache_lock:
         # Re-check inside the lock: a concurrent turn may have built it.
         cached = _client_cache.get(cache_key)
         if cached is not None:
-            return cached  # type: ignore[return-value]
+            return cached
 
         # Sequential: both resolves share the same ``db`` session, and
         # SQLAlchemy AsyncSession does NOT permit concurrent operations on one
@@ -518,8 +572,10 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
             fast_llm=fast_llm,
             embedder=embedder,
         )
-        _client_cache.clear()  # only one live version at a time
+        displaced = list(_client_cache.values())
+        _client_cache.clear()  # only one active version at a time
         _client_cache[cache_key] = bundle
+        _schedule_client_retirement(displaced)
         logger.info("llm_client_cache built key=%s", cache_key)
         return bundle
 
@@ -527,6 +583,25 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
 def reset_client_cache() -> None:
     """Clear the LLM client cache. Tests use this between cases."""
     _client_cache.clear()
+    _retired_client_bundles.clear()
+    for task in _client_retirement_tasks:
+        task.cancel()
+    _client_retirement_tasks.clear()
+
+
+async def aclose_client_cache() -> None:
+    """Close active and safely retired provider pools owned by this event loop."""
+    retirement_tasks = list(_client_retirement_tasks)
+    for task in retirement_tasks:
+        task.cancel()
+    if retirement_tasks:
+        await asyncio.gather(*retirement_tasks, return_exceptions=True)
+    _client_retirement_tasks.clear()
+    bundles = list(_client_cache.values()) + list(_retired_client_bundles)
+    _client_cache.clear()
+    _retired_client_bundles.clear()
+    unique_bundles = list({id(bundle): bundle for bundle in bundles}.values())
+    await _close_client_bundles(unique_bundles)
 
 
 async def build_deps(db, *, session_factory=None):

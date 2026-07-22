@@ -37,6 +37,34 @@ setup_logging()
 logger = logging.getLogger("app")
 
 
+async def _shutdown_web_resources() -> None:
+    from app.core.http import aclose_all
+    from app.graph.factories import aclose_client_cache
+    from app.workers.chatbot_worker import drain_direct_chat_turns
+
+    cancellation: asyncio.CancelledError | None = None
+    for resource_name, cleanup in (
+        ("direct chat turns", drain_direct_chat_turns),
+        ("database engine", engine.dispose),
+        ("LLM clients", aclose_client_cache),
+        ("HTTP clients", aclose_all),
+    ):
+        try:
+            await cleanup()
+        except asyncio.CancelledError as exc:
+            cancellation = cancellation or exc
+            logger.warning("web shutdown cleanup cancelled resource=%s", resource_name)
+        except Exception:  # noqa: BLE001 - close remaining independent resources
+            logger.warning(
+                "web shutdown cleanup failed resource=%s",
+                resource_name,
+                exc_info=True,
+            )
+    logger.info("vfic backend stopped")
+    if cancellation is not None:
+        raise cancellation
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("vfic backend starting env=%s", settings.app_env)
@@ -128,16 +156,12 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("rq-scheduler setup failed (non-fatal)")
 
-    yield
-    await engine.dispose()
-    # Close persistent HTTP clients AFTER engine.dispose so any final DB-driven
-    # send completes against a warm connection (Tech-Lead Directive §4). RQ
-    # workers don't run this lifespan; they call aclose_all() from their own
-    # shutdown hook (process exit reaps the sockets regardless).
-    from app.core.http import aclose_all
-
-    await aclose_all()
-    logger.info("vfic backend stopped")
+    try:
+        yield
+    finally:
+        # Direct turns finish before their DB/provider resources. Every cleanup
+        # remains independent so one close failure cannot strand another pool.
+        await _shutdown_web_resources()
 
 
 app = FastAPI(title="VFIC API", version="0.1.0", lifespan=lifespan)

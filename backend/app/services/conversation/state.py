@@ -29,13 +29,17 @@ from app.models.conversation import (
 )
 from app.models.user import Role, User
 from app.services.audit_service import record_audit
-from app.graph.outbound_telemetry import OutboundTelemetry
+from app.shared.application.outbound import OutboundTelemetry, is_ambiguous_send
 from app.services.zalo_bot_service import SendResult
 
 _settings = get_settings()
 _SEMI_AUTO_INACTIVITY = timedelta(minutes=5)
 
 logger = logging.getLogger(__name__)
+
+
+def _delivery_status_for_send_error(error_class: str | None, *, ok: bool):
+    return DeliveryStatus.SEND_UNKNOWN if is_ambiguous_send(error_class, ok=ok) else None
 
 # Forward-only delivery progression for receipt handling (READ > DELIVERED > SENT).
 # PENDING/SENDING/SEND_UNKNOWN/FAILED/SUPPRESSED sit at 0 so a receipt never revives a
@@ -1375,14 +1379,13 @@ class ConversationState:
         error_class: str | None = None,
     ) -> Message:
         """Finalize one persisted recruiter command without creating a bubble."""
-        from app.graph.send_classification import delivery_status_for_send_error
         from app.models.outbox import OutboxStatus, OutboundOutbox
 
         msg = await self.db.get(Message, message_id)
         outbox = await self.db.get(OutboundOutbox, outbox_id)
         if msg is None or msg.conversation_id != conv.id or outbox is None:
             raise RuntimeError("outbound message disappeared before delivery finalization")
-        delivery_status = delivery_status_for_send_error(error_class, ok=delivered)
+        delivery_status = _delivery_status_for_send_error(error_class, ok=delivered)
         if delivery_status is None:
             delivery_status = DeliveryStatus.SENT if delivered else DeliveryStatus.FAILED
         msg.delivery_status = delivery_status
@@ -1422,7 +1425,6 @@ class ConversationState:
         telemetry: OutboundTelemetry | None = None,
     ) -> Message:
         """Finalize a recovered command for any outbound sender without a new row."""
-        from app.graph.send_classification import delivery_status_for_send_error
         from app.models.outbox import OutboxStatus, OutboundOutbox
 
         msg = await self.db.get(Message, message_id)
@@ -1432,7 +1434,7 @@ class ConversationState:
         delivery_status = (
             DeliveryStatus.SUPPRESSED
             if suppressed
-            else delivery_status_for_send_error(error_class, ok=delivered)
+            else _delivery_status_for_send_error(error_class, ok=delivered)
         )
         if delivery_status is None:
             delivery_status = DeliveryStatus.SENT if delivered else DeliveryStatus.FAILED

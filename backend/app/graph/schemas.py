@@ -71,6 +71,15 @@ TOOL_SCHEMAS = [
                         "maximum": 10,
                         "description": "Số việc tối đa cần trả về, mặc định 3.",
                     },
+                    "sort_by": {
+                        "type": "string",
+                        "enum": ["updated_at", "salary_desc", "salary_asc"],
+                        "description": (
+                            "Thứ tự sắp xếp. salary_desc: lương từ cao xuống thấp (dùng khi ứng viên "
+                            "hỏi việc lương cao / sắp xếp theo lương). salary_asc: từ thấp đến cao. "
+                            "Bỏ qua nếu ứng viên không yêu cầu sắp xếp theo lương."
+                        ),
+                    },
                 },
             },
         },
@@ -281,6 +290,7 @@ async def _dispatch_tool(
                 company=args.get("company"),
                 location=args.get("location"),
                 top_k=args.get("top_k", 3),
+                sort_by=args.get("sort_by"),
             )
         elif name == "recommend_projects":
             result = await recommend_projects(

@@ -11,12 +11,12 @@ import uuid
 
 from app.core.logging import trace_id_ctx
 from app.graph.llm_semaphore import LLMThrottled
-from app.graph.outbound_telemetry import OutboundTelemetry
-from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES
+from app.shared.application.outbound import AMBIGUOUS_SEND_CLASSES, OutboundTelemetry
 from app.graph.types import _now
 from app.models.conversation import DeliveryStatus
 
 logger = logging.getLogger(__name__)
+_direct_turn_tasks: set[asyncio.Task[None]] = set()
 
 # Static Vietnamese degradation message — sent when LLM is throttled (no LLM call).
 DEGRADATION_REPLY = (
@@ -38,8 +38,10 @@ def start_direct_chat_turn(job: dict) -> bool:
         logger.exception("direct chat turn could not be scheduled")
         return False
     task = loop.create_task(_run_job_async(job, source="direct"))
+    _direct_turn_tasks.add(task)
 
     def _log_completion(completed: asyncio.Task[None]) -> None:
+        _direct_turn_tasks.discard(completed)
         try:
             completed.result()
         except asyncio.CancelledError:
@@ -49,6 +51,18 @@ def start_direct_chat_turn(job: dict) -> bool:
 
     task.add_done_callback(_log_completion)
     return True
+
+
+async def drain_direct_chat_turns(*, timeout_seconds: float = 5.0) -> None:
+    """Finish direct turns when possible, then cancel and drain stragglers."""
+    pending = {task for task in _direct_turn_tasks if not task.done()}
+    if not pending:
+        return
+    _done, pending = await asyncio.wait(pending, timeout=timeout_seconds)
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
 
 
 async def _renew_direct_lock(job: dict) -> None:

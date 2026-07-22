@@ -1,4 +1,4 @@
-"""Compatibility imports for domain errors now owned by ``app.shared``."""
+"""Framework-free domain primitives shared across bounded contexts."""
 
 from app.shared.domain.errors import (
     ConflictError,

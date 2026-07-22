@@ -220,6 +220,49 @@ def is_vacancy_lookup(user_text: str) -> bool:
     return not candidate_object.startswith(_NON_ROLE_ACCEPTANCE_PREFIXES)
 
 
+# Vietnamese diacritic-insensitive markers for salary-sort intent. Detection lives
+# in the router (the intent-classification layer) so the graph never imports a
+# service module merely to read the user's phrasing.
+_SALARY_SORT_DESC_MARKERS = (
+    "cao xuong thap",
+    "cao nhat",
+    "cao xuong",
+    "cao den thap",
+    "cao toi thap",
+    "giam dan",
+)
+_SALARY_SORT_ASC_MARKERS = (
+    "thap len cao",
+    "thap nhat",
+    "thap den cao",
+    "thap toi cao",
+    "tang dan",
+)
+
+
+def detect_salary_sort_intent(user_text: str) -> str | None:
+    """Return ``salary_desc`` / ``salary_asc`` when the user asks to sort by salary.
+
+    Matches Vietnamese phrasings like "sắp xếp theo lương từ cao xuống thấp" after
+    diacritic stripping. Returns ``None`` when no salary-sort intent is present so
+    callers keep the default ``updated_at`` ordering.
+    """
+    text = _normalize(user_text)
+    if not text:
+        return None
+    if "luong" not in text and "thu nhap" not in text:
+        return None
+    if any(marker in text for marker in _SALARY_SORT_DESC_MARKERS):
+        return "salary_desc"
+    if any(marker in text for marker in _SALARY_SORT_ASC_MARKERS):
+        return "salary_asc"
+    if "sap xep" in text or "sx" in text.split():
+        # "sắp xếp theo lương" without an explicit direction defaults to desc
+        # (candidates asking to "sort by salary" expect the highest first).
+        return "salary_desc"
+    return None
+
+
 def route_turn(user_text: str) -> TurnRoute:
     """Classify a user turn into the first retrieval strategy to try.
 

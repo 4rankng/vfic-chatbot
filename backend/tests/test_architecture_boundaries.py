@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 from pathlib import Path, PurePosixPath
 import re
+import subprocess
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -163,12 +165,8 @@ schema_infra|backend/app/schemas/personas.py|app.models.lead:LeadStage
 schema_infra|backend/app/schemas/project_knowledge.py|app.models.knowledge:KnowledgeCategoryRevisionStatus
 schema_infra|backend/app/schemas/projects.py|app.models.knowledge:KnowledgeBaseMode
 schema_infra|backend/app/schemas/user.py|app.models.user:Role
-service_outward|backend/app/services/conversation/__init__.py|app.graph.outbound_telemetry:OutboundTelemetry
-service_outward|backend/app/services/conversation/state.py|app.graph.outbound_telemetry:OutboundTelemetry
-service_outward|backend/app/services/conversation/state.py|app.graph.send_classification:delivery_status_for_send_error
 service_outward|backend/app/services/knowledge/category_service.py|app.workers.category_worker:enqueue_category_revision
 service_outward|backend/app/services/knowledge/category_service.py|app.workers.utils:EnqueueStatusUnknown
-service_outward|backend/app/services/outbox_service.py|app.graph.outbound_telemetry:OutboundTelemetry
 service_outward|backend/app/services/personas/providers.py|app.graph.provider_scope:provider_from_conversation
 service_outward|backend/app/services/project/faq.py|app.graph.clients:build_embedder
 service_outward|backend/app/services/project/features.py|app.graph.clients:build_embedder
@@ -176,23 +174,11 @@ service_outward|backend/app/services/project/features.py|app.graph.factories:mak
 service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.single_page_external_source_sync_worker:enqueue_one_shot
 service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.utils:EnqueueStatusUnknown
 service_outward|backend/app/services/webhook.py|app.workers.persistence_worker:enqueue_enrich_oa_profile
-service_outward|backend/app/services/zalo_bot_service.py|app.graph.outbound_telemetry:OutboundTelemetry
-service_outward|backend/app/services/zalo_bot_service.py|app.graph.outbound_telemetry:combine_outbound_telemetry
-service_outward|backend/app/services/zalo_bot_service.py|app.graph.send_classification:classify_transport_error
-service_outward|backend/app/services/zalo_oa_service.py|app.graph.outbound_telemetry:OutboundTelemetry
 """.splitlines()
     if line.strip()
 )
 
-_TS_GAP = r"(?:(?:\s+)|(?:/\*.*?\*/)|(?://[^\n]*(?:\n|$)))*"
-_TS_STATIC_MODULE = re.compile(
-    rf"(?<![\w$'\"/-])(?:from|import){_TS_GAP}[\"']([^\"']+)[\"']",
-    re.DOTALL,
-)
-_TS_CALL_MODULE = re.compile(
-    rf"\b(?:import|require){_TS_GAP}\({_TS_GAP}[\"'`]([^\"'`]+)[\"'`]",
-    re.DOTALL,
-)
+_TS_SCANNER = Path(__file__).parent / "helpers" / "typescript_import_scanner.cjs"
 
 
 def _resolve_python_module(path: Path, node: ast.ImportFrom) -> str:
@@ -310,15 +296,48 @@ def _resolve_typescript_module(path: Path, module: str) -> str:
     return module
 
 
-def _typescript_import_targets(path: Path, source: str) -> set[str]:
+def _typescript_import_targets_many(files: list[tuple[Path, str]]) -> dict[Path, set[str]]:
+    payload = [{"path": path.as_posix(), "source": source} for path, source in files]
+    completed = subprocess.run(
+        ["node", str(_TS_SCANNER)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=True,
+        cwd=REPO_ROOT,
+    )
+    parsed: dict[str, list[str]] = json.loads(completed.stdout)
     return {
-        _resolve_typescript_module(path, module)
-        for module in _TS_STATIC_MODULE.findall(source) + _TS_CALL_MODULE.findall(source)
+        path: {_resolve_typescript_module(path, module) for module in parsed[path.as_posix()]}
+        for path, _source in files
     }
+
+
+def _typescript_import_targets(path: Path, source: str) -> set[str]:
+    return _typescript_import_targets_many([(path, source)])[path]
 
 
 def _backend_rule(rel: str, target: str) -> str | None:
     module = target.split(":", 1)[0]
+    if rel.startswith("backend/app/shared/") and module.startswith(
+        (
+            "fastapi",
+            "httpx",
+            "pydantic",
+            "redis",
+            "rq",
+            "socketio",
+            "sqlalchemy",
+            "app.api",
+            "app.channels",
+            "app.core",
+            "app.graph",
+            "app.models",
+            "app.services",
+            "app.workers",
+        )
+    ):
+        return "shared_outward"
     if rel.startswith("backend/app/services/") and module.startswith(
         ("app.graph", "app.workers", "app.api")
     ):
@@ -354,11 +373,14 @@ def _current_edges() -> set[str]:
             if rule := _backend_rule(rel, target):
                 found.add(f"{rule}|{rel}|{target}")
 
-    for path in (REPO_ROOT / "frontend/src").rglob("*"):
-        if not path.is_file() or path.suffix not in {".ts", ".tsx"}:
-            continue
+    frontend_files = [
+        (path, path.read_text(errors="ignore"))
+        for path in (REPO_ROOT / "frontend/src").rglob("*")
+        if path.is_file() and path.suffix in {".ts", ".tsx"}
+    ]
+    for path, targets in _typescript_import_targets_many(frontend_files).items():
         rel = path.relative_to(REPO_ROOT).as_posix()
-        for target in _typescript_import_targets(path, path.read_text(errors="ignore")):
+        for target in targets:
             if rule := _frontend_rule(rel, target):
                 found.add(f"{rule}|{rel}|{target}")
     return found
@@ -415,6 +437,19 @@ def test_python_scanner_normalizes_relative_imports_and_symbols() -> None:
     assert _backend_rule("backend/app/services/example.py", "app.api") == "service_outward"
 
 
+def test_shared_kernel_rejects_framework_and_infrastructure_imports() -> None:
+    importer = "backend/app/shared/application/example.py"
+    for target in (
+        "fastapi:Depends",
+        "httpx:AsyncClient",
+        "sqlalchemy:select",
+        "app.models.user:User",
+        "app.channels.http_error_classification:classify_transport_error",
+        "app.workers.utils:enqueue_job",
+    ):
+        assert _backend_rule(importer, target) == "shared_outward"
+
+
 def test_typescript_scanner_covers_supported_import_forms_and_aliases() -> None:
     path = REPO_ROOT / "frontend/src/components/atomic-crm/example.ts"
     targets = _typescript_import_targets(
@@ -460,3 +495,37 @@ def test_typescript_scanner_covers_supported_import_forms_and_aliases() -> None:
         == "product_lib"
         for target in targets
     )
+
+
+def test_typescript_scanner_ignores_commented_out_imports() -> None:
+    path = REPO_ROOT / "frontend/src/components/atomic-crm/example.ts"
+    targets = _typescript_import_targets(
+        path,
+        """
+        // import '@/lib/vfic/comment-only';
+        /* from '@/lib/vfic/block-only' */
+        const text = "import '@/lib/vfic/string-only'";
+        const callText = " import('@/lib/vfic/call-string-only')";
+        const templateText = ` import('@/lib/vfic/template-string-only')`;
+        const expression = `value: ${import('@/lib/vfic/template-expression')}`;
+        """,
+    )
+    assert targets == {"frontend/src/lib/vfic/template-expression"}
+
+
+def test_typescript_scanner_does_not_lose_imports_after_regex_literals() -> None:
+    path = REPO_ROOT / "frontend/src/components/atomic-crm/example.ts"
+    targets = _typescript_import_targets(
+        path,
+        "const quote = /[\"']/;\n"
+        "const slash = /[//]/;\n"
+        "const arrow = () => /[\"']/;\n"
+        "if (value) /[\"']/.test(value);\n"
+        "function* matches() { yield /[\"']/; }\n"
+        "import '@/lib/vfic/static-after-regex';\n"
+        "const lazy = import('@/lib/vfic/dynamic-after-regex');\n",
+    )
+    assert targets == {
+        "frontend/src/lib/vfic/static-after-regex",
+        "frontend/src/lib/vfic/dynamic-after-regex",
+    }
