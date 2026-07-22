@@ -437,9 +437,8 @@ class ZaloOASender:
         envelope = await self._get_with_refresh("/v3.0/oa/user/detail", params={"data": data_param})
         if not isinstance(envelope, dict) or envelope.get("error") not in (0, "0", None):
             logger.info(
-                "zalo OA user-detail lookup failed error=%s message=%s",
+                "zalo OA user-detail lookup failed error=%s",
                 envelope.get("error") if isinstance(envelope, dict) else "non-dict",
-                envelope.get("message") if isinstance(envelope, dict) else None,
             )
             return None
         data = envelope.get("data")

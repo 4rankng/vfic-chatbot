@@ -119,5 +119,8 @@ async def _enrich_oa_profile_async(job: dict) -> None:
                 refresh=integration.refresh_oa_access_token,
             )
             await ProfileEnrichmentService(db, sender).enrich_oa_user(zalo_id, user_id=user_id)
-    except Exception:
-        logger.warning("oa profile enrichment failed", exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — enrichment is best-effort
+        logger.warning(
+            "oa profile enrichment failed error_type=%s",
+            type(exc).__name__,
+        )

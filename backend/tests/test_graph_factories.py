@@ -1,6 +1,7 @@
 """Tests for graph factories and GraphDeps wiring."""
 
 import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -91,6 +92,53 @@ async def test_build_deps_wires_graphdeps(monkeypatch):
     assert deps.safety is None
     assert isinstance(deps.embedder, OpenRouterEmbedder)
     assert deps.zalo is not None
+
+
+@pytest.mark.asyncio
+async def test_inline_oa_profile_lookup_has_no_refresh_and_uses_isolated_session(monkeypatch):
+    class _FakeLLM:
+        pass
+
+    profile_sender_kwargs = []
+    profile_sessions = []
+    enrichment_calls = []
+
+    class _ProfileSender:
+        def __init__(self, **kwargs):
+            profile_sender_kwargs.append(kwargs)
+
+        async def get_user_detail(self, _user_id):
+            return None
+
+    class _ProfileService:
+        def __init__(self, db, sender):
+            self.db = db
+            self.sender = sender
+
+        async def enrich_oa_user(self, zalo_id, *, user_id):
+            enrichment_calls.append((self.db, self.sender, zalo_id, user_id))
+            return True
+
+    profile_db = object()
+
+    @asynccontextmanager
+    async def session_factory():
+        profile_sessions.append(profile_db)
+        yield profile_db
+
+    monkeypatch.setattr("app.graph.factories._chat_for_role", lambda *a, **k: _FakeLLM())
+    monkeypatch.setattr("app.services.zalo_oa_service.ZaloOASender", _ProfileSender)
+    monkeypatch.setattr("app.services.profile_enrichment.ProfileEnrichmentService", _ProfileService)
+
+    deps = await build_deps(object(), session_factory=session_factory)
+    await deps.enrich_oa_profile("oa:user-1", "user-1")
+
+    assert len(profile_sender_kwargs) == 1
+    assert set(profile_sender_kwargs[0]) == {"access_token"}
+    assert profile_sender_kwargs[0]["access_token"] is not None
+    assert profile_sessions == [profile_db]
+    assert enrichment_calls[0][0] is profile_db
+    assert enrichment_calls[0][2:] == ("oa:user-1", "user-1")
 
 
 def test_minimax_json_missing_key_names_minimax(monkeypatch):

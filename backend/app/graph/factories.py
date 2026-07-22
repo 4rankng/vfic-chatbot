@@ -536,9 +536,16 @@ async def build_deps(db, *, session_factory=None):
     profile_sender = ZaloOASender(access_token=zalo_config.oa_access_token)
 
     async def _enrich_oa_profile(zalo_id: str, user_id: str) -> bool:
+        # Production chatbot turns provide a session factory. Keep the provider
+        # request and profile update isolated from the main turn transaction so
+        # a slow OA response never pins that transaction or connection.
+        if session_factory is not None:
+            async with session_factory() as profile_db:
+                return await ProfileEnrichmentService(
+                    profile_db, profile_sender
+                ).enrich_oa_user(zalo_id, user_id=user_id)
         return await ProfileEnrichmentService(db, profile_sender).enrich_oa_user(
-            zalo_id,
-            user_id=user_id,
+            zalo_id, user_id=user_id
         )
 
     # Parallel tool dispatch: each concurrent tool call gets its own session so

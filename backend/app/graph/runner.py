@@ -794,16 +794,25 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 try:
                     await deps.db.rollback()
                     await deps.db.refresh(conv)
-                except Exception:  # noqa: BLE001 — run_turn owns terminal error handling
-                    logger.debug("oa profile enrichment timeout recovery failed", exc_info=True)
-            except Exception:  # noqa: BLE001 — profile data is optional for a safe reply
+                except Exception as recovery_exc:  # noqa: BLE001
+                    logger.debug(
+                        "oa profile enrichment timeout recovery failed error_type=%s",
+                        type(recovery_exc).__name__,
+                    )
+            except Exception as profile_exc:  # noqa: BLE001 — optional profile data
                 timings["oa_profile_result"] = "error"
-                logger.warning("oa profile enrichment failed before chat turn", exc_info=True)
+                logger.warning(
+                    "oa profile enrichment failed before chat turn error_type=%s",
+                    type(profile_exc).__name__,
+                )
                 try:
                     await deps.db.rollback()
                     await deps.db.refresh(conv)
-                except Exception:  # noqa: BLE001 — run_turn owns terminal error handling
-                    logger.debug("oa profile enrichment recovery failed", exc_info=True)
+                except Exception as recovery_exc:  # noqa: BLE001
+                    logger.debug(
+                        "oa profile enrichment recovery failed error_type=%s",
+                        type(recovery_exc).__name__,
+                    )
         timings["oa_profile_ms"] = int(round((time.monotonic() - profile_t0) * 1000))
     zalo = _zalo_for_conversation(deps, conv)
 
