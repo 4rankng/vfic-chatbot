@@ -168,14 +168,21 @@ class CandidateExtractionService:
         db: AsyncSession,
         chat_id: str,
         user_text: str,
+        *,
+        prev_bot_message: str | None = None,
     ) -> str | None:
         """Persist an unambiguous self-introduced name on the inbound path.
 
         This intentionally does not wait for the deferred LLM extraction job.
         The latter still enriches the rest of the candidate profile and can
         overwrite this value only when it has a non-empty extracted name.
+
+        ``prev_bot_message`` is the bot's immediately preceding reply; when it
+        asked for the name, a bare reply ("Dũng") is captured here so the next
+        turn personalises correctly instead of reverting to the Zalo profile
+        name.
         """
-        name = extract_self_reported_name(user_text)
+        name = extract_self_reported_name(user_text, prev_bot_message=prev_bot_message)
         if not name:
             return None
         lead_patch = normalize_lead({"name": name}, chat_id)

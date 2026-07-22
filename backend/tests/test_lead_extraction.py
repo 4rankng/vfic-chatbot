@@ -269,6 +269,51 @@ class TestExtractSelfReportedName:
     def test_does_not_guess_without_name_keyword(self, text):
         assert extract_self_reported_name(text) is None
 
+    @pytest.mark.parametrize(
+        "prev",
+        [
+            "Bạn tên gì vậy?",
+            "Cho mình xin tên để tiện hỗ trợ nhé 😊",
+            "Mình xưng hô với nhau nha!",
+            "ban ten la gi",
+        ],
+    )
+    def test_captures_bare_name_when_bot_just_asked(self, prev):
+        assert extract_self_reported_name("Dũng", prev_bot_message=prev) == "Dũng"
+        assert (
+            extract_self_reported_name("Nguyễn Thị Mai", prev_bot_message=prev)
+            == "Nguyễn Thị Mai"
+        )
+
+    def test_strips_trailing_particles_off_bare_name(self):
+        assert (
+            extract_self_reported_name("Dũng ạ", prev_bot_message="Bạn tên gì?")
+            == "Dũng"
+        )
+        assert (
+            extract_self_reported_name("Mai nhé", prev_bot_message="Bạn tên gì?")
+            == "Mai"
+        )
+
+    @pytest.mark.parametrize(
+        "reply", ["hi", "ok", "không", "vâng", "yes", "0987654321", "ai", "haha"]
+    )
+    def test_never_captures_non_name_even_after_name_request(self, reply):
+        assert (
+            extract_self_reported_name(reply, prev_bot_message="Bạn tên gì?") is None
+        )
+
+    def test_does_not_capture_bare_name_without_name_request(self):
+        # No prior context -> a bare token is not captured (existing behaviour).
+        assert extract_self_reported_name("Dũng") is None
+        # Prior message was about location, not a name request -> not a name.
+        assert (
+            extract_self_reported_name(
+                "Hải Phòng", prev_bot_message="Bạn muốn tìm việc ở khu vực nào?"
+            )
+            is None
+        )
+
 
 class TestCandidateExtractionService:
     def test_candidate_turn_marks_saved_notes_as_comparison_only(self):
@@ -335,6 +380,49 @@ class TestCandidateExtractionService:
         assert len(saved) == 1
         assert saved[0]["zalo_id"] == "zalo_1"
         assert saved[0]["name"] == "LiteQA"
+
+    @pytest.mark.asyncio
+    async def test_persists_bare_name_when_bot_just_asked(self, monkeypatch):
+        """A bare reply right after the bot asked for the name is captured on the
+        inbound path so the next turn uses it instead of the Zalo profile name."""
+        saved: list[dict] = []
+
+        async def save_name(_db, lead_patch):
+            saved.append(lead_patch)
+            return 1
+
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "upsert_lead",
+            staticmethod(save_name),
+        )
+
+        saved_name = await CandidateExtractionService.persist_explicit_name(
+            object(),
+            "zalo_1",
+            "Dũng",
+            prev_bot_message="Bạn tên gì vậy? Mình gọi cho đàng hoàng nhé 😄",
+        )
+
+        assert saved_name == "Dũng"
+        assert len(saved) == 1
+        assert saved[0]["name"] == "Dũng"
+
+    @pytest.mark.asyncio
+    async def test_does_not_persist_bare_name_without_name_request(self, monkeypatch):
+        upsert = AsyncMock()
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+
+        # No prior name request -> a bare reply must not be stored as a name.
+        saved_name = await CandidateExtractionService.persist_explicit_name(
+            object(),
+            "zalo_1",
+            "Dũng",
+            prev_bot_message="Bạn muốn tìm việc ở khu vực nào?",
+        )
+
+        assert saved_name is None
+        upsert.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_extracts_lead_patch_and_memory_facts_from_one_llm_call(self):

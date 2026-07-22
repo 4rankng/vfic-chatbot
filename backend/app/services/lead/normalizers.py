@@ -9,6 +9,8 @@ import json
 import re
 from datetime import datetime
 
+from app.core.text import normalize_vietnamese_text
+
 
 _NOTE_PREFIX_RE = re.compile(r"^(?:(?:[-*•–—])\s*|(?:\d+[.)])\s+)")
 _NOTE_TRAILING_PUNCTUATION_RE = re.compile(r"[.!?;:,]+$")
@@ -109,14 +111,78 @@ _NAME_STOP_RE = re.compile(
     flags=re.IGNORECASE,
 )
 
+# Matches a bot turn that asked for the candidate's name ("Bạn tên gì?",
+# "Cho mình xin tên để tiện hỗ trợ nhé", "Mình xưng hô với nhau nhé?"). Matched
+# against the de-accented, lowercased message so diacritic variants still hit.
+_NAME_REQUEST_RE = re.compile(
+    r"ten\s*(?:gi|la\s*gi|gi\s*vay|nao|cua\s*ban|de\s*(?:tien|minh|toi))|"
+    r"cho\s+(?:minh|toi|em|anh|chi)\s+xin\s+(?:ten|cach\s*xung\s*ho|xung\s*ho)|"
+    r"xung\s+ho|(?:minh|toi)\s+(?:goi|xung)|ban\s+ten|xung\s*nhau"
+)
 
-def extract_self_reported_name(text: str | None) -> str | None:
+# Bare replies that must never be stored as a name even right after a name
+# request. De-accented + lowercased; compared against the normalized candidate.
+_BARE_NAME_REJECT = frozenset(
+    {
+        "hi", "hello", "hey", "chao", "chao ban", "chao ban nha", "chao nha", "xin chao",
+        "ok", "okay", "oke", "oki", "vang", "vang a", "da", "u", "ua", "hm", "hmm",
+        "co", "khong", "ko", "k", "khong co", "chua", "chua biet",
+        "sai", "cam on", "cam on ban", "cam on nhe", "thanks", "thank you",
+        "bot", "ai", "ban", "minh", "toi", "em", "anh", "chi", "haha", "hehe", "hihi",
+        "yes", "no", "y", "n", "sdt", "khong hen", "chua co", "deo",
+    }
+)
+
+# Trailing sentence-ending particles / fillers to trim off a bare name reply
+# ("Dũng ạ", "Dũng nhé", "Dũng nè") before validation.
+_TRAILING_PARTICLE_RE = re.compile(
+    r"\s+(?:ạ|a|nhé|nhe|nha|đi|di|nè|ne|vậy|vy|ợ|o|hé|he|à|á|ak|nhé|nha)\s*[.!?~*-]*$",
+    flags=re.IGNORECASE,
+)
+
+
+def _bare_name_when_asked(text: str) -> str | None:
+    """Return a bare reply as a name, or None if it could be something else.
+
+    Used only when the bot's previous message asked for the name, so the bar is
+    "does this look like a name at all" rather than "is this definitely a name".
+    Guards against greetings, affirmations/negations, numbers, questions, and
+    over-long replies so "hi" / "không" / "0987..." are never stored as names.
+    """
+    candidate = _pick(text)
+    if not candidate or len(candidate) > 30:
+        return None
+    if re.search(r"\d", candidate) or "?" in candidate:
+        return None
+    candidate = _TRAILING_PARTICLE_RE.sub("", candidate).strip(' .,!?:;~*-"\'')
+    if not candidate:
+        return None
+    words = candidate.split()
+    if not (1 <= len(words) <= 4):
+        return None
+    if not all(re.search(r"[A-Za-zÀ-ỹĐđ]", w) for w in words):
+        return None
+    key = re.sub(r"\s+", " ", normalize_vietnamese_text(candidate)).strip()
+    if not key or key in _BARE_NAME_REJECT:
+        return None
+    return candidate
+
+
+def extract_self_reported_name(
+    text: str | None,
+    *,
+    prev_bot_message: str | None = None,
+) -> str | None:
     """Extract explicit self-introduction names from short Vietnamese replies.
 
     This is a narrow deterministic fallback for turns like "tôi tên Mai" when
     the LLM lead extractor misses the `name` field but the bot/memory extractor
     correctly understood it. It intentionally requires the word "tên" / "ten"
     to avoid treating "tôi là công nhân" as a candidate name.
+
+    A bare reply ("Dũng", "Mai") is also accepted when ``prev_bot_message`` is
+    the bot's immediately preceding name request ("Bạn tên gì?") — the request
+    is the signal that the bare token is a name, not a greeting or a yes/no.
     """
     body = _pick(text)
     if not body:
@@ -139,6 +205,12 @@ def extract_self_reported_name(text: str | None) -> str | None:
             continue
         words = candidate.split()
         if 1 <= len(words) <= 5 and all(re.search(r"[A-Za-zÀ-ỹĐđ]", w) for w in words):
+            return candidate
+    if prev_bot_message and _NAME_REQUEST_RE.search(
+        normalize_vietnamese_text(prev_bot_message)
+    ):
+        candidate = _bare_name_when_asked(body)
+        if candidate:
             return candidate
     return None
 

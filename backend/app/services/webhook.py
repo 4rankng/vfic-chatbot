@@ -146,10 +146,32 @@ class ZaloWebhookService:
         try:
             from app.services.candidate_extraction import CandidateExtractionService
 
+            # A bare reply ("Dũng") to the bot's name request is captured here,
+            # immediately at inbound, so the next turn personalises with it
+            # instead of reverting to the Zalo profile name. Only look back when
+            # the reply is short enough to be a name, to skip a history read on
+            # normal-length messages. Best-effort: a history read failure just
+            # skips this enhancement (name capture is already best-effort).
+            prev_bot_message = None
+            if len((norm.user_text or "").strip()) <= 30:
+                try:
+                    _recent = await svc.last_messages(conv, limit=5)
+                    prev_bot_message = next(
+                        (
+                            m.body
+                            for m in reversed(_recent)
+                            if getattr(m, "sender", None) == "BOT"
+                        ),
+                        None,
+                    )
+                except Exception:
+                    prev_bot_message = None
+
             await CandidateExtractionService.persist_explicit_name(
                 db,
                 norm.zalo_chat_id,
                 norm.user_text,
+                prev_bot_message=prev_bot_message,
             )
         except Exception as exc:
             # The inbound message is already durable. Do not turn a CRM-profile
