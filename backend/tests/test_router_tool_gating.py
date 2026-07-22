@@ -226,6 +226,70 @@ async def test_vacancy_knowledge_route_prefetches_evidence_for_llm(monkeypatch):
     assert llm.bound_names is None
 
 
+async def test_focused_rag_knowledge_lookup_does_not_discard_grounded_reply(monkeypatch):
+    """Regression: focused-RAG turn must return the grounded LLM answer, not the
+    fallback. The runner sets ``allowed_tools=("search_knowledge",)`` (which
+    triggers the knowledge_lookup prefetch) and ``required_tool="search_knowledge"``
+    for a FOCUSED RAG project. The prefetch injects the KB evidence and runs one
+    grounded generation. The post-generation guard (required_tool not called →
+    fallback) must recognize that the prefetch already satisfied the required
+    tool; otherwise the grounded answer is discarded and replaced with the
+    "chưa thể truy xuất" fallback — even though the evidence was retrieved.
+    """
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    query = "chính sách phúc lợi lương LG Display là gì?"
+    evidence = "LG Display Tràng Duệ: lương 10-14 triệu, hỗ trợ KTX, xe đưa đón."
+    grounded_answer = "LG Display trả lương 10-14 triệu, có KTX và xe đưa đón nhé."
+
+    async def _search(retrieval, embedder, name, args, **kwargs):  # noqa: ARG001
+        assert name == "search_knowledge"
+        return evidence
+
+    class _KnowledgeLLM:
+        """Returns the grounded answer on the first (main-loop) call.
+
+        If the post-generation guard wrongly falls back to ``self.direct()``,
+        that path sends a different system prompt ("...bắt buộc chưa được truy
+        xuất thành công...") to the same LLM, so we detect the fallback by
+        inspecting the system message and surface it as a sentinel.
+        """
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
+            self.calls += 1
+            # The fallback ``direct()`` path sends [SystemMessage(fallback), HumanMessage].
+            # Detect it by scanning message contents for the fallback marker.
+            for message in messages:
+                content = str(getattr(message, "content", "") or "")
+                if "bắt buộc chưa được truy xuất thành công" in content:
+                    return SimpleNamespace(
+                        content="FALLBACK_INVOKED", tool_calls=None
+                    )
+            return SimpleNamespace(content=grounded_answer, tool_calls=None)
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", _search)
+    llm = _KnowledgeLLM()
+
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        query,
+        system="sys",
+        retrieval=object(),
+        embedder=object(),
+        allowed_tools=("search_knowledge",),
+        lookup_query=query,
+        required_tool="search_knowledge",
+    )
+
+    assert result == grounded_answer
+    assert llm.calls == 1, "the fallback self.direct() path should not have run"
+    assert "FALLBACK_INVOKED" not in result
+    assert "chưa thể truy xuất" not in result.lower()
+
+
 async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent

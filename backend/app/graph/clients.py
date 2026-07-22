@@ -770,7 +770,14 @@ class MiniMaxAgent:
             )
         else:
             bound = active_llm
-        required_tool_called = False
+        # The knowledge_lookup_route prefetch already executed `search_knowledge`
+        # and injected its evidence (schemas = []). A focused-RAG turn sets
+        # required_tool="search_knowledge" for the same authority purpose; if we
+        # initialize required_tool_called=False here, the post-generation guard
+        # below wrongly discards the grounded answer and falls back to the
+        # "chưa thể truy xuất" reply — even though the KB evidence was retrieved
+        # and surfaced. Seed True only when the prefetch already ran that tool.
+        required_tool_called = knowledge_lookup_route and required_tool == "search_knowledge"
         empty_retry_available = retry_empty_generation
         retrying_empty_generation = False
         iterations_remaining = self.max_iters

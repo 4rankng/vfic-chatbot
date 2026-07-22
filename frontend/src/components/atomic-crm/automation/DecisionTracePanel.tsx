@@ -32,7 +32,7 @@ import type {
   DecisionTrace,
   DecisionTraceModelTurnEvent,
 } from "../types";
-import { formatDateTime, outcomeMeta } from "./botRunMeta";
+import { formatDateTime } from "./botRunMeta";
 import { modelPhaseLabel, toolNameLabel } from "./decisionTraceMeta";
 import {
   clearDecisionTraceQueries,
@@ -222,29 +222,16 @@ const BotRunTraceDetailContent = ({
   );
 };
 
-const RunSummary = ({ run }: { run: BotRunTraceSummary }) => {
-  const meta = outcomeMeta(run.outcome);
-  return (
-    <div className="min-w-0 flex-1 pr-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-body font-semibold text-foreground">
-          Lần chạy #{run.id}
-        </span>
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 text-badge font-semibold uppercase tracking-wide",
-            meta.classes,
-          )}
-        >
-          {meta.label}
-        </span>
-      </div>
-      <p className="mt-1 text-helper tabular-nums text-muted-foreground">
-        {formatDateTime(run.started_at)}
-      </p>
-    </div>
-  );
-};
+const RunSummary = ({ run }: { run: BotRunTraceSummary }) => (
+  <div className="min-w-0 flex-1 pr-2">
+    <span className="text-body font-semibold text-foreground">
+      Lần chạy #{run.id}
+    </span>
+    <p className="mt-1 text-helper tabular-nums text-muted-foreground">
+      {formatDateTime(run.started_at)}
+    </p>
+  </div>
+);
 
 export const DecisionTracePanel = ({
   conversationId,
