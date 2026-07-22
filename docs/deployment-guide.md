@@ -80,6 +80,9 @@ build + push both images → blue/green cutover.
    - `scripts/prod-env.sh` → generates `/opt/vfic/.env` (idempotent).
    - `create_admin --only-if-no-admins` (idempotent bootstrap admin).
    - Hand off to `scripts/bg_deploy.sh` (below).
+5. `cd backend && make deploy-restart-frontend` pulls and recreates the newly
+   pushed frontend image. This is separate from the backend blue/green cutover,
+   which intentionally does not pull the frontend.
 
 ### Blue/green cutover (`scripts/bg_deploy.sh`) — zero downtime at the edge
 1. Pull the new backend image for the inactive web color and backend workers;

@@ -28,6 +28,8 @@ deploy: release-check
 	cd backend && make push
 	@echo "=== Deploying to production ==="
 	$(MAKE) -C backend deploy
+	@echo "=== Recreating production frontend ==="
+	$(MAKE) -C backend deploy-restart-frontend
 
 # Adminer over an SSH tunnel -> http://localhost:18081 (no public exposure).
 # Ctrl-C closes the tunnel.

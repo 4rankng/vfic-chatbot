@@ -21,6 +21,7 @@ from pathlib import Path
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = BACKEND_DIR.parent
 SCRIPTS = BACKEND_DIR / "scripts"
 
 
@@ -42,6 +43,16 @@ def _make_target_dry_run(target: str) -> str:
     return subprocess.run(
         ["make", "-n", target],
         cwd=BACKEND_DIR,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def _root_make_deploy_dry_run() -> str:
+    return subprocess.run(
+        ["make", "-n", "deploy"],
+        cwd=ROOT_DIR,
         capture_output=True,
         text=True,
         check=True,
@@ -110,3 +121,75 @@ def test_deploy_status_remote_command_is_shell_safe() -> None:
     out = _make_target_dry_run("deploy-status")
     assert "<inaugural>" not in out
     assert "echo inaugural" in out
+
+
+# ---------------------------------------------------------------------------
+# Rollback path (bg_rollback.sh / `make rollback`). The forward cutover above
+# is pinned; these mirror it for the revert path so a future edit cannot
+# silently break the ability to roll a bad image back. Every assertion below
+# holds against the committed bg_rollback.sh (no script change intended).
+# ---------------------------------------------------------------------------
+
+
+def test_rollback_target_uses_bg_rollback_script() -> None:
+    """`make rollback` SCPs bg_rollback.sh + flip_caddy.sh and runs it remotely."""
+    out = _make_target_dry_run("rollback")
+    assert "bg_rollback.sh" in out
+    assert "flip_caddy.sh" in out
+    assert "bg_deploy.sh" not in out
+
+
+def test_rollback_target_does_not_pass_image_tag() -> None:
+    """Rollback derives the tag from PREV_TAG; it must not require a fresh build."""
+    out = _make_target_dry_run("rollback")
+    assert "IMAGE_TAG=" not in out
+
+
+def test_bg_rollback_requires_recorded_prev_state() -> None:
+    """Rollback must refuse to run without a recorded prior deploy (exit 2)."""
+    script = _read("bg_rollback.sh")
+    assert "PREV_COLOR_FILE" in script
+    assert "PREV_TAG_FILE" in script
+    assert "exit 2" in script
+
+
+def test_bg_rollback_recreates_workers_at_prev_tag() -> None:
+    """web + workers must move together at PREV_TAG (no image divergence)."""
+    script = _read("bg_rollback.sh")
+    assert 'IMAGE_TAG="$PREV_TAG"' in script
+    assert '--force-recreate "web-$PREV"' in script
+    assert "$WORKERS" in script
+
+
+def test_bg_rollback_gates_flip_on_health() -> None:
+    """The revived color must be healthy before Caddy is flipped back."""
+    script = _read("bg_rollback.sh")
+    health = script.index("Health.Status")
+    flip = script.index("flip_caddy.sh")
+    assert health < flip
+
+
+def test_bg_rollback_records_demoted_tag_before_swapping_active() -> None:
+    """Demoted tag is recorded BEFORE ACTIVE is overwritten, so a mid-swap
+    crash leaves rollback still reversible (mirrors bg_deploy's ordering)."""
+    script = _read("bg_rollback.sh")
+    demoted_tag = script.index("PREV_TAG_FILE")
+    active_write = script.index('"$PREV" > "$ACTIVE_FILE"')
+    assert demoted_tag < active_write
+    assert '"$ACTIVE" > "$PREV_COLOR_FILE"' in script
+    assert '"$PREV" > "$ACTIVE_FILE"' in script
+
+
+def test_bg_rollback_stops_demoted_color() -> None:
+    """The demoted color is stopped, not removed (kept for a subsequent rollback)."""
+    script = _read("bg_rollback.sh")
+    assert 'docker compose stop "web-$ACTIVE"' in script
+    assert "docker compose rm" not in script
+
+
+def test_full_deploy_recreates_the_pushed_frontend() -> None:
+    """The full release must serve the frontend image it has just pushed."""
+    out = _root_make_deploy_dry_run()
+    backend_cutover = out.index("make -C backend deploy")
+    frontend_recreate = out.index("make -C backend deploy-restart-frontend")
+    assert backend_cutover < frontend_recreate
