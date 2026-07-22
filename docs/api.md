@@ -44,7 +44,7 @@ The application registers the API routers in `backend/app/main.py` under
 | `leads` | `/api/v1/leads` | `leads` | JWT | Lead CRM pipeline |
 | `bot_runs` | `/api/v1/bot_runs` | `bot_runs` | JWT (read-only) | Bot turn audit log |
 | `knowledge` | `/api/v1/knowledge` | `knowledge` | `require_admin` | KB documents, chunks, versions |
-| `projects` | `/api/v1/knowledge/projects` | `projects` | `require_recruiter` (list/get); `require_admin` (create/delete) | Product/project knowledge CRUD, FAQ, features |
+| `projects` | `/api/v1/knowledge/projects` | `projects` | `require_recruiter` (list/get); `require_admin` (create/delete) | Product/project knowledge CRUD, direct-context sync, FAQ, features |
 | `personas` | `/api/v1/knowledge/personas`, `/api/v1/knowledge/persona-assignments` | `personas` | `require_admin` | AI agent persona CRUD and adapter assignment |
 | `jobs` | `/api/v1/jobs` | `jobs` | JWT (list/get); `require_admin` (create/update) | Job postings |
 | `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics + recruiter attention queue |
@@ -380,6 +380,30 @@ All endpoints below are admin-only and live below `/api/v1/knowledge`.
 Template previews are validation/extraction simulations. They do not activate a KB
 release or expose candidate-facing answers. Validation failures return `422`; stale
 draft or assignment revisions and invalid lifecycle transitions return `409`.
+
+## Direct-context single-page sync
+
+The admin-only Project API exposes the single-page knowledge file plus the
+additive Google Sheet sync control plane. These routes apply only when the
+Project owns a `DIRECT_CONTEXT` knowledge base.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/knowledge/projects/{project_id}/single-page` | Read the current direct-context page, including the raw text. |
+| `PUT /api/v1/knowledge/projects/{project_id}/single-page` | Replace the direct-context page manually. |
+| `GET /api/v1/knowledge/projects/{project_id}/single-page/external-sources` | List the Google Sheet sync rows. |
+| `POST /api/v1/knowledge/projects/{project_id}/single-page/external-sources` | Create the additive sync row from one public HTTPS Google Sheet URL. The backend resolves one exact `gid`; fragment `#gid=` takes precedence over `?gid=`. |
+| `POST /api/v1/knowledge/projects/{project_id}/single-page/external-sources/{source_id}/run-now` | Trigger the same sync immediately from the console. Returns `{"job_id": "..."}` and enforces the 5-minute cooldown with `429 run_now_cooldown`. |
+| `DELETE /api/v1/knowledge/projects/{project_id}/single-page/external-sources/{source_id}` | Remove the sync row. The direct-context page remains until another successful replacement. |
+
+List rows expose the operational state used in the console: `sheet_url`,
+`sheet_gid`, `auto_sync_enabled`, `consecutive_failures`, `last_status`,
+`last_error`, `last_row_count`, `last_content_hash`, `last_synced_at`,
+`created_at`, and `updated_at`.
+
+Sync failures preserve the previous page. `FAILED` records an error code on the
+row, `NO_OP` records an unchanged content hash, and `OK` records the new hash
+and row count after atomic replacement.
 
 ## Project category authority
 

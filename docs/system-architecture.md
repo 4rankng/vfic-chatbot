@@ -744,6 +744,12 @@ be shared by another Project.
 - `DIRECT_CONTEXT` stores one replacement-only file and makes a tool-free LLM
   call with the complete page plus bounded recent conversation history. The raw
   page and deterministic normalized text stay side by side in the database.
+  An additive `single_page_external_source_sync_state` row can point at one
+  public Google Sheet. The sync worker resolves one exact `gid` from the URL,
+  renders the FAQ sheet into deterministic Markdown, and replaces the page
+  atomically on success. Manual `Xử lý ngay` syncs and the daily scheduler tick
+  both enqueue the same worker path; failures record status on the source row
+  and preserve the prior page.
 - `RAG` owns twelve `knowledge_categories`. Immutable
   `knowledge_category_revisions` preserve raw YAML, normalized payloads, a
   deterministic checksum, and recovery metadata (`processing_token`,

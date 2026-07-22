@@ -1,7 +1,7 @@
 # Project Overview & Product Development Requirements (PDR)
 
 **Product:** Ting Ting / VFIC miniCRM
-**Last updated:** 2026-07-09
+**Last updated:** 2026-07-22
 **Status:** Production at `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM)
 
 ---
@@ -34,6 +34,7 @@ a human.
 | **Human inbox** | Realtime Socket.IO push, per-conversation rooms, take-over / release / semi-auto / close / reopen, virtualized thread (`virtua`). |
 | **Proactive follow-up** | 6h / 24h / 46h cadence, cap 3, 48h-Zalo-rule-safe (47h margin), Vietnamese opt-out phrase matching. |
 | **Knowledge base (RAG)** | Per-project docs ingested into pgvector halfvec HNSW + exact re-rank; versioned, re-indexable. |
+| **Direct-context sync** | Single-page projects can be refreshed from one public Google Sheet. The sync requires one exact `gid`, supports manual `Xử lý ngay` and daily auto-sync, renders the current FAQ sheet into deterministic Markdown, and preserves the prior page on failure. |
 | **Personas** | Agent voice and follow-up policy — CRUD, activate, import, and optional assignment per messaging adapter. One global default serves every adapter unless that adapter selects another Agent. Projects remain knowledge-only. |
 | **Reliability** | Reconcile worker sweeps every 60s, recovers lost turns after worker crash (~3-4 min total recovery). Per-chat DB lock owner + optimistic ownership guard prevent stale-run sends. |
 | **Audit** | `bot_runs` resource exposes every bot execution for review. |
@@ -117,6 +118,12 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
 - **FR-7.2** Retrieval: HNSW candidate generation (default 200) → exact
   vector re-rank → return top-k.
 - **FR-7.3** Versioned documents; re-index on content change.
+- **FR-7.4** Direct-context projects may attach one public Google Sheet sync
+  row. The sync resolves one exact `gid` from the pasted URL, accepts the
+  current four-column FAQ sheet shape, and updates the page atomically on
+  success.
+- **FR-7.5** Manual sync and daily auto-sync share the same worker path; if a
+  sync fails, the prior direct-context page remains live.
 
 ### FR-8 Auth
 - **FR-8.1** JWT (HS256) access token 60 min + refresh token 14 days; both

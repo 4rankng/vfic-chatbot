@@ -35,6 +35,26 @@ The lifecycle vocabulary is shared across lanes:
   "ready". RAG Projects keep using category readiness.
 - The Project still needs a compact discovery card so candidates can find it while exploring.
 
+### Public Google Sheet sync
+
+Direct-context Projects can attach one additive Google Sheet sync row in
+`single_page_external_source_sync_state`. That row is a public-source control
+plane, not a replacement for the page itself.
+
+- The admin pastes one public HTTPS Google Sheet URL.
+- The backend resolves exactly one `gid` from that URL. A fragment `#gid=...`
+  wins over `?gid=...`; missing, invalid, conflicting, or unsafe `gid` values
+  are rejected.
+- The sheet sync runs either manually from the console (`Xử lý ngay`) or by the
+  daily worker tick when `auto_sync_enabled` is on.
+- The parser accepts the current four-column FAQ sheet shape used by LG
+  Display: `STT theo quy trình` | `Thông tin` | `Question` | `Answer`. It also
+  tolerates the older 3-column layout.
+- The sheet is rendered deterministically into Markdown with the FAQ heading,
+  a `## FAQ` section, and `### FAQ: <question>` blocks.
+- Sync failure updates the sync-state row, but the prior direct-context page
+  stays live. A later successful sync replaces the page atomically.
+
 ## Category mode
 
 The Project has twelve independent YAML categories:

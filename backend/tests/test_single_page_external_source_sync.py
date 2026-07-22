@@ -131,7 +131,7 @@ def test_create_schema_accepts_512_character_url_and_rejects_513() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_source_compensates_when_enqueue_fails(
+async def test_create_source_preserves_retryable_new_row_when_enqueue_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db = _Db()
@@ -149,15 +149,15 @@ async def test_create_source_compensates_when_enqueue_fails(
         lambda *_args, **_kwargs: None,
     )
 
-    with pytest.raises(UpstreamError, match="single_page_sync_enqueue_failed"):
-        await service.create_source(
-            uuid.uuid4(),
-            SimpleNamespace(sheet_url=f"{SHEET_URL}#gid=0", auto_sync_enabled=True),
-            SimpleNamespace(id=uuid.uuid4()),
-        )
+    row = await service.create_source(
+        uuid.uuid4(),
+        SimpleNamespace(sheet_url=f"{SHEET_URL}#gid=0", auto_sync_enabled=True),
+        SimpleNamespace(id=uuid.uuid4()),
+    )
 
-    assert len(db.deleted) == 1
-    assert db.commits == 2
+    assert row.last_status == "NEW"
+    assert db.deleted == []
+    assert db.commits == 1
     audit.assert_awaited_once()
 
 
