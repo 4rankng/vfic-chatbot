@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
     | ((acceptedFiles: File[], rejectedFiles: unknown[]) => void),
 }));
 
-vi.mock("@/lib/vfic/knowledgeService", () => ({
+vi.mock("./knowledge-service", () => ({
   createAndIngestKnowledgeBaseVersion: mocks.createAndIngestKnowledgeBaseVersion,
   saveKnowledgeTemplate: vi.fn(),
 }));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveGoogleSheetGid } from "@/lib/vfic/knowledgeService";
+import { resolveGoogleSheetGid } from "./project-knowledge-service";
 
 describe("resolveGoogleSheetGid", () => {
   it("prefers #gid when query and fragment agree", () => {

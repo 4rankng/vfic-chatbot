@@ -17,9 +17,13 @@ import {
   extractProjectFeatures,
   getProjectFeatures,
   updateProjectFeature,
-} from "@/lib/vfic/knowledgeService";
+} from "./project-knowledge-service";
 import type { ProductFeature } from "../types";
 import { cn } from "@/lib/utils";
+import {
+  isProductFeatureReady,
+  orderProductFeatureSlots,
+} from "./domain/project-knowledge-policy";
 import "./projects.css";
 
 const FEATURE_CATEGORY_LABELS: Record<string, string> = {
@@ -74,23 +78,6 @@ const getFillHint = (feature: ProductFeature) =>
 // Binary readiness derivation. A feature is "đủ thông tin" (ready) when the
 // agent has a non-empty value_text and the row is not flagged missing/unclear.
 // Empty slots are NOT ready.
-const isReady = (f: ProductFeature | null | undefined): boolean =>
-  !!f && !!f.value_text?.trim() && !f.is_missing && !f.needs_clarification;
-
-// Canonical positional view: sort by the catalog display_priority and pad to
-// the active catalog total returned by the API.
-const orderedSlots = (
-  features: ProductFeature[] | null,
-  totalSlots: number,
-): (ProductFeature | null)[] => {
-  const sorted = [...(features ?? [])].sort(
-    (a, b) => a.display_priority - b.display_priority,
-  );
-  const slots: (ProductFeature | null)[] = [];
-  for (let i = 0; i < totalSlots; i++) slots.push(sorted[i] ?? null);
-  return slots;
-};
-
 // "Đặc điểm sản phẩm" panel: active worker product features extracted from the
 // project's posting, including missing rows that need an admin-provided value.
 export const ProjectFeatures = ({
@@ -156,9 +143,9 @@ export const ProjectFeatures = ({
   };
 
   const totalSlots = Math.max(featureTotal, features?.length ?? 0);
-  const slots = orderedSlots(features, totalSlots);
-  const readySlots = slots.filter(isReady);
-  const gapSlots = slots.filter((s) => !isReady(s));
+  const slots = orderProductFeatureSlots(features, totalSlots);
+  const readySlots = slots.filter(isProductFeatureReady);
+  const gapSlots = slots.filter((slot) => !isProductFeatureReady(slot));
   const readyCount = readySlots.length;
   const gapCount = Math.max(0, totalSlots - readyCount);
   const hasFeatures = (features?.length ?? 0) > 0;
@@ -464,7 +451,7 @@ const FeatureCard = ({
   const [draft, setDraft] = useState(feature.value_text);
   const [saving, setSaving] = useState(false);
   const showFillHint = feature.is_missing || feature.needs_clarification;
-  const ready = isReady(feature);
+  const ready = isProductFeatureReady(feature);
 
   const save = async () => {
     setSaving(true);

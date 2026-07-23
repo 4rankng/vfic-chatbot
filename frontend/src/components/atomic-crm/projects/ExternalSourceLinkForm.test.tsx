@@ -11,7 +11,7 @@ vi.mock("ra-core", () => ({
   useNotify: () => mocks.notify,
 }));
 
-vi.mock("@/lib/vfic/knowledgeService", async (importOriginal) => ({
+vi.mock("./project-knowledge-service", async (importOriginal) => ({
   ...(await importOriginal()),
   createExternalSource: mocks.createExternalSource,
   createSinglePageExternalSource: mocks.createSinglePageExternalSource,

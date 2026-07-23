@@ -12,6 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
+import {
+  buildProjectCreation,
+  type ProjectKnowledgeMode,
+} from "./domain/project-knowledge-policy";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 
 export const ProjectCreate = () => {
@@ -19,7 +23,7 @@ export const ProjectCreate = () => {
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
-  const [mode, setMode] = useState<"" | "RAG" | "DIRECT_CONTEXT">("");
+  const [mode, setMode] = useState<"" | ProjectKnowledgeMode>("");
   const [aliases, setAliases] = useState("");
   const [summary, setSummary] = useState("");
   const [location, setLocation] = useState("");
@@ -29,22 +33,17 @@ export const ProjectCreate = () => {
   const onSubmit = async (data: Record<string, unknown>) => {
     setSubmitting(true);
     try {
-      if (!mode) {
+      const creation = buildProjectCreation({
+        aliases,
+        mode,
+        discovery: { summary, location, roles, highlights },
+      });
+      if (!creation.ok && creation.reason === "mode_required") {
         notify("Chọn một cách lưu kiến thức để tiếp tục.", { type: "warning" });
         setSubmitting(false);
         return;
       }
-      const discoveryCard =
-        mode === "DIRECT_CONTEXT"
-          ? {
-              summary: summary.trim(),
-              location: location.trim(),
-              roles: splitList(roles),
-              eligibility: [],
-              highlights: splitList(highlights),
-            }
-          : undefined;
-      if (mode === "DIRECT_CONTEXT" && (!summary.trim() || !location.trim())) {
+      if (!creation.ok) {
         notify(
           "Vui lòng nhập tóm tắt và địa điểm để Agent có thể gợi ý dự án.",
           {
@@ -57,10 +56,7 @@ export const ProjectCreate = () => {
       const created = await dataProvider.create("projects", {
         data: {
           ...data,
-          knowledge_mode: mode,
-          aliases: splitList(aliases),
-          discovery_card: discoveryCard,
-          is_active: false,
+          ...creation.data,
         },
       });
       notify("Đã tạo dự án.", { type: "success" });
@@ -206,9 +202,3 @@ export const ProjectCreate = () => {
     </CreateBase>
   );
 };
-
-const splitList = (value: string) =>
-  value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);

@@ -20,7 +20,7 @@ import {
   archiveKnowledge,
   downloadKnowledgeRawFile,
   reindexKnowledge,
-} from "@/lib/vfic/knowledgeService";
+} from "./knowledge-service";
 import { getRelativeTimeString } from "@/lib/utils";
 import type { KnowledgeSource, Project } from "../types";
 import { stageLabel } from "./stageTone";

@@ -12,7 +12,11 @@ import {
   getProjectFaq,
   updateProjectFaq,
   type ProjectFaq,
-} from "@/lib/vfic/knowledgeService";
+} from "./project-knowledge-service";
+import {
+  mergeUniqueTerms,
+  normalizeProjectFaq,
+} from "./domain/project-knowledge-policy";
 
 type FaqDraft = {
   question: string;
@@ -52,17 +56,8 @@ const TermListInput = ({
 }) => {
   const [text, setText] = useState("");
   const commit = () => {
-    const parts = text
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return;
-    const merged = [...values];
-    for (const part of parts) {
-      if (!merged.some((v) => v.toLowerCase() === part.toLowerCase())) {
-        merged.push(part);
-      }
-    }
+    const merged = mergeUniqueTerms(values, text);
+    if (merged.length === values.length) return;
     onChange(merged);
     setText("");
   };
@@ -201,20 +196,15 @@ export const ProjectFaqEditor = ({
   }, [projectId]);
 
   const createFaq = async () => {
-    const question = newDraft.question.trim();
-    const answer = newDraft.answer.trim();
-    if (!question || !answer) {
+    const normalized = normalizeProjectFaq(newDraft);
+    if (!normalized) {
       notify("Vui lòng nhập cả câu hỏi và câu trả lời.", { type: "warning" });
       return;
     }
     setSavingNew(true);
     try {
       const created = await createProjectFaq(projectId, {
-        question,
-        answer,
-        question_variants: newDraft.question_variants,
-        required_terms: newDraft.required_terms,
-        forbidden_terms: newDraft.forbidden_terms,
+        ...normalized,
       });
       setItems((prev) => [created, ...prev]);
       setNewDraft(emptyDraft());
@@ -356,20 +346,15 @@ const FaqRow = ({
   };
 
   const save = async () => {
-    const question = draft.question.trim();
-    const answer = draft.answer.trim();
-    if (!question || !answer) {
+    const normalized = normalizeProjectFaq(draft);
+    if (!normalized) {
       notify("Vui lòng nhập cả câu hỏi và câu trả lời.", { type: "warning" });
       return;
     }
     setSaving(true);
     try {
       const updated = await updateProjectFaq(projectId, item.id, {
-        question,
-        answer,
-        question_variants: draft.question_variants,
-        required_terms: draft.required_terms,
-        forbidden_terms: draft.forbidden_terms,
+        ...normalized,
       });
       onUpdate(updated);
       setEditing(false);

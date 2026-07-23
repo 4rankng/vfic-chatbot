@@ -31,7 +31,7 @@ import {
   uploadProjectKnowledgeCategory,
   type KnowledgeCategoryKey,
   type KnowledgeCategoryStatus,
-} from "@/lib/vfic/knowledgeService";
+} from "./project-knowledge-service";
 import { cn } from "@/lib/utils";
 import { ExternalSourceLinkForm } from "./ExternalSourceLinkForm";
 import { ExternalSourceList } from "./ExternalSourceList";

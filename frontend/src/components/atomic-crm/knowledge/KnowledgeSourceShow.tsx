@@ -19,7 +19,7 @@ import { isCanonicalSource } from "./knowledgePipelineUtils";
 import {
   archiveKnowledge,
   reindexKnowledge,
-} from "@/lib/vfic/knowledgeService";
+} from "./knowledge-service";
 import { DeleteButton } from "@/components/admin";
 
 const Field = ({ label, value }: { label: string; value?: ReactNode }) => (

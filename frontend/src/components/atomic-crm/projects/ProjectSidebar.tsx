@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { Project } from "../types";
+import { projectReadinessLabel } from "./domain/project-knowledge-policy";
 
 const ProjectStatusBadge = ({
   active,
@@ -100,15 +101,7 @@ const SelectedProjectSummary = ({
   }
 
   const isSinglePage = project.knowledge_mode === "DIRECT_CONTEXT";
-  const readinessReady = project.feature_readiness?.ready;
-  const readinessTotal = project.feature_readiness?.total ?? 16;
-  const readinessText = isSinglePage
-    ? (project.knowledge_document_count ?? 0) > 0
-      ? "Đã sẵn sàng"
-      : "Chưa có trang"
-    : typeof readinessReady === "number"
-      ? `${readinessReady}/${readinessTotal}`
-      : "Chưa đo";
+  const readinessText = projectReadinessLabel(project);
 
   return (
     <aside className="project-selected-summary">

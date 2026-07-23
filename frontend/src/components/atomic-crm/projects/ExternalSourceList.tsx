@@ -15,7 +15,7 @@ import {
   singlePageSyncErrorMessage,
   type ExternalSourceSyncState,
   type SinglePageExternalSourceSyncState,
-} from "@/lib/vfic/knowledgeService";
+} from "./project-knowledge-service";
 
 const RUN_NOW_COOLDOWN_MS = 5 * 60 * 1000;
 const FAST_FOLLOW_UP_REFRESH_MS = 4000;

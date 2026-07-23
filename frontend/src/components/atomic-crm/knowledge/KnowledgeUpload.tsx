@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   saveKnowledgeTemplate,
   createAndIngestKnowledgeBaseVersion,
-} from "@/lib/vfic/knowledgeService";
+} from "./knowledge-service";
 import { cn } from "@/lib/utils";
 import {
   ACCEPTED_KNOWLEDGE_TYPES,

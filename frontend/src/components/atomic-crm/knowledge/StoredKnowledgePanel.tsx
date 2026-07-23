@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   getKnowledgeUnits,
   type KnowledgeUnit,
-} from "@/lib/vfic/knowledgeService";
+} from "./knowledge-service";
 import { Markdown } from "../misc/Markdown";
 import type { KnowledgeSource } from "../types";
 import { isPublished, needsReview } from "./knowledgePipelineUtils";

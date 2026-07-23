@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 
-vi.mock("@/lib/vfic/knowledgeService", () => ({
+vi.mock("./knowledge-service", () => ({
   createAndIngestKnowledgeBaseVersion: mocks.createAndIngestKnowledgeBaseVersion,
   saveKnowledgeTemplate: vi.fn(),
 }));

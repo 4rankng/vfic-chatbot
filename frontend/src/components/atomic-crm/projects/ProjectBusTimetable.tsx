@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { BusRoute, BusTimetableList } from "../types";
-import { getProjectBusTimetable } from "@/lib/vfic/knowledgeService";
+import { getProjectBusTimetable } from "./project-knowledge-service";
 
 const shiftLabel = (shift: string) =>
   (

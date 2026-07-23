@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/components/atomic-crm/providers/rest/api";
-import type { KnowledgeCategoryStatus } from "@/lib/vfic/knowledgeService";
-import type * as KnowledgeServiceModule from "@/lib/vfic/knowledgeService";
+import type { KnowledgeCategoryStatus } from "./project-knowledge-service";
+import type * as KnowledgeServiceModule from "./project-knowledge-service";
 import type { Project } from "../types";
 
 const mocks = vi.hoisted(() => ({
@@ -27,7 +27,7 @@ vi.mock("ra-core", () => ({
   useRefresh: () => mocks.refresh,
 }));
 
-vi.mock("@/lib/vfic/knowledgeService", async (importOriginal) => ({
+vi.mock("./project-knowledge-service", async (importOriginal) => ({
   ...(await importOriginal<typeof KnowledgeServiceModule>()),
   getProjectKnowledgeCategories: mocks.getProjectKnowledgeCategories,
   getProjectKnowledgeCategorySource: mocks.getProjectKnowledgeCategorySource,

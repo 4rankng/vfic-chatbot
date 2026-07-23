@@ -14,7 +14,7 @@ import {
   listKnowledgeBaseVersions,
   publishKnowledgeBaseVersion,
   type KnowledgeBaseVersion,
-} from "@/lib/vfic/knowledgeService";
+} from "./knowledge-service";
 
 export const KnowledgeVersionManager = ({ projectId }: { projectId?: string }) => {
   const [open, setOpen] = useState(false);

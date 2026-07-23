@@ -31,7 +31,7 @@ import {
 } from "./useKnowledgeSourceFilters";
 import { ProjectPicker } from "./ProjectPicker";
 import { InboxIcons } from "../conversations/InboxIcons";
-import { reindexAllKnowledge } from "@/lib/vfic/knowledgeService";
+import { reindexAllKnowledge } from "./knowledge-service";
 import { cn } from "@/lib/utils";
 import "../conversations/inbox.css";
 import type { KnowledgeSource } from "../types";

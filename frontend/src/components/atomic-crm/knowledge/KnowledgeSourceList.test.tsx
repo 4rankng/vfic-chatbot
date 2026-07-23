@@ -21,7 +21,7 @@ vi.mock("ra-core", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/vfic/knowledgeService", async (importOriginal) => {
+vi.mock("./knowledge-service", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,

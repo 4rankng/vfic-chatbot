@@ -18,6 +18,10 @@ import type { Project } from "../types";
 import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
+import {
+  aggregateProjectFeatureReadiness,
+  projectReadinessLabel,
+} from "./domain/project-knowledge-policy";
 
 const ProjectListContent = () => {
   const { data, isPending, total } = useListContext<Project>();
@@ -39,19 +43,7 @@ const ProjectListContent = () => {
     [projects],
   );
   const readiness = useMemo(
-    () =>
-      projects.reduce(
-        (acc, project) => {
-          if (project.knowledge_mode === "DIRECT_CONTEXT") return acc;
-          const totalFeatures = project.feature_readiness?.total ?? 0;
-          const readyFeatures = project.feature_readiness?.ready ?? 0;
-          return {
-            ready: acc.ready + readyFeatures,
-            total: acc.total + totalFeatures,
-          };
-        },
-        { ready: 0, total: 0 },
-      ),
+    () => aggregateProjectFeatureReadiness(projects),
     [projects],
   );
 
@@ -142,16 +134,7 @@ export const ProjectAccordionList = ({
     <Accordion type="single" collapsible className="project-accordion-list">
       {projects.map((project) => {
         const projectId = String(project.id);
-        const isSinglePage = project.knowledge_mode === "DIRECT_CONTEXT";
-        const readinessReady = project.feature_readiness?.ready;
-        const readinessTotal = project.feature_readiness?.total ?? 16;
-        const readinessText = isSinglePage
-          ? (project.knowledge_document_count ?? 0) > 0
-            ? "Đã sẵn sàng"
-            : "Chưa có trang"
-          : typeof readinessReady === "number"
-            ? `${readinessReady}/${readinessTotal}`
-            : "Chưa đo";
+        const readinessText = projectReadinessLabel(project);
 
         return (
           <AccordionItem

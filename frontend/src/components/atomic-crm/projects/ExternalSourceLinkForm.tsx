@@ -20,7 +20,7 @@ import {
   resolveGoogleSheetGid,
   singlePageSyncErrorMessage,
   type KnowledgeCategoryKey,
-} from "@/lib/vfic/knowledgeService";
+} from "./project-knowledge-service";
 
 const CATEGORY_OPTIONS: { value: KnowledgeCategoryKey; label: string }[] = [
   { value: "faq", label: "Câu hỏi thường gặp" },

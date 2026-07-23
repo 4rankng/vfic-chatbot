@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import {
   saveKnowledgeTemplate,
   createAndIngestKnowledgeBaseVersion,
-} from "@/lib/vfic/knowledgeService";
+} from "./knowledge-service";
 import {
   ACCEPTED_KNOWLEDGE_TYPES,
   formatFileSize,
