@@ -91,7 +91,7 @@ async def test_bot_webhook_dispatches_turn_through_rq(monkeypatch):
     )
 
     assert response.status_code == 503
-    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn
     assert handle.await_args.kwargs["runtime_authority"] == _runtime_authority()
 
 
@@ -125,7 +125,7 @@ async def test_valid_oa_webhook_preserves_start_failed_retry_mapping(monkeypatch
     )
 
     assert response.status_code == 503
-    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn
 
 
 @pytest.mark.asyncio
@@ -210,7 +210,7 @@ async def test_oa_webhook_dispatches_verifiably_signed_event(monkeypatch):
 
     assert response.status_code == 200
     handle.assert_awaited_once()
-    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn
     assert handle.await_args.kwargs["runtime_authority"] == _runtime_authority()
 
 

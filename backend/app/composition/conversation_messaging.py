@@ -26,6 +26,18 @@ def build_delivery_status_values() -> SqlAlchemyDeliveryStatusValues:
     return SqlAlchemyDeliveryStatusValues()
 
 
+def enqueue_chat_turn(job) -> bool | None:
+    from app.workers.chatbot_worker import enqueue_chat_run
+
+    return enqueue_chat_run(job)
+
+
+def webhook_app_env() -> str:
+    from app.core.config import get_settings
+
+    return get_settings().app_env
+
+
 async def run_zalo_ingress(
     db,
     payload,
@@ -74,6 +86,8 @@ async def run_outbound_recovery() -> None:
 __all__ = [
     "SqlAlchemyOutboundRecoveryAdapter",
     "build_delivery_status_values",
+    "enqueue_chat_turn",
     "run_outbound_recovery",
     "run_zalo_ingress",
+    "webhook_app_env",
 ]

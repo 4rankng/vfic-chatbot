@@ -33,25 +33,11 @@ api_outward|backend/app/api/conversations.py|app.models.conversation:Conversatio
 api_outward|backend/app/api/conversations.py|app.models.user:Role
 api_outward|backend/app/api/conversations.py|app.models.user:User
 api_outward|backend/app/api/conversations.py|app.workers.chatbot_worker:enqueue_chat_run
-api_outward|backend/app/api/integrations.py|app.core.config:ZALO_BOT_WEBHOOK_URL
-api_outward|backend/app/api/integrations.py|app.core.config:get_settings
-api_outward|backend/app/api/integrations.py|app.core.db:get_db
-api_outward|backend/app/api/integrations.py|app.core.http:get_http_client
-api_outward|backend/app/api/integrations.py|app.core.redis:get_redis
-api_outward|backend/app/api/integrations.py|app.models.user:Role
-api_outward|backend/app/api/integrations.py|app.models.user:User
 api_outward|backend/app/api/leads.py|app.core.db:get_db
 api_outward|backend/app/api/leads.py|app.models.lead:LeadStage
 api_outward|backend/app/api/leads.py|app.models.user:User
 api_outward|backend/app/api/personas.py|app.core.db:get_db
 api_outward|backend/app/api/personas.py|app.models.user:User
-api_outward|backend/app/api/webhooks.py|app.core.config:get_settings
-api_outward|backend/app/api/webhooks.py|app.core.db:get_db
-api_outward|backend/app/api/webhooks.py|app.models.contact:ContactChannelIdentity
-api_outward|backend/app/api/webhooks.py|app.models.conversation:Conversation
-api_outward|backend/app/api/webhooks.py|app.models.conversation:DeliveryStatus
-api_outward|backend/app/api/webhooks.py|app.models.conversation:Message
-api_outward|backend/app/api/webhooks.py|app.workers.chatbot_worker:enqueue_chat_run
 """.splitlines()
     if line.strip()
 )

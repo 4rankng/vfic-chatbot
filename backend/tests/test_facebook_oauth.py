@@ -902,7 +902,7 @@ def test_oauth_redirect_uses_first_allowlisted_origin(monkeypatch):
     import app.api.integrations as api
 
     monkeypatch.setattr(
-        "app.core.config.get_settings",
+        "app.integrations.admin_runtime.get_settings",
         lambda: SimpleNamespace(
             facebook_callback_allowlist=[
                 "https://admin.example.com/",

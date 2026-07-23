@@ -328,7 +328,9 @@ async def test_receipt_is_scoped_by_page_account_no_cross_contamination(
 
     from sqlalchemy import select
 
-    from app.api.webhooks import _apply_messenger_receipt
+    from app.conversation_messaging.infrastructure.webhook_delivery import (
+        apply_messenger_receipt,
+    )
     from app.channels.types import ChannelReceipt
     from app.core.db import async_session
     from app.models.contact import Contact, ContactChannelIdentity
@@ -383,7 +385,7 @@ async def test_receipt_is_scoped_by_page_account_no_cross_contamination(
             kind="delivered",
             occurred_at=datetime.now(timezone.utc),
         )
-        await _apply_messenger_receipt(db, receipt, account_key="page-A")
+        await apply_messenger_receipt(db, receipt, account_key="page-A")
 
     async with async_session() as db:
         rows = (
