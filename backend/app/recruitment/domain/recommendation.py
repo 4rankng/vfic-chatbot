@@ -8,7 +8,7 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Literal
 
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 
 ActiveJobLookupStatus = Literal["matched", "no_match", "catalog_empty", "unavailable"]
 SortBy = Literal["updated_at", "salary_desc", "salary_asc", "created_at"]
@@ -69,7 +69,7 @@ def parse_salary_band(text: str | None) -> tuple[int | None, int | None]:
     return None, None
 
 
-@dataclass(frozen=True)
+@dataclass
 class LeadProfile:
     """Candidate signals used by the structured ranker."""
 
@@ -97,8 +97,6 @@ class LeadProfile:
             age=lead.get("age"),
             gender=(lead.get("gender") or "").lower(),
             years_experience_text=lead.get("years_experience") or "",
-            wants_accommodation=lead.get("wants_accommodation"),
-            wants_transport=lead.get("wants_transport"),
             salary_min=salary_min,
             salary_max=salary_max,
         )
@@ -108,7 +106,7 @@ class LeadProfile:
         return bool(self.desired_job or self.living_area or self.region or self.salary_max)
 
 
-@dataclass(frozen=True)
+@dataclass
 class JobCandidate:
     """One structured job row shaped for pure scoring."""
 
@@ -149,7 +147,7 @@ class JobCandidate:
         )
 
 
-@dataclass(frozen=True)
+@dataclass
 class ScoredJob:
     job: JobCandidate
     score: float
@@ -391,23 +389,3 @@ def select_matching_active_jobs(
         if matches
         else ActiveJobLookup("no_match", total=total)
     )
-
-
-__all__ = [
-    "ActiveJob",
-    "ActiveJobLookup",
-    "ActiveJobLookupStatus",
-    "JobCandidate",
-    "LeadProfile",
-    "RecommendationWeights",
-    "ScoredJob",
-    "SortBy",
-    "parse_salary_band",
-    "score_experience",
-    "score_job",
-    "score_location",
-    "score_salary",
-    "score_support_flags",
-    "score_title",
-    "select_matching_active_jobs",
-]

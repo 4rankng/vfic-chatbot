@@ -29,6 +29,7 @@ from app.graph.clients import (
 )
 from app.graph.safety import DeterministicReplyPolicy
 from app.graph.types import GraphDeps
+from app.recruitment.infrastructure.legacy_adapters import LegacyLeadContextAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -99,72 +100,7 @@ def _is_general_or_comparative(normalized_message: str) -> bool:
     return bool(_SALARY_FIGURE_RE.search(text) and _SALARY_ACHIEVEMENT_RE.search(text))
 
 
-class _LeadContextAdapter:
-    """LeadContextPort backed by the concrete lead service pieces.
-
-    Defined here (the composition root) so the graph layer never imports the lead
-    service modules. Each method does one DB fetch, matching the prior single-fetch
-    behavior of the brain; the caller owns the best-effort try/except.
-    """
-
-    def __init__(self, db) -> None:
-        self._db = db
-
-    async def profile_text(self, chat_id: str) -> str:
-        from app.services.lead import lead_profile_text
-        from app.services.lead.repository import LeadRepository
-
-        lead = await LeadRepository(self._db).by_zalo_id(chat_id)
-        return lead_profile_text(lead)
-
-    async def context(self, chat_id, current_user_text, recent_messages):
-        from app.services.lead import lead_profile_text
-        from app.services.conversation import ConversationService
-        from app.services.lead.probing import (
-            lead_collection_question,
-            oa_profile_name_guidance,
-        )
-        from app.services.lead.repository import LeadRepository
-
-        lead = await LeadRepository(self._db).by_zalo_id(chat_id)
-        oa_profile_display_name = None
-        if chat_id.startswith("oa:"):
-            conversation = await ConversationService(self._db).get_by_zalo(chat_id)
-            if conversation is not None and conversation.contact is not None:
-                oa_profile_display_name = conversation.contact.display_name
-
-        collection_lead = lead
-        if oa_profile_display_name and not str((lead or {}).get("name") or "").strip():
-            collection_lead = dict(lead or {})
-            collection_lead["name"] = oa_profile_display_name
-            next_question = lead_collection_question(
-                lead=collection_lead,
-                current_user_text=current_user_text,
-                recent_messages=recent_messages,
-            )
-            collection_guidance = oa_profile_name_guidance(
-                oa_profile_display_name,
-                next_question=next_question,
-            )
-        else:
-            collection_guidance = lead_collection_question(
-                lead=lead,
-                current_user_text=current_user_text,
-                recent_messages=recent_messages,
-            )
-        return (
-            lead_profile_text(
-                lead,
-                oa_profile_display_name=oa_profile_display_name,
-                personalize=chat_id.startswith("oa:"),
-            ),
-            collection_guidance,
-        )
-
-    def instruction(self, question: str) -> str:
-        from app.services.lead.probing import lead_collection_instruction
-
-        return lead_collection_instruction(question=question)
+_LeadContextAdapter = LegacyLeadContextAdapter
 
 
 class _DirectContextAdapter:
@@ -741,7 +677,7 @@ async def build_deps(db, *, session_factory=None):
         retrieval=RetrievalRepository(db),
         reply_policy=DeterministicReplyPolicy(),
         make_retrieval=make_retrieval,
-        lead=_LeadContextAdapter(db),
+        lead=_build_lead_context(db),
         faq_bypass=_FaqBypassAdapter(db, clients.embedder),
         followup_allowed=_make_followup_allowed(db),
         enrich_oa_profile=_enrich_oa_profile,
@@ -751,9 +687,13 @@ async def build_deps(db, *, session_factory=None):
 
 
 def _make_followup_allowed(db):
-    from app.services.proactive.repository import conversation_allowed_by_followup_rules
+    from app.composition.recruitment import build_followup_eligibility
 
-    async def _allowed(conv):
-        return await conversation_allowed_by_followup_rules(db, conv)
+    adapter = build_followup_eligibility(db)
+    return adapter.allowed
 
-    return _allowed
+
+def _build_lead_context(db):
+    from app.composition.recruitment import build_lead_context
+
+    return build_lead_context(db)

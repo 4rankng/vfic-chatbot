@@ -18,6 +18,11 @@ from typing import Any, Protocol
 
 from app.conversation_messaging.application.ports import DeliveryResultPort
 from app.project_knowledge.application.retrieval import ProjectKnowledgeQueryPort
+from app.recruitment.application.ports import (
+    LeadContextQueryPort,
+    PersonaBodyResolver,
+    RecommendationQueryPort,
+)
 from app.shared.application.outbound import OutboundTelemetry
 
 
@@ -157,7 +162,7 @@ class ConversationPort(Protocol):
     async def acquire_lock(self, conv_id: Any) -> Any: ...
 
 
-class LeadContextPort(Protocol):
+class LeadContextPort(LeadContextQueryPort, Protocol):
     """Lead-profile context the brain injects into the agent prompt.
 
     ``context`` does one DB fetch and returns both the profile text and the
@@ -167,13 +172,7 @@ class LeadContextPort(Protocol):
     questions — there is no post-reply CTA append.
     """
 
-    async def profile_text(self, chat_id: str) -> str: ...
-
-    async def context(
-        self, chat_id: str, current_user_text: str, recent_messages: list[Any]
-    ) -> tuple[str, str]: ...
-
-    def instruction(self, question: str) -> str: ...
+    pass
 
 
 class RuntimePolicyPort(Protocol):
@@ -186,33 +185,17 @@ class RuntimePolicyPort(Protocol):
     ) -> bool: ...
 
 
-class RetrievalPort(ProjectKnowledgeQueryPort, Protocol):
+class RetrievalPort(
+    ProjectKnowledgeQueryPort,
+    PersonaBodyResolver,
+    RecommendationQueryPort,
+    Protocol,
+):
     """Compatibility aggregate while Phase 5/6 split conversation and recruitment reads."""
-
-    async def active_persona_body(self, provider: str | None = None) -> str | None: ...
 
     async def match_memories(
         self, embedding: str, top_k: int, filters_json: str
     ) -> list[Any]: ...
-
-    async def match_jobs_for_lead(
-        self, chat_id: str, *, top_k: int = 5, province: str | None = None
-    ) -> list[Any]: ...
-
-    async def recommend_jobs_for_lead(
-        self, chat_id: str, *, top_k: int = 5, province: str | None = None
-    ) -> Any: ...
-
-    async def list_active_jobs(
-        self,
-        *,
-        project_slug: str | None = None,
-        role: str | None = None,
-        company: str | None = None,
-        location: str | None = None,
-        top_k: int = 3,
-        sort_by: str | None = None,
-    ) -> Any: ...
 
 
 class FaqBypassPort(Protocol):

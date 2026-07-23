@@ -19,8 +19,7 @@ class _Normalizer:
     def normalize_lead_patch(self, value: object, chat_id: str) -> dict[str, object] | None:
         if not isinstance(value, dict):
             return None
-        lead_patch = {"zalo_id": chat_id, **value}
-        return lead_patch
+        return {"zalo_id": chat_id, **value}
 
     def extract_self_reported_name(
         self,
@@ -103,10 +102,8 @@ async def test_application_extract_uses_ports_and_preserves_candidate_turn_shape
     assert result.intent_confidence == 0.99
 
 
-def test_recruitment_candidate_extraction_modules_stay_free_of_orm_graph_and_provider_imports() -> None:
-    application_path = (
-        REPO_ROOT / "backend/app/recruitment/application/candidate_extraction.py"
-    )
+def test_candidate_extraction_modules_stay_free_of_orm_graph_and_provider_imports() -> None:
+    application_path = REPO_ROOT / "backend/app/recruitment/application/candidate_extraction.py"
     domain_path = REPO_ROOT / "backend/app/recruitment/domain/candidate_extraction.py"
 
     forbidden_prefixes = (

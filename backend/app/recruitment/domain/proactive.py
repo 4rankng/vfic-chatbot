@@ -17,7 +17,7 @@ class FollowupRulePolicy:
 
 @dataclass(frozen=True)
 class FollowupRulesPolicy:
-    """Pure, provider-neutral follow-up policy values."""
+    """Provider-neutral follow-up policy values."""
 
     hot: FollowupRulePolicy = field(
         default_factory=lambda: FollowupRulePolicy(cadence_hours=(10, 22, 46))
@@ -61,10 +61,3 @@ def followup_rule_allows(
     if now < due_at:
         return False, "not_due"
     return True, "due"
-
-
-__all__ = [
-    "FollowupRulePolicy",
-    "FollowupRulesPolicy",
-    "followup_rule_allows",
-]

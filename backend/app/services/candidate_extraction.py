@@ -34,7 +34,6 @@ Extractor = Callable[[str, str], Awaitable[str]]
 
 logger = logging.getLogger(__name__)
 
-
 class _LegacyCandidateLeadNormalizer:
     def normalize_lead_patch(self, value: object, chat_id: str) -> dict[str, object] | None:
         return normalize_lead(value, chat_id)

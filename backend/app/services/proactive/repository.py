@@ -21,6 +21,11 @@ from app.core.config import (
     PROACTIVE_RETRY_COOLDOWN_SECONDS,
 )
 from app.models.conversation import Conversation
+from app.recruitment.domain.proactive import (
+    FollowupRulePolicy,
+    FollowupRulesPolicy,
+    followup_rule_allows,
+)
 from app.schemas.personas import PersonaFollowupRules, normalize_followup_rules
 from app.services.personas.providers import conversation_adapter_provider
 from app.services.personas.repository import PersonaRepository
@@ -51,6 +56,21 @@ def _mode_value(mode) -> str | None:
     return getattr(mode, "value", mode) if mode is not None else None
 
 
+def _to_policy(rules: PersonaFollowupRules) -> FollowupRulesPolicy:
+    def _rule(rule) -> FollowupRulePolicy:
+        return FollowupRulePolicy(
+            enabled=rule.enabled,
+            cadence_hours=tuple(rule.cadence_hours),
+            eligible_stages=tuple(stage.value for stage in rule.eligible_stages),
+        )
+
+    return FollowupRulesPolicy(
+        hot=_rule(rules.hot),
+        warm=_rule(rules.warm),
+        not_interested=_rule(rules.not_interested),
+    )
+
+
 def _rule_allows(
     conv: Conversation,
     *,
@@ -59,21 +79,15 @@ def _rule_allows(
     rules: PersonaFollowupRules,
     now: datetime,
 ) -> tuple[bool, str]:
-    rule = rules.rule_for_score(lead_score)
-    if rule is None:
-        return False, "no_score_rule"
-    if not rule.enabled:
-        return False, "rule_disabled"
-    if lead_stage not in {stage.value for stage in rule.eligible_stages}:
-        return False, "stage_not_eligible"
-    if conv.followup_count >= len(rule.cadence_hours):
-        return False, "rule_sequence_exhausted"
-    if conv.followup_count >= PROACTIVE_FOLLOWUP_CAP:
-        return False, "cap_reached"
-    due_at = conv.last_inbound_at + timedelta(hours=rule.cadence_hours[conv.followup_count])
-    if now < due_at:
-        return False, "not_due"
-    return True, "due"
+    return followup_rule_allows(
+        followup_count=conv.followup_count,
+        last_inbound_at=conv.last_inbound_at,
+        lead_score=lead_score,
+        lead_stage=lead_stage,
+        rules=_to_policy(rules),
+        now=now,
+        followup_cap=PROACTIVE_FOLLOWUP_CAP,
+    )
 
 
 async def conversation_allowed_by_followup_rules(db, conv: Conversation) -> tuple[bool, str]:
@@ -175,7 +189,6 @@ async def find_eligible_conversations(db) -> list[Conversation]:
     fetched = {str(conv.id): conv for conv in result.scalars().all()}
     candidates = [fetched[str(conv_id)] for conv_id in conv_ids if str(conv_id) in fetched]
 
-    # --- Python-side rule filter: score/stage/cadence are provider-Agent config ---
     eligible: list[Conversation] = []
     rules_cache: dict[str, PersonaFollowupRules] = {}
     for conv in candidates:
@@ -195,8 +208,6 @@ async def find_eligible_conversations(db) -> list[Conversation]:
         if allowed:
             eligible.append(conv)
 
-    # Cap *after* the gap filter so that actually-due candidates are never
-    # starved by not-yet-due rows that happen to be newer.
     pre_cap = len(eligible)
     eligible = eligible[:per_tick]
 

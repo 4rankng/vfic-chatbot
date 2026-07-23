@@ -1,1 +1,1 @@
-"""Application ports for the recruitment context."""
+"""Application use cases and ports for recruitment."""

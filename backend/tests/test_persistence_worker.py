@@ -40,7 +40,7 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
         ),
         patch("app.workers.persistence_worker._build_extractor", return_value=fake_extractor),
         patch(
-            "app.services.candidate_extraction.CandidateExtractionService.persist",
+            "app.composition.recruitment.run_candidate_persistence",
             new_callable=AsyncMock,
         ) as persist,
     ):
@@ -55,11 +55,11 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
 
     persist.assert_awaited_once_with(
         db,
-        fake_embedder,
-        fake_extractor,
-        "zalo_1",
-        "tôi tên Mai",
-        "Chào Mai",
+        embed_batch=fake_embedder,
+        extractor=fake_extractor,
+        chat_id="zalo_1",
+        user_text="tôi tên Mai",
+        bot_output="Chào Mai",
         expected_conversation_version=7,
     )
 
@@ -91,7 +91,7 @@ async def test_stale_stamped_persist_job_never_resolves_an_extractor():
             new_callable=AsyncMock,
         ) as resolve_openrouter,
         patch(
-            "app.services.candidate_extraction.CandidateExtractionService.persist",
+            "app.composition.recruitment.run_candidate_persistence",
             new_callable=AsyncMock,
         ) as persist,
     ):

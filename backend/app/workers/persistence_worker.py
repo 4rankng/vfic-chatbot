@@ -52,8 +52,8 @@ def _build_extractor():
 
 
 async def _persist_candidate_async(job: dict) -> None:
+    from app.composition.recruitment import run_candidate_persistence
     from app.graph.clients import build_embedder
-    from app.services.candidate_extraction import CandidateExtractionService
     from app.services.integration_settings import IntegrationSettingsService
     from app.services.installation.service import InstallationService
     from app.workers._db import worker_session
@@ -77,13 +77,15 @@ async def _persist_candidate_async(job: dict) -> None:
                     logger.info("candidate extraction suppressed by runtime authority")
                     return
             openrouter_config = await IntegrationSettingsService(db).resolve_openrouter()
-            await CandidateExtractionService.persist(
+            await run_candidate_persistence(
                 db,
-                build_embedder(openrouter_api_key=openrouter_config.api_key).batch,
-                _build_extractor(),
-                job["chat_id"],
-                job.get("user_text", ""),
-                job.get("bot_output", ""),
+                embed_batch=build_embedder(
+                    openrouter_api_key=openrouter_config.api_key
+                ).batch,
+                extractor=_build_extractor(),
+                chat_id=job["chat_id"],
+                user_text=job.get("user_text", ""),
+                bot_output=job.get("bot_output", ""),
                 expected_conversation_version=job.get("conversation_version"),
             )
     except Exception:
