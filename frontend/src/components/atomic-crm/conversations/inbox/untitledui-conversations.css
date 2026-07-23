@@ -1,0 +1,897 @@
+/*
+ * Untitled UI conversations workspace.
+ *
+ * This is a page-scoped visual layer over the mature inbox DOM and interaction
+ * model. It reuses the app-wide Untitled UI tokens from styles/untitledui.css
+ * and deliberately leaves data flow, responsive ownership, and chat behavior
+ * untouched.
+ */
+
+.inbox-bg-container {
+  --uu-inbox-brand: var(--color-uu-brand-600, #4a3fff);
+  --uu-inbox-brand-hover: var(--color-uu-brand-700, #3d2fd9);
+  --uu-inbox-brand-strong: var(--color-uu-brand-800, #3128a8);
+  --uu-inbox-brand-soft: var(--color-uu-brand-50, #eef0fe);
+  --uu-inbox-brand-line: var(--color-uu-brand-200, #c7ccfd);
+  --uu-inbox-navy: #0a2540;
+  --uu-inbox-ink: #101828;
+  --uu-inbox-message-meta: #475467;
+  --uu-inbox-muted: #667085;
+  --uu-inbox-faint: #98a2b3;
+  --uu-inbox-canvas: #f2f5f9;
+  --uu-inbox-surface: #ffffff;
+  --uu-inbox-surface-subtle: #f8fafc;
+  --uu-inbox-line: #e4e7ec;
+  --uu-inbox-line-strong: #d0d5dd;
+  --uu-inbox-focus: 0 0 0 3px
+    color-mix(in srgb, var(--uu-inbox-brand) 18%, transparent);
+
+  /* Replace the previous page-local emerald skin with the product brand. */
+  --tailkit-brand: var(--uu-inbox-brand);
+  --tailkit-brand-hover: var(--uu-inbox-brand-hover);
+  --tailkit-brand-soft: var(--uu-inbox-brand-soft);
+  --tailkit-brand-line: var(--uu-inbox-brand-line);
+  --tailkit-canvas: var(--uu-inbox-canvas);
+  --tailkit-shell: color-mix(
+    in srgb,
+    var(--uu-inbox-surface-subtle) 92%,
+    var(--uu-inbox-brand-soft)
+  );
+  --tailkit-surface: var(--uu-inbox-surface);
+  --tailkit-surface-muted: var(--uu-inbox-surface-subtle);
+  --tailkit-ink: var(--uu-inbox-ink);
+  --tailkit-muted: var(--uu-inbox-muted);
+  --tailkit-faint: var(--uu-inbox-faint);
+  --tailkit-line: var(--uu-inbox-line);
+  --tailkit-line-soft: color-mix(
+    in srgb,
+    var(--uu-inbox-line) 82%,
+    transparent
+  );
+  --tailkit-shadow-xs: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+
+  --brand: var(--uu-inbox-brand);
+  --brand-hover: var(--uu-inbox-brand-hover);
+  --brand-light: var(--uu-inbox-brand-soft);
+  --inbox-accent: var(--uu-inbox-brand);
+  --primary-soft: var(--uu-inbox-brand-soft);
+  --workspace-active: var(--uu-inbox-brand);
+  --workspace-action: var(--uu-inbox-brand);
+  --workspace-action-strong: var(--uu-inbox-brand-hover);
+  --workspace-teal-soft: var(--uu-inbox-brand-soft);
+  --chat-bg: var(--uu-inbox-surface);
+  --chat-bubble-user: #f2f4f7;
+  --chat-bubble-user-text: var(--uu-inbox-ink);
+  --chat-bubble-bot: var(--uu-inbox-brand-soft);
+  --chat-bubble-agent: var(--uu-inbox-brand-soft);
+  --chat-bubble-agent-text: var(--uu-inbox-ink);
+
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      circle at 5% 0%,
+      color-mix(in srgb, var(--uu-inbox-brand) 9%, transparent),
+      transparent 27rem
+    ),
+    linear-gradient(180deg, #f7f9fc 0%, var(--uu-inbox-canvas) 100%);
+}
+
+.inbox-bg-container::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.34;
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--uu-inbox-brand) 7%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--uu-inbox-brand) 7%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 28px 28px;
+  mask-image: radial-gradient(circle at 0 0, #000 0, transparent 34rem);
+}
+
+.inbox-bg-container .app {
+  gap: 10px;
+  border-radius: var(--radius-uu-2xl, 18px);
+}
+
+.inbox-bg-container .left-panel,
+.inbox-bg-container .center-panel,
+.inbox-bg-container .right-panel.context-persistent {
+  border-color: var(--uu-inbox-line);
+  border-radius: var(--radius-uu-2xl, 18px);
+  box-shadow: var(--shadow-uu-md, 0 4px 8px -2px rgb(16 24 40 / 0.1));
+}
+
+.inbox-bg-container .left-panel,
+.inbox-bg-container .right-panel.context-persistent {
+  background: color-mix(
+    in srgb,
+    var(--uu-inbox-surface) 96%,
+    var(--uu-inbox-brand-soft)
+  );
+}
+
+.inbox-bg-container .center-panel {
+  padding: 0;
+  overflow: hidden;
+  background: var(--uu-inbox-surface);
+}
+
+/* Directory header: Untitled UI command-menu rhythm with visible hierarchy. */
+.inbox-bg-container .workspace-rail {
+  grid-template-areas:
+    "title adapters"
+    "search search";
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  padding: 14px;
+  border-color: var(--uu-inbox-line);
+  background: var(--uu-inbox-surface);
+}
+
+.inbox-bg-container .workspace-rail > .workspace-title {
+  grid-area: title;
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+.inbox-bg-container .workspace-rail > .channel-adapter-selector {
+  grid-area: adapters;
+  justify-content: flex-end;
+}
+
+.inbox-bg-container .workspace-title-row {
+  align-items: center;
+}
+
+.inbox-bg-container .workspace-title-copy {
+  gap: 2px;
+}
+
+.inbox-bg-container .workspace-rail-kicker {
+  color: var(--uu-inbox-brand);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.inbox-bg-container .workspace-heading {
+  color: var(--uu-inbox-ink);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.inbox-bg-container .workspace-conversation-count {
+  height: 24px;
+  min-width: 28px;
+  border-color: var(--uu-inbox-brand-line);
+  background: var(--uu-inbox-brand-soft);
+  color: var(--uu-inbox-brand-hover);
+}
+
+.inbox-bg-container .channel-adapter-options {
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--uu-inbox-line);
+  border-radius: 10px;
+  background: var(--uu-inbox-surface-subtle);
+}
+
+.inbox-bg-container .channel-adapter-option {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-radius: 7px;
+}
+
+.inbox-bg-container .channel-adapter-option img {
+  width: 30px;
+  height: 30px;
+}
+
+.inbox-bg-container .channel-adapter-option:hover {
+  background: var(--uu-inbox-surface);
+  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+  transform: none;
+}
+
+.inbox-bg-container .channel-adapter-option[data-state="checked"] {
+  background: var(--uu-inbox-surface);
+  box-shadow:
+    0 0 0 1px var(--uu-inbox-brand-line),
+    var(--shadow-uu-sm, 0 1px 3px rgb(16 24 40 / 0.1));
+}
+
+.inbox-bg-container .workspace-rail .search input {
+  min-height: 42px;
+  height: 42px;
+  padding-left: 38px;
+  border-color: var(--uu-inbox-line-strong);
+  border-radius: 10px;
+  background: var(--uu-inbox-surface);
+  color: var(--uu-inbox-ink);
+  font-size: 13px;
+  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+}
+
+.inbox-bg-container .workspace-rail .search input::placeholder {
+  color: var(--uu-inbox-faint);
+}
+
+.inbox-bg-container .workspace-rail .search .icon {
+  left: 13px;
+  color: var(--uu-inbox-muted);
+}
+
+.inbox-bg-container .workspace-rail .search input:focus {
+  border-color: var(--uu-inbox-brand);
+  box-shadow: var(--uu-inbox-focus);
+}
+
+/* Conversation list: crisp scan lines, stable hover, unmistakable selection. */
+.inbox-bg-container .conversations {
+  padding: 8px;
+  background: var(--uu-inbox-surface);
+}
+
+.inbox-bg-container .conversation {
+  min-height: 76px;
+  gap: 11px;
+  padding: 11px 10px;
+  border-color: transparent;
+  border-radius: 11px;
+  color: var(--uu-inbox-muted);
+}
+
+.inbox-bg-container .conversation + .conversation {
+  margin-top: 2px;
+}
+
+.inbox-bg-container .conversation:hover {
+  border-color: var(--uu-inbox-line);
+  background: var(--uu-inbox-surface-subtle);
+}
+
+.inbox-bg-container .conversation.active {
+  border-color: color-mix(
+    in srgb,
+    var(--uu-inbox-brand) 22%,
+    var(--uu-inbox-line)
+  );
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--uu-inbox-brand-soft) 92%, #ffffff) 0%,
+    #ffffff 100%
+  );
+  box-shadow: var(--shadow-uu-sm, 0 1px 3px rgb(16 24 40 / 0.1));
+}
+
+.inbox-bg-container .conversation.active::before {
+  left: -1px;
+  width: 3px;
+  height: 30px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(
+    180deg,
+    var(--uu-inbox-brand),
+    var(--uu-inbox-brand-strong)
+  );
+}
+
+.inbox-bg-container .conversation.needs-attention:not(.active) {
+  background: color-mix(in srgb, #fff7ed 54%, #ffffff);
+}
+
+.inbox-bg-container .conversation .avatar {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--uu-inbox-line);
+  background: var(--uu-inbox-surface-subtle);
+  color: var(--uu-inbox-muted);
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 0 0 4px var(--uu-inbox-line);
+}
+
+.inbox-bg-container .conversation.active .avatar {
+  border-color: var(--uu-inbox-brand-line);
+  background: var(--uu-inbox-brand-soft);
+  color: var(--uu-inbox-brand-hover);
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 0 0 4px var(--uu-inbox-brand-line);
+}
+
+.inbox-bg-container .conv-name {
+  color: var(--uu-inbox-ink);
+  font-weight: 650;
+  letter-spacing: -0.006em;
+}
+
+.inbox-bg-container .conv-time {
+  color: var(--uu-inbox-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.inbox-bg-container .conv-preview {
+  color: var(--uu-inbox-muted);
+}
+
+.inbox-bg-container .conv-preview-icon {
+  color: var(--uu-inbox-faint);
+}
+
+.inbox-bg-container .mini-chip {
+  min-height: 22px;
+  border-radius: 999px;
+  font-weight: 650;
+}
+
+.inbox-bg-container .mini-chip.priority-hot,
+.inbox-bg-container .mini-chip.priority-warm {
+  border-color: color-mix(in srgb, #f79009 32%, transparent);
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.inbox-bg-container .conv-state-label.is-human-escalation {
+  color: #b54708;
+}
+
+/* Conversation identity and actions. */
+.inbox-bg-container .chat-header {
+  min-height: 72px;
+  padding: 9px 12px 14px;
+  border-bottom: 0;
+}
+
+.inbox-bg-container .header-avatar {
+  border-color: var(--uu-inbox-brand-line);
+  background: linear-gradient(145deg, #ffffff, var(--uu-inbox-brand-soft));
+  color: var(--uu-inbox-brand-hover);
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 0 0 4px var(--uu-inbox-brand-line);
+}
+
+.inbox-bg-container .person-name {
+  color: var(--uu-inbox-ink);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.inbox-bg-container .person-subtitle {
+  color: var(--uu-inbox-muted);
+  font-size: 12px;
+}
+
+.inbox-bg-container .icon-btn,
+.inbox-bg-container .mode-menu-trigger {
+  min-width: 40px;
+  min-height: 40px;
+  border-color: transparent;
+  color: var(--uu-inbox-muted);
+}
+
+.inbox-bg-container .icon-btn:hover,
+.inbox-bg-container .mode-menu-trigger:hover:not(:disabled) {
+  border-color: var(--uu-inbox-line);
+  background: var(--uu-inbox-surface);
+  color: var(--uu-inbox-ink);
+  box-shadow: var(--shadow-uu-sm, 0 1px 3px rgb(16 24 40 / 0.1));
+}
+
+.inbox-bg-container .mode-menu-trigger--primary {
+  padding-inline: 10px;
+  border-color: var(--uu-inbox-brand-line);
+  background: var(--uu-inbox-brand-soft);
+  color: var(--uu-inbox-brand-hover);
+}
+
+.inbox-bg-container .mode-menu-trigger--primary:hover:not(:disabled) {
+  border-color: var(--uu-inbox-brand-line);
+  background: color-mix(in srgb, var(--uu-inbox-brand-soft) 70%, #ffffff);
+  color: var(--uu-inbox-brand-strong);
+}
+
+.inbox-bg-container .mode-menu-trigger-icon {
+  color: currentColor;
+}
+
+/* Thread: one continuous column surface with dividers, not a nested card. */
+.inbox-bg-container .chat-scroll-shell {
+  border: 0;
+  border-top: 1px solid var(--uu-inbox-line);
+  border-radius: 0;
+  background: var(--uu-inbox-surface);
+  box-shadow: none;
+}
+
+.inbox-bg-container .chat-scroller {
+  padding-block: 24px 28px;
+  background:
+    radial-gradient(
+      circle at 15% 4%,
+      color-mix(in srgb, var(--uu-inbox-brand) 5%, transparent),
+      transparent 22rem
+    ),
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--uu-inbox-brand) 8%, transparent) 0.75px,
+      transparent 0.75px
+    ),
+    var(--uu-inbox-surface);
+  background-size:
+    auto,
+    22px 22px,
+    auto;
+}
+
+.inbox-bg-container .message-row {
+  gap: 11px;
+  margin-bottom: 16px;
+}
+
+.inbox-bg-container .message-avatar {
+  border-color: var(--uu-inbox-line);
+  background: var(--uu-inbox-surface);
+  color: var(--uu-inbox-muted);
+  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+}
+
+.inbox-bg-container .bubble {
+  max-width: min(74%, 680px);
+  padding: 11px 14px;
+  border-radius: 16px;
+}
+
+.inbox-bg-container .message-row.user .bubble {
+  border: 1px solid var(--uu-inbox-line);
+  border-bottom-left-radius: 4px;
+  background: #f9fafb;
+  color: var(--uu-inbox-ink);
+  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+}
+
+.inbox-bg-container .message-row.bot .bubble,
+.inbox-bg-container .message-row.agent .bubble {
+  border: 1px solid var(--uu-inbox-brand-line);
+  border-bottom-right-radius: 4px;
+  background: var(--uu-inbox-brand-soft);
+  color: var(--uu-inbox-ink);
+  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+}
+
+.inbox-bg-container .message-text {
+  font-size: 14px;
+  line-height: 1.52;
+}
+
+.inbox-bg-container .bubble-meta-inline {
+  margin-left: 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inbox-bg-container .message-row.user .bubble-time-inline {
+  color: var(--uu-inbox-muted);
+}
+
+.inbox-bg-container
+  .message-row:is(.bot, .agent)
+  .bubble
+  :is(.bubble-time-inline, .delivery-status, .delivery-retry-count) {
+  color: var(--uu-inbox-message-meta);
+}
+
+.inbox-bg-container
+  .message-row:is(.bot, .agent)
+  .bubble
+  .delivery-status.pending,
+.inbox-bg-container
+  .message-row:is(.bot, .agent)
+  .bubble
+  .delivery-retry-button {
+  color: var(--uu-inbox-brand-hover);
+}
+
+.inbox-bg-container
+  .message-row:is(.bot, .agent)
+  .bubble
+  :is(.delivery-status.failed, .delivery-error-detail) {
+  color: #b42318;
+}
+
+.inbox-bg-container
+  .message-row:is(.bot, .agent)
+  .bubble
+  .delivery-status.suppressed {
+  color: var(--uu-inbox-message-meta);
+}
+
+.inbox-bg-container .system-message span,
+.inbox-bg-container .system-event span {
+  border: 1px solid var(--uu-inbox-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--uu-inbox-muted);
+  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+}
+
+.inbox-bg-container .composer-wrap {
+  padding: 12px 10px 5px;
+  border-top: 1px solid var(--uu-inbox-line);
+  background: var(--uu-inbox-surface);
+}
+
+.inbox-bg-container .composer {
+  min-height: 50px;
+  border-color: var(--uu-inbox-line-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-uu-sm, 0 1px 3px rgb(16 24 40 / 0.1));
+}
+
+.inbox-bg-container .composer:focus-within {
+  border-color: var(--uu-inbox-brand);
+  box-shadow: var(--uu-inbox-focus);
+}
+
+.inbox-bg-container .composer-action.send {
+  border-color: var(--uu-inbox-brand);
+  border-radius: 9px;
+  background: linear-gradient(
+    135deg,
+    var(--uu-inbox-brand),
+    var(--uu-inbox-brand-hover)
+  );
+  box-shadow: 0 4px 8px -4px
+    color-mix(in srgb, var(--uu-inbox-brand) 62%, transparent);
+}
+
+.inbox-bg-container .handoff-note,
+.inbox-bg-container .closed-note {
+  min-height: 48px;
+  border-color: var(--uu-inbox-line);
+  border-radius: 11px;
+  background: var(--uu-inbox-surface);
+  color: var(--uu-inbox-muted);
+  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+}
+
+.inbox-bg-container .inline-takeover-btn,
+.inbox-bg-container .takeover-btn {
+  min-height: 38px;
+  border-color: var(--uu-inbox-brand);
+  border-radius: 9px;
+  background: linear-gradient(
+    135deg,
+    var(--uu-inbox-brand),
+    var(--uu-inbox-brand-hover)
+  );
+  color: #ffffff;
+  box-shadow: 0 4px 8px -4px
+    color-mix(in srgb, var(--uu-inbox-brand) 62%, transparent);
+}
+
+/* Candidate context: open sections separated by rhythm and rules. */
+.inbox-bg-container .profile-header {
+  min-height: 72px;
+  height: 72px;
+  border-color: var(--uu-inbox-line);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.inbox-bg-container .profile-title {
+  color: var(--uu-inbox-ink);
+  letter-spacing: -0.012em;
+}
+
+.inbox-bg-container .profile-title-copy small {
+  color: var(--uu-inbox-muted);
+}
+
+.inbox-bg-container .profile-scroll {
+  padding: 0 16px 16px;
+  background: var(--uu-inbox-surface);
+  scrollbar-color: var(--uu-inbox-line-strong) transparent;
+}
+
+.inbox-bg-container .context-card {
+  margin: 0;
+  padding: 20px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.inbox-bg-container .context-overview {
+  position: relative;
+  overflow: visible;
+  margin: 0 -16px;
+  padding: 16px;
+  border: 0;
+  border-bottom: 1px solid var(--uu-inbox-line);
+  border-radius: 0;
+  background: color-mix(
+    in srgb,
+    var(--uu-inbox-brand-soft) 48%,
+    var(--uu-inbox-surface)
+  );
+  box-shadow: none;
+}
+
+.inbox-bg-container .context-overview::before {
+  display: none;
+}
+
+.inbox-bg-container .context-overview-kicker {
+  color: var(--uu-inbox-brand-hover);
+  letter-spacing: 0.07em;
+}
+
+.inbox-bg-container .candidate-progress-score,
+.inbox-bg-container .completion-pill {
+  border-color: var(--uu-inbox-brand-line);
+  background: var(--uu-inbox-brand-soft);
+  color: var(--uu-inbox-brand-hover);
+}
+
+.inbox-bg-container .candidate-progress-meter {
+  height: 7px;
+  background: #eaecf0;
+  box-shadow: none;
+}
+
+.inbox-bg-container .candidate-progress-fill {
+  background: linear-gradient(
+    90deg,
+    var(--uu-inbox-brand),
+    var(--color-uu-brand-400, #818cf8)
+  );
+}
+
+.inbox-bg-container .section-head {
+  margin-bottom: 10px;
+}
+
+.inbox-bg-container .section-head h3 {
+  color: var(--uu-inbox-ink);
+  font-size: 14px;
+  letter-spacing: -0.008em;
+}
+
+.inbox-bg-container .candidate-info-grid {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.inbox-bg-container .candidate-info-row {
+  min-height: 56px;
+  grid-template-columns: 32px minmax(0, 1fr) 18px;
+  gap: 10px;
+  padding: 10px 0;
+  border-color: var(--uu-inbox-line);
+  background: transparent;
+}
+
+.inbox-bg-container .candidate-info-row:hover {
+  background: transparent;
+}
+
+.inbox-bg-container .candidate-info-row.filled {
+  background: transparent;
+}
+
+.inbox-bg-container .candidate-info-icon {
+  width: 32px;
+  height: 32px;
+  border-color: transparent;
+  border-radius: 8px;
+  background: var(--uu-inbox-surface-subtle);
+  color: var(--uu-inbox-muted);
+}
+
+.inbox-bg-container .candidate-info-row.filled .candidate-info-icon {
+  border-color: var(--uu-inbox-brand-line);
+  background: var(--uu-inbox-brand-soft);
+  color: var(--uu-inbox-brand-hover);
+}
+
+.inbox-bg-container .candidate-info-label {
+  color: var(--uu-inbox-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.inbox-bg-container .candidate-info-value {
+  color: var(--uu-inbox-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.inbox-bg-container .candidate-info-row.filled .candidate-info-value {
+  color: var(--uu-inbox-ink);
+  font-weight: 600;
+}
+
+/* Web accessibility and state parity. */
+.inbox-bg-container
+  :is(
+    button,
+    input,
+    textarea,
+    [role="button"],
+    [role="radio"],
+    a
+  ):focus-visible {
+  outline: 2px solid var(--uu-inbox-brand);
+  outline-offset: 2px;
+}
+
+.inbox-bg-container
+  :is(
+    .conversation,
+    .channel-adapter-option,
+    .icon-btn,
+    .mode-menu-trigger,
+    .composer-action,
+    .inline-takeover-btn,
+    .takeover-btn
+  ) {
+  touch-action: manipulation;
+}
+
+@media (min-width: 768px) {
+  .workspace-frame-content .inbox-bg-container .app {
+    grid-template-columns: minmax(292px, 324px) minmax(0, 1fr);
+  }
+
+  .workspace-frame-content .inbox-bg-container .app.has-selected-conversation {
+    grid-template-columns: minmax(292px, 324px) minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .workspace-frame-content .inbox-bg-container .app.has-selected-conversation {
+    grid-template-columns: minmax(292px, 324px) minmax(0, 1fr) 360px;
+  }
+}
+
+@media (max-width: 900px) and (min-width: 768px) {
+  .inbox-bg-container .workspace-rail {
+    grid-template-areas:
+      "adapters"
+      "search";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inbox-bg-container .workspace-rail > .workspace-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .inbox-bg-container .workspace-rail > .channel-adapter-selector {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 767px) {
+  .inbox-bg-container {
+    background: var(--uu-inbox-surface);
+  }
+
+  .inbox-bg-container::before {
+    display: none;
+  }
+
+  .inbox-bg-container .app {
+    gap: 0;
+    border-radius: 0;
+  }
+
+  .inbox-bg-container .left-panel,
+  .inbox-bg-container .center-panel {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .inbox-bg-container .workspace-rail {
+    grid-template-areas:
+      "title adapters"
+      "search search";
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: calc(10px + env(safe-area-inset-top)) 14px 12px;
+  }
+
+  .inbox-bg-container .channel-adapter-options {
+    border: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .inbox-bg-container .channel-adapter-option {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+  }
+
+  .inbox-bg-container .channel-adapter-option img {
+    width: 44px;
+    height: 44px;
+  }
+
+  .inbox-bg-container .workspace-rail .search input {
+    min-height: 46px !important;
+    height: 46px;
+    font-size: 16px;
+  }
+
+  .inbox-bg-container .conversations {
+    padding: 6px 10px;
+  }
+
+  .inbox-bg-container .conversation {
+    min-height: 72px;
+    border-radius: 0;
+    border-right: 0;
+    border-left: 0;
+  }
+
+  .inbox-bg-container .conversation.active::before {
+    display: none;
+  }
+
+  .inbox-bg-container .center-panel {
+    padding: 0;
+  }
+
+  .inbox-bg-container .chat-header {
+    min-height: 62px;
+  }
+
+  .inbox-bg-container .bubble {
+    max-width: min(86%, calc(100% - 38px));
+  }
+
+  .inbox-bg-container .message-text {
+    font-size: 14px;
+  }
+
+  .inbox-bg-container .profile-scroll {
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbox-bg-container *,
+  .inbox-bg-container *::before,
+  .inbox-bg-container *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .inbox-bg-container .candidate-progress-fill {
+    transition: none;
+  }
+}

@@ -488,13 +488,7 @@ const ConversationListPanel = ({
           new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
       });
-  }, [
-    adapterPresentations,
-    conversations,
-    snippets,
-    deferredQuery,
-    readIds,
-  ]);
+  }, [adapterPresentations, conversations, snippets, deferredQuery, readIds]);
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -562,9 +556,7 @@ const ConversationListPanel = ({
           <ListEmptyState kind="error" onAction={() => void refetch()} />
         ) : rows.length === 0 ? (
           <ListEmptyState
-            kind={
-              query || hasServerFilter ? "filtered" : "empty"
-            }
+            kind={query || hasServerFilter ? "filtered" : "empty"}
             onAction={
               query || hasServerFilter ? clearSearchAndFilters : undefined
             }
@@ -603,7 +595,14 @@ const WorkspaceRail = ({
   searchSlot: ReactNode;
 }) => (
   <div className="workspace-rail" aria-label="Tin nhắn">
-    <h1 className="sr-only">Tin nhắn</h1>
+    <div className="workspace-title">
+      <div className="workspace-title-copy">
+        <span className="workspace-rail-kicker">Tương tác đa kênh</span>
+        <div className="workspace-title-row">
+          <h1 className="workspace-heading">Hộp thư</h1>
+        </div>
+      </div>
+    </div>
     {adapterSlot}
     <div className="inbox-tools">{searchSlot}</div>
   </div>
