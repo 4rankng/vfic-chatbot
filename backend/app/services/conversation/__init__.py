@@ -103,40 +103,6 @@ class ConversationService:
             viewer=viewer, channel_provider=channel_provider
         )
 
-    async def list_by_attention_reason(
-        self,
-        *,
-        viewer: User,
-        reason: str,
-        page: int,
-        per_page: int,
-        channel_provider: str | None = None,
-    ) -> tuple[list[Conversation], int]:
-        """Conversations matching an attention reason, viewer-scoped.
-
-        The dashboard repository applies reason/provider filters before dedup,
-        exact counting, and pagination. This endpoint then resolves the page of
-        IDs to full viewer-visible Conversation objects without changing the
-        database-defined attention order.
-        """
-        from app.models.user import Role
-        from app.services.dashboard.repository import DashboardRepository
-
-        recruiter_id = None if viewer.role == Role.admin else str(viewer.id)
-        repo = DashboardRepository(self.db)
-        page_ids, total = await repo.attention_reason_page(
-            recruiter_id,
-            reason=reason,
-            channel_provider=channel_provider,
-            page=page,
-            per_page=per_page,
-        )
-        rows = await self.repo.get_visible_by_ids(viewer=viewer, ids=page_ids)
-        # Preserve the filtered order in the returned page.
-        rows_by_id = {r.id: r for r in rows}
-        ordered = [rows_by_id[cid] for cid in page_ids if cid in rows_by_id]
-        return ordered, total
-
     async def last_messages(self, conv: Conversation, limit: int = 50) -> list[Message]:
         return await self.repo.last_messages(conv, limit)
 

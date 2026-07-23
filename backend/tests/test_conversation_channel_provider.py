@@ -51,10 +51,16 @@ async def test_unknown_channel_provider_returns_422(transport, path: str) -> Non
 @pytest.mark.asyncio
 async def test_list_threads_provider_through_normal_and_reason_paths(transport) -> None:
     http_transport, _db = transport
-    with patch("app.api.conversations.ConversationService") as service_class:
+    with (
+        patch("app.api.conversations.ConversationService") as service_class,
+        patch(
+            "app.api.conversations.run_conversation_attention_query",
+            new_callable=AsyncMock,
+            return_value=([], 0),
+        ) as attention_query,
+    ):
         service = service_class.return_value
         service.list = AsyncMock(return_value=([], 0))
-        service.list_by_attention_reason = AsyncMock(return_value=([], 0))
         async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             normal = await client.get(
                 "/api/v1/conversations",
@@ -68,7 +74,7 @@ async def test_list_threads_provider_through_normal_and_reason_paths(transport) 
     assert normal.status_code == 200
     assert reason.status_code == 200
     assert service.list.await_args.kwargs["channel_provider"] == "zalo_oa"
-    assert service.list_by_attention_reason.await_args.kwargs["channel_provider"] == "zalo_bot"
+    assert attention_query.await_args.kwargs["channel_provider"] == "zalo_bot"
 
 
 @pytest.mark.asyncio
@@ -141,7 +147,7 @@ async def test_attention_reason_query_returns_total_for_empty_late_page() -> Non
 
 @pytest.mark.asyncio
 async def test_attention_reason_service_uses_dedicated_page_query(monkeypatch) -> None:
-    from app.services import conversation as conversation_module
+    from app.composition.reporting import run_conversation_attention_query
 
     conversation_id = uuid.uuid4()
     dashboard_repo = SimpleNamespace(
@@ -151,12 +157,18 @@ async def test_attention_reason_service_uses_dedicated_page_query(monkeypatch) -
         "app.services.dashboard.repository.DashboardRepository",
         lambda _db: dashboard_repo,
     )
-    service = conversation_module.ConversationService(AsyncMock())
     row = SimpleNamespace(id=conversation_id)
-    service.repo.get_visible_by_ids = AsyncMock(return_value=[row])
+    conversation_repo = SimpleNamespace(
+        get_visible_by_ids=AsyncMock(return_value=[row])
+    )
+    monkeypatch.setattr(
+        "app.services.conversation.repository.ConversationRepository",
+        lambda _db: conversation_repo,
+    )
     viewer = SimpleNamespace(id=uuid.uuid4(), role=Role.recruiter)
 
-    rows, total = await service.list_by_attention_reason(
+    rows, total = await run_conversation_attention_query(
+        AsyncMock(),
         viewer=viewer,
         reason="WAITING_REPLY",
         channel_provider="zalo_bot",
@@ -172,4 +184,8 @@ async def test_attention_reason_service_uses_dedicated_page_query(monkeypatch) -
         channel_provider="zalo_bot",
         page=2,
         per_page=10,
+    )
+    conversation_repo.get_visible_by_ids.assert_awaited_once_with(
+        viewer=viewer,
+        ids=[conversation_id],
     )

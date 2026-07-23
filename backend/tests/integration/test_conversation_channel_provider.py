@@ -104,22 +104,31 @@ async def test_provider_scope_composes_with_search_attention_reason_and_viewer(
     ) == 2
     assert await service.needs_attention_count(viewer=recruiter) == 4
 
-    first_page, total = await service.list_by_attention_reason(
-        viewer=recruiter,
+    from app.composition.reporting import run_conversation_attention_query
+
+    async def attention_page(*, reason, channel_provider=None, page, per_page):
+        return await run_conversation_attention_query(
+            integration_session,
+            viewer=recruiter,
+            reason=reason,
+            channel_provider=channel_provider,
+            page=page,
+            per_page=per_page,
+        )
+
+    first_page, total = await attention_page(
         reason="REPLY_OVERDUE",
         channel_provider="zalo_oa",
         page=1,
         per_page=1,
     )
-    second_page, second_total = await service.list_by_attention_reason(
-        viewer=recruiter,
+    second_page, second_total = await attention_page(
         reason="REPLY_OVERDUE",
         channel_provider="zalo_oa",
         page=2,
         per_page=1,
     )
-    beyond_page, beyond_total = await service.list_by_attention_reason(
-        viewer=recruiter,
+    beyond_page, beyond_total = await attention_page(
         reason="REPLY_OVERDUE",
         channel_provider="zalo_oa",
         page=3,
@@ -129,8 +138,7 @@ async def test_provider_scope_composes_with_search_attention_reason_and_viewer(
     assert total == second_total == beyond_total == 2
     assert beyond_page == []
 
-    aggregate, aggregate_total = await service.list_by_attention_reason(
-        viewer=recruiter,
+    aggregate, aggregate_total = await attention_page(
         reason="REPLY_OVERDUE",
         page=1,
         per_page=10,
@@ -145,8 +153,7 @@ async def test_provider_scope_composes_with_search_attention_reason_and_viewer(
 
     # Reason continuations are independent by contract: this row qualifies for
     # both higher-precedence REPLY_OVERDUE and lower-precedence UNREAD.
-    unread_rows, unread_total = await service.list_by_attention_reason(
-        viewer=recruiter,
+    unread_rows, unread_total = await attention_page(
         reason="UNREAD",
         channel_provider="zalo_bot",
         page=1,
