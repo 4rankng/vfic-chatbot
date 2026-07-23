@@ -50,15 +50,15 @@ async def _find_or_create_direct_document(
 ) -> KnowledgeDocument:
     """Return the synthetic DIRECT_CONTEXT document for ``knowledge_base_id``.
 
-    Reuses the existing row (matched by ``metadata_ ->> 'knowledge_base_id'``) so the
+    Reuses the existing row (matched by ``metadata ->> 'knowledge_base_id'``) so the
     pipeline's ``replace_for_doc`` replaces the prior chunks in place. Creates one if
-    none exists yet.
+    none exists yet. (The DB column is ``metadata``; the ORM attribute is ``metadata_``.)
     """
     kb_id_str = str(knowledge_base_id)
     existing_id = await db.scalar(
         text(
             "SELECT id FROM knowledge_documents "
-            "WHERE source = :src AND metadata_ ->> 'knowledge_base_id' = :kb_id "
+            "WHERE source = :src AND metadata ->> 'knowledge_base_id' = :kb_id "
             "LIMIT 1"
         ),
         {"src": DIRECT_CONTEXT_SOURCE, "kb_id": kb_id_str},

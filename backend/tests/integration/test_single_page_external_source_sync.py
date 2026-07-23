@@ -437,3 +437,42 @@ async def test_missing_discovery_card_preserves_current_page(
     )
     assert current is not None
     assert (current.content_sha256, current.raw_text) == (prior_hash, prior_text)
+
+
+async def test_find_or_create_direct_document_queries_correct_metadata_column(
+    integration_session,
+) -> None:
+    """Regression: the find-or-create lookup is raw SQL against the DB column
+    ``metadata`` (the ORM attribute is ``metadata_``). A prior build wrote
+    ``metadata_ ->>`` in the raw SQL, raising UndefinedColumnError and silently
+    breaking DIRECT_CONTEXT indexing for every publish path (admin UI, sheet sync,
+    backfill) — leaving sheet-sourced KBs like Rorze with 0 knowledge_chunks.
+    """
+    from app.services.knowledge.direct_context_indexing import (
+        DIRECT_CONTEXT_SOURCE,
+        _find_or_create_direct_document,
+    )
+
+    _admin, project, knowledge_base, _state = await _seed_project(integration_session)
+
+    doc = await _find_or_create_direct_document(
+        integration_session,
+        knowledge_base_id=knowledge_base.id,
+        project_id=project.id,
+        text_blob="# Câu hỏi thường gặp\n\n## FAQ\n",
+    )
+    assert doc.source == DIRECT_CONTEXT_SOURCE
+    assert doc.metadata_["knowledge_base_id"] == str(knowledge_base.id)
+    first_id = doc.id
+
+    # Second call must REUSE the row via the metadata lookup — this is the exact
+    # SELECT that raised UndefinedColumnError before the column-name fix.
+    doc_again = await _find_or_create_direct_document(
+        integration_session,
+        knowledge_base_id=knowledge_base.id,
+        project_id=project.id,
+        text_blob="# updated content\n",
+    )
+    assert doc_again.id == first_id
+
+    await integration_session.commit()
