@@ -1,113 +1,58 @@
 import type { ReactNode } from "react";
-import { MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 type AuthShellProps = {
   children: ReactNode;
   productName: string;
 };
 
-const FEATURES = [
-  { icon: ShieldCheck, label: "Tự động ưu tiên ứng viên cần chú ý" },
-  { icon: MessageSquare, label: "Theo dõi hội thoại theo thời gian thực" },
-  { icon: Sparkles, label: "Vận hành tuyển dụng tập trung một nơi" },
-] as const;
-
-/**
- * Shared light-only authentication canvas — UntitledUI-style split hero.
- *
- * Left: indigo→navy gradient brand panel built over the project-owned recruiting
- * artwork, with a display headline + feature bullets. Right: clean form surface.
- * Brand stays indigo (#635bff), font stays Be Vietnam Pro. All depth comes from
- * the namespaced --shadow-uu-* / --radius-uu-* tokens so the rest of the
- * console's design system is untouched.
- */
+/** Shared light-only authentication canvas with a responsive recruiting visual. */
 export const AuthShell = ({ children, productName }: AuthShellProps) => (
-  <main className="tt-hero uu-spotlight relative flex min-h-svh items-center justify-center overflow-hidden bg-base-200 p-3 text-base-content sm:p-6 lg:p-8">
-    <div
-      className="uu-grid-texture pointer-events-none absolute inset-0 opacity-50"
-      aria-hidden="true"
-    />
+  <main className="tt-hero min-h-svh bg-base-200 p-3 text-base-content sm:p-6 lg:p-8">
     <section
       data-slot="auth-frame"
-      className="uu-card animate-uu-fade-up relative grid w-full max-w-[1180px] overflow-hidden rounded-uu-3xl sm:min-h-[calc(100svh-3rem)] lg:h-[calc(100svh-4rem)] lg:min-h-[640px] lg:max-h-[820px] lg:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.9fr)]"
+      className="tt-card tt-card-border grid min-h-[calc(100svh-1.5rem)] w-full max-w-[1180px] overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-[0_24px_70px_rgb(44_58_94_/_0.12)] sm:min-h-[calc(100svh-3rem)] lg:h-[calc(100svh-4rem)] lg:min-h-[640px] lg:max-h-[820px] lg:grid-cols-[minmax(0,1.1fr)_minmax(420px,0.78fr)]"
     >
-      {/* Brand panel (desktop) — gradient over the recruiting artwork. */}
-      <figure className="relative hidden overflow-hidden bg-[#0a2540] lg:block">
+      <figure className="relative min-h-36 overflow-hidden bg-base-200 sm:min-h-44 lg:min-h-full">
         <img
           src="/login-recruiting-console-v2.webp"
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 size-full object-cover object-center opacity-35"
+          className="absolute inset-0 size-full object-cover object-[68%_center] lg:object-center"
         />
-        <div className="uu-hero-gradient absolute inset-0 opacity-90" aria-hidden="true" />
-        <div className="uu-spotlight absolute inset-0" aria-hidden="true" />
         <div
-          className="absolute inset-0 opacity-50"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
-            backgroundSize: "32px 32px",
-          }}
+          className="absolute inset-0 hidden bg-linear-to-r from-base-100 via-base-100/90 to-transparent lg:block"
           aria-hidden="true"
         />
-        <div className="relative flex h-full flex-col justify-between p-10 text-white xl:p-14">
-          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-helper font-semibold text-white/90 backdrop-blur-sm">
+        <div className="absolute left-4 top-4 lg:hidden">
+          <span className="tt-badge tt-badge-primary tt-badge-soft min-h-7 gap-1.5 px-3 font-semibold">
             <ShieldCheck className="size-3.5" aria-hidden="true" />
+            Tuyển dụng thông minh
+          </span>
+        </div>
+        <div className="absolute left-10 top-10 hidden max-w-sm lg:block xl:left-14 xl:top-14">
+          <span className="tt-badge tt-badge-primary tt-badge-soft min-h-8 gap-2 px-3 font-semibold">
+            <ShieldCheck className="size-4" aria-hidden="true" />
             Trung tâm tuyển dụng
           </span>
-
-          <div className="max-w-md">
-            <h2 className="text-balance text-uu-display-sm font-semibold leading-[1.1] tracking-[-0.02em] text-white">
-              Kết nối đúng người với đúng cơ hội.
-            </h2>
-            <p className="mt-4 max-w-sm text-body-lg leading-7 text-white/75">
-              Theo dõi ứng viên, hội thoại và dự án tuyển dụng trong một không gian
-              vận hành thống nhất.
-            </p>
-            <ul className="mt-8 space-y-3">
-              {FEATURES.map(({ icon: Icon, label }) => (
-                <li
-                  key={label}
-                  className="flex items-center gap-3 text-body text-white/85"
-                >
-                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-white/10 ring-1 ring-inset ring-white/20">
-                    <Icon className="size-4" aria-hidden="true" />
-                  </span>
-                  {label}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <p className="text-helper text-white/55">
-            © {new Date().getFullYear()} Ting Ting — VFIC miniCRM
+          <h2 className="mt-6 text-balance text-display font-semibold leading-tight tracking-[-0.035em] text-base-content">
+            Kết nối đúng người với đúng cơ hội.
+          </h2>
+          <p className="mt-4 max-w-xs text-body-lg leading-7 text-muted-foreground">
+            Theo dõi ứng viên, hội thoại và dự án tuyển dụng trong một không
+            gian vận hành thống nhất.
           </p>
         </div>
       </figure>
 
-      {/* Brand chip (mobile) */}
-      <div className="absolute left-4 top-4 z-10 lg:hidden">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-base-300 bg-base-100/80 px-3 py-1.5 text-helper font-semibold text-base-content shadow-uu-xs backdrop-blur-sm">
-          <ShieldCheck
-            className="size-3.5 text-uu-brand-600"
-            aria-hidden="true"
-          />
-          Tuyển dụng thông minh
-        </span>
-      </div>
-
-      {/* Form panel */}
-      <div className="relative flex items-center justify-center bg-base-100/70 px-5 py-8 backdrop-blur-sm sm:px-10 sm:py-10 lg:px-10 xl:px-14">
-        <div
-          className="w-full max-w-sm animate-uu-fade-in"
-          aria-label={productName}
-        >
-          <div className="mb-7 flex items-center gap-3">
+      <div className="relative flex items-center justify-center bg-base-200/45 px-5 py-7 sm:px-10 sm:py-10 lg:px-8 xl:px-10">
+        <div className="w-full max-w-sm" aria-label={productName}>
+          <div className="mb-5 flex items-center gap-3 px-1">
             <img
               src="/tingting-mark.webp"
               alt=""
               aria-hidden="true"
-              className="size-11 rounded-xl border border-base-300 object-cover shadow-uu-sm"
+              className="size-11 rounded-xl border border-base-300 object-cover shadow-sm"
             />
             <div className="min-w-0">
               <strong className="block text-subsection font-semibold tracking-tight text-base-content">
