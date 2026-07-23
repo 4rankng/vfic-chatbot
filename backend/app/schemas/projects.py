@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.knowledge import KnowledgeBaseMode
+from app.project_knowledge.domain.statuses import KnowledgeBaseMode
 
 
 class FeatureReadiness(BaseModel):

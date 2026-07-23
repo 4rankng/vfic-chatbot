@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.knowledge import KnowledgeBaseMode
+from app.project_knowledge.domain.statuses import KnowledgeBaseMode
 
 MAX_DIRECT_CONTEXT_CHARS = 300_000
 

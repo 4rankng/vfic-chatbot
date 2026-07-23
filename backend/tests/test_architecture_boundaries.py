@@ -106,13 +106,8 @@ api_outward|backend/app/api/webhooks.py|app.models.conversation:Conversation
 api_outward|backend/app/api/webhooks.py|app.models.conversation:DeliveryStatus
 api_outward|backend/app/api/webhooks.py|app.models.conversation:Message
 api_outward|backend/app/api/webhooks.py|app.workers.chatbot_worker:enqueue_chat_run
-schema_infra|backend/app/schemas/knowledge.py|app.models.knowledge:KBVersionStatus
-schema_infra|backend/app/schemas/knowledge.py|app.models.knowledge:KnowledgeStatus
-schema_infra|backend/app/schemas/knowledge_bases.py|app.models.knowledge:KnowledgeBaseMode
 schema_infra|backend/app/schemas/personas.py|app.core.config:PROACTIVE_48H_WINDOW_SECONDS
 schema_infra|backend/app/schemas/personas.py|app.core.config:PROACTIVE_FOLLOWUP_CAP
-schema_infra|backend/app/schemas/project_knowledge.py|app.models.knowledge:KnowledgeCategoryRevisionStatus
-schema_infra|backend/app/schemas/projects.py|app.models.knowledge:KnowledgeBaseMode
 schema_infra|backend/app/schemas/user.py|app.models.user:Role
 service_outward|backend/app/services/project/service.py|app.workers.direct_context_worker:enqueue_direct_context_index
 service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.direct_context_worker:enqueue_direct_context_index
