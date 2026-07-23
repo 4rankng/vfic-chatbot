@@ -24,7 +24,8 @@ from app.conversation_messaging.domain.ownership import (
     lock_still_live as _lock_still_live,
     normalize_lock_owner as _normalize_lock_owner,
 )
-from app.core.config import PROACTIVE_OPTOUT_PHRASES, get_settings
+from app.core.config import get_settings
+from app.recruitment.domain.proactive_policy import PROACTIVE_OPTOUT_PHRASES
 from app.schemas.bot_run import parse_decision_trace
 from app.models.conversation import (
     BotRun,

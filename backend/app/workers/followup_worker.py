@@ -32,7 +32,7 @@ def run_followup_job(job: dict) -> None:
 
 
 async def _run_followup_async(job: dict) -> None:
-    from app.core.config import PROACTIVE_JOB_MAX_AGE_SECONDS
+    from app.recruitment.domain.proactive_policy import PROACTIVE_JOB_MAX_AGE_SECONDS
 
     # Job-age guard: drop stale jobs (e.g. worker was down, now backlogged).
     enqueued_at = job.get("enqueued_at")

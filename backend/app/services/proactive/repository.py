@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text
 
-from app.core.config import (
+from app.recruitment.domain.proactive_policy import (
     PROACTIVE_48H_WINDOW_SECONDS,
     PROACTIVE_FOLLOWUP_CAP,
     PROACTIVE_PER_TICK_CAP,
