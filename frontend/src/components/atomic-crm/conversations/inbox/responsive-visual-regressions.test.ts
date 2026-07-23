@@ -10,12 +10,12 @@ describe("responsive workspace visual regressions", () => {
     );
   });
 
-  it("collapses long stored knowledge on phones with an explicit reveal", () => {
+  it("keeps knowledge disclosures compact and within the phone viewport", () => {
     expect(featureStyles).toMatch(
-      /\.knowledge-unit-content:not\(\.is-expanded\)[\s\S]*-webkit-line-clamp:\s*10/,
+      /\.knowledge-unit-disclosure > summary[\s\S]*min-height:\s*68px/,
     );
     expect(featureStyles).toMatch(
-      /\.knowledge-unit-toggle[\s\S]*display:\s*inline-flex/,
+      /\.knowledge-unit-disclosure\[open\] \.knowledge-unit-chevron[\s\S]*transform:\s*rotate\(180deg\)/,
     );
   });
 
