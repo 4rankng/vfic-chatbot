@@ -909,7 +909,8 @@ const RagCategoriesPanel = ({
         {canManageSources && (
           <section className="space-y-2">
             <h3 className="text-body font-semibold">
-              Nguồn đồng bộ từ link công khai
+              <Link2 className="size-4" aria-hidden="true" />
+              Sync From Link
             </h3>
             <ExternalSourceList
               projectId={String(project.id)}

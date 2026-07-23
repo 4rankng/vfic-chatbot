@@ -58,6 +58,7 @@ describe("Bot run pages", () => {
     const pagination = screen.getByRole("navigation", { name: "Phân trang" });
 
     await expect.element(row).toBeVisible();
+    await expect.element(screen.getByText("#42")).toBeVisible();
     expect(row.element().getAttribute("aria-label")).not.toContain(
       "Đây là câu trả lời dài",
     );

@@ -75,6 +75,53 @@ describe("RecruitingCommandCenter candidate rows", () => {
     ).toBeNull();
   });
 
+  it("keeps a small recent-candidate list visible in the dashboard panel", async () => {
+    const attention = {
+      updated_at: "2026-07-12T10:00:00Z",
+      counters: {
+        needs_reply: 0,
+        overdue: 0,
+        due_today: 0,
+        priority: 0,
+        unread: 0,
+      },
+      immediate: [],
+      today: [],
+    };
+    mockApiJson.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.startsWith("/api/v1/leads")
+          ? {
+              data: [
+                {
+                  id: 42,
+                  name: "Ứng viên mới",
+                  phone: "0900000042",
+                  desired_job: "Công nhân sản xuất",
+                  created_at: "2026-07-14T08:30:00Z",
+                },
+              ],
+              total: 1,
+            }
+          : attention,
+      ),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <RecruitingCommandCenter />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await expect.element(screen.getByText("Ứng viên mới")).toBeVisible();
+    await expect.element(screen.getByText("0900000042")).toBeVisible();
+    await expect.element(screen.getByText("Công nhân sản xuất")).toBeVisible();
+  });
+
   it("does not report an active queue while initial requests are failing", async () => {
     mockApiJson.mockRejectedValue(new Error("network unavailable"));
     const queryClient = new QueryClient({

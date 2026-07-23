@@ -70,11 +70,11 @@ const ModelTurnEventRow = ({
         </p>
       </div>
       {event.reasoning_status === "not_returned" ? (
-        <p className="rounded-md border border-dashed px-3 py-2 text-helper text-muted-foreground">
+        <p className="decision-trace-reasoning-empty border-l-2 border-dashed border-border pl-3 text-helper text-muted-foreground">
           Nhà cung cấp không trả về nội dung suy luận cho lượt này.
         </p>
       ) : (
-        <div className="rounded-md border bg-muted/40 p-3">
+        <div className="decision-trace-reasoning border-l-2 border-primary/20 pl-3">
           <p className="mb-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
             Thinking
             {event.reasoning_status === "truncated" ? " · đã rút gọn" : ""}

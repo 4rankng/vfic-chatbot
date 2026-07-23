@@ -30,10 +30,21 @@ vi.mock("./KnowledgeDetailPanel", () => ({
   KnowledgeDetailPanel: ({
     source,
     headingId,
+    onBack,
   }: {
     source: KnowledgeSource;
     headingId?: string;
-  }) => <h3 id={headingId}>Chi tiết: {source.file_name}</h3>,
+    onBack?: () => void;
+  }) => (
+    <>
+      {onBack ? (
+        <button type="button" onClick={onBack}>
+          Quay lại danh sách
+        </button>
+      ) : null}
+      <h3 id={headingId}>Chi tiết: {source.file_name}</h3>
+    </>
+  ),
 }));
 
 vi.mock("@/components/admin/list-pagination", () => ({
@@ -141,6 +152,33 @@ describe("KnowledgeSourceWorkspace", () => {
     expect(document.activeElement).toBe(
       screen.container.querySelector("#knowledge-source-detail"),
     );
+  });
+
+  it("returns to the source list from the phone detail", async () => {
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query) =>
+        ({
+          matches: query === "(max-width: 760px)",
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(() => true),
+        }) as MediaQueryList,
+    );
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    const screen = await render(<WorkspaceHarness />);
+
+    await screen.getByRole("button", { name: "Quay lại danh sách" }).click();
+
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "start",
+    });
   });
 
   it("stacks the detail below navigation in the phone viewport", async () => {

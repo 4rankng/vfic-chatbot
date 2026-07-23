@@ -177,9 +177,7 @@ export const RecruitingCommandCenter = ({
             <span className="dashboard-live-dot" aria-hidden="true" />
             <div>
               {queueHealth.title ? <strong>{queueHealth.title}</strong> : null}
-              {queueHealth.detail ? (
-                <span>{queueHealth.detail}</span>
-              ) : null}
+              {queueHealth.detail ? <span>{queueHealth.detail}</span> : null}
             </div>
           </div>
         ) : null}
@@ -351,6 +349,28 @@ const CandidateGroupedList = ({
   const isMobile = useIsMobile();
   const candidates = groups.flatMap((group) => group.candidates);
   const desktopHeight = Math.min(720, count * 68 + groups.length * 32);
+
+  // The dashboard usually contains only a handful of recent candidates. A
+  // direct list keeps those rows visible and avoids a virtualizer viewport
+  // hiding the only result inside a short panel; larger histories still use
+  // virtualization to keep scrolling inexpensive.
+  if (count <= 20) {
+    return (
+      <div className="dashboard-candidate-static-list">
+        {groups.map((group) => (
+          <div key={group.key}>
+            <h2 className="dashboard-candidate-day-header">{group.label}</h2>
+            {group.candidates.map((candidate) => (
+              <CandidateRow
+                key={`candidate-${candidate.id}`}
+                candidate={candidate}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <GroupedVirtuoso

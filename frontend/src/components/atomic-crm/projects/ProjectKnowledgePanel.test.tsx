@@ -528,9 +528,7 @@ describe("ProjectKnowledgePanel", () => {
       .element(screen.getByRole("button", { name: "Sửa nội dung" }))
       .toBeVisible();
     expect(screen.container.textContent).not.toContain("Tải file YAML");
-    expect(screen.container.textContent).not.toContain(
-      "Nguồn đồng bộ từ link công khai",
-    );
+    expect(screen.container.textContent).not.toContain("Sync From Link");
     expect(mocks.listExternalSources).not.toHaveBeenCalled();
   });
 

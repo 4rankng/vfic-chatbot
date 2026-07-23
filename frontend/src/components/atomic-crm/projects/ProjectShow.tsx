@@ -1,5 +1,4 @@
 import { ShowBase, useRecordContext, useRedirect } from "ra-core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
@@ -21,37 +20,37 @@ const ProjectShowContent = () => {
     <ProjectWorkspaceShell>
       <div className="project-workspace-content">
         <div className="project-editor-header">
-          <h2 className="mt-1 text-content-title font-semibold">{project.name}</h2>
+          <h2 className="mt-1 text-content-title font-semibold">
+            {project.name}
+          </h2>
           <p className="mt-1 text-body text-muted-foreground">
             Xem thẻ danh mục, đặc điểm sản phẩm và FAQ mà Agent dùng trong hội
             thoại tuyển dụng.
           </p>
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between gap-2 text-section-title">
-                <span>{project.name}</span>
-                <Badge
-                  variant="outline"
-                  className={
-                    project.is_active
-                      ? "tt-badge-success tt-badge-soft border-transparent text-success"
-                      : "border-border bg-muted/40 text-muted-foreground"
-                  }
-                >
-                  {project.is_active ? "Đang hoạt động" : "Tắt"}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 text-body">
-              <div>
+          <section className="project-show-summary">
+            <header className="project-show-summary-header flex items-center justify-between gap-2 text-section-title">
+              <span>Thông tin</span>
+              <Badge
+                variant="outline"
+                className={
+                  project.is_active
+                    ? "tt-badge-success tt-badge-soft border-transparent text-success"
+                    : "border-border bg-muted/40 text-muted-foreground"
+                }
+              >
+                {project.is_active ? "Đang hoạt động" : "Tắt"}
+              </Badge>
+            </header>
+            <div className="project-show-summary-content flex flex-col text-body">
+              <div className="project-show-fact">
                 <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Mã dự án
                 </div>
                 <div className="font-mono">{project.slug}</div>
               </div>
-              <div>
+              <div className="project-show-fact">
                 <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Cách lưu kiến thức
                 </div>
@@ -61,25 +60,25 @@ const ProjectShowContent = () => {
                     : "Theo danh mục"}
                 </p>
               </div>
-              <div>
+              <div className="project-show-fact">
                 <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Tóm tắt
                 </div>
                 <p>{project.summary ?? "—"}</p>
               </div>
-              <div>
+              <div className="project-show-fact">
                 <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Địa điểm
                 </div>
                 <p>{card.location ?? "—"}</p>
               </div>
-              <div>
+              <div className="project-show-fact">
                 <div className="text-helper uppercase tracking-wide text-muted-foreground">
                   Vị trí
                 </div>
                 <p>{(card.key_roles ?? []).join(", ") || "—"}</p>
               </div>
-              <div className="mt-1 flex flex-wrap gap-2">
+              <div className="project-show-summary-actions mt-1 flex flex-wrap gap-2">
                 {canEdit && (
                   <Button
                     variant="outline"
@@ -100,8 +99,8 @@ const ProjectShowContent = () => {
                   />
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
 
           <div className="project-detail-stack">
             <ProjectKnowledgePanel

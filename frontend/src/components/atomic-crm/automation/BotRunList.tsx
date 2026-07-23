@@ -33,6 +33,10 @@ export const BotRunRow = ({ run }: { run: BotRun }) => {
       <div className="min-w-0 flex-1">
         <p className="truncate text-body">{preview}</p>
         <p className="mt-0.5 text-helper text-muted-foreground">
+          <span className="font-mono text-[0.7rem] text-foreground/60">
+            #{run.id}
+          </span>
+          <span aria-hidden="true"> · </span>
           {relativeTime}
           {dur ? ` · ${dur}` : ""}
         </p>

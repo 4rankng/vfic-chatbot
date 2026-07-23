@@ -7,7 +7,6 @@ import {
   useRecordContext,
   useRedirect,
 } from "ra-core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TextInput } from "@/components/admin/text-input";
 import { BooleanInput } from "@/components/admin/boolean-input";
@@ -48,7 +47,7 @@ const ProjectEditContent = () => {
   return (
     <ProjectWorkspaceShell>
       <div className="project-workspace-content">
-        <div className="project-editor-header flex flex-wrap items-start gap-3 rounded-lg border p-4">
+        <div className="project-editor-header project-form-page-header flex flex-wrap items-start gap-3">
           <div className="mr-auto min-w-0">
             <p className="text-helper font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               Dự án
@@ -69,30 +68,28 @@ const ProjectEditContent = () => {
           )}
         </div>
 
-        <Card className="mt-4 max-w-2xl">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-section-title">
-              <span>{project.name}</span>
-              <div className="flex gap-2">
-                <Badge variant="outline">
-                  {project.knowledge_mode === "DIRECT_CONTEXT"
-                    ? "Một trang"
-                    : "Theo danh mục"}
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className={
-                    project.is_active
-                      ? "tt-badge-success tt-badge-soft border-transparent text-success"
-                      : "border-border bg-muted/40 text-muted-foreground"
-                  }
-                >
-                  {project.is_active ? "Đang hoạt động" : "Tắt"}
-                </Badge>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-2">
+        <section className="project-form-surface project-edit-form-surface mt-4 max-w-2xl">
+          <header className="project-form-section-header flex items-center justify-between text-section-title">
+            <span>{project.name}</span>
+            <div className="flex gap-2">
+              <Badge variant="outline">
+                {project.knowledge_mode === "DIRECT_CONTEXT"
+                  ? "Một trang"
+                  : "Theo danh mục"}
+              </Badge>
+              <Badge
+                variant="outline"
+                className={
+                  project.is_active
+                    ? "tt-badge-success tt-badge-soft border-transparent text-success"
+                    : "border-border bg-muted/40 text-muted-foreground"
+                }
+              >
+                {project.is_active ? "Đang hoạt động" : "Tắt"}
+              </Badge>
+            </div>
+          </header>
+          <div className="project-form-content pt-2">
             <Form record={project} onSubmit={onSubmit}>
               <div className="flex flex-col gap-4">
                 <TextInput source="name" label="Tên dự án" isRequired />
@@ -102,8 +99,8 @@ const ProjectEditContent = () => {
                 </Button>
               </div>
             </Form>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
         <div className="project-detail-stack mt-4">
           <ProjectKnowledgePanel

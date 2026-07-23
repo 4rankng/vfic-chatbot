@@ -55,6 +55,7 @@ describe("KnowledgeSourceRow", () => {
     await expect
       .element(screen.getByText("LG Display", { exact: false }))
       .toBeVisible();
+    await expect.element(screen.getByText("Sẵn sàng")).toHaveClass("kb-status");
     expect(screen.container.textContent).not.toContain("Đang xem");
     expect(
       screen.container.querySelector(".knowledge-source-row-footer"),

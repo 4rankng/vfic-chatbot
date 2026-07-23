@@ -57,6 +57,9 @@ const ProjectListContent = () => {
             <div className="ops-command-title">
               <div className="min-w-0">
                 <h1>Dự án tuyển dụng</h1>
+                <p>
+                  Theo dõi trạng thái, tài liệu và độ sẵn sàng kiến thức.
+                </p>
               </div>
             </div>
             <div className="project-command-actions">
@@ -73,8 +76,11 @@ const ProjectListContent = () => {
             </div>
           </header>
 
-          {projects.length > 1 && (
-            <section className="project-rollup-strip">
+          {projects.length > 0 && (
+            <section
+              className="project-rollup-strip"
+              aria-label="Tóm tắt dự án"
+            >
               <span>{projectTotal} dự án</span>
               <span>{activeCount} đang bật</span>
               <span>{documentCount} tài liệu</span>

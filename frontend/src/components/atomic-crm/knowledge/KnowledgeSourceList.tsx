@@ -291,6 +291,7 @@ export const KnowledgeSourceWorkspace = ({
   onSelect: (id: string) => void;
 }) => {
   const detailRef = useRef<HTMLElement>(null);
+  const navigationRef = useRef<HTMLElement>(null);
 
   const selectSource = (id: string) => {
     onSelect(id);
@@ -311,12 +312,25 @@ export const KnowledgeSourceWorkspace = ({
     });
   };
 
+  const returnToSourceList = () => {
+    const navigation = navigationRef.current;
+    if (!navigation) return;
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    navigation.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
+  };
+
   return (
     <section
       className="knowledge-source-workspace"
       aria-label="Duyệt nguồn kiến thức"
     >
       <aside
+        ref={navigationRef}
         className="knowledge-source-navigation"
         aria-labelledby="knowledge-source-list-title"
       >
@@ -358,6 +372,7 @@ export const KnowledgeSourceWorkspace = ({
           <KnowledgeDetailPanel
             source={selectedSource}
             headingId="knowledge-source-detail-title"
+            onBack={returnToSourceList}
           />
         ) : (
           <EmptyState

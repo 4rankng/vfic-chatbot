@@ -283,6 +283,12 @@ describe("DecisionTraceRenderer", () => {
     await expect
       .element(screen.getByText("Thinking · đã rút gọn"))
       .toBeVisible();
+    expect(
+      screen.container.querySelectorAll(".decision-trace-reasoning"),
+    ).toHaveLength(2);
+    expect(
+      screen.container.querySelector(".decision-trace-reasoning.rounded-md"),
+    ).toBeNull();
   });
 
   it("does not expose raw fields from unsupported trace versions", async () => {

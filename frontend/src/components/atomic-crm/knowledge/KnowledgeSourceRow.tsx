@@ -117,10 +117,10 @@ const Stamp = ({
 }) => (
   <span
     className={cn(
-      "kb-stamp",
+      "kb-status",
       tone === "ready" && "text-[var(--kb-teal)]",
       tone === "error" && "text-[var(--kb-rust)]",
-      tone === "pending" && "kb-stamp--pending text-[var(--kb-ochre)]",
+      tone === "pending" && "text-[var(--kb-ochre)]",
       tone === "processing" && "text-[var(--kb-teal)]",
     )}
   >

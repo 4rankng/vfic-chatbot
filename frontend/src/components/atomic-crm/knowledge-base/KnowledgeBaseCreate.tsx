@@ -76,6 +76,7 @@ export const KnowledgeBaseCreate = () => {
               <SelectInput
                 source="mode"
                 label="Chế độ"
+                emptyText="Chọn chế độ"
                 choices={[
                   { id: "RAG", name: "RAG — nhiều dự án" },
                   {
