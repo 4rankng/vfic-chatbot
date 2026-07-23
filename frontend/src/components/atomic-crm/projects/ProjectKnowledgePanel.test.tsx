@@ -211,10 +211,18 @@ describe("ProjectKnowledgePanel", () => {
       .toBeVisible();
     // Auto-sync state now surfaces via the source-row badge, not the flow
     // diagram caption (which was removed to cut visual noise).
-    await expect.element(screen.getByText("Tự động mỗi ngày")).toBeVisible();
+    await expect
+      .element(screen.getByLabelText("Tự động mỗi ngày"))
+      .toBeVisible();
     await expect
       .element(screen.getByText("Trang kiến thức", { exact: true }))
       .toBeVisible();
+    const syncHeading = screen.container.querySelector(
+      "#single-page-sync-heading",
+    )!;
+    expect(syncHeading.parentElement?.querySelector("svg")).not.toBeNull();
+    expect(syncHeading.parentElement?.className).toContain("inline-flex");
+    expect(syncHeading.parentElement?.className).toContain("whitespace-nowrap");
 
     const warning = screen.getByText("Sheet sẽ ghi đè nội dung sửa tay");
     const warningDetail = screen.getByText(
@@ -304,12 +312,12 @@ describe("ProjectKnowledgePanel", () => {
     vi.useFakeTimers();
 
     // First sync completion → onSynchronized → loadPage (firstRefresh, pending).
-    await screen.getByRole("button", { name: "Xử lý ngay" }).click();
+    await screen.getByRole("button", { name: "Đồng bộ ngay" }).click();
     await vi.advanceTimersByTimeAsync(4000);
 
     // Clear the 5-minute run-now cooldown before triggering a second sync.
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
-    await screen.getByRole("button", { name: "Xử lý ngay" }).click();
+    await screen.getByRole("button", { name: "Đồng bộ ngay" }).click();
     await vi.advanceTimersByTimeAsync(4000);
 
     // Newer request resolves first → its content is applied.
@@ -383,7 +391,9 @@ describe("ProjectKnowledgePanel", () => {
       "Google Sheet → trang kiến thức",
     );
     expect(screen.container.textContent).not.toContain("Liên kết Google Sheet");
-    expect(screen.container.textContent).not.toContain("Xử lý ngay");
+    expect(
+      screen.container.querySelector(".project-external-source-actions"),
+    ).toBeNull();
     expect(screen.container.textContent).not.toContain(
       "Thay thế trang hiện tại",
     );
@@ -509,6 +519,11 @@ describe("ProjectKnowledgePanel", () => {
 
     await screen.getByRole("button", { name: "Sửa nội dung" }).click();
     await expect.element(editor).not.toHaveAttribute("readonly");
+    const saveButton = screen.getByRole("button", { name: "Lưu thay đổi" });
+    await expect.element(saveButton).toBeDisabled();
+    expect(saveButton.element().className).toContain(
+      "project-category-save-button",
+    );
     await editor.fill("jobs:\n  - id: operator");
     await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
 

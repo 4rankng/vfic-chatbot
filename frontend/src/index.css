@@ -548,10 +548,10 @@
   --sidebar-primary-foreground: oklch(0.13 0.04 264); /* deep indigo ink */
   --sidebar-accent: color-mix(
     in oklab,
-    var(--primary) 16%,
+    var(--primary) 28%,
     var(--background)
-  ); /* dark indigo-soft selected */
-  --sidebar-accent-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
+  ); /* dark indigo-soft selected — bumped from 16% for visibility */
+  --sidebar-accent-foreground: oklch(0.78 0.16 264); /* lifted indigo ink for active icon + label */
   --sidebar-border: oklch(
     0.7107 0.0351 256.8 / 0.08
   ); /* rgba(148,163,184,0.08) */

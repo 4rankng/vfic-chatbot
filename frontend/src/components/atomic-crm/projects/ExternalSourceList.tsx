@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNotify } from "ra-core";
-import { Loader2, Play, Trash2 } from "lucide-react";
+import { Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,10 +58,11 @@ type PollSession = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  NEW: "Mới",
+  NEW: "Chưa đồng bộ",
+  PROCESSING: "Đang đồng bộ",
   OK: "Đã đồng bộ",
-  NO_OP: "Không đổi",
-  FAILED: "Lỗi",
+  NO_OP: "Không thay đổi",
+  FAILED: "Lỗi đồng bộ",
 };
 
 const statusDotClass = (
@@ -92,6 +93,31 @@ const formatTimestamp = (value?: string | null): string => {
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(value));
+  } catch {
+    return value;
+  }
+};
+
+const formatCompactTimestamp = (value?: string | null): string => {
+  if (!value) return "—";
+  try {
+    const date = new Date(value);
+    const includeYear = date.getFullYear() !== new Date().getFullYear();
+    const time = new Intl.DateTimeFormat("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+    const dateParts = new Intl.DateTimeFormat("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      ...(includeYear ? { year: "2-digit" as const } : {}),
+    }).formatToParts(date);
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      dateParts.find((item) => item.type === type)?.value ?? "";
+    const day = [part("day"), part("month"), includeYear ? part("year") : ""]
+      .filter(Boolean)
+      .join("/");
+    return `${time} · ${day}`;
   } catch {
     return value;
   }
@@ -424,88 +450,113 @@ export const ExternalSourceList = ({
         return (
           <div
             key={row.id}
-            className="project-external-source-row flex flex-col items-stretch gap-2 rounded-md border border-border px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3"
+            className="project-external-source-row"
           >
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span
-                  className={cn(
-                    "size-2 shrink-0 rounded-full",
-                    statusDotClass(row),
-                  )}
-                  aria-label={STATUS_LABEL[row.last_status] ?? row.last_status}
-                  title={STATUS_LABEL[row.last_status] ?? row.last_status}
-                />
-                {"category_key" in row && row.category_key ? (
-                  <Badge variant="outline" className="font-mono">
-                    {row.category_key}
-                  </Badge>
-                ) : null}
-                {isSinglePage && (
-                  <Badge variant="outline" className="font-mono">
-                    gid={row.sheet_gid}
-                  </Badge>
-                )}
-                {row.auto_sync_enabled ? (
-                  <Badge variant="secondary">Tự động mỗi ngày</Badge>
-                ) : (
-                  <Badge variant="outline">Thủ công</Badge>
-                )}
-                {autoDisabled && (
-                  <Badge variant="destructive">Đã tự động tắt</Badge>
-                )}
+            <div className="project-external-source-identity">
+              <div className="project-external-source-heading">
+                <p className="project-external-source-name">
+                  {"category_key" in row && row.category_key
+                    ? row.category_key
+                    : `gid=${row.sheet_gid}`}
+                </p>
               </div>
               <p
-                className="mt-1 truncate text-body-sm text-muted-foreground"
+                className="project-external-source-url"
                 title={row.sheet_url}
               >
                 {truncate(row.sheet_url)}
               </p>
-              <p
+            </div>
+
+            <div className="project-external-source-sync">
+              <div className="project-external-source-status-line">
+                <span
+                  className={cn(
+                    "project-external-source-status-dot",
+                    statusDotClass(row),
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="project-external-source-status-label">
+                  {STATUS_LABEL[row.last_status] ?? row.last_status}
+                </span>
+                {row.auto_sync_enabled ? (
+                  <Badge
+                    variant="secondary"
+                    title="Tự động mỗi ngày"
+                    aria-label="Tự động mỗi ngày"
+                    className="project-external-source-schedule"
+                  >
+                    <RefreshCw className="size-3" aria-hidden="true" />
+                    24h
+                  </Badge>
+                ) : (
+                  <Badge variant="outline">Thủ công</Badge>
+                )}
+                {autoDisabled && (
+                  <Badge variant="destructive">Đã tắt lịch</Badge>
+                )}
+              </div>
+              <div
                 className={cn(
-                  "break-words text-body-sm [overflow-wrap:anywhere]",
+                  "project-external-source-meta",
                   statusErrorClass(row),
                 )}
               >
-                Đồng bộ gần nhất: {formatTimestamp(row.last_synced_at)}
-                {typeof row.last_row_count === "number"
-                  ? ` · ${row.last_row_count} hàng`
-                  : ""}
-                {row.last_status === "FAILED" && row.last_error
-                  ? ` · ${
-                      isSinglePage
-                        ? singlePageSyncErrorMessage(row.last_error)
-                        : row.last_error
-                    }`
-                  : ""}
-              </p>
+                <span
+                  className="project-external-source-meta-item"
+                  title={`Đồng bộ gần nhất: ${formatTimestamp(row.last_synced_at)}`}
+                  aria-label={`Đồng bộ gần nhất: ${formatTimestamp(row.last_synced_at)}`}
+                >
+                  <time dateTime={row.last_synced_at ?? undefined}>
+                    {formatCompactTimestamp(row.last_synced_at)}
+                  </time>
+                </span>
+                {typeof row.last_row_count === "number" ? (
+                  <span
+                    className="project-external-source-meta-item project-external-source-row-count"
+                    aria-label={`${row.last_row_count} hàng`}
+                    title={`${row.last_row_count} hàng đã đồng bộ`}
+                  >
+                    {row.last_row_count} hàng
+                  </span>
+                ) : null}
+                {row.last_status === "FAILED" && row.last_error ? (
+                  <span className="project-external-source-error">
+                    {isSinglePage
+                      ? singlePageSyncErrorMessage(row.last_error)
+                      : row.last_error}
+                  </span>
+                ) : null}
+              </div>
             </div>
+
             {mutable && (
-              <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+              <div className="project-external-source-actions">
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
+                  aria-label="Đồng bộ ngay"
                   onClick={() => void runNow(row)}
                   disabled={disabled || isProcessing || isCoolingDown}
                   title={
                     isCoolingDown
-                      ? "Vui lòng đợi 5 phút giữa các lần xử lý"
+                      ? "Vui lòng đợi 5 phút giữa các lần đồng bộ"
                       : undefined
                   }
-                  className="min-w-0 flex-1 sm:flex-none"
+                  className="project-external-source-sync-button"
                 >
                   {isProcessing ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    <Play className="size-4" />
+                    <RefreshCw className="size-4" />
                   )}
-                  Xử lý ngay
+                  Đồng bộ
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
                   className="project-source-delete"
                   onClick={() => void remove(row)}
                   disabled={disabled}

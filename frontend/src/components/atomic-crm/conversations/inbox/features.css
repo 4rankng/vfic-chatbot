@@ -1029,6 +1029,19 @@
   font-weight: var(--chat-fw-semibold);
 }
 
+/* A disabled save action should explain its state, not disappear into the
+   surface. The conditional text utility keeps the active state primary blue. */
+.profile-save-button:disabled {
+  opacity: 1;
+  border-color: var(--border);
+  background: var(--surface-hover);
+  color: var(--muted-foreground) !important;
+}
+
+.profile-save-button:disabled svg {
+  color: currentColor;
+}
+
 .profile-session-content {
   display: flex;
   align-items: center;

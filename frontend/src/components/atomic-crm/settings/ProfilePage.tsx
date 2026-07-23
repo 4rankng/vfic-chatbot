@@ -192,7 +192,11 @@ const ProfileForm = ({
                 <Button
                   type="submit"
                   disabled={!isDirty || isSaving}
-                  className="profile-action-button profile-save-button tt-btn-touch"
+                  className={`profile-action-button profile-save-button tt-btn-touch ${
+                    !isDirty || isSaving
+                      ? "text-[var(--muted-foreground)]!"
+                      : ""
+                  }`}
                 >
                   {isSaving ? (
                     <LoaderCircle className="size-4 animate-spin" />

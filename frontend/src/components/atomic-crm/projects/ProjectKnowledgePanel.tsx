@@ -52,9 +52,7 @@ export const ProjectKnowledgePanel = ({
   canManageSources = editable,
 }: Props) => {
   if (project.knowledge_mode === "DIRECT_CONTEXT") {
-    return (
-      <SinglePagePanel project={project} editable={canManageSources} />
-    );
+    return <SinglePagePanel project={project} editable={canManageSources} />;
   }
   return (
     <RagCategoriesPanel
@@ -276,21 +274,23 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                   aria-labelledby="single-page-sync-heading"
                 >
                   <header className="flex flex-wrap items-center gap-x-2 gap-y-1 text-label font-semibold">
-                    <Link2
-                      className="size-4 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <h3
-                      id="single-page-sync-heading"
-                      className="flex items-center gap-1.5"
-                    >
-                      <span>Google Sheet</span>
-                      <ArrowRight
-                        className="size-3.5 text-muted-foreground"
+                    <div className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
+                      <Link2
+                        className="size-4 shrink-0 text-muted-foreground"
                         aria-hidden="true"
                       />
-                      <span>Trang kiến thức</span>
-                    </h3>
+                      <h3
+                        id="single-page-sync-heading"
+                        className="flex min-w-0 items-center gap-1.5"
+                      >
+                        <span>Google Sheet</span>
+                        <ArrowRight
+                          className="size-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        <span>Trang kiến thức</span>
+                      </h3>
+                    </div>
                     {refreshingPage && (
                       <span
                         className="text-body-sm font-normal text-muted-foreground"
@@ -348,11 +348,7 @@ const SinglePagePanel = ({ project, editable }: Props) => {
   );
 };
 
-const RagCategoriesPanel = ({
-  project,
-  editable,
-  canManageSources,
-}: Props) => {
+const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
   const notify = useNotify();
   const [categories, setCategories] = useState<
     KnowledgeCategoryStatus[] | null
@@ -813,7 +809,10 @@ const RagCategoriesPanel = ({
                     </Button>
                     <Button
                       size="sm"
-                      className="tt-btn-touch"
+                      className={cn(
+                        "project-category-save-button tt-btn-touch",
+                        !hasUnsavedChanges && "text-[var(--muted-foreground)]!",
+                      )}
                       onClick={() => void saveManualEdit()}
                       disabled={saving || !hasUnsavedChanges}
                     >
@@ -910,7 +909,7 @@ const RagCategoriesPanel = ({
           <section className="space-y-2">
             <h3 className="text-body font-semibold">
               <Link2 className="size-4" aria-hidden="true" />
-              Sync From Link
+              Google Sheet
             </h3>
             <ExternalSourceList
               projectId={String(project.id)}

@@ -243,6 +243,167 @@
   min-height: 44px;
 }
 
+.project-external-source-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(200px, 260px) auto;
+  align-items: center;
+  min-width: 0;
+  column-gap: 24px;
+  padding-block: 14px;
+  border-block: 1px solid var(--border);
+}
+
+.project-external-source-row + .project-external-source-row {
+  border-top: 0;
+}
+
+.project-external-source-identity,
+.project-external-source-sync {
+  min-width: 0;
+}
+
+.project-external-source-heading,
+.project-external-source-status-line,
+.project-external-source-actions {
+  display: flex;
+  align-items: center;
+}
+
+.project-external-source-heading {
+  gap: 8px;
+}
+
+.project-external-source-name {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-external-source-url {
+  min-width: 0;
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-external-source-sync {
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+}
+
+.project-external-source-status-line {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.project-external-source-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.project-external-source-status-label {
+  color: var(--foreground);
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+}
+
+.project-external-source-schedule {
+  margin-left: 2px;
+}
+
+.project-external-source-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-top: 5px;
+  color: var(--muted-foreground);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-external-source-meta-item {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.project-external-source-meta-item + .project-external-source-meta-item::before {
+  content: "·";
+  margin-inline: 6px;
+  color: var(--border-strong, var(--border));
+}
+
+.project-external-source-row-count {
+  color: inherit;
+}
+
+.project-external-source-error {
+  flex-basis: 100%;
+  margin-top: 4px;
+  line-height: var(--lh-normal);
+}
+
+.project-external-source-actions {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-external-source-sync-button {
+  min-width: 94px;
+}
+
+@media (max-width: 900px) {
+  .project-external-source-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+    padding-block: 14px;
+  }
+
+  .project-external-source-sync {
+    padding-top: 12px;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .project-external-source-actions {
+    justify-content: stretch;
+  }
+
+  .project-external-source-sync-button {
+    flex: 1 1 auto;
+  }
+}
+
+/* Disabled save is still an instruction: keep its label readable while
+   signalling that there is nothing new to persist yet. */
+.project-category-save-button:disabled {
+  opacity: 1;
+  border-color: var(--border);
+  background: var(--surface-hover);
+  color: var(--muted-foreground) !important;
+}
+
+.project-category-save-button:disabled svg {
+  color: currentColor;
+}
+
 .project-category-editor-skeleton {
   height: 320px;
   margin: 14px 0;

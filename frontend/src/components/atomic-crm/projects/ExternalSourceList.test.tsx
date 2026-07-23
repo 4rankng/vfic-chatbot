@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "@/index.css";
+import "./projects.css";
 
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
@@ -63,9 +64,7 @@ const singlePageRow = {
 
 describe("ExternalSourceList", () => {
   it("keeps polling through the full worker timeout and retry budget", () => {
-    expect(SINGLE_PAGE_SYNC_MAX_POLL_MS).toBe(
-      (4 * 1800 + 3 * 2000) * 1000,
-    );
+    expect(SINGLE_PAGE_SYNC_MAX_POLL_MS).toBe((4 * 1800 + 3 * 2000) * 1000);
   });
 
   afterEach(async () => {
@@ -94,14 +93,77 @@ describe("ExternalSourceList", () => {
       ),
     );
     await expect
-      .element(screen.getByRole("button", { name: "Xử lý ngay" }))
+      .element(screen.getByRole("button", { name: "Đồng bộ ngay" }))
       .toBeVisible();
-    await expect.element(screen.getByText("Tự động mỗi ngày")).toBeVisible();
+    await expect
+      .element(screen.getByLabelText("Tự động mỗi ngày"))
+      .toBeVisible();
+    await expect.element(screen.getByText("24h")).toBeVisible();
+    expect(screen.container.textContent).not.toContain("Tự động mỗi ngày");
+    expect(screen.container.textContent).not.toContain("Đồng bộ gần nhất:");
   });
 
-  it("triggers run-now on Process now", async () => {
+  it("separates source identity, sync state, and actions on wide screens", async () => {
+    await page.viewport(1200, 720);
+
     const screen = await render(<ExternalSourceList projectId="project-1" />);
-    await screen.getByRole("button", { name: "Xử lý ngay" }).click();
+    await vi.waitFor(() =>
+      expect(mocks.listExternalSources).toHaveBeenCalledWith(
+        "project-1",
+        expect.any(AbortSignal),
+      ),
+    );
+
+    const row = screen.container.querySelector(
+      ".project-external-source-row",
+    )!;
+    const identity = row.querySelector(
+      ".project-external-source-identity",
+    )!.getBoundingClientRect();
+    const sync = row
+      .querySelector(".project-external-source-sync")!
+      .getBoundingClientRect();
+    const actions = row
+      .querySelector(".project-external-source-actions")!
+      .getBoundingClientRect();
+
+    expect(identity.right).toBeLessThanOrEqual(sync.left + 0.5);
+    expect(sync.right).toBeLessThanOrEqual(actions.left + 0.5);
+  });
+
+  it("stacks the row before tablet-width actions can overflow", async () => {
+    await page.viewport(768, 900);
+
+    const screen = await render(<ExternalSourceList projectId="project-1" />);
+    await vi.waitFor(() =>
+      expect(mocks.listExternalSources).toHaveBeenCalledWith(
+        "project-1",
+        expect.any(AbortSignal),
+      ),
+    );
+
+    const row = screen.container.querySelector(
+      ".project-external-source-row",
+    )!;
+    const identity = row
+      .querySelector(".project-external-source-identity")!
+      .getBoundingClientRect();
+    const sync = row
+      .querySelector(".project-external-source-sync")!
+      .getBoundingClientRect();
+    const actions = row
+      .querySelector(".project-external-source-actions")!
+      .getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+
+    expect(sync.top).toBeGreaterThanOrEqual(identity.bottom - 0.5);
+    expect(actions.top).toBeGreaterThanOrEqual(sync.bottom - 0.5);
+    expect(actions.right).toBeLessThanOrEqual(rowRect.right + 0.5);
+  });
+
+  it("triggers run-now from the sync action", async () => {
+    const screen = await render(<ExternalSourceList projectId="project-1" />);
+    await screen.getByRole("button", { name: "Đồng bộ ngay" }).click();
 
     await vi.waitFor(() =>
       expect(mocks.runExternalSourceNow).toHaveBeenCalledWith(
@@ -142,7 +204,7 @@ describe("ExternalSourceList", () => {
     );
 
     vi.useFakeTimers();
-    await screen.getByRole("button", { name: "Xử lý ngay" }).click();
+    await screen.getByRole("button", { name: "Đồng bộ ngay" }).click();
     await screen.rerender(
       <ExternalSourceList
         projectId="project-1"
@@ -228,12 +290,12 @@ describe("ExternalSourceList", () => {
         onSynchronized={onSynchronized}
       />,
     );
-    await expect.element(screen.getByText(/44 hàng/)).toBeVisible();
+    await expect.element(screen.getByLabelText("44 hàng")).toBeVisible();
 
     resolveOlder([singlePageRow]);
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
-    await expect.element(screen.getByText(/44 hàng/)).toBeVisible();
+    await expect.element(screen.getByLabelText("44 hàng")).toBeVisible();
     expect(screen.container.textContent).not.toContain("18 hàng");
     expect(onSynchronized).not.toHaveBeenCalled();
   });
@@ -256,7 +318,7 @@ describe("ExternalSourceList", () => {
     expect(screen.container.textContent).not.toContain("sheet_not_public");
   });
 
-  it("keeps source details and actions inside a phone-width card", async () => {
+  it("stacks source details and actions inside a phone-width row", async () => {
     await page.viewport(320, 844);
 
     const screen = await render(<ExternalSourceList projectId="project-1" />);
@@ -267,19 +329,27 @@ describe("ExternalSourceList", () => {
       ),
     );
 
-    const runButton = screen.getByRole("button", { name: "Xử lý ngay" });
+    const runButton = screen.getByRole("button", { name: "Đồng bộ ngay" });
     await expect.element(runButton).toBeVisible();
 
-    const card = runButton
+    const row = runButton
       .element()
       .closest<HTMLElement>(".project-external-source-row")!;
     const actions = runButton.element().parentElement!;
-    const cardRect = card.getBoundingClientRect();
+    const identity = row.querySelector(
+      ".project-external-source-identity",
+    )!.getBoundingClientRect();
+    const sync = row
+      .querySelector(".project-external-source-sync")!
+      .getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
     const actionsRect = actions.getBoundingClientRect();
 
-    expect(actionsRect.left).toBeGreaterThanOrEqual(cardRect.left - 0.5);
-    expect(actionsRect.right).toBeLessThanOrEqual(cardRect.right + 0.5);
-    expect(actions.clientWidth).toBeLessThanOrEqual(card.clientWidth);
+    expect(sync.top).toBeGreaterThanOrEqual(identity.bottom - 0.5);
+    expect(actionsRect.top).toBeGreaterThanOrEqual(sync.bottom - 0.5);
+    expect(actionsRect.left).toBeGreaterThanOrEqual(rowRect.left - 0.5);
+    expect(actionsRect.right).toBeLessThanOrEqual(rowRect.right + 0.5);
+    expect(actions.clientWidth).toBeLessThanOrEqual(row.clientWidth);
   });
 
   it("renders single-page sync details and refreshes from the single-page endpoint", async () => {
@@ -298,7 +368,7 @@ describe("ExternalSourceList", () => {
     );
 
     await expect.element(screen.getByText("gid=987654321")).toBeVisible();
-    await expect.element(screen.getByText(/18 hàng/)).toBeVisible();
+    await expect.element(screen.getByLabelText("18 hàng")).toBeVisible();
 
     // The parent (SinglePagePanel) bumps refreshSignal after a source change to
     // re-trigger load() — that is now the primary refresh path on this page.
@@ -348,7 +418,9 @@ describe("ExternalSourceList", () => {
       ),
     );
 
-    expect(screen.container.textContent).not.toContain("Xử lý ngay");
+    expect(
+      screen.container.querySelector(".project-external-source-actions"),
+    ).toBeNull();
     expect(screen.container.textContent).not.toContain("Xóa nguồn đồng bộ");
   });
 });

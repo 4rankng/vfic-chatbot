@@ -67,6 +67,16 @@
   color: var(--primary-foreground);
 }
 
+/* Keep unavailable integration actions legible. Disabled opacity is already
+   communicated by the neutral surface, so fading the label again is harmful. */
+.settings-workspace-content .settings-primary-action:disabled,
+.settings-workspace-content .settings-danger-action:disabled {
+  border-color: var(--settings-border);
+  background: var(--workspace-surface-muted);
+  color: var(--ink-muted) !important;
+  opacity: 1;
+}
+
 .settings-workspace-content .settings-danger-action {
   border: 1px solid color-mix(in srgb, var(--destructive) 36%, var(--border));
   background: transparent;
