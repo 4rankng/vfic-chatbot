@@ -1,5 +1,9 @@
-"""Focused import surface for provider dependencies."""
+"""Provider dependency adapters for HTTP transports."""
 
-from app.api.dependencies import get_embedder
+from app.composition.project_knowledge import build_default_embedder
+
+
+def get_embedder():
+    return build_default_embedder()
 
 __all__ = ["get_embedder"]

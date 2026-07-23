@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.api import projects as projects_api
-from app.api.dependencies import get_db, require_admin
+from app.api.auth_dependencies import require_admin
+from app.shared.infrastructure.db import get_request_db as get_db
 from app.core.errors import register_domain_exception_handlers
 from app.shared.domain.errors import ConflictError
 from app.main import app as main_app

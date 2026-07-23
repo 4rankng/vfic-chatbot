@@ -47,8 +47,8 @@ from app.services.knowledge.canonical import (
     load_faq_template,
     load_template,
 )
-from app.services.knowledge.external_source_sync import ExternalSourceSyncError
 from app.services.knowledge.external_source_admin import KnowledgeExternalSourceAdminService
+from app.shared.domain.errors import ConflictError
 from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -503,23 +503,14 @@ async def create_external_source(
 ) -> ExternalSourceSyncStateOut:
     try:
         row = await KnowledgeExternalSourceAdminService(db).create_source(project_id, body, admin)
-    except ExternalSourceSyncError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, exc.code) from exc
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid_category_key") from exc
-    except Exception as exc:
-        if str(exc) in {
-            "external_source_already_exists",
-            "unsupported_source_kind",
-            "invalid_category_key",
-        }:
-            code = (
-                status.HTTP_409_CONFLICT
-                if str(exc) == "external_source_already_exists"
-                else status.HTTP_400_BAD_REQUEST
-            )
-            raise HTTPException(code, str(exc)) from exc
-        raise
+    except ConflictError as exc:
+        detail = str(exc)
+        code = (
+            status.HTTP_409_CONFLICT
+            if detail == "external_source_already_exists"
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(code, detail) from exc
     return ExternalSourceSyncStateOut.model_validate(row)
 
 

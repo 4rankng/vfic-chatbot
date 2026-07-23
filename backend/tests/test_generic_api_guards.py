@@ -5,11 +5,8 @@ from types import SimpleNamespace
 import httpx
 from fastapi import Depends, FastAPI
 
-from app.api.dependencies import (
-    get_current_user,
-    require_capability,
-    require_capability_or_legacy,
-)
+from app.api.auth_dependencies import get_current_user
+from app.api.installation_dependencies import require_capability, require_capability_or_legacy
 from app.core.db import get_db
 from app.services.installation.service import InstallationService
 

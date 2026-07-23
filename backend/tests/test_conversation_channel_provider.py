@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport
 
 from app.api.conversations import router as conversations_router
-from app.api.dependencies import get_current_user
+from app.api.auth_dependencies import get_current_user
 from app.core.db import get_db
 from app.models.user import Role
 

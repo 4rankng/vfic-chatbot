@@ -6,7 +6,7 @@ import json
 from unittest.mock import Mock
 
 from app.api import installation
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 from app.core.errors import _installation_handler, _request_validation_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.requests import Request

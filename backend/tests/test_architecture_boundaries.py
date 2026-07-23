@@ -33,8 +33,6 @@ api_outward|backend/app/api/conversations.py|app.models.conversation:Conversatio
 api_outward|backend/app/api/conversations.py|app.models.user:Role
 api_outward|backend/app/api/conversations.py|app.models.user:User
 api_outward|backend/app/api/conversations.py|app.workers.chatbot_worker:enqueue_chat_run
-api_outward|backend/app/api/dependencies.py|app.core.db:get_db
-api_outward|backend/app/api/dependencies.py|app.graph.clients:build_embedder
 api_outward|backend/app/api/integrations.py|app.core.config:ZALO_BOT_WEBHOOK_URL
 api_outward|backend/app/api/integrations.py|app.core.config:get_settings
 api_outward|backend/app/api/integrations.py|app.core.db:get_db
@@ -570,7 +568,7 @@ def test_context_domain_and_application_modules_reject_outward_imports() -> None
             "redis.asyncio:Redis",
             "rq:Queue",
             "socketio:AsyncServer",
-            "app.api.dependencies:get_current_user",
+            "app.api.auth_dependencies:get_current_user",
             "app.core.security:decode_token",
             "app.models.user:User",
             "app.services.installation.service:InstallationService",
