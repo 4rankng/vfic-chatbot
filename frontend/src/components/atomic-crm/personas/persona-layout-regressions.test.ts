@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import editorStyles from "../conversations/inbox/mobile-persona-editor.css?raw";
+import responsiveStyles from "../conversations/inbox/personas-responsive.css?raw";
 import studioStyles from "../conversations/inbox/personas-studio.css?raw";
 import assignmentsSource from "./PersonaAssignments.tsx?raw";
 import editSource from "./PersonaEdit.tsx?raw";
@@ -27,6 +28,18 @@ describe("Agent workspace layout regressions", () => {
     );
     expect(studioStyles).toMatch(
       /\.persona-page-shell \.persona-overview-edit-action\s*\{[\s\S]*min-height:\s*44px;[\s\S]*height:\s*44px/,
+    );
+  });
+
+  it("uses compact controls when the Agent directory is embedded in settings", () => {
+    expect(responsiveStyles).toMatch(
+      /@media \(min-width: 761px\)[\s\S]*\.settings-embedded-resource \.persona-studio-layout\s*\{[\s\S]*grid-template-columns:\s*minmax\(208px, 224px\) minmax\(0, 1fr\)/,
+    );
+    expect(responsiveStyles).toMatch(
+      /\.settings-embedded-resource[\s\S]*\.persona-agent-picker[\s\S]*\.persona-create-action\s*\{[\s\S]*width:\s*auto;[\s\S]*height:\s*34px\s*!important/,
+    );
+    expect(responsiveStyles).toMatch(
+      /\.settings-embedded-resource \.persona-studio-section\s*\{[\s\S]*padding:\s*14px 16px/,
     );
   });
 

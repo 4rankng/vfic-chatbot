@@ -42,6 +42,21 @@ describe("flat settings workspace", () => {
     expect(settingsSource).toContain("SettingsGroupStatus");
   });
 
+  it("uses a wide configuration-row layout with quiet field status icons", () => {
+    expect(stylesheet).toMatch(
+      /@media \(min-width: 1121px\)[\s\S]*\.settings-grid-zalo > \.settings-group,[\s\S]*grid-template-columns:\s*minmax\(210px, 260px\) minmax\(0, 1fr\)/,
+    );
+    expect(stylesheet).toMatch(
+      /\.settings-grid-models > \.settings-group,[\s\S]*\.settings-messenger-credentials\s*\{[\s\S]*grid-template-columns:\s*minmax\(210px, 260px\) minmax\(0, 1fr\)/,
+    );
+    expect(stylesheet).toMatch(
+      /\.settings-field-status\s*\{[^}]*width:\s*20px[^}]*height:\s*20px/,
+    );
+    expect(stylesheet).not.toMatch(
+      /\.settings-field-status\s*\{[^}]*border-radius/,
+    );
+  });
+
   it("places credentials side by side at tablet-width mobile layouts", () => {
     expect(stylesheet).toMatch(
       /@media \(min-width: 480px\) and \(max-width: 767px\)[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,

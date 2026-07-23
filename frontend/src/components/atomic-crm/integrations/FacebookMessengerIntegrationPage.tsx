@@ -32,6 +32,10 @@ import {
   type FacebookPageList,
 } from "./api";
 import { consumeFacebookOAuthCallback } from "./facebook-oauth-callback";
+import {
+  SettingsFieldStatus,
+  SettingsGroupStatus,
+} from "./SettingsFieldStatus";
 
 type CredentialsFormState = {
   facebook_app_id: string;
@@ -59,6 +63,7 @@ type MetaAppFieldProps = {
   id: keyof CredentialsFormState;
   label: string;
   hint?: string;
+  configured: boolean;
   value: string;
   onChange: (key: keyof CredentialsFormState, value: string) => void;
 };
@@ -67,11 +72,15 @@ const MetaAppPlainField = ({
   id,
   label,
   hint,
+  configured,
   value,
   onChange,
 }: MetaAppFieldProps) => (
   <div className="settings-field">
-    <Label htmlFor={id}>{label}</Label>
+    <div className="settings-field-label-row">
+      <Label htmlFor={id}>{label}</Label>
+      <SettingsFieldStatus configured={configured} />
+    </div>
     <Input
       id={id}
       type="text"
@@ -102,11 +111,7 @@ const MetaAppSecretField = ({
     <div className="settings-field">
       <div className="settings-field-label-row">
         <Label htmlFor={id}>{label}</Label>
-        <span
-          className={`settings-field-status${configured ? " is-configured" : ""}`}
-        >
-          {configured ? "Đã lưu" : "Chưa cấu hình"}
-        </span>
+        <SettingsFieldStatus configured={configured} />
       </div>
       <div className="settings-sensitive-input">
         <Input
@@ -229,6 +234,14 @@ export const FacebookMessengerIntegrationPage = () => {
   };
 
   const appIdConfigured = credentials?.facebook_app_id.configured ?? false;
+  const configuredCredentialCount = credentials
+    ? [
+        credentials.facebook_app_id.configured,
+        credentials.facebook_app_secret.configured,
+        credentials.facebook_login_config_id.configured,
+        credentials.facebook_webhook_verify_token.configured,
+      ].filter(Boolean).length
+    : 0;
 
   // Seed the plaintext (non-secret) fields with the server's current value
   // once on load. Secret fields stay empty ("leave blank to keep current value").
@@ -352,20 +365,29 @@ export const FacebookMessengerIntegrationPage = () => {
       {/* Meta App credentials (DB-first, env fallback). Required before the
           OAuth flow can build a valid authorization URL. */}
       <form
-        className="settings-group settings-messenger-group"
+        className="settings-group settings-messenger-group settings-messenger-credentials"
         onSubmit={submitCredentials}
       >
-        <div className="settings-group-content settings-messenger-group-content">
-          <div className="settings-messenger-group-heading">
+        <div className="settings-messenger-group-heading">
+          <div>
             <h3 className="settings-messenger-group-title">Ứng dụng Meta</h3>
             <p className="settings-field-hint">
               Để trống bí mật để giữ giá trị đã lưu.
             </p>
           </div>
+          <SettingsGroupStatus
+            configured={configuredCredentialCount}
+            total={4}
+          />
+        </div>
+        <div className="settings-group-content settings-messenger-group-content">
           <div className="settings-messenger-credentials-grid">
             <MetaAppPlainField
               id="facebook_app_id"
               label="App ID"
+              configured={
+                credentials?.facebook_app_id.configured ?? false
+              }
               value={credentialsForm.facebook_app_id}
               onChange={onCredentialChange}
             />
@@ -373,6 +395,9 @@ export const FacebookMessengerIntegrationPage = () => {
               id="facebook_login_config_id"
               label="Configuration ID"
               hint="Không bắt buộc"
+              configured={
+                credentials?.facebook_login_config_id.configured ?? false
+              }
               value={credentialsForm.facebook_login_config_id}
               onChange={onCredentialChange}
             />

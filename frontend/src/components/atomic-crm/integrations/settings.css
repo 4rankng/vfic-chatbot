@@ -15,7 +15,7 @@
 .settings-group-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   color: var(--ink-muted);
   font-size: var(--fs-caption);
   font-weight: 700;
@@ -23,29 +23,31 @@
   white-space: nowrap;
 }
 
-.settings-group-status::before {
-  width: 7px;
-  height: 7px;
+.settings-group-status svg {
+  width: 15px;
+  height: 15px;
   flex: 0 0 auto;
-  border-radius: 999px;
-  background: var(--ink-faint);
-  content: "";
 }
 
 .settings-group-status.is-ready {
-  color: var(--settings-accent-strong);
-}
-
-.settings-group-status.is-ready::before {
-  background: var(--settings-accent);
+  color: var(--success);
 }
 
 .settings-group-status.is-incomplete {
   color: var(--warning, #a16207);
 }
 
-.settings-group-status.is-incomplete::before {
-  background: var(--warning, #a16207);
+.settings-workspace-content .settings-group-icon {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-workspace-content .settings-group-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .settings-field-label-row {
@@ -56,33 +58,20 @@
 }
 
 .settings-field-status {
-  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
   flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid color-mix(in srgb, var(--warning) 24%, transparent);
-  border-radius: 999px;
-  background: var(--warning-soft);
+  place-items: center;
   color: var(--warning);
-  padding: 3px 8px;
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
 }
 
-.settings-field-status::before {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: currentColor;
-  content: "";
+.settings-field-status svg {
+  width: 17px;
+  height: 17px;
 }
 
 .settings-field-status.is-configured {
-  border-color: color-mix(in srgb, var(--success) 24%, transparent);
-  background: var(--success-soft);
   color: var(--success);
 }
 
@@ -183,6 +172,39 @@
   border-radius: 0;
   background: transparent;
   padding: 10px 0;
+}
+
+/* Settings lives inside the global recruiter shell, so it must not recreate
+   the inbox's decorative canvas or reserve another navigation rail. */
+.inbox-bg-container.settings-workspace {
+  padding: 0;
+  background: var(--settings-canvas);
+}
+
+.inbox-bg-container.settings-workspace::before {
+  display: none;
+}
+
+.inbox-bg-container.settings-workspace .settings-app {
+  display: block;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.settings-workspace .settings-side-nav-icon {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-workspace .settings-command-header .ops-command-title {
+  gap: 0;
 }
 
 @media (max-width: 767px) {
@@ -323,8 +345,8 @@
   }
 
   .settings-mobile-drawer-item .settings-side-nav-icon {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
   }
 
   .settings-workspace-content {
@@ -619,11 +641,17 @@
 .settings-messenger-group-heading {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 4px 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--settings-border);
+}
+
+.settings-messenger-group-heading > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
 .settings-messenger-group-heading .settings-field-hint {
@@ -874,6 +902,8 @@
    borders are reserved for inputs, disclosure controls, and true state. */
 @media (min-width: 768px) {
   .inbox-bg-container.settings-workspace .settings-center-panel {
+    width: 100%;
+    height: 100%;
     border: 0;
     border-radius: 0;
     background: var(--settings-canvas);
@@ -978,18 +1008,40 @@
 }
 
 @media (min-width: 1121px) {
-  .settings-grid-zalo {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .settings-grid-zalo,
+  .settings-grid-models {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .settings-grid-zalo > .settings-group:first-child {
-    padding-right: 28px;
+  .settings-grid-zalo > .settings-group,
+  .settings-grid-models > .settings-group,
+  .settings-messenger-credentials {
+    grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
   }
 
   .settings-grid-zalo > .settings-group + .settings-group {
-    border-top: 0;
+    margin-top: 28px;
+    padding-top: 28px;
+    border-top: 1px solid var(--settings-border);
+  }
+
+  .settings-grid-zalo > .settings-group > .settings-group-header,
+  .settings-grid-models > .settings-group > .settings-group-header,
+  .settings-messenger-credentials > .settings-messenger-group-heading {
+    align-items: flex-start;
+    padding: 2px 28px 2px 0;
+    border-right: 1px solid var(--settings-border);
+    border-bottom: 0;
+  }
+
+  .settings-grid-zalo > .settings-group > .settings-group-content,
+  .settings-grid-models > .settings-group > .settings-group-content,
+  .settings-messenger-credentials > .settings-messenger-group-content {
     padding-left: 28px;
-    border-left: 1px solid var(--settings-border);
+  }
+
+  .settings-grid-models {
+    max-width: none;
   }
 }
 

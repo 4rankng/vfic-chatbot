@@ -659,15 +659,23 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                 aria-label="Danh sách Agent"
               >
                 <div className="persona-panel-header">
-                  <div>
+                  <div className="persona-panel-heading">
                     <h2>Agent</h2>
+                    <Badge
+                      variant="outline"
+                      className="border-border bg-background/70"
+                    >
+                      {numberFormatter.format(totalCount)} hồ sơ
+                    </Badge>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className="border-border bg-background/70"
+                  <Button
+                    type="button"
+                    className="persona-create-action tt-btn-touch"
+                    onClick={() => redirect("create", "personas")}
                   >
-                    {numberFormatter.format(totalCount)} hồ sơ
-                  </Badge>
+                    <Plus className="size-4" />
+                    Tạo Agent
+                  </Button>
                 </div>
 
                 <label className="tt-input persona-studio-command">
@@ -680,15 +688,6 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                     aria-label="Tìm Agent"
                   />
                 </label>
-
-                <Button
-                  type="button"
-                  className="persona-create-action tt-btn-touch"
-                  onClick={() => redirect("create", "personas")}
-                >
-                  <Plus className="size-4" />
-                  Tạo Agent
-                </Button>
 
                 {isPending ? (
                   <div className="persona-directory-loading">

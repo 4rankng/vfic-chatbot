@@ -674,6 +674,148 @@
   }
 }
 
+/* The Agent directory is nested inside the settings console. Keep this
+   master-detail view denser than the standalone editor while preserving
+   mobile-sized controls below 760px. */
+@media (min-width: 761px) {
+  .settings-embedded-resource .persona-studio-layout {
+    grid-template-columns: minmax(208px, 224px) minmax(0, 1fr);
+  }
+
+  .settings-embedded-resource .persona-agent-picker {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .settings-embedded-resource .persona-panel-header {
+    min-height: 34px;
+  }
+
+  .settings-embedded-resource .persona-panel-header h2 {
+    margin: 0;
+    font-size: var(--fs-subsection);
+  }
+
+  .settings-embedded-resource .persona-panel-header [data-slot="badge"] {
+    min-height: 20px;
+    padding-inline: 7px;
+    font-size: var(--fs-caption);
+  }
+
+  .settings-embedded-resource .persona-agent-picker .persona-create-action {
+    width: auto;
+    min-height: 34px !important;
+    height: 34px !important;
+    gap: 5px;
+    padding-inline: 10px;
+    border-radius: 7px;
+    font-size: var(--fs-body-sm);
+  }
+
+  .settings-embedded-resource .persona-agent-picker .persona-studio-command,
+  .settings-embedded-resource
+    .persona-agent-picker
+    .persona-studio-command
+    input {
+    min-height: 38px;
+  }
+
+  .settings-embedded-resource .persona-workspace-content .persona-directory-row,
+  .settings-embedded-resource .persona-directory-main {
+    min-height: 56px;
+  }
+
+  .settings-embedded-resource .persona-directory-main {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 7px 9px;
+  }
+
+  .settings-embedded-resource
+    .persona-workspace-content
+    .persona-directory-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+  }
+
+  .settings-embedded-resource .persona-directory-copy {
+    gap: 1px;
+  }
+
+  .settings-embedded-resource .persona-studio-profile {
+    padding: 13px 16px;
+  }
+
+  .settings-embedded-resource .persona-studio-profile-head {
+    gap: 10px;
+  }
+
+  .settings-embedded-resource .persona-studio-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    font-size: var(--fs-body-sm);
+  }
+
+  .settings-embedded-resource .persona-studio-profile h1 {
+    font-size: var(--fs-subsection);
+  }
+
+  .settings-embedded-resource .persona-studio-status-row {
+    gap: 5px;
+    margin-top: 7px;
+  }
+
+  .settings-embedded-resource .persona-studio-badge {
+    min-height: 20px;
+    padding-inline: 7px;
+    font-size: var(--fs-caption);
+  }
+
+  .settings-embedded-resource
+    .persona-studio-profile-actions
+    [data-slot="button"],
+  .settings-embedded-resource .persona-overview-edit-action {
+    min-height: 36px;
+    height: 36px;
+    padding-inline: 11px;
+    font-size: var(--fs-body-sm);
+  }
+
+  .settings-embedded-resource .persona-studio-section {
+    padding: 14px 16px;
+  }
+
+  .settings-embedded-resource .persona-studio-section-title {
+    margin-bottom: 8px;
+  }
+
+  .settings-embedded-resource .persona-readiness-bar-card {
+    grid-template-columns: 88px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding-bottom: 10px;
+  }
+
+  .settings-embedded-resource .persona-readiness-bar {
+    height: 6px;
+  }
+
+  .settings-embedded-resource .persona-studio-checklist {
+    gap: 0 18px;
+  }
+
+  .settings-embedded-resource .persona-studio-checklist > div {
+    min-height: 38px;
+    padding: 7px 0;
+  }
+
+  .settings-embedded-resource .persona-studio-checklist > div > svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
 @media (max-width: 1020px) {
   .persona-page-shell .persona-followup-card {
     border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);

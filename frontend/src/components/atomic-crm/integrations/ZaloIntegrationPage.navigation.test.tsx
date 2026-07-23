@@ -52,7 +52,9 @@ const mocks = vi.hoisted(() => ({
       oa_token_expired: false,
     }),
   ),
-  loadFacebookStatus: vi.fn(() => Promise.resolve({ enabled: true, accounts: [] })),
+  loadFacebookStatus: vi.fn(() =>
+    Promise.resolve({ enabled: true, accounts: [] }),
+  ),
   loadFacebookCredentials: vi.fn(() =>
     Promise.resolve({
       facebook_app_id: { configured: false, value: null },
@@ -99,7 +101,6 @@ vi.mock("./api", () => ({
     disconnect: vi.fn(),
   },
 }));
-vi.mock("../conversations/InboxIcons", () => ({ InboxIcons: () => null }));
 vi.mock("../personas/PersonaList", () => ({ PersonaList: () => null }));
 vi.mock("../users/UserList", () => ({ UserList: () => null }));
 
@@ -117,7 +118,45 @@ afterEach(async () => {
 });
 
 describe("ZaloIntegrationPage navigation", () => {
-  it("keeps credential statuses in right-aligned badges beside their labels", async () => {
+  it("uses one flat desktop workspace without a second navigation rail", async () => {
+    mocks.isMobile = false;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    const workspace = screen.container.querySelector<HTMLElement>(
+      ".settings-workspace",
+    )!;
+    const app = workspace.querySelector<HTMLElement>(".settings-app")!;
+    const center = workspace.querySelector<HTMLElement>(
+      ".settings-center-panel",
+    )!;
+    const navIcon = workspace.querySelector<HTMLElement>(
+      ".settings-side-nav-icon",
+    )!;
+
+    expect(workspace.querySelector(".inbox-sidebar")).toBeNull();
+    expect(workspace.querySelector(".ops-command-mark")).toBeNull();
+    expect(getComputedStyle(workspace).backgroundImage).toBe("none");
+    expect(getComputedStyle(workspace).padding).toBe("0px");
+    expect(getComputedStyle(app).gridTemplateColumns).not.toContain("58px");
+    expect(getComputedStyle(app).borderRadius).toBe("0px");
+    expect(getComputedStyle(navIcon).borderTopWidth).toBe("0px");
+    expect(getComputedStyle(navIcon).backgroundColor).toBe(
+      "rgba(0, 0, 0, 0)",
+    );
+    expect(center.getBoundingClientRect().width).toBeCloseTo(
+      workspace.getBoundingClientRect().width,
+      0,
+    );
+  });
+
+  it("shows compact credential status icons and channel readiness progress", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -130,14 +169,12 @@ describe("ZaloIntegrationPage navigation", () => {
     const configuredLabel = screen.container.querySelector(
       'label[for="zalo_bot_token"]',
     );
-    const configuredRow = configuredLabel?.closest(
-      ".settings-field-label-row",
-    );
+    const configuredRow = configuredLabel?.closest(".settings-field-label-row");
     const configuredStatus = configuredRow?.querySelector(
       ".settings-field-status",
     );
 
-    expect(configuredStatus?.textContent).toBe("Đã lưu");
+    expect(configuredStatus?.getAttribute("aria-label")).toBe("Đã lưu");
     expect(configuredStatus?.classList.contains("is-configured")).toBe(true);
 
     const missingLabel = screen.container.querySelector(
@@ -146,8 +183,13 @@ describe("ZaloIntegrationPage navigation", () => {
     const missingRow = missingLabel?.closest(".settings-field-label-row");
     const missingStatus = missingRow?.querySelector(".settings-field-status");
 
-    expect(missingStatus?.textContent).toBe("Chưa cấu hình");
+    expect(missingStatus?.getAttribute("aria-label")).toBe("Chưa cấu hình");
     expect(missingStatus?.classList.contains("is-configured")).toBe(false);
+
+    const chatbotGroup = configuredLabel?.closest(".settings-group");
+    const progress = chatbotGroup?.querySelector(".settings-group-status");
+    expect(progress?.textContent).toBe("1/2");
+    expect(progress?.getAttribute("aria-label")).toBe("1/2 trường đã cấu hình");
   });
 
   it("reports only the OA credential test result when webhook signature health is mismatched", async () => {

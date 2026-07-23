@@ -502,14 +502,14 @@
 }
 
 .settings-page-shell {
-  width: min(100%, 1200px);
+  width: min(100%, 1280px);
   gap: 0;
 }
 
 .settings-console {
   display: grid;
-  grid-template-columns: minmax(208px, 216px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(184px, 196px) minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
 }
 
@@ -607,7 +607,7 @@
 
 .settings-side-nav-link {
   position: relative;
-  min-height: 54px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -615,7 +615,7 @@
   border-radius: 9px;
   background: transparent;
   color: var(--ink);
-  padding: 8px 9px;
+  padding: 7px 8px;
   text-align: left;
   text-decoration: none;
   transition:
@@ -677,8 +677,8 @@
 }
 
 .settings-side-nav-icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   display: grid;
   flex: 0 0 auto;
   place-items: center;
@@ -743,7 +743,7 @@
 
 .settings-command-header {
   min-height: auto;
-  padding: 12px 2px 20px;
+  padding: 8px 0 14px;
   border: 0;
   border-bottom: 1px solid
     color-mix(in srgb, var(--workspace-border) 76%, transparent);
@@ -753,12 +753,12 @@
 }
 
 .settings-command-header .ops-command-title {
-  gap: 12px;
+  gap: 10px;
 }
 
 .settings-command-header .ops-command-mark {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-color: color-mix(in srgb, var(--settings-accent) 22%, transparent);
   border-radius: 9px;
   background: color-mix(
@@ -776,8 +776,8 @@
 }
 
 .settings-command-header h1 {
-  margin-top: 2px;
-  font-size: var(--crm-fs-title-lg);
+  margin-top: 1px;
+  font-size: var(--fs-page-title);
   font-weight: var(--chat-fw-bold);
   letter-spacing: 0;
   line-height: var(--crm-lh-heading);
@@ -786,11 +786,17 @@
 
 .settings-command-header p:not(.ops-kicker) {
   max-width: 68ch;
-  margin-top: 5px;
+  margin-top: 3px;
   color: var(--ink-muted);
   font-size: var(--crm-fs-body-sm);
   line-height: var(--crm-lh-body);
   text-wrap: pretty;
+}
+
+@media (min-width: 761px) {
+  .inbox-bg-container .settings-workspace-content {
+    padding: 18px 20px 36px;
+  }
 }
 
 .settings-command-header [data-slot="button"] {

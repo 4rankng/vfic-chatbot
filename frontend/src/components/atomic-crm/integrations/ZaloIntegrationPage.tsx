@@ -11,7 +11,6 @@ import {
   MessageCircle,
   MessagesSquare,
   PlugZap,
-  Settings,
   UsersRound,
   Wifi,
   Workflow,
@@ -52,11 +51,14 @@ import {
   type ZaloFormState,
   type ZaloSettingsScope,
 } from "./zaloUpdatePayload";
-import { InboxIcons } from "../conversations/InboxIcons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { PersonaList } from "../personas/PersonaList";
 import { UserList } from "../users/UserList";
 import { FacebookMessengerIntegrationPage } from "./FacebookMessengerIntegrationPage";
+import {
+  SettingsFieldStatus,
+  SettingsGroupStatus,
+} from "./SettingsFieldStatus";
 import "../conversations/inbox.css";
 import "./settings.css";
 
@@ -261,11 +263,7 @@ const SecretField = ({
     <div className="settings-field">
       <div className="settings-field-label-row">
         <Label htmlFor={id}>{label}</Label>
-        <span
-          className={`settings-field-status${status.configured ? " is-configured" : ""}`}
-        >
-          {status.configured ? "Đã lưu" : "Chưa cấu hình"}
-        </span>
+        <SettingsFieldStatus configured={status.configured} />
       </div>
       <div className="settings-sensitive-input">
         <Input
@@ -481,22 +479,6 @@ const SettingsGroup = ({
     </section>
   );
 };
-
-const SettingsGroupStatus = ({
-  ready,
-  disabled = false,
-}: {
-  ready: boolean;
-  disabled?: boolean;
-}) => (
-  <span
-    className={`settings-group-status ${
-      disabled ? "is-off" : ready ? "is-ready" : "is-incomplete"
-    }`}
-  >
-    {disabled ? "Đang tắt" : ready ? "Sẵn sàng" : "Cần cấu hình"}
-  </span>
-);
 
 const SettingsSectionPanel = ({
   id,
@@ -995,22 +977,20 @@ export const ZaloIntegrationPage = () => {
   const webhookHealth = describeOaSignatureHealth(
     settings?.zalo_oa_webhook_signature ?? null,
   );
-  const botReady = Boolean(
-    settings?.zalo_bot_token.configured &&
-      settings.zalo_bot_webhook_secret.configured,
-  );
-  const oaReady = Boolean(
-    settings?.zalo_oa_app_id.configured &&
-      settings.zalo_oa_secret_key.configured &&
-      settings.zalo_oa_access_token.configured &&
-      settings.zalo_oa_refresh_token.configured,
-  );
-  const minimaxReady = Boolean(
-    minimaxEnabled && minimaxSettings?.minimax_api_key.configured,
-  );
-  const openRouterReady = Boolean(
-    openRouterEnabled && openRouterSettings?.openrouter_api_key.configured,
-  );
+  const botConfigured = [
+    settings?.zalo_bot_token.configured,
+    settings?.zalo_bot_webhook_secret.configured,
+  ].filter(Boolean).length;
+  const oaConfigured = [
+    settings?.zalo_oa_app_id.configured,
+    settings?.zalo_oa_secret_key.configured,
+    settings?.zalo_oa_access_token.configured,
+    settings?.zalo_oa_refresh_token.configured,
+  ].filter(Boolean).length;
+  const minimaxConfigured = minimaxSettings?.minimax_api_key.configured ? 1 : 0;
+  const openRouterConfigured = openRouterSettings?.openrouter_api_key.configured
+    ? 1
+    : 0;
 
   const selectSettingsItem = (itemId: SettingsItemId) => {
     setActiveItemId(itemId);
@@ -1030,7 +1010,6 @@ export const ZaloIntegrationPage = () => {
 
     return (
       <div className="inbox-bg-container settings-workspace">
-        <InboxIcons />
         <div className="app settings-app" id="app">
           <section className="panel center-panel settings-center-panel">
             {content}
@@ -1068,7 +1047,9 @@ export const ZaloIntegrationPage = () => {
             <SettingsGroup
               title="Zalo Chatbot"
               icon={<PlugZap className="size-4" />}
-              meta={<SettingsGroupStatus ready={botReady} />}
+              meta={
+                <SettingsGroupStatus configured={botConfigured} total={2} />
+              }
               defaultOpen
             >
               <SecretInput
@@ -1106,12 +1087,15 @@ export const ZaloIntegrationPage = () => {
             <SettingsGroup
               title="Zalo OA"
               icon={<MessageCircle className="size-4" />}
-              meta={<SettingsGroupStatus ready={oaReady} />}
+              meta={<SettingsGroupStatus configured={oaConfigured} total={4} />}
             >
               <div className="settings-oa-fields">
                 <div className="settings-field">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="settings-field-label-row">
                     <Label htmlFor="zalo_oa_app_id">Zalo App ID</Label>
+                    <SettingsFieldStatus
+                      configured={settings?.zalo_oa_app_id.configured ?? false}
+                    />
                   </div>
                   <Input
                     id="zalo_oa_app_id"
@@ -1204,7 +1188,8 @@ export const ZaloIntegrationPage = () => {
               icon={<Bot className="size-4" />}
               meta={
                 <SettingsGroupStatus
-                  ready={minimaxReady}
+                  configured={minimaxConfigured}
+                  total={1}
                   disabled={!minimaxEnabled}
                 />
               }
@@ -1261,7 +1246,8 @@ export const ZaloIntegrationPage = () => {
             icon={<Cpu className="size-4" />}
             meta={
               <SettingsGroupStatus
-                ready={openRouterReady}
+                configured={openRouterConfigured}
+                total={1}
                 disabled={!openRouterEnabled}
               />
             }
@@ -1360,9 +1346,6 @@ export const ZaloIntegrationPage = () => {
           <div className="settings-main">
             <header className="ops-command-header settings-command-header">
               <div className="ops-command-title">
-                <div className="ops-command-mark">
-                  <Settings className="size-5" />
-                </div>
                 <div className="min-w-0">
                   <p className="ops-kicker">{headerCopy.kicker}</p>
                   <h1>{headerCopy.title}</h1>
