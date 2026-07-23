@@ -2,8 +2,17 @@ import { useEffect, useState } from "react";
 import { useDataProvider, useNotify, useRefresh } from "ra-core";
 import type { Conversation } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
+import {
+  changeConversationMode,
+  type ConversationModeWriter,
+} from "./application/conversation-actions";
+import {
+  deriveConversationModeState,
+  type ConversationMode,
+  type EditableConversationMode,
+} from "./domain/conversation-mode";
 
-export type ConversationMode = Conversation["mode"];
+export type { ConversationMode } from "./domain/conversation-mode";
 
 /**
  * Shared takeover/release logic for a conversation record. Used by the
@@ -30,25 +39,28 @@ export const useConversationActions = (record?: Conversation) => {
     setLocallyClaimed(false);
   }, [record?.id, record?.assigned_recruiter_id]);
 
-  const effectiveMode: ConversationMode | undefined = localMode ?? record?.mode;
-  const isBotMode = effectiveMode === "bot";
-  const needsClaim =
-    effectiveMode === "human" &&
-    !record?.assigned_recruiter_id &&
-    !locallyClaimed;
-  const canHumanReply =
-    (effectiveMode === "human" && !needsClaim) || effectiveMode === "semi_auto";
+  const { effectiveMode, isBotMode, needsClaim, canHumanReply } =
+    deriveConversationModeState({
+      record,
+      localMode,
+      locallyClaimed,
+    });
 
-  const setConversationMode = async (
-    nextMode: Extract<ConversationMode, "bot" | "human" | "semi_auto">,
-  ) => {
-    if (
-      !record ||
-      (effectiveMode === nextMode && !(nextMode === "human" && needsClaim))
-    )
-      return;
-    try {
-      await dataProvider.setConversationMode(record.id, nextMode);
+  const modeWriter: ConversationModeWriter = {
+    setConversationMode: (conversationId, mode) =>
+      dataProvider.setConversationMode(conversationId, mode),
+  };
+
+  const setConversationMode = async (nextMode: EditableConversationMode) => {
+    const result = await changeConversationMode({
+      conversationId: record?.id,
+      currentMode: effectiveMode,
+      needsClaim,
+      nextMode,
+      writer: modeWriter,
+    });
+
+    if (result.kind === "changed") {
       setLocalMode(nextMode);
       setLocallyClaimed(nextMode === "human");
       const key =
@@ -59,7 +71,7 @@ export const useConversationActions = (record?: Conversation) => {
             : "conversations.release.success";
       notify(key, { type: "success" });
       refresh();
-    } catch {
+    } else if (result.kind === "failed") {
       const errorKey =
         nextMode === "human"
           ? "conversations.takeover.error"

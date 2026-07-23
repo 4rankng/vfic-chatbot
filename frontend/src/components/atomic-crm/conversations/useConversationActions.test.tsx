@@ -62,6 +62,16 @@ describe("useConversationActions — unassigned HUMAN", () => {
       "conv-1",
       "human",
     );
+    expect(notify).toHaveBeenCalledWith("conversations.takeover.success", {
+      type: "success",
+    });
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(
+      dataProvider.setConversationMode.mock.invocationCallOrder[0],
+    ).toBeLessThan(notify.mock.invocationCallOrder[0]);
+    expect(notify.mock.invocationCallOrder[0]).toBeLessThan(
+      refresh.mock.invocationCallOrder[0],
+    );
     await expect.element(screen.getByText("claimed")).toBeVisible();
     await expect.element(screen.getByText("can-reply")).toBeVisible();
   });
@@ -74,6 +84,10 @@ describe("useConversationActions — unassigned HUMAN", () => {
 
     await screen.getByRole("button", { name: "Tiếp quản" }).click();
 
+    expect(notify).toHaveBeenCalledWith("conversations.takeover.error", {
+      type: "error",
+    });
+    expect(refresh).not.toHaveBeenCalled();
     await expect.element(screen.getByText("needs-claim")).toBeVisible();
     await expect.element(screen.getByText("cannot-reply")).toBeVisible();
   });
