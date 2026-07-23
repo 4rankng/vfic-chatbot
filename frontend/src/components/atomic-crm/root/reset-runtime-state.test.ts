@@ -4,7 +4,7 @@ const realtime = vi.hoisted(() => ({
   closeRealtimeSocket: vi.fn(),
   getRealtimeSocket: vi.fn(),
 }));
-vi.mock("@/lib/vfic/realtimeSocket", () => realtime);
+vi.mock("../providers/realtime/realtime-socket", () => realtime);
 
 import { useMessageStore } from "../conversations/messageStore";
 import {

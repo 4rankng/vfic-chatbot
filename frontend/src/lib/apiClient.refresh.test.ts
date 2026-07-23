@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { apiJson, clearTokens, getAccessToken, setTokens } from "./api";
+import { apiJson, clearTokens, getAccessToken, setTokens } from "./apiClient";
 
 const accessTokenFor = (subject: string, generation: string): string =>
   `header.${btoa(JSON.stringify({ sub: subject, generation }))}.signature`;

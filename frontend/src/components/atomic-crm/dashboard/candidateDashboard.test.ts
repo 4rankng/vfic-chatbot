@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiJsonMock = vi.fn();
-vi.mock("../providers/rest/api", () => ({
+vi.mock("@/lib/apiClient", () => ({
   apiJson: (...args: unknown[]) => apiJsonMock(...args),
 }));
 

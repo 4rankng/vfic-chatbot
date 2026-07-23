@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const { useQueryMock } = vi.hoisted(() => ({ useQueryMock: vi.fn() }));
 
 vi.mock("@tanstack/react-query", () => ({ useQuery: useQueryMock }));
-vi.mock("../../providers/rest/api", () => ({ apiJson: vi.fn() }));
+vi.mock("@/lib/apiClient", () => ({ apiJson: vi.fn() }));
 
 import { useNotifications } from "./useNotifications";
 

@@ -10,11 +10,11 @@ vi.mock("../../root/reset-runtime-state", () => ({
   clearActiveDecisionTraceQueries: mocks.clearActiveDecisionTraceQueries,
 }));
 
-vi.mock("@/lib/vfic/realtimeSocket", () => ({
+vi.mock("../realtime/realtime-socket", () => ({
   closeRealtimeSocket: mocks.closeRealtimeSocket,
 }));
 
-vi.mock("./api", () => {
+vi.mock("@/lib/apiClient", () => {
   class ApiError extends Error {
     constructor(
       public status: number,
@@ -33,7 +33,7 @@ vi.mock("./api", () => {
   };
 });
 
-import { ApiError } from "./api";
+import { ApiError } from "@/lib/apiClient";
 import { getAuthProvider } from "./authProvider";
 
 afterEach(() => {

@@ -1,4 +1,4 @@
-import { apiUrl } from "../providers/rest/api";
+import { apiUrl } from "@/lib/apiClient";
 import type {
   RuntimeManifestGateway,
   RuntimeManifestHttpResponse,

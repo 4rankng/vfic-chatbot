@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDataProvider, useNotify, useRefresh } from "ra-core";
-import { ApiError } from "@/components/atomic-crm/providers/rest/api";
+import { ApiError } from "@/lib/apiClient";
 import {
   AlertCircle,
   ArrowRight,

@@ -1,4 +1,4 @@
-import { apiJson } from "../../providers/rest/api";
+import { apiJson } from "@/lib/apiClient";
 import type { ReportingReadPort } from "../application/ports";
 
 export const reportingApi: ReportingReadPort = {

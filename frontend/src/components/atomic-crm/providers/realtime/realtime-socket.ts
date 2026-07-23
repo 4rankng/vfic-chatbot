@@ -7,11 +7,10 @@
 // is false — the socket is opened lazily by the first subscriber (and only when
 // a session token exists), avoiding reconnect spam when logged out.
 
-import { getAccessToken } from "@/components/atomic-crm/providers/rest/api";
+import { getAccessToken } from "@/lib/apiClient";
+import { vficConfig } from "@/lib/runtime-config";
 
 import { io, type Socket } from "socket.io-client";
-
-import { vficConfig } from "./config";
 
 let socket: Socket | null = null;
 

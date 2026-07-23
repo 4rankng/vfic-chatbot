@@ -6,7 +6,7 @@ const { mockApiUrl } = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock("../providers/rest/api", () => ({ apiUrl: mockApiUrl }));
+vi.mock("@/lib/apiClient", () => ({ apiUrl: mockApiUrl }));
 
 import { fetchRuntimeManifest, parseRuntimeManifest } from "./runtime-manifest";
 import { loadRuntimeManifest } from "./runtime-manifest-application";

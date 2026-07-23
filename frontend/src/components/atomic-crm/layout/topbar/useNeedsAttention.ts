@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { apiJson } from "../../providers/rest/api";
+import { apiJson } from "@/lib/apiClient";
 import type { Conversation } from "../../types";
 
 /** Subset of {@link Conversation} rendered in the bell popover. */

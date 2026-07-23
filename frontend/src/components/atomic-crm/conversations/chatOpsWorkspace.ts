@@ -6,7 +6,7 @@ import type {
   LeadSignal,
   LeadTag,
 } from "../types";
-import { apiJson } from "../providers/rest/api";
+import { apiJson } from "@/lib/apiClient";
 
 export type OperationalTagKey =
   | "has_phone"

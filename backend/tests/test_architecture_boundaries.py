@@ -106,44 +106,12 @@ api_outward|backend/app/api/webhooks.py|app.models.conversation:Conversation
 api_outward|backend/app/api/webhooks.py|app.models.conversation:DeliveryStatus
 api_outward|backend/app/api/webhooks.py|app.models.conversation:Message
 api_outward|backend/app/api/webhooks.py|app.workers.chatbot_worker:enqueue_chat_run
-lib_product|frontend/src/lib/vfic/knowledgeService.ts|frontend/src/components/atomic-crm/providers/rest/api
-lib_product|frontend/src/lib/vfic/knowledgeService.ts|frontend/src/components/atomic-crm/types
-lib_product|frontend/src/lib/vfic/realtimeSocket.ts|frontend/src/components/atomic-crm/providers/rest/api
-product_lib|frontend/src/components/atomic-crm/capabilities/recruitment/index.tsx|frontend/src/lib/vfic/realtimeSocket
-product_lib|frontend/src/components/atomic-crm/conversations/ChatThread.tsx|frontend/src/lib/vfic/humanReplyService
-product_lib|frontend/src/components/atomic-crm/conversations/chatRepository.ts|frontend/src/lib/vfic/realtimeSocket
-product_lib|frontend/src/components/atomic-crm/conversations/useConversationRealtime.ts|frontend/src/lib/vfic/realtimeSocket
-product_lib|frontend/src/components/atomic-crm/knowledge/InlineKnowledgeUploader.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeDetailPanel.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeSourceList.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeSourceShow.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeUpload.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeVersionManager.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/StoredKnowledgePanel.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/personas/PersonaAssignments.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/personas/PersonaEdit.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/personas/PersonaForm.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/personas/PersonaList.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ExternalSourceLinkForm.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ExternalSourceList.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectBusTimetable.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectFaqEditor.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectFeatures.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.test.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/singlePageSheetUrl.test.ts|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/providers/rest/api.ts|frontend/src/lib/vfic/config
-product_lib|frontend/src/components/atomic-crm/providers/rest/authProvider.ts|frontend/src/lib/vfic/realtimeSocket
-product_lib|frontend/src/components/atomic-crm/providers/rest/dataProvider.ts|frontend/src/lib/vfic/humanReplyService
-product_lib|frontend/src/components/atomic-crm/root/reset-runtime-state.ts|frontend/src/lib/vfic/realtimeSocket
 schema_infra|backend/app/schemas/bot_run.py|app.models.conversation:BotRunOutcome
 schema_infra|backend/app/schemas/conversation.py|app.models.conversation:ConversationMode
 schema_infra|backend/app/schemas/conversation.py|app.models.conversation:ConversationProjectState
 schema_infra|backend/app/schemas/conversation.py|app.models.conversation:ConversationStatus
 schema_infra|backend/app/schemas/conversation.py|app.models.conversation:DeliveryStatus
 schema_infra|backend/app/schemas/conversation.py|app.models.conversation:MessageSender
-schema_infra|backend/app/schemas/ingestion_templates.py|app.models.ingestion_template:IngestionRunStatus
-schema_infra|backend/app/schemas/ingestion_templates.py|app.models.ingestion_template:TemplateVersionStatus
 schema_infra|backend/app/schemas/job.py|app.models.job:JobStatus
 schema_infra|backend/app/schemas/knowledge.py|app.models.knowledge:KBVersionStatus
 schema_infra|backend/app/schemas/knowledge.py|app.models.knowledge:KnowledgeStatus
@@ -368,16 +336,6 @@ _FRONTEND_LAYERED_FEATURE_ROOTS = tuple(
     f"frontend/src/components/atomic-crm/{feature}"
     for feature in ("knowledge", "leads", "personas", "projects", "reporting")
 )
-_FRONTEND_FEATURE_COMPOSITION_FACADES = frozenset(
-    {
-        "frontend/src/components/atomic-crm/knowledge/knowledge-service.ts",
-        "frontend/src/components/atomic-crm/personas/personaService.ts",
-        "frontend/src/components/atomic-crm/projects/project-knowledge-service.ts",
-        "frontend/src/components/atomic-crm/reporting/reportingService.ts",
-    }
-)
-
-
 def _has_module_prefix(target: str, prefix: str) -> bool:
     return target == prefix or target.startswith(f"{prefix}/")
 
@@ -409,7 +367,13 @@ def _conversation_layer_rule(rel: str, target: str) -> str | None:
     framework_or_browser_target = target.startswith(
         ("react", "ra-core", "zustand", "@tanstack/")
     )
-    outer_infrastructure_target = target.startswith("frontend/src/lib/vfic") or any(
+    outer_infrastructure_target = target.startswith(
+        (
+            "frontend/src/lib/apiClient",
+            "frontend/src/lib/runtime-config",
+            "frontend/src/lib/vfic",
+        )
+    ) or any(
         _has_module_prefix(target, prefix)
         for prefix in (
             "frontend/src/components/atomic-crm/providers",
@@ -479,6 +443,14 @@ def _is_feature_layer_module(rel: str) -> bool:
     )
 
 
+def _is_feature_composition_module(rel: str) -> bool:
+    """Recognize feature-local composition roots by the service naming convention."""
+    root = _feature_root(rel)
+    if root is None or PurePosixPath(rel).parent.as_posix() != root:
+        return False
+    return PurePosixPath(rel).stem.lower().endswith("service")
+
+
 def _feature_layer_rule(rel: str, target: str) -> str | None:
     """Keep migrated frontend feature layers inward-only without exceptions."""
     root = _feature_root(rel)
@@ -530,7 +502,7 @@ def _feature_layer_rule(rel: str, target: str) -> str | None:
             return "frontend_feature_infrastructure_outward"
 
     if (
-        rel not in _FRONTEND_FEATURE_COMPOSITION_FACADES
+        not _is_feature_composition_module(rel)
         and not any(
             _has_module_prefix(rel, layer)
             for layer in (domain, application, infrastructure)
@@ -593,6 +565,11 @@ def test_boundary_allowlist_only_names_existing_files() -> None:
         edge for edge in ALLOWED_EDGES if not (REPO_ROOT / edge.split("|", 2)[1]).is_file()
     )
     assert not missing, f"Remove stale architecture allowlist entries: {missing}"
+
+
+def test_boundary_allowlist_only_contains_active_edges() -> None:
+    stale = sorted(ALLOWED_EDGES - _current_edges())
+    assert not stale, "Remove inactive architecture allowlist edges:\n" + "\n".join(stale)
 
 
 def test_python_scanner_normalizes_relative_imports_and_symbols() -> None:
@@ -813,8 +790,8 @@ def test_conversation_layers_have_zero_allowlist_dependency_rules() -> None:
             "ra-core",
             "zustand",
             "@tanstack/react-query",
-            "frontend/src/components/atomic-crm/providers/rest/api",
-            "frontend/src/lib/vfic/realtimeSocket",
+            "frontend/src/lib/apiClient",
+            "frontend/src/components/atomic-crm/providers/realtime/realtime-socket",
             "frontend/src/components/atomic-crm/root/reset-runtime-state",
         ):
             assert _frontend_rule(importer, target) is not None
@@ -834,12 +811,18 @@ def test_conversation_layers_have_zero_allowlist_dependency_rules() -> None:
         infrastructure,
         "frontend/src/components/atomic-crm/capabilities/static-recruitment-runtime",
     ) == "conversation_infrastructure_outward"
-    assert _frontend_rule(infrastructure, "frontend/src/lib/vfic/realtimeSocket") is None
+    assert (
+        _frontend_rule(
+            infrastructure,
+            "frontend/src/components/atomic-crm/providers/realtime/realtime-socket",
+        )
+        is None
+    )
 
     for target in (
         f"{_CONVERSATION_ROOT}/infrastructure/repository",
-        "frontend/src/components/atomic-crm/providers/rest/api",
-        "frontend/src/lib/vfic/realtimeSocket",
+        "frontend/src/lib/apiClient",
+        "frontend/src/components/atomic-crm/providers/realtime/realtime-socket",
         "frontend/src/components/atomic-crm/root/reset-runtime-state",
         f"{_CONVERSATION_ROOT}/chatRepository",
         f"{_CONVERSATION_ROOT}/messageStore",
@@ -874,8 +857,8 @@ def test_migrated_frontend_feature_layers_have_zero_allowlist_rules() -> None:
                 "react",
                 "ra-core",
                 "@tanstack/react-query",
-                "frontend/src/components/atomic-crm/providers/rest/api",
-                "frontend/src/lib/vfic/knowledgeService",
+                "frontend/src/lib/apiClient",
+                f"{root}/infrastructure/http",
             ):
                 assert _frontend_rule(importer, target) is not None
 
@@ -895,10 +878,11 @@ def test_migrated_frontend_feature_layers_have_zero_allowlist_rules() -> None:
             "frontend_feature_presentation_outward"
         )
 
-    for facade in _FRONTEND_FEATURE_COMPOSITION_FACADES:
-        root = _feature_root(facade)
-        assert root is not None
+    for root in _FRONTEND_LAYERED_FEATURE_ROOTS:
+        facade = f"{root}/feature-service.ts"
+        assert _is_feature_composition_module(facade)
         assert _frontend_rule(facade, f"{root}/infrastructure/http") is None
+        assert not _is_feature_composition_module(f"{root}/FeaturePanel.tsx")
 
 
 def test_frontend_domain_and_application_layers_do_not_use_browser_io_globals() -> None:

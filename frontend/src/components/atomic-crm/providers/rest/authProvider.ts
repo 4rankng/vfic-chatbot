@@ -1,7 +1,7 @@
 import type { AuthProvider, UserIdentity } from "ra-core";
 
 import { canAccess as canAccessFn } from "../commons/canAccess";
-import { closeRealtimeSocket } from "@/lib/vfic/realtimeSocket";
+import { closeRealtimeSocket } from "../realtime/realtime-socket";
 import {
   ApiError,
   apiJson,
@@ -9,7 +9,7 @@ import {
   getAccessToken,
   refreshOnce,
   setTokens,
-} from "./api";
+} from "@/lib/apiClient";
 
 // JWT auth provider (replaces Supabase Auth).
 //

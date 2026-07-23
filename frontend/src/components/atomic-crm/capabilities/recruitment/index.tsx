@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useGetList } from "ra-core";
 
-import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
+import { getRealtimeSocket } from "../../providers/realtime/realtime-socket";
 import { Dashboard } from "../../dashboard/Dashboard";
 import { ConversationContextPanel } from "../../conversations/ConversationContextPanel";
 import {

@@ -12,7 +12,7 @@ import {
   getAuthProvider as defaultAuthProviderBuilder,
   getDataProvider as defaultDataProviderBuilder,
 } from "../providers/rest";
-import { getAccessToken } from "../providers/rest/api";
+import { getAccessToken } from "@/lib/apiClient";
 import type { CrmDataProvider } from "../providers/types";
 
 const defaultDataProvider = defaultDataProviderBuilder();

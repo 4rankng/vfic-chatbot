@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { apiJson, ApiError } from "./api";
+import { apiJson, ApiError } from "./apiClient";
 
 /**
  * Regression coverage for the H1 fix: a FastAPI 422 returns a Pydantic

@@ -17,7 +17,7 @@ import type {
   Persona,
   Project,
 } from "../types";
-import { ApiError, apiJson } from "../providers/rest/api";
+import { ApiError, apiJson } from "@/lib/apiClient";
 import { PageHeading, PageShell } from "../kit";
 
 type DirectFile = {

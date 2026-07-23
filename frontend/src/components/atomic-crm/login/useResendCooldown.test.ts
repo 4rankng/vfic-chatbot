@@ -13,7 +13,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, renderHook } from "vitest-browser-react";
 
-import { ApiError } from "../providers/rest/api";
+import { ApiError } from "@/lib/apiClient";
 
 const { mockRequestPasswordResetOtp } = vi.hoisted(() => ({
   mockRequestPasswordResetOtp: vi.fn(),

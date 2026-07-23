@@ -1,4 +1,4 @@
-import { apiJson } from "../providers/rest/api";
+import { apiJson } from "@/lib/apiClient";
 import type { ZaloFormState } from "./zaloUpdatePayload";
 
 export type SecretStatus = { configured: boolean; preview?: string | null };

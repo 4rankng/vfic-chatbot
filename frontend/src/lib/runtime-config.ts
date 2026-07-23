@@ -1,4 +1,4 @@
-// VFIC runtime configuration.
+// Browser runtime configuration.
 //
 // The CRM talks to a self-hosted REST + Socket.IO backend (FastAPI). Source
 // precedence: window.__VFIC__ (injected into index.html at deploy time)

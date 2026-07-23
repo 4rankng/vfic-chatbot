@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { apiJson } from "../../providers/rest/api";
+import { apiJson } from "@/lib/apiClient";
 
 interface NeedsAttentionResponse {
   count: number;
