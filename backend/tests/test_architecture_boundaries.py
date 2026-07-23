@@ -161,6 +161,7 @@ schema_infra|backend/app/schemas/projects.py|app.models.knowledge:KnowledgeBaseM
 schema_infra|backend/app/schemas/user.py|app.models.user:Role
 service_outward|backend/app/services/personas/providers.py|app.graph.provider_scope:provider_from_conversation
 service_outward|backend/app/services/project/service.py|app.workers.direct_context_worker:enqueue_direct_context_index
+service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.direct_context_worker:enqueue_direct_context_index
 service_outward|backend/app/services/webhook.py|app.workers.persistence_worker:enqueue_enrich_oa_profile
 """.splitlines()
     if line.strip()

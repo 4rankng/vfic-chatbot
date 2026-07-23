@@ -406,6 +406,16 @@ async def _sync_locked(
         return SinglePageExternalSourceSyncOutcome(status="FAILED", error=code)
 
     await _mark_ok(db, state, stats.content_sha256, row_count)
+    # Index the DIRECT_CONTEXT text into knowledge_chunks so sheet-synced content
+    # participates in cross-project retrieval — mirrors the admin-UI publish path
+    # in project/service.py. Without this, a sheet-synced DIRECT_CONTEXT KB is only
+    # reachable via FOCUSED-turn system-prompt injection and stays invisible to
+    # search_knowledge from other projects' turns. Best-effort: the enqueue swallows
+    # Redis errors so a transient queue failure never rolls back this sync.
+    from app.workers.direct_context_worker import enqueue_direct_context_index
+
+    if markdown:
+        enqueue_direct_context_index(knowledge_base.id, project.id, markdown)
     if activating:
         await bump_cache_version(NS_PREAMBLE)
     return SinglePageExternalSourceSyncOutcome(

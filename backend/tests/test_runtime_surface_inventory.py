@@ -64,9 +64,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     "provider_boundary": 75,  # identity lookup moved behind an infrastructure gateway
     # Three service-owned worker calls moved behind the project/knowledge
     # application scheduler port; queue names and durable worker paths are unchanged.
-    "queue_producer": 32,
+    # +1 queue_producer: single-page sheet sync now enqueues direct-context indexing
+    # so sheet-sourced DIRECT_CONTEXT content participates in cross-project retrieval.
+    "queue_producer": 33,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "fb10c374fd9a05fa0b8171672ab3e53b8c5196445bc4d005417539c7278b9c7a"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "dd6705c3f349522d40f852f73b2d9353731d59b9d5f3a9d2cf4f0831eaa79915"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

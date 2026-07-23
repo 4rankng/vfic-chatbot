@@ -339,3 +339,106 @@ async def test_create_source_maps_unique_constraint_to_duplicate_conflict() -> N
         )
 
     assert db.rollbacks == 1
+
+
+class _NestedTx:
+    async def __aenter__(self) -> "_NestedTx":
+        return self
+
+    async def __aexit__(self, *_exc) -> bool:
+        return False
+
+
+def _patch_sync_internals(monkeypatch: pytest.MonkeyPatch, *, sha: str) -> object:
+    """Stub the sheet-fetch/render/upsert deps of ``_sync_locked`` for a unit test.
+
+    Returns the project + knowledge_base used, so a test can assert the enqueue args.
+    """
+    project_id = uuid.uuid4()
+    knowledge_base_id = uuid.uuid4()
+    project = SimpleNamespace(id=project_id, is_active=True, index_card=object())
+    knowledge_base = SimpleNamespace(id=knowledge_base_id)
+
+    monkeypatch.setattr(
+        single_page_sync.SinglePageExternalSourceService,
+        "_require_direct_context_project",
+        AsyncMock(return_value=(project, knowledge_base)),
+    )
+    monkeypatch.setattr(
+        single_page_sync,
+        "SheetClient",
+        lambda: SimpleNamespace(fetch_csv=AsyncMock(return_value="csv")),
+    )
+    monkeypatch.setattr(single_page_sync, "render_sheet_markdown", lambda _csv: ("# FAQ\n", 1))
+    monkeypatch.setattr(
+        single_page_sync.KnowledgeBaseService,
+        "canonical_direct_file_stats",
+        staticmethod(
+            lambda _text: SimpleNamespace(content_sha256=sha, normalized_text="n")
+        ),
+    )
+    monkeypatch.setattr(single_page_sync.KnowledgeBaseService, "upsert_direct_file", AsyncMock())
+    return project, knowledge_base
+
+
+@pytest.mark.asyncio
+async def test_sync_locked_enqueues_direct_context_index_on_changed_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sheet sync that changes the direct-file content enqueues DIRECT_CONTEXT
+    indexing so the content participates in cross-project retrieval. Regression:
+    the sync path wrote the file without indexing it, so sheet-sourced
+    DIRECT_CONTEXT KBs (e.g. Rorze) stayed invisible to search_knowledge."""
+    project, knowledge_base = _patch_sync_internals(monkeypatch, sha="sha-new")
+    state = SimpleNamespace(
+        id=uuid.uuid4(),
+        project_id=project.id,
+        sheet_url=f"{SHEET_URL}#gid=0",
+        sheet_gid=0,
+    )
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=None)  # no existing file -> content changed -> OK
+    db.begin_nested = lambda: _NestedTx()
+    monkeypatch.setattr(single_page_sync, "_mark_ok", AsyncMock())
+
+    enqueued: list[tuple] = []
+    monkeypatch.setattr(
+        "app.workers.direct_context_worker.enqueue_direct_context_index",
+        lambda *args: enqueued.append(args),
+    )
+
+    outcome = await single_page_sync._sync_locked(db, state, SimpleNamespace())
+
+    assert outcome.status == "OK"
+    assert enqueued == [(knowledge_base.id, project.id, "# FAQ\n")]
+
+
+@pytest.mark.asyncio
+async def test_sync_locked_does_not_enqueue_direct_context_index_on_noop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unchanged sheet (NO_OP) must not enqueue indexing — the content is
+    already indexed, so re-enqueuing would waste an ingest job."""
+    project, _knowledge_base = _patch_sync_internals(monkeypatch, sha="same")
+    state = SimpleNamespace(
+        id=uuid.uuid4(),
+        project_id=project.id,
+        sheet_url=f"{SHEET_URL}#gid=0",
+        sheet_gid=0,
+    )
+    db = AsyncMock()
+    db.scalar = AsyncMock(
+        return_value=SimpleNamespace(content_sha256="same")
+    )  # unchanged -> NO_OP
+    monkeypatch.setattr(single_page_sync, "_mark_noop", AsyncMock())
+
+    enqueued: list[tuple] = []
+    monkeypatch.setattr(
+        "app.workers.direct_context_worker.enqueue_direct_context_index",
+        lambda *args: enqueued.append(args),
+    )
+
+    outcome = await single_page_sync._sync_locked(db, state, SimpleNamespace())
+
+    assert outcome.status == "NO_OP"
+    assert enqueued == []
