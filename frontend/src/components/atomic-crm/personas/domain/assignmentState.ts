@@ -56,7 +56,7 @@ export const getPersonaAssignmentState = (
     return {
       badge: "Gán riêng",
       badgeVariant: "brand" as const,
-      summary: "Adapter này đang gán rõ ràng Agent này.",
+      summary: "Dùng Agent này.",
       actionLabel: "Trả về mặc định",
       nextPersonaId: null as string | null,
       actionDisabled: false,
@@ -67,8 +67,8 @@ export const getPersonaAssignmentState = (
     return {
       badge: "Theo mặc định",
       badgeVariant: "good" as const,
-      summary: "Adapter này đang kế thừa Agent này từ mặc định toàn hệ thống.",
-      actionLabel: "Agent mặc định",
+      summary: "Kế thừa từ mặc định.",
+      actionLabel: "Đang mặc định",
       nextPersonaId: null as string | null,
       actionDisabled: true,
     };
@@ -78,8 +78,8 @@ export const getPersonaAssignmentState = (
     badge: assignment.persona_id ? "Agent khác" : "Mặc định khác",
     badgeVariant: "neutral" as const,
     summary: assignment.persona_id
-      ? "Adapter này đang gán rõ ràng một Agent khác."
-      : "Adapter này đang kế thừa một Agent mặc định khác.",
+      ? "Đang dùng Agent khác."
+      : "Kế thừa mặc định khác.",
     actionLabel: "Gán Agent này",
     nextPersonaId: persona.id,
     actionDisabled: false,
