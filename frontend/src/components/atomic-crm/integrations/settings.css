@@ -1,3 +1,18 @@
+.settings-workspace-content {
+  --settings-control-height: 38px;
+  --settings-action-height: 36px;
+  --settings-touch-target: 44px;
+  --settings-mobile-row-height: 48px;
+  --settings-page-title-size: 22px;
+  --settings-section-title-size: 16px;
+  --settings-space-1: 4px;
+  --settings-space-2: 8px;
+  --settings-space-3: 12px;
+  --settings-space-4: 16px;
+  --settings-space-5: 20px;
+  --settings-space-6: 24px;
+}
+
 .settings-header-actions {
   display: grid;
   justify-items: end;
@@ -35,6 +50,16 @@
 
 .settings-group-status.is-incomplete {
   color: var(--warning, #a16207);
+}
+
+.settings-group-status.is-loading,
+.settings-field-status.is-loading {
+  color: var(--ink-muted);
+}
+
+.settings-group-status.is-error,
+.settings-field-status.is-error {
+  color: var(--destructive);
 }
 
 .settings-workspace-content .settings-group-icon {
@@ -76,10 +101,10 @@
 }
 
 .settings-workspace-content .settings-test-button {
-  min-height: 44px !important;
-  height: 44px !important;
+  min-height: var(--settings-action-height) !important;
+  height: var(--settings-action-height) !important;
   border-radius: 8px;
-  padding-inline: 14px;
+  padding-inline: var(--settings-space-3);
 }
 
 .settings-workspace-content .settings-primary-action {
@@ -147,13 +172,13 @@
 
 .settings-embedded-resource [data-slot="button"],
 .settings-embedded-resource .persona-studio-command {
-  min-height: 44px !important;
-  height: 44px !important;
+  min-height: var(--settings-action-height) !important;
+  height: var(--settings-action-height) !important;
 }
 
 .settings-messenger-recovery-form .tt-input {
-  min-height: 44px;
-  height: 44px;
+  min-height: var(--settings-control-height);
+  height: var(--settings-control-height);
 }
 
 .settings-advanced {
@@ -232,8 +257,8 @@
 
   .settings-mobile-drawer-trigger {
     width: 100%;
-    height: 44px;
-    min-height: 44px;
+    height: var(--settings-touch-target);
+    min-height: var(--settings-touch-target);
     justify-content: flex-start;
     border-color: var(--settings-border);
     border-radius: 9px;
@@ -327,7 +352,7 @@
 
   .settings-mobile-drawer-item {
     width: 100%;
-    min-height: 56px;
+    min-height: var(--settings-mobile-row-height);
     display: flex;
     align-items: center;
     gap: 10px;
@@ -335,7 +360,7 @@
     border-radius: 9px;
     background: transparent;
     color: var(--ink);
-    padding: 8px 9px;
+    padding: 6px 8px;
     text-align: left;
   }
 
@@ -350,12 +375,12 @@
   }
 
   .settings-workspace-content {
-    padding: 14px 14px calc(96px + env(safe-area-inset-bottom));
+    padding: 12px 12px calc(88px + env(safe-area-inset-bottom));
   }
 
   .settings-mobile-topbar {
-    margin: -14px -14px 10px;
-    padding: calc(7px + env(safe-area-inset-top)) 14px 7px;
+    margin: -12px -12px 8px;
+    padding: calc(6px + env(safe-area-inset-top)) 12px 6px;
   }
 
   .settings-mobile-drawer-trigger {
@@ -399,7 +424,7 @@
   }
 
   .settings-main {
-    gap: 10px;
+    gap: 8px;
   }
 
   .settings-section-panel {
@@ -424,11 +449,13 @@
   }
 
   .settings-mobile-group-summary {
+    min-height: var(--settings-mobile-row-height);
     display: grid;
     grid-template-columns: minmax(0, 1fr) 20px;
     align-items: center;
     cursor: pointer;
     list-style: none;
+    padding: 0;
   }
 
   .settings-mobile-group-summary::-webkit-details-marker {
@@ -448,8 +475,8 @@
   }
 
   .settings-mobile-group .settings-group-header {
-    min-height: 56px;
-    padding: 10px 0;
+    min-height: var(--settings-mobile-row-height);
+    padding: var(--settings-space-2) 0;
     border-bottom: 0;
   }
 
@@ -480,8 +507,8 @@
   }
 
   .settings-mobile-group .settings-group-content {
-    gap: 9px;
-    padding: 14px 0 18px;
+    gap: var(--settings-space-2);
+    padding: var(--settings-space-3) 0 14px;
   }
 
   .settings-sensitive-input {
@@ -528,18 +555,48 @@
     column-gap: 4px;
   }
 
-  .settings-oa-fields > .settings-field:first-child > .flex {
+  .settings-oa-fields
+    > .settings-field:first-child
+    > .settings-field-label-row {
     grid-column: 1 / -1;
+  }
+
+  .settings-oa-fields > .settings-field:first-child > .settings-input {
+    grid-column: 1;
+  }
+
+  .settings-oa-fields > .settings-field:first-child > .settings-copy-app-id {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .settings-workspace-content .settings-group .settings-test-button {
     position: relative;
     width: auto;
-    min-height: 44px !important;
-    height: 44px !important;
+    min-height: var(--settings-touch-target) !important;
+    height: var(--settings-touch-target) !important;
     margin-block: 0;
     border-radius: 8px;
     padding-inline: 14px;
+    font-size: var(--fs-body-sm);
+  }
+
+  .settings-embedded-resource [data-slot="button"],
+  .settings-embedded-resource .persona-studio-command {
+    min-height: var(--settings-touch-target) !important;
+    height: var(--settings-touch-target) !important;
+  }
+
+  .settings-embedded-resource .persona-studio-command input {
+    font-size: 16px;
+  }
+
+  .settings-embedded-users .user-directory-toolbar h2 {
+    font-size: var(--settings-section-title-size);
+    line-height: 1.25;
+  }
+
+  .settings-embedded-users .user-directory-create {
     font-size: var(--fs-body-sm);
   }
 
@@ -553,7 +610,7 @@
   }
 
   .settings-advanced-summary {
-    min-height: 44px;
+    min-height: var(--settings-touch-target);
   }
 
   .settings-webhook-health {
@@ -634,8 +691,8 @@
 
 .settings-messenger-group-content {
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  padding: 16px 0 18px;
+  gap: 10px;
+  padding: 14px 0 16px;
 }
 
 .settings-messenger-group-heading {
@@ -661,7 +718,7 @@
 .settings-messenger-credentials-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 16px;
+  gap: 10px 14px;
 }
 
 .settings-messenger-credentials-grid .settings-field {
@@ -670,13 +727,13 @@
 }
 
 .settings-messenger-credentials-grid .settings-input {
-  min-height: 44px;
-  height: 44px;
+  min-height: var(--settings-control-height);
+  height: var(--settings-control-height);
 }
 
 .settings-messenger .settings-sensitive-input {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
+  grid-template-columns: minmax(0, 1fr) var(--settings-control-height);
   gap: 6px;
 }
 
@@ -685,9 +742,9 @@
 }
 
 .settings-messenger .settings-input-action {
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
+  width: var(--settings-control-height);
+  min-width: var(--settings-control-height);
+  height: var(--settings-control-height);
   border: 1px solid var(--settings-border);
   border-radius: 8px;
   background: var(--surface-solid);
@@ -867,9 +924,9 @@
   }
 
   .settings-messenger .settings-input-action {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    width: var(--settings-touch-target);
+    min-width: var(--settings-touch-target);
+    height: var(--settings-touch-target);
   }
 
   .settings-messenger .settings-messenger-primary-action {
@@ -877,13 +934,16 @@
     max-width: 100%;
   }
 
-  .settings-messenger-recovery-form .settings-test-button {
-    width: 100%;
+  .settings-workspace-content
+    .settings-messenger-recovery-form
+    .settings-test-button {
+    width: max-content;
+    max-width: 100%;
   }
 
   .settings-messenger-recovery-summary {
-    min-height: 52px;
-    padding: 12px 44px 12px 0;
+    min-height: var(--settings-mobile-row-height);
+    padding: 10px var(--settings-touch-target) 10px 0;
   }
 
   .settings-messenger-recovery-content {
@@ -892,8 +952,10 @@
 }
 
 @media (max-width: 480px) {
-  .settings-messenger .settings-messenger-primary-action {
-    width: 100%;
+  .settings-workspace-content
+    .settings-messenger
+    .settings-messenger-primary-action {
+    width: max-content;
   }
 }
 
@@ -911,11 +973,11 @@
   }
 
   .settings-workspace-content {
-    padding: 24px 28px 48px;
+    padding: var(--settings-space-4) var(--settings-space-5) 32px;
   }
 
   .settings-page-shell {
-    width: min(100%, 1240px);
+    width: min(100%, 1280px);
   }
 
   .settings-console {
@@ -936,13 +998,17 @@
   }
 
   .settings-command-header {
-    padding: 0 0 20px;
+    padding: 0 0 14px;
+  }
+
+  .settings-workspace-content .settings-side-nav-link {
+    min-height: var(--settings-touch-target);
   }
 
   .settings-section-panel {
     gap: 0;
     border-block: 1px solid var(--settings-border);
-    padding-block: 22px;
+    padding-block: var(--settings-space-4);
   }
 
   .settings-grid {
@@ -963,15 +1029,47 @@
   }
 
   .settings-group-header {
-    min-height: 36px;
-    padding: 0 0 14px;
+    min-height: var(--settings-action-height);
+    padding: 0 0 10px;
     border: 0;
   }
 
   .settings-group-content,
   .settings-messenger-group-content {
-    gap: 14px 16px;
+    gap: 10px 14px;
     padding: 0;
+  }
+
+  .settings-group .settings-input,
+  .settings-messenger-credentials-grid .settings-input {
+    min-height: var(--settings-control-height);
+    height: var(--settings-control-height);
+    font-size: var(--fs-body);
+  }
+
+  .settings-switch-row,
+  .settings-readonly-field {
+    min-height: var(--settings-control-height);
+    padding-block: 8px;
+  }
+
+  .settings-advanced-summary {
+    min-height: var(--settings-control-height);
+  }
+
+  .settings-messenger-recovery-summary {
+    min-height: calc(var(--settings-control-height) + 4px);
+    padding-block: 8px;
+  }
+
+  .settings-oa-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+  }
+
+  .settings-oa-fields > .settings-oa-actions,
+  .settings-oa-fields > .settings-advanced {
+    grid-column: 1 / -1;
   }
 
   .settings-grid-models {
@@ -986,24 +1084,24 @@
   }
 
   .settings-messenger > .settings-group + .settings-group {
-    margin-top: 22px;
-    padding-top: 22px;
+    margin-top: 18px;
+    padding-top: 18px;
     border-top: 1px solid var(--settings-border);
   }
 }
 
 @media (min-width: 901px) {
   .settings-console {
-    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-columns: 196px minmax(0, 1fr);
   }
 
   .settings-side-nav {
-    padding: 0 24px 0 0;
+    padding: 0 18px 0 0;
     border-right: 1px solid var(--settings-border);
   }
 
   .settings-main {
-    padding-left: 32px;
+    padding-left: 24px;
   }
 }
 
@@ -1016,12 +1114,12 @@
   .settings-grid-zalo > .settings-group,
   .settings-grid-models > .settings-group,
   .settings-messenger-credentials {
-    grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+    grid-template-columns: minmax(176px, 208px) minmax(0, 1fr);
   }
 
   .settings-grid-zalo > .settings-group + .settings-group {
-    margin-top: 28px;
-    padding-top: 28px;
+    margin-top: 20px;
+    padding-top: 20px;
     border-top: 1px solid var(--settings-border);
   }
 
@@ -1029,7 +1127,7 @@
   .settings-grid-models > .settings-group > .settings-group-header,
   .settings-messenger-credentials > .settings-messenger-group-heading {
     align-items: flex-start;
-    padding: 2px 28px 2px 0;
+    padding: 2px 20px 2px 0;
     border-right: 1px solid var(--settings-border);
     border-bottom: 0;
   }
@@ -1037,7 +1135,7 @@
   .settings-grid-zalo > .settings-group > .settings-group-content,
   .settings-grid-models > .settings-group > .settings-group-content,
   .settings-messenger-credentials > .settings-messenger-group-content {
-    padding-left: 28px;
+    padding-left: 20px;
   }
 
   .settings-grid-models {
@@ -1052,8 +1150,8 @@
   }
 
   .settings-grid > .settings-group + .settings-group {
-    margin-top: 24px;
-    padding-top: 24px;
+    margin-top: 18px;
+    padding-top: 18px;
     border-top: 1px solid var(--settings-border);
   }
 }

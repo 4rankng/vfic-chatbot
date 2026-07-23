@@ -828,6 +828,12 @@
 }
 
 @media (max-width: 760px) {
+  .persona-page-shell .persona-panel-header .persona-create-action {
+    width: auto;
+    padding-inline: 12px;
+    font-size: var(--fs-body);
+  }
+
   .persona-studio-section {
     padding: 16px;
   }

@@ -124,20 +124,23 @@ afterEach(async () => {
 describe("FacebookMessengerIntegrationPage", () => {
   it("shows compact status icons for every credential and a group summary", async () => {
     const screen = await renderPage();
+    await expect
+      .poll(
+        () =>
+          screen.container.querySelector(".settings-group-status .sr-only")
+            ?.textContent,
+      )
+      .toBe("0/3 trường đã cấu hình");
+
     const statuses = screen.container.querySelectorAll(
       ".settings-messenger-credentials-grid .settings-field-status",
     );
 
-    expect(statuses).toHaveLength(4);
+    expect(statuses).toHaveLength(3);
     statuses.forEach((status) => {
       expect(status.getAttribute("aria-label")).toBe("Chưa cấu hình");
       expect(status.textContent).toBe("");
     });
-    expect(
-      screen.container.querySelector(".settings-group-status")?.getAttribute(
-        "aria-label",
-      ),
-    ).toBe("0/4 trường đã cấu hình");
   });
 
   it("keeps the empty state and recovery form inside flat settings groups", async () => {

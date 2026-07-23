@@ -188,8 +188,12 @@ describe("ZaloIntegrationPage navigation", () => {
 
     const chatbotGroup = configuredLabel?.closest(".settings-group");
     const progress = chatbotGroup?.querySelector(".settings-group-status");
-    expect(progress?.textContent).toBe("1/2");
-    expect(progress?.getAttribute("aria-label")).toBe("1/2 trường đã cấu hình");
+    expect(
+      progress?.querySelector('span[aria-hidden="true"]')?.textContent,
+    ).toBe("1/2");
+    expect(progress?.querySelector(".sr-only")?.textContent).toBe(
+      "1/2 trường đã cấu hình",
+    );
   });
 
   it("reports only the OA credential test result when webhook signature health is mismatched", async () => {

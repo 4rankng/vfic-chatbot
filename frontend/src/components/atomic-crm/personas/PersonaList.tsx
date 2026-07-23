@@ -664,8 +664,9 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                     <Badge
                       variant="outline"
                       className="border-border bg-background/70"
+                      aria-label={`${numberFormatter.format(totalCount)} hồ sơ`}
                     >
-                      {numberFormatter.format(totalCount)} hồ sơ
+                      {numberFormatter.format(totalCount)}
                     </Badge>
                   </div>
                   <Button

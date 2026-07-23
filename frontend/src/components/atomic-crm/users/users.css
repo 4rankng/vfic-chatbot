@@ -303,9 +303,10 @@
 
   .user-directory-row {
     grid-template-columns: 36px minmax(0, 1fr) 44px;
-    gap: 10px;
-    min-height: 92px;
-    padding: 12px 0;
+    column-gap: 10px;
+    row-gap: 4px;
+    min-height: 84px;
+    padding: 8px 0;
     background: transparent;
   }
 
@@ -315,14 +316,15 @@
 
   .user-directory-meta {
     grid-column: 2 / -1;
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
     align-items: center;
     gap: 6px;
   }
 
   .user-directory-created {
-    flex-basis: 100%;
+    justify-self: end;
+    margin: 0;
   }
 
   .user-directory-actions {

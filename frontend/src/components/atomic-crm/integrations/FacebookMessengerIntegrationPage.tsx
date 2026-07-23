@@ -35,6 +35,7 @@ import { consumeFacebookOAuthCallback } from "./facebook-oauth-callback";
 import {
   SettingsFieldStatus,
   SettingsGroupStatus,
+  type SettingsStatusState,
 } from "./SettingsFieldStatus";
 
 type CredentialsFormState = {
@@ -64,6 +65,8 @@ type MetaAppFieldProps = {
   label: string;
   hint?: string;
   configured: boolean;
+  showMissingStatus?: boolean;
+  statusState?: SettingsStatusState;
   value: string;
   onChange: (key: keyof CredentialsFormState, value: string) => void;
 };
@@ -73,13 +76,17 @@ const MetaAppPlainField = ({
   label,
   hint,
   configured,
+  showMissingStatus = true,
+  statusState = "ready",
   value,
   onChange,
 }: MetaAppFieldProps) => (
   <div className="settings-field">
     <div className="settings-field-label-row">
       <Label htmlFor={id}>{label}</Label>
-      <SettingsFieldStatus configured={configured} />
+      {showMissingStatus || configured || statusState !== "ready" ? (
+        <SettingsFieldStatus configured={configured} state={statusState} />
+      ) : null}
     </div>
     <Input
       id={id}
@@ -99,19 +106,21 @@ const MetaAppSecretField = ({
   label,
   hint,
   configured,
+  statusState = "ready",
   preview,
   value,
   onChange,
 }: MetaAppFieldProps & {
   configured: boolean;
   preview: string | null;
+  statusState?: SettingsStatusState;
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   return (
     <div className="settings-field">
       <div className="settings-field-label-row">
         <Label htmlFor={id}>{label}</Label>
-        <SettingsFieldStatus configured={configured} />
+        <SettingsFieldStatus configured={configured} state={statusState} />
       </div>
       <div className="settings-sensitive-input">
         <Input
@@ -173,7 +182,11 @@ export const FacebookMessengerIntegrationPage = () => {
   });
 
   // App-level Meta credentials (DB-first, env fallback on the backend).
-  const { data: credentials } = useQuery<FacebookCredentials>({
+  const {
+    data: credentials,
+    isPending: credentialsPending,
+    isError: credentialsError,
+  } = useQuery<FacebookCredentials>({
     queryKey: ["facebook-credentials"],
     queryFn: () => facebookIntegrationGateway.loadCredentials(),
     staleTime: 30_000,
@@ -234,11 +247,15 @@ export const FacebookMessengerIntegrationPage = () => {
   };
 
   const appIdConfigured = credentials?.facebook_app_id.configured ?? false;
+  const credentialsStatusState: SettingsStatusState = credentialsPending
+    ? "loading"
+    : credentialsError
+      ? "error"
+      : "ready";
   const configuredCredentialCount = credentials
     ? [
         credentials.facebook_app_id.configured,
         credentials.facebook_app_secret.configured,
-        credentials.facebook_login_config_id.configured,
         credentials.facebook_webhook_verify_token.configured,
       ].filter(Boolean).length
     : 0;
@@ -377,7 +394,8 @@ export const FacebookMessengerIntegrationPage = () => {
           </div>
           <SettingsGroupStatus
             configured={configuredCredentialCount}
-            total={4}
+            total={3}
+            state={credentialsStatusState}
           />
         </div>
         <div className="settings-group-content settings-messenger-group-content">
@@ -388,6 +406,7 @@ export const FacebookMessengerIntegrationPage = () => {
               configured={
                 credentials?.facebook_app_id.configured ?? false
               }
+              statusState={credentialsStatusState}
               value={credentialsForm.facebook_app_id}
               onChange={onCredentialChange}
             />
@@ -398,6 +417,8 @@ export const FacebookMessengerIntegrationPage = () => {
               configured={
                 credentials?.facebook_login_config_id.configured ?? false
               }
+              showMissingStatus={false}
+              statusState={credentialsStatusState}
               value={credentialsForm.facebook_login_config_id}
               onChange={onCredentialChange}
             />
@@ -405,6 +426,7 @@ export const FacebookMessengerIntegrationPage = () => {
               id="facebook_app_secret"
               label="App Secret"
               configured={credentials?.facebook_app_secret.configured ?? false}
+              statusState={credentialsStatusState}
               preview={credentials?.facebook_app_secret.preview ?? null}
               value={credentialsForm.facebook_app_secret}
               onChange={onCredentialChange}
@@ -416,6 +438,7 @@ export const FacebookMessengerIntegrationPage = () => {
               configured={
                 credentials?.facebook_webhook_verify_token.configured ?? false
               }
+              statusState={credentialsStatusState}
               preview={
                 credentials?.facebook_webhook_verify_token.preview ?? null
               }

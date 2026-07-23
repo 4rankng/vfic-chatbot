@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useNotify, usePermissions, useTranslate } from "ra-core";
 import {
   Bot,
@@ -58,6 +64,7 @@ import { FacebookMessengerIntegrationPage } from "./FacebookMessengerIntegration
 import {
   SettingsFieldStatus,
   SettingsGroupStatus,
+  type SettingsStatusState,
 } from "./SettingsFieldStatus";
 import "../conversations/inbox.css";
 import "./settings.css";
@@ -246,6 +253,7 @@ const SecretField = ({
   id,
   label,
   status,
+  statusState = "ready",
   value,
   placeholder,
   onValueChange,
@@ -253,6 +261,7 @@ const SecretField = ({
   id: string;
   label: string;
   status: SecretStatus;
+  statusState?: SettingsStatusState;
   value: string;
   placeholder: string;
   onValueChange: (value: string) => void;
@@ -263,7 +272,10 @@ const SecretField = ({
     <div className="settings-field">
       <div className="settings-field-label-row">
         <Label htmlFor={id}>{label}</Label>
-        <SettingsFieldStatus configured={status.configured} />
+        <SettingsFieldStatus
+          configured={status.configured}
+          state={statusState}
+        />
       </div>
       <div className="settings-sensitive-input">
         <Input
@@ -307,12 +319,14 @@ const SecretInput = ({
   id,
   label,
   status,
+  statusState,
   value,
   onChange,
 }: {
   id: keyof FormState;
   label: string;
   status: SecretStatus;
+  statusState?: SettingsStatusState;
   value: string;
   onChange: (key: keyof FormState, value: string) => void;
 }) => (
@@ -320,6 +334,7 @@ const SecretInput = ({
     id={id}
     label={label}
     status={status}
+    statusState={statusState}
     value={value}
     placeholder="Nhập giá trị"
     onValueChange={(nextValue) => onChange(id, nextValue)}
@@ -330,12 +345,14 @@ const MinimaxSecretInput = ({
   id,
   label,
   status,
+  statusState,
   value,
   onChange,
 }: {
   id: keyof MinimaxFormState;
   label: string;
   status: SecretStatus;
+  statusState?: SettingsStatusState;
   value: string;
   onChange: (key: keyof MinimaxFormState, value: string) => void;
 }) => (
@@ -343,6 +360,7 @@ const MinimaxSecretInput = ({
     id={id}
     label={label}
     status={status}
+    statusState={statusState}
     value={value}
     placeholder="Dán token Minimax"
     onValueChange={(nextValue) => onChange(id, nextValue)}
@@ -353,12 +371,14 @@ const OpenRouterSecretInput = ({
   id,
   label,
   status,
+  statusState,
   value,
   onChange,
 }: {
   id: keyof OpenRouterFormState;
   label: string;
   status: SecretStatus;
+  statusState?: SettingsStatusState;
   value: string;
   onChange: (key: keyof OpenRouterFormState, value: string) => void;
 }) => (
@@ -366,6 +386,7 @@ const OpenRouterSecretInput = ({
     id={id}
     label={label}
     status={status}
+    statusState={statusState}
     value={value}
     placeholder="Dán token OpenRouter"
     onValueChange={(nextValue) => onChange(id, nextValue)}
@@ -650,6 +671,8 @@ export const ZaloIntegrationPage = () => {
     useState<MinimaxSettings | null>(null);
   const [openRouterSettings, setOpenRouterSettings] =
     useState<OpenRouterSettings | null>(null);
+  const [settingsStatusState, setSettingsStatusState] =
+    useState<SettingsStatusState>("loading");
   const [form, setForm] = useState<FormState>(emptyForm);
   const [minimaxForm, setMinimaxForm] =
     useState<MinimaxFormState>(emptyMinimaxForm);
@@ -670,32 +693,39 @@ export const ZaloIntegrationPage = () => {
   const [testingMinimax, setTestingMinimax] = useState(false);
   const [testingOpenRouter, setTestingOpenRouter] = useState(false);
 
-  const load = async () => {
-    const {
-      zalo: data,
-      minimax: minimaxData,
-      openRouter: openRouterData,
-    } = await zaloIntegrationGateway.loadSettingsBundle();
-    setSettings(data);
-    setMinimaxSettings(minimaxData);
-    setOpenRouterSettings(openRouterData);
-    setForm((current) => ({
-      ...current,
-      zalo_oa_app_id: data.zalo_oa_app_id.value ?? "",
-    }));
-    setMinimaxEnabled(minimaxData.minimax_enable);
-    setOpenRouterEnabled(openRouterData.openrouter_enable);
-    setLlmDefaultProvider(openRouterData.llm_default_provider);
-    setOpenRouterModel(openRouterData.openrouter_agent_model);
-    setMinimaxForm(emptyMinimaxForm);
-    setOpenRouterForm(emptyOpenRouterForm);
-  };
+  const load = useCallback(async () => {
+    setSettingsStatusState("loading");
+    try {
+      const {
+        zalo: data,
+        minimax: minimaxData,
+        openRouter: openRouterData,
+      } = await zaloIntegrationGateway.loadSettingsBundle();
+      setSettings(data);
+      setMinimaxSettings(minimaxData);
+      setOpenRouterSettings(openRouterData);
+      setForm((current) => ({
+        ...current,
+        zalo_oa_app_id: data.zalo_oa_app_id.value ?? "",
+      }));
+      setMinimaxEnabled(minimaxData.minimax_enable);
+      setOpenRouterEnabled(openRouterData.openrouter_enable);
+      setLlmDefaultProvider(openRouterData.llm_default_provider);
+      setOpenRouterModel(openRouterData.openrouter_agent_model);
+      setMinimaxForm(emptyMinimaxForm);
+      setOpenRouterForm(emptyOpenRouterForm);
+      setSettingsStatusState("ready");
+    } catch {
+      setSettingsStatusState("error");
+      notify("Không thể tải cấu hình tích hợp.", { type: "error" });
+    }
+  }, [notify]);
 
   useEffect(() => {
     if (!permissionsPending && permissions === "admin") {
       void load();
     }
-  }, [permissions, permissionsPending]);
+  }, [load, permissions, permissionsPending]);
 
   const changedPayload = useMemo(() => {
     return buildZaloUpdatePayload(form, settings?.zalo_oa_app_id.value);
@@ -1048,7 +1078,11 @@ export const ZaloIntegrationPage = () => {
               title="Zalo Chatbot"
               icon={<PlugZap className="size-4" />}
               meta={
-                <SettingsGroupStatus configured={botConfigured} total={2} />
+                <SettingsGroupStatus
+                  configured={botConfigured}
+                  total={2}
+                  state={settingsStatusState}
+                />
               }
               defaultOpen
             >
@@ -1056,6 +1090,7 @@ export const ZaloIntegrationPage = () => {
                 id="zalo_bot_token"
                 label="Bot Token"
                 status={settings?.zalo_bot_token ?? { configured: false }}
+                statusState={settingsStatusState}
                 value={form.zalo_bot_token}
                 onChange={setValue}
               />
@@ -1067,6 +1102,7 @@ export const ZaloIntegrationPage = () => {
                     configured: false,
                   }
                 }
+                statusState={settingsStatusState}
                 value={form.zalo_bot_webhook_secret}
                 onChange={setValue}
               />
@@ -1087,7 +1123,13 @@ export const ZaloIntegrationPage = () => {
             <SettingsGroup
               title="Zalo OA"
               icon={<MessageCircle className="size-4" />}
-              meta={<SettingsGroupStatus configured={oaConfigured} total={4} />}
+              meta={
+                <SettingsGroupStatus
+                  configured={oaConfigured}
+                  total={4}
+                  state={settingsStatusState}
+                />
+              }
             >
               <div className="settings-oa-fields">
                 <div className="settings-field">
@@ -1095,6 +1137,7 @@ export const ZaloIntegrationPage = () => {
                     <Label htmlFor="zalo_oa_app_id">Zalo App ID</Label>
                     <SettingsFieldStatus
                       configured={settings?.zalo_oa_app_id.configured ?? false}
+                      state={settingsStatusState}
                     />
                   </div>
                   <Input
@@ -1124,6 +1167,7 @@ export const ZaloIntegrationPage = () => {
                   id="zalo_oa_secret_key"
                   label="Bot Secret"
                   status={settings?.zalo_oa_secret_key ?? { configured: false }}
+                  statusState={settingsStatusState}
                   value={form.zalo_oa_secret_key}
                   onChange={setValue}
                 />
@@ -1135,6 +1179,7 @@ export const ZaloIntegrationPage = () => {
                       configured: false,
                     }
                   }
+                  statusState={settingsStatusState}
                   value={form.zalo_oa_access_token}
                   onChange={setValue}
                 />
@@ -1146,6 +1191,7 @@ export const ZaloIntegrationPage = () => {
                       configured: false,
                     }
                   }
+                  statusState={settingsStatusState}
                   value={form.zalo_oa_refresh_token}
                   onChange={setValue}
                 />
@@ -1191,6 +1237,7 @@ export const ZaloIntegrationPage = () => {
                   configured={minimaxConfigured}
                   total={1}
                   disabled={!minimaxEnabled}
+                  state={settingsStatusState}
                 />
               }
             >
@@ -1217,6 +1264,7 @@ export const ZaloIntegrationPage = () => {
                 status={
                   minimaxSettings?.minimax_api_key ?? { configured: false }
                 }
+                statusState={settingsStatusState}
                 value={minimaxForm.minimax_api_key}
                 onChange={setMinimaxValue}
               />
@@ -1249,6 +1297,7 @@ export const ZaloIntegrationPage = () => {
                 configured={openRouterConfigured}
                 total={1}
                 disabled={!openRouterEnabled}
+                state={settingsStatusState}
               />
             }
           >
@@ -1294,6 +1343,7 @@ export const ZaloIntegrationPage = () => {
                   configured: false,
                 }
               }
+              statusState={settingsStatusState}
               value={openRouterForm.openrouter_api_key}
               onChange={setOpenRouterValue}
             />
