@@ -21,12 +21,20 @@ from app.services import knowledge_base_capacity
 
 
 class _Db:
-    def __init__(self, *, get_values: dict[tuple[str, uuid.UUID], object | None], scalars=None):
+    def __init__(
+        self,
+        *,
+        get_values: dict[tuple[str, uuid.UUID], object | None],
+        scalars=None,
+        execute_rows: list[list[tuple]] | None = None,
+    ):
         self.get_values = get_values
         self.scalar_values: list[object | None] = []
         self.scalars_value = scalars
         self.added: list[object] = []
         self.commits = 0
+        self.execute_rows = list(execute_rows or [])
+        self.executed_statements: list[object] = []
 
     async def get(self, model, row_id):
         return self.get_values.get((model.__name__, row_id))
@@ -36,6 +44,11 @@ class _Db:
 
     async def scalars(self, _statement):
         return SimpleNamespace(all=lambda: self.scalars_value or [])
+
+    async def execute(self, statement):
+        self.executed_statements.append(statement)
+        rows = self.execute_rows.pop(0) if self.execute_rows else []
+        return SimpleNamespace(all=lambda: rows)
 
     def add(self, value):
         self.added.append(value)
@@ -167,6 +180,36 @@ def test_direct_context_file_rejects_oversized_text_at_request_boundary() -> Non
 def test_rag_kb_schema_accepts_tenant_neutral_names() -> None:
     kb = KnowledgeBaseCreate(name="Customer knowledge", slug="customer-knowledge", mode="RAG")
     assert kb.mode is KnowledgeBaseMode.RAG
+
+
+@pytest.mark.asyncio
+async def test_project_job_count_selects_only_current_category_authority() -> None:
+    kb_id = uuid.uuid4()
+    project = SimpleNamespace(
+        id=uuid.uuid4(),
+        slug="alpha",
+        name="Alpha",
+        is_active=True,
+    )
+    db = _Db(
+        get_values={
+            (
+                "KnowledgeBase",
+                kb_id,
+            ): SimpleNamespace(id=kb_id, mode=KnowledgeBaseMode.RAG)
+        },
+        scalars=[project],
+        execute_rows=[[], [], []],
+    )
+
+    result = await KnowledgeBaseService(db).list_projects(kb_id)
+
+    assert result[0].active_job_count == 0
+    job_sql = str(db.executed_statements[-1]).lower()
+    assert "projects.category_authority_started is true" in job_sql
+    assert "jobs.source_category_revision_id is not null" in job_sql
+    assert "projects.category_authority_started is false" in job_sql
+    assert "jobs.source_category_revision_id is null" in job_sql
 
 
 @pytest.mark.asyncio

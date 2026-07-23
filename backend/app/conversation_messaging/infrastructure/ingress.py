@@ -1,8 +1,13 @@
-"""SQLAlchemy compatibility adapter for neutral inbound messages."""
+"""SQLAlchemy adapter for provider-neutral inbound messages."""
 
 from __future__ import annotations
 
-from app.conversation_messaging.application.ingress import InboundTextCommand
+from sqlalchemy.exc import IntegrityError
+
+from app.conversation_messaging.application.ingress import (
+    InboundTextCommand,
+    PersistedInboundMessage,
+)
 
 
 class SqlAlchemyInboundMessageAdapter:
@@ -19,7 +24,7 @@ class SqlAlchemyInboundMessageAdapter:
             dedup_key,
         )
 
-    async def persist(self, command: InboundTextCommand) -> str | None:
+    async def persist(self, command: InboundTextCommand) -> PersistedInboundMessage | None:
         from app.services.conversation import ConversationService
 
         identity = command.identity
@@ -40,7 +45,7 @@ class SqlAlchemyInboundMessageAdapter:
         )
         await self._db.refresh(conversation)
         try:
-            await service.record_inbound(
+            message = await service.record_inbound(
                 conversation,
                 body=command.text,
                 provider_message_id=command.external_message_id,
@@ -48,12 +53,18 @@ class SqlAlchemyInboundMessageAdapter:
                 authority_generation=None,
                 runtime_fingerprint=None,
             )
-        except Exception:
-            # Preserve the compatibility facade's durable-uniqueness behavior:
-            # a late duplicate (or post-commit publish failure) is acknowledged.
+        except IntegrityError:
+            # A racing delivery can win the database uniqueness constraint after
+            # the transient claim. Only that durable duplicate is acknowledged.
             await self._db.rollback()
             return None
-        return str(conversation.id)
+        return PersistedInboundMessage(
+            conversation_id=str(conversation.id),
+            message_id=message.id,
+            body=message.body,
+            provider_message_id=message.provider_message_id or "",
+            created_at=message.created_at,
+        )
 
 
 __all__ = ["SqlAlchemyInboundMessageAdapter"]

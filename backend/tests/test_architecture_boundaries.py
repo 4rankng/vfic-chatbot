@@ -185,11 +185,15 @@ def _backend_rule(rel: str, target: str) -> str | None:
             "app.core",
             "app.graph",
             "app.models",
+            "app.schemas",
             "app.services",
             "app.workers",
+            "app.composition",
         )
     ):
         return "pure_outward"
+    if "/infrastructure/" in rel and module.startswith("app.composition"):
+        return "infrastructure_composition"
     if rel.startswith("backend/app/services/") and module.startswith(
         ("app.graph", "app.workers", "app.api")
     ):
@@ -217,6 +221,14 @@ _CONVERSATION_LEGACY_STATE_TARGETS = (
 _FRONTEND_LAYERED_FEATURE_ROOTS = tuple(
     f"frontend/src/components/atomic-crm/{feature}"
     for feature in ("knowledge", "leads", "personas", "projects", "reporting")
+)
+_FRONTEND_FEATURE_COMPOSITION_MODULES = frozenset(
+    {
+        "frontend/src/components/atomic-crm/knowledge/knowledge-service.ts",
+        "frontend/src/components/atomic-crm/personas/personaService.ts",
+        "frontend/src/components/atomic-crm/projects/project-knowledge-service.ts",
+        "frontend/src/components/atomic-crm/reporting/reportingService.ts",
+    }
 )
 def _has_module_prefix(target: str, prefix: str) -> bool:
     return target == prefix or target.startswith(f"{prefix}/")
@@ -326,11 +338,8 @@ def _is_feature_layer_module(rel: str) -> bool:
 
 
 def _is_feature_composition_module(rel: str) -> bool:
-    """Recognize feature-local composition roots by the service naming convention."""
-    root = _feature_root(rel)
-    if root is None or PurePosixPath(rel).parent.as_posix() != root:
-        return False
-    return PurePosixPath(rel).stem.lower().endswith("service")
+    """Recognize only the explicitly certified feature composition roots."""
+    return rel in _FRONTEND_FEATURE_COMPOSITION_MODULES
 
 
 def _feature_layer_rule(rel: str, target: str) -> str | None:
@@ -529,10 +538,22 @@ def test_context_domain_and_application_modules_reject_outward_imports() -> None
             "app.api.auth_dependencies:get_current_user",
             "app.core.security:decode_token",
             "app.models.user:User",
+            "app.schemas.user:UserOut",
             "app.services.installation.service:InstallationService",
             "app.workers.chatbot_worker:enqueue_chat_run",
+            "app.composition.identity:build_identity",
         ):
             assert _backend_rule(importer, target) == "pure_outward"
+
+
+def test_infrastructure_layers_cannot_import_composition_roots() -> None:
+    assert (
+        _backend_rule(
+            "backend/app/conversation_messaging/infrastructure/example.py",
+            "app.composition.conversation_messaging:enqueue_chat_turn",
+        )
+        == "infrastructure_composition"
+    )
 
 
 def test_project_knowledge_package_has_no_graph_or_worker_backedge() -> None:
@@ -760,11 +781,23 @@ def test_migrated_frontend_feature_layers_have_zero_allowlist_rules() -> None:
             "frontend_feature_presentation_outward"
         )
 
-    for root in _FRONTEND_LAYERED_FEATURE_ROOTS:
-        facade = f"{root}/feature-service.ts"
+    for facade in _FRONTEND_FEATURE_COMPOSITION_MODULES:
+        root = _feature_root(facade)
+        assert root is not None
         assert _is_feature_composition_module(facade)
         assert _frontend_rule(facade, f"{root}/infrastructure/http") is None
-        assert not _is_feature_composition_module(f"{root}/FeaturePanel.tsx")
+
+    arbitrary_service = (
+        "frontend/src/components/atomic-crm/knowledge/totally-unrelated-service.ts"
+    )
+    assert not _is_feature_composition_module(arbitrary_service)
+    assert (
+        _frontend_rule(
+            arbitrary_service,
+            "frontend/src/components/atomic-crm/knowledge/infrastructure/http",
+        )
+        == "frontend_feature_presentation_outward"
+    )
 
 
 def test_frontend_domain_and_application_layers_do_not_use_browser_io_globals() -> None:

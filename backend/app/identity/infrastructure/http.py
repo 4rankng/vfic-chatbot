@@ -15,13 +15,11 @@ from app.core.security import (
     verify_password,
 )
 from app.identity.application.http import (
-    AuthHttpService,
     AuthenticatedUser,
     InvalidCredentialsError,
     InvalidCurrentPasswordError,
     InvalidRefreshTokenError,
     PasswordResetRequestError,
-    UserHttpService,
 )
 from app.identity.domain.role import Role
 from app.models.user import User
@@ -184,11 +182,11 @@ class SqlAlchemyUserHttpService:
         await self._svc.delete(user_id, actor_id=actor_id)
 
 
-def build_auth_http_service(db: AsyncSession) -> AuthHttpService:
+def build_auth_http_service(db: AsyncSession) -> SqlAlchemyAuthHttpService:
     return SqlAlchemyAuthHttpService(db)
 
 
-def build_user_http_service(db: AsyncSession) -> UserHttpService:
+def build_user_http_service(db: AsyncSession) -> SqlAlchemyUserHttpService:
     return SqlAlchemyUserHttpService(db)
 
 

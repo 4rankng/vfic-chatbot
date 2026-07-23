@@ -30,7 +30,7 @@ from typing import Any
 from app.conversation_messaging.domain.delivery import DeliveryState
 from app.core.config import get_settings
 from app.graph.decision_trace import DecisionTraceBuilder
-from app.graph.ports import DeliveryResultPort, OutboundMessagePort, SendOutcome
+from app.graph.ports import DeliveryResultPort, DirectMessageSenderPort, SendOutcome
 from app.shared.application.outbound import (
     AMBIGUOUS_SEND_CLASSES,
     OutboundTelemetry,
@@ -125,7 +125,7 @@ def _build_outbox_payload(chat_id: str, text: str, quote_message_id: str | None)
 
 async def _dispatch_claimed_message(
     svc,
-    zalo: OutboundMessagePort,
+    zalo: DirectMessageSenderPort,
     conv,
     *,
     message_id: int | None,

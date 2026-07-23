@@ -18,7 +18,7 @@ from app.conversation_messaging.infrastructure.delivery_status import (
     SqlAlchemyDeliveryStatusValues,
 )
 from app.conversation_messaging.infrastructure.zalo_ingress import (
-    LegacyZaloIngressAdapter,
+    ServiceZaloIngressAdapter,
 )
 from app.conversation_messaging.application.zalo_ingress import ZaloIngressUseCases
 from app.conversation_messaging.application.http import (
@@ -107,7 +107,7 @@ async def run_zalo_ingress(
     """Build the Zalo ingress adapter at the HTTP composition boundary."""
     from app.workers.persistence_worker import enqueue_enrich_oa_profile
 
-    return await ZaloIngressUseCases(LegacyZaloIngressAdapter(db)).handle(
+    return await ZaloIngressUseCases(ServiceZaloIngressAdapter(db)).handle(
         payload,
         enqueue=enqueue,
         channel=channel,

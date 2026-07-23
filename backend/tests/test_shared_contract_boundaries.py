@@ -65,14 +65,13 @@ def test_outbound_contract_is_immutable_and_contains_no_payload_fields() -> None
     assert not {"text", "recipient_id", "token", "payload"} & telemetry.__dict__.keys()
 
 
-def test_classification_compatibility_matches_canonical_policy() -> None:
-    from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES as legacy_classes
+def test_canonical_outbound_classification_policy() -> None:
     from app.shared.application.outbound import (
         AMBIGUOUS_SEND_CLASSES,
         is_ambiguous_send,
     )
 
-    assert legacy_classes is AMBIGUOUS_SEND_CLASSES
+    assert "read_timeout" in AMBIGUOUS_SEND_CLASSES
     assert is_ambiguous_send("read_timeout", ok=False)
     assert not is_ambiguous_send("connect_error", ok=False)
     assert not is_ambiguous_send("read_timeout", ok=True)

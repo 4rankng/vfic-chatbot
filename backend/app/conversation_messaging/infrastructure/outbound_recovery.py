@@ -1,4 +1,4 @@
-"""SQLAlchemy/provider compatibility adapter for durable outbound recovery."""
+"""SQLAlchemy/provider adapter for durable outbound recovery."""
 
 from __future__ import annotations
 

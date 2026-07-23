@@ -437,7 +437,8 @@ async def test_upload_file_endpoint_extracts_and_enqueues(
 ):
     enqueued: list[str] = []
     monkeypatch.setattr(
-        "app.api.knowledge.enqueue_ingest", lambda doc_id: enqueued.append(str(doc_id))
+        "app.api.knowledge._project_knowledge_jobs.ingest_document",
+        lambda doc_id: enqueued.append(str(doc_id)),
     )
     import docx
 

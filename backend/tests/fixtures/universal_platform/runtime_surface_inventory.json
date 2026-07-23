@@ -148,34 +148,6 @@
   },
   {
     "category": "queue_producer",
-    "file": "app/api/knowledge.py",
-    "scope": "ingest_kb_version",
-    "call": "enqueue_ingest_version",
-    "count": 1
-  },
-  {
-    "category": "queue_producer",
-    "file": "app/api/knowledge.py",
-    "scope": "process",
-    "call": "enqueue_ingest",
-    "count": 1
-  },
-  {
-    "category": "queue_producer",
-    "file": "app/api/knowledge.py",
-    "scope": "reindex",
-    "call": "enqueue_ingest",
-    "count": 1
-  },
-  {
-    "category": "queue_producer",
-    "file": "app/api/knowledge.py",
-    "scope": "upload_file",
-    "call": "enqueue_ingest",
-    "count": 1
-  },
-  {
-    "category": "queue_producer",
     "file": "app/composition/conversation_messaging.py",
     "scope": "enqueue_chat_turn",
     "call": "enqueue_chat_run",
@@ -193,6 +165,13 @@
     "file": "app/composition/project_knowledge_jobs.py",
     "scope": "enqueue",
     "call": "enqueue_ingest_version",
+    "count": 1
+  },
+  {
+    "category": "queue_producer",
+    "file": "app/conversation_messaging/infrastructure/webhook_delivery.py",
+    "scope": "enqueue_facebook_turn",
+    "call": "enqueue",
     "count": 1
   },
   {

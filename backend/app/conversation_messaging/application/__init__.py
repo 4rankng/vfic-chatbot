@@ -12,6 +12,7 @@ from app.conversation_messaging.application.ingress import (
     InboundMessagePort,
     InboundMessageUseCases,
     InboundTextCommand,
+    PersistedInboundMessage,
     inbound_dedup_key,
 )
 from app.conversation_messaging.application.ports import (
@@ -31,6 +32,7 @@ __all__ = [
     "InboundMessagePort",
     "InboundMessageUseCases",
     "InboundTextCommand",
+    "PersistedInboundMessage",
     "OutboundRecoveryCandidate",
     "OutboundRecoveryPort",
     "OutboundRecoverySummary",

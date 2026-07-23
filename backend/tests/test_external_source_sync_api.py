@@ -69,8 +69,6 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     unsafe_db = AsyncMock()
     unsafe_db.add.side_effect = AssertionError("rejection path must not touch the DB")
     app.dependency_overrides[get_db] = lambda: unsafe_db
-    # The create endpoint enqueues a one-shot import only on success.
-    monkeypatch.setattr(knowledge_api, "enqueue_one_shot", lambda *a, **k: "job-id")
     return TestClient(app)
 
 

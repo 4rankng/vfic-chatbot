@@ -284,10 +284,14 @@ async def facebook_webhook(
         # Enqueue a bot turn for the persisted message, mirroring the Zalo
         # webhook flow. The v2 job payload carries only neutral ids.
         try:
-            await enqueue_facebook_turn(db, outcome, runtime_authority)
+            await enqueue_facebook_turn(
+                db,
+                outcome,
+                runtime_authority,
+                enqueue=enqueue_chat_turn,
+            )
         except Exception:  # noqa: BLE001 — enqueue failure is recovered by reconcile
             logger.info("facebook turn enqueue failed conversation=%s", outcome.conversation_id)
 
     await _stamp_ack(t0, 200)
     return JSONResponse({"status": "processed"}, status_code=200)
-

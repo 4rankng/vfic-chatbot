@@ -44,8 +44,8 @@ class SendOutcome:
     telemetry: OutboundTelemetry | None = None
 
 
-class OutboundMessagePort(Protocol):
-    """Direct sender compatibility seam used by graph fakes and legacy adapters."""
+class DirectMessageSenderPort(Protocol):
+    """Direct provider-neutral sender used by graph execution and test adapters."""
 
     async def send_message(
         self,
@@ -185,13 +185,13 @@ class RuntimePolicyPort(Protocol):
     ) -> bool: ...
 
 
-class RetrievalPort(
+class GraphRetrievalPort(
     ProjectKnowledgeQueryPort,
     PersonaBodyResolver,
     RecommendationQueryPort,
     Protocol,
 ):
-    """Compatibility aggregate while Phase 5/6 split conversation and recruitment reads."""
+    """Graph-owned query surface composed from bounded-context read ports."""
 
     async def match_memories(
         self, embedding: str, top_k: int, filters_json: str
@@ -216,7 +216,7 @@ class DirectContextPort(Protocol):
 __all__ = [
     "SendOutcome",
     "DeliveryResultPort",
-    "OutboundMessagePort",
+    "DirectMessageSenderPort",
     "FaqBypassResult",
     "ReplyPolicyResult",
     "ReplyPolicyPort",
@@ -225,5 +225,5 @@ __all__ = [
     "ConversationStatePort",
     "LeadContextPort",
     "DirectContextPort",
-    "RetrievalPort",
+    "GraphRetrievalPort",
 ]

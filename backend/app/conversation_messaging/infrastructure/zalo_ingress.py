@@ -1,4 +1,4 @@
-"""Compatibility adapter for the current Zalo ingress transaction."""
+"""Service adapter for the current Zalo ingress transaction."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 from app.services.webhook import ZaloWebhookService
 
 
-class LegacyZaloIngressAdapter:
+class ServiceZaloIngressAdapter:
     def __init__(self, db) -> None:
         self._db = db
 
@@ -32,4 +32,4 @@ class LegacyZaloIngressAdapter:
         )
 
 
-__all__ = ["LegacyZaloIngressAdapter", "ZaloWebhookService"]
+__all__ = ["ServiceZaloIngressAdapter"]

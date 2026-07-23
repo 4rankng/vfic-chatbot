@@ -11,7 +11,7 @@ from typing import AsyncContextManager, Awaitable, Callable, Protocol
 # An embedder maps text -> 3072-dim vector.
 Embedder = Callable[[str], Awaitable[list[float]]]
 
-# Factory yielding a fresh RetrievalPort on its own DB session (parallel tools).
+# Factory yielding a fresh GraphRetrievalPort on its own DB session (parallel tools).
 MakeRetrieval = Callable[[], AsyncContextManager]
 
 

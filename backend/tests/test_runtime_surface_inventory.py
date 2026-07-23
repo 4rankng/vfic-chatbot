@@ -64,9 +64,9 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # adapters remain covered after transport logic moves out of legacy packages.
     "outbox_boundary": 10,
     "provider_boundary": 91,
-    "queue_producer": 41,
+    "queue_producer": 37,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "c0b67438ceb6f5b7c8efb516afcee370c0b2b1f74e5262f191e9bfbe9301fbba"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "115f0529fc06009d7cbd5de045d51cbf9c2f986d064d0073aa9378061a242a02"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

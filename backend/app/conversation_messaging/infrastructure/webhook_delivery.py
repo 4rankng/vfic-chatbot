@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.composition.conversation_messaging import enqueue_chat_turn
 from app.conversation_messaging.domain.statuses import DeliveryStatus
 from app.models.contact import ContactChannelIdentity
 from app.models.conversation import Conversation, Message
@@ -47,23 +48,22 @@ async def apply_messenger_receipt(db: AsyncSession, receipt, account_key: str) -
     await db.commit()
 
 
-async def enqueue_facebook_turn(db: AsyncSession, outcome, runtime_authority) -> None:
+async def enqueue_facebook_turn(
+    db: AsyncSession,
+    outcome,
+    runtime_authority,
+    *,
+    enqueue: Callable[[dict[str, Any]], bool | None],
+) -> None:
+    persisted = outcome.message
+    if persisted is None:
+        return
     conversation = await db.scalar(
         select(Conversation).where(
-            Conversation.id == uuid.UUID(outcome.conversation_id)
+            Conversation.id == uuid.UUID(persisted.conversation_id)
         )
     )
     if conversation is None:
-        return
-    last_inbound = (
-        await db.scalars(
-            select(Message)
-            .where(Message.conversation_id == conversation.id)
-            .order_by(Message.created_at.desc(), Message.id.desc())
-            .limit(1)
-        )
-    ).first()
-    if last_inbound is None:
         return
     service = ConversationService(db)
     conversation = await service.get(conversation.id)
@@ -77,13 +77,13 @@ async def enqueue_facebook_turn(db: AsyncSession, outcome, runtime_authority) ->
         "v": 2,
         "conversation_id": str(conversation.id),
         "version_at_start": version_at_start,
-        "user_text": last_inbound.body,
+        "user_text": persisted.body,
         "user_name": "",
-        "reply_to_message_id": last_inbound.provider_message_id or "",
+        "reply_to_message_id": persisted.provider_message_id,
         "lock_owner": str(lock_owner),
         "execution_source": "queued",
         "received_at": (
-            last_inbound.created_at.isoformat() if last_inbound.created_at else ""
+            persisted.created_at.isoformat() if persisted.created_at else ""
         ),
         "received_at_epoch": time.time(),
         "trace_id": "",
@@ -100,10 +100,9 @@ async def enqueue_facebook_turn(db: AsyncSession, outcome, runtime_authority) ->
         ),
     }
     try:
-        accepted = enqueue_chat_turn(job)
+        accepted = enqueue(job)
     except Exception:
         await service.release_lock(conversation, lock_owner=lock_owner)
         raise
     if accepted is False:
         await service.release_lock(conversation, lock_owner=lock_owner)
-

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal, Protocol
 
 
@@ -22,10 +23,23 @@ class InboundTextCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class PersistedInboundMessage:
+    conversation_id: str
+    message_id: int
+    body: str
+    provider_message_id: str
+    created_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
 class InboundIngressResult:
     status: Literal["persisted", "duplicate", "ignored"]
-    conversation_id: str | None = None
+    message: PersistedInboundMessage | None = None
     dedup_key: str | None = None
+
+    @property
+    def conversation_id(self) -> str | None:
+        return self.message.conversation_id if self.message is not None else None
 
 
 def inbound_dedup_key(command: InboundTextCommand) -> str:
@@ -39,8 +53,8 @@ def inbound_dedup_key(command: InboundTextCommand) -> str:
 class InboundMessagePort(Protocol):
     async def claim(self, command: InboundTextCommand, dedup_key: str) -> bool: ...
 
-    async def persist(self, command: InboundTextCommand) -> str | None:
-        """Return the conversation id, or None when durable uniqueness wins."""
+    async def persist(self, command: InboundTextCommand) -> PersistedInboundMessage | None:
+        """Return the exact persisted message, or None when durable uniqueness wins."""
         ...
 
 
@@ -54,12 +68,12 @@ class InboundMessageUseCases:
         dedup_key = inbound_dedup_key(command)
         if not await self._port.claim(command, dedup_key):
             return InboundIngressResult(status="duplicate", dedup_key=dedup_key)
-        conversation_id = await self._port.persist(command)
-        if conversation_id is None:
+        message = await self._port.persist(command)
+        if message is None:
             return InboundIngressResult(status="duplicate", dedup_key=dedup_key)
         return InboundIngressResult(
             status="persisted",
-            conversation_id=conversation_id,
+            message=message,
             dedup_key=dedup_key,
         )
 
@@ -70,5 +84,6 @@ __all__ = [
     "InboundMessagePort",
     "InboundMessageUseCases",
     "InboundTextCommand",
+    "PersistedInboundMessage",
     "inbound_dedup_key",
 ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company, Project
@@ -251,6 +251,16 @@ class KnowledgeBaseService:
                     Company.project_id.in_(project_ids),
                     Job.status == JobStatus.ACTIVE,
                     func.coalesce(Job.vacancy_count, 0) > 0,
+                    or_(
+                        and_(
+                            Project.category_authority_started.is_(True),
+                            Job.source_category_revision_id.is_not(None),
+                        ),
+                        and_(
+                            Project.category_authority_started.is_(False),
+                            Job.source_category_revision_id.is_(None),
+                        ),
+                    ),
                 )
                 .group_by(Company.project_id)
             )
