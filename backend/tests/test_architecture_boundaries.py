@@ -22,19 +22,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_EDGES: frozenset[str] = frozenset(
     line.strip()
     for line in """
-api_outward|backend/app/api/auth.py|app.core.config:get_settings
-api_outward|backend/app/api/auth.py|app.core.db:get_db
-api_outward|backend/app/api/auth.py|app.core.ratelimit:enforce_rate_limit
-api_outward|backend/app/api/auth.py|app.core.ratelimit:enforce_rate_limit_key
-api_outward|backend/app/api/auth.py|app.core.security:create_access_token
-api_outward|backend/app/api/auth.py|app.core.security:create_refresh_token
-api_outward|backend/app/api/auth.py|app.core.security:decode_token
-api_outward|backend/app/api/auth.py|app.core.security:hash_password
-api_outward|backend/app/api/auth.py|app.core.security:verify_password
-api_outward|backend/app/api/auth.py|app.models.user:User
-api_outward|backend/app/api/bot_runs.py|app.core.db:get_db
-api_outward|backend/app/api/bot_runs.py|app.models.conversation:BotRunOutcome
-api_outward|backend/app/api/bot_runs.py|app.models.user:User
 api_outward|backend/app/api/conversations.py|app.core.config:get_settings
 api_outward|backend/app/api/conversations.py|app.core.db:get_db
 api_outward|backend/app/api/conversations.py|app.graph.factories:build_deps
@@ -46,12 +33,8 @@ api_outward|backend/app/api/conversations.py|app.models.conversation:Conversatio
 api_outward|backend/app/api/conversations.py|app.models.user:Role
 api_outward|backend/app/api/conversations.py|app.models.user:User
 api_outward|backend/app/api/conversations.py|app.workers.chatbot_worker:enqueue_chat_run
-api_outward|backend/app/api/dashboard.py|app.core.db:get_db
-api_outward|backend/app/api/dashboard.py|app.models.user:User
 api_outward|backend/app/api/dependencies.py|app.core.db:get_db
 api_outward|backend/app/api/dependencies.py|app.graph.clients:build_embedder
-api_outward|backend/app/api/installation.py|app.core.db:get_db
-api_outward|backend/app/api/installation.py|app.models.user:User
 api_outward|backend/app/api/integrations.py|app.core.config:ZALO_BOT_WEBHOOK_URL
 api_outward|backend/app/api/integrations.py|app.core.config:get_settings
 api_outward|backend/app/api/integrations.py|app.core.db:get_db
@@ -62,17 +45,8 @@ api_outward|backend/app/api/integrations.py|app.models.user:User
 api_outward|backend/app/api/leads.py|app.core.db:get_db
 api_outward|backend/app/api/leads.py|app.models.lead:LeadStage
 api_outward|backend/app/api/leads.py|app.models.user:User
-api_outward|backend/app/api/performance.py|app.core.cache:cache_get_json
-api_outward|backend/app/api/performance.py|app.core.cache:cache_set_json
-api_outward|backend/app/api/performance.py|app.core.db:async_session
-api_outward|backend/app/api/performance.py|app.core.ops_health:collect_queue_health
-api_outward|backend/app/api/performance.py|app.core.redis:get_redis
-api_outward|backend/app/api/performance.py|app.models.user:User
 api_outward|backend/app/api/personas.py|app.core.db:get_db
 api_outward|backend/app/api/personas.py|app.models.user:User
-api_outward|backend/app/api/users.py|app.core.db:get_db
-api_outward|backend/app/api/users.py|app.models.user:Role
-api_outward|backend/app/api/users.py|app.models.user:User
 api_outward|backend/app/api/webhooks.py|app.core.config:get_settings
 api_outward|backend/app/api/webhooks.py|app.core.db:get_db
 api_outward|backend/app/api/webhooks.py|app.models.contact:ContactChannelIdentity

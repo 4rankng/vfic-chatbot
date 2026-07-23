@@ -14,10 +14,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import get_current_user, require_admin
-from app.core.db import get_db
-from app.models.conversation import BotRunOutcome
-from app.models.user import User
-from app.schemas.bot_run import BotRunListResponse, BotRunOut, BotRunTraceDetailOut
+from app.identity.application.http import AuthenticatedUser
+from app.schemas.bot_run import BotRunListResponse, BotRunOut, BotRunOutcome, BotRunTraceDetailOut
+from app.shared.infrastructure.db import get_request_db
 from app.services.bot_run_service import BotRunService
 
 router = APIRouter(prefix="/bot_runs", tags=["bot_runs"])
@@ -29,8 +28,8 @@ async def list_bot_runs(
     per_page: int = Query(25, ge=1, le=200),
     conversation_id: uuid.UUID | None = None,
     outcome: BotRunOutcome | None = None,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    _user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> BotRunListResponse:
     # Read-only ops audit trail; both roles may view (writes are bot-side only).
     rows, total = await BotRunService(db).list(
@@ -42,8 +41,8 @@ async def list_bot_runs(
 @router.get("/{run_id}", response_model=BotRunTraceDetailOut)
 async def get_bot_run_detail(
     run_id: int,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> BotRunTraceDetailOut:
     detail = await BotRunService(db).get_trace_detail(run_id)
     if detail is None:

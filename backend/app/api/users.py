@@ -6,17 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import get_current_user, require_admin
-from app.core.db import get_db
-from app.models.user import Role, User
+from app.identity.application.http import AuthenticatedUser
+from app.identity.infrastructure.http import build_user_http_service
 from app.schemas.user import (
     AdminPasswordReset,
+    Role,
     SelfProfileUpdate,
     UserCreate,
     UserListResponse,
     UserOut,
     UserUpdate,
 )
-from app.services.user_service import UserProvisioningService
+from app.shared.infrastructure.db import get_request_db
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -26,25 +27,23 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("/me", response_model=UserOut)
 async def get_me(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> UserOut:
-    await db.refresh(user)
-    return UserOut.model_validate(user)
+    return await build_user_http_service(db).get_me(current=user)
 
 
 @router.patch("/me", response_model=UserOut)
 async def update_me(
     body: SelfProfileUpdate,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> UserOut:
-    svc = UserProvisioningService(db)
+    svc = build_user_http_service(db)
     try:
-        updated = await svc.update(user.id, body, actor_id=user.id)
+        return await svc.update_me(current=user, body=body)
     except ValueError as exc:  # email already exists
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-    return UserOut.model_validate(updated)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 # ── Admin CRUD ─────────────────────────────────────────────────────────────
@@ -55,63 +54,58 @@ async def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=200),
     role: Role | None = None,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> UserListResponse:
-    svc = UserProvisioningService(db)
-    rows, total = await svc.list(page=page, per_page=per_page, role=role)
-    return UserListResponse(data=[UserOut.model_validate(r) for r in rows], total=total)
+    return await build_user_http_service(db).list_users(page=page, per_page=per_page, role=role)
 
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def create_user(
     body: UserCreate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> UserOut:
-    svc = UserProvisioningService(db)
+    svc = build_user_http_service(db)
     try:
-        user = await svc.create(body, actor_id=admin.id)
+        return await svc.create_user(body=body, actor_id=admin.id)
     except ValueError as exc:  # email already exists
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-    return UserOut.model_validate(user)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.get("/{user_id}", response_model=UserOut)
 async def get_user(
     user_id: uuid.UUID,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> UserOut:
-    svc = UserProvisioningService(db)
-    user = await svc.get(user_id)
+    user = await build_user_http_service(db).get_user(user_id=user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
-    return UserOut.model_validate(user)
+    return user
 
 
 @router.patch("/{user_id}", response_model=UserOut)
 async def update_user(
     user_id: uuid.UUID,
     body: UserUpdate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> UserOut:
-    svc = UserProvisioningService(db)
+    svc = build_user_http_service(db)
     try:
-        user = await svc.update(user_id, body, actor_id=admin.id)
+        return await svc.update_user(user_id=user_id, body=body, actor_id=admin.id)
     except LookupError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-    return UserOut.model_validate(user)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.post("/{user_id}/disable", response_model=UserOut)
 async def disable_user(
     user_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> UserOut:
     return await _set_disabled(user_id=user_id, disabled=True, actor=admin, db=db)
 
@@ -119,8 +113,8 @@ async def disable_user(
 @router.post("/{user_id}/enable", response_model=UserOut)
 async def enable_user(
     user_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> UserOut:
     return await _set_disabled(user_id=user_id, disabled=False, actor=admin, db=db)
 
@@ -129,41 +123,44 @@ async def enable_user(
 async def reset_user_password(
     user_id: uuid.UUID,
     body: AdminPasswordReset,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> None:
-    svc = UserProvisioningService(db)
+    svc = build_user_http_service(db)
     try:
-        await svc.reset_password(user_id, body.password, actor_id=admin.id)
+        await svc.reset_password(user_id=user_id, body=body, actor_id=admin.id)
     except LookupError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> None:
-    svc = UserProvisioningService(db)
+    svc = build_user_http_service(db)
     try:
-        await svc.delete(user_id, actor_id=admin.id)
+        await svc.delete_user(user_id=user_id, actor_id=admin.id)
     except LookupError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 async def _set_disabled(
-    *, user_id: uuid.UUID, disabled: bool, actor: User, db: AsyncSession
+    *,
+    user_id: uuid.UUID,
+    disabled: bool,
+    actor: AuthenticatedUser,
+    db: AsyncSession,
 ) -> UserOut:
-    svc = UserProvisioningService(db)
+    svc = build_user_http_service(db)
     try:
-        user = await svc.set_disabled(user_id, disabled, actor_id=actor.id)
+        return await svc.set_disabled(user_id=user_id, disabled=disabled, actor_id=actor.id)
     except LookupError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return UserOut.model_validate(user)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
