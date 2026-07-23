@@ -8,9 +8,11 @@ import pytest
 
 from app.graph.clients import MiniMaxAgent, OpenRouterEmbedder
 from app.graph.factories import (
+    _DirectContextAdapter,
     _LeadContextAdapter,
     _asks_to_explore,
     _build_fast_llm,
+    _is_general_or_comparative,
     aclose_client_cache,
     build_deps,
     make_minimax_llm_json,
@@ -29,6 +31,99 @@ def test_explicit_exploration_request_releases_project_focus(message):
 
 def test_normal_project_followup_keeps_focus():
     assert _asks_to_explore("luong bao nhieu") is False
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # The reported inconsistent-salary message: a factory-agnostic threshold
+        # hypothetical that was wrongly answered from LG Display's KB alone.
+        "minh lam luong 20 trieu mot thang, neu luong nam cong thuong chia deu 12 thang co dc 20tr ko",
+        "lam 15 trieu duoc khong",
+        "luong cao nhat",
+        "nha may nao luong cao nhat",
+        "co bao nhieu nha may",
+        "so sanh luong cac nha may",
+        "viec lam nao gan nhat",
+    ],
+)
+def test_general_or_comparative_question_is_detected(message):
+    assert _is_general_or_comparative(message) is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["luong bao nhieu", "luong the nao", "ca lam viec gi", "co ktx khong", "ho so can gi"],
+)
+def test_focused_project_followup_is_not_general(message):
+    # Ordinary project-scoped follow-ups must keep the established focus.
+    assert _is_general_or_comparative(message) is False
+
+
+class _FakeResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
+class _FakeDB:
+    def __init__(self, rows):
+        self._rows = rows
+
+    async def execute(self, _stmt):
+        return _FakeResult(self._rows)
+
+    async def commit(self):
+        return None
+
+
+async def test_general_salary_question_not_locked_to_focused_project():
+    """A factory-agnostic salary question must not be pinned to the focused
+    project's KB, even when ``focused_project_id`` is set and the message names
+    no factory. Regression for the LG-Display-vs-Rorze 20M inconsistency."""
+    from app.models.conversation import ConversationProjectState
+
+    proj_a = SimpleNamespace(id="a", slug="lg-display", name="LG Display", aliases=[])
+    proj_b = SimpleNamespace(id="b", slug="rorze", name="Rorze", aliases=[])
+    rows = [(proj_a, object(), None), (proj_b, object(), None)]
+    conversation = SimpleNamespace(
+        focused_project_id="a",
+        project_context_state=ConversationProjectState.FOCUSED,
+    )
+    ctx = await _DirectContextAdapter(_FakeDB(rows)).resolve(
+        conversation,
+        "minh lam luong 20 trieu mot thang, neu luong nam cong thuong "
+        "chia deu 12 thang co dc 20tr ko",
+    )
+    assert ctx.state == "EXPLORE"
+    assert ctx.project_id is None
+    assert ctx.project_slug is None
+    # The focus is preserved for a subsequent project-specific question.
+    assert conversation.focused_project_id == "a"
+
+
+async def test_single_active_project_still_uses_focused_fallback():
+    """With only one active project there is nothing to compare across, so a
+    general question still falls back to the focused project (no behavior change
+    for single-project installations)."""
+    from app.models.conversation import ConversationProjectState
+
+    proj_a = SimpleNamespace(id="a", slug="lg-display", name="LG Display", aliases=[])
+    kb = SimpleNamespace(mode=SimpleNamespace(value="rag"))
+    rows = [(proj_a, kb, None)]
+    conversation = SimpleNamespace(
+        focused_project_id="a",
+        project_context_state=ConversationProjectState.FOCUSED,
+    )
+    ctx = await _DirectContextAdapter(_FakeDB(rows)).resolve(
+        conversation,
+        "minh lam luong 20 trieu mot thang co dc 20tr ko",
+    )
+    # Falls through the general guard (len(rows) < 2) to the focused path.
+    assert ctx.state == "FOCUSED"
+    assert ctx.project_id == "a"
 
 
 class _Settings:

@@ -62,17 +62,26 @@ IMAGE_TAG="$IMAGE_TAG" docker compose run --rm --no-deps web-blue \
 echo "==> [4/10] bringing up web-$NEXT + workers at $IMAGE_TAG..."
 IMAGE_TAG="$IMAGE_TAG" docker compose up -d --no-deps --force-recreate "web-$NEXT" $WORKERS
 
-# 5. Wait for the new color's healthcheck to pass.
-echo "==> [5/10] waiting for web-$NEXT healthy..."
+# 5. Wait for the new color's healthcheck to pass. Cold-boot on the droplet can
+#    exceed 120s (image pull + uvicorn + scheduler registration + DB-pool
+#    warmup), so budget 240s and log progress — a silent abort is impossible to
+#    diagnose after the failed-run container is gone.
+echo "==> [5/10] waiting for web-$NEXT healthy (budget 240s)..."
 cid="$(IMAGE_TAG="$IMAGE_TAG" docker compose ps -q "web-$NEXT")"
 ok=0
-for i in $(seq 1 60); do
+for i in $(seq 1 120); do
   st="$(docker inspect --format '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "")"
   if [ "$st" = "healthy" ]; then ok=1; break; fi
+  if [ $((i % 10)) -eq 0 ]; then
+    rc="$(docker inspect --format '{{.RestartCount}}' "$cid" 2>/dev/null || echo '?')"
+    echo "    ...still ${st:-unknown} after $((i * 2))s (restarts=$rc)"
+  fi
   sleep 2
 done
 if [ "$ok" != "1" ]; then
-  echo "==> web-$NEXT did not become healthy. ABORTING — ${ACTIVE:-<none>} keeps serving." >&2
+  echo "==> web-$NEXT did not become healthy within 240s (last status: ${st:-unknown}). ABORTING — ${ACTIVE:-<none>} keeps serving." >&2
+  echo "==> last 40 log lines from web-$NEXT:" >&2
+  docker logs --tail=40 "$cid" >&2 2>/dev/null || true
   exit 1
 fi
 

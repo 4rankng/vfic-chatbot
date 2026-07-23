@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./styles/untitledui.css";
 
 /* Load only the Latin and Vietnamese WOFF2 subsets used by the console. The
    package's aggregate CSS also references Latin Extended and legacy WOFF
@@ -159,6 +160,8 @@
   --depth: 0;
   --noise: 0;
 }
+
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -1616,4 +1619,23 @@ body {
     background-repeat: no-repeat;
     animation: vfic-shimmer 1.4s ease-in-out infinite;
   }
+}
+
+/* =========================================================================
+   UntitledUI shell elevation (appended; same specificity, later source wins).
+   The navy shell gets an indigo-tinted active rail pill + a topbar hairline.
+   Tokens: --color-uu-brand-* (indigo). Delete this block to revert.
+   ========================================================================= */
+.workspace-topbar {
+  box-shadow: 0 1px 0 0 color-mix(in srgb, #000 16%, transparent);
+}
+
+.workspace-navigation-link.is-active {
+  background: color-mix(
+    in srgb,
+    var(--color-uu-brand-500) 22%,
+    var(--workspace-shell-active)
+  );
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--color-uu-brand-400) 42%, transparent);
 }

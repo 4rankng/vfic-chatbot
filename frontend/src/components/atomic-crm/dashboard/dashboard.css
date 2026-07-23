@@ -644,3 +644,89 @@ button.dashboard-candidate-row:active {
     line-height: 20px;
   }
 }
+
+/* =========================================================================
+   UntitledUI elevation layer — appended overrides (same specificity; later
+   source order wins). Adds premium depth/radius/gradient to the command
+   center without rewriting the rules above. Tokens: --radius-uu-*,
+   --shadow-uu-*, --color-uu-brand-* (indigo). Delete this block to revert.
+   ========================================================================= */
+
+.recruiting-panel {
+  border-radius: var(--radius-uu-2xl);
+  border-color: color-mix(
+    in srgb,
+    var(--workspace-border, var(--border)) 85%,
+    transparent
+  );
+  box-shadow: var(--shadow-uu-lg);
+}
+
+.recruiting-panel-header {
+  padding-top: 22px;
+  padding-bottom: 14px;
+}
+
+.recruiting-panel-header h2 {
+  letter-spacing: -0.01em;
+}
+
+/* Hero header — stronger responsive display title, refined live-status pill. */
+.recruiting-hero {
+  padding-bottom: 22px;
+}
+.recruiting-hero h1 {
+  font-size: clamp(1.375rem, 1.2rem + 0.6vw, 1.625rem);
+  letter-spacing: -0.02em;
+}
+.dashboard-live-status {
+  border-radius: var(--radius-uu-xl);
+  box-shadow: var(--shadow-uu-md);
+}
+
+/* Candidate rows — softer radius + indigo hover wash + gentler lift. */
+.dashboard-candidate-row {
+  border-radius: var(--radius-uu-xl);
+}
+button.dashboard-candidate-row:hover {
+  background: color-mix(
+    in srgb,
+    var(--color-uu-brand-500) 10%,
+    var(--workspace-surface, var(--card))
+  );
+  transform: translateX(2px);
+}
+
+/* Placeholder avatars — indigo gradient chip, white glyph. */
+.dashboard-candidate-avatar {
+  border-radius: 12px;
+  background: linear-gradient(
+    135deg,
+    var(--color-uu-brand-500),
+    var(--color-uu-brand-700)
+  );
+  color: #ffffff;
+  box-shadow: var(--shadow-uu-xs);
+}
+
+/* Empty-state icon — soft indigo chip for a premium zero-state. */
+.dashboard-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--color-uu-brand-500) 10%,
+    var(--workspace-surface, var(--card))
+  );
+  color: var(--color-uu-brand-600, var(--workspace-action, var(--primary)));
+  box-shadow: var(--shadow-uu-xs);
+}
+
+@media (min-width: 1100px) {
+  .recruiting-two-column {
+    gap: 28px;
+  }
+}

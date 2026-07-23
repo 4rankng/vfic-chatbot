@@ -1,0 +1,157 @@
+/*
+ * UntitledUI visual layer (additive) — Ting Ting / VFIC miniCRM.
+ *
+ * Cherry-picked from UntitledUI v8 tokens, ADAPTED to this console's identity:
+ *   - brand remapped from UntitledUI violet → indigo #635bff (Stripe Heritage)
+ *   - display / shadow / radius / brand tokens NAMESPACED (--*-uu-*) so they
+ *     never clobber the existing shadcn / daisyUI(tt-) / --workspace-* / --fs-*
+ *     design system already living in index.css
+ *   - font stays Be Vietnam Pro (Vietnamese coverage); UntitledUI's Inter is NOT used
+ *
+ * Imported ONCE from src/index.css. Never add a second `@import "tailwindcss"`.
+ */
+
+@theme {
+  /* ---- Brand: indigo scale (#635bff primary) ---- */
+  --color-uu-brand-50: #eef0fe;
+  --color-uu-brand-100: #e0e3fe;
+  --color-uu-brand-200: #c7ccfd;
+  --color-uu-brand-300: #a5abfc;
+  --color-uu-brand-400: #818cf8;
+  --color-uu-brand-500: #635bff;
+  --color-uu-brand-600: #4a3fff;
+  --color-uu-brand-700: #3d2fd9;
+  --color-uu-brand-800: #3128a8;
+  --color-uu-brand-900: #282384;
+  --color-uu-brand-950: #1a164f;
+
+  /* ---- Display type ramp (UntitledUI scale, tight tracking; hero headings) ---- */
+  --text-uu-display-xs: 1.5rem;
+  --text-uu-display-xs--line-height: 2rem;
+  --text-uu-display-xs--letter-spacing: -0.01em;
+
+  --text-uu-display-sm: 1.875rem;
+  --text-uu-display-sm--line-height: 2.375rem;
+  --text-uu-display-sm--letter-spacing: -0.02em;
+
+  --text-uu-display-md: 2.25rem;
+  --text-uu-display-md--line-height: 2.75rem;
+  --text-uu-display-md--letter-spacing: -0.02em;
+
+  --text-uu-display-lg: 3rem;
+  --text-uu-display-lg--line-height: 3.625rem;
+  --text-uu-display-lg--letter-spacing: -0.03em;
+
+  --text-uu-display-xl: 3.75rem;
+  --text-uu-display-xl--line-height: 4.5rem;
+  --text-uu-display-xl--letter-spacing: -0.04em;
+
+  /* ---- Soft layered shadows (UntitledUI elevation) ---- */
+  --shadow-uu-xs: 0px 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-uu-sm: 0px 1px 3px rgb(16 24 40 / 0.1), 0px 1px 2px -1px rgb(16 24 40 / 0.1);
+  --shadow-uu-md: 0px 4px 8px -2px rgb(16 24 40 / 0.1), 0px 2px 4px -2px rgb(16 24 40 / 0.06);
+  --shadow-uu-lg: 0px 12px 16px -4px rgb(16 24 40 / 0.08),
+    0px 4px 6px -2px rgb(16 24 40 / 0.03), 0px 2px 2px -1px rgb(16 24 40 / 0.04);
+  --shadow-uu-xl: 0px 20px 24px -4px rgb(16 24 40 / 0.1),
+    0px 8px 8px -4px rgb(16 24 40 / 0.04);
+  --shadow-uu-2xl: 0px 24px 48px -12px rgb(16 24 40 / 0.2),
+    0px 4px 4px -2px rgb(16 24 40 / 0.04);
+  --shadow-uu-3xl: 0px 32px 64px -12px rgb(16 24 40 / 0.18);
+
+  /* ---- Larger radii for hero cards ---- */
+  --radius-uu-xl: 0.875rem;
+  --radius-uu-2xl: 1.125rem;
+  --radius-uu-3xl: 1.5rem;
+
+  /* ---- Entrance animations (respect prefers-reduced-motion via index.css) ---- */
+  --animate-uu-fade-up: uu-fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-uu-fade-in: uu-fade-in 0.4s ease both;
+  --animate-uu-caret-blink: uu-caret-blink 1s infinite;
+
+  @keyframes uu-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes uu-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes uu-caret-blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    51%,
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+/* ---- Composite utilities (UntitledUI idiom, token-aware) ---- */
+
+@utility uu-card {
+  border-radius: var(--radius-uu-2xl);
+  background-color: var(--card, #ffffff);
+  border: 1px solid var(--workspace-border, var(--border, rgb(227 232 238)));
+  box-shadow: var(--shadow-uu-lg);
+}
+
+@utility uu-card-flat {
+  border-radius: var(--radius-uu-2xl);
+  background-color: var(--card, #ffffff);
+  border: 1px solid var(--workspace-border, var(--border, rgb(227 232 238)));
+  box-shadow: var(--shadow-uu-xs);
+}
+
+/* Indigo → navy hero gradient (UntitledUI-style brand panels). */
+@utility uu-hero-gradient {
+  background-image: linear-gradient(
+    135deg,
+    var(--color-uu-brand-600) 0%,
+    var(--color-uu-brand-800) 52%,
+    #0a2540 100%
+  );
+}
+
+/* Soft indigo radial spotlight, composited over a surface. */
+@utility uu-spotlight {
+  background-image: radial-gradient(
+    120% 120% at 50% -10%,
+    color-mix(in oklab, var(--color-uu-brand-500) 18%, transparent) 0%,
+    transparent 58%
+  );
+}
+
+/* Restrained grid texture for hero canvases; masked to fade toward the edges. */
+@utility uu-grid-texture {
+  background-image: linear-gradient(
+      var(--workspace-border, rgb(227 232 238)) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, var(--workspace-border, rgb(227 232 238)) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: center;
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 75%);
+  mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 75%);
+}
+
+/* Hide scrollbars on horizontal chip rails. */
+@utility uu-scrollbar-hide {
+  &::-webkit-scrollbar {
+    display: none;
+    -webkit-appearance: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

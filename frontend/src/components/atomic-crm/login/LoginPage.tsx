@@ -41,23 +41,23 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
   return (
     <>
       <AuthShell productName={productName}>
-        <section
-          aria-labelledby="login-title"
-          className="tt-card tt-card-border rounded-xl border border-base-300 bg-base-100 p-6 shadow-sm sm:p-7"
-        >
+        <section aria-labelledby="login-title" className="w-full">
           <h1
             id="login-title"
-            className="mb-5 text-page-title font-semibold tracking-tight"
+            className="text-uu-display-xs font-semibold tracking-[-0.02em] text-base-content"
           >
             Đăng nhập
           </h1>
+          <p className="mt-2 text-body text-muted-foreground">
+            Chào mừng trở lại. Đăng nhập để tiếp tục công việc.
+          </p>
 
-          <Form className="grid gap-5" onSubmit={handleSubmit}>
+          <Form className="mt-7 grid gap-5" onSubmit={handleSubmit}>
             <EmailField />
             <PasswordField disabled={loading} />
             <Button
               type="submit"
-              className="mt-2 min-h-12 w-full"
+              className="mt-2 min-h-12 w-full rounded-xl text-button font-semibold shadow-uu-sm transition-all hover:shadow-uu-md"
               disabled={loading}
             >
               {loading ? (

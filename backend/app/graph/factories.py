@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -45,6 +46,57 @@ def _asks_to_explore(normalized_message: str) -> bool:
             "quay lai tim viec",
         )
     )
+
+
+# A salary/income figure in Vietnamese ("20 trieu", "20tr", "15 trieu"). Matches
+# the diacritic-stripped, lowercased form produced by ``normalize_vietnamese_text``.
+_SALARY_FIGURE_RE = re.compile(r"\b\d+\s*(?:trieu|tr)\b", re.IGNORECASE)
+# Phrasing that turns a figure into a cross-factory achievement/hypothetical
+# question: "co dc ... ko", "duoc khong", "co the", "dat duoc", "chia deu 12 thang".
+_SALARY_ACHIEVEMENT_RE = re.compile(
+    r"(?:co\s+dc|co\s+duoc|duoc\s+ko|duoc\s+khong|co\s+the|dat\s+duoc|dat\s+nguong|chia\s+deu|lam\s+duoc)",
+    re.IGNORECASE,
+)
+
+
+def _is_general_or_comparative(normalized_message: str) -> bool:
+    """True when a question is factory-agnostic and comparative/general.
+
+    Such questions must NOT be answered from one (focused) project's KB: a salary
+    threshold hypothetical ("lam 20 trieu duoc ko"), a superlative ("luong cao
+    nhat"), or an explicit multi-factory scope ("nha may nao", "bao nhieu nha
+    may"). A bare "luong bao nhieu" is a focused follow-up and returns False, so
+    an established focus is preserved for ordinary project-scoped questions.
+    """
+    text = normalized_message or ""
+    if any(
+        phrase in text
+        for phrase in (
+            # Comparative / superlative (inherently cross-project).
+            "cao nhat",
+            "thap nhat",
+            "nhieu nhat",
+            "it nhat",
+            "tot nhat",
+            "gan nhat",
+            "moi nhat",
+            "xa nhat",
+            "so sanh",
+            # Explicit multi-factory scope / "which job" browsing.
+            "nha may nao",
+            "bao nhieu nha may",
+            "co bao nhieu nha may",
+            "viec lam nao",
+            "viec nao",
+            "du an nao",
+            "cac nha may",
+            "cac du an",
+            "tat ca nha may",
+        )
+    ):
+        return True
+    # Salary threshold + achievement question carrying a money figure.
+    return bool(_SALARY_FIGURE_RE.search(text) and _SALARY_ACHIEVEMENT_RE.search(text))
 
 
 class _LeadContextAdapter:
@@ -173,6 +225,20 @@ class _DirectContextAdapter:
             conversation.project_context_state = ConversationProjectState.EXPLORE
             conversation.focused_project_id = None
             await self._db.commit()
+            return ProjectTurnContext(state="EXPLORE")
+        if (
+            selected is None
+            and _is_general_or_comparative(normalized_message)
+            and len(rows) >= 2
+        ):
+            # Factory-agnostic comparative/general question (e.g. a salary
+            # threshold "lam 20 trieu duoc ko", "luong cao nhat", "nha may nao").
+            # Must NOT be silently answered from one focused project's KB: that
+            # is how the bot gave LG Display's "can't confirm 20M" as a universal
+            # answer while another factory's KB said 20M is reachable. Keep
+            # focused_project_id intact (the user may still be on that thread)
+            # but do not pin this turn, so the agent can answer across active
+            # projects and ask which one the candidate means.
             return ProjectTurnContext(state="EXPLORE")
         if selected is None and focused_id is not None:
             selected = next((row for row in rows if row[0].id == focused_id), None)
