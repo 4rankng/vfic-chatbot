@@ -27,7 +27,7 @@ from app.api import (
     webhooks,
 )
 from app.core.config import PROACTIVE_TICK_INTERVAL_SECONDS, get_settings
-from app.workers.scheduler_utils import register_unique_tick
+from app.workers.scheduler_utils import register_unique_cron_tick, register_unique_tick
 from app.core.db import engine
 from app.core.errors import register_domain_exception_handlers
 from app.core.logging import request_id_ctx, setup_logging
@@ -134,31 +134,30 @@ async def lifespan(app: FastAPI):
             logger.exception("decision trace retention scheduler registration failed (non-fatal)")
         try:
             from app.workers.external_source_sync_worker import (
-                DEFAULT_INTERVAL_SECONDS as EXT_SYNC_INTERVAL,
                 run_external_source_sync_tick,
             )
 
-            register_unique_tick(sched, run_external_source_sync_tick, EXT_SYNC_INTERVAL)
+            register_unique_cron_tick(
+                sched, run_external_source_sync_tick, settings.kb_sync_cron
+            )
             logger.info(
-                "external source sync tick registered: interval=%ds",
-                EXT_SYNC_INTERVAL,
+                "external source sync tick registered: cron=%s", settings.kb_sync_cron
             )
         except Exception:  # noqa: BLE001
             logger.exception("external source sync scheduler registration failed (non-fatal)")
         try:
             from app.workers.single_page_external_source_sync_worker import (
-                DEFAULT_INTERVAL_SECONDS as SINGLE_PAGE_EXT_SYNC_INTERVAL,
                 run_single_page_external_source_sync_tick,
             )
 
-            register_unique_tick(
+            register_unique_cron_tick(
                 sched,
                 run_single_page_external_source_sync_tick,
-                SINGLE_PAGE_EXT_SYNC_INTERVAL,
+                settings.kb_sync_cron,
             )
             logger.info(
-                "single-page external source sync tick registered: interval=%ds",
-                SINGLE_PAGE_EXT_SYNC_INTERVAL,
+                "single-page external source sync tick registered: cron=%s",
+                settings.kb_sync_cron,
             )
         except Exception:  # noqa: BLE001
             logger.exception(

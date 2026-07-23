@@ -17,9 +17,9 @@ from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
-# Module-level operational constants (Validation Session 1 Q1: only the global
-# kill switch needs env-tunability; interval/job-timeout are code constants).
-DEFAULT_INTERVAL_SECONDS = 86400  # daily
+# Module-level operational constants. Daily re-ingest cadence is pinned to a
+# wall-clock time via settings.kb_sync_cron (see app.main lifespan) so a
+# web-container restart mid-day no longer pushes the next sync out by 24h.
 DEFAULT_JOB_TIMEOUT_SECONDS = 1800  # 30 min RQ cap — embedder is serialized
 
 COUNTER_SUCCESS = "external_source_sync_success_total"

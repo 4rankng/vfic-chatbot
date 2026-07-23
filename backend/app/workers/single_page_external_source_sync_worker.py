@@ -10,7 +10,9 @@ from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_INTERVAL_SECONDS = 86400
+# Daily re-ingest cadence is pinned to a wall-clock time via settings.kb_sync_cron
+# (see app.main lifespan) — a mid-day web-container restart no longer pushes the
+# next sync out by 24h.
 DEFAULT_JOB_TIMEOUT_SECONDS = 1800
 DEFAULT_RETRY_MAX = 3
 DEFAULT_RETRY_INTERVALS_SECONDS = [2000, 2000, 2000]

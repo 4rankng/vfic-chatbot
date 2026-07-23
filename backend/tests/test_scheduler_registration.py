@@ -1,8 +1,8 @@
-"""Tests for register_unique_tick — mock-based, no Redis/DB required."""
+"""Tests for register_unique_tick / register_unique_cron_tick — mock-based, no Redis/DB required."""
 
 from unittest.mock import MagicMock
 
-from app.workers.scheduler_utils import register_unique_tick
+from app.workers.scheduler_utils import register_unique_cron_tick, register_unique_tick
 
 
 def _make_job(func_name: str) -> MagicMock:
@@ -82,3 +82,78 @@ def test_get_jobs_failure_is_non_fatal():
 
     sched.schedule.assert_called_once()
     assert sched.schedule.call_args.kwargs["id"].startswith("vfic-tick-")
+
+
+# --- register_unique_cron_tick (wall-clock-pinned variant) --------------------
+
+
+def test_cron_cancels_matching_jobs_and_keeps_unrelated():
+    """Cron variant mirrors interval variant: dedupes this tick only, keeps others."""
+    sched = MagicMock()
+    tick = lambda: None  # noqa: E731
+    tick.__module__ = tick.__qualname__ = "test_cron_tick"
+    tick_name = f"{tick.__module__}.{tick.__name__}"
+
+    sched.get_jobs.return_value = [_make_job(tick_name) for _ in range(3)] + [
+        _make_job("app.workers.reconcile_worker.run_reconcile_tick")
+    ]
+
+    register_unique_cron_tick(sched, tick, cron_string="0 20 * * *")
+
+    assert sched.cancel.call_count == 3
+    cancelled = [c.args[0].func_name for c in sched.cancel.call_args_list]
+    assert all(n == tick_name for n in cancelled)
+    # cron() called once with stable id + the supplied expression up front
+    sched.cron.assert_called_once()
+    args, kw = sched.cron.call_args
+    assert args[0] == "0 20 * * *"
+    assert kw["id"] == f"vfic-tick-{tick.__name__}"
+    assert kw["repeat"] is None
+    # Must NOT have touched the interval API
+    sched.schedule.assert_not_called()
+
+
+def test_cron_no_prior_jobs_registers_cleanly():
+    sched = MagicMock()
+    tick = lambda: None  # noqa: E731
+    tick.__module__ = "test_cron_clean"
+    sched.get_jobs.return_value = []
+
+    register_unique_cron_tick(sched, tick, cron_string="0 3 * * *")
+
+    sched.cancel.assert_not_called()
+    sched.cron.assert_called_once()
+    assert sched.cron.call_args.kwargs["id"].startswith("vfic-tick-")
+
+
+def test_cron_idempotent_after_first_registration():
+    """A second boot that finds the stable-id job still leaves exactly one."""
+    sched = MagicMock()
+    tick = lambda: None  # noqa: E731
+    tick.__module__ = "test_cron_idemp"
+    tick_name = f"{tick.__module__}.{tick.__name__}"
+    stable_id = f"vfic-tick-{tick.__name__}"
+
+    existing = _make_job(tick_name)
+    sched.get_jobs.return_value = [existing]
+
+    register_unique_cron_tick(sched, tick, cron_string="0 20 * * *")
+
+    assert sched.cancel.call_count == 1
+    sched.cancel.assert_called_with(existing)
+    sched.cron.assert_called_once()
+    assert sched.cron.call_args.kwargs["id"] == stable_id
+
+
+def test_cron_get_jobs_failure_is_non_fatal():
+    """If get_jobs() throws, cron() still fires (no idempotent cleanup but still registers)."""
+    sched = MagicMock()
+    tick = lambda: None  # noqa: E731
+    tick.__module__ = "test_cron_fail"
+    sched.get_jobs.side_effect = RuntimeError("Redis down")
+
+    # Should NOT raise.
+    register_unique_cron_tick(sched, tick, cron_string="0 20 * * *")
+
+    sched.cron.assert_called_once()
+    assert sched.cron.call_args.kwargs["id"].startswith("vfic-tick-")

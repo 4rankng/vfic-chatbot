@@ -46,7 +46,9 @@ plane, not a replacement for the page itself.
   wins over `?gid=...`; missing, invalid, conflicting, or unsafe `gid` values
   are rejected.
 - The sheet sync runs either manually from the console (`Xử lý ngay`) or by the
-  daily worker tick when `auto_sync_enabled` is on.
+  daily worker tick when `auto_sync_enabled` is on. The tick is pinned to a
+  wall-clock time via `KB_SYNC_CRON` (default `0 20 * * *` UTC = 03:00 ICT); a
+  mid-day web-container restart no longer pushes the next sync out by 24h.
 - The parser accepts the current four-column FAQ sheet shape used by LG
   Display: `STT theo quy trình` | `Thông tin` | `Question` | `Answer`. It also
   tolerates the older 3-column layout.

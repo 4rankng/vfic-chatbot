@@ -889,7 +889,8 @@ be shared by another Project.
   renders the FAQ sheet into deterministic Markdown, and replaces the page
   atomically on success. Manual `Xử lý ngay` syncs and the daily scheduler tick
   both enqueue the same worker path; failures record status on the source row
-  and preserve the prior page.
+  and preserve the prior page. The daily tick is cron-pinned via `KB_SYNC_CRON`
+  (default `0 20 * * *` UTC = 03:00 ICT).
 - `RAG` owns twelve `knowledge_categories`. Immutable
   `knowledge_category_revisions` preserve raw YAML, normalized payloads, a
   deterministic checksum, and recovery metadata (`processing_token`,

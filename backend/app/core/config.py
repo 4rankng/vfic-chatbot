@@ -370,20 +370,26 @@ class Settings(BaseSettings):
     # re-ingest cadence is pinned to a wall-clock time via `kb_sync_cron` below
     # so a web-container restart mid-day no longer pushes the next sync out by
     # 24h. Job-timeout/retry remain code constants in the worker modules.
-    # Cron expression in UTC, evaluated by rq-scheduler (croniter). Default
+    # Cron expression in UTC, evaluated by rq-scheduler. Default
     # `0 20 * * *` = 03:00 ICT (UTC+7, no DST) — middle of the 2–5 AM low-traffic
-    # window. Override per-env to shift the time-of-day.
+    # window. Override per-env to shift the time-of-day. NOTE: "UTC" assumes the
+    # container TZ is unset/UTC (the default for python:3.12-slim and our
+    # Dockerfile does not override it). If ops ever sets TZ=Asia/Ho_Chi_Minh on
+    # the container, this expression would silently shift by 7h — re-express the
+    # cron in local time or pin ENV TZ=UTC in that case.
     kb_sync_cron: str = "0 20 * * *"
 
     @field_validator("kb_sync_cron")
     @classmethod
     def _validate_kb_sync_cron(cls, value: str) -> str:
         # Fail fast at startup on a malformed env value rather than silently
-        # mis-firing (or never firing) at the first scheduled tick.
-        from croniter import croniter
+        # mis-firing (or never firing) at the first scheduled tick. rq-scheduler
+        # parses with python-crontab (not croniter) — validate with the same
+        # parser so accepted/rejected strings match the scheduler exactly.
+        from crontab import CronTab
 
         try:
-            croniter(value)
+            CronTab(value)
         except (ValueError, KeyError) as exc:
             raise ValueError(
                 f"kb_sync_cron must be a valid cron expression (got {value!r})"

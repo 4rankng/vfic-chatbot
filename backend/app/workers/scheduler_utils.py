@@ -36,3 +36,32 @@ def register_unique_tick(scheduler, func, interval: int) -> None:
         repeat=None,
         id=f"vfic-tick-{func.__name__}",
     )
+
+
+def register_unique_cron_tick(scheduler, func, cron_string: str) -> None:
+    """Register exactly one cron-based rq-scheduler job for *func*.
+
+    Mirror of :func:`register_unique_tick` but for wall-clock-pinned schedules.
+    Unlike the interval variant, the next fire is the next cron match — a
+    mid-day web-container restart no longer pushes the next run out by a full
+    interval. ``cron_string`` is a 5-field cron expression evaluated in UTC
+    (rq-scheduler parses with python-crontab); e.g. ``"0 20 * * *"`` = 03:00
+    ICT daily. UTC depends on the container TZ being unset/UTC (see
+    ``settings.kb_sync_cron`` docstring for the caveat).
+    """
+    func_name = f"{func.__module__}.{func.__name__}"
+    # Best-effort cleanup of prior duplicates; failure must not block (re)register.
+    try:
+        for job in scheduler.get_jobs():  # all scheduled jobs, regardless of time
+            if getattr(job, "func_name", None) == func_name:
+                scheduler.cancel(job)
+    except Exception:  # noqa: BLE001
+        log.exception("scheduler dedupe scan failed for %s (non-fatal)", func_name)
+    # The Scheduler instance is already bound to a queue at construction (see
+    # app.main lifespan); cron() inherits it, matching the interval path.
+    scheduler.cron(
+        cron_string,
+        func=func,
+        repeat=None,
+        id=f"vfic-tick-{func.__name__}",
+    )
