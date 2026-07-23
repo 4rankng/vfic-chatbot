@@ -106,7 +106,6 @@ api_outward|backend/app/api/webhooks.py|app.models.conversation:Conversation
 api_outward|backend/app/api/webhooks.py|app.models.conversation:DeliveryStatus
 api_outward|backend/app/api/webhooks.py|app.models.conversation:Message
 api_outward|backend/app/api/webhooks.py|app.workers.chatbot_worker:enqueue_chat_run
-schema_infra|backend/app/schemas/user.py|app.models.user:Role
 service_outward|backend/app/services/project/service.py|app.workers.direct_context_worker:enqueue_direct_context_index
 service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.direct_context_worker:enqueue_direct_context_index
 """.splitlines()
