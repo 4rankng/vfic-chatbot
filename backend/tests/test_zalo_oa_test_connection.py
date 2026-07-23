@@ -1,153 +1,17 @@
-"""Wiring: webhook records signature health; L3 verify endpoint; admin_view surfaces health."""
+"""L3 verify endpoint (manual admin probe) + admin_view OA signature key is null.
+
+Inbound OA webhook signature verification is retired (see app/api/webhooks.py);
+the manual POST /zalo/oa/verify-signature probe remains as a diagnostic for a
+future cutover when a dedicated Zalo webhook signing secret is available.
+"""
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 from unittest.mock import AsyncMock
 
 import pytest
-
-
-class _FakeRequest:
-    def __init__(self, body: bytes, headers: dict[str, str] | None = None) -> None:
-        self._body = body
-        self.headers = headers or {}
-
-    async def body(self) -> bytes:
-        return self._body
-
-
-# ---------------------------------------------------------------------------
-# L1: the inbound webhook records the signature outcome
-# ---------------------------------------------------------------------------
-
-
-class _WebhookSvc:
-    """Stub for IntegrationSettingsService as used by app.api.webhooks."""
-
-    config = None
-
-    def __init__(self, _db) -> None:
-        pass
-
-    async def resolve_zalo(self):
-        return self.config
-
-
-@pytest.mark.asyncio
-async def test_oa_webhook_records_verified_on_valid_signature(monkeypatch):
-    from app.api import webhooks
-    from app.services.integration_settings import ZaloRuntimeConfig
-
-    app_id, secret = "app-1", "secret"
-    payload = {
-        "app_id": app_id,
-        "timestamp": "1700000000",
-        "event_name": "user_send_text",
-        "sender": {"id": "u1"},
-        "message": {"text": "hi", "msg_id": "m1"},
-    }
-    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    digest = hashlib.sha256(app_id.encode() + raw + b"1700000000" + secret.encode()).hexdigest()
-
-    _WebhookSvc.config = ZaloRuntimeConfig(
-        oa_app_id=app_id, oa_secret_key=secret, oa_access_token="t"
-    )
-    recorder = AsyncMock()
-    monkeypatch.setattr(webhooks, "IntegrationSettingsService", _WebhookSvc)
-    monkeypatch.setattr(webhooks, "record_oa_signature", recorder)
-    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=object()))
-    monkeypatch.setattr(
-        webhooks.ZaloWebhookService, "handle", AsyncMock(return_value={"status": "queued"})
-    )
-
-    req = _FakeRequest(
-        raw,
-        headers={"x-zevent-signature": f"mac={digest}", "x-zevent-timestamp": "1700000000"},
-    )
-    resp = await webhooks.zalo_oa_webhook(req, db=AsyncMock())
-    await asyncio.sleep(0)  # let the fire-and-forget health record run
-
-    assert resp.status_code == 200
-    recorder.assert_called_once_with(ok=True)
-
-
-@pytest.mark.asyncio
-async def test_oa_webhook_uses_event_app_id_for_signature(monkeypatch):
-    from app.api import webhooks
-    from app.services.integration_settings import ZaloRuntimeConfig
-
-    event_app_id, secret = "developer-app-1", "secret"
-    payload = {
-        "app_id": event_app_id,
-        "timestamp": "1700000000",
-        "event_name": "user_send_text",
-        "sender": {"id": "u1"},
-        "message": {"text": "hi", "msg_id": "m1"},
-    }
-    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    digest = hashlib.sha256(
-        event_app_id.encode() + raw + b"1700000000" + secret.encode()
-    ).hexdigest()
-
-    # An administrator may have entered the OA ID in the legacy App ID field.
-    # Authenticity still comes from the event App ID plus the configured secret.
-    _WebhookSvc.config = ZaloRuntimeConfig(
-        oa_app_id="oa-id-not-app-id", oa_secret_key=secret, oa_access_token="t"
-    )
-    recorder = AsyncMock()
-    monkeypatch.setattr(webhooks, "IntegrationSettingsService", _WebhookSvc)
-    monkeypatch.setattr(webhooks, "record_oa_signature", recorder)
-    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=object()))
-    handler = AsyncMock(return_value={"status": "queued"})
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handler)
-
-    req = _FakeRequest(raw, headers={"x-zevent-signature": f"mac={digest}"})
-    resp = await webhooks.zalo_oa_webhook(req, db=AsyncMock())
-    await asyncio.sleep(0)
-
-    assert resp.status_code == 200
-    recorder.assert_called_once_with(ok=True)
-    handler.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_oa_webhook_records_mismatch_but_still_processes(monkeypatch):
-    """Signature verification is currently non-blocking: a mismatch is recorded to
-    the health badge, but the event is still dispatched (otherwise a wrong/stale OA
-    secret drops every real event, including user_seen_message receipts)."""
-    from app.api import webhooks
-    from app.services.integration_settings import ZaloRuntimeConfig
-
-    _WebhookSvc.config = ZaloRuntimeConfig(
-        oa_app_id="app-1", oa_secret_key="secret", oa_access_token="t"
-    )
-    recorder = AsyncMock()
-    monkeypatch.setattr(webhooks, "IntegrationSettingsService", _WebhookSvc)
-    monkeypatch.setattr(webhooks, "record_oa_signature", recorder)
-    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=object()))
-    handler = AsyncMock(return_value={"status": "queued"})
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handler)
-
-    raw = json.dumps(
-        {
-            "app_id": "app-1",
-            "event_name": "user_send_text",
-            "sender": {"id": "u1"},
-            "message": {"text": "hi", "msg_id": "m"},
-        }
-    ).encode("utf-8")
-    req = _FakeRequest(
-        raw, headers={"x-zevent-signature": "mac=deadbeef", "x-zevent-timestamp": "1"}
-    )
-    resp = await webhooks.zalo_oa_webhook(req, db=AsyncMock())
-    await asyncio.sleep(0)  # let the fire-and-forget health record run
-
-    assert resp.status_code == 200
-    recorder.assert_called_once_with(ok=False)
-    handler.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -249,23 +113,16 @@ async def test_verify_endpoint_reports_malformed_body(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# admin_view surfaces the passive signature health
+# admin_view: OA signature key is null (inbound verification retired)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_admin_view_includes_oa_signature_health(monkeypatch):
-    import app.services.zalo_oa_health as health_mod
+async def test_admin_view_oa_signature_health_is_null(monkeypatch):
     from app.services.integration_settings import IntegrationSettingsService, ZaloRuntimeConfig
 
     iss = IntegrationSettingsService.__new__(IntegrationSettingsService)
     monkeypatch.setattr(iss, "resolve_zalo", AsyncMock(return_value=ZaloRuntimeConfig()))
-    monkeypatch.setattr(
-        health_mod,
-        "read_oa_signature_health",
-        AsyncMock(return_value={"last_status": "mismatched", "consec_failures": 3}),
-    )
 
     view = await iss.admin_view()
-    assert view["zalo_oa_webhook_signature"]["last_status"] == "mismatched"
-    assert view["zalo_oa_webhook_signature"]["consec_failures"] == 3
+    assert view["zalo_oa_webhook_signature"] is None

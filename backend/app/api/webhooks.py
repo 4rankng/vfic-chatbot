@@ -12,7 +12,6 @@ Only request size and safe event metadata are logged. Candidate content, provide
 signatures, timestamps, and identifiers never enter application logs.
 """
 
-import asyncio
 import hmac
 import json
 import logging
@@ -28,8 +27,6 @@ from app.services.integration_settings import IntegrationSettingsService
 from app.services.installation.service import InstallationService
 from app.services.slo_service import record_webhook_ack_ms
 from app.services.webhook import ZaloWebhookService
-from app.services.zalo_oa_health import record_oa_signature
-from app.services.zalo_oa_signature import verify_signature
 from app.workers.chatbot_worker import enqueue_chat_run
 
 logger = logging.getLogger(__name__)
@@ -112,48 +109,18 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
 
     # Zalo verifies a newly configured OA webhook URL with an unsigned POST whose
     # body is an empty JSON object. It must receive 200 before Zalo will save the
-    # URL. Accept only that side-effect-free probe; every real event below still
-    # requires X-ZEvent-Signature verification.
+    # URL. Accept only that side-effect-free probe; real events below are processed
+    # WITHOUT X-ZEvent-Signature verification (see the retirement note below).
     if payload == {} and not request.headers.get("x-zevent-signature"):
         await _stamp_ack(t0, 200)
         return JSONResponse({"status": "verified"}, status_code=200)
 
-    cfg = await IntegrationSettingsService(db).resolve_zalo()
-    if cfg.oa_secret_key:
-        signature = request.headers.get("x-zevent-signature") or ""
-        ts_header = request.headers.get("x-zevent-timestamp") or ""
-        signed_app_id = str(payload.get("app_id") or cfg.oa_app_id or "")
-        oa_result = verify_signature(
-            signature=signature,
-            raw=raw,
-            payload=payload,
-            app_id=signed_app_id,
-            secret_key=cfg.oa_secret_key,
-            timestamp_header=ts_header,
-        )
-        if oa_result.verified:
-            asyncio.create_task(record_oa_signature(ok=True))
-        else:
-            # NOTE: signature verification is currently NON-BLOCKING. A mismatch is
-            # recorded to the passive health badge (so admins see a wrong/stale OA
-            # secret in the integration status) and logged, but the event is still
-            # processed. Blocking was enabled in 156202f7 but had to be reverted:
-            # while the stored OA secret disagrees with Zalo's signing, EVERY real
-            # event — including ``user_seen_message`` receipts and inbound text — is
-            # rejected with 401, which Zalo surfaces as "Không thể kết nối với
-            # webhook" and silently drops the event. Re-enable the hard reject once
-            # the OA secret is confirmed correct (health badge stays "verified").
-            logger.warning(
-                "zalo oa signature mismatch (non-blocking) "
-                "event_class=oa_event reason=verification_failed",
-            )
-            asyncio.create_task(record_oa_signature(ok=False))
-    elif _settings.app_env != "development":
-        await _stamp_ack(t0, 503)
-        return JSONResponse(
-            {"detail": "OA webhook verification not configured"},
-            status_code=503,
-        )
+    # Inbound OA signature verification is intentionally non-enforced: the held
+    # ``oa_secret_key`` is the OA access-token secret, not Zalo's webhook signing
+    # key, so the check false-rejected 100% of real events while being non-blocking
+    # (zero protection). The manual admin verify probe
+    # (POST /zalo/oa/verify-signature) remains as a diagnostic for a future
+    # cutover when a dedicated signing secret is available.
 
     runtime_authority = await _runtime_authority_or_inactive(db, channel="oa")
     result = await ZaloWebhookService.handle(

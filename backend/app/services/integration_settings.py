@@ -305,11 +305,7 @@ class IntegrationSettingsService:
         return ZaloRuntimeConfig(**cached)
 
     async def admin_view(self) -> dict:
-        # Local import so tests can monkeypatch read_oa_signature_health.
-        from app.services.zalo_oa_health import read_oa_signature_health
-
         cfg = await self.resolve_zalo()
-        signature_health = await read_oa_signature_health()
         return {
             "zalo_bot_token": {
                 "configured": bool(cfg.bot_token),
@@ -337,7 +333,8 @@ class IntegrationSettingsService:
             },
             "zalo_bot_api_base": ZALO_BOT_API_BASE,
             "zalo_oa_api_base": ZALO_OA_API_BASE,
-            "zalo_oa_webhook_signature": signature_health,
+            # Inbound OA signature verification is retired (see app/api/webhooks.py).
+            "zalo_oa_webhook_signature": None,
         }
 
     async def resolve_minimax(self) -> MinimaxRuntimeConfig:

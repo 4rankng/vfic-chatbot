@@ -55,7 +55,6 @@ async def test_webhook_logs_never_include_candidate_body_or_signature(monkeypatc
     settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
     monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", AsyncMock(return_value={"status": "ignored"}))
-    monkeypatch.setattr(webhooks, "record_oa_signature", AsyncMock())
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
 
     with caplog.at_level("INFO", logger="app.api.webhooks"):
@@ -69,7 +68,6 @@ async def test_webhook_logs_never_include_candidate_body_or_signature(monkeypatc
     assert signature not in caplog.text
     assert "1700000000" not in caplog.text
     assert "bytes=" in caplog.text
-    assert "event_class=oa_event" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -131,10 +129,11 @@ async def test_oa_webhook_accepts_unsigned_empty_registration_probe(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_oa_webhook_processes_unsigned_real_event_non_blocking(monkeypatch):
-    """Signature verification is currently non-blocking: a mismatch is recorded to
-    the health badge but the event is still dispatched (otherwise a wrong/stale OA
-    secret drops every real event, including user_seen_message receipts)."""
+async def test_oa_webhook_processes_real_event_without_signature_check(monkeypatch, caplog):
+    """Inbound OA signature verification is retired: a real event with no/invalid
+    x-zevent-signature is processed normally (200, dispatched) with NO signature
+    warning logged and NO health recording. A configured secret no longer triggers
+    any verification path."""
     from app.api import webhooks
 
     cfg = SimpleNamespace(oa_secret_key="oa-secret", oa_app_id="app-1")
@@ -152,10 +151,13 @@ async def test_oa_webhook_processes_unsigned_real_event_non_blocking(monkeypatch
         }
     ).encode()
 
-    response = await webhooks.zalo_oa_webhook(FakeRequest(raw), db=AsyncMock())
+    with caplog.at_level("WARNING", logger="app.api.webhooks"):
+        response = await webhooks.zalo_oa_webhook(FakeRequest(raw), db=AsyncMock())
 
     assert response.status_code == 200
     handle.assert_awaited_once()
+    assert "event_class=oa_event" not in caplog.text
+    assert "verification_failed" not in caplog.text
 
 
 @pytest.mark.asyncio
