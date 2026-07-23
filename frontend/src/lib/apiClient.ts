@@ -70,6 +70,8 @@ interface RequestOptions {
 const isFormData = (body: unknown): body is FormData =>
   typeof FormData !== "undefined" && body instanceof FormData;
 
+let refreshInFlight: Promise<boolean> | null = null;
+
 const send = async (
   path: string,
   options: RequestOptions,
@@ -102,9 +104,7 @@ const send = async (
   });
 };
 
-// Exchange the stored refresh token for a fresh access/refresh pair. Returns
-// false on any failure so the caller can surface the original 401.
-export const refreshOnce = async (): Promise<boolean> => {
+const runRefresh = async (): Promise<boolean> => {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
   try {
@@ -121,10 +121,27 @@ export const refreshOnce = async (): Promise<boolean> => {
       access_token: string;
       refresh_token: string;
     };
+    if (getRefreshToken() !== refreshToken) return false;
     setTokens(tokens.access_token, tokens.refresh_token);
     return true;
   } catch {
     return false;
+  }
+};
+
+// Exchange the stored refresh token for a fresh access/refresh pair. Concurrent
+// 401s share one in-flight refresh so the browser issues exactly one refresh
+// request and all waiters observe the rotated token pair.
+export const refreshOnce = async (): Promise<boolean> => {
+  if (refreshInFlight) return refreshInFlight;
+  const operation = runRefresh();
+  refreshInFlight = operation;
+  try {
+    return await operation;
+  } finally {
+    if (refreshInFlight === operation) {
+      refreshInFlight = null;
+    }
   }
 };
 

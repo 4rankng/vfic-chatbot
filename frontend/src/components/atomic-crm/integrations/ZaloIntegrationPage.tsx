@@ -36,7 +36,17 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { apiJson } from "../providers/rest/api";
+import {
+  zaloIntegrationGateway,
+  type IntegrationConfigTestResult,
+  type LlmProvider,
+  type MinimaxSettings,
+  type OpenRouterSettings,
+  type SecretStatus,
+  type ZaloChannelTestResult,
+  type ZaloOaSignatureHealth,
+  type ZaloSettings,
+} from "./api";
 import {
   buildZaloUpdatePayload,
   type ZaloFormState,
@@ -49,49 +59,6 @@ import { UserList } from "../users/UserList";
 import { FacebookMessengerIntegrationPage } from "./FacebookMessengerIntegrationPage";
 import "../conversations/inbox.css";
 import "./settings.css";
-
-type SecretStatus = { configured: boolean; preview?: string | null };
-type PlainStatus = { configured: boolean; value?: string | null };
-
-type ZaloOaSignatureHealth = {
-  last_status: "verified" | "mismatched" | null;
-  last_ts: number | null;
-  last_mismatch_ts: number | null;
-  consec_failures: number | null;
-};
-
-type ZaloSettings = {
-  zalo_bot_token: SecretStatus;
-  zalo_bot_webhook_secret: SecretStatus;
-  zalo_oa_app_id: PlainStatus;
-  zalo_oa_secret_key: SecretStatus;
-  zalo_oa_access_token: SecretStatus;
-  zalo_oa_refresh_token: SecretStatus;
-  zalo_bot_api_base: string;
-  zalo_oa_api_base: string;
-  zalo_oa_webhook_signature: ZaloOaSignatureHealth | null;
-};
-
-type MinimaxSettings = {
-  minimax_api_key: SecretStatus;
-  minimax_base_url: string;
-  minimax_agent_model: string;
-  minimax_safety_model: string;
-  minimax_enable: boolean;
-  llm_default_provider: LlmProvider;
-};
-
-type OpenRouterSettings = {
-  openrouter_api_key: SecretStatus;
-  openrouter_base_url: string;
-  openrouter_agent_model: string;
-  openrouter_safety_model: string;
-  openrouter_digest_model: string;
-  openrouter_enable: boolean;
-  llm_default_provider: LlmProvider;
-};
-
-type LlmProvider = "minimax" | "openrouter";
 
 type FormState = ZaloFormState;
 
@@ -125,22 +92,6 @@ const emptyForm: FormState = {
   zalo_oa_secret_key: "",
   zalo_oa_access_token: "",
   zalo_oa_refresh_token: "",
-};
-
-type ZaloChannelTestResult = {
-  configured: boolean;
-  connected: boolean;
-  missing: string[];
-  errors: string[];
-  // OA-only diagnostics
-  oa_secret_valid?: boolean | null;
-  oa_refresh_ok?: boolean | null;
-  oa_token_expired?: boolean | null;
-};
-
-type IntegrationConfigTestResult = {
-  configured: boolean;
-  missing: string[];
 };
 
 const ZALO_TEST_FIELD_LABELS: Record<string, string> = {
@@ -723,11 +674,11 @@ export const ZaloIntegrationPage = () => {
   const [testingOpenRouter, setTestingOpenRouter] = useState(false);
 
   const load = async () => {
-    const [data, minimaxData, openRouterData] = await Promise.all([
-      apiJson<ZaloSettings>("/api/v1/admin/integrations/zalo"),
-      apiJson<MinimaxSettings>("/api/v1/admin/integrations/minimax"),
-      apiJson<OpenRouterSettings>("/api/v1/admin/integrations/openrouter"),
-    ]);
+    const {
+      zalo: data,
+      minimax: minimaxData,
+      openRouter: openRouterData,
+    } = await zaloIntegrationGateway.loadSettingsBundle();
     setSettings(data);
     setMinimaxSettings(minimaxData);
     setOpenRouterSettings(openRouterData);
@@ -872,13 +823,7 @@ export const ZaloIntegrationPage = () => {
         : buildZaloUpdatePayload(form, settings?.zalo_oa_app_id.value, scope);
     if (Object.keys(payload).length === 0) return settings;
 
-    const nextZalo = await apiJson<ZaloSettings>(
-      "/api/v1/admin/integrations/zalo",
-      {
-        method: "PUT",
-        body: payload,
-      },
-    );
+    const nextZalo = await zaloIntegrationGateway.saveZaloSettings(payload);
     setSettings(nextZalo);
     setForm({
       ...emptyForm,
@@ -890,13 +835,8 @@ export const ZaloIntegrationPage = () => {
   const saveMinimaxChanges = async () => {
     if (Object.keys(changedMinimaxPayload).length === 0) return minimaxSettings;
 
-    const nextMinimax = await apiJson<MinimaxSettings>(
-      "/api/v1/admin/integrations/minimax",
-      {
-        method: "PUT",
-        body: changedMinimaxPayload,
-      },
-    );
+    const nextMinimax =
+      await zaloIntegrationGateway.saveMinimaxSettings(changedMinimaxPayload);
     setMinimaxSettings(nextMinimax);
     setMinimaxForm(emptyMinimaxForm);
     setMinimaxEnabled(nextMinimax.minimax_enable);
@@ -908,13 +848,10 @@ export const ZaloIntegrationPage = () => {
     if (Object.keys(changedOpenRouterPayload).length === 0)
       return openRouterSettings;
 
-    const nextOpenRouter = await apiJson<OpenRouterSettings>(
-      "/api/v1/admin/integrations/openrouter",
-      {
-        method: "PUT",
-        body: changedOpenRouterPayload,
-      },
-    );
+    const nextOpenRouter =
+      await zaloIntegrationGateway.saveOpenRouterSettings(
+        changedOpenRouterPayload,
+      );
     setOpenRouterSettings(nextOpenRouter);
     setOpenRouterForm(emptyOpenRouterForm);
     setOpenRouterEnabled(nextOpenRouter.openrouter_enable);
@@ -924,7 +861,7 @@ export const ZaloIntegrationPage = () => {
   };
 
   const testChannel = async (
-    path: string,
+    request: () => Promise<ZaloChannelTestResult>,
     label: string,
     busySetter: (busy: boolean) => void,
     scope: Exclude<ZaloSettingsScope, "all">,
@@ -932,9 +869,7 @@ export const ZaloIntegrationPage = () => {
     busySetter(true);
     try {
       await saveZaloChanges(scope);
-      const result = await apiJson<ZaloChannelTestResult>(path, {
-        method: "POST",
-      });
+      const result = await request();
       if (result.connected) {
         // Show OA-specific warnings even when connected (e.g. secret key
         // invalid but access token still works — will break on next refresh).
@@ -985,7 +920,7 @@ export const ZaloIntegrationPage = () => {
 
   const testBotConnection = () =>
     testChannel(
-      "/api/v1/admin/integrations/zalo/bot/test",
+      zaloIntegrationGateway.testBotConnection,
       "Zalo Chatbot",
       setTestingBot,
       "bot",
@@ -993,14 +928,14 @@ export const ZaloIntegrationPage = () => {
 
   const testOaConnection = () =>
     testChannel(
-      "/api/v1/admin/integrations/zalo/oa/test",
+      zaloIntegrationGateway.testOaConnection,
       "Zalo OA",
       setTestingOa,
       "oa",
     );
 
   const testConfiguredIntegration = async (
-    path: string,
+    request: () => Promise<IntegrationConfigTestResult>,
     label: string,
     busySetter: (busy: boolean) => void,
     saveChanges: () => Promise<MinimaxSettings | OpenRouterSettings | null>,
@@ -1008,9 +943,7 @@ export const ZaloIntegrationPage = () => {
     busySetter(true);
     try {
       await saveChanges();
-      const result = await apiJson<IntegrationConfigTestResult>(path, {
-        method: "POST",
-      });
+      const result = await request();
       if (result.configured) {
         notify(`Cấu hình ${label} đã sẵn sàng`, { type: "success" });
         return;
@@ -1026,7 +959,7 @@ export const ZaloIntegrationPage = () => {
 
   const testMinimaxConnection = () =>
     testConfiguredIntegration(
-      "/api/v1/admin/integrations/minimax/test",
+      zaloIntegrationGateway.testMinimaxConnection,
       "Minimax",
       setTestingMinimax,
       saveMinimaxChanges,
@@ -1034,7 +967,7 @@ export const ZaloIntegrationPage = () => {
 
   const testOpenRouterConnection = () =>
     testConfiguredIntegration(
-      "/api/v1/admin/integrations/openrouter/test",
+      zaloIntegrationGateway.testOpenRouterConnection,
       "OpenRouter",
       setTestingOpenRouter,
       saveOpenRouterChanges,

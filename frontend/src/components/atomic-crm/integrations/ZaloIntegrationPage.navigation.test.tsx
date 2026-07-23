@@ -4,20 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
-  apiJson: vi.fn((path: string) => {
-    if (path.endsWith("/zalo/oa/test")) {
-      return Promise.resolve({
-        configured: true,
-        connected: true,
-        missing: [],
-        errors: [],
-        oa_secret_valid: null,
-        oa_refresh_ok: null,
-        oa_token_expired: false,
-      });
-    }
-    if (path.endsWith("/zalo")) {
-      return Promise.resolve({
+  loadSettingsBundle: vi.fn(() =>
+    Promise.resolve({
+      zalo: {
         zalo_bot_token: { configured: false },
         zalo_bot_webhook_secret: { configured: false },
         zalo_oa_app_id: { configured: false, value: "" },
@@ -32,40 +21,52 @@ const mocks = vi.hoisted(() => ({
           last_mismatch_ts: 1_784_732_616,
           consec_failures: 526,
         },
-      });
-    }
-    if (path.endsWith("/minimax")) {
-      return Promise.resolve({
+      },
+      minimax: {
         minimax_api_key: { configured: false },
         minimax_base_url: "",
         minimax_agent_model: "minimax-model",
         minimax_safety_model: "minimax-model",
         minimax_enable: true,
-        llm_default_provider: "minimax",
-      });
-    }
-    if (path.endsWith("/openrouter")) {
-      return Promise.resolve({
+        llm_default_provider: "minimax" as const,
+      },
+      openRouter: {
         openrouter_api_key: { configured: false },
         openrouter_base_url: "",
         openrouter_agent_model: "deepseek/deepseek-v4-flash",
         openrouter_safety_model: "deepseek/deepseek-v4-flash",
         openrouter_digest_model: "deepseek/deepseek-v4-flash",
         openrouter_enable: false,
-        llm_default_provider: "minimax",
-      });
-    }
-    if (path.endsWith("/facebook")) {
-      return Promise.resolve({ enabled: true, accounts: [] });
-    }
-    if (path.startsWith("/api/v1/admin/integrations/facebook/oauth/pages?")) {
-      return Promise.resolve({
-        pages: [{ id: "page-123", name: "Ting Ting Tuyển dụng" }],
-        active_page_id: null,
-      });
-    }
-    return Promise.reject(new Error(`Unexpected API path: ${path}`));
-  }),
+        llm_default_provider: "minimax" as const,
+      },
+    }),
+  ),
+  testOaConnection: vi.fn(() =>
+    Promise.resolve({
+      configured: true,
+      connected: true,
+      missing: [],
+      errors: [],
+      oa_secret_valid: null,
+      oa_refresh_ok: null,
+      oa_token_expired: false,
+    }),
+  ),
+  loadFacebookStatus: vi.fn(() => Promise.resolve({ enabled: true, accounts: [] })),
+  loadFacebookCredentials: vi.fn(() =>
+    Promise.resolve({
+      facebook_app_id: { configured: false, value: null },
+      facebook_app_secret: { configured: false, preview: null },
+      facebook_login_config_id: { configured: false, value: null },
+      facebook_webhook_verify_token: { configured: false, preview: null },
+    }),
+  ),
+  loadFacebookOAuthPages: vi.fn((_flowId: string) =>
+    Promise.resolve({
+      pages: [{ id: "page-123", name: "Ting Ting Tuyển dụng" }],
+      active_page_id: null,
+    }),
+  ),
   isMobile: false,
 }));
 
@@ -76,7 +77,28 @@ vi.mock("ra-core", () => ({
     options?._ ?? key,
 }));
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => mocks.isMobile }));
-vi.mock("../providers/rest/api", () => ({ apiJson: mocks.apiJson }));
+vi.mock("./api", () => ({
+  zaloIntegrationGateway: {
+    loadSettingsBundle: mocks.loadSettingsBundle,
+    saveZaloSettings: vi.fn(),
+    saveMinimaxSettings: vi.fn(),
+    saveOpenRouterSettings: vi.fn(),
+    testBotConnection: vi.fn(),
+    testOaConnection: mocks.testOaConnection,
+    testMinimaxConnection: vi.fn(),
+    testOpenRouterConnection: vi.fn(),
+  },
+  facebookIntegrationGateway: {
+    loadStatus: mocks.loadFacebookStatus,
+    loadCredentials: mocks.loadFacebookCredentials,
+    saveCredentials: vi.fn(),
+    loadOAuthPages: mocks.loadFacebookOAuthPages,
+    startOAuth: vi.fn(),
+    completeOAuth: vi.fn(),
+    testConnection: vi.fn(),
+    disconnect: vi.fn(),
+  },
+}));
 vi.mock("../conversations/InboxIcons", () => ({ InboxIcons: () => null }));
 vi.mock("../personas/PersonaList", () => ({ PersonaList: () => null }));
 vi.mock("../users/UserList", () => ({ UserList: () => null }));
@@ -85,7 +107,11 @@ import { ZaloIntegrationPage } from "./ZaloIntegrationPage";
 
 afterEach(async () => {
   await cleanup();
-  mocks.apiJson.mockClear();
+  mocks.loadSettingsBundle.mockClear();
+  mocks.testOaConnection.mockClear();
+  mocks.loadFacebookStatus.mockClear();
+  mocks.loadFacebookCredentials.mockClear();
+  mocks.loadFacebookOAuthPages.mockClear();
   mocks.notify.mockClear();
   window.history.replaceState(null, "", "/#/settings");
 });
@@ -136,10 +162,8 @@ describe("ZaloIntegrationPage navigation", () => {
       .toBeVisible();
     await expect
       .poll(() =>
-        mocks.apiJson.mock.calls.some(
-          ([path]) =>
-            path ===
-            "/api/v1/admin/integrations/facebook/oauth/pages?flow_id=opaque-flow-123",
+        mocks.loadFacebookOAuthPages.mock.calls.some(
+          ([flowId]) => flowId === "opaque-flow-123",
         ),
       )
       .toBe(true);

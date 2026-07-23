@@ -40,6 +40,7 @@ const manifest = {
   terminology: null,
   capability_ids: [],
   readiness_code: "SETUP_REQUIRED",
+  legacy_workspace: false,
 };
 
 const manifestWithGeneration = (authorityGeneration: number) => ({

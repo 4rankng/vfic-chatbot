@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-07-23
 **Production:** `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM), Docker
 Compose at `/opt/vfic`, Caddy edge.
 
@@ -117,46 +117,29 @@ phase starts reading pinned `PersonaVersion` content. Active-KB publish/rollback
 writers are not yet wired to the installation authority barrier and generation
 advance; that fencing remains required before activation can be enabled.
 
-### 1.2 Dormant capability compiler and generic kernel (Phase 4)
+### 1.2 Fixed static recruitment runtime
 
-Phase 4 adds the code-reviewed composition boundary and domain-neutral records
-needed by later industry packs, without changing the live recruitment runtime:
+The live frontend runtime is intentionally single-tenant and fixed to the
+recruitment product surface:
 
-- The backend capability registry is closed-world source code. Database state
-  may select known pack/capability IDs, but cannot supply modules, imports,
-  prompts, tools, routes, or other executable content. The canonical
-  non-executable `recruitment@1` contract uses schema `1`, kernel ABI `1`, and
-  hash `2a7c602a2e222d14686fca6d86e12da34b0e2ce8ee6b4af32a95af7bd58622d9`.
-  Frontend tests consume the checked backend JSON artifact and reject parity
-  drift before materializing modules.
-- The frontend compiler validates dependencies and rejects unknown or duplicate
-  resources, routes, navigation contributions, dashboard owners, and
-  conversation slots before mounting React Admin. Compiled `Resource` and
-  custom-route elements are direct Admin children. A runtime-generation switch
+- The backend capability registry remains closed-world source code, but the
+  current recruiter console does not fetch executable modules or compile a
+  generic pack at runtime. Browser-visible installation data is limited to the
+  public runtime manifest projection.
+- The frontend boot path mounts one static recruitment runtime bundle
+  (`kernel` + `recruitment` contributions) keyed by
+  `authority_generation`. When that generation changes, the runtime reset path
   abandons the old Query client/store, closes Socket.IO, clears message and
-  adapter state, advances the request epoch, then mounts one fresh generation;
-  stale responses cannot repopulate the new workspace.
-- Migration `0044_generic_contact_case_kernel` adds immutable administrator-
-  authored workflow versions, typed Contacts with account-scoped channel
-  identities, and Cases pinned to a workflow version/checksum. Case stages,
-  transitions, tags, notes, follow-ups, lifecycle, assignment, and bounded
-  supplemental attributes are explicit typed authorities rather than generic
-  operational EAV. Conversations receive only nullable Contact/channel-identity
-  links and projections; there is no inferred Case or Lead backfill.
-- Workflow authoring is available to an authenticated administrator before
-  activation. Generic Contact/Case APIs require authentication, an active
-  installation, and the `conversation` capability. These APIs are therefore
-  dormant while activation remains impossible.
-
-Every shipped pack still declares `runtime_ready=false`. Phase 4 does not attach
-new guards to the live webhook, workers, Socket.IO rooms, provider dispatch, or
-legacy recruitment routers, and it does not change the graph, prompts, safety,
-grounding, or tool behavior. The existing setup-persona wire contract still
-serializes disabled `hot`, `warm`, and `not_interested` follow-up rule keys. That
-recruitment-specific contract is a protected Phase 5 activation blocker: it must
-be replaced or deliberately capability-owned before any readiness flip. Phase 6
-owns recruitment parity extraction, and Phase 7 owns live authority guards and
-the first possible `runtime_ready=true` decision.
+  adapter state, advances the request epoch, then mounts one fresh recruitment
+  generation. Stale responses cannot repopulate the new workspace.
+- Installation lifecycle state currently influences safe runtime metadata and
+  generation resets only. It does not switch the product to another industry,
+  compile arbitrary capability graphs, or enable multi-tenant runtime
+  composition in the browser.
+- Migration `0044_generic_contact_case_kernel` still preserves dormant generic
+  records and APIs on the backend, but those remain outside the live static
+  recruitment console until an explicit future product decision reactivates
+  them.
 
 ### 1.3 Incremental DDD boundary migration
 

@@ -33,43 +33,52 @@ const mocks = vi.hoisted(() => ({
         status: "ACTIVE" | "INACTIVE";
       }
     | Error,
-  apiJson: vi.fn((path: string, options?: ApiOptions): Promise<unknown> => {
-    if (path === "/api/v1/admin/integrations/facebook/credentials") {
-      return Promise.resolve({
-        facebook_app_id: { configured: false, value: null },
-        facebook_app_secret: { configured: false, preview: null },
-        facebook_login_config_id: { configured: false, value: null },
-        facebook_webhook_verify_token: {
-          configured: false,
-          preview: null,
-        },
-      });
-    }
-    if (path === "/api/v1/admin/integrations/facebook") {
-      if (options?.method === "DELETE") {
-        return Promise.resolve({
-          page_id_suffix: "4321",
-          label: "Ting Ting Tuyển dụng",
-          status: "INACTIVE",
-        });
-      }
-      return Promise.resolve({ enabled: true, accounts: mocks.accounts });
-    }
-    if (path.startsWith("/api/v1/admin/integrations/facebook/oauth/pages?")) {
-      return mocks.pageListResult instanceof Error
-        ? Promise.reject(mocks.pageListResult)
-        : Promise.resolve(mocks.pageListResult);
-    }
-    if (path === "/api/v1/admin/integrations/facebook/oauth/complete") {
-      return mocks.completeResult instanceof Error
-        ? Promise.reject(mocks.completeResult)
-        : Promise.resolve(mocks.completeResult);
-    }
-    return Promise.reject(new Error(`Unexpected API path: ${path}`));
-  }),
+  loadStatus: vi.fn(() => Promise.resolve({ enabled: true, accounts: mocks.accounts })),
+  loadCredentials: vi.fn(() =>
+    Promise.resolve({
+      facebook_app_id: { configured: false, value: null },
+      facebook_app_secret: { configured: false, preview: null },
+      facebook_login_config_id: { configured: false, value: null },
+      facebook_webhook_verify_token: {
+        configured: false,
+        preview: null,
+      },
+    }),
+  ),
+  saveCredentials: vi.fn(),
+  loadOAuthPages: vi.fn((_flowId: string) =>
+    mocks.pageListResult instanceof Error
+      ? Promise.reject(mocks.pageListResult)
+      : Promise.resolve(mocks.pageListResult),
+  ),
+  startOAuth: vi.fn(),
+  completeOAuth: vi.fn((_body: ApiOptions["body"]) =>
+    mocks.completeResult instanceof Error
+      ? Promise.reject(mocks.completeResult)
+      : Promise.resolve(mocks.completeResult),
+  ),
+  testConnection: vi.fn(),
+  disconnect: vi.fn(() =>
+    Promise.resolve({
+      page_id_suffix: "4321",
+      label: "Ting Ting Tuyển dụng",
+      status: "INACTIVE",
+    }),
+  ),
 }));
 
-vi.mock("../providers/rest/api", () => ({ apiJson: mocks.apiJson }));
+vi.mock("./api", () => ({
+  facebookIntegrationGateway: {
+    loadStatus: mocks.loadStatus,
+    loadCredentials: mocks.loadCredentials,
+    saveCredentials: mocks.saveCredentials,
+    loadOAuthPages: mocks.loadOAuthPages,
+    startOAuth: mocks.startOAuth,
+    completeOAuth: mocks.completeOAuth,
+    testConnection: mocks.testConnection,
+    disconnect: mocks.disconnect,
+  },
+}));
 
 import { FacebookMessengerIntegrationPage } from "./FacebookMessengerIntegrationPage";
 
@@ -99,7 +108,14 @@ afterEach(async () => {
     label: "Ting Ting Tuyển dụng",
     status: "ACTIVE",
   };
-  mocks.apiJson.mockClear();
+  mocks.loadStatus.mockClear();
+  mocks.loadCredentials.mockClear();
+  mocks.saveCredentials.mockClear();
+  mocks.loadOAuthPages.mockClear();
+  mocks.startOAuth.mockClear();
+  mocks.completeOAuth.mockClear();
+  mocks.testConnection.mockClear();
+  mocks.disconnect.mockClear();
   window.history.replaceState(null, "", "/#/settings");
 });
 
@@ -167,15 +183,13 @@ describe("FacebookMessengerIntegrationPage", () => {
 
     await expect
       .poll(() =>
-        mocks.apiJson.mock.calls.some(
-          ([path, options]) =>
-            path === "/api/v1/admin/integrations/facebook/oauth/complete" &&
-            options?.method === "POST" &&
-            JSON.stringify(options.body) ===
-              JSON.stringify({
-                flow_id: "opaque-flow-123",
-                page_id: "page-123456789",
-              }),
+        mocks.completeOAuth.mock.calls.some(
+          ([body]) =>
+            JSON.stringify(body) ===
+            JSON.stringify({
+              flow_id: "opaque-flow-123",
+              page_id: "page-123456789",
+            }),
         ),
       )
       .toBe(true);
@@ -190,17 +204,13 @@ describe("FacebookMessengerIntegrationPage", () => {
     await expect.element(input).toBeVisible();
     await expect.element(input).toHaveValue("  opaque-manual-flow-id  ");
 
-    expect(
-      mocks.apiJson.mock.calls.some(([path]) => path.includes("oauth/pages")),
-    ).toBe(false);
+    expect(mocks.loadOAuthPages).not.toHaveBeenCalled();
     await screen.getByRole("button", { name: "Tải danh sách Trang" }).click();
 
     await expect
       .poll(() =>
-        mocks.apiJson.mock.calls.some(
-          ([path]) =>
-            path ===
-            "/api/v1/admin/integrations/facebook/oauth/pages?flow_id=opaque-manual-flow-id",
+        mocks.loadOAuthPages.mock.calls.some(
+          ([flowId]) => flowId === "opaque-manual-flow-id",
         ),
       )
       .toBe(true);
@@ -245,17 +255,11 @@ describe("FacebookMessengerIntegrationPage", () => {
     await screen.getByRole("button", { name: "Ngắt kết nối" }).click();
 
     await expect
-      .poll(() =>
-        mocks.apiJson.mock.calls.some(
-          ([path, options]) =>
-            path === "/api/v1/admin/integrations/facebook" &&
-            options?.method === "DELETE",
-        ),
-      )
-      .toBe(true);
-    expect(
-      mocks.apiJson.mock.calls.some(([path]) => path.includes("page_id=")),
-    ).toBe(false);
+      .poll(() => mocks.disconnect.mock.calls.length)
+      .toBe(1);
+    expect(mocks.disconnect.mock.calls.every((call) => call.length === 0)).toBe(
+      true,
+    );
   });
 
   it("shows safe generic Vietnamese copy for an unknown OAuth callback error", async () => {

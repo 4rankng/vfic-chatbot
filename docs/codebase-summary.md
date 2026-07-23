@@ -1,7 +1,7 @@
 # Codebase Summary
 
 **Repo:** `git@github.com:4rankng/ChatBotN8N.git` (branch `main`)
-**Last updated:** 2026-07-18
+**Last updated:** 2026-07-23
 
 A monorepo with two deployable subprojects (`backend/`, `frontend/`) plus
 root-level ops scripts. DockerHub images: `franknguyenvd/vfic-backend:latest`
@@ -52,13 +52,13 @@ ChatBot/
 ├── frontend/             React Admin SPA (~48.6k LOC TS/TSX)
 │   ├── src/
 │   │   ├── main.tsx      StrictMode + vite:preloadError guard
-│   │   ├── App.tsx       direct recruitment console + runtime compilation recovery
+│   │   ├── App.tsx       fixed static recruitment console bootstrap
 │   │   ├── components/
 │   │   │   ├── admin/            vendored shadcn-admin-kit (mutable dep)
 │   │   │   ├── ui/               vendored Shadcn primitives (mutable dep)
 │   │   │   └── atomic-crm/       THE VFIC app
-│   │   │       ├── root/             compiled <CRM> composition + generation reset
-│   │   │       ├── capabilities/     static compiler/registry + recruitment adapter
+│   │   │       ├── root/             fixed recruitment <CRM> shell + generation reset
+│   │   │       ├── capabilities/     static recruitment runtime bundle modules
 │   │   │       ├── installation/     public runtime bootstrap clients/context
 │   │   │       ├── workflows/        blank immutable workflow authoring
 │   │   │       ├── contacts/, cases/ dormant generic React Admin resources
@@ -123,8 +123,8 @@ ChatBot/
 | `components/admin/` | **Vendored mutable dependency.** shadcn-admin-kit: `admin.tsx`, `data-table.tsx`, `filter-form.tsx`, `simple-form-iterator.tsx`, `file-input.tsx`. |
 | `components/ui/` | **Vendored mutable dependency.** Shadcn UI + Radix primitives. |
 | `components/atomic-crm/` | **The VFIC app.** All product code lives here. |
-| `components/atomic-crm/root/` | `<CRM>` receives one compiled runtime bundle and renders direct React Admin resources/routes; reset code owns Query/store/socket/message generation teardown. |
-| `components/atomic-crm/capabilities/` | Static safe module registry, strict pack compiler, canonical backend parity check, and delegation-only recruitment composition. |
+| `components/atomic-crm/root/` | `<CRM>` renders the fixed static recruitment runtime bundle; reset code owns Query/store/socket/message generation teardown keyed by authority generation. |
+| `components/atomic-crm/capabilities/` | Static single-tenant recruitment runtime modules (kernel + recruitment contributions). There is no live generic runtime compiler or backend-selected import path. |
 | `components/atomic-crm/installation/` | Public runtime manifest parsing and lifecycle context/bootstrap. It refreshes safe runtime metadata but does not gate the authenticated recruiter console behind an installer. |
 | `components/atomic-crm/providers/` | `dataProvider.ts` (react-admin verb mapping), `rest/api.ts` (HTTP client + JWT + 401 refresh), `authProvider.ts`, `i18nProvider.ts` (Vietnamese-only). |
 | `components/atomic-crm/conversations/` | Inbox: ConversationList, ChatThread (virtua VList), ConversationContextPanel, WorkspaceShell + WorkspaceIconRail, chatRepository, useConversationRealtime, Zustand `messageStore.ts`. CSS barrel `inbox.css`. |
@@ -189,9 +189,9 @@ ChatBot/
 | `backend/scripts/benchmark_models.py` | LLM latency/throughput benchmark. |
 | `backend/scripts/benchmark_rag.py` | Golden-case RAG retrieval scoring. |
 | `frontend/src/main.tsx` | StrictMode + `vite:preloadError` sessionStorage-guarded force-reload. |
-| `frontend/src/App.tsx` | Opens the static recruitment console for every runtime lifecycle; compiles one runtime generation fail-closed and offers recovery if console compilation fails. |
-| `frontend/src/components/atomic-crm/root/CRM.tsx` | Renders compiled direct React Admin Resources, CustomRoutes, dashboard, navigation, providers, and capability slots. |
-| `frontend/src/components/atomic-crm/capabilities/compile-capabilities.ts` | Pure compatibility/collision compiler; no database-selected imports. |
+| `frontend/src/App.tsx` | Opens the fixed static recruitment console for every runtime lifecycle and reloads safely if the bundle cannot initialize. |
+| `frontend/src/components/atomic-crm/root/CRM.tsx` | Renders the static recruitment runtime's direct React Admin Resources, CustomRoutes, dashboard, navigation, and conversation slots. |
+| `frontend/src/components/atomic-crm/capabilities/static-recruitment-runtime.ts` | Builds the fixed static recruitment runtime bundle keyed by installation authority generation. |
 | `frontend/src/components/atomic-crm/root/reset-runtime-state.ts` | Generation-owned Query/store/Socket.IO/Zustand/adapter teardown and stale-response isolation. |
 | `frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.tsx` | Project knowledge editor for direct-context pages and per-category RAG replacement. |
 | `frontend/src/components/atomic-crm/providers/rest/api.ts` | HTTP client; JWT in `Authorization: Bearer`; `apiRequest()` 401 retry via `refreshOnce()`; `friendlyApiMessage()` Vietnamese i18n. |

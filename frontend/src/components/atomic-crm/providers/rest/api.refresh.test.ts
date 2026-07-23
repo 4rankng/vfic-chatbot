@@ -105,4 +105,53 @@ describe("apiJson 401 refresh-retry", () => {
     // original (401) -> refresh (401, fails) -> no retry. 2 calls total.
     expect(count).toBe(2);
   });
+
+  it("coalesces concurrent 401 refresh attempts into a single refresh request", async () => {
+    setTokens("expired-access", "good-refresh");
+    let refreshCalls = 0;
+    let protectedCalls = 0;
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = typeof input === "string" ? input : input.toString();
+      const headers = new Headers(init?.headers);
+      if (url.includes("/auth/refresh")) {
+        refreshCalls += 1;
+        await Promise.resolve();
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: "fresh-access",
+            refresh_token: "fresh-refresh",
+          }),
+        } as unknown as Response;
+      }
+      protectedCalls += 1;
+      if (headers.get("Authorization")?.includes("expired-access")) {
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({}),
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      } as unknown as Response;
+    }) as unknown as typeof globalThis.fetch;
+
+    const [first, second] = await Promise.all([
+      apiJson<{ ok: boolean }>("/api/v1/leads"),
+      apiJson<{ ok: boolean }>("/api/v1/conversations"),
+    ]);
+
+    expect(first).toEqual({ ok: true });
+    expect(second).toEqual({ ok: true });
+    expect(refreshCalls).toBe(1);
+    expect(protectedCalls).toBe(4);
+    expect(getAccessToken()).toBe("fresh-access");
+  });
 });

@@ -9,6 +9,7 @@ const { mockApiUrl } = vi.hoisted(() => ({
 vi.mock("../providers/rest/api", () => ({ apiUrl: mockApiUrl }));
 
 import { fetchRuntimeManifest, parseRuntimeManifest } from "./runtime-manifest";
+import { loadRuntimeManifest } from "./runtime-manifest-application";
 
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
@@ -267,5 +268,20 @@ describe("fetchRuntimeManifest", () => {
 
     expect(requestSignal?.aborted).toBe(true);
     await expect(request).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+describe("loadRuntimeManifest", () => {
+  it("validates the transport response outside the browser adapter", async () => {
+    await expect(
+      loadRuntimeManifest({
+        readRuntimeManifest: async () => ({
+          ok: true,
+          status: 200,
+          cacheControl: "no-store",
+          json: async () => activeManifest(),
+        }),
+      }),
+    ).resolves.toEqual(activeManifest());
   });
 });

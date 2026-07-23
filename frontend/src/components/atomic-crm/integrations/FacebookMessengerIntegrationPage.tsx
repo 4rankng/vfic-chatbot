@@ -18,72 +18,20 @@ import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiJson } from "../providers/rest/api";
 import "../conversations/inbox.css";
 import "./settings.css";
-
-// ─── API types (mirror the backend Pydantic schemas) ───────────────────────
-
-type FacebookAccountStatus = {
-  page_id_suffix: string;
-  label: string;
-  status: "ACTIVE" | "INACTIVE";
-};
-
-type FacebookIntegrationStatus = {
-  enabled: boolean;
-  accounts: FacebookAccountStatus[];
-};
-
-type FacebookOAuthStart = {
-  authorization_url: string;
-};
-
-type FacebookPage = {
-  id: string;
-  name: string;
-};
-
-type FacebookPageList = {
-  pages: FacebookPage[];
-  active_page_id: string | null;
-};
-
-type FacebookOAuthCompleteRequest = {
-  flow_id: string;
-  page_id: string;
-};
-
-type FacebookChannelTest = {
-  healthy: boolean;
-  error: string | null;
-};
-
-// App-level Meta credentials (configurable via the admin UI). Mirrors the
-// backend SecretStatus / PlainStatus shape.
-type SecretStatus = {
-  configured: boolean;
-  preview: string | null;
-};
-
-type PlainStatus = {
-  configured: boolean;
-  value: string | null;
-};
-
-type FacebookCredentials = {
-  facebook_app_id: PlainStatus;
-  facebook_app_secret: SecretStatus;
-  facebook_login_config_id: PlainStatus;
-  facebook_webhook_verify_token: SecretStatus;
-};
-
-type FacebookCredentialsUpdate = {
-  facebook_app_id?: string;
-  facebook_app_secret?: string;
-  facebook_login_config_id?: string;
-  facebook_webhook_verify_token?: string;
-};
+import {
+  facebookIntegrationGateway,
+  type FacebookAccountStatus,
+  type FacebookChannelTest,
+  type FacebookCredentials,
+  type FacebookCredentialsUpdate,
+  type FacebookIntegrationStatus,
+  type FacebookOAuthCompleteRequest,
+  type FacebookOAuthStart,
+  type FacebookPageList,
+} from "./api";
+import { consumeFacebookOAuthCallback } from "./facebook-oauth-callback";
 
 type CredentialsFormState = {
   facebook_app_id: string;
@@ -97,67 +45,6 @@ const EMPTY_CREDENTIALS_FORM: CredentialsFormState = {
   facebook_app_secret: "",
   facebook_login_config_id: "",
   facebook_webhook_verify_token: "",
-};
-
-const FACEBOOK_OAUTH_CALLBACK_KEYS = [
-  "facebook_oauth_status",
-  "facebook_oauth_flow_id",
-  "facebook_oauth_error",
-] as const;
-
-const FACEBOOK_OAUTH_ERROR_MESSAGES: Readonly<Record<string, string>> = {
-  invalid_state:
-    "Phiên kết nối không hợp lệ hoặc đã hết hạn. Vui lòng kết nối lại.",
-  invalid_admin: "Tài khoản quản trị không còn hợp lệ. Vui lòng đăng nhập lại.",
-  session_changed:
-    "Phiên đăng nhập đã thay đổi. Vui lòng đăng nhập và kết nối lại.",
-  missing_code: "Facebook không trả về mã ủy quyền. Vui lòng thử kết nối lại.",
-  exchange_failed:
-    "Không thể hoàn tất ủy quyền Facebook. Vui lòng thử kết nối lại.",
-  no_pages: "Không tìm thấy Trang Facebook có thể kết nối.",
-};
-
-const GENERIC_OAUTH_ERROR =
-  "Không thể hoàn tất kết nối Facebook. Vui lòng thử lại.";
-
-type FacebookOAuthCallback = {
-  flowId: string | null;
-  errorMessage: string | null;
-};
-
-const consumeFacebookOAuthCallback = (): FacebookOAuthCallback | null => {
-  const hash = window.location.hash;
-  const queryIndex = hash.indexOf("?");
-  if (queryIndex === -1) return null;
-
-  const hashPath = hash.slice(0, queryIndex);
-  const params = new URLSearchParams(hash.slice(queryIndex + 1));
-  if (!FACEBOOK_OAUTH_CALLBACK_KEYS.some((key) => params.has(key))) return null;
-
-  const status = params.get("facebook_oauth_status");
-  const callbackFlowId = params.get("facebook_oauth_flow_id")?.trim() ?? "";
-  const errorCode = params.get("facebook_oauth_error") ?? "";
-
-  FACEBOOK_OAUTH_CALLBACK_KEYS.forEach((key) => params.delete(key));
-  const cleanQuery = params.toString();
-  const cleanHash = cleanQuery ? `${hashPath}?${cleanQuery}` : hashPath;
-  window.history.replaceState(
-    window.history.state,
-    "",
-    `${window.location.pathname}${window.location.search}${cleanHash}`,
-  );
-
-  if (status === "pending_selection" && callbackFlowId) {
-    return { flowId: callbackFlowId, errorMessage: null };
-  }
-  if (status === "error") {
-    return {
-      flowId: null,
-      errorMessage:
-        FACEBOOK_OAUTH_ERROR_MESSAGES[errorCode] ?? GENERIC_OAUTH_ERROR,
-    };
-  }
-  return { flowId: null, errorMessage: GENERIC_OAUTH_ERROR };
 };
 
 // ─── Meta App credentials card ─────────────────────────────────────────────
@@ -260,8 +147,13 @@ export const FacebookMessengerIntegrationPage = () => {
   );
 
   useEffect(() => {
-    const callback = consumeFacebookOAuthCallback();
+    const callback = consumeFacebookOAuthCallback(window.location.hash);
     if (!callback) return;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${window.location.search}${callback.cleanHash}`,
+    );
     setPendingFlowId(callback.flowId);
     setError(callback.errorMessage);
   }, []);
@@ -269,18 +161,14 @@ export const FacebookMessengerIntegrationPage = () => {
   // Status: active + archived Page accounts.
   const { data: status } = useQuery<FacebookIntegrationStatus>({
     queryKey: ["facebook-integration-status"],
-    queryFn: () =>
-      apiJson<FacebookIntegrationStatus>("/api/v1/admin/integrations/facebook"),
+    queryFn: () => facebookIntegrationGateway.loadStatus(),
     staleTime: 30_000,
   });
 
   // App-level Meta credentials (DB-first, env fallback on the backend).
   const { data: credentials } = useQuery<FacebookCredentials>({
     queryKey: ["facebook-credentials"],
-    queryFn: () =>
-      apiJson<FacebookCredentials>(
-        "/api/v1/admin/integrations/facebook/credentials",
-      ),
+    queryFn: () => facebookIntegrationGateway.loadCredentials(),
     staleTime: 30_000,
   });
 
@@ -289,11 +177,7 @@ export const FacebookMessengerIntegrationPage = () => {
     Error,
     FacebookCredentialsUpdate
   >({
-    mutationFn: (body) =>
-      apiJson<FacebookCredentials>(
-        "/api/v1/admin/integrations/facebook/credentials",
-        { method: "PUT", body },
-      ),
+    mutationFn: (body) => facebookIntegrationGateway.saveCredentials(body),
     onSuccess: (data) => {
       setError(null);
       // Reset the form so secret fields go back to "leave blank to keep" mode.
@@ -364,22 +248,14 @@ export const FacebookMessengerIntegrationPage = () => {
     useQuery<FacebookPageList>({
       queryKey: ["facebook-oauth-pages", pendingFlowId],
       queryFn: () =>
-        apiJson<FacebookPageList>(
-          `/api/v1/admin/integrations/facebook/oauth/pages?flow_id=${encodeURIComponent(pendingFlowId ?? "")}`,
-        ),
+        facebookIntegrationGateway.loadOAuthPages(pendingFlowId ?? ""),
       enabled: pendingFlowId !== null,
       staleTime: 0,
     });
 
   // Step 1: start OAuth — get the authorization URL and open it.
   const startOAuth = useMutation<FacebookOAuthStart, Error>({
-    mutationFn: () =>
-      apiJson<FacebookOAuthStart>(
-        "/api/v1/admin/integrations/facebook/oauth/start",
-        {
-          method: "POST",
-        },
-      ),
+    mutationFn: () => facebookIntegrationGateway.startOAuth(),
     onSuccess: (data) => {
       setError(null);
       // Open the official Facebook authorization URL. The callback redirects
@@ -397,11 +273,7 @@ export const FacebookMessengerIntegrationPage = () => {
     Error,
     FacebookOAuthCompleteRequest
   >({
-    mutationFn: (body) =>
-      apiJson<FacebookAccountStatus>(
-        "/api/v1/admin/integrations/facebook/oauth/complete",
-        { method: "POST", body },
-      ),
+    mutationFn: (body) => facebookIntegrationGateway.completeOAuth(body),
     onSuccess: () => {
       setPendingFlowId(null);
       setSelectedPageId(null);
@@ -419,18 +291,12 @@ export const FacebookMessengerIntegrationPage = () => {
 
   // Test the active connection.
   const testConnection = useMutation<FacebookChannelTest, Error>({
-    mutationFn: () =>
-      apiJson<FacebookChannelTest>("/api/v1/admin/integrations/facebook/test", {
-        method: "POST",
-      }),
+    mutationFn: () => facebookIntegrationGateway.testConnection(),
   });
 
   // Disconnect a Page (marks inactive; history preserved).
   const disconnect = useMutation<FacebookAccountStatus, Error, void>({
-    mutationFn: () =>
-      apiJson<FacebookAccountStatus>("/api/v1/admin/integrations/facebook", {
-        method: "DELETE",
-      }),
+    mutationFn: () => facebookIntegrationGateway.disconnect(),
     onSuccess: () => {
       setError(null);
       queryClient.invalidateQueries({
