@@ -8,8 +8,7 @@ Covers:
 - ``enqueue_outbox``: insert + upsert-on-conflict semantics
 - ``OutboxStatus`` enum values match the migration's CHECK constraint
 - ``record_bot_outcome`` writes an outbox row when channel+payload provided
-- ``record_bot_outcome`` skips the outbox when channel is None (legacy callers)
-- ``_detect_channel`` infers zalo_bot vs zalo_oa from the sender class
+- ``record_bot_outcome`` skips the outbox when no delivery channel is requested
 - ``_build_outbox_payload`` includes quote_message_id only when present
 """
 
@@ -209,34 +208,7 @@ async def test_count_by_status_empty_returns_empty_dict():
     assert counts == {}
 
 
-# ─── runner helpers: _detect_channel + _build_outbox_payload ─────────────────
-
-
-def test_detect_channel_zalo_bot():
-    from app.graph.runner import _detect_channel
-
-    class ZaloBotSender:
-        pass
-
-    assert _detect_channel(ZaloBotSender()) == "zalo_bot"
-
-
-def test_detect_channel_zalo_oa():
-    from app.graph.runner import _detect_channel
-
-    class ZaloOASender:
-        pass
-
-    assert _detect_channel(ZaloOASender()) == "zalo_oa"
-
-
-def test_detect_channel_unknown_defaults_to_bot():
-    from app.graph.runner import _detect_channel
-
-    class SomeOtherSender:
-        pass
-
-    assert _detect_channel(SomeOtherSender()) == "zalo_bot"
+# ─── runner helper: _build_outbox_payload ────────────────────────────────────
 
 
 def test_build_outbox_payload_includes_quote_when_present():

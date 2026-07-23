@@ -105,11 +105,6 @@ def _channel_for_conversation(conv) -> str:
     return "zalo_oa" if getattr(conv, "zalo_channel", "bot") == "oa" else "zalo_bot"
 
 
-def _detect_channel(zalo) -> str:
-    """Compatibility helper for legacy callers without a Conversation row."""
-    return "zalo_oa" if "OA" in type(zalo).__name__ else "zalo_bot"
-
-
 def _build_outbox_payload(chat_id: str, text: str, quote_message_id: str | None) -> dict:
     """Build the Zalo send payload recorded in the outbox.
 
