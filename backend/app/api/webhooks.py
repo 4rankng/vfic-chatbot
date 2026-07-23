@@ -23,10 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.composition.conversation_messaging import run_zalo_ingress
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.installation.service import InstallationService
 from app.services.slo_service import record_webhook_ack_ms
-from app.services.webhook import ZaloWebhookService
 from app.workers.chatbot_worker import enqueue_chat_run
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ async def zalo_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> 
     # Pass the DB-resolved bot token so the fire-and-forget typing indicator uses
     # the live token (the env ZALO_BOT_TOKEN is stale; resolve_zalo wins).
     runtime_authority = await _runtime_authority_or_inactive(db, channel="bot")
-    result = await ZaloWebhookService.handle(
+    result = await run_zalo_ingress(
         db,
         payload,
         enqueue=enqueue_chat_run,
@@ -123,7 +123,7 @@ async def zalo_oa_webhook(request: Request, db: AsyncSession = Depends(get_db)) 
     # cutover when a dedicated signing secret is available.
 
     runtime_authority = await _runtime_authority_or_inactive(db, channel="oa")
-    result = await ZaloWebhookService.handle(
+    result = await run_zalo_ingress(
         db,
         payload,
         enqueue=enqueue_chat_run,

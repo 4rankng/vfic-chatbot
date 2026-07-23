@@ -63,13 +63,6 @@
     "count": 1
   },
   {
-    "category": "outbox_boundary",
-    "file": "app/workers/outbound_dispatch_worker.py",
-    "scope": "_dispatch_pending",
-    "call": "dispatch_outbox",
-    "count": 1
-  },
-  {
     "category": "provider_boundary",
     "file": "app/graph/proactive.py",
     "scope": "run_proactive_turn",
@@ -179,13 +172,6 @@
     "file": "app/services/webhook.py",
     "scope": "handle",
     "call": "enqueue",
-    "count": 1
-  },
-  {
-    "category": "queue_producer",
-    "file": "app/services/webhook.py",
-    "scope": "handle",
-    "call": "enqueue_enrich_oa_profile",
     "count": 1
   },
   {

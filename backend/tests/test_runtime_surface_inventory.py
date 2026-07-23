@@ -60,15 +60,18 @@ EXPECTED_ROUTE_COUNTS = {
 }
 EXPECTED_ROUTE_INVENTORY_SHA256 = "3fecf58e9c1f3e94b0b692db4564e8e1cef6d94f57c7a5143adf09ae39737fec"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
-    "outbox_boundary": 10,
+    # Recovery dispatch moved behind the conversation/messaging application port.
+    "outbox_boundary": 9,
     "provider_boundary": 75,  # identity lookup moved behind an infrastructure gateway
     # Three service-owned worker calls moved behind the project/knowledge
     # application scheduler port; queue names and durable worker paths are unchanged.
     # +1 queue_producer: single-page sheet sync now enqueues direct-context indexing
     # so sheet-sourced DIRECT_CONTEXT content participates in cross-project retrieval.
-    "queue_producer": 33,
+    # OA profile enrichment moved from the compatibility service to composition,
+    # removing one service-owned worker edge.
+    "queue_producer": 32,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "dd6705c3f349522d40f852f73b2d9353731d59b9d5f3a9d2cf4f0831eaa79915"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "dd909b443433e9b8d084d945dfff6b3f7f6c0b70fa0d9c3f62dddbeed6e81ab1"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

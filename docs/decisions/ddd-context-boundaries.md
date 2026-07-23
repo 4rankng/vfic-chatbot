@@ -104,8 +104,8 @@ remain subject to code review.
 ## Frozen Runtime Contracts
 
 The executable inventory in `backend/tests/test_runtime_surface_inventory.py`
-is the detailed source of truth: 172 HTTP endpoints and 41 named queue/outbox/
-provider call records (117 under the broad detector) are classified and hashed.
+is the detailed source of truth: 172 HTTP endpoints and 40 named queue/outbox/
+provider call records (115 under the broad detector) are classified and hashed.
 Any route or dispatch change requires an explicit snapshot review.
 
 - Queues: `webhook_high`, `persistence_low`, `ingest`, and `followup`; RQ module

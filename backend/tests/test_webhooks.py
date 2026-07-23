@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
 import hashlib
 import json
 import uuid
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -54,7 +54,11 @@ async def test_webhook_logs_never_include_candidate_body_or_signature(monkeypatc
     cfg = SimpleNamespace(oa_secret_key="oa-secret", oa_app_id="app-1")
     settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", AsyncMock(return_value={"status": "ignored"}))
+    monkeypatch.setattr(
+        webhooks,
+        "run_zalo_ingress",
+        AsyncMock(return_value={"status": "ignored"}),
+    )
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
 
     with caplog.at_level("INFO", logger="app.api.webhooks"):
@@ -78,7 +82,7 @@ async def test_bot_webhook_dispatches_turn_through_rq(monkeypatch):
     settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
     handle = AsyncMock(return_value={"status": "start_failed"})
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "run_zalo_ingress", handle)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=_runtime_authority()))
 
     response = await webhooks.zalo_webhook(
@@ -92,18 +96,31 @@ async def test_bot_webhook_dispatches_turn_through_rq(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_oa_webhook_dispatches_turn_through_rq(monkeypatch):
+async def test_valid_oa_webhook_preserves_start_failed_retry_mapping(monkeypatch):
     from app.api import webhooks
+    from app.services.zalo_oa_signature import compute_mac
 
-    cfg = SimpleNamespace(oa_secret_key="")
+    app_id, secret, ts = "app-1", "oa-secret", "1700000000"
+    raw = json.dumps(
+        {
+            "event_name": "user_send_text",
+            "app_id": app_id,
+            "timestamp": ts,
+        }
+    ).encode()
+    digest = compute_mac(app_id, raw.decode("utf-8"), ts, secret)
+    cfg = SimpleNamespace(oa_secret_key=secret, oa_app_id=app_id)
     settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
     handle = AsyncMock(return_value={"status": "start_failed"})
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "run_zalo_ingress", handle)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=_runtime_authority()))
 
     response = await webhooks.zalo_oa_webhook(
-        FakeRequest(json.dumps({"event_name": "user_send_text"}).encode()),
+        FakeRequest(
+            raw,
+            headers={"x-zevent-signature": f"sha256={digest}", "x-zevent-timestamp": ts},
+        ),
         db=AsyncMock(),
     )
 
@@ -118,7 +135,7 @@ async def test_oa_webhook_accepts_unsigned_empty_registration_probe(monkeypatch)
     settings_service = MagicMock()
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", settings_service)
     handle = AsyncMock(return_value={"status": "queued"})
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "run_zalo_ingress", handle)
 
     response = await webhooks.zalo_oa_webhook(FakeRequest(b"{}"), db=AsyncMock())
 
@@ -140,8 +157,9 @@ async def test_oa_webhook_processes_real_event_without_signature_check(monkeypat
     settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
     handle = AsyncMock(return_value={"status": "queued"})
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
-    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=_runtime_authority()))
+    monkeypatch.setattr(webhooks, "run_zalo_ingress", handle)
+    runtime_lookup = AsyncMock(return_value=_runtime_authority())
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", runtime_lookup)
     raw = json.dumps(
         {
             "event_name": "user_send_text",
@@ -181,7 +199,7 @@ async def test_oa_webhook_dispatches_verifiably_signed_event(monkeypatch):
     settings_service = SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg))
     monkeypatch.setattr(webhooks, "IntegrationSettingsService", lambda _db: settings_service)
     handle = AsyncMock(return_value={"status": "queued"})
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "run_zalo_ingress", handle)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=_runtime_authority()))
 
     req = FakeRequest(
@@ -192,13 +210,15 @@ async def test_oa_webhook_dispatches_verifiably_signed_event(monkeypatch):
 
     assert response.status_code == 200
     handle.assert_awaited_once()
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+    assert handle.await_args.kwargs["runtime_authority"] == _runtime_authority()
 
 
 @pytest.mark.asyncio
 async def test_zalo_webhook_returns_400_for_malformed_json():
     from app.api.webhooks import zalo_webhook
 
-    with patch("app.api.webhooks.ZaloWebhookService.handle", new_callable=AsyncMock) as handle:
+    with patch("app.api.webhooks.run_zalo_ingress", new_callable=AsyncMock) as handle:
         response = await zalo_webhook(FakeRequest(b"{not-json"), db=AsyncMock())
 
     assert response.status_code == 400
@@ -218,7 +238,7 @@ async def test_verified_webhook_dispatches_without_runtime_authority(monkeypatch
     inactive = AsyncMock(return_value=None)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", inactive)
     handle = AsyncMock(return_value={"status": "processing"})
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "run_zalo_ingress", handle)
 
     response = await webhooks.zalo_webhook(
         FakeRequest(json.dumps({"message": {"text": "Xin chào"}}).encode()),
@@ -245,7 +265,7 @@ async def test_oa_webhook_dispatches_without_runtime_authority(monkeypatch):
     inactive = AsyncMock(return_value=None)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", inactive)
     handle = AsyncMock(return_value={"status": "processing"})
-    monkeypatch.setattr(webhooks.ZaloWebhookService, "handle", handle)
+    monkeypatch.setattr(webhooks, "run_zalo_ingress", handle)
 
     response = await webhooks.zalo_oa_webhook(
         FakeRequest(json.dumps({"event_name": "user_send_text"}).encode()),
@@ -896,11 +916,6 @@ async def test_oa_text_message_starts_bot_turn(monkeypatch):
     def _fake_enqueue_enrich(job):
         enrich_calls.append(job)
 
-    monkeypatch.setattr(
-        "app.workers.persistence_worker.enqueue_enrich_oa_profile",
-        _fake_enqueue_enrich,
-    )
-
     db = MagicMock()
     db.refresh = AsyncMock()
     enqueued: list[dict] = []
@@ -918,6 +933,7 @@ async def test_oa_text_message_starts_bot_turn(monkeypatch):
         },
         enqueue=enqueue,
         channel="oa",
+        enrich_oa_profile=_fake_enqueue_enrich,
     )
 
     assert result["status"] == "processing"

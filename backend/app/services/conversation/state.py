@@ -14,6 +14,16 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, or_, select, text, update
 
+from app.conversation_messaging.application.ports import (
+    ConversationEventsPort,
+    DeliveryResultPort,
+)
+from app.conversation_messaging.domain.delivery import delivery_rank, receipt_advances
+from app.conversation_messaging.domain.ownership import (
+    lock_owner_matches as _lock_owner_matches,
+    lock_still_live as _lock_still_live,
+    normalize_lock_owner as _normalize_lock_owner,
+)
 from app.core.config import PROACTIVE_OPTOUT_PHRASES, get_settings
 from app.schemas.bot_run import parse_decision_trace
 from app.models.conversation import (
@@ -30,7 +40,6 @@ from app.models.conversation import (
 from app.models.user import Role, User
 from app.services.audit_service import record_audit
 from app.shared.application.outbound import OutboundTelemetry, is_ambiguous_send
-from app.services.zalo_bot_service import SendResult
 
 _settings = get_settings()
 _SEMI_AUTO_INACTIVITY = timedelta(minutes=5)
@@ -40,22 +49,6 @@ logger = logging.getLogger(__name__)
 
 def _delivery_status_for_send_error(error_class: str | None, *, ok: bool):
     return DeliveryStatus.SEND_UNKNOWN if is_ambiguous_send(error_class, ok=ok) else None
-
-# Forward-only delivery progression for receipt handling (READ > DELIVERED > SENT).
-# PENDING/SENDING/SEND_UNKNOWN/FAILED/SUPPRESSED sit at 0 so a receipt never revives a
-# non-sent row (SENDING is a transient pre-send claim, not a delivered state;
-# SEND_UNKNOWN is an ambiguous-send terminal state, also non-revivable).
-_DELIVERY_RANK = {
-    DeliveryStatus.PENDING: 0,
-    DeliveryStatus.SENDING: 0,
-    DeliveryStatus.SEND_UNKNOWN: 0,
-    DeliveryStatus.FAILED: 0,
-    DeliveryStatus.SUPPRESSED: 0,
-    DeliveryStatus.SENT: 1,
-    DeliveryStatus.DELIVERED: 2,
-    DeliveryStatus.READ: 3,
-}
-
 
 class ConversationConflict(Exception):
     """Raised when a recruiter tries to take over a conversation owned by another."""
@@ -67,31 +60,6 @@ class ConversationConflict(Exception):
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _normalize_lock_owner(lock_owner: uuid.UUID | str | None) -> uuid.UUID | None:
-    if lock_owner is None:
-        return None
-    if isinstance(lock_owner, uuid.UUID):
-        return lock_owner
-    return uuid.UUID(str(lock_owner))
-
-
-def _lock_owner_matches(current: uuid.UUID | str | None, expected: uuid.UUID | str | None) -> bool:
-    expected_owner = _normalize_lock_owner(expected)
-    if expected_owner is None:
-        return True
-    if current is None:
-        return False
-    return str(current) == str(expected_owner)
-
-
-def _lock_still_live(locked_until: datetime | None) -> bool:
-    if locked_until is None:
-        return False
-    if locked_until.tzinfo is None:
-        locked_until = locked_until.replace(tzinfo=timezone.utc)
-    return locked_until > utcnow()
 
 
 async def _fetch_owner_name(db, conv: Conversation) -> str | None:
@@ -118,7 +86,7 @@ class ConversationState:
     rules.
     """
 
-    def __init__(self, db, repo, events) -> None:
+    def __init__(self, db, repo, events: ConversationEventsPort) -> None:
         self.db = db
         self.repo = repo
         self.events = events
@@ -725,8 +693,8 @@ class ConversationState:
         if matched_pending and pending_msg is not None:
             resolved_delivery_status = (
                 pending_msg.delivery_status
-                if _DELIVERY_RANK.get(pending_msg.delivery_status, 0)
-                > _DELIVERY_RANK.get(delivery_status, 0)
+                if delivery_rank(pending_msg.delivery_status)
+                > delivery_rank(delivery_status)
                 else delivery_status
             )
             pending_msg.body = reply
@@ -734,8 +702,8 @@ class ConversationState:
             pending_msg.delivery_status = resolved_delivery_status
             pending_msg.external_error = (
                 None
-                if _DELIVERY_RANK.get(resolved_delivery_status, 0)
-                >= _DELIVERY_RANK[DeliveryStatus.SENT]
+                if delivery_rank(resolved_delivery_status)
+                >= delivery_rank(DeliveryStatus.SENT)
                 else external_error
             )
             if zalo_message_id:
@@ -773,9 +741,9 @@ class ConversationState:
                 conv.bot_locked_until = None
                 conv.bot_lock_owner = None
                 conv.bot_lock_heartbeat_at = None
-        if _DELIVERY_RANK.get(resolved_delivery_status, 0) >= _DELIVERY_RANK[
+        if delivery_rank(resolved_delivery_status) >= delivery_rank(
             DeliveryStatus.SENT
-        ]:
+        ):
             conv.last_outbound_at = utcnow()
         # Bump the strict monotonic seq for every bot outcome (the key delta vs
         # `version`, which intentionally skips bot outcomes). The no-owner branch
@@ -792,8 +760,8 @@ class ConversationState:
 
             outbox_status = (
                 OutboxStatus.SENT
-                if _DELIVERY_RANK.get(resolved_delivery_status, 0)
-                >= _DELIVERY_RANK[DeliveryStatus.SENT]
+                if delivery_rank(resolved_delivery_status)
+                >= delivery_rank(DeliveryStatus.SENT)
                 else OutboxStatus.SEND_UNKNOWN
                 if resolved_delivery_status == DeliveryStatus.SEND_UNKNOWN
                 else OutboxStatus.FAILED
@@ -919,7 +887,7 @@ class ConversationState:
         conv: Conversation,
         *,
         message: str,
-        result: SendResult,
+        result: DeliveryResultPort,
         lock_owner: uuid.UUID | str | None = None,
         pending_message_id: int | None = None,
         outbox_channel: str | None = None,
@@ -1315,7 +1283,7 @@ class ConversationState:
         return conv
 
     async def record_recruiter_message(
-        self, conv: Conversation, recruiter: User, body: str, result: SendResult
+        self, conv: Conversation, recruiter: User, body: str, result: DeliveryResultPort
     ) -> Message:
         msg = Message(
             conversation_id=conv.id,
@@ -1663,10 +1631,10 @@ class ConversationState:
         )
         moved: list[Message] = []
         for msg in result.all():
-            if _DELIVERY_RANK.get(msg.delivery_status, 0) < _DELIVERY_RANK[target]:
+            if receipt_advances(msg.delivery_status, target):
                 msg.delivery_status = target
                 moved.append(msg)
-        if _DELIVERY_RANK[DeliveryStatus.SEND_UNKNOWN] < _DELIVERY_RANK[target]:
+        if receipt_advances(DeliveryStatus.SEND_UNKNOWN, target):
             # Id-less SEND_UNKNOWN rows can never match the query above. They are
             # disjoint from the id-matched set (a row cannot have both a non-null
             # id-in-ids and a NULL id), so no message is double-counted here.

@@ -25,6 +25,10 @@ async def publish_event(event_type: str, payload: dict) -> None:
         from app.realtime.emitter import emit_event
         from app.realtime.socketio import _room_for_payload
 
-        await emit_event(event_type, payload, room=_room_for_payload(payload))
+        room = _room_for_payload(payload)
+        if room is None:
+            logger.warning("socket.io publish suppressed: unroutable event_type=%s", event_type)
+            return
+        await emit_event(event_type, payload, room=room)
     except Exception as exc:  # noqa: BLE001 — realtime must not break writes
         logger.warning("socket.io publish failed: %s", exc)

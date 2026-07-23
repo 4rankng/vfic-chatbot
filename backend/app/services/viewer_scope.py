@@ -16,12 +16,26 @@ predicates.
 
 from __future__ import annotations
 
-from sqlalchemy import ColumnElement, Select, or_
+import uuid
+from typing import Protocol
 
+from sqlalchemy import ColumnElement, Select, or_, select
+
+from app.models.conversation import Conversation
+from app.models.lead import Lead
 from app.models.user import Role, User
 
 
-def viewer_scope_condition(column: ColumnElement, viewer: User) -> ColumnElement[bool] | None:
+class ViewerIdentity(Protocol):
+    """The identity fields required by viewer-scoped reads."""
+
+    id: uuid.UUID
+    role: Role
+
+
+def viewer_scope_condition(
+    column: ColumnElement, viewer: User | ViewerIdentity
+) -> ColumnElement[bool] | None:
     """Return the ORM viewer-scope predicate, or ``None`` for admins.
 
     ``None`` means "no restriction" — callers should skip ``.where()`` entirely
@@ -33,10 +47,34 @@ def viewer_scope_condition(column: ColumnElement, viewer: User) -> ColumnElement
     return or_(column == viewer.id, column.is_(None))
 
 
-def viewer_scope_filter(stmt: Select, column: ColumnElement, viewer: User) -> Select:
+def viewer_scope_filter(
+    stmt: Select, column: ColumnElement, viewer: User | ViewerIdentity
+) -> Select:
     """Apply :func:`viewer_scope_condition` to a ``Select`` statement."""
     condition = viewer_scope_condition(column, viewer)
     return stmt.where(condition) if condition is not None else stmt
+
+
+async def viewer_can_access_conversation(
+    db, conversation_id: uuid.UUID, viewer: User | ViewerIdentity
+) -> bool:
+    """Return whether ``viewer`` may subscribe to one conversation."""
+    stmt = viewer_scope_filter(
+        select(Conversation.id).where(Conversation.id == conversation_id),
+        Conversation.assigned_recruiter_id,
+        viewer,
+    )
+    return (await db.scalar(stmt)) is not None
+
+
+async def viewer_can_access_lead(db, lead_id: int, viewer: User | ViewerIdentity) -> bool:
+    """Return whether ``viewer`` may subscribe to one lead."""
+    stmt = viewer_scope_filter(
+        select(Lead.id).where(Lead.id == lead_id),
+        Lead.assigned_recruiter_id,
+        viewer,
+    )
+    return (await db.scalar(stmt)) is not None
 
 
 def viewer_scope_sql(alias: str = "") -> str:
@@ -50,4 +88,11 @@ def viewer_scope_sql(alias: str = "") -> str:
     return f"({col} = :uid OR {col} IS NULL)"
 
 
-__all__ = ["viewer_scope_condition", "viewer_scope_filter", "viewer_scope_sql"]
+__all__ = [
+    "ViewerIdentity",
+    "viewer_can_access_conversation",
+    "viewer_can_access_lead",
+    "viewer_scope_condition",
+    "viewer_scope_filter",
+    "viewer_scope_sql",
+]

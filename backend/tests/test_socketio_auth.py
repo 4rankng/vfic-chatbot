@@ -12,6 +12,11 @@ from app.models.user import Role
 from app.realtime import socketio as socketio_module
 
 
+@pytest.fixture(autouse=True)
+def clear_socket_access_state() -> None:
+    socketio_module._connection_access.clear()
+
+
 @pytest.mark.asyncio
 async def test_socket_auth_prefers_handshake_token_over_bearer_header(monkeypatch) -> None:
     seen_tokens: list[str] = []
@@ -94,3 +99,6 @@ async def test_socket_connect_saves_session_and_joins_user_room(monkeypatch) -> 
 
     assert saved_sessions == [("sid-1", {"user_id": str(user_id), "role": "recruiter"})]
     assert entered_rooms == [("sid-1", f"user:{user_id}")]
+    access = socketio_module._connection_access["sid-1"]
+    assert access.id == user_id
+    assert access.role == Role.recruiter

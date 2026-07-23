@@ -162,7 +162,6 @@ schema_infra|backend/app/schemas/user.py|app.models.user:Role
 service_outward|backend/app/services/personas/providers.py|app.graph.provider_scope:provider_from_conversation
 service_outward|backend/app/services/project/service.py|app.workers.direct_context_worker:enqueue_direct_context_index
 service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.direct_context_worker:enqueue_direct_context_index
-service_outward|backend/app/services/webhook.py|app.workers.persistence_worker:enqueue_enrich_oa_profile
 """.splitlines()
     if line.strip()
 )
@@ -315,6 +314,8 @@ def _backend_rule(rel: str, target: str) -> str | None:
         "backend/app/installation/application/",
         "backend/app/project_knowledge/domain/",
         "backend/app/project_knowledge/application/",
+        "backend/app/conversation_messaging/domain/",
+        "backend/app/conversation_messaging/application/",
     )
     pure_backend_file = rel.startswith("backend/app/integrations/") and rel.endswith(
         ("/domain.py", "/application.py")
@@ -455,6 +456,8 @@ def test_context_domain_and_application_modules_reject_outward_imports() -> None
         "backend/app/integrations/facebook_oauth/application.py",
         "backend/app/project_knowledge/domain/example.py",
         "backend/app/project_knowledge/application/example.py",
+        "backend/app/conversation_messaging/domain/example.py",
+        "backend/app/conversation_messaging/application/example.py",
     ):
         for target in (
             "fastapi:Depends",
@@ -483,6 +486,21 @@ def test_project_knowledge_package_has_no_graph_or_worker_backedge() -> None:
             if module.startswith(("app.graph", "app.workers")):
                 forbidden.append(f"{rel}|{target}")
     assert not forbidden, "Project/knowledge context backedges:\n" + "\n".join(
+        sorted(forbidden)
+    )
+
+
+def test_conversation_messaging_package_has_no_graph_or_worker_backedge() -> None:
+    context_root = REPO_ROOT / "backend/app/conversation_messaging"
+    forbidden: list[str] = []
+    for path in context_root.rglob("*.py"):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        targets = _python_import_targets(path, path.read_text())
+        for target in targets:
+            module = target.split(":", 1)[0]
+            if module.startswith(("app.graph", "app.workers")):
+                forbidden.append(f"{rel}|{target}")
+    assert not forbidden, "Conversation/messaging context backedges:\n" + "\n".join(
         sorted(forbidden)
     )
 

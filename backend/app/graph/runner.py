@@ -28,6 +28,7 @@ from inspect import Parameter, iscoroutinefunction, signature
 
 from app.core.config import get_settings
 from app.graph.decision_trace import DecisionTraceBuilder
+from app.graph.ports import DeliveryResultPort, OutboundMessagePort, SendOutcome
 from app.shared.application.outbound import (
     AMBIGUOUS_SEND_CLASSES,
     OutboundTelemetry,
@@ -107,22 +108,23 @@ def _build_outbox_payload(chat_id: str, text: str, quote_message_id: str | None)
 
 async def _dispatch_claimed_message(
     svc,
-    zalo,
+    zalo: OutboundMessagePort,
     conv,
     *,
     message_id: int | None,
     text: str,
     quote_message_id: str | None,
-):
+) -> DeliveryResultPort:
     """Send an already-persisted command, retaining fake-port compatibility."""
     dispatch = getattr(svc, "dispatch_outbound_message", None)
     if callable(dispatch) and iscoroutinefunction(dispatch):
         result = await dispatch(message_id=message_id)
         if result is not None:
             return result
-        from app.services.zalo_bot_service import SendResult
-
-        return SendResult(ok=False, error="outbound command was not available for dispatch")
+        return SendOutcome(
+            ok=False,
+            error="outbound command was not available for dispatch",
+        )
     if quote_message_id:
         return await zalo.send_message(conv.zalo_chat_id, text, quote_message_id=quote_message_id)
     return await zalo.send_message(conv.zalo_chat_id, text)

@@ -16,23 +16,39 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from app.conversation_messaging.application.ports import DeliveryResultPort
 from app.project_knowledge.application.retrieval import ProjectKnowledgeQueryPort
+from app.shared.application.outbound import OutboundTelemetry
 
 
 @dataclass(frozen=True)
 class SendOutcome:
-    """Graph-local send result (mirrors the service-layer ``SendResult`` shape).
+    """Provider-neutral value result for synthetic graph send outcomes.
 
     The proactive turn constructs synthetic outcomes for non-send paths (the agent
-    decided not to send, safety blocked, generation threw). Defining the shape here
-    keeps the graph layer from importing the Zalo service module. Downstream
-    persistence reads only ``ok`` / ``msg_id`` / ``error``, so this satisfies the
-    service contract structurally.
+    decided not to send, safety blocked, generation threw). The optional delivery
+    metadata also lets the reactive runner represent a missing durable command
+    without constructing a provider service's concrete result type.
     """
 
     ok: bool
     msg_id: str | None = None
     error: str | None = None
+    error_class: str | None = None
+    suppressed: bool = False
+    telemetry: OutboundTelemetry | None = None
+
+
+class OutboundMessagePort(Protocol):
+    """Direct sender compatibility seam used by graph fakes and legacy adapters."""
+
+    async def send_message(
+        self,
+        chat_id: str,
+        text: str,
+        *,
+        quote_message_id: str | None = None,
+    ) -> DeliveryResultPort: ...
 
 
 @dataclass(frozen=True)
@@ -130,7 +146,13 @@ class ConversationPort(Protocol):
         lock_owner: Any,
         pending_message_id: int | None,
         reply: str,
+        outbox_channel: str | None = None,
+        outbox_payload: dict | None = None,
     ) -> bool: ...
+
+    async def dispatch_outbound_message(
+        self, *, message_id: int
+    ) -> DeliveryResultPort | None: ...
 
     async def acquire_lock(self, conv_id: Any) -> Any: ...
 
@@ -210,6 +232,8 @@ class DirectContextPort(Protocol):
 
 __all__ = [
     "SendOutcome",
+    "DeliveryResultPort",
+    "OutboundMessagePort",
     "FaqBypassResult",
     "ReplyPolicyResult",
     "ReplyPolicyPort",

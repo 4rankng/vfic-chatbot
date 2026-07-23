@@ -94,6 +94,7 @@ class ZaloWebhookService:
         channel: str = "bot",
         bot_token: str | None = None,
         runtime_authority: RuntimeAuthorityStamp | None = None,
+        enrich_oa_profile: Callable[[dict], object] | None = None,
     ) -> dict:
         """Run the synchronous guard chain and (if allowed) enqueue the bot turn.
 
@@ -259,11 +260,14 @@ class ZaloWebhookService:
         # low-priority queue; never blocks the webhook ack. Only the external OA
         # user id is carried — the worker resolves live credentials and short-
         # circuits when the lead already has an avatar (no unbounded Zalo calls).
-        if channel == "oa" and event is not None and event.sender_id:
+        if (
+            channel == "oa"
+            and event is not None
+            and event.sender_id
+            and enrich_oa_profile is not None
+        ):
             try:
-                from app.workers.persistence_worker import enqueue_enrich_oa_profile
-
-                enqueue_enrich_oa_profile(
+                enrich_oa_profile(
                     {"zalo_id": norm.zalo_chat_id, "user_id": event.sender_id}
                 )
             except Exception:  # noqa: BLE001 — enrichment is best-effort

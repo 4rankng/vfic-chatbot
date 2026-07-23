@@ -329,12 +329,15 @@ def test_dispatch_stale_age_covers_maximum_chunked_oa_attempt_window():
 def test_dispatch_worker_uses_the_same_safe_age_for_selection_and_claim():
     import inspect
 
-    from app.workers import outbound_dispatch_worker
+    from app.composition import conversation_messaging
 
-    source = inspect.getsource(outbound_dispatch_worker._dispatch_pending)
+    root_source = inspect.getsource(conversation_messaging.run_outbound_recovery)
+    adapter_source = inspect.getsource(
+        conversation_messaging.SqlAlchemyOutboundRecoveryAdapter
+    )
 
-    assert "outbound_dispatch_stale_after_seconds" in source
-    assert source.count("stale_after_seconds=stale_after_seconds") == 2
+    assert "outbound_dispatch_stale_after_seconds" in root_source
+    assert adapter_source.count("stale_after_seconds=self.stale_after_seconds") == 2
 
 
 def test_phase1_claim_stale_sending_unknown_never_reverts_to_pending():

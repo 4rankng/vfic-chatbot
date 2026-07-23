@@ -31,8 +31,8 @@ if TYPE_CHECKING:
         Message,
     )
     from app.models.user import User
+    from app.conversation_messaging.application.ports import DeliveryResultPort
     from app.shared.application.outbound import OutboundTelemetry
-    from app.services.zalo_bot_service import SendResult
 
 __all__ = ["ConversationConflict", "ConversationService"]
 
@@ -363,7 +363,7 @@ class ConversationService:
         return await self.state.mark_read(conv)
 
     async def record_recruiter_message(
-        self, conv: Conversation, recruiter: User, body: str, result: SendResult
+        self, conv: Conversation, recruiter: User, body: str, result: DeliveryResultPort
     ) -> Message:
         return await self.state.record_recruiter_message(conv, recruiter, body, result)
 
@@ -372,7 +372,7 @@ class ConversationService:
         conv: Conversation,
         *,
         message: str,
-        result: SendResult,
+        result: DeliveryResultPort,
         lock_owner: uuid.UUID | str | None = None,
         pending_message_id: int | None = None,
         outbox_channel: str | None = None,
