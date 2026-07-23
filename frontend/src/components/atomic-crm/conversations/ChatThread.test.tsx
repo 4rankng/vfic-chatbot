@@ -105,7 +105,10 @@ vi.mock("ra-core", () => ({
   useTranslate: () => (key: string) => key,
 }));
 
-import { ChatThread, isUnseenWorthyArrival } from "./ChatThread";
+import {
+  ChatThread,
+  isUnseenWorthyArrival,
+} from "./presentation/ChatThread";
 
 // --- Helpers -----------------------------------------------------------
 

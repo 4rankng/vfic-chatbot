@@ -7,7 +7,7 @@ import {
   getConversationAttentionLabel,
   getConversationUnreadCount,
   isHumanManagedConversation,
-} from "./conversation-row-state";
+} from "./domain/conversation-row-state";
 
 const conversation = (overrides: Partial<Conversation>): Conversation => ({
   id: "conversation-1",

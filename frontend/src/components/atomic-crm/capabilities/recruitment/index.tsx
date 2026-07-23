@@ -7,7 +7,7 @@ import { ConversationContextPanel } from "../../conversations/ConversationContex
 import {
   getLeadPriorityChip,
   getLeadStatusColor,
-} from "../../conversations/conversationDisplay";
+} from "../../conversations/domain/conversation-display";
 import type { Conversation, Lead } from "../../types";
 import { loadRecruitmentConversationRows } from "../../leads/application/loadRecruitmentConversationRows";
 import {

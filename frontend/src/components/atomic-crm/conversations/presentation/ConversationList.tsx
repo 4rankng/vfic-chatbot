@@ -40,7 +40,7 @@ import {
   getConversationAttentionLabel,
   getConversationUnreadCount,
   needsHumanReply,
-} from "../conversation-row-state";
+} from "../domain/conversation-row-state";
 import type { ConversationRowPresentation } from "../../capabilities/types";
 import conversationWorkspaceIllustration from "@/assets/empty-states/conversation-workspace-illustration.webp";
 import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";

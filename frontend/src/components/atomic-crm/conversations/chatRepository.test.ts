@@ -18,7 +18,10 @@ vi.mock("../providers/realtime/realtime-socket", () => ({
   closeRealtimeSocket: vi.fn(),
 }));
 
-import { chatRepository, RuntimeEpochMismatchError } from "./chatRepository";
+import {
+  chatRepository,
+  RuntimeEpochMismatchError,
+} from "./infrastructure/chat-repository";
 import { resetActiveRuntimeState } from "../root/reset-runtime-state";
 
 /**

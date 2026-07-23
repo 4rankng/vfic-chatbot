@@ -25,8 +25,8 @@ import {
   mergeChronological,
   mergeRealtimePage,
   useConversationRealtime,
-} from "./useConversationRealtime";
-import { useMessageStore } from "./messageStore";
+} from "./presentation/use-conversation-realtime";
+import { useMessageStore } from "./infrastructure/message-store";
 import {
   bindConversationApplication,
   type ConversationMessageStatePort,

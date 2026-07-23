@@ -6,7 +6,7 @@ const realtime = vi.hoisted(() => ({
 }));
 vi.mock("../providers/realtime/realtime-socket", () => realtime);
 
-import { useMessageStore } from "../conversations/messageStore";
+import { useMessageStore } from "../conversations/infrastructure/message-store";
 import {
   abandonRuntimeGenerationForTests,
   ensureRuntimeGeneration,

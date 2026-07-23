@@ -15,7 +15,7 @@ vi.mock("ra-core", () => ({
   useRefresh: () => refresh,
 }));
 
-import { useConversationActions } from "./useConversationActions";
+import { useConversationActions } from "./presentation/use-conversation-actions";
 
 const unassignedHuman = {
   id: "conv-1",

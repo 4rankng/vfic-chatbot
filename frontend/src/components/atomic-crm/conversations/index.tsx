@@ -2,7 +2,7 @@ import { lazy } from "react";
 import type { Conversation } from "../types";
 
 const ConversationList = lazy(() =>
-  import("./presentation/conversation-list").then((m) => ({
+  import("./presentation/ConversationList").then((m) => ({
     default: m.ConversationList,
   })),
 );

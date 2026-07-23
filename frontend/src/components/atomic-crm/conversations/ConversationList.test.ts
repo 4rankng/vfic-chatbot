@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import componentSource from "./ConversationList.tsx?raw";
+import componentSource from "./presentation/ConversationList.tsx?raw";
 import {
   getChannelProviderSearchParams,
   getConversationListKey,

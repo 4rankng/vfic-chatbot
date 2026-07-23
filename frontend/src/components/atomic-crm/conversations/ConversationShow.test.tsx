@@ -73,7 +73,7 @@ vi.mock("../automation/DecisionTracePanel", () => ({
   DecisionTracePanel: () => null,
 }));
 
-import { ConversationShowContent } from "./ConversationShow";
+import { ConversationShowContent } from "./presentation/ConversationShow";
 
 // --- State holder so the ra-core `useRecordContext` mock can be re-keyed --
 const recordState: { record: Conversation | null } = {
