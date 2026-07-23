@@ -1,8 +1,9 @@
 # Design Tokens — Ting Ting Recruiting Control Room
 
 > **Slug note.** The filename `design-tokens-graphite-cloud.md` is retained as a
-> historical slug. The current palette is **Stripe Heritage indigo**, which
-> supersedes the earlier graphite-cloud direction (see *Palette migration*
+> historical slug. The current authenticated workspace is the **Recruiter
+> Workbench** direction, which supersedes the earlier Stripe Heritage indigo
+> shell while preserving its stable token contracts (see *Palette migration*
 > below).
 
 The authenticated recruiter console uses a custom daisyUI v5 theme as its
@@ -17,6 +18,21 @@ not alter the recruiter console. Feature components must not introduce
 independent theme state or a theme toggle.
 
 ## Palette migration
+
+- **Date.** 2026-07-23.
+- **What changed.** The authenticated console moved to a flat recruiter
+  workbench: petrol `#12343b` for identity and message ownership, copper
+  `#b5472f` for actions and selection, paper `#ffffff` for working surfaces,
+  mist `#f5f6f6` for the canvas, and `#d8dddd` hairline dividers. Desktop
+  work surfaces use the new system while the established navy topbar, compact
+  icon rail, and bottom-mobile navigation preserve their existing design.
+- **Scope.** `layout/workspace-redesign.css` overrides only
+  `.workspace-frame`. The login and password-recovery pages remain visually
+  unchanged. Existing `--workspace-*`, `--tt-*`, `--crm-*`, and `--chat-*`
+  contracts remain intact.
+- **Surface rule.** Authenticated pages use borders, spacing, and tonal
+  surfaces only. Drop shadows, glow, raised hover transforms, and decorative
+  gradients are prohibited.
 
 - **Date.** 2026-07-20.
 - **What changed.** Brand palette migrated from denim + steel-blue + cool cloud
@@ -49,9 +65,10 @@ independent theme state or a theme toggle.
 | Warning | `warning` | `--workspace-warning` |
 | Error | `error` | `--workspace-danger` |
 
-The console uses a cool-white canvas, deep navy navigation, and one confident
-indigo action accent. Color is never the only status cue: labels or icons accompany
-selection, warning, delivery, and intervention states.
+The console uses a mist canvas, paper working surfaces, petrol identity cues,
+and one confident copper action accent. Color is never the only status cue:
+labels or icons accompany selection, warning, delivery, and intervention
+states.
 
 ## Component contract
 
