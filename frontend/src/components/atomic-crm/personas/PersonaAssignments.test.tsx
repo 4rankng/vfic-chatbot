@@ -22,7 +22,7 @@ vi.mock("ra-core", () => ({
   useRefresh: () => mocks.refresh,
 }));
 
-vi.mock("@/lib/vfic/knowledgeService", () => ({
+vi.mock("./personaService", () => ({
   activatePersona: mocks.activatePersona,
   listPersonaAssignments: mocks.listPersonaAssignments,
   updatePersonaAssignment: mocks.updatePersonaAssignment,

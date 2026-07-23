@@ -27,23 +27,27 @@ import {
   FileText,
   Upload,
 } from "lucide-react";
-import { importPersona } from "@/lib/vfic/knowledgeService";
+import { importPersona } from "./personaService";
 import {
   LEAD_STAGES,
   type LeadScoreValue,
   type LeadStageValue,
   type PersonaFollowupRule,
-  type PersonaFollowupRules,
   type KnowledgeBase,
+  type PersonaFollowupRules,
 } from "../types";
 import {
   composePersonaMarkdown,
-  defaultPersonaFollowupRules,
   parsePersonaMarkdown,
   PERSONA_SECTIONS,
   PERSONA_TEMPLATE,
   type PersonaSectionValues,
 } from "./personaMarkdown";
+import {
+  FOLLOWUP_SCORE_ORDER,
+  normalizePersonaFollowupRules,
+  parseFollowupCadenceHours,
+} from "./domain/followupRules";
 
 const PERSONA_TEMPLATE_FILENAME = "mau-agent-vfic.md";
 
@@ -52,32 +56,6 @@ const FOLLOWUP_SCORE_LABELS: Record<LeadScoreValue, string> = {
   warm: "Warm",
   not_interested: "Cold",
 };
-
-const FOLLOWUP_SCORE_ORDER: LeadScoreValue[] = [
-  "hot",
-  "warm",
-  "not_interested",
-];
-
-const normalizeFollowupRules = (
-  rules?: Partial<PersonaFollowupRules> | null,
-): PersonaFollowupRules => {
-  const defaults = defaultPersonaFollowupRules();
-  return {
-    hot: { ...defaults.hot, ...(rules?.hot ?? {}) },
-    warm: { ...defaults.warm, ...(rules?.warm ?? {}) },
-    not_interested: {
-      ...defaults.not_interested,
-      ...(rules?.not_interested ?? {}),
-    },
-  };
-};
-
-const parseCadenceInput = (value: string): number[] =>
-  value
-    .split(/[,\s]+/)
-    .map((part) => Number.parseInt(part.trim(), 10))
-    .filter((value) => Number.isFinite(value) && value > 0);
 
 export interface PersonaValues {
   name: string;
@@ -116,7 +94,7 @@ const PersonaForm = ({
     initial.knowledge_base_id,
   );
   const [followupRules, setFollowupRules] = useState<PersonaFollowupRules>(() =>
-    normalizeFollowupRules(initial.followup_rules),
+    normalizePersonaFollowupRules(initial.followup_rules),
   );
   const [submitting, setSubmitting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -211,7 +189,7 @@ const PersonaForm = ({
       setExtraMarkdown(parsed.extraMarkdown);
       if (persona.notes != null) setNotes(persona.notes);
       if (persona.followup_rules) {
-        setFollowupRules(normalizeFollowupRules(persona.followup_rules));
+        setFollowupRules(normalizePersonaFollowupRules(persona.followup_rules));
       }
       notify(
         `Đã nhập Agent "${persona.name}" thành công. Hãy rà soát trước khi lưu.`,
@@ -538,7 +516,7 @@ const PersonaForm = ({
                           value={rule.cadence_hours.join(" ")}
                           onChange={(event) =>
                             updateFollowupRule(score, {
-                              cadence_hours: parseCadenceInput(
+                              cadence_hours: parseFollowupCadenceHours(
                                 event.target.value,
                               ),
                             })

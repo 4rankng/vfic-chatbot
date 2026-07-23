@@ -23,7 +23,7 @@ import {
 } from "./personaMarkdown";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Persona } from "../types";
-import { activatePersona } from "@/lib/vfic/knowledgeService";
+import { activatePersona } from "./personaService";
 import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
 
 const PersonaEditContent = () => {

@@ -6,102 +6,30 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Globe2, RefreshCcw, Workflow } from "lucide-react";
 import {
   ADAPTER_PROVIDERS,
-  type AdapterPersonaAssignment,
   type AdapterProvider,
+  type AdapterPersonaAssignment,
   type Persona,
 } from "../types";
 import {
   activatePersona,
   listPersonaAssignments,
   updatePersonaAssignment,
-} from "@/lib/vfic/knowledgeService";
+} from "./personaService";
+import {
+  createInitialAssignmentFeedback,
+  getPersonaAssignmentState,
+  normalizePersonaAssignments,
+  type RowFeedback,
+} from "./domain/assignmentState";
 
 interface PersonaAssignmentsProps {
   persona: Persona;
 }
 
-type RowFeedback = {
-  pending: boolean;
-  success: string | null;
-  error: string | null;
-};
-
-const EMPTY_ROW_FEEDBACK: RowFeedback = {
-  pending: false,
-  success: null,
-  error: null,
-};
-
-const ADAPTER_LABELS: Record<AdapterProvider, string> = {
-  zalo_bot: "Zalo Chatbot",
-  zalo_oa: "Zalo OA",
-  facebook_messenger: "Messenger",
-};
-
-const initialFeedbackState = (): Record<AdapterProvider, RowFeedback> => ({
-  zalo_bot: { ...EMPTY_ROW_FEEDBACK },
-  zalo_oa: { ...EMPTY_ROW_FEEDBACK },
-  facebook_messenger: { ...EMPTY_ROW_FEEDBACK },
-});
-
-const normalizeAssignments = (
-  assignments: AdapterPersonaAssignment[],
-): AdapterPersonaAssignment[] =>
-  ADAPTER_PROVIDERS.map((provider) => {
-    const existing = assignments.find((item) => item.provider === provider);
-    return (
-      existing ?? {
-        provider,
-        label: ADAPTER_LABELS[provider],
-        persona_id: null,
-        effective_persona_id: null,
-        is_default: false,
-      }
-    );
-  });
-
 const badgeClassName = (variant: "brand" | "good" | "neutral") => {
   if (variant === "brand") return "persona-studio-badge is-brand";
   if (variant === "good") return "persona-studio-badge is-good";
   return "persona-studio-badge";
-};
-
-const getAssignmentState = (
-  assignment: AdapterPersonaAssignment,
-  persona: Persona,
-) => {
-  if (assignment.persona_id === persona.id) {
-    return {
-      badge: "Gán riêng",
-      badgeVariant: "brand" as const,
-      summary: "Dùng Agent này.",
-      actionLabel: "Trả về mặc định",
-      nextPersonaId: null as string | null,
-      actionDisabled: false,
-    };
-  }
-
-  if (assignment.is_default && assignment.effective_persona_id === persona.id) {
-    return {
-      badge: "Theo mặc định",
-      badgeVariant: "good" as const,
-      summary: "Kế thừa từ mặc định.",
-      actionLabel: "Đang mặc định",
-      nextPersonaId: null as string | null,
-      actionDisabled: true,
-    };
-  }
-
-  return {
-    badge: assignment.persona_id ? "Agent khác" : "Mặc định khác",
-    badgeVariant: "neutral" as const,
-    summary: assignment.persona_id
-      ? "Đang dùng Agent khác."
-      : "Kế thừa mặc định khác.",
-    actionLabel: "Gán Agent này",
-    nextPersonaId: persona.id,
-    actionDisabled: false,
-  };
 };
 
 export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
@@ -113,7 +41,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [feedbackByProvider, setFeedbackByProvider] =
-    useState<Record<AdapterProvider, RowFeedback>>(initialFeedbackState);
+    useState<Record<AdapterProvider, RowFeedback>>(createInitialAssignmentFeedback);
   const [activating, setActivating] = useState(false);
   const assignmentRequestId = useRef(0);
 
@@ -139,7 +67,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
     try {
       const result = await listPersonaAssignments();
       if (requestId === assignmentRequestId.current) {
-        setAssignments(normalizeAssignments(result.data));
+        setAssignments(normalizePersonaAssignments(result.data));
         return true;
       }
       return null;
@@ -333,7 +261,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
               </div>
             ) : (
               assignments.map((assignment) => {
-                const state = getAssignmentState(assignment, persona);
+                const state = getPersonaAssignmentState(assignment, persona);
                 const feedback = feedbackByProvider[assignment.provider];
                 const missingAssignment = !assignment.effective_persona_id;
 

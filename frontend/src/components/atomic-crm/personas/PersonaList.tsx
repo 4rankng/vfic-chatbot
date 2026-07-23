@@ -23,15 +23,17 @@ import {
   Zap,
 } from "lucide-react";
 import { ADAPTER_PROVIDER_LABELS, type Persona } from "../types";
-import { activatePersona } from "@/lib/vfic/knowledgeService";
+import { activatePersona } from "./personaService";
 import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
 import {
   getCompletedPersonaSectionCount,
   getPersonaAuthoredContentLength,
   getPersonaSectionSummaries,
 } from "./personaMarkdown";
-
-const PERSONA_SECTION_TOTAL = 7;
+import {
+  PERSONA_SECTION_TOTAL,
+  getPersonaReadinessPercent,
+} from "./domain/personaReadiness";
 const FOLLOWUP_TOTAL = 3;
 const FOLLOWUP_KEYS = ["hot", "warm", "not_interested"] as const;
 const FOLLOWUP_LABELS: Record<(typeof FOLLOWUP_KEYS)[number], string> = {
@@ -96,13 +98,6 @@ const getAdapterScopeSummary = (
   }
   return "Chưa adapter nào dùng Agent này.";
 };
-
-const getReadinessPercent = (sectionCount: number) =>
-  Math.round(
-    (Math.max(0, Math.min(PERSONA_SECTION_TOTAL, sectionCount)) /
-      PERSONA_SECTION_TOTAL) *
-      100,
-  );
 
 const formatDate = (value: string) => {
   const date = new Date(value);
@@ -224,7 +219,7 @@ const PersonaStudioOverview = ({
     return null;
   }
 
-  const readinessPercent = getReadinessPercent(stats.sectionCount);
+  const readinessPercent = getPersonaReadinessPercent(stats.sectionCount);
   const hasCompleteContent = stats.sectionCount >= PERSONA_SECTION_TOTAL;
   const hasCompleteFollowups = stats.followupEnabledCount >= FOLLOWUP_TOTAL;
   const hasAssignedScope = persona.is_active || stats.adapterCount > 0;

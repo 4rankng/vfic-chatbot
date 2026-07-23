@@ -1,4 +1,4 @@
-import { apiJson } from "../providers/rest/api";
+import { getReportingJson } from "../reporting/reportingService";
 
 export interface DashboardCandidate {
   id: number;
@@ -99,7 +99,7 @@ export const fetchDashboardCandidates = async (): Promise<
     sort: "created_at",
     order: "DESC",
   });
-  const response = await apiJson<CandidateListEnvelope>(
+  const response = await getReportingJson<CandidateListEnvelope>(
     `/api/v1/leads?${search.toString()}`,
   );
   return response.data.filter((candidate) => candidate.phone?.trim());

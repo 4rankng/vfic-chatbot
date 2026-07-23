@@ -12,7 +12,7 @@
 // NOTE: this module intentionally does NOT consume `useDashboardStats.ts`,
 // which remains live for `KnowledgeIngestPanel` and `usePerformanceStats`.
 
-import { apiJson } from "../providers/rest/api";
+import { getReportingJson } from "../reporting/reportingService";
 
 /**
  * The inbox's three-valued queue chip filter. Owned here (rather than in
@@ -84,7 +84,7 @@ export interface AttentionDashboard {
 export const ATTENTION_QUERY_KEY = ["dashboard-attention"] as const;
 
 export const fetchAttentionDashboard = (): Promise<AttentionDashboard> =>
-  apiJson<AttentionDashboard>("/api/v1/dashboard/attention");
+  getReportingJson<AttentionDashboard>("/api/v1/dashboard/attention");
 
 /** Vietnamese recruiter-facing labels for each reason enum. */
 export const REASON_LABELS: Record<AttentionReason, string> = {
