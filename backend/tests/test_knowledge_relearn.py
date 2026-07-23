@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.api import knowledge
+from app.services.knowledge import service as knowledge_service
+from app.services.knowledge.service import KnowledgeService
 
 
 class _Scalars:
@@ -29,8 +30,8 @@ class _DB:
         self.rows = rows
         self.commits = 0
 
-    async def execute(self, _statement):
-        return _Result(self.rows)
+    async def scalars(self, _statement):
+        return _Scalars(self.rows)
 
     async def commit(self):
         self.commits += 1
@@ -41,28 +42,30 @@ async def test_reindex_all_enqueues_sources_clears_caches_and_audits(monkeypatch
     docs = [SimpleNamespace(id=uuid.uuid4()), SimpleNamespace(id=uuid.uuid4())]
     db = _DB(docs)
     enqueued: list[uuid.UUID] = []
-    cache_bumps: list[str] = []
+    cache_repairs = 0
     audits: list[dict] = []
 
-    monkeypatch.setattr(knowledge, "enqueue_ingest", enqueued.append)
+    class _Jobs:
+        def ingest_document(self, document_id):
+            enqueued.append(document_id)
 
-    async def _bump(namespace: str):
-        cache_bumps.append(namespace)
+    async def _repair_caches():
+        nonlocal cache_repairs
+        cache_repairs += 1
 
     async def _audit(_db, **kwargs):
         audits.append(kwargs)
 
-    monkeypatch.setattr(knowledge, "bump_cache_version", _bump)
-    monkeypatch.setattr(knowledge, "record_audit", _audit)
+    service = KnowledgeService(db)
+    monkeypatch.setattr(service, "_job_scheduler", lambda: _Jobs())
+    monkeypatch.setattr(knowledge_service, "bump_kb_caches", _repair_caches)
+    monkeypatch.setattr(knowledge_service, "record_audit", _audit)
 
-    result = await knowledge.reindex_all(
-        admin=SimpleNamespace(id=uuid.uuid4()),
-        db=db,
-    )
+    result = await service.reindex_all(SimpleNamespace(id=uuid.uuid4()))
 
-    assert result == {"status": "ok", "queued": 2}
+    assert result == 2
     assert enqueued == [doc.id for doc in docs]
-    assert cache_bumps == ["knowledge", "semantic_cache"]
+    assert cache_repairs == 1
     assert audits[0]["action"] == "knowledge_relearn_all_enqueued"
     assert audits[0]["payload"] == {"queued": 2}
     assert db.commits == 1

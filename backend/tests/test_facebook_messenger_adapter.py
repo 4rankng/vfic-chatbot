@@ -447,16 +447,10 @@ async def test_webhook_post_rejects_invalid_signature_before_any_write(monkeypat
 
 @pytest.mark.asyncio
 async def test_webhook_get_challenge_constant_time(monkeypatch):
-    from types import SimpleNamespace
-
     from app.api import webhooks
 
     # Configure a known verify token so the challenge succeeds/fails deterministically.
-    monkeypatch.setattr(
-        webhooks,
-        "_settings",
-        SimpleNamespace(app_env="development"),
-    )
+    monkeypatch.setattr(webhooks, "_APP_ENV", "development")
     _stub_facebook_oauth_service(monkeypatch, app_secret="any", verify_token="verify-me")
     response = await webhooks.facebook_webhook_verify(
         _FakeRequest(
@@ -493,16 +487,10 @@ async def test_webhook_get_challenge_constant_time(monkeypatch):
 async def test_webhook_post_inactive_page_acks_without_turn(monkeypatch):
     """When no active Page is connected, the webhook acks as inactive — no
     bot turn is enqueued for a disconnected Page's traffic."""
-    from types import SimpleNamespace
-
     from app.api import webhooks
 
     app_secret = "fb-app-secret-for-test"
-    monkeypatch.setattr(
-        webhooks,
-        "_settings",
-        SimpleNamespace(app_env="development"),
-    )
+    monkeypatch.setattr(webhooks, "_APP_ENV", "development")
     _stub_facebook_oauth_service(monkeypatch, app_secret=app_secret, verify_token="t")
     monkeypatch.setattr(webhooks, "_resolve_active_facebook_page", AsyncMock(return_value=(None, None)))
     body = json.dumps({"entry": [{"messaging": [_msg_event(mid="m.1", text="hi")]}]}).encode()

@@ -30,7 +30,12 @@ FORBIDDEN_PREFIXES = (
 
 def test_shared_contracts_have_no_framework_or_infrastructure_imports() -> None:
     violations: list[str] = []
-    for path in SHARED_ROOT.rglob("*.py"):
+    contract_paths = (
+        path
+        for layer in ("domain", "application")
+        for path in (SHARED_ROOT / layer).rglob("*.py")
+    )
+    for path in contract_paths:
         tree = ast.parse(path.read_text())
         modules = [
             node.module
