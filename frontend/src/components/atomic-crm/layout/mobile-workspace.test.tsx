@@ -1,9 +1,16 @@
 import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
-import { BriefcaseBusiness, Home, MessageCircle, MoreHorizontal, Settings } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  Home,
+  MessageCircle,
+  MoreHorizontal,
+  Settings,
+} from "lucide-react";
 
 import "@/index.css";
+import workspaceStyles from "@/index.css?raw";
 import "./mobile-workspace.css";
 
 const destinations = [
@@ -14,9 +21,58 @@ const destinations = [
   ["Thêm", MoreHorizontal],
 ] as const;
 
+const activeNavigationRules = Array.from(
+  workspaceStyles.matchAll(
+    /\.(?:workspace-navigation-link|workspace-navigation-(?:rail|mobile)\s+\.workspace-navigation-link)\.is-active\s*\{[^}]*\}/g,
+  ),
+  ([rule]) => rule,
+).join("\n");
+
 afterEach(async () => {
   await cleanup();
   await page.viewport(1280, 720);
+});
+
+describe("desktop workspace rail", () => {
+  it("wins the active-state cascade with the brand surface", async () => {
+    const screen = await render(
+      <div className="workspace-frame">
+        <style>{`
+          .workspace-frame {
+            --color-uu-brand-500: #635bff;
+            --workspace-action: #635bff;
+            --workspace-shell-active: #0e2d54;
+            --workspace-shell-rail-active: #11315c;
+          }
+          ${activeNavigationRules}
+        `}</style>
+        <nav className="workspace-navigation-rail">
+          <a className="workspace-navigation-link is-active">
+            <MessageCircle />
+          </a>
+        </nav>
+        <nav className="workspace-navigation-mobile">
+          <a className="workspace-navigation-link is-active">
+            <MessageCircle />
+          </a>
+        </nav>
+      </div>,
+    );
+
+    const desktopActive = screen.container.querySelector<HTMLElement>(
+      ".workspace-navigation-rail .workspace-navigation-link.is-active",
+    )!;
+    const mobileActive = screen.container.querySelector<HTMLElement>(
+      ".workspace-navigation-mobile .workspace-navigation-link.is-active",
+    )!;
+
+    expect(getComputedStyle(desktopActive).backgroundColor).toBe(
+      "rgb(99, 91, 255)",
+    );
+    expect(getComputedStyle(mobileActive).backgroundColor).not.toBe(
+      "rgb(99, 91, 255)",
+    );
+  });
 });
 
 describe("mobile workspace dock", () => {
@@ -100,9 +156,9 @@ describe("mobile workspace dock", () => {
       expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth + 1);
       expect(iconRect.top).toBeGreaterThanOrEqual(linkRect.top);
       expect(labelRect.bottom).toBeLessThanOrEqual(linkRect.bottom);
-      expect(Number.parseFloat(getComputedStyle(label).lineHeight)).toBeGreaterThan(
-        Number.parseFloat(getComputedStyle(label).fontSize),
-      );
+      expect(
+        Number.parseFloat(getComputedStyle(label).lineHeight),
+      ).toBeGreaterThan(Number.parseFloat(getComputedStyle(label).fontSize));
     });
   });
 });

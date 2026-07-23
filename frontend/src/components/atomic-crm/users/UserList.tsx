@@ -95,7 +95,7 @@ const UserListContent = ({
       <PageHeading
         eyebrow="Quản trị truy cập"
         title={title}
-        subtitle="Quản lý tài khoản, vai trò và trạng thái truy cập nội bộ."
+        subtitle="Tài khoản và quyền truy cập nội bộ."
         actions={<CreateUserButton />}
       />
       <div className="mt-4">

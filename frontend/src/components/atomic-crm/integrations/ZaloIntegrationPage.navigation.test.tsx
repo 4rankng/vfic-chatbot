@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   loadSettingsBundle: vi.fn(() =>
     Promise.resolve({
       zalo: {
-        zalo_bot_token: { configured: false },
+        zalo_bot_token: { configured: true, preview: "dev-…oken" },
         zalo_bot_webhook_secret: { configured: false },
         zalo_oa_app_id: { configured: false, value: "" },
         zalo_oa_secret_key: { configured: false },
@@ -117,6 +117,39 @@ afterEach(async () => {
 });
 
 describe("ZaloIntegrationPage navigation", () => {
+  it("keeps credential statuses in right-aligned badges beside their labels", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    const configuredLabel = screen.container.querySelector(
+      'label[for="zalo_bot_token"]',
+    );
+    const configuredRow = configuredLabel?.closest(
+      ".settings-field-label-row",
+    );
+    const configuredStatus = configuredRow?.querySelector(
+      ".settings-field-status",
+    );
+
+    expect(configuredStatus?.textContent).toBe("Đã lưu");
+    expect(configuredStatus?.classList.contains("is-configured")).toBe(true);
+
+    const missingLabel = screen.container.querySelector(
+      'label[for="zalo_bot_webhook_secret"]',
+    );
+    const missingRow = missingLabel?.closest(".settings-field-label-row");
+    const missingStatus = missingRow?.querySelector(".settings-field-status");
+
+    expect(missingStatus?.textContent).toBe("Chưa cấu hình");
+    expect(missingStatus?.classList.contains("is-configured")).toBe(false);
+  });
+
   it("reports only the OA credential test result when webhook signature health is mismatched", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

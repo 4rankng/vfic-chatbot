@@ -284,26 +284,29 @@
     margin-bottom: 12px;
   }
 
-  .user-directory-create span {
-    display: none;
-  }
-
   .user-directory-create {
-    width: 44px;
-    min-width: 44px;
+    width: auto;
+    min-width: max-content;
     height: 44px;
-    padding: 0;
+    padding-inline: 14px;
   }
 
   .user-directory-columns {
     display: none;
   }
 
+  .user-directory-card {
+    border-inline: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
   .user-directory-row {
     grid-template-columns: 36px minmax(0, 1fr) 44px;
     gap: 10px;
     min-height: 92px;
-    padding: 12px;
+    padding: 12px 0;
+    background: transparent;
   }
 
   .user-directory-avatar {

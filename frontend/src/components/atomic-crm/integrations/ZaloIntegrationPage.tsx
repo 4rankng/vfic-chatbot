@@ -261,7 +261,9 @@ const SecretField = ({
     <div className="settings-field">
       <div className="settings-field-label-row">
         <Label htmlFor={id}>{label}</Label>
-        <span className={status.configured ? "is-configured" : ""}>
+        <span
+          className={`settings-field-status${status.configured ? " is-configured" : ""}`}
+        >
           {status.configured ? "Đã lưu" : "Chưa cấu hình"}
         </span>
       </div>

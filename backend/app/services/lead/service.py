@@ -419,7 +419,7 @@ class LeadService:
             # Messenger leads (which carry no zalo_id).
             Conversation.contact_id == Lead.contact_id,
             Conversation.status == "OPEN",
-            Conversation.mode.in_([ConversationMode.HUMAN, ConversationMode.SEMI_AUTO]),
+            Conversation.mode == ConversationMode.HUMAN,
             Conversation.last_inbound_at.is_not(None),
             or_(
                 Conversation.last_outbound_at.is_(None),

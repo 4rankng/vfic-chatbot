@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
 
 from app.models.user import Role
 from app.schemas.dashboard import (
@@ -26,6 +27,7 @@ from app.schemas.dashboard import (
     AttentionReason,
 )
 from app.services.dashboard import service as service_mod
+from app.services.conversation.repository import _unanswered_inbound_condition
 
 UID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 OTHER_UID = uuid.UUID("22222222-2222-2222-2222-222222222222")
@@ -195,6 +197,17 @@ def test_attention_reason_enum_has_all_nine_reasons():
 
 def test_attention_action_enum_values():
     assert {a.value for a in AttentionAction} == {"OPEN_CONVERSATION", "CALL"}
+
+
+def test_inbox_needs_attention_is_human_mode_only():
+    sql = str(
+        _unanswered_inbound_condition().compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "'HUMAN'" in sql
+    assert "'SEMI_AUTO'" not in sql
 
 
 # --- service: viewer-scope mapping -----------------------------------------
@@ -515,3 +528,35 @@ async def test_attention_rows_select_full_phone_for_recruiter_follow_up():
     assert "el.name, el.phone, el.desired_job" in sql
     assert "SELECT l.name, l.phone, l.desired_job" in sql
     assert "right(l.phone, 4)" not in sql
+
+
+@pytest.mark.asyncio
+async def test_human_intervention_sources_require_human_mode_and_unanswered_inbound():
+    """Every reason shown in ``Cần can thiệp`` must share one queue contract."""
+    sql = await _captured_attention_sql(str(UID), "immediate")
+    human_unanswered = (
+        "c.status = 'OPEN' AND c.mode = 'HUMAN' AND c.last_inbound_at IS NOT NULL "
+        "AND (c.last_outbound_at IS NULL OR c.last_inbound_at > c.last_outbound_at)"
+    )
+
+    # DELIVERY_REVIEW, HUMAN_ESCALATION, REPLY_OVERDUE and WAITING_REPLY are
+    # the four conversation reasons the frontend may render in this panel.
+    assert sql.count(human_unanswered) == 4
+
+
+def test_attention_reason_deep_links_share_human_unanswered_contract():
+    from app.services.dashboard.repository import DashboardRepository
+
+    repo = DashboardRepository(db=MagicMock())
+    human_unanswered = (
+        "c.status = 'OPEN' AND c.mode = 'HUMAN' AND c.last_inbound_at IS NOT NULL "
+        "AND (c.last_outbound_at IS NULL OR c.last_inbound_at > c.last_outbound_at)"
+    )
+
+    for reason in (
+        "DELIVERY_REVIEW",
+        "HUMAN_ESCALATION",
+        "REPLY_OVERDUE",
+        "WAITING_REPLY",
+    ):
+        assert human_unanswered in repo._attention_reason_source(reason, str(UID))

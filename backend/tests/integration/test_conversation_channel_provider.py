@@ -8,7 +8,14 @@ import pytest
 from sqlalchemy import select
 
 from app.models.contact import Contact, ContactChannelIdentity
-from app.models.conversation import Conversation, ConversationMode, Message, MessageSender
+from app.models.conversation import (
+    Conversation,
+    ConversationMode,
+    ConversationStatus,
+    DeliveryStatus,
+    Message,
+    MessageSender,
+)
 from app.models.lead import Lead, LeadScore
 from app.models.user import Role, User
 from app.services.conversation import ConversationService
@@ -86,6 +93,65 @@ async def test_provider_scope_composes_with_search_attention_reason_and_viewer(
         assigned_recruiter_id=recruiter.id,
         **common,
     )
+    await make_conversation(
+        integration_session,
+        provider="zalo_bot",
+        account_key="bot-account",
+        external_id="searchable-semi-auto-unassigned",
+        zalo_chat_id="searchable-semi-auto-unassigned",
+        mode=ConversationMode.SEMI_AUTO,
+        last_inbound_at=common["last_inbound_at"],
+        last_outbound_at=common["last_outbound_at"],
+    )
+    await make_conversation(
+        integration_session,
+        provider="zalo_bot",
+        account_key="bot-account",
+        external_id="searchable-bot-mode-unassigned",
+        zalo_chat_id="searchable-bot-mode-unassigned",
+        mode=ConversationMode.BOT,
+        last_inbound_at=common["last_inbound_at"],
+        last_outbound_at=common["last_outbound_at"],
+    )
+    open_without_outbound = await make_conversation(
+        integration_session,
+        provider="zalo_bot",
+        account_key="bot-account",
+        external_id="searchable-open-no-outbound",
+        zalo_chat_id="searchable-open-no-outbound",
+        mode=ConversationMode.HUMAN,
+        last_inbound_at=now - timedelta(minutes=5),
+        last_outbound_at=None,
+    )
+    closed_failed_delivery = await make_conversation(
+        integration_session,
+        provider="zalo_bot",
+        account_key="bot-account",
+        external_id="searchable-closed-failed-delivery",
+        zalo_chat_id="searchable-closed-failed-delivery",
+        mode=ConversationMode.HUMAN,
+        status=ConversationStatus.CLOSED,
+        last_inbound_at=now - timedelta(minutes=5),
+        last_outbound_at=None,
+    )
+    integration_session.add_all(
+        [
+            Message(
+                conversation_id=open_without_outbound.id,
+                sender=MessageSender.RECRUITER,
+                body="Open failed delivery",
+                delivery_status=DeliveryStatus.FAILED,
+                created_at=now,
+            ),
+            Message(
+                conversation_id=closed_failed_delivery.id,
+                sender=MessageSender.RECRUITER,
+                body="Closed failed delivery",
+                delivery_status=DeliveryStatus.FAILED,
+                created_at=now,
+            ),
+        ]
+    )
     await integration_session.flush()
 
     service = ConversationService(integration_session)
@@ -96,13 +162,17 @@ async def test_provider_scope_composes_with_search_attention_reason_and_viewer(
         needs_attention=True,
         per_page=10,
     )
-    assert {row.id for row in bot_rows} == {bot_unassigned.id, bot_owned.id}
-    assert bot_total == 2
+    assert {row.id for row in bot_rows} == {
+        bot_unassigned.id,
+        bot_owned.id,
+        open_without_outbound.id,
+    }
+    assert bot_total == 3
 
     assert await service.needs_attention_count(
         viewer=recruiter, channel_provider="zalo_oa"
     ) == 2
-    assert await service.needs_attention_count(viewer=recruiter) == 4
+    assert await service.needs_attention_count(viewer=recruiter) == 5
 
     from app.composition.reporting import run_conversation_attention_query
 
@@ -165,6 +235,24 @@ async def test_provider_scope_composes_with_search_attention_reason_and_viewer(
     # Exercise every dedicated reason branch against PostgreSQL so provider
     # composition, enum literals, joins, and nullable totals stay executable.
     dashboard_repo = DashboardRepository(integration_session)
+    counters = await dashboard_repo.attention_counters(str(recruiter.id))
+    assert counters["needs_reply"] == 5
+    assert counters["priority"] == 1
+    immediate = await dashboard_repo.attention_rows(str(recruiter.id), "immediate", limit=20)
+    immediate_ids = {row["conversation_id"] for row in immediate}
+    assert open_without_outbound.id in immediate_ids
+    assert closed_failed_delivery.id not in immediate_ids
+
+    delivery_ids, delivery_total = await dashboard_repo.attention_reason_page(
+        str(recruiter.id),
+        reason="DELIVERY_REVIEW",
+        channel_provider="zalo_bot",
+        page=1,
+        per_page=10,
+    )
+    assert delivery_ids == [open_without_outbound.id]
+    assert delivery_total == 1
+
     for reason in (
         "DELIVERY_REVIEW",
         "HUMAN_ESCALATION",

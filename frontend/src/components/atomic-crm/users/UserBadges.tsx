@@ -21,7 +21,7 @@ export const UserStatusBadge = () => {
   if (!record) return null;
   return (
     <Badge variant={record.disabled ? "outline" : "secondary"}>
-      {record.disabled ? "Đã vô hiệu" : "Đang hoạt động"}
+      {record.disabled ? "Vô hiệu" : "Hoạt động"}
     </Badge>
   );
 };

@@ -48,6 +48,44 @@
   background: var(--warning, #a16207);
 }
 
+.settings-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-field-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, transparent);
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  padding: 3px 8px;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.settings-field-status::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.settings-field-status.is-configured {
+  border-color: color-mix(in srgb, var(--success) 24%, transparent);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
 .settings-workspace-content .settings-test-button {
   min-height: 44px !important;
   height: 44px !important;
@@ -422,23 +460,6 @@
   .settings-mobile-group .settings-group-content {
     gap: 9px;
     padding: 14px 0 18px;
-  }
-
-  .settings-field-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .settings-field-label-row > span {
-    color: var(--ink-muted);
-    font-size: var(--fs-caption);
-    font-weight: 600;
-  }
-
-  .settings-field-label-row > span.is-configured {
-    color: var(--settings-accent);
   }
 
   .settings-sensitive-input {

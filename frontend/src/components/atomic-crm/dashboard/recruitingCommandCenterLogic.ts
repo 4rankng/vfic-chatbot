@@ -80,13 +80,13 @@ const HUMAN_INTERVENTION_REASONS: ReadonlySet<AttentionReason> = new Set([
   "DELIVERY_REVIEW",
   "HUMAN_ESCALATION",
   "REPLY_OVERDUE",
+  "WAITING_REPLY",
 ]);
 
 /**
  * Keep the "Cần can thiệp" panel limited to conversations where a person must
- * act. UNREAD only means the recruiter has not opened the chat, and
- * WAITING_REPLY is still inside the bot's normal response grace period; neither
- * is evidence that the bot failed to answer.
+ * act. The backend guarantees these rows are Human-mode conversations whose
+ * latest candidate message is unanswered. UNREAD alone is not a reply request.
  */
 export const filterHumanInterventions = (
   rows: AttentionItem[],

@@ -127,7 +127,8 @@ export const COUNTER_LABELS: Record<keyof AttentionCounters, string> = {
 /**
  * Map a reason to the counter whose reason-group it belongs to, mirroring the
  * backend `AttentionCounters` docstring:
- *  - needs_reply = REPLY_OVERDUE + WAITING_REPLY + HUMAN_ESCALATION
+ *  - needs_reply = distinct OPEN + HUMAN conversations with unanswered inbound
+ *    (presented as REPLY_OVERDUE, WAITING_REPLY or HUMAN_ESCALATION)
  *  - overdue     = REPLY_OVERDUE + FOLLOWUP_OVERDUE
  *  - due_today   = FOLLOWUP_TODAY
  *  - priority    = PRIORITY_NO_ACTION + DELIVERY_REVIEW + STALLED

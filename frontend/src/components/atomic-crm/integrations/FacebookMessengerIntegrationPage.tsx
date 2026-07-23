@@ -102,7 +102,9 @@ const MetaAppSecretField = ({
     <div className="settings-field">
       <div className="settings-field-label-row">
         <Label htmlFor={id}>{label}</Label>
-        <span className={configured ? "is-configured" : ""}>
+        <span
+          className={`settings-field-status${configured ? " is-configured" : ""}`}
+        >
           {configured ? "Đã lưu" : "Chưa cấu hình"}
         </span>
       </div>

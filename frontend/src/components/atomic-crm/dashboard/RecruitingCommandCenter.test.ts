@@ -183,7 +183,7 @@ describe("filterByCounter", () => {
 });
 
 describe("filterHumanInterventions", () => {
-  it("excludes answered chats that are only unread or still inside the bot grace period", () => {
+  it("includes every unanswered-human reason, including a new inbound inside 30 minutes", () => {
     const rows = [
       row("unread", "UNREAD"),
       row("waiting", "WAITING_REPLY"),
@@ -193,6 +193,7 @@ describe("filterHumanInterventions", () => {
     ];
 
     expect(filterHumanInterventions(rows).map((item) => item.key)).toEqual([
+      "waiting",
       "escalated",
       "failed",
       "overdue",

@@ -311,6 +311,14 @@ Each queue is bounded to 8 rows; counters cover the full filtered set. Each
 `last_inbound_at?`, `due_at?`, `delivery_status?`, and `action`
 (`OPEN_CONVERSATION` | `CALL`). A candidate appears once, under its highest-priority reason.
 
+The **Cần can thiệp** cohort has one authoritative membership rule: the
+conversation is `OPEN`, its mode is `HUMAN`, and its latest candidate inbound is
+newer than the latest outbound reply (or no outbound exists). `BOT` and
+`SEMI_AUTO` conversations are excluded until a real state transition changes
+the mode to `HUMAN`. The same rule backs `needs_reply`, the inbox
+`needs_attention=true` filter, the topbar count, and the conversation reason
+deep links.
+
 **Reason precedence** (1 = highest): `DELIVERY_REVIEW` → `HUMAN_ESCALATION` →
 `REPLY_OVERDUE` → `FOLLOWUP_OVERDUE` → `WAITING_REPLY` → `PRIORITY_NO_ACTION` →
 `FOLLOWUP_TODAY` → `UNREAD` → `STALLED`.
@@ -350,7 +358,8 @@ after provider filtering, so pages never mix adapters.
 
 `GET /api/v1/conversations/needs-attention` accepts the same optional scope and
 returns `{"count": <number>}`. Omitting `channel_provider` keeps the aggregate
-count used by the global navigation badge. Unsupported providers return `422`.
+count used by the global navigation badge. This count uses the same open
+Human-mode + unanswered-inbound rule as the dashboard. Unsupported providers return `422`.
 The Messenger settings flow lives under `/settings` and is documented below.
 
 ## Custom DataProvider Methods

@@ -260,6 +260,17 @@ class DashboardRepository:
             f"= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date"
         )
 
+    @staticmethod
+    def _human_unanswered_predicate(alias: str = "c.") -> str:
+        """Canonical recruiter-response queue membership for raw SQL reads."""
+        return (
+            f"{alias}status = 'OPEN' "
+            f"AND {alias}mode = 'HUMAN' "
+            f"AND {alias}last_inbound_at IS NOT NULL "
+            f"AND ({alias}last_outbound_at IS NULL "
+            f"OR {alias}last_inbound_at > {alias}last_outbound_at)"
+        )
+
     # The five counter keys, in the order AttentionCounters expects them.
     _COUNTER_KEYS: tuple[str, ...] = (
         "needs_reply",
@@ -292,27 +303,20 @@ class DashboardRepository:
         vn_today_due = self._vn_today_predicate("f.due_at")
 
         # --- Conversation-anchored predicates (viewer scope on c.) -----------
-        # HUMAN_ESCALATION: open conversation flagged needs_human.
-        human_esc = (
+        human_unanswered = (
             "SELECT count(*) FROM conversations c "
-            "WHERE c.status = 'OPEN' AND c.needs_human AND " + c_scope
+            "WHERE "
+            + self._human_unanswered_predicate()
+            + " AND "
+            + c_scope
         )
         # REPLY_OVERDUE: unanswered inbound age >= 30 minutes.
         reply_overdue = (
             "SELECT count(*) FROM conversations c "
-            "WHERE c.status = 'OPEN' "
-            "AND c.last_inbound_at IS NOT NULL "
-            "AND c.last_inbound_at > c.last_outbound_at "
+            "WHERE "
+            + self._human_unanswered_predicate()
+            + " "
             "AND c.last_inbound_at < now() - interval '30 minutes' "
-            "AND " + c_scope
-        )
-        # WAITING_REPLY: unanswered inbound age < 30 minutes (still in grace).
-        waiting_reply = (
-            "SELECT count(*) FROM conversations c "
-            "WHERE c.status = 'OPEN' "
-            "AND c.last_inbound_at IS NOT NULL "
-            "AND c.last_inbound_at > c.last_outbound_at "
-            "AND c.last_inbound_at >= now() - interval '30 minutes' "
             "AND " + c_scope
         )
         # UNREAD: open conversation with unread_count > 0.
@@ -337,7 +341,10 @@ class DashboardRepository:
             "    WHERE m2.conversation_id = c.id "
             "    AND m2.sender IN ('BOT','RECRUITER') "
             "    ORDER BY m2.created_at DESC LIMIT 1)) "
-            "AND " + c_scope
+            "AND "
+            + self._human_unanswered_predicate()
+            + " AND "
+            + c_scope
         )
 
         # --- Lead-anchored predicates (viewer scope on l.) -------------------
@@ -402,7 +409,7 @@ class DashboardRepository:
         # independent and exact (no cross-anchor row multiplication).
         sql = (
             "SELECT "
-            f"({human_esc}) + ({reply_overdue}) + ({waiting_reply}) AS needs_reply, "
+            f"({human_unanswered}) AS needs_reply, "
             f"({reply_overdue}) + ({followup_overdue}) AS overdue, "
             f"({followup_today}) AS due_today, "
             f"({priority_no_action}) + ({delivery_review}) + ({stalled}) AS priority, "
@@ -441,6 +448,7 @@ class DashboardRepository:
             params["uid"] = recruiter_id
         vn_today_due = self._vn_today_predicate("f.due_at")
         not_skipped = "l.lead_stage <> 'SKIPPED'"
+        human_unanswered = self._human_unanswered_predicate()
 
         # Each reason is a CTE projecting a uniform row shape plus a fixed
         # integer precedence (smaller = higher priority, matching the Reason
@@ -464,7 +472,11 @@ class DashboardRepository:
             "    SELECT m2.id, m2.created_at, m2.delivery_status FROM messages m2 "
             "    WHERE m2.conversation_id = c.id AND m2.sender IN ('BOT','RECRUITER') "
             "    ORDER BY m2.created_at DESC LIMIT 1) m ON true "
-            "  WHERE m.delivery_status IN ('FAILED','SEND_UNKNOWN') AND " + c_scope + ")"
+            "  WHERE m.delivery_status IN ('FAILED','SEND_UNKNOWN') AND "
+            + human_unanswered
+            + " AND "
+            + c_scope
+            + ")"
         )
         human_esc_cte = (
             "human_escalation AS ("
@@ -474,7 +486,11 @@ class DashboardRepository:
             "  NULL::text AS delivery_status, c.last_inbound_at, "
             "  NULL::timestamptz AS due_at "
             "  FROM conversations c "
-            "  WHERE c.status = 'OPEN' AND c.needs_human AND " + c_scope + ")"
+            "  WHERE c.needs_human AND "
+            + human_unanswered
+            + " AND "
+            + c_scope
+            + ")"
         )
         reply_overdue_cte = (
             "reply_overdue AS ("
@@ -483,9 +499,11 @@ class DashboardRepository:
             "  c.last_inbound_at AS urgency_at, NULL::text AS delivery_status, "
             "  c.last_inbound_at, NULL::timestamptz AS due_at "
             "  FROM conversations c "
-            "  WHERE c.status = 'OPEN' AND c.last_inbound_at IS NOT NULL "
-            "  AND c.last_inbound_at > c.last_outbound_at "
-            "  AND c.last_inbound_at < now() - interval '30 minutes' AND " + c_scope + ")"
+            "  WHERE "
+            + human_unanswered
+            + " AND c.last_inbound_at < now() - interval '30 minutes' AND "
+            + c_scope
+            + ")"
         )
         followup_overdue_cte = (
             "followup_overdue AS ("
@@ -505,9 +523,11 @@ class DashboardRepository:
             "  c.last_inbound_at AS urgency_at, NULL::text AS delivery_status, "
             "  c.last_inbound_at, NULL::timestamptz AS due_at "
             "  FROM conversations c "
-            "  WHERE c.status = 'OPEN' AND c.last_inbound_at IS NOT NULL "
-            "  AND c.last_inbound_at > c.last_outbound_at "
-            "  AND c.last_inbound_at >= now() - interval '30 minutes' AND " + c_scope + ")"
+            "  WHERE "
+            + human_unanswered
+            + " AND c.last_inbound_at >= now() - interval '30 minutes' AND "
+            + c_scope
+            + ")"
         )
         priority_no_action_cte = (
             "priority_no_action AS ("
@@ -700,6 +720,7 @@ class DashboardRepository:
         )
         not_skipped = "l.lead_stage <> 'SKIPPED'"
         vn_today_due = self._vn_today_predicate("f.due_at")
+        human_unanswered = self._human_unanswered_predicate()
 
         sources = {
             "DELIVERY_REVIEW": (
@@ -712,6 +733,8 @@ class DashboardRepository:
                 "  ORDER BY m2.created_at DESC LIMIT 1"
                 ") m ON true "
                 "WHERE m.delivery_status IN ('FAILED','SEND_UNKNOWN') AND "
+                + human_unanswered
+                + " AND "
                 + c_scope
                 + " AND "
                 + provider_scope
@@ -720,7 +743,9 @@ class DashboardRepository:
                 "SELECT c.id AS conversation_id, "
                 "coalesce(c.last_inbound_at, c.updated_at) AS urgency_at "
                 + conversation_from
-                + "WHERE c.status = 'OPEN' AND c.needs_human AND "
+                + "WHERE c.needs_human AND "
+                + human_unanswered
+                + " AND "
                 + c_scope
                 + " AND "
                 + provider_scope
@@ -728,9 +753,9 @@ class DashboardRepository:
             "REPLY_OVERDUE": (
                 "SELECT c.id AS conversation_id, c.last_inbound_at AS urgency_at "
                 + conversation_from
-                + "WHERE c.status = 'OPEN' AND c.last_inbound_at IS NOT NULL "
-                "AND c.last_inbound_at > c.last_outbound_at "
-                "AND c.last_inbound_at < now() - interval '30 minutes' AND "
+                + "WHERE "
+                + human_unanswered
+                + " AND c.last_inbound_at < now() - interval '30 minutes' AND "
                 + c_scope
                 + " AND "
                 + provider_scope
@@ -749,9 +774,9 @@ class DashboardRepository:
             "WAITING_REPLY": (
                 "SELECT c.id AS conversation_id, c.last_inbound_at AS urgency_at "
                 + conversation_from
-                + "WHERE c.status = 'OPEN' AND c.last_inbound_at IS NOT NULL "
-                "AND c.last_inbound_at > c.last_outbound_at "
-                "AND c.last_inbound_at >= now() - interval '30 minutes' AND "
+                + "WHERE "
+                + human_unanswered
+                + " AND c.last_inbound_at >= now() - interval '30 minutes' AND "
                 + c_scope
                 + " AND "
                 + provider_scope
