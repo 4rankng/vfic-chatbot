@@ -648,3 +648,67 @@ async def test_matched_authority_salary_reformulation_does_not_fire_third_llm_ca
 
     assert llm.calls == 2, "salary reformulation must not fire a third LLM call"
     assert "Samsung" in result
+
+
+async def test_voluntary_list_active_jobs_does_not_fire_third_llm_call():
+    """A voluntary (non-required) list_active_jobs dispatch stays bounded at 2 calls.
+
+    The grounding path also runs when the model calls ``list_active_jobs`` on its
+    own (no ``required_tool``). This pins that the 3rd-call rewrite never fires
+    on that path either.
+    """
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    llm = _CountingRequiredToolLLM(
+        [
+            # Call 1: model voluntarily calls list_active_jobs (no required_tool).
+            SimpleNamespace(
+                content="",
+                tool_calls=[{"name": "list_active_jobs", "args": {}, "id": "c1"}],
+            ),
+            # Call 2: untrusted prose must be replaced by the tool-rendered
+            # authority without firing a third rewrite.
+            SimpleNamespace(
+                content="Samsung đang tuyển kỹ sư tại Đà Nẵng, 99 vị trí.",
+                tool_calls=None,
+            ),
+        ]
+    )
+
+    class _VoluntaryRepo:
+        async def list_active_jobs(self, **kwargs):  # noqa: ARG002
+            return SimpleNamespace(
+                status="matched",
+                jobs=(
+                    SimpleNamespace(
+                        id="v-samsung",
+                        title="Công nhân",
+                        company_name="Samsung",
+                        factory_name="Bắc Ninh",
+                        project_name="Samsung Bắc Ninh",
+                        project_slug="samsung-bac-ninh",
+                        province="Bắc Ninh",
+                        district=None,
+                        salary_min=7_000_000,
+                        salary_max=10_000_000,
+                        vacancy_count=50,
+                    ),
+                ),
+            )
+
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        "Samsung đang tuyển gì",
+        system="sys",
+        retrieval=_VoluntaryRepo(),
+        embedder=None,
+        allowed_tools=("list_active_jobs",),
+        # No required_tool — the dispatch is voluntary.
+    )
+
+    assert llm.calls == 2, "voluntary list_active_jobs must not fire a third LLM call"
+    assert "Samsung" in result
+    assert "Công nhân" in result
+    assert "kỹ sư" not in result
+    assert "Đà Nẵng" not in result
+    assert "99 vị trí" not in result
