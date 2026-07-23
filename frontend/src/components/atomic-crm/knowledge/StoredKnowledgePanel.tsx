@@ -1,6 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, HelpCircle, Quote, RefreshCw, Tags } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronDown,
+  HelpCircle,
+  Quote,
+  RefreshCw,
+  Tags,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,11 +72,56 @@ export const localizeKnowledgeText = (value: string) =>
 const COMPACT_MARKDOWN_CLASS =
   "[&_h1]:text-section-title [&_h2]:text-section-title [&_h3]:text-card-title [&_h4]:text-card-title [&_h5]:text-card-title [&_h6]:text-card-title [&_pre]:p-3 [&_table]:text-helper";
 
+const INITIAL_VISIBLE_UNITS = 8;
+
+const comparableKnowledgeText = (value: string | null | undefined) =>
+  value
+    ? localizeKnowledgeText(value).replace(/\s+/g, " ").toLocaleLowerCase("vi")
+    : "";
+
+export const areEquivalentKnowledgeTexts = (
+  candidate: string | null | undefined,
+  reference: string | null | undefined,
+) => {
+  const candidateKey = comparableKnowledgeText(candidate);
+  const referenceKey = comparableKnowledgeText(reference);
+  return Boolean(candidateKey && referenceKey && candidateKey === referenceKey);
+};
+
+export const getKnowledgeUnitPreview = (
+  unit: Pick<KnowledgeUnit, "content" | "questions" | "summary">,
+) => {
+  const firstQuestion = unit.questions?.find((question) => question.trim());
+  if (firstQuestion) return localizeKnowledgeText(firstQuestion);
+
+  if (unit.summary?.trim()) {
+    return localizeKnowledgeText(unit.summary).replace(/\s+/g, " ");
+  }
+
+  const lines = localizeKnowledgeText(unit.content)
+    .split("\n")
+    .map((line) => line.replace(/^[-*#\s]+/, "").trim())
+    .filter(Boolean);
+  const readableLine =
+    lines.find(
+      (line) =>
+        line.toLocaleLowerCase("vi") !== "câu hỏi thường gặp" &&
+        !/^(id|question|answer|question_variants|required_terms|forbidden_terms|tags)\s*:/i.test(
+          line,
+        ),
+    ) ??
+    lines[0] ??
+    "Đơn vị kiến thức";
+
+  return readableLine.replace(/\s+/g, " ");
+};
+
 export const StoredKnowledgePanel = ({
   source,
 }: {
   source: KnowledgeSource;
 }) => {
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_UNITS);
   const { data, isError, isPending } = useQuery({
     queryKey: ["knowledge-units", source.id],
     queryFn: () => getKnowledgeUnits(String(source.id), 50),
@@ -77,17 +129,22 @@ export const StoredKnowledgePanel = ({
     staleTime: 5000,
   });
   const units = data?.data ?? [];
+  const visibleUnits = units.slice(0, visibleCount);
+  const remainingCount = Math.max(0, units.length - visibleCount);
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_UNITS);
+  }, [source.id]);
 
   return (
-    <section className="border-y border-border py-4 sm:rounded-[12px] sm:border sm:bg-background sm:p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3 px-1 sm:px-0">
+    <section className="knowledge-units-panel">
+      <div className="knowledge-units-header">
         <div className="min-w-0">
           <h4 className="kb-display text-card-title text-foreground">
-            Kiến thức đã lưu
+            Kiến thức agent dùng
           </h4>
           <p className="mt-1 text-helper leading-5 text-muted-foreground">
-            Đơn vị agent thực sự truy xuất — đây là phần con người có thể kiểm
-            tra.
+            Mở từng đơn vị để kiểm tra nội dung.
           </p>
         </div>
         <Badge className="kb-mono rounded-full bg-[var(--kb-teal-soft)] text-caption text-[var(--kb-teal)] hover:bg-[var(--kb-teal-soft)]">
@@ -114,158 +171,211 @@ export const StoredKnowledgePanel = ({
         </div>
       ) : units.length === 0 ? (
         <div className="mt-3 border-l-2 border-border py-2 pl-3 text-body text-muted-foreground">
-          Chưa có đơn vị kiến thức nào được lưu. Nếu tài liệu đã xử lý xong, hãy
-          kiểm tra nội dung nguồn hoặc chạy lại pipeline.
+          Chưa có đơn vị kiến thức. Kiểm tra nguồn hoặc chạy lại pipeline.
         </div>
       ) : (
-        <div className="mt-4 max-h-[520px] divide-y divide-border overflow-y-auto">
-          {units.map((unit) => (
-            <KnowledgeUnitCard key={unit.id} unit={unit} />
-          ))}
-        </div>
+        <>
+          <div className="knowledge-unit-list">
+            {visibleUnits.map((unit) => (
+              <KnowledgeUnitDisclosure key={unit.id} unit={unit} />
+            ))}
+          </div>
+          {remainingCount > 0 ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="knowledge-unit-more tt-btn-touch"
+              onClick={() =>
+                setVisibleCount((count) =>
+                  Math.min(units.length, count + INITIAL_VISIBLE_UNITS),
+                )
+              }
+            >
+              Xem thêm {Math.min(INITIAL_VISIBLE_UNITS, remainingCount)} đơn vị
+            </Button>
+          ) : units.length > INITIAL_VISIBLE_UNITS ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="knowledge-unit-more tt-btn-touch"
+              onClick={() => setVisibleCount(INITIAL_VISIBLE_UNITS)}
+            >
+              Thu gọn danh sách
+            </Button>
+          ) : null}
+        </>
       )}
     </section>
   );
 };
 
-const KnowledgeUnitCard = ({ unit }: { unit: KnowledgeUnit }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const questionCount = unit.questions?.length ?? 0;
+const KnowledgeUnitDisclosure = ({ unit }: { unit: KnowledgeUnit }) => {
+  const content = localizeKnowledgeText(unit.content);
+  const summary = unit.summary ? localizeKnowledgeText(unit.summary) : "";
+  const sourceQuote = unit.source_quote
+    ? localizeKnowledgeText(unit.source_quote)
+    : "";
+  const showSummary =
+    Boolean(summary) && !areEquivalentKnowledgeTexts(summary, content);
+  const showSourceQuote =
+    Boolean(sourceQuote) &&
+    !areEquivalentKnowledgeTexts(sourceQuote, content) &&
+    !areEquivalentKnowledgeTexts(sourceQuote, summary);
+  const relatedQuestions = (unit.questions ?? []).slice(1, 4);
   const entityEntries = Object.entries(unit.entities ?? {}).filter(
     ([, value]) =>
       value !== null && value !== undefined && String(value) !== "",
   );
 
   return (
-    <article className="py-4 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-center gap-2">
-        <Chip>{labelFromMap(unit.category || "other", CATEGORY_LABELS)}</Chip>
-        <Chip
-          tone={
-            unit.confidence === "low"
-              ? "warning"
-              : unit.confidence === "high"
-                ? "success"
-                : "neutral"
-          }
-        >
-          Tin cậy {labelFromMap(unit.confidence || "medium", CONFIDENCE_LABELS)}
-        </Chip>
-        {unit.is_inference && <Chip tone="warning">Suy luận</Chip>}
-        {unit.content_type && (
-          <Chip>{labelFromMap(unit.content_type, CONTENT_TYPE_LABELS)}</Chip>
+    <details className="knowledge-unit-disclosure">
+      <summary>
+        <div className="knowledge-unit-summary-copy">
+          <div className="knowledge-unit-summary-meta">
+            <Chip>
+              {labelFromMap(unit.category || "other", CATEGORY_LABELS)}
+            </Chip>
+            <Chip
+              tone={
+                unit.confidence === "low"
+                  ? "warning"
+                  : unit.confidence === "high"
+                    ? "success"
+                    : "neutral"
+              }
+            >
+              Tin cậy{" "}
+              {labelFromMap(unit.confidence || "medium", CONFIDENCE_LABELS)}
+            </Chip>
+            {unit.is_inference && <Chip tone="warning">Suy luận</Chip>}
+            <span className="kb-mono text-caption text-muted-foreground">
+              #{unit.chunk_index + 1}
+            </span>
+          </div>
+          <p className="knowledge-unit-preview">
+            {getKnowledgeUnitPreview(unit)}
+          </p>
+        </div>
+        <ChevronDown
+          className="knowledge-unit-chevron size-4"
+          aria-hidden="true"
+        />
+      </summary>
+
+      <div className="knowledge-unit-body">
+        {(unit.content_type || unit.route_id) && (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {unit.content_type && (
+              <Chip>
+                {labelFromMap(unit.content_type, CONTENT_TYPE_LABELS)}
+              </Chip>
+            )}
+            {unit.route_id && <Chip>{unit.route_id}</Chip>}
+          </div>
         )}
-        {unit.route_id && <Chip>{unit.route_id}</Chip>}
-        <span className="kb-mono text-caption text-muted-foreground sm:ml-auto">
-          #{unit.chunk_index + 1}
-        </span>
-      </div>
 
-      <div
-        className={`knowledge-unit-content mt-3 ${isExpanded ? "is-expanded" : ""}`}
-      >
-        <Markdown
-          className={`break-words text-body leading-6 text-foreground ${COMPACT_MARKDOWN_CLASS}`}
-        >
-          {localizeKnowledgeText(unit.content)}
-        </Markdown>
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="knowledge-unit-toggle mt-3 hidden rounded-[8px]"
-        aria-expanded={isExpanded}
-        onClick={() => setIsExpanded((value) => !value)}
-      >
-        {isExpanded ? "Thu gọn" : "Xem toàn bộ"}
-      </Button>
-
-      {unit.summary && (
-        <div className="mt-3 border-l-2 border-border py-1 pl-3 text-helper leading-5 text-muted-foreground">
+        <section className="knowledge-unit-section">
+          <h5>Nội dung</h5>
           <Markdown
-            className={`text-helper [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
+            className={`break-words text-body leading-6 text-foreground ${COMPACT_MARKDOWN_CLASS}`}
           >
-            {localizeKnowledgeText(unit.summary)}
+            {content}
           </Markdown>
-        </div>
-      )}
+        </section>
 
-      {unit.source_quote && (
-        <div className="mt-3 flex gap-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3 text-helper leading-5 text-muted-foreground">
-          <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-ink-300)]" />
-          <Markdown
-            className={`min-w-0 flex-1 break-words text-helper [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
-          >
-            {localizeKnowledgeText(unit.source_quote)}
-          </Markdown>
-        </div>
-      )}
+        {showSummary && (
+          <section className="knowledge-unit-section">
+            <h5>Tóm tắt</h5>
+            <Markdown
+              className={`text-helper [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
+            >
+              {summary}
+            </Markdown>
+          </section>
+        )}
 
-      {(unit.citation_label || unit.source_anchor || unit.effective_from) && (
-        <div className="mt-3 grid gap-2 border-t border-border pt-3 text-helper leading-5 text-muted-foreground">
-          {unit.citation_label && (
-            <div className="flex gap-2">
-              <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-teal)]" />
-              <span className="break-words">
-                Nguồn: {localizeKnowledgeText(unit.citation_label)}
-              </span>
-            </div>
-          )}
-          {unit.source_anchor && (
-            <div className="kb-mono break-words text-caption">
-              Mốc nguồn: {localizeKnowledgeText(unit.source_anchor)}
-            </div>
-          )}
-          {unit.effective_from && (
-            <div className="flex gap-2">
-              <CalendarDays className="mt-0.5 size-4 shrink-0 text-[var(--kb-teal)]" />
-              <span>
-                Hiệu lực: {unit.effective_from}
-                {unit.effective_to ? ` - ${unit.effective_to}` : ""}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {questionCount > 0 && (
-        <div className="mt-3">
-          <div className="flex items-center gap-2 text-helper font-semibold text-foreground">
-            <HelpCircle className="size-4 text-[var(--kb-teal)]" />
-            Câu hỏi unit này trả lời được
-          </div>
-          <ul className="mt-2 grid gap-1.5">
-            {unit.questions.slice(0, 3).map((question) => (
-              <li
-                key={question}
-                className="break-words border-l-2 border-border py-1 pl-3 text-helper leading-5 text-[var(--kb-ink-700)]"
+        {showSourceQuote && (
+          <section className="knowledge-unit-section">
+            <h5>Nguồn trích dẫn</h5>
+            <div className="flex gap-2 text-helper leading-5 text-muted-foreground">
+              <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-ink-300)]" />
+              <Markdown
+                className={`min-w-0 flex-1 break-words text-helper [&_p]:leading-5 ${COMPACT_MARKDOWN_CLASS}`}
               >
-                {localizeKnowledgeText(question)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+                {sourceQuote}
+              </Markdown>
+            </div>
+          </section>
+        )}
 
-      {entityEntries.length > 0 && (
-        <div className="mt-3">
-          <div className="flex items-center gap-2 text-helper font-semibold text-foreground">
-            <Tags className="size-4 text-[var(--kb-teal)]" />
-            Thực thể đã nhận diện
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {entityEntries.slice(0, 8).map(([key, value]) => (
-              <span
-                key={key}
-                className="kb-mono rounded-full bg-secondary px-2 py-1 text-caption text-[var(--kb-ink-700)]"
-              >
-                {labelFromMap(key, ENTITY_LABELS)}: {String(value)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-    </article>
+        {(unit.citation_label || unit.source_anchor || unit.effective_from) && (
+          <section className="knowledge-unit-section">
+            <h5>Nguồn và hiệu lực</h5>
+            <div className="grid gap-2 text-helper leading-5 text-muted-foreground">
+              {unit.citation_label && (
+                <div className="flex gap-2">
+                  <Quote className="mt-0.5 size-4 shrink-0 text-[var(--kb-teal)]" />
+                  <span className="break-words">
+                    {localizeKnowledgeText(unit.citation_label)}
+                  </span>
+                </div>
+              )}
+              {unit.source_anchor && (
+                <div className="kb-mono break-words text-caption">
+                  Mốc: {localizeKnowledgeText(unit.source_anchor)}
+                </div>
+              )}
+              {unit.effective_from && (
+                <div className="flex gap-2">
+                  <CalendarDays className="mt-0.5 size-4 shrink-0 text-[var(--kb-teal)]" />
+                  <span>
+                    Hiệu lực: {unit.effective_from}
+                    {unit.effective_to ? ` - ${unit.effective_to}` : ""}
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {relatedQuestions.length > 0 && (
+          <section className="knowledge-unit-section">
+            <h5 className="flex items-center gap-2">
+              <HelpCircle className="size-4 text-[var(--kb-teal)]" />
+              Câu hỏi liên quan
+            </h5>
+            <ul className="mt-2 grid gap-1.5">
+              {relatedQuestions.map((question) => (
+                <li
+                  key={question}
+                  className="break-words border-l-2 border-border py-1 pl-3 text-helper leading-5 text-[var(--kb-ink-700)]"
+                >
+                  {localizeKnowledgeText(question)}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {entityEntries.length > 0 && (
+          <section className="knowledge-unit-section">
+            <h5 className="flex items-center gap-2">
+              <Tags className="size-4 text-[var(--kb-teal)]" />
+              Thực thể
+            </h5>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {entityEntries.slice(0, 8).map(([key, value]) => (
+                <span
+                  key={key}
+                  className="kb-mono rounded-full bg-secondary px-2 py-1 text-caption text-[var(--kb-ink-700)]"
+                >
+                  {labelFromMap(key, ENTITY_LABELS)}: {String(value)}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </details>
   );
 };

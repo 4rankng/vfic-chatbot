@@ -96,14 +96,11 @@ const PersonaEditContent = () => {
                         className="persona-studio-badge is-good"
                       >
                         <CheckCircle2 className="size-3.5" />
-                        Active
+                        Đang bật
                       </Badge>
                     )}
                   </div>
-                  <p>
-                    Cập nhật giọng tư vấn, luật trả lời và phạm vi dùng cho
-                    chatbot tuyển dụng.
-                  </p>
+                  <p>Giọng trả lời, follow-up và kênh sử dụng.</p>
                 </div>
               </div>
             </div>
@@ -145,10 +142,15 @@ const PersonaEditContent = () => {
                     variant="outline"
                     className="border-primary/20 bg-primary/5 text-primary"
                   >
-                    Active
+                    Đang bật
                   </Badge>
                 ) : (
-                  <Button type="button" variant="outline" onClick={onActivate}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="tt-btn-touch"
+                    onClick={onActivate}
+                  >
                     <Zap className="size-4" />
                     Kích hoạt
                   </Button>
@@ -156,6 +158,7 @@ const PersonaEditContent = () => {
                 <Button
                   type="button"
                   variant="ghost"
+                  className="tt-btn-touch"
                   onClick={() => redirect("/personas")}
                 >
                   Hủy

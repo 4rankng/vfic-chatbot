@@ -13,6 +13,7 @@ import { ListPagination } from "@/components/admin/list-pagination";
 import {
   BotMessageSquare,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Clock3,
   Hash,
@@ -156,6 +157,12 @@ const PersonaFormattedContent = ({
   );
 };
 
+const getContentPreview = (content: string) =>
+  content
+    .split("\n")
+    .map((line) => line.trim().replace(/^[-*#\d.)\s]+/, ""))
+    .find(Boolean) ?? "Chưa có nội dung";
+
 type PersonaRowProps = {
   persona: Persona;
   isSelected: boolean;
@@ -225,7 +232,6 @@ const PersonaStudioOverview = ({
   const updatedAt = formatDate(persona.updated_at);
   const createdAt = formatDate(persona.created_at);
   const sections = getPersonaSectionSummaries(persona.body_md);
-  const ruleSections = sections.filter((_, index) => [2, 3, 5].includes(index));
   const adapterScopeSummary = getAdapterScopeSummary(persona, stats);
   const adapterModeLabel = persona.is_active
     ? "Mặc định toàn hệ thống"
@@ -293,10 +299,8 @@ const PersonaStudioOverview = ({
       <section className="persona-studio-section">
         <div className="persona-studio-section-title">
           <div>
-            <h2>Mức sẵn sàng</h2>
-            <p>
-              Agent có đủ prompt, follow-up và cấu hình adapter để vận hành.
-            </p>
+            <h2>Sẵn sàng</h2>
+            <p>Nội dung, follow-up và phạm vi vận hành.</p>
           </div>
         </div>
         <div className="persona-readiness-bar-card">
@@ -373,7 +377,7 @@ const PersonaStudioOverview = ({
         <div className="persona-studio-section-title">
           <div>
             <h2>Prompt Agent</h2>
-            <p>Nội dung quyết định agent nói gì, hỏi gì và tránh điều gì.</p>
+            <p>7 phần định hình cách Agent tư vấn.</p>
           </div>
           <Button
             variant="outline"
@@ -386,28 +390,33 @@ const PersonaStudioOverview = ({
         </div>
         <div className="persona-prompt-list">
           {sections.map((section) => (
-            <article
-              key={section.title}
-              className="persona-prompt-card tt-card"
-            >
-              <div>
-                <strong>{section.title}</strong>
-                <Badge
-                  variant="outline"
-                  className={
-                    section.content
-                      ? "persona-studio-badge is-good"
-                      : "persona-studio-badge"
-                  }
-                >
-                  {section.content ? "Đã viết" : "Thiếu"}
-                </Badge>
+            <details key={section.title} className="persona-prompt-disclosure">
+              <summary>
+                <span className="persona-prompt-summary-copy">
+                  <strong>{section.title}</strong>
+                  <span>{getContentPreview(section.content)}</span>
+                </span>
+                <span className="persona-prompt-summary-state">
+                  <Badge
+                    variant="outline"
+                    className={
+                      section.content
+                        ? "persona-studio-badge is-good"
+                        : "persona-studio-badge"
+                    }
+                  >
+                    {section.content ? "Đã viết" : "Thiếu"}
+                  </Badge>
+                  <ChevronDown className="size-4" aria-hidden="true" />
+                </span>
+              </summary>
+              <div className="persona-prompt-disclosure-content">
+                <PersonaFormattedContent
+                  content={section.content}
+                  emptyText="Chưa có nội dung cho phần này."
+                />
               </div>
-              <PersonaFormattedContent
-                content={section.content}
-                emptyText="Chưa có nội dung cho phần này."
-              />
-            </article>
+            </details>
           ))}
         </div>
       </section>
@@ -415,40 +424,8 @@ const PersonaStudioOverview = ({
       <section className="persona-studio-section">
         <div className="persona-studio-section-title">
           <div>
-            <h2>Luật phản hồi</h2>
-            <p>Những nguyên tắc quan trọng nhất agent phải tuân thủ.</p>
-          </div>
-        </div>
-        <div className="persona-prompt-list">
-          {ruleSections.map((section) => (
-            <article key={section.title} className="persona-rule-card tt-card">
-              <div>
-                <Badge
-                  variant="outline"
-                  className={
-                    section.content
-                      ? "persona-studio-badge is-good"
-                      : "persona-studio-badge"
-                  }
-                >
-                  {section.content ? "Bật" : "Thiếu"}
-                </Badge>
-                <strong>{section.title}</strong>
-              </div>
-              <PersonaFormattedContent
-                content={section.content}
-                emptyText="Chưa có luật phản hồi cho phần này."
-              />
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="persona-studio-section">
-        <div className="persona-studio-section-title">
-          <div>
-            <h2>Tự động follow-up</h2>
-            <p>Lịch nhắc lại theo mức ưu tiên của ứng viên.</p>
+            <h2>Follow-up</h2>
+            <p>Lịch nhắc theo mức ưu tiên.</p>
           </div>
           <Button
             variant="outline"
@@ -456,14 +433,14 @@ const PersonaStudioOverview = ({
             onClick={() => onEdit(persona)}
           >
             <Pencil className="size-3.5" />
-            Sửa follow-up
+            Sửa
           </Button>
         </div>
         <div className="persona-followup-grid">
           {FOLLOWUP_KEYS.map((key) => {
             const rule = persona.followup_rules?.[key];
             return (
-              <article key={key} className="persona-followup-card tt-card">
+              <article key={key} className="persona-followup-card">
                 <div>
                   <strong>{FOLLOWUP_LABELS[key]}</strong>
                   <Badge
@@ -479,11 +456,11 @@ const PersonaStudioOverview = ({
                 </div>
                 <p>
                   {rule?.cadence_hours?.length
-                    ? `Nhắc sau ${rule.cadence_hours.join(", ")} giờ`
-                    : "Chưa đặt lịch nhắc"}
+                    ? `Sau ${rule.cadence_hours.join(", ")} giờ`
+                    : "Chưa đặt lịch"}
                 </p>
                 <small>
-                  Giai đoạn: {rule?.eligible_stages?.join(", ") || "Chưa chọn"}
+                  {rule?.eligible_stages?.join(", ") || "Chưa chọn nhóm"}
                 </small>
               </article>
             );
@@ -494,16 +471,14 @@ const PersonaStudioOverview = ({
       <section className="persona-studio-section">
         <div className="persona-studio-section-title">
           <div>
-            <h2>Adapter & nhật ký</h2>
-            <p>
-              Agent đang hiệu lực trên adapter nào và thay đổi gần nhất là gì.
-            </p>
+            <h2>Phạm vi</h2>
+            <p>Adapter sử dụng Agent này.</p>
           </div>
         </div>
         <div className="persona-scope-activity-grid">
           <div className="persona-scope-list">
             <div className="persona-scope-row">
-              <span>Loại agent</span>
+              <span>Kiểu dùng</span>
               <strong>{adapterModeLabel}</strong>
               <Badge
                 variant="outline"
@@ -513,61 +488,70 @@ const PersonaStudioOverview = ({
               </Badge>
             </div>
             <div className="persona-scope-row">
-              <span>Adapter hiệu lực</span>
+              <span>Đang dùng</span>
               <strong>{adapterScopeSummary}</strong>
               <Button
                 variant="outline"
                 type="button"
                 onClick={() => onEdit(persona)}
               >
-                Quản lý adapter
+                Quản lý
               </Button>
             </div>
             <div className="persona-scope-row">
-              <span>Ghi chú nội bộ</span>
-              <strong>{persona.notes?.trim() || "Chưa có ghi chú"}</strong>
+              <span>Ghi chú</span>
+              <strong>{persona.notes?.trim() || "Chưa có"}</strong>
               <Button
                 variant="outline"
                 type="button"
                 onClick={() => onEdit(persona)}
               >
-                Thêm
+                Sửa
               </Button>
             </div>
           </div>
-          <div className="persona-activity is-expanded">
-            <div>
+          <details className="persona-activity-disclosure">
+            <summary>
               <span>
-                <Pencil className="size-3.5" />
+                <Clock3 className="size-4" />
+                Lịch sử
               </span>
-              <p>
-                <strong>Cập nhật cấu hình</strong>
-                <small>{updatedAt}</small>
-              </p>
+              <ChevronDown className="size-4" aria-hidden="true" />
+            </summary>
+            <div className="persona-activity">
+              <div>
+                <span>
+                  <Pencil className="size-3.5" />
+                </span>
+                <p>
+                  <strong>Cập nhật cấu hình</strong>
+                  <small>{updatedAt}</small>
+                </p>
+              </div>
+              <div>
+                <span>
+                  <Clock3 className="size-3.5" />
+                </span>
+                <p>
+                  <strong>Tạo Agent</strong>
+                  <small>{createdAt}</small>
+                </p>
+              </div>
+              <div>
+                <span>
+                  <CheckCircle2 className="size-3.5" />
+                </span>
+                <p>
+                  <strong>
+                    {persona.is_active
+                      ? "Đang làm mặc định"
+                      : "Trạng thái adapter"}
+                  </strong>
+                  <small>{adapterActivitySummary}</small>
+                </p>
+              </div>
             </div>
-            <div>
-              <span>
-                <Clock3 className="size-3.5" />
-              </span>
-              <p>
-                <strong>Tạo Agent</strong>
-                <small>{createdAt}</small>
-              </p>
-            </div>
-            <div>
-              <span>
-                <CheckCircle2 className="size-3.5" />
-              </span>
-              <p>
-                <strong>
-                  {persona.is_active
-                    ? "Đang làm mặc định"
-                    : "Trạng thái adapter"}
-                </strong>
-                <small>{adapterActivitySummary}</small>
-              </p>
-            </div>
-          </div>
+          </details>
         </div>
       </section>
 
@@ -722,8 +706,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
               >
                 <div className="persona-panel-header">
                   <div>
-                    <p className="persona-panel-eyebrow">Danh sách</p>
-                    <h2>Danh sách Agent</h2>
+                    <h2>Hồ sơ Agent</h2>
                   </div>
                   <Badge
                     variant="outline"

@@ -43,9 +43,7 @@ describe("KnowledgeRelearnAction", () => {
     mocks.reindexAllKnowledge.mockResolvedValue({ status: "ok", queued: 7 });
     const screen = await render(<KnowledgeRelearnAction />);
 
-    await screen
-      .getByRole("button", { name: "Học lại dữ liệu", exact: true })
-      .click();
+    await screen.getByRole("button", { name: "Học lại", exact: true }).click();
     expect(mocks.reindexAllKnowledge).not.toHaveBeenCalled();
     await expect
       .element(
@@ -53,9 +51,7 @@ describe("KnowledgeRelearnAction", () => {
       )
       .toBeVisible();
 
-    await screen
-      .getByRole("button", { name: "Học lại dữ liệu", exact: true })
-      .click();
+    await screen.getByRole("button", { name: "Học lại", exact: true }).click();
 
     await vi.waitFor(() => {
       expect(mocks.reindexAllKnowledge).toHaveBeenCalledTimes(1);
@@ -69,7 +65,8 @@ describe("KnowledgeRelearnAction", () => {
 
   it("disables the pending action to prevent duplicate requests", async () => {
     let resolveRequest:
-      ((value: { status: string; queued: number }) => void) | undefined;
+      | ((value: { status: string; queued: number }) => void)
+      | undefined;
     mocks.reindexAllKnowledge.mockImplementation(
       () =>
         new Promise<{ status: string; queued: number }>((resolve) => {
@@ -78,12 +75,8 @@ describe("KnowledgeRelearnAction", () => {
     );
     const screen = await render(<KnowledgeRelearnAction />);
 
-    await screen
-      .getByRole("button", { name: "Học lại dữ liệu", exact: true })
-      .click();
-    await screen
-      .getByRole("button", { name: "Học lại dữ liệu", exact: true })
-      .click();
+    await screen.getByRole("button", { name: "Học lại", exact: true }).click();
+    await screen.getByRole("button", { name: "Học lại", exact: true }).click();
 
     const pendingButton = screen.getByRole("button", {
       name: "Đang xếp hàng…",
@@ -105,12 +98,8 @@ describe("KnowledgeRelearnAction", () => {
     mocks.reindexAllKnowledge.mockRejectedValue(new Error("Máy chủ đang bận."));
     const screen = await render(<KnowledgeRelearnAction />);
 
-    await screen
-      .getByRole("button", { name: "Học lại dữ liệu", exact: true })
-      .click();
-    await screen
-      .getByRole("button", { name: "Học lại dữ liệu", exact: true })
-      .click();
+    await screen.getByRole("button", { name: "Học lại", exact: true }).click();
+    await screen.getByRole("button", { name: "Học lại", exact: true }).click();
 
     await vi.waitFor(() => {
       expect(mocks.notify).toHaveBeenCalledWith(
@@ -119,9 +108,7 @@ describe("KnowledgeRelearnAction", () => {
       );
     });
     await expect
-      .element(
-        screen.getByRole("button", { name: "Học lại dữ liệu", exact: true }),
-      )
+      .element(screen.getByRole("button", { name: "Học lại", exact: true }))
       .toBeEnabled();
   });
 
@@ -130,7 +117,7 @@ describe("KnowledgeRelearnAction", () => {
     const screen = await render(<KnowledgeRelearnAction />);
 
     await expect
-      .element(screen.getByRole("button", { name: "Học lại dữ liệu" }))
+      .element(screen.getByRole("button", { name: "Học lại" }))
       .not.toBeInTheDocument();
   });
 });

@@ -240,14 +240,14 @@ const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
   {
     itemId: "settings-agents",
     label: "Agents",
-    description: "Giọng trả lời theo adapter",
+    description: "Giọng trả lời",
     Icon: Workflow,
     mode: "embedded",
   },
   {
     itemId: "settings-users",
-    label: "Users",
-    description: "Tài khoản quản trị",
+    label: "Người dùng",
+    description: "Tài khoản & quyền",
     Icon: UsersRound,
     mode: "embedded",
   },
@@ -260,33 +260,32 @@ const SETTINGS_VIEW_COPY: Record<
   "settings-zalo-channel": {
     kicker: "Kênh liên lạc",
     title: "Zalo",
-    description: "Cấu hình Bot Platform và Official Account dùng để nhắn tin.",
+    description: "Bot Platform và OA cho tin nhắn Zalo.",
   },
   "settings-facebook-messenger": {
     kicker: "Kênh liên lạc",
     title: "Messenger",
-    description: "Kết nối Trang Facebook để nhận và trả lời tin nhắn ứng viên.",
+    description: "Kết nối Trang Facebook để nhắn tin với ứng viên.",
   },
   "settings-minimax": {
     kicker: "Model chính",
     title: "Minimax",
-    description: "Cấu hình khóa API cho model chính của Agent.",
+    description: "Khóa API cho model Agent chính.",
   },
   "settings-openrouter": {
     kicker: "Model dự phòng",
     title: "OpenRouter",
-    description: "Cấu hình fallback và embeddings khi cần chuyển tuyến model.",
+    description: "Fallback và embeddings khi model chính gián đoạn.",
   },
   "settings-agents": {
     kicker: "Không gian cài đặt",
     title: "Agents",
-    description:
-      "Quản lý giọng trả lời, prompt và phân công Agent theo adapter.",
+    description: "Giọng trả lời và adapter sử dụng.",
   },
   "settings-users": {
     kicker: "Không gian cài đặt",
-    title: "Users",
-    description: "Quản lý tài khoản nội bộ và quyền truy cập quản trị.",
+    title: "Người dùng",
+    description: "Tài khoản nội bộ và quyền quản trị.",
   },
 };
 

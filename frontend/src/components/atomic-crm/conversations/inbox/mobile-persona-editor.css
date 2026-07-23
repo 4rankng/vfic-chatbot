@@ -881,3 +881,407 @@
     border: 0;
   }
 }
+
+/* Flat Agent editor: one continuous surface with compact, expandable sections. */
+.persona-editor-shell {
+  gap: 0;
+  background: var(--surface-solid);
+}
+
+.persona-editor-hero {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.persona-edit-surface {
+  border: 0;
+  border-radius: 0;
+}
+
+.persona-edit-identity {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 18px 16px;
+}
+
+.persona-edit-name-field {
+  max-width: none;
+}
+
+.persona-edit-name-field [data-slot="input"],
+.persona-edit-name-field [data-slot="select-trigger"] {
+  width: 100%;
+  max-width: none;
+  min-height: 44px;
+}
+
+.persona-edit-import-strip {
+  display: block;
+  padding: 0;
+  background: transparent;
+}
+
+.persona-edit-import-strip > summary {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.persona-edit-import-strip > summary::-webkit-details-marker,
+.persona-edit-prompt-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+.persona-edit-import-strip > summary:focus-visible,
+.persona-edit-prompt-block > summary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.persona-edit-import-strip > summary > svg,
+.persona-edit-prompt-state > svg {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
+  transition: transform 180ms ease;
+}
+
+.persona-edit-import-strip[open] > summary > svg,
+.persona-edit-prompt-block[open] .persona-edit-prompt-state > svg {
+  transform: rotate(180deg);
+}
+
+.persona-edit-import-actions {
+  padding: 0 16px 12px 55px;
+}
+
+.persona-edit-import-actions [data-slot="button"] {
+  min-height: 40px;
+  height: 40px;
+}
+
+.persona-edit-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.persona-edit-main {
+  padding: 18px 16px 20px;
+  border-right: 0;
+  background: var(--surface-solid);
+}
+
+.persona-edit-section-heading {
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.persona-edit-section-heading p {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.persona-edit-section-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border-block: 1px solid var(--border);
+}
+
+.persona-edit-prompt-block,
+.persona-edit-prompt-block:nth-child(3),
+.persona-edit-prompt-block:nth-child(4) {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  grid-row: auto;
+}
+
+.persona-edit-prompt-block:last-child {
+  border-bottom: 0;
+}
+
+.persona-edit-prompt-head {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  padding: 10px 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.persona-edit-prompt-copy {
+  min-width: 0;
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+}
+
+.persona-edit-prompt-copy small {
+  max-width: 78ch;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: var(--fs-meta);
+  font-weight: 560;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.persona-edit-prompt-state {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.persona-edit-prompt-block[open] .persona-edit-prompt-copy small {
+  display: none;
+}
+
+.persona-edit-prompt-content {
+  padding: 0 4px 14px;
+}
+
+.persona-edit-textarea,
+.persona-edit-prompt-block:nth-child(3) .persona-edit-textarea,
+.persona-edit-prompt-block:nth-child(4) .persona-edit-textarea {
+  min-height: 220px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-hover) 20%, transparent);
+}
+
+.persona-edit-rail {
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface-solid);
+}
+
+.persona-edit-rail-card {
+  gap: 10px;
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.persona-edit-rail-card + .persona-edit-rail-card {
+  border-left: 1px solid var(--border);
+}
+
+.persona-followup-editor-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-block: 1px solid var(--border);
+}
+
+.persona-followup-editor-card {
+  gap: 10px;
+  padding: 12px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.persona-followup-editor-card:first-child {
+  border-left: 0;
+}
+
+.persona-followup-editor-card [data-slot="input"],
+.persona-followup-editor-card input {
+  min-height: 40px;
+  height: 40px;
+  font-size: var(--fs-body-sm);
+}
+
+.persona-followup-editor-card [role="switch"] {
+  transform: none;
+}
+
+.persona-followup-stage {
+  min-height: 36px;
+}
+
+.tailkit-workspace-content .persona-followup-stage [data-slot="checkbox"] {
+  width: 18px;
+  height: 18px !important;
+  min-height: 18px !important;
+}
+
+.persona-edit-savebar {
+  padding: 12px 16px;
+}
+
+.tailkit-workspace-content .persona-edit-savebar button[data-slot="button"] {
+  min-height: 44px !important;
+  height: 44px !important;
+}
+
+.persona-assignment-surface {
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.persona-assignment-header {
+  padding: 16px;
+  background: transparent;
+}
+
+.persona-assignment-title {
+  margin: 0;
+}
+
+.persona-assignment-content {
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 0;
+  padding: 0 16px 18px;
+}
+
+.persona-assignment-summary {
+  padding: 14px 18px 14px 0;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.persona-assignment-table {
+  border: 0;
+  border-radius: 0;
+}
+
+.persona-assignment-table-head {
+  padding-inline: 16px 0;
+  background: transparent;
+}
+
+.persona-assignment-table-body {
+  max-height: none;
+  overflow: visible;
+}
+
+.persona-assignment-row-card {
+  min-height: 76px;
+  padding: 12px 0 12px 16px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.persona-assignment-row-actions [data-slot="button"] {
+  min-height: 40px;
+}
+
+@media (max-width: 900px) {
+  .persona-edit-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .persona-edit-rail-card + .persona-edit-rail-card {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .persona-editor-hero,
+  .persona-edit-identity,
+  .persona-edit-main,
+  .persona-edit-rail-card,
+  .persona-assignment-header {
+    padding: 14px;
+  }
+
+  .persona-edit-identity,
+  .persona-followup-editor-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .persona-editor-status-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .persona-edit-import-strip > summary {
+    min-height: 60px;
+    padding-inline: 14px;
+  }
+
+  .persona-edit-import-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0 14px 14px;
+  }
+
+  .persona-edit-import-actions [data-slot="button"],
+  .tailkit-workspace-content .persona-edit-savebar button[data-slot="button"],
+  .persona-assignment-row-actions [data-slot="button"] {
+    min-height: 44px !important;
+    height: 44px !important;
+  }
+
+  .persona-edit-section-heading {
+    display: flex;
+  }
+
+  .persona-edit-prompt-head {
+    min-height: 72px;
+    padding-inline: 0;
+  }
+
+  .persona-edit-prompt-copy small {
+    display: -webkit-box;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .persona-edit-prompt-content {
+    padding-inline: 0;
+  }
+
+  .persona-followup-editor-card {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .persona-followup-editor-card:first-child {
+    border-top: 0;
+  }
+
+  .persona-followup-stage {
+    min-height: 44px;
+  }
+
+  .persona-assignment-content {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0 14px 18px;
+  }
+
+  .persona-assignment-summary {
+    padding: 12px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .persona-assignment-table-head,
+  .persona-assignment-row-card {
+    padding-inline: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .persona-edit-import-strip > summary > svg,
+  .persona-edit-prompt-state > svg {
+    transition: none;
+  }
+}

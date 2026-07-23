@@ -303,12 +303,8 @@
     min-width: 0;
   }
 
-  .tailkit-workspace-content
-    .settings-workspace-content
-    .settings-input-action,
-  .tailkit-workspace-content
-    .settings-workspace-content
-    .settings-copy-app-id {
+  .tailkit-workspace-content .settings-workspace-content .settings-input-action,
+  .tailkit-workspace-content .settings-workspace-content .settings-copy-app-id {
     position: relative;
     width: 36px;
     min-width: 36px;
@@ -367,6 +363,10 @@
     padding-top: 0;
   }
 
+  .settings-advanced-summary {
+    min-height: 44px;
+  }
+
   .settings-webhook-health {
     grid-column: 1 / -1;
   }
@@ -408,12 +408,8 @@
     grid-template-columns: minmax(0, 1fr) 44px 44px;
   }
 
-  .tailkit-workspace-content
-    .settings-workspace-content
-    .settings-input-action,
-  .tailkit-workspace-content
-    .settings-workspace-content
-    .settings-copy-app-id {
+  .tailkit-workspace-content .settings-workspace-content .settings-input-action,
+  .tailkit-workspace-content .settings-workspace-content .settings-copy-app-id {
     width: 44px;
     min-width: 44px;
     height: 44px;
@@ -703,5 +699,158 @@
 @media (max-width: 480px) {
   .settings-messenger .settings-messenger-primary-action {
     width: 100%;
+  }
+}
+
+/* UntitledUI-inspired flat settings console.
+   The navigation and configuration groups share one continuous workspace;
+   borders are reserved for inputs, disclosure controls, and true state. */
+@media (min-width: 768px) {
+  .inbox-bg-container.settings-workspace .settings-center-panel {
+    border: 0;
+    border-radius: 0;
+    background: var(--settings-canvas);
+    box-shadow: none;
+  }
+
+  .settings-workspace-content {
+    padding: 24px 28px 48px;
+  }
+
+  .settings-page-shell {
+    width: min(100%, 1240px);
+  }
+
+  .settings-console {
+    gap: 0;
+  }
+
+  .settings-side-nav {
+    gap: 12px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .settings-main {
+    gap: 0;
+  }
+
+  .settings-command-header {
+    padding: 0 0 20px;
+  }
+
+  .settings-section-panel {
+    gap: 0;
+    padding-top: 22px;
+  }
+
+  .settings-grid {
+    gap: 0;
+  }
+
+  .settings-card {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    transition: none;
+  }
+
+  .settings-card:hover {
+    border-color: transparent;
+  }
+
+  .settings-card-header {
+    min-height: 36px;
+    padding: 0 0 14px;
+    border: 0;
+  }
+
+  .settings-card-content,
+  .settings-messenger-card-content {
+    gap: 14px 16px;
+    padding: 0;
+  }
+
+  .settings-grid-models {
+    max-width: 720px;
+  }
+
+  .settings-embedded-resource {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+}
+
+@media (min-width: 901px) {
+  .settings-console {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+
+  .settings-side-nav {
+    padding: 0 24px 0 0;
+    border-right: 1px solid var(--settings-border);
+  }
+
+  .settings-main {
+    padding-left: 32px;
+  }
+}
+
+@media (min-width: 1121px) {
+  .settings-grid-zalo {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-grid-zalo > .settings-card:first-child {
+    padding-right: 28px;
+  }
+
+  .settings-grid-zalo > .settings-card + .settings-card {
+    padding-left: 28px;
+    border-left: 1px solid var(--settings-border);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1120px) {
+  .settings-grid-zalo,
+  .settings-grid-models {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-grid > .settings-card + .settings-card {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--settings-border);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 900px) {
+  .settings-side-nav {
+    padding: 0 0 18px;
+    border-bottom: 1px solid var(--settings-border);
+  }
+
+  .settings-main {
+    padding-top: 24px;
+  }
+}
+
+@media (min-width: 768px) {
+  .settings-embedded-resource .persona-studio-layout {
+    border: 0;
+    border-top: 1px solid var(--settings-border);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .settings-embedded-resource .persona-agent-picker {
+    background: transparent;
   }
 }

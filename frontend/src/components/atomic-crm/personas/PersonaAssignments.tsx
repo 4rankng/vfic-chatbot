@@ -2,13 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNotify, useRefresh } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Globe2, RefreshCcw, Workflow } from "lucide-react";
 import {
@@ -81,7 +74,7 @@ const getAssignmentState = (
     return {
       badge: "Gán riêng",
       badgeVariant: "brand" as const,
-      summary: "Adapter này đang gán rõ ràng Agent này.",
+      summary: "Dùng Agent này.",
       actionLabel: "Trả về mặc định",
       nextPersonaId: null as string | null,
       actionDisabled: false,
@@ -92,8 +85,8 @@ const getAssignmentState = (
     return {
       badge: "Theo mặc định",
       badgeVariant: "good" as const,
-      summary: "Adapter này đang kế thừa Agent này từ mặc định toàn hệ thống.",
-      actionLabel: "Agent mặc định",
+      summary: "Kế thừa từ mặc định.",
+      actionLabel: "Đang mặc định",
       nextPersonaId: null as string | null,
       actionDisabled: true,
     };
@@ -103,8 +96,8 @@ const getAssignmentState = (
     badge: assignment.persona_id ? "Agent khác" : "Mặc định khác",
     badgeVariant: "neutral" as const,
     summary: assignment.persona_id
-      ? "Adapter này đang gán rõ ràng một Agent khác."
-      : "Adapter này đang kế thừa một Agent mặc định khác.",
+      ? "Đang dùng Agent khác."
+      : "Kế thừa mặc định khác.",
     actionLabel: "Gán Agent này",
     nextPersonaId: persona.id,
     actionDisabled: false,
@@ -255,18 +248,17 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   };
 
   return (
-    <Card className="persona-assignment-surface">
-      <CardHeader className="persona-assignment-header">
+    <section className="persona-assignment-surface">
+      <header className="persona-assignment-header">
         <div className="persona-assignment-header-row">
           <div>
-            <CardTitle className="persona-assignment-title">
+            <h2 className="persona-assignment-title">
               <Workflow className="size-4 text-primary" />
-              Phạm vi adapter
-            </CardTitle>
-            <CardDescription className="persona-assignment-description">
-              Mỗi adapter dùng một Agent hiệu lực. Bạn có thể gán rõ ràng Agent
-              này cho từng adapter hoặc trả adapter về mặc định toàn hệ thống.
-            </CardDescription>
+              Adapter
+            </h2>
+            <p className="persona-assignment-description">
+              Chọn Agent hiệu lực cho từng kênh.
+            </p>
           </div>
           <div className="persona-assignment-actions">
             {persona.is_active ? (
@@ -282,6 +274,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 type="button"
                 variant="outline"
                 size="sm"
+                className="tt-btn-touch"
                 onClick={setGlobalDefault}
                 disabled={activating}
               >
@@ -298,15 +291,15 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
             )}
           </div>
         </div>
-      </CardHeader>
+      </header>
 
-      <CardContent className="persona-assignment-content">
+      <div className="persona-assignment-content">
         <div className="persona-assignment-summary">
-          <div>Adapter đang dùng</div>
+          <div>Đang dùng</div>
           <strong>{usageSummary.effectiveCount}/3</strong>
           <p>
-            Gán rõ ràng: {usageSummary.explicitCount}. Theo mặc định:{" "}
-            {usageSummary.effectiveCount - usageSummary.explicitCount}.
+            {usageSummary.explicitCount} gán riêng ·{" "}
+            {usageSummary.effectiveCount - usageSummary.explicitCount} kế thừa
           </p>
         </div>
 
@@ -347,7 +340,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 return (
                   <section
                     key={assignment.provider}
-                    className="persona-assignment-row persona-assignment-row-card tt-card"
+                    className="persona-assignment-row persona-assignment-row-card"
                     role="group"
                     aria-label={assignment.label}
                   >
@@ -384,6 +377,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                         type="button"
                         variant="outline"
                         size="sm"
+                        className="tt-btn-touch"
                         onClick={() =>
                           void refreshProvider(assignment.provider)
                         }
@@ -403,6 +397,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                       <Button
                         type="button"
                         size="sm"
+                        className="tt-btn-touch"
                         onClick={() =>
                           !state.actionDisabled
                             ? void saveAssignment(
@@ -429,7 +424,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
             )}
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 };

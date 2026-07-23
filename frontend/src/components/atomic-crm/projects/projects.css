@@ -793,6 +793,30 @@
     max-width: none;
     justify-content: flex-start;
   }
+
+  .project-category-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-category-card {
+    min-height: 68px;
+  }
+
+  .project-category-card:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .project-category-card:nth-last-child(-n + 2) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .project-category-card:last-child {
+    border-bottom: 0;
+  }
+
+  .project-source-delete {
+    min-width: 44px;
+  }
 }
 
 @media (max-width: 359px) {
@@ -819,5 +843,109 @@
 
   .project-category-editor-actions > :last-child {
     grid-column: auto;
+  }
+}
+
+/* Flat project workspace: the project summary, actions, and knowledge editor
+   read as one continuous operational surface instead of nested cards. */
+@media (min-width: 768px) {
+  .inbox-bg-container.project-workspace .project-center-panel {
+    border: 0;
+    border-radius: 0;
+    background: var(--chat-bg);
+    box-shadow: none;
+  }
+
+  .project-workspace-content {
+    padding: 24px 28px 48px;
+  }
+
+  .project-page-shell {
+    width: min(100%, 1240px);
+    gap: 16px;
+  }
+
+  .project-command-header {
+    padding: 0 0 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .project-accordion-list {
+    gap: 0;
+    border-block: 1px solid var(--border);
+  }
+
+  .project-accordion-item {
+    overflow: visible;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .project-accordion-item:last-child {
+    border-bottom: 0;
+  }
+
+  .project-accordion-item[data-state="open"] {
+    border-color: var(--border);
+    box-shadow: none;
+  }
+
+  .project-accordion-trigger {
+    padding: 18px 4px;
+  }
+
+  .project-accordion-trigger:hover {
+    background: color-mix(in srgb, var(--brand-light) 22%, transparent);
+  }
+
+  .project-accordion-item[data-state="open"] .project-accordion-trigger {
+    background: color-mix(in srgb, var(--brand-light) 34%, transparent);
+    box-shadow: inset 3px 0 0 var(--brand);
+  }
+
+  .project-accordion-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin-top: 12px;
+    border: 0;
+  }
+
+  .project-accordion-facts > div {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: baseline;
+    gap: 8px;
+    padding: 0;
+  }
+
+  .project-accordion-facts > div + div {
+    border-left: 0;
+  }
+
+  .project-accordion-facts dd {
+    margin: 0;
+  }
+
+  .project-accordion-description {
+    max-width: 82ch;
+    margin-top: 10px;
+  }
+
+  .project-accordion-content {
+    gap: 18px;
+    padding: 20px 4px 28px;
+    border-top: 1px solid var(--border);
+    background: transparent;
+  }
+
+  .project-knowledge-header {
+    padding-top: 0;
+  }
+
+  .project-category-grid {
+    margin-top: 2px;
   }
 }

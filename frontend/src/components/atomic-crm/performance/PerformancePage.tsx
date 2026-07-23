@@ -210,10 +210,7 @@ const PerformanceError = ({ onRetry }: { onRetry: () => void }) => {
     >
       <AlertCircle aria-hidden="true" />
       <h2>Không tải được số liệu hiệu suất</h2>
-      <p>
-        Kiểm tra kết nối rồi thử lại. Dữ liệu vận hành không thay đổi khi bạn
-        tải lại trang này.
-      </p>
+      <p>Kiểm tra kết nối rồi thử lại.</p>
       <div>
         <Button onClick={onRetry}>
           <RefreshCw className="size-4" />
@@ -242,7 +239,7 @@ const TrendChart = ({
       <div className="performance-section-heading">
         <div>
           <h2>Xu hướng độ trễ ứng viên chờ</h2>
-          <p>p95 theo từng 5 phút. Mục tiêu candidate-visible: ≤ 10 giây.</p>
+          <p>p95 mỗi 5 phút · mục tiêu ≤ 10 giây.</p>
         </div>
         <div className="performance-legend" aria-label="Chú giải biểu đồ">
           <span>
@@ -381,8 +378,7 @@ const AttentionQueue = ({ data }: { data: PerfMetrics }) => {
       id: "stable",
       tone: "success",
       title: "Chưa có tín hiệu cần xử lý",
-      detail:
-        "Dữ liệu hiện tại không cho thấy áp lực giao gửi hay xử lý bất thường.",
+      detail: "Không ghi nhận bất thường.",
       value: "Ổn định",
       icon: CheckCircle2,
     });
@@ -396,7 +392,7 @@ const AttentionQueue = ({ data }: { data: PerfMetrics }) => {
               {signals.filter((signal) => signal.tone !== "success").length}
             </span>
           </h2>
-          <p>Ưu tiên theo mức độ ảnh hưởng tới ứng viên và giao gửi.</p>
+          <p>Ưu tiên theo ảnh hưởng tới ứng viên.</p>
         </div>
       </div>
       <ul className="performance-signal-list">
@@ -474,10 +470,7 @@ const StageMatrix = ({ data }: { data: PerfMetrics }) => {
       <div className="performance-section-heading">
         <div>
           <h2>Chẩn đoán độ trễ</h2>
-          <p>
-            p50 · p95 · p99; các điểm đo nội bộ là chi tiết chẩn đoán, không
-            cộng dồn.
-          </p>
+          <p>p50 · p95 · p99 theo từng điểm đo, không cộng dồn.</p>
         </div>
       </div>
       {rows.length === 0 ? (
@@ -543,15 +536,13 @@ const AdapterComparison = ({ data }: { data: PerfMetrics }) => {
         <div>
           <h2>So sánh kênh giao gửi</h2>
           <p>
-            Các số liệu cùng một hợp đồng adapter; thời gian dừng khi nhà cung
-            cấp nhận yêu cầu, không phải lúc ứng viên nhìn thấy tin nhắn.
+            Đo đến khi nhà cung cấp nhận yêu cầu, chưa phải lúc ứng viên thấy
+            tin.
           </p>
         </div>
       </div>
       {rows.length === 0 ? (
-        <p className="performance-empty">
-          Chưa có lượt gửi đã được đo theo adapter.
-        </p>
+        <p className="performance-empty">Chưa có dữ liệu theo kênh.</p>
       ) : (
         <div
           className="performance-table-wrap"
@@ -793,12 +784,12 @@ const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
           <h2>
             Lượt cần xem <span>{slowTurns.length}</span>
           </h2>
-          <p>Ưu tiên những lượt ảnh hưởng tới phản hồi hoặc giao gửi.</p>
+          <p>Các lượt ảnh hưởng tới phản hồi hoặc giao gửi.</p>
         </div>
       </div>
       {slowTurns.length === 0 ? (
         <p className="performance-empty">
-          Chưa có lượt nào được ghi nhận trong khoảng thời gian này.
+          Chưa có lượt cần xem trong khoảng này.
         </p>
       ) : (
         <>
@@ -949,7 +940,7 @@ const SupportingStats = ({ data }: { data: PerfMetrics }) => {
         <p>
           {data.trend.length > 0
             ? `${data.trend.length} điểm xu hướng trong khoảng đã chọn.`
-            : "Chưa có bucket thời gian để kiểm tra."}
+            : "Chưa có điểm thời gian để kiểm tra."}
         </p>
       </article>
     </section>
@@ -1057,7 +1048,7 @@ const PerformancePanel = () => {
           <p>
             {isPending
               ? "Đang tải số liệu cho khoảng thời gian đã chọn."
-              : "Theo dõi trải nghiệm ứng viên, năng lực xử lý và độ tin cậy giao gửi."}
+              : "Trải nghiệm ứng viên, năng lực xử lý và độ tin cậy giao gửi."}
           </p>
         </div>
         <div className="performance-header-actions">
@@ -1088,7 +1079,9 @@ const PerformancePanel = () => {
             />
             {freshness ? (
               <>
-                <span className="performance-refresh-prefix">Cập nhật lúc </span>
+                <span className="performance-refresh-prefix">
+                  Cập nhật lúc{" "}
+                </span>
                 {freshness}
               </>
             ) : (

@@ -78,7 +78,7 @@ export const KnowledgeRelearnAction = () => {
         variant="outline"
         disabled={reindexPending}
         onClick={() => setConfirmOpen(true)}
-        className="h-11 w-full rounded-[9px] sm:h-10 sm:w-fit"
+        className="knowledge-relearn-action tt-btn-touch h-11 w-full rounded-[9px] sm:w-fit"
       >
         <RelearnIcon
           className={cn(
@@ -86,15 +86,15 @@ export const KnowledgeRelearnAction = () => {
             reindexPending && "animate-spin motion-reduce:animate-none",
           )}
         />
-        {reindexPending ? "Đang xếp hàng…" : "Học lại dữ liệu"}
+        {reindexPending ? "Đang xếp hàng…" : "Học lại"}
       </Button>
       <Confirm
         isOpen={confirmOpen}
         loading={reindexPending}
         title="Học lại toàn bộ dữ liệu?"
-        content="Hệ thống sẽ xếp hàng xử lý lại KB đã xuất bản, sau đó dựng lại dữ liệu có cấu trúc và việc làm từ nguồn kiến thức. Tác vụ chạy nền và có thể mất vài phút."
+        content="Hệ thống sẽ xử lý lại các nguồn đã xuất bản. Tác vụ chạy nền và có thể mất vài phút."
         cancel="Hủy"
-        confirm={reindexPending ? "Đang xếp hàng…" : "Học lại dữ liệu"}
+        confirm={reindexPending ? "Đang xếp hàng…" : "Học lại"}
         ConfirmIcon={RelearnIcon}
         onClose={() => {
           if (!reindexPending) setConfirmOpen(false);
@@ -165,10 +165,7 @@ const KnowledgeSourceListContent = () => {
             <div className="min-w-0">
               <p className="ops-kicker">Trung tâm kiến thức</p>
               <h1>Quản lý kiến thức</h1>
-              <p>
-                Theo dõi tài liệu theo từng dự án, trạng thái xử lý, và nguồn
-                cần xem lại trước khi agent dùng trong hội thoại.
-              </p>
+              <p>Tìm, kiểm tra và cập nhật nguồn agent đang sử dụng.</p>
               {hasActive && (
                 <span className="ops-live-pill">
                   <RefreshCw className="size-3.5 animate-spin" />
@@ -178,19 +175,25 @@ const KnowledgeSourceListContent = () => {
             </div>
           </div>
           {(hasSources || permissions === "admin") && (
-            <div className="flex w-full flex-col gap-2 sm:w-fit sm:flex-row">
-              <KnowledgeRelearnAction />
+            <div className="knowledge-command-actions">
+              <div>
+                <KnowledgeRelearnAction />
+              </div>
               {hasSources && (
                 <>
-                  <KnowledgeVersionManager
-                    projectId={
-                      projectFilter !== ALL_PROJECTS ? projectFilter : undefined
-                    }
-                  />
+                  <div>
+                    <KnowledgeVersionManager
+                      projectId={
+                        projectFilter !== ALL_PROJECTS
+                          ? projectFilter
+                          : undefined
+                      }
+                    />
+                  </div>
                   <Button
                     type="button"
                     onClick={() => setUploadOpen(true)}
-                    className="h-10 w-full rounded-[9px] sm:w-fit"
+                    className="knowledge-primary-action tt-btn-touch h-11 w-full rounded-[9px] sm:w-fit"
                   >
                     <Upload className="size-4" />
                     Thêm tệp
@@ -211,7 +214,7 @@ const KnowledgeSourceListContent = () => {
             <strong>{readyCount}</strong>
           </div>
           <div>
-            <span className="ops-status-label">Đang xử lý</span>
+            <span className="ops-status-label">Xử lý</span>
             <strong>{processingCount}</strong>
           </div>
           <div>
@@ -219,7 +222,7 @@ const KnowledgeSourceListContent = () => {
             <strong>{unitCount}</strong>
           </div>
           <div>
-            <span className="ops-status-label">Cần xem lại</span>
+            <span className="ops-status-label">Cần xem</span>
             <strong>{reviewCount}</strong>
           </div>
         </section>
@@ -238,8 +241,8 @@ const KnowledgeSourceListContent = () => {
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm tài liệu, nguồn, tóm tắt..."
-              className="h-10 rounded-[9px] border-border bg-card pl-9 text-control"
+              placeholder="Tìm tài liệu..."
+              className="h-11 rounded-[9px] border-border bg-card pl-9 text-control"
             />
           </div>
           <div className="knowledge-filter-actions">
@@ -252,7 +255,7 @@ const KnowledgeSourceListContent = () => {
                 type="button"
                 variant="outline"
                 onClick={() => selectProject(ALL_PROJECTS)}
-                className="h-10 rounded-[9px]"
+                className="tt-btn-touch h-11 rounded-[9px]"
               >
                 Tất cả
               </Button>
@@ -284,7 +287,7 @@ const KnowledgeSourceListContent = () => {
               <EmptyState
                 icon={<FileText className="size-6" />}
                 title="Chọn một nguồn kiến thức"
-                description="Chi tiết trích xuất, tóm tắt digest và thao tác quản lý sẽ hiện ở đây."
+                description="Chi tiết và thao tác quản lý sẽ hiện ở đây."
                 className="min-h-[420px] rounded-[14px] bg-card"
               />
             )}
@@ -314,17 +317,18 @@ const SourceSelector = ({
 }: {
   sources: ReturnType<typeof useKnowledgeSourceFilters>["sources"];
   selectedSource:
-    ReturnType<typeof useKnowledgeSourceFilters>["sources"][number] | null;
+    | ReturnType<typeof useKnowledgeSourceFilters>["sources"][number]
+    | null;
   total: number;
   onSelect: (id: string) => void;
 }) => {
   return (
-    <section className="ops-panel knowledge-selector-panel">
-      <div className="ops-panel-header knowledge-selector-header">
+    <section className="knowledge-selector-panel">
+      <div className="knowledge-selector-header">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <div className="ops-panel-title">
-            <p className="ops-panel-eyebrow">Tài liệu đang xem</p>
-            <h2>Nguồn đang xem</h2>
+            <p className="ops-panel-eyebrow">Tài liệu</p>
+            <h2>Nguồn kiến thức</h2>
           </div>
           <Badge variant="outline" className="border-border bg-background/70">
             {total} nguồn
@@ -340,7 +344,7 @@ const SourceSelector = ({
           value={selectedSource ? String(selectedSource.id) : undefined}
           onValueChange={onSelect}
         >
-          <SelectTrigger className="h-10 w-full rounded-[9px] border-border bg-background text-control md:w-[380px] lg:w-[460px]">
+          <SelectTrigger className="h-11 w-full rounded-[9px] border-border bg-background text-control md:w-[380px] lg:w-[460px]">
             <SelectValue placeholder="Chọn nguồn kiến thức" />
           </SelectTrigger>
           <SelectContent className="max-h-96">
@@ -363,7 +367,7 @@ const SourceSelector = ({
 };
 
 const SourceSelectorSkeleton = () => (
-  <section className="ops-panel p-4">
+  <section className="knowledge-selector-skeleton p-4">
     <div className="flex items-center gap-3">
       <Skeleton className="size-10 rounded-[10px]" />
       <div className="flex-1 space-y-2">

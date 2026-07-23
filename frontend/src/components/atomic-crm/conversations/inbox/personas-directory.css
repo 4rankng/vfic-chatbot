@@ -350,7 +350,9 @@
 
 .persona-directory-chevron {
   color: var(--ink-faint);
-  transition: transform 160ms ease, color 160ms ease;
+  transition:
+    transform 160ms ease,
+    color 160ms ease;
 }
 
 .persona-directory-row.is-selected .persona-directory-chevron {
@@ -557,4 +559,49 @@
   font-size: var(--fs-meta);
   font-weight: 560;
   line-height: 1.45;
+}
+
+/* Agent picker is a continuous list, not a stack of cards. */
+.persona-agent-bubbles {
+  gap: 0;
+  padding-top: 0;
+  border-block: 1px solid var(--border);
+}
+
+.inbox-bg-container .persona-workspace-content .persona-directory-row {
+  min-height: 64px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.inbox-bg-container
+  .persona-workspace-content
+  .persona-directory-row:last-child {
+  border-bottom: 0;
+}
+
+.inbox-bg-container
+  .persona-workspace-content
+  .persona-directory-row:is(:hover, .is-active, .is-selected) {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--brand-light) 32%, transparent);
+  box-shadow: none;
+}
+
+.inbox-bg-container
+  .persona-workspace-content
+  .persona-directory-row.is-selected {
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.persona-directory-main {
+  min-height: 64px;
+  padding-inline: 12px 10px;
+  border-radius: 0;
+}
+
+.persona-directory-row.is-selected .persona-directory-chevron {
+  transform: none;
 }

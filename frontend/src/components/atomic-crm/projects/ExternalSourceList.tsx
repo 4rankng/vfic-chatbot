@@ -506,6 +506,7 @@ export const ExternalSourceList = ({
                   type="button"
                   variant="ghost"
                   size="sm"
+                  className="project-source-delete"
                   onClick={() => void remove(row)}
                   disabled={disabled}
                   aria-label="Xóa nguồn đồng bộ"

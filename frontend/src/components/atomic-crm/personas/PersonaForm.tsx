@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import {
   BotMessageSquare,
-  CheckCircle2,
+  ChevronDown,
   Download,
   FileText,
   Upload,
@@ -272,33 +272,6 @@ const PersonaForm = ({
           void submit();
         }}
       >
-        <header className="persona-edit-formbar">
-          <div className="persona-edit-formbar-title">
-            <BotMessageSquare className="size-4 text-primary" />
-            <div>
-              <strong>Cấu hình Agent</strong>
-              <span>Viết prompt, follow-up và phạm vi vận hành.</span>
-            </div>
-          </div>
-          <div className="persona-edit-formbar-metrics">
-            <Badge variant="secondary" className="gap-1.5">
-              <FileText className="size-3" />
-              {completedSectionCount}/7 phần
-            </Badge>
-            <Badge variant="outline" className="gap-1.5">
-              <FileText className="size-3" />
-              {contentLength.toLocaleString("vi-VN")} ký tự
-            </Badge>
-            <Badge
-              variant={name.trim() ? "secondary" : "outline"}
-              className="gap-1.5"
-            >
-              <CheckCircle2 className="size-3" />
-              {name.trim() ? "Có tên Agent" : "Chưa đặt tên"}
-            </Badge>
-          </div>
-        </header>
-
         <section className="persona-edit-identity">
           <div className="persona-edit-name-field">
             <Label htmlFor="persona-name" className="text-label font-semibold">
@@ -377,27 +350,36 @@ const PersonaForm = ({
           </div>
         </section>
 
-        <section
+        <details
           className="persona-edit-import-strip"
           aria-label="Nhập file cấu hình Agent"
         >
-          <div className="persona-edit-import-copy">
-            <span className="persona-edit-import-icon" aria-hidden="true">
-              <Upload className="size-4" />
-            </span>
-            <div>
-              <strong>Nhập file cấu hình</strong>
-              <p>Dùng file .md hoặc .txt để điền nhanh prompt trước khi sửa.</p>
+          <summary>
+            <div className="persona-edit-import-copy">
+              <span className="persona-edit-import-icon" aria-hidden="true">
+                <Upload className="size-4" />
+              </span>
+              <div>
+                <strong>Nhập từ file</strong>
+                <p>Markdown hoặc văn bản thuần.</p>
+              </div>
             </div>
-          </div>
+            <ChevronDown className="size-4" aria-hidden="true" />
+          </summary>
           <div className="persona-edit-import-actions">
-            <Button type="button" variant="outline" onClick={downloadTemplate}>
+            <Button
+              type="button"
+              variant="outline"
+              className="tt-btn-touch"
+              onClick={downloadTemplate}
+            >
               <Download className="size-4" />
               Tải mẫu
             </Button>
             <Button
               type="button"
               variant="outline"
+              className="tt-btn-touch"
               disabled={importing || !knowledgeBaseId}
               onClick={() => fileInputRef.current?.click()}
             >
@@ -419,18 +401,18 @@ const PersonaForm = ({
               onChange={onPersonaFileChange}
             />
           </div>
-        </section>
+        </details>
 
         <div className="persona-edit-grid">
           <div className="persona-edit-main">
             <section className="persona-edit-section-heading">
               <div>
-                <span>Nội dung Agent</span>
-                <h2>Prompt làm việc</h2>
+                <span>Nội dung</span>
+                <h2>Prompt Agent</h2>
               </div>
               <p>
-                Mỗi phần là một khối hướng dẫn riêng. Giữ câu chữ ngắn, rõ, kiểm
-                soát được và dễ rà soát.
+                {completedSectionCount}/7 phần ·{" "}
+                {contentLength.toLocaleString("vi-VN")} ký tự
               </p>
             </section>
 
@@ -440,77 +422,96 @@ const PersonaForm = ({
                 const completed = value.trim().length > 0;
 
                 return (
-                  <section
+                  <details
                     key={section.title}
                     className="persona-edit-prompt-block"
                   >
-                    <div className="persona-edit-prompt-head">
-                      <div className="min-w-0">
+                    <summary className="persona-edit-prompt-head">
+                      <div className="persona-edit-prompt-copy">
                         <span>Phần {index + 1}</span>
-                        <Label
-                          htmlFor={`persona-section-${index}`}
+                        <strong
+                          id={`persona-section-title-${index}`}
                           className="persona-edit-prompt-title"
                         >
                           {section.title.replace(/^\d+\.\s*/, "")}
-                        </Label>
+                        </strong>
+                        <small>
+                          {completed
+                            ? value.trim().replace(/\s+/g, " ")
+                            : section.hint}
+                        </small>
                       </div>
-                      <Badge
-                        variant={completed ? "secondary" : "outline"}
-                        className="shrink-0"
-                      >
-                        {completed ? "Đã điền" : "Trống"}
-                      </Badge>
+                      <span className="persona-edit-prompt-state">
+                        <Badge
+                          variant={completed ? "secondary" : "outline"}
+                          className="shrink-0"
+                        >
+                          {completed ? "Đã điền" : "Trống"}
+                        </Badge>
+                        <ChevronDown className="size-4" aria-hidden="true" />
+                      </span>
+                    </summary>
+                    <div className="persona-edit-prompt-content">
+                      <Textarea
+                        id={`persona-section-${index}`}
+                        aria-labelledby={`persona-section-title-${index}`}
+                        value={value}
+                        onChange={(event) =>
+                          updateSectionValue(index, event.target.value)
+                        }
+                        placeholder={section.hint}
+                        rows={index === 2 || index === 3 ? 12 : 7}
+                        className="persona-edit-textarea"
+                      />
                     </div>
-                    <Textarea
-                      id={`persona-section-${index}`}
-                      value={value}
-                      onChange={(event) =>
-                        updateSectionValue(index, event.target.value)
-                      }
-                      placeholder={section.hint}
-                      rows={index === 2 || index === 3 ? 12 : 7}
-                      className="persona-edit-textarea"
-                    />
-                  </section>
+                  </details>
                 );
               })}
 
               {extraMarkdown && (
-                <section className="persona-edit-prompt-block">
-                  <div className="persona-edit-prompt-head">
-                    <div>
+                <details className="persona-edit-prompt-block">
+                  <summary className="persona-edit-prompt-head">
+                    <div className="persona-edit-prompt-copy">
                       <span>Bổ sung</span>
-                      <Label className="persona-edit-prompt-title">
+                      <strong className="persona-edit-prompt-title">
                         Nội dung ngoài mẫu
-                      </Label>
+                      </strong>
+                      <small>{extraMarkdown.trim().replace(/\s+/g, " ")}</small>
                     </div>
+                    <span className="persona-edit-prompt-state">
+                      <Badge variant="secondary">Đã điền</Badge>
+                      <ChevronDown className="size-4" aria-hidden="true" />
+                    </span>
+                  </summary>
+                  <div className="persona-edit-prompt-content">
+                    <Label htmlFor="persona-extra-markdown" className="sr-only">
+                      Nội dung ngoài mẫu
+                    </Label>
+                    <Textarea
+                      id="persona-extra-markdown"
+                      value={extraMarkdown}
+                      onChange={(event) => setExtraMarkdown(event.target.value)}
+                      rows={6}
+                      className="persona-edit-textarea is-mono"
+                    />
                   </div>
-                  <Textarea
-                    value={extraMarkdown}
-                    onChange={(event) => setExtraMarkdown(event.target.value)}
-                    rows={6}
-                    className="persona-edit-textarea is-mono"
-                  />
-                </section>
+                </details>
               )}
             </div>
           </div>
 
           <aside className="persona-edit-rail">
-            <section className="persona-edit-rail-card tt-card">
+            <section className="persona-edit-rail-card">
               <div className="persona-edit-rail-title">
                 <BotMessageSquare className="size-4 text-primary" />
-                Tự động follow-up
+                Follow-up
               </div>
-              <p>Cấu hình theo mức ưu tiên của ứng viên.</p>
+              <p>Lịch nhắc theo mức ưu tiên.</p>
               <div className="persona-followup-editor-list">
                 {FOLLOWUP_SCORE_ORDER.map((score) => {
                   const rule = followupRules[score];
                   return (
-                    <div
-                      key={score}
-                      className="persona-followup-editor-card tt-card"
-                    >
+                    <div key={score} className="persona-followup-editor-card">
                       <div className="persona-followup-editor-head">
                         <div>
                           <strong>{FOLLOWUP_SCORE_LABELS[score]}</strong>
@@ -580,16 +581,13 @@ const PersonaForm = ({
               </div>
             </section>
 
-            <section className="persona-edit-rail-card tt-card">
-              <div className="persona-edit-rail-title">
-                <FileText className="size-4" />
-                Ghi chú riêng tư
-              </div>
+            <section className="persona-edit-rail-card">
               <Label
                 htmlFor="persona-notes"
-                className="text-label font-semibold"
+                className="persona-edit-rail-title"
               >
-                Chỉ dùng nội bộ
+                <FileText className="size-4" />
+                Ghi chú nội bộ
               </Label>
               <Textarea
                 id="persona-notes"
@@ -604,7 +602,11 @@ const PersonaForm = ({
 
         <footer className="persona-edit-savebar">
           {extraActions}
-          <Button type="submit" className="sm:min-w-32" disabled={submitting}>
+          <Button
+            type="submit"
+            className="tt-btn-touch sm:min-w-32"
+            disabled={submitting}
+          >
             {submitting ? (
               <>
                 <span

@@ -1043,3 +1043,60 @@
     display: none;
   }
 }
+
+/* Keep the six KPI tiles and the primary chart/attention comparison bounded.
+   Diagnostic sections below them form one continuous report with dividers,
+   avoiding a stack of visually equal cards. */
+@media (min-width: 721px) {
+  .performance-page {
+    gap: 0;
+    padding: 24px 28px 48px;
+  }
+
+  .performance-header {
+    margin-bottom: 16px;
+  }
+
+  .performance-metrics {
+    margin-bottom: 16px;
+  }
+
+  .performance-primary-grid {
+    margin-bottom: 4px;
+  }
+
+  .performance-page > .performance-panel {
+    gap: 12px;
+    padding: 22px 0;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .performance-page > .performance-slow-turns {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .performance-page > .performance-panel .performance-section-heading {
+    padding-inline: 2px;
+  }
+
+  .performance-supporting {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin-top: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .performance-supporting article {
+    padding: 20px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .performance-supporting article + article {
+    border-left: 1px solid var(--border);
+  }
+}

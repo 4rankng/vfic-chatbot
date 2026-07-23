@@ -1,17 +1,19 @@
 import { render } from "vitest-browser-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  AdapterPersonaAssignment,
-  Persona,
-} from "../types";
+import type { AdapterPersonaAssignment, Persona } from "../types";
 
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   refresh: vi.fn(),
-  listPersonaAssignments: vi.fn<() => Promise<{ data: AdapterPersonaAssignment[] }>>(),
-  updatePersonaAssignment: vi.fn<
-    (provider: string, personaId: string | null) => Promise<AdapterPersonaAssignment>
-  >(),
+  listPersonaAssignments:
+    vi.fn<() => Promise<{ data: AdapterPersonaAssignment[] }>>(),
+  updatePersonaAssignment:
+    vi.fn<
+      (
+        provider: string,
+        personaId: string | null,
+      ) => Promise<AdapterPersonaAssignment>
+    >(),
   activatePersona: vi.fn<() => Promise<unknown>>(),
 }));
 
@@ -55,7 +57,12 @@ const defaultPersona: Persona = {
 };
 
 const baseAssignments = (
-  overrides: Partial<Record<AdapterPersonaAssignment["provider"], Partial<AdapterPersonaAssignment>>> = {},
+  overrides: Partial<
+    Record<
+      AdapterPersonaAssignment["provider"],
+      Partial<AdapterPersonaAssignment>
+    >
+  > = {},
 ): AdapterPersonaAssignment[] => [
   {
     provider: "zalo_bot",
@@ -116,13 +123,15 @@ describe("PersonaAssignments", () => {
       }),
     });
 
-    const screen = await render(<PersonaAssignments persona={defaultPersona} />);
+    const screen = await render(
+      <PersonaAssignments persona={defaultPersona} />,
+    );
 
+    await expect.element(screen.getByText("Đang dùng")).toBeVisible();
     await expect
-      .element(screen.getByText("Adapter đang dùng"))
-      .toBeVisible();
-    await expect
-      .element(screen.getByRole("button", { name: "Agent mặc định cho Zalo Chatbot" }))
+      .element(
+        screen.getByRole("button", { name: "Đang mặc định cho Zalo Chatbot" }),
+      )
       .toBeDisabled();
   });
 

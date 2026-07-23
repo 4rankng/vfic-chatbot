@@ -79,7 +79,7 @@ export const KnowledgeDetailPanel = ({
   };
 
   return (
-    <section className="knowledge-detail-panel flex min-h-[620px] flex-col gap-4 bg-transparent text-foreground sm:rounded-[14px] sm:border sm:border-border sm:bg-card sm:p-5 lg:p-6">
+    <section className="knowledge-detail-panel flex min-h-[620px] flex-col bg-transparent text-foreground">
       {onBack && (
         <button
           type="button"
@@ -91,7 +91,7 @@ export const KnowledgeDetailPanel = ({
       )}
 
       {/* Compact identity — one block, no duplicated stats */}
-      <div className="flex items-start justify-between gap-3 px-1 sm:px-0">
+      <div className="knowledge-detail-identity flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="kb-display break-words text-subsection text-foreground sm:text-content-title">
             {source.file_name}
@@ -108,11 +108,11 @@ export const KnowledgeDetailPanel = ({
       </div>
 
       {/* Single, context-dependent action row */}
-      <div className="flex flex-wrap gap-2 border-b border-border px-1 pb-4 sm:px-0">
+      <div className="knowledge-detail-actions flex flex-wrap gap-2">
         <Button
           size="sm"
           onClick={() => redirect("edit", "knowledge_sources", source.id)}
-          className="rounded-[9px]"
+          className="tt-btn-touch rounded-[9px]"
         >
           <Pencil className="size-4" />
           Sửa
@@ -126,7 +126,7 @@ export const KnowledgeDetailPanel = ({
               "Đã đưa vào hàng huấn luyện lại.",
             )
           }
-          className="rounded-[9px]"
+          className="tt-btn-touch rounded-[9px]"
         >
           <RefreshCw className="size-4" />
           Huấn luyện lại
@@ -135,7 +135,7 @@ export const KnowledgeDetailPanel = ({
           variant="outline"
           size="sm"
           onClick={downloadRawFile}
-          className="rounded-[9px]"
+          className="tt-btn-touch rounded-[9px]"
         >
           <Download className="size-4" />
           Tải tệp gốc
@@ -145,7 +145,7 @@ export const KnowledgeDetailPanel = ({
             <Button
               variant="outline"
               size="icon"
-              className="rounded-[9px]"
+              className="tt-btn-touch rounded-[9px]"
               aria-label={`Mở thao tác cho ${source.file_name}`}
             >
               <MoreHorizontal className="size-4" />
@@ -188,7 +188,7 @@ export const KnowledgeDetailPanel = ({
       )}
 
       {/* Compact stat trio (units / flagged / updated) — hairline grid */}
-      <div className="grid grid-cols-3 gap-px overflow-hidden border-y border-border bg-border sm:rounded-[10px] sm:border-y-0">
+      <div className="knowledge-detail-stats grid grid-cols-3 gap-px overflow-hidden border-y border-border bg-border">
         <InfoBlock
           label="Đơn vị"
           value={String(source.digest_meta?.unit_count ?? 0)}
@@ -201,7 +201,7 @@ export const KnowledgeDetailPanel = ({
       </div>
 
       {/* Digest ticket */}
-      <div className="px-1 sm:px-0">
+      <div className="knowledge-digest-section">
         <h4 className="kb-display text-card-title text-foreground">
           {isCanonicalSource(source) ? "Tóm tắt nguồn" : "Tóm tắt digest"}
         </h4>
@@ -223,11 +223,12 @@ export const KnowledgeDetailPanel = ({
       <StoredKnowledgePanel source={source} />
 
       {/* Pipeline detail — collapsed, demoted */}
-      <div className="px-1 sm:px-0">
+      <div className="knowledge-pipeline-section">
         <button
           type="button"
           onClick={() => setShowPipeline((value) => !value)}
-          className="flex w-full items-center justify-between gap-2 border-y border-border py-3 text-left text-button font-semibold text-foreground transition-colors hover:text-[var(--kb-teal)] sm:rounded-[10px] sm:border sm:bg-background sm:px-4 sm:hover:bg-secondary"
+          className="knowledge-pipeline-toggle flex w-full items-center justify-between gap-2 text-left text-button font-semibold text-foreground transition-colors hover:text-[var(--kb-teal)]"
+          aria-expanded={showPipeline}
         >
           <span>Chi tiết pipeline (6 bước)</span>
           <span className="kb-mono text-helper text-muted-foreground">
@@ -242,7 +243,7 @@ export const KnowledgeDetailPanel = ({
           </span>
         </button>
         {showPipeline && (
-          <div className="mt-2 border-b border-border pb-4 sm:rounded-[10px] sm:border sm:bg-background sm:p-4">
+          <div className="knowledge-pipeline-body">
             <p className="mb-3 text-helper leading-5 text-muted-foreground">
               {pipelineStateCopy(source)}
             </p>
