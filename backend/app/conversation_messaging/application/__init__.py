@@ -19,10 +19,6 @@ from app.conversation_messaging.application.ports import (
     BotTurnQueuePort,
     ConversationEventsPort,
 )
-from app.conversation_messaging.application.zalo_ingress import (
-    ZaloIngressPort,
-    ZaloIngressUseCases,
-)
 
 __all__ = [
     "BotTurnQueuePort",
@@ -36,8 +32,6 @@ __all__ = [
     "OutboundRecoveryCandidate",
     "OutboundRecoveryPort",
     "OutboundRecoverySummary",
-    "ZaloIngressPort",
-    "ZaloIngressUseCases",
     "recover_outbound_batch",
     "inbound_dedup_key",
 ]

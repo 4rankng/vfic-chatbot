@@ -17,10 +17,6 @@ from app.conversation_messaging.infrastructure.outbound_recovery import (
 from app.conversation_messaging.infrastructure.delivery_status import (
     SqlAlchemyDeliveryStatusValues,
 )
-from app.conversation_messaging.infrastructure.zalo_ingress import (
-    ServiceZaloIngressAdapter,
-)
-from app.conversation_messaging.application.zalo_ingress import ZaloIngressUseCases
 from app.conversation_messaging.application.http import (
     ConversationHttpRecord,
     InlineWebChatTurnResult,
@@ -104,10 +100,12 @@ async def run_zalo_ingress(
     bot_token: str | None = None,
     runtime_authority=None,
 ):
-    """Build the Zalo ingress adapter at the HTTP composition boundary."""
+    """Execute the established Zalo transaction from the composition boundary."""
+    from app.services.webhook import ZaloWebhookService
     from app.workers.persistence_worker import enqueue_enrich_oa_profile
 
-    return await ZaloIngressUseCases(ServiceZaloIngressAdapter(db)).handle(
+    return await ZaloWebhookService.handle(
+        db,
         payload,
         enqueue=enqueue,
         channel=channel,

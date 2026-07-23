@@ -115,13 +115,17 @@ async def test_sqlalchemy_adapter_maps_only_integrity_error_to_duplicate(
 ) -> None:
     conversation = SimpleNamespace(id=uuid.uuid4())
 
+    class DuplicateViolation(Exception):
+        sqlstate = "23505"
+        constraint_name = "uq_messages_conv_provider_message"
+
     class Service:
         def __init__(self, db) -> None:
             pass
 
         ensure_by_identity = AsyncMock(return_value=conversation)
         record_inbound = AsyncMock(
-            side_effect=IntegrityError("insert", {}, Exception("unique"))
+            side_effect=IntegrityError("insert", {}, DuplicateViolation("unique"))
         )
 
     monkeypatch.setattr("app.services.conversation.ConversationService", Service)
@@ -130,4 +134,43 @@ async def test_sqlalchemy_adapter_maps_only_integrity_error_to_duplicate(
     result = await SqlAlchemyInboundMessageAdapter(db).persist(_command())
 
     assert result is None
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "sqlstate,constraint_name",
+    [
+        ("23503", "fk_messages_conversation_id"),
+        ("23505", "uq_messages_other_field"),
+    ],
+)
+async def test_sqlalchemy_adapter_propagates_other_integrity_failures(
+    monkeypatch,
+    sqlstate: str,
+    constraint_name: str,
+) -> None:
+    conversation = SimpleNamespace(id=uuid.uuid4())
+
+    class OtherViolation(Exception):
+        pass
+
+    violation = OtherViolation("integrity failure")
+    violation.sqlstate = sqlstate
+    violation.constraint_name = constraint_name
+
+    class Service:
+        def __init__(self, db) -> None:
+            pass
+
+        ensure_by_identity = AsyncMock(return_value=conversation)
+        record_inbound = AsyncMock(
+            side_effect=IntegrityError("insert", {}, violation)
+        )
+
+    monkeypatch.setattr("app.services.conversation.ConversationService", Service)
+    db = SimpleNamespace(refresh=AsyncMock(), rollback=AsyncMock())
+
+    with pytest.raises(IntegrityError):
+        await SqlAlchemyInboundMessageAdapter(db).persist(_command())
+
     db.rollback.assert_awaited_once()

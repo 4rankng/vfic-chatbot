@@ -167,7 +167,7 @@ def _stamp_outbound_telemetry(timings: dict | None, send_result) -> None:
 
 
 def _with_optional_trace(callable_obj, kwargs: dict, trace_sink) -> dict:
-    """Add the trace sink without breaking legacy adapters or test doubles.
+    """Add the trace sink when the injected agent supports it.
 
     The graph protocol keeps trace capture additive. Existing installations may
     provide an agent implementation that predates the optional keyword, so the

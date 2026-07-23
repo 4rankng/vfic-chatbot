@@ -9,6 +9,24 @@ from app.conversation_messaging.application.ingress import (
     PersistedInboundMessage,
 )
 
+_MESSAGE_PROVIDER_ID_UNIQUE_CONSTRAINT = "uq_messages_conv_provider_message"
+
+
+def _is_duplicate_message_integrity_error(error: IntegrityError) -> bool:
+    sqlstate: str | None = None
+    constraint_name: str | None = None
+    current: BaseException | None = error.orig
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        sqlstate = sqlstate or getattr(current, "sqlstate", None)
+        constraint_name = constraint_name or getattr(current, "constraint_name", None)
+        current = current.__cause__ or current.__context__
+    return (
+        sqlstate == "23505"
+        and constraint_name == _MESSAGE_PROVIDER_ID_UNIQUE_CONSTRAINT
+    )
+
 
 class SqlAlchemyInboundMessageAdapter:
     def __init__(self, db) -> None:
@@ -53,10 +71,12 @@ class SqlAlchemyInboundMessageAdapter:
                 authority_generation=None,
                 runtime_fingerprint=None,
             )
-        except IntegrityError:
-            # A racing delivery can win the database uniqueness constraint after
-            # the transient claim. Only that durable duplicate is acknowledged.
+        except IntegrityError as exc:
             await self._db.rollback()
+            if not _is_duplicate_message_integrity_error(exc):
+                raise
+            # A racing delivery won the exact durable message-id uniqueness
+            # constraint after the transient claim.
             return None
         return PersistedInboundMessage(
             conversation_id=str(conversation.id),
