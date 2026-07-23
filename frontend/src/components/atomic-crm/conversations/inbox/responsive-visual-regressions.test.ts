@@ -17,6 +17,9 @@ describe("responsive workspace visual regressions", () => {
     expect(featureStyles).toMatch(
       /\.knowledge-unit-disclosure\[open\] \.knowledge-unit-chevron[\s\S]*transform:\s*rotate\(180deg\)/,
     );
+    expect(personaResponsiveStyles).toMatch(
+      /\.knowledge-page-shell,[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;[\s\S]*max-width:\s*100%/,
+    );
   });
 
   it("shows every settings destination in a tablet grid", () => {

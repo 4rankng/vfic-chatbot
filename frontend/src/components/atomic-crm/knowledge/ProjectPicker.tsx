@@ -137,7 +137,7 @@ export const ProjectPicker = ({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-10 w-full justify-between rounded-[9px] border-border bg-background px-3 text-button font-normal"
+          className="tt-btn-touch h-11 w-full justify-between rounded-[9px] border-border bg-background px-3 text-button font-normal"
         >
           <span className="truncate">
             {selectedProject?.name ?? "Chọn dự án"}

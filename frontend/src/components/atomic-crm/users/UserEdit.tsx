@@ -7,7 +7,6 @@ import {
   useRecordContext,
   useRedirect,
 } from "ra-core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
 import { BooleanInput } from "@/components/admin/boolean-input";
@@ -15,9 +14,10 @@ import { Button } from "@/components/ui/button";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { UserAccount } from "../types";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
-import { ArrowLeft, UserCog } from "lucide-react";
+import { ArrowLeft, Check, LoaderCircle, UserCog } from "lucide-react";
 import { Link } from "react-router";
-import { AlternateCard, PageHeading, PageShell } from "../kit";
+import { PageHeading, PageShell } from "../kit";
+import "./users.css";
 
 const ROLE_CHOICES = [
   { id: "admin", name: "Quản trị" },
@@ -55,20 +55,41 @@ const UserEditContent = () => {
   };
 
   return (
-    <Card className="w-full border-0 py-0">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-3 text-section-title">
-          <span>{user.email}</span>
-          <span className="flex gap-2">
+    <section
+      className="user-account-form user-account-edit-form mt-4"
+      aria-labelledby="user-edit-form-title"
+    >
+      <header className="user-account-form-header user-account-edit-header">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="user-account-form-icon">
+            <UserCog className="size-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 id="user-edit-form-title" className="truncate">
+              {user.email}
+            </h2>
+            <p>Thông tin và quyền truy cập.</p>
+          </div>
+        </div>
+        <span className="user-account-statuses">
+          <span>
             <UserRoleBadge />
+          </span>
+          <span>
             <UserStatusBadge />
           </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-2">
-        <Form record={user} onSubmit={onSubmit}>
-          <div className="flex flex-col gap-4">
-            <TextInput source="email" label="Email" type="email" isRequired />
+        </span>
+      </header>
+      <Form record={user} onSubmit={onSubmit}>
+        <div className="user-account-form-body">
+          <div className="user-account-field-grid">
+            <TextInput
+              source="email"
+              label="Email"
+              type="email"
+              isRequired
+              className="user-account-field user-account-field-wide"
+            />
             <TextInput source="full_name" label="Họ tên" isRequired />
             <SelectInput
               source="role"
@@ -76,14 +97,30 @@ const UserEditContent = () => {
               choices={ROLE_CHOICES}
               isRequired
             />
-            <BooleanInput source="disabled" label="Vô hiệu hóa tài khoản" />
-            <Button type="submit" disabled={submitting}>
-              Lưu tài khoản
-            </Button>
+            <div className="user-account-toggle-row user-account-field-wide">
+              <BooleanInput source="disabled" label="Vô hiệu hóa tài khoản" />
+            </div>
           </div>
-        </Form>
-      </CardContent>
-    </Card>
+          <footer className="user-account-form-actions">
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="user-account-submit tt-btn-touch"
+            >
+              {submitting ? (
+                <LoaderCircle
+                  className="size-4 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Check className="size-4" aria-hidden="true" />
+              )}
+              {submitting ? "Đang lưu" : "Lưu thay đổi"}
+            </Button>
+          </footer>
+        </div>
+      </Form>
+    </section>
   );
 };
 
@@ -93,24 +130,21 @@ export const UserEdit = () => (
       <PageHeading
         eyebrow="Quản trị truy cập"
         title="Chỉnh sửa tài khoản"
-        subtitle="Cập nhật thông tin, vai trò hoặc trạng thái truy cập."
+        subtitle="Cập nhật thông tin, quyền và trạng thái."
         actions={
-          <Button asChild variant="outline" size="sm">
+          <Button
+            asChild
+            variant="outline"
+            className="user-account-back tt-btn-touch"
+          >
             <Link to="/users">
               <ArrowLeft className="size-4" aria-hidden="true" />
-              Quay lại
+              Tài khoản
             </Link>
           </Button>
         }
       />
-      <AlternateCard
-        className="mt-4"
-        icon={<UserCog className="size-4" aria-hidden="true" />}
-        title="Chi tiết tài khoản"
-        bodyClassName="overflow-hidden p-5 sm:p-6"
-      >
-        <UserEditContent />
-      </AlternateCard>
+      <UserEditContent />
     </PageShell>
   </EditBase>
 );

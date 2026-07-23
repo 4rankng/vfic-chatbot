@@ -7,7 +7,8 @@
 }
 
 .user-directory-create {
-  min-height: 40px;
+  height: 44px !important;
+  min-height: 44px !important;
   border-radius: 8px;
   box-shadow: none;
 }
@@ -34,7 +35,11 @@
   min-height: 38px;
   padding: 0 14px;
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-hover) 48%, var(--surface-solid));
+  background: color-mix(
+    in srgb,
+    var(--surface-hover) 48%,
+    var(--surface-solid)
+  );
   color: var(--ink-muted);
   font-size: var(--fs-caption);
   font-weight: 720;
@@ -62,7 +67,11 @@
 }
 
 .user-directory-row:hover {
-  background: color-mix(in srgb, var(--surface-hover) 50%, var(--surface-solid));
+  background: color-mix(
+    in srgb,
+    var(--surface-hover) 50%,
+    var(--surface-solid)
+  );
 }
 
 .user-directory-avatar > div {
@@ -124,8 +133,8 @@
 }
 
 .user-directory-actions [data-slot="button"] {
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .user-directory-skeleton {
@@ -139,6 +148,134 @@
 
 .user-directory-skeleton:last-child {
   border-bottom: 0;
+}
+
+.user-account-form {
+  overflow: hidden;
+  border-block: 1px solid var(--tt-border);
+  background: transparent;
+}
+
+.user-account-form-header {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--tt-border);
+}
+
+.user-account-form-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-account-form-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid
+    color-mix(in srgb, var(--tt-accent-strong) 20%, var(--tt-border));
+  border-radius: 9px;
+  background: var(--tt-accent-soft);
+  color: var(--tt-accent-strong);
+}
+
+.user-account-form-header h2 {
+  margin: 0;
+  color: var(--tt-ink);
+  font-size: var(--text-section-title);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.user-account-form-header p {
+  margin: 3px 0 0;
+  color: var(--tt-ink-muted);
+  font-size: var(--text-body-sm);
+  line-height: 1.4;
+}
+
+.user-account-form-body {
+  padding: 22px 4px 4px;
+}
+
+.user-account-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 16px;
+}
+
+.user-account-field {
+  min-width: 0;
+}
+
+.user-account-field-wide {
+  grid-column: 1 / -1;
+}
+
+.user-account-form [data-slot="form-label"] {
+  color: var(--tt-ink);
+  font-size: var(--text-body-sm);
+  line-height: 1.35;
+}
+
+.user-account-form [data-slot="form-control"],
+.user-account-form [data-slot="select-trigger"] {
+  height: 44px !important;
+  min-height: 44px !important;
+  border-color: var(--tt-border);
+  border-radius: 8px;
+  background: var(--tt-surface-lift);
+  box-shadow: none;
+}
+
+.user-account-form-actions {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+  border-top: 1px solid var(--tt-border);
+}
+
+.user-account-form-actions [data-slot="button"],
+.user-account-back {
+  height: 44px !important;
+  min-height: 44px !important;
+}
+
+.user-account-submit {
+  min-width: 136px;
+}
+
+.user-account-toggle-row {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  border-block: 1px solid var(--tt-border);
+}
+
+.user-account-toggle-row [data-slot="form-item"] > div {
+  min-height: 44px;
+}
+
+.user-account-statuses {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.user-account-statuses > span {
+  display: inline-flex;
 }
 
 @media (max-width: 760px) {
@@ -188,5 +325,50 @@
   .user-directory-actions {
     grid-column: 3;
     grid-row: 1;
+  }
+
+  .user-account-form {
+    margin-top: 8px;
+  }
+
+  .user-account-form-header {
+    align-items: flex-start;
+    min-height: 68px;
+    padding-inline: 0;
+  }
+
+  .user-account-edit-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .user-account-statuses {
+    justify-content: flex-start;
+    padding-left: 46px;
+  }
+
+  .user-account-form-body {
+    padding: 18px 0 2px;
+  }
+
+  .user-account-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .user-account-field-wide {
+    grid-column: auto;
+  }
+
+  .user-account-form-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+    min-height: auto;
+    padding-block: 16px 2px;
+  }
+
+  .user-account-form-actions [data-slot="button"],
+  .user-account-form-actions a {
+    width: 100%;
   }
 }

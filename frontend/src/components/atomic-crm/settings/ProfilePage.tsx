@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   CircleX,
   Globe2,
+  LoaderCircle,
   LogOut,
   Pencil,
   Save,
@@ -20,10 +21,9 @@ import {
   useTranslate,
 } from "ra-core";
 import { useState } from "react";
-import { useFormState } from "react-hook-form";
+import { useFormContext, useFormState } from "react-hook-form";
 import { TextInput } from "@/components/admin/text-input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -54,7 +54,7 @@ export const ProfilePage = () => {
   const notify = useNotify();
   const isMobile = useIsMobile();
 
-  const { mutate } = useMutation({
+  const { isPending, mutate } = useMutation({
     mutationKey: ["profile-update"],
     mutationFn: async (values: { full_name?: string; email?: string }) => {
       return apiJson<Record<string, unknown>>("/api/v1/users/me", {
@@ -108,17 +108,18 @@ export const ProfilePage = () => {
             </div>
             <div className="min-w-0">
               <p className="ops-kicker">Tài khoản</p>
-              <h1>{displayName}</h1>
-              <p>
-                {displayEmail ||
-                  "Quản lý thông tin và tùy chọn tài khoản của bạn"}
-              </p>
+              <h1>Hồ sơ cá nhân</h1>
+              <p>{[displayName, displayEmail].filter(Boolean).join(" · ")}</p>
             </div>
           </div>
         </header>
 
         <Form onSubmit={handleOnSubmit} record={data}>
-          <ProfileForm isEditMode={isEditMode} setEditMode={setEditMode} />
+          <ProfileForm
+            isEditMode={isEditMode}
+            isSaving={isPending}
+            setEditMode={setEditMode}
+          />
         </Form>
       </div>
     </div>
@@ -142,83 +143,103 @@ export const ProfilePage = () => {
 
 const ProfileForm = ({
   isEditMode,
+  isSaving,
   setEditMode,
 }: {
   isEditMode: boolean;
+  isSaving: boolean;
   setEditMode: (value: boolean) => void;
 }) => {
   const translate = useTranslate();
   const { identity } = useGetIdentity();
   const logout = useLogout();
   const { isDirty } = useFormState();
+  const { reset } = useFormContext();
 
   if (!identity) return null;
 
   return (
     <div className="profile-grid">
-      <Card className="profile-card profile-account-card">
-        <CardContent className="profile-card-content">
-          <div className="profile-card-header">
+      <section
+        className="profile-section profile-account-section"
+        aria-labelledby="profile-account-title"
+      >
+        <header className="profile-section-header">
+          <div className="profile-section-heading">
             <span className="profile-card-icon">
               <ShieldCheck className="size-4" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <h2>Thông tin tài khoản</h2>
-              <p>Cập nhật tên hiển thị, email và ngôn ngữ giao diện.</p>
+              <h2 id="profile-account-title">Thông tin tài khoản</h2>
+              <p>Tên hiển thị và email đăng nhập.</p>
             </div>
           </div>
-
-          <div className="profile-field-grid">
-            <TextRender source="full_name" isEditMode={isEditMode} />
-            <TextRender source="email" isEditMode={isEditMode} />
-            <LanguageSelector />
-          </div>
-
           <div className="profile-actions">
-            <Button
-              type="button"
-              variant={isEditMode ? "ghost" : "outline"}
-              onClick={() => setEditMode(!isEditMode)}
-              className="profile-action-button"
-            >
-              {isEditMode ? <CircleX /> : <Pencil />}
-              {isEditMode
-                ? translate("ra.action.cancel")
-                : translate("ra.action.edit")}
-            </Button>
-
-            {isEditMode && (
+            {isEditMode ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    reset();
+                    setEditMode(false);
+                  }}
+                  className="profile-action-button tt-btn-touch"
+                >
+                  <CircleX />
+                  {translate("ra.action.cancel")}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!isDirty || isSaving}
+                  className="profile-action-button profile-save-button tt-btn-touch"
+                >
+                  {isSaving ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : (
+                    <Save />
+                  )}
+                  {isSaving ? "Đang lưu" : translate("ra.action.save")}
+                </Button>
+              </>
+            ) : (
               <Button
-                type="submit"
-                disabled={!isDirty}
+                type="button"
                 variant="outline"
-                className="profile-action-button"
+                onClick={() => setEditMode(true)}
+                className="profile-action-button tt-btn-touch"
               >
-                <Save />
-                {translate("ra.action.save")}
+                <Pencil />
+                {translate("ra.action.edit")}
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </header>
 
-      <Card className="profile-card profile-session-card">
-        <CardContent className="profile-session-content">
+        <div className="profile-field-grid">
+          <TextRender source="full_name" isEditMode={isEditMode} />
+          <TextRender source="email" isEditMode={isEditMode} />
+          <LanguageSelector />
+        </div>
+      </section>
+
+      <section className="profile-session-section">
+        <div className="profile-session-content">
           <div className="min-w-0">
             <h2>Đăng xuất</h2>
-            <p>Thoát khỏi phiên làm việc trên thiết bị này.</p>
+            <p>Kết thúc phiên trên thiết bị này.</p>
           </div>
           <Button
             type="button"
             variant="outline"
             onClick={() => logout()}
-            className="profile-action-button profile-logout-button"
+            className="profile-action-button profile-logout-button tt-btn-touch"
           >
             <LogOut className="size-4" />
             {translate("ra.auth.logout")}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </div>
   );
 };

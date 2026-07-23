@@ -54,7 +54,7 @@ export const KnowledgeVersionManager = ({ projectId }: { projectId?: string }) =
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" className="h-10 rounded-[9px]" disabled={!projectId}>
+        <Button type="button" variant="outline" className="tt-btn-touch h-11 rounded-[9px]" disabled={!projectId}>
           <History className="size-4" /> Phiên bản KB
         </Button>
       </DialogTrigger>

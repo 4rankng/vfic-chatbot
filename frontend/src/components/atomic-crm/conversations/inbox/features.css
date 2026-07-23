@@ -41,6 +41,20 @@
   width: 100%;
 }
 
+.knowledge-page-shell .knowledge-command-actions button,
+.knowledge-page-shell .knowledge-filter-bar button,
+.knowledge-page-shell .knowledge-filter-bar input,
+.knowledge-page-shell .knowledge-selector-header button,
+.knowledge-page-shell .knowledge-detail-actions button,
+.knowledge-page-shell .knowledge-unit-more {
+  height: 44px !important;
+  min-height: 44px !important;
+}
+
+.knowledge-page-shell .knowledge-detail-actions button {
+  min-width: 44px;
+}
+
 .knowledge-selector-panel {
   border-block: 1px solid var(--border);
   background: transparent;
@@ -81,10 +95,6 @@
   padding-top: 12px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
-}
-
-.knowledge-detail-actions [data-slot="button"] {
-  min-height: 44px;
 }
 
 .knowledge-detail-stats {
@@ -619,16 +629,12 @@
 }
 
 .profile-command-header {
-  min-height: 104px;
-  padding: 16px;
-  border-radius: 10px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-solid) 98%, transparent),
-      color-mix(in srgb, var(--surface-hover) 34%, var(--surface-solid))
-    ),
-    var(--surface-solid);
+  min-height: auto;
+  padding: 12px 2px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
 
@@ -674,30 +680,31 @@
 
 .profile-grid {
   display: grid;
-  gap: 12px;
+  gap: 0;
 }
 
-.profile-card {
-  overflow: hidden;
-  border-color: color-mix(in srgb, var(--border) 92%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-solid) 94%, var(--surface));
+.profile-section,
+.profile-session-section {
+  border-bottom: 1px solid var(--border);
+  background: transparent;
   color: var(--ink);
-  box-shadow: none;
 }
 
-.profile-card-content {
-  padding: 0;
+.profile-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 76px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
 }
 
-.profile-card-header {
+.profile-section-heading {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 70px;
-  padding: 13px 14px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-hover) 28%, transparent);
 }
 
 .profile-card-icon {
@@ -712,7 +719,7 @@
   color: var(--brand);
 }
 
-.profile-card-header h2,
+.profile-section-header h2,
 .profile-session-content h2 {
   margin: 0;
   color: var(--ink);
@@ -721,7 +728,7 @@
   line-height: var(--crm-lh-title);
 }
 
-.profile-card-header p,
+.profile-section-header p,
 .profile-session-content p {
   margin: 4px 0 0;
   color: var(--ink-muted);
@@ -732,8 +739,9 @@
 
 .profile-field-grid {
   display: grid;
-  gap: 10px;
-  padding: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+  padding: 18px 4px 20px;
 }
 
 .profile-field {
@@ -758,21 +766,16 @@
 }
 
 .profile-field-value {
-  min-height: 44px;
+  min-height: 32px;
   display: flex;
   align-items: center;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: color-mix(
-    in srgb,
-    var(--surface-solid) 90%,
-    var(--surface-hover)
-  );
+  border: 0;
+  background: transparent;
   color: var(--ink);
-  padding: 0 12px;
+  padding: 0;
   font-size: var(--crm-fs-body);
-  font-weight: var(--chat-fw-regular);
+  font-weight: var(--chat-fw-semibold);
   line-height: var(--crm-lh-body);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -796,14 +799,16 @@
 
 .profile-actions {
   display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  padding: 0 14px 14px;
+  padding: 0;
 }
 
 .profile-action-button {
-  min-height: 44px;
-  height: 44px;
+  min-height: 44px !important;
+  height: 44px !important;
   border-radius: 8px;
   padding-inline: 12px;
   font-size: var(--crm-fs-action);
@@ -815,7 +820,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 14px;
+  padding: 16px 4px;
 }
 
 .profile-logout-button {

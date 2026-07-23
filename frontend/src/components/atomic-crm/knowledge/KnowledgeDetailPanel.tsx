@@ -110,7 +110,6 @@ export const KnowledgeDetailPanel = ({
       {/* Single, context-dependent action row */}
       <div className="knowledge-detail-actions flex flex-wrap gap-2">
         <Button
-          size="sm"
           onClick={() => redirect("edit", "knowledge_sources", source.id)}
           className="tt-btn-touch rounded-[9px]"
         >
@@ -119,7 +118,6 @@ export const KnowledgeDetailPanel = ({
         </Button>
         <Button
           variant="outline"
-          size="sm"
           onClick={() =>
             run(
               () => reindexKnowledge(String(source.id)),
@@ -133,7 +131,6 @@ export const KnowledgeDetailPanel = ({
         </Button>
         <Button
           variant="outline"
-          size="sm"
           onClick={downloadRawFile}
           className="tt-btn-touch rounded-[9px]"
         >

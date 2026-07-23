@@ -126,7 +126,7 @@ const RecruitmentConversationContext = ({
               }
             : undefined,
         avatarAlt: `Ảnh đại diện của ${identity.displayName}`,
-        panelLabel: "thông tin ứng viên",
+        panelLabel: "Dữ Liệu Ứng Viên",
         renderPanel: ({ open, persistent, onClose, onCloseAutoFocus }) => (
           <ConversationContextPanel
             lead={lead}
