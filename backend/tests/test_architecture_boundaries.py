@@ -106,7 +106,6 @@ api_outward|backend/app/api/webhooks.py|app.models.conversation:Conversation
 api_outward|backend/app/api/webhooks.py|app.models.conversation:DeliveryStatus
 api_outward|backend/app/api/webhooks.py|app.models.conversation:Message
 api_outward|backend/app/api/webhooks.py|app.workers.chatbot_worker:enqueue_chat_run
-lib_product|frontend/src/lib/vfic/humanReplyService.ts|frontend/src/components/atomic-crm/providers/rest/api
 lib_product|frontend/src/lib/vfic/knowledgeService.ts|frontend/src/components/atomic-crm/providers/rest/api
 lib_product|frontend/src/lib/vfic/knowledgeService.ts|frontend/src/components/atomic-crm/types
 lib_product|frontend/src/lib/vfic/realtimeSocket.ts|frontend/src/components/atomic-crm/providers/rest/api
@@ -354,7 +353,105 @@ def _backend_rule(rel: str, target: str) -> str | None:
     return None
 
 
+_CONVERSATION_ROOT = "frontend/src/components/atomic-crm/conversations"
+_CONVERSATION_RESET_FACADE = f"{_CONVERSATION_ROOT}/reset-runtime"
+_CONVERSATION_VALUE_TYPE_TARGETS = (
+    "frontend/src/components/atomic-crm/types",
+    f"{_CONVERSATION_ROOT}/domain",
+)
+_CONVERSATION_LEGACY_STATE_TARGETS = (
+    f"{_CONVERSATION_ROOT}/chatRepository",
+    f"{_CONVERSATION_ROOT}/messageStore",
+)
+
+
+def _has_module_prefix(target: str, prefix: str) -> bool:
+    return target == prefix or target.startswith(f"{prefix}/")
+
+
+def _is_conversation_layer_test(rel: str) -> bool:
+    return rel.startswith(f"{_CONVERSATION_ROOT}/") and ".test." in Path(rel).name
+
+
+def _is_conversation_layer_module(rel: str) -> bool:
+    return any(
+        _has_module_prefix(rel, f"{_CONVERSATION_ROOT}/{layer}")
+        for layer in ("domain", "application", "infrastructure", "presentation")
+    )
+
+
+def _conversation_layer_rule(rel: str, target: str) -> str | None:
+    """Keep the conversation DDD layers one-way without a grandfathered edge."""
+    if _is_conversation_layer_test(rel):
+        return None
+
+    root_reset = "frontend/src/components/atomic-crm/root/reset-runtime-state.ts"
+    if rel == root_reset and _has_module_prefix(target, _CONVERSATION_ROOT):
+        return None if target == _CONVERSATION_RESET_FACADE else "conversation_root_reset"
+
+    domain = f"{_CONVERSATION_ROOT}/domain"
+    application = f"{_CONVERSATION_ROOT}/application"
+    infrastructure = f"{_CONVERSATION_ROOT}/infrastructure"
+    presentation = f"{_CONVERSATION_ROOT}/presentation"
+    framework_or_browser_target = target.startswith(
+        ("react", "ra-core", "zustand", "@tanstack/")
+    )
+    outer_infrastructure_target = target.startswith("frontend/src/lib/vfic") or any(
+        _has_module_prefix(target, prefix)
+        for prefix in (
+            "frontend/src/components/atomic-crm/providers",
+            "frontend/src/components/atomic-crm/root",
+        )
+    )
+
+    if _has_module_prefix(rel, domain):
+        if (
+            framework_or_browser_target
+            or outer_infrastructure_target
+            or not any(
+                _has_module_prefix(target, allowed)
+                for allowed in _CONVERSATION_VALUE_TYPE_TARGETS
+            )
+        ):
+            return "conversation_domain_outward"
+
+    if _has_module_prefix(rel, application):
+        if (
+            framework_or_browser_target
+            or outer_infrastructure_target
+            or _has_module_prefix(target, infrastructure)
+            or _has_module_prefix(target, presentation)
+            or not any(
+                _has_module_prefix(target, allowed)
+                for allowed in (*_CONVERSATION_VALUE_TYPE_TARGETS, application)
+            )
+        ):
+            return "conversation_application_outward"
+
+    if _has_module_prefix(rel, infrastructure) and (
+        _has_module_prefix(target, presentation)
+        or _has_module_prefix(target, "frontend/src/components/atomic-crm/capabilities")
+    ):
+        return "conversation_infrastructure_outward"
+
+    if _has_module_prefix(rel, presentation) and (
+        _has_module_prefix(target, infrastructure)
+        or outer_infrastructure_target
+        or any(
+            _has_module_prefix(target, legacy)
+            for legacy in _CONVERSATION_LEGACY_STATE_TARGETS
+        )
+    ):
+        return "conversation_presentation_outward"
+
+    return None
+
+
 def _frontend_rule(rel: str, target: str) -> str | None:
+    if rule := _conversation_layer_rule(rel, target):
+        return rule
+    if _is_conversation_layer_module(rel):
+        return None
     if rel.startswith("frontend/src/lib/vfic/") and target.startswith(
         "frontend/src/components/atomic-crm"
     ):
@@ -603,3 +700,64 @@ def test_typescript_scanner_does_not_lose_imports_after_regex_literals() -> None
         "frontend/src/lib/vfic/static-after-regex",
         "frontend/src/lib/vfic/dynamic-after-regex",
     }
+
+
+def test_conversation_layers_have_zero_allowlist_dependency_rules() -> None:
+    domain = f"{_CONVERSATION_ROOT}/domain/example.ts"
+    application = f"{_CONVERSATION_ROOT}/application/example.ts"
+    infrastructure = f"{_CONVERSATION_ROOT}/infrastructure/example.ts"
+    presentation = f"{_CONVERSATION_ROOT}/presentation/example.tsx"
+
+    for importer in (domain, application):
+        for target in (
+            "react",
+            "ra-core",
+            "zustand",
+            "@tanstack/react-query",
+            "frontend/src/components/atomic-crm/providers/rest/api",
+            "frontend/src/lib/vfic/realtimeSocket",
+            "frontend/src/components/atomic-crm/root/reset-runtime-state",
+        ):
+            assert _frontend_rule(importer, target) is not None
+
+    assert _frontend_rule(domain, f"{_CONVERSATION_ROOT}/domain/value") is None
+    assert _frontend_rule(domain, "frontend/src/components/atomic-crm/types") is None
+    assert _frontend_rule(application, f"{_CONVERSATION_ROOT}/domain/value") is None
+    assert _frontend_rule(application, f"{_CONVERSATION_ROOT}/application/ports") is None
+    assert _frontend_rule(application, f"{_CONVERSATION_ROOT}/infrastructure/repository") == (
+        "conversation_application_outward"
+    )
+    assert (
+        _frontend_rule(infrastructure, f"{_CONVERSATION_ROOT}/presentation/view")
+        == "conversation_infrastructure_outward"
+    )
+    assert _frontend_rule(
+        infrastructure,
+        "frontend/src/components/atomic-crm/capabilities/static-recruitment-runtime",
+    ) == "conversation_infrastructure_outward"
+    assert _frontend_rule(infrastructure, "frontend/src/lib/vfic/realtimeSocket") is None
+
+    for target in (
+        f"{_CONVERSATION_ROOT}/infrastructure/repository",
+        "frontend/src/components/atomic-crm/providers/rest/api",
+        "frontend/src/lib/vfic/realtimeSocket",
+        "frontend/src/components/atomic-crm/root/reset-runtime-state",
+        f"{_CONVERSATION_ROOT}/chatRepository",
+        f"{_CONVERSATION_ROOT}/messageStore",
+    ):
+        assert _frontend_rule(presentation, target) == "conversation_presentation_outward"
+
+
+def test_root_reset_can_only_import_the_public_conversation_reset_facade() -> None:
+    importer = "frontend/src/components/atomic-crm/root/reset-runtime-state.ts"
+    assert _frontend_rule(importer, _CONVERSATION_RESET_FACADE) is None
+    assert _frontend_rule(importer, f"{_CONVERSATION_ROOT}/messageStore") == (
+        "conversation_root_reset"
+    )
+    assert (
+        _frontend_rule(
+            importer,
+            f"{_CONVERSATION_ROOT}/infrastructure/runtime-epoch-adapter",
+        )
+        == "conversation_root_reset"
+    )
