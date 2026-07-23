@@ -305,13 +305,19 @@ const AttentionQueue = ({ data }: { data: PerfMetrics }) => {
                 <strong>{signal.title}</strong>
                 <small>{signal.detail}</small>
               </div>
-              <b>{signal.value}</b>
-              <a
-                href="#slow-turns"
-                aria-label={`Xem lượt liên quan đến ${signal.title}`}
-              >
-                <ArrowRight aria-hidden="true" />
-              </a>
+              {signal.tone === "success" ? null : (
+                <>
+                  <b>{signal.value}</b>
+                  {data.slow_turns.length > 0 ? (
+                    <a
+                      href="#slow-turns"
+                      aria-label={`Xem lượt liên quan đến ${signal.title}`}
+                    >
+                      <ArrowRight aria-hidden="true" />
+                    </a>
+                  ) : null}
+                </>
+              )}
             </li>
           );
         })}
@@ -366,7 +372,7 @@ const StageMatrix = ({ data }: { data: PerfMetrics }) => {
   const candidate = rows.filter((key) => CANDIDATE_STAGES.has(key));
   const internal = rows.filter((key) => !CANDIDATE_STAGES.has(key));
   return (
-    <section className="performance-panel performance-matrix tt-card tt-card-border">
+    <section className="performance-panel performance-matrix">
       <div className="performance-section-heading">
         <div>
           <h2>Chẩn đoán độ trễ</h2>
@@ -431,7 +437,7 @@ const ADAPTER_LABELS: Record<string, string> = {
 const AdapterComparison = ({ data }: { data: PerfMetrics }) => {
   const rows = data.by_adapter ?? [];
   return (
-    <section className="performance-panel performance-matrix tt-card tt-card-border">
+    <section className="performance-panel performance-matrix">
       <div className="performance-section-heading">
         <div>
           <h2>So sánh kênh giao gửi</h2>
@@ -674,6 +680,9 @@ const MobileTurnCard = ({ turn }: { turn: PerfSlowTurn }) => {
 
 const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const visibleTurns = showAll ? slowTurns : slowTurns.slice(0, 8);
+  const hiddenCount = slowTurns.length - visibleTurns.length;
   return (
     <section
       className="performance-panel performance-slow-turns tt-card tt-card-border"
@@ -712,7 +721,7 @@ const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
                 </tr>
               </thead>
               <tbody>
-                {slowTurns.map((turn) => {
+                {visibleTurns.map((turn) => {
                   const tone = getSlowTurnTone(turn);
                   const isOpen = expandedId === turn.id;
                   return (
@@ -782,10 +791,28 @@ const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
             </table>
           </div>
           <div className="performance-turn-cards">
-            {slowTurns.map((turn) => (
+            {visibleTurns.map((turn) => (
               <MobileTurnCard key={turn.id} turn={turn} />
             ))}
           </div>
+          {slowTurns.length > 8 ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="performance-show-more"
+              onClick={() => {
+                setShowAll((current) => !current);
+                setExpandedId(null);
+              }}
+            >
+              {showAll ? "Thu gọn" : `Xem thêm ${hiddenCount} lượt`}
+              <ChevronDown
+                className={showAll ? "is-open" : undefined}
+                aria-hidden="true"
+              />
+            </Button>
+          ) : null}
         </>
       )}
     </section>
@@ -847,8 +874,38 @@ const SupportingStats = ({ data }: { data: PerfMetrics }) => {
   );
 };
 
-const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
+const PerformanceNoActivity = ({ windowLabel }: { windowLabel: string }) => (
+  <section
+    className="performance-no-activity"
+    aria-labelledby="performance-no-activity-title"
+  >
+    <Activity aria-hidden="true" />
+    <div>
+      <h2 id="performance-no-activity-title">
+        Chưa có lượt xử lý trong {windowLabel}
+      </h2>
+      <p>Trạng thái trực tiếp vẫn hiển thị phía trên.</p>
+    </div>
+  </section>
+);
+
+export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
   const endToEnd = data.percentiles.end_to_end?.p95;
+  const totalTurns = Object.values(data.by_outcome).reduce(
+    (sum, value) => sum + value,
+    0,
+  );
+  const hasPercentileData = Object.values(data.percentiles).some(
+    (stage) => stage.p50 != null || stage.p95 != null || stage.p99 != null,
+  );
+  const hasHistoricalData =
+    totalTurns > 0 ||
+    data.trend.length > 0 ||
+    data.slow_turns.length > 0 ||
+    hasPercentileData ||
+    (data.by_adapter ?? []).some((adapter) => adapter.turns > 0);
+  const windowLabel =
+    data.window === "1h" ? "1 giờ" : data.window === "7d" ? "7 ngày" : "24 giờ";
   const workerTone: Tone =
     data.live.total_workers > 0 &&
     data.live.busy_workers >= data.live.total_workers
@@ -903,22 +960,41 @@ const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
         />
         <Metric
           label="Lượt xử lý"
-          value={Object.values(data.by_outcome)
-            .reduce((sum, value) => sum + value, 0)
-            .toLocaleString()}
-          hint={`trong ${data.window === "1h" ? "1 giờ" : data.window === "7d" ? "7 ngày" : "24 giờ"}`}
+          value={totalTurns.toLocaleString()}
+          hint={`trong ${windowLabel}`}
           tone="neutral"
           icon={Activity}
         />
       </section>
-      <section className="performance-primary-grid">
-        <TrendChart trend={data.trend ?? []} window={data.window} />
-        <AttentionQueue data={data} />
-      </section>
-      <StageMatrix data={data} />
-      <AdapterComparison data={data} />
-      <SlowestTurns slowTurns={data.slow_turns} />
-      <SupportingStats data={data} />
+      {!hasHistoricalData ? (
+        <PerformanceNoActivity windowLabel={windowLabel} />
+      ) : (
+        <>
+          <section className="performance-primary-grid">
+            <TrendChart trend={data.trend ?? []} window={data.window} />
+            <AttentionQueue data={data} />
+          </section>
+          {data.slow_turns.length > 0 ? (
+            <SlowestTurns slowTurns={data.slow_turns} />
+          ) : null}
+          <details className="performance-details">
+            <summary>
+              <span>
+                <strong>Phân tích chi tiết</strong>
+                <small>Giai đoạn · kênh · dữ liệu hỗ trợ</small>
+              </span>
+              <ChevronDown aria-hidden="true" />
+            </summary>
+            <div className="performance-details-content">
+              {hasPercentileData ? <StageMatrix data={data} /> : null}
+              {(data.by_adapter ?? []).length > 0 ? (
+                <AdapterComparison data={data} />
+              ) : null}
+              <SupportingStats data={data} />
+            </div>
+          </details>
+        </>
+      )}
     </>
   );
 };

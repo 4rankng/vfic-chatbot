@@ -32,8 +32,21 @@ describe("performance trend chart layers", () => {
     expect(refresh).toMatch(/min-height:\s*2rem/);
   });
 
+  it("presents the top metrics as one flat status strip", () => {
+    const metrics = rule("\\.performance-metrics");
+    const metric = rule("\\.performance-metric");
+
+    expect(metrics).toMatch(/gap:\s*0/);
+    expect(metrics).toMatch(/border-block:\s*1px solid var\(--border\)/);
+    expect(metric).toMatch(/border:\s*0/);
+    expect(metric).toMatch(/border-radius:\s*0/);
+    expect(metric).toMatch(/background:\s*transparent/);
+  });
+
   it("uses the page title as the top of the mobile type and spacing scale", () => {
-    const mobile = stylesheet.slice(stylesheet.indexOf("@media (max-width: 720px)"));
+    const mobile = stylesheet.slice(
+      stylesheet.indexOf("@media (max-width: 720px)"),
+    );
 
     expect(mobile).toMatch(
       /\.performance-header h1\s*\{[^}]*font-size:\s*var\(--fs-page-title\)[^}]*line-height:\s*28px/s,
@@ -44,15 +57,12 @@ describe("performance trend chart layers", () => {
     expect(mobile).toMatch(
       /\.performance-window button\s*\{[^}]*min-height:\s*36px[^}]*font-size:\s*var\(--fs-body-sm\)/s,
     );
-    expect(mobile).toMatch(
-      /\.performance-metric\s*\{[^}]*border-radius:\s*12px[^}]*padding:\s*10px/s,
-    );
+    expect(mobile).toMatch(/\.performance-metric\s*\{[^}]*padding:\s*10px/s);
+    expect(mobile).not.toMatch(/\.performance-metric\s*\{[^}]*box-shadow:/s);
     expect(mobile).toMatch(
       /\.performance-metric strong\s*\{[^}]*font-size:\s*22px[^}]*line-height:\s*26px/s,
     );
-    expect(mobile).toMatch(
-      /\.performance-trend\s*\{[^}]*height:\s*152px/s,
-    );
+    expect(mobile).toMatch(/\.performance-trend\s*\{[^}]*height:\s*152px/s);
     expect(stylesheet).toMatch(
       /@media \(max-width: 420px\)[\s\S]*\.performance-refresh-prefix\s*\{[^}]*display:\s*none/s,
     );
