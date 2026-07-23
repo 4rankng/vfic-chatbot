@@ -73,9 +73,8 @@ ChatBot/
 │   │   │       ├── layout/           Layout + MobileLayout
 │   │   │       ├── login/, settings/, profiles/, misc/, automation/
 │   │   │       └── inbox/            10 CSS section files (barrel = inbox.css)
-│   │   ├── lib/          utils.ts (cn), toSlug.ts, vietnameseSearch.ts
-│   │   ├── lib/vfic/     config.ts, humanReplyService.ts,
-│   │   │                 knowledgeService.ts, realtimeSocket.ts
+│   │   ├── lib/          apiClient.ts, runtime-config.ts, utils.ts,
+│   │   │                 vietnameseSearch.ts
 │   │   └── hooks/        use-mobile.ts
 │   ├── e2e/              Playwright specs (vfic.spec.ts, visual.spec.ts)
 │   ├── Dockerfile        node:22 build → nginx:1.27 serve
@@ -105,7 +104,12 @@ ChatBot/
 
 | Subdir | Responsibility |
 |---|---|
-| `api/` | FastAPI routers under `/api/v1` (except `realtime`, `webhooks`). `dependencies.py` holds auth deps. |
+| `api/` | FastAPI transport routers under `/api/v1` (except `realtime`, `webhooks`). Context-specific dependency adapters are named explicitly; there is no shared compatibility facade. |
+| `identity/`, `access/` | Identity/authentication and authorization domain policies, application ports/use cases, and infrastructure adapters. |
+| `project_knowledge/` | Project/knowledge domain policies, application scheduling/query/provider ports, and infrastructure adapters. |
+| `conversation_messaging/` | Messaging ownership/delivery domain rules, ingress/recovery application ports, and transport persistence adapters. |
+| `recruitment/`, `reporting/` | Recruitment domain/application behavior and reporting read-model ports/adapters. |
+| `composition/` | Explicit cross-context wiring for messaging, project/knowledge, recruitment, and reporting. Contains construction, not business rules. |
 | `capabilities/` | Closed-world industry pack/capability definitions, dependency/owner validation, canonical non-executable pack contract, and dormant recruitment delegation descriptor. Database values never select executable imports. |
 | `core/` | Cross-cutting infra: config (Pydantic BaseSettings), async DB engine + session, Redis pool, security (JWT/argon2), structured logging + request_id, error handlers, cache, ratelimit, embedding + vector helpers, text utils. |
 | `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools.py` tool dispatch; `safety.py` fast + LLM safety; `prompts.py`; `proactive/`. |
@@ -126,16 +130,15 @@ ChatBot/
 | `components/atomic-crm/root/` | `<CRM>` renders the fixed static recruitment runtime bundle; reset code owns Query/store/socket/message generation teardown keyed by authority generation. |
 | `components/atomic-crm/capabilities/` | Static single-tenant recruitment runtime modules (kernel + recruitment contributions). There is no live generic runtime compiler or backend-selected import path. |
 | `components/atomic-crm/installation/` | Public runtime manifest parsing and lifecycle context/bootstrap. It refreshes safe runtime metadata but does not gate the authenticated recruiter console behind an installer. |
-| `components/atomic-crm/providers/` | `dataProvider.ts` (react-admin verb mapping), `rest/api.ts` (HTTP client + JWT + 401 refresh), `authProvider.ts`, `i18nProvider.ts` (Vietnamese-only). |
-| `components/atomic-crm/conversations/` | Inbox: ConversationList, ChatThread (virtua VList), ConversationContextPanel, WorkspaceShell + WorkspaceIconRail, chatRepository, useConversationRealtime, Zustand `messageStore.ts`. CSS barrel `inbox.css`. |
+| `components/atomic-crm/providers/` | Transport adapters: react-admin data/auth providers plus the realtime Socket.IO adapter. Shared HTTP/JWT behavior lives in `src/lib/apiClient.ts`. |
+| `components/atomic-crm/conversations/` | Layered conversation slice: `presentation -> application -> domain`, with HTTP/realtime/Zustand implementations in `infrastructure/`. CSS remains feature-owned. |
 | `components/atomic-crm/leads/` | Kanban board, lead show/edit, chatops actions. |
 | `components/atomic-crm/dashboard/` | RecruitingCommandCenter (Vietnamese metric cards). |
-| `components/atomic-crm/knowledge/` | KnowledgeIngestPanel (largest file, 763 LOC) + project workspace shell. |
+| `components/atomic-crm/knowledge/` | Layered knowledge contracts, operations, HTTP/download adapters, and presentation workspaces. |
 | `components/atomic-crm/projects/` | ProjectSidebar, ProjectWorkspaceShell, and ProjectKnowledgePanel. Projects own recruiting knowledge, not Agent selection. |
-| `components/atomic-crm/personas/` | Persona CRUD, adapter assignment, PersonaWorkspaceShell, and personaMarkdown. |
+| `components/atomic-crm/personas/` | Persona domain rules, application ports/actions, HTTP adapter, CRUD, and workspace presentation. |
 | `components/atomic-crm/integrations/` | ZaloIntegrationPage + FacebookMessengerIntegrationPage (admin only). |
-| `lib/vfic/` | `config.ts` (API base resolution), `realtimeSocket.ts` (Socket.IO singleton), `humanReplyService.ts`, `knowledgeService.ts`. |
-| `lib/` | `utils.ts` (`cn()` = clsx + tailwind-merge), `toSlug.ts`, `vietnameseSearch.ts` (diacritic-insensitive). |
+| `lib/` | Shared technical utilities: `apiClient.ts`, `runtime-config.ts`, `utils.ts` (`cn()`), and `vietnameseSearch.ts`. Product behavior stays in feature slices. |
 
 ## Project knowledge modes
 
@@ -170,13 +173,13 @@ ChatBot/
 | `backend/app/services/retrieval/repository.py` | pgvector halfvec HNSW + exact re-rank retrieval (line 160). |
 | `backend/app/services/knowledge/category_service.py` | Stages, activates, clears, cuts over, rolls back, and derives category revisions for Project-owned RAG categories. |
 | `backend/app/workers/run_worker.py` | RQ worker container entrypoint; calls `Worker.clean_registries()` on startup. |
-| `backend/app/workers/chatbot.py` | Chat turn worker (consumes `webhook_high`, `persistence_low`). |
-| `backend/app/workers/reconcile.py` | Reconcile sweep (line 43); SETNX non-reentrancy guard; 7 Redis observability counters. |
-| `backend/app/workers/followup.py` | Proactive follow-up fan-out (line 74). |
+| `backend/app/workers/chatbot_worker.py` | Stable chat-turn RQ entry point (consumes `webhook_high`, `persistence_low`). |
+| `backend/app/workers/reconcile_worker.py` | Reconcile sweep; SETNX non-reentrancy guard and Redis observability counters. |
+| `backend/app/workers/followup_worker.py` | Stable proactive follow-up RQ entry point. |
 | `backend/app/workers/async_runner.py` | One persistent event loop per worker process (sync RQ → async bridge). |
 | `backend/app/realtime/` | Socket.IO server + cross-process emit bridge (264 LOC). |
-| `backend/app/api/webhooks.py` | `POST /webhooks/zalo/chatbot` (line 34), `POST /webhooks/zalo/oa` (line 71), `_verify_oa_signature` (line 115). |
-| `backend/app/api/dependencies.py` | Auth dependencies plus dormant auth-first `get_active_installation` / `require_capability`; token-version gate remains the identity boundary. |
+| `backend/app/api/webhooks.py` | Thin Zalo and Facebook webhook transport; messaging persistence/enqueue behavior is delegated to context adapters and composition. |
+| `backend/app/api/auth_dependencies.py` | FastAPI authentication adapter backed by identity application contracts. |
 | `backend/alembic/versions/0048_project_owned_knowledge_modes.py` | Additive Project-owned knowledge-mode migration: ownership links, 12 categories, EXPLORE/FOCUSED state, and LG Display backfill guardrails. |
 | `backend/alembic/versions/0050_data_ingestion_recovery.py` | Adds durable category processing leases, retry metadata, quality-result storage, and Project cutover snapshot columns. |
 | `backend/alembic/env.py` | Injects `settings.database_url_sync`; registers models on `Base.metadata`; baseline is raw SQL. |
@@ -194,14 +197,14 @@ ChatBot/
 | `frontend/src/components/atomic-crm/capabilities/static-recruitment-runtime.ts` | Builds the fixed static recruitment runtime bundle keyed by installation authority generation. |
 | `frontend/src/components/atomic-crm/root/reset-runtime-state.ts` | Generation-owned Query/store/Socket.IO/Zustand/adapter teardown and stale-response isolation. |
 | `frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.tsx` | Project knowledge editor for direct-context pages and per-category RAG replacement. |
-| `frontend/src/components/atomic-crm/providers/rest/api.ts` | HTTP client; JWT in `Authorization: Bearer`; `apiRequest()` 401 retry via `refreshOnce()`; `friendlyApiMessage()` Vietnamese i18n. |
+| `frontend/src/lib/apiClient.ts` | HTTP client; JWT in `Authorization: Bearer`; `apiRequest()` 401 retry via `refreshOnce()`; Vietnamese error mapping. |
 | `frontend/src/components/atomic-crm/providers/rest/dataProvider.ts` | react-admin verb → `/api/v1/{resource}`; custom methods (takeOverConversation, etc.); `RESOURCE_PATH` aliases. |
 | `frontend/src/components/atomic-crm/providers/commons/i18nProvider.ts` | `polyglotI18nProvider(() => vietnameseCatalog, "vi", ...)`; `getInitialLocale()` hard-returns `"vi"`. |
-| `frontend/src/components/atomic-crm/conversations/messageStore.ts` | Zustand normalized message store (253 LOC); per-conv `Map<id,Message>` + lazily-recomputed sorted array. |
-| `frontend/src/components/atomic-crm/conversations/ChatThread.tsx` | Virtualized thread (`virtua` VList); at-bottom detection; double-RAF measure-before-scroll. |
-| `frontend/src/lib/vfic/knowledgeService.ts` | Client helpers for Project single-page and 12-category knowledge endpoints. |
-| `frontend/src/lib/vfic/config.ts` | API base resolution: `window.__VFIC__.API_BASE` → `VITE_API_BASE` → "" (same-origin). |
-| `frontend/src/lib/vfic/realtimeSocket.ts` | Socket.IO singleton; lazy autoConnect false; websocket-first; JWT re-read on reconnect. |
+| `frontend/src/components/atomic-crm/conversations/infrastructure/message-store.ts` | Zustand normalized message adapter with optimistic/server-echo merge. |
+| `frontend/src/components/atomic-crm/conversations/presentation/ChatThread.tsx` | Virtualized thread (`virtua` VList). |
+| `frontend/src/components/atomic-crm/knowledge/infrastructure/http-knowledge-adapter.ts` | HTTP adapter for Project single-page and category knowledge operations. |
+| `frontend/src/lib/runtime-config.ts` | API base resolution: `window.__VFIC__.API_BASE` → `VITE_API_BASE` → same origin. |
+| `frontend/src/components/atomic-crm/providers/realtime/realtime-socket.ts` | Socket.IO transport adapter; lazy connection and JWT re-read on reconnect. |
 | `frontend/src/conversations/inbox.css` | Barrel `@import`-ing 10 section files under `conversations/inbox/`. |
 | `frontend/vite.config.ts` | Vite 7.3 config; Tailwind v4 plugin; VitePWA autoUpdate (≤5 MiB); manual chunks; dev proxies `/api`, `/realtime`, `/socket.io` → `localhost:8000`. |
 | `Makefile` (root) | `dev`, `deploy`, `deploy-backend`, `deploy-frontend`, `adminer`, `seed`, `backup`, `restore`, `backup-full`, `restore-prod`. |

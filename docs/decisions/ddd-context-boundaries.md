@@ -76,11 +76,11 @@ Frontend domain-rich features follow `presentation -> application -> domain`,
 with infrastructure implementing application ports. Declarative CRUD and
 presentation-only features stay thin; four folders are not a goal by themselves.
 
-## Enforced Legacy Baseline
+## Certified Dependency Matrix
 
 `backend/tests/test_architecture_boundaries.py` scans Python and TypeScript and
-fails when a new forbidden edge appears. Deleting an inversion passes. Owners
-and removal phases:
+fails when a forbidden edge appears. The certification allowlist is empty.
+The retired migration categories and their completed owners were:
 
 | Rule | Owner | Removal phase |
 |---|---|---:|
@@ -89,8 +89,6 @@ and removal phases:
 | Services -> graph | shared contracts + owning context | 2–6 |
 | Services -> workers | job-port owner | 4–5 |
 | Frontend `lib/vfic` <-> product features | owning frontend slice | 7–8 |
-
-The allowlist is a ceiling, not a target. No phase may expand it.
 
 The scanner freezes exact normalized importer-to-symbol edges for Python and
 importer-to-module edges for TypeScript. It resolves relative paths and covers
@@ -104,12 +102,13 @@ remain subject to code review.
 ## Frozen Runtime Contracts
 
 The executable inventory in `backend/tests/test_runtime_surface_inventory.py`
-is the detailed source of truth: 172 HTTP endpoints and 40 named queue/outbox/
-provider call records (115 under the broad detector) are classified and hashed.
+is the detailed source of truth: 172 HTTP endpoints and 51 named queue/outbox/
+provider call records (142 under the broad detector) are classified and hashed.
 Any route or dispatch change requires an explicit snapshot review.
 
 - Queues: `webhook_high`, `persistence_low`, `ingest`, and `followup`; RQ module
-  paths and payload decoders remain stable until Phase 9 drain evidence.
+  paths and N/N-1 payload decoders remain stable until a separately approved
+  operational drain proves no serialized callers remain.
 - Realtime rooms: `user:{id}`, `conv:{conversation_id}`, and `lead:{lead_id}`.
   Public client events include `join/leave conversation`, `join/leave lead`,
   `message.created`, and `lead.updated`.
@@ -118,14 +117,14 @@ Any route or dispatch change requires an explicit snapshot review.
   `followup_allowed`, `persist`, `enrich_oa_profile`, `runtime_policy`, and
   `direct_context`. Protocols live in `app/graph/ports.py`.
 - Frontend resource names are frozen by
-  `capabilities/static-recruitment-runtime.test.ts`; provider aliases remain in
-  `providers/rest/dataProvider.ts` until their owning feature migration.
+  `capabilities/static-recruitment-runtime.test.ts`; the data provider is a
+  transport adapter and feature code consumes application ports.
 - High-risk characterization suites cover auth/capability order, webhook-to-RQ
   dispatch, outbox send claims, knowledge activation/retrieval, takeover,
   proactive turns, and frontend runtime reset/realtime subscription lifetime.
 
-The pre-migration local baseline is 1,854 passing backend non-integration tests
-(23 skipped) and 494 passing frontend unit tests. Latency-sensitive production
+The certification local baseline is 2,133 passing backend unit tests
+(23 skipped) and 443 passing frontend app tests. Latency-sensitive production
 flows are webhook acknowledgement, queue wait, cached response, model/provider
 call, full answer, and provider send. Existing release targets remain authoritative:
 full-answer p95 below 4 seconds for the release gate and operational bot-turn p95
@@ -142,10 +141,10 @@ Project/knowledge scheduling preserves five operation-specific contracts behind
 one application facade: document ingest is fire-and-forget; version and category
 work require stable receipts; RAG and single-page source sync may return no
 receipt and retain their existing ambiguity handling. The RQ adapter continues
-to call the established worker facades from the composition root, so serialized callable paths and queue
-payloads are unchanged. Three direct service-owned enqueue calls disappeared
-from the broad static inventory; this is a boundary deletion, not a runtime
-surface removal.
+to call the established worker facades from the composition root, so serialized
+callable paths and queue payloads are unchanged. The complete application-tree
+inventory includes composition roots and bounded-context adapters, preventing
+structural moves from silently shrinking operational coverage.
 
 Category activation, project authority cutover/rollback, and single-page publish
 continue to commit their database authority before cache repair. Cache repair is

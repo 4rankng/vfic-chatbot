@@ -178,8 +178,10 @@ freeze current recruitment behavior for later refactoring; they do **not**
 change production code or runtime semantics, activate another industry, or
 establish that the platform is universal.
 
-The DDD migration additionally freezes dependency edges in
+The completed DDD migration enforces a zero-exception dependency matrix in
 `tests/test_architecture_boundaries.py`, the hashed route/queue/outbox/provider
 surface in `tests/test_runtime_surface_inventory.py`, and graph-to-service
-direction in `tests/test_graph_import_guard.py`. Updating any snapshot requires
-an explicit architecture review; deleting a legacy dependency edge is allowed.
+direction in `tests/test_graph_import_guard.py`. The runtime inventory scans the
+complete backend application tree, including bounded-context adapters and
+composition roots. Updating any snapshot requires an explicit architecture
+review.
