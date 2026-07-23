@@ -9,7 +9,6 @@ import pytest
 from app.graph.clients import MiniMaxAgent, OpenRouterEmbedder
 from app.graph.factories import (
     _DirectContextAdapter,
-    _LeadContextAdapter,
     _asks_to_explore,
     _build_fast_llm,
     _is_general_or_comparative,
@@ -19,6 +18,7 @@ from app.graph.factories import (
     reset_client_cache,
 )
 from app.graph.types import GraphDeps
+from app.recruitment.infrastructure.legacy_adapters import LegacyLeadContextAdapter
 
 
 @pytest.mark.parametrize(
@@ -279,7 +279,7 @@ async def test_lead_context_personalizes_only_oa_profiles(
         lambda **_kwargs: "phone question",
     )
 
-    profile, question = await _LeadContextAdapter(object()).context(chat_id, "hello", [])
+    profile, question = await LegacyLeadContextAdapter(object()).context(chat_id, "hello", [])
 
     assert profile == "profile"
     if chat_id.startswith("oa:"):

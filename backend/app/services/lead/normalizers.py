@@ -9,7 +9,7 @@ import json
 import re
 from datetime import datetime
 
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 
 
 _NOTE_PREFIX_RE = re.compile(r"^(?:(?:[-*•–—])\s*|(?:\d+[.)])\s+)")

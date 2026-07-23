@@ -23,8 +23,8 @@ from app.schemas.personas import (
     PersonaUpdate,
     default_followup_rules_dict,
 )
-from app.services.errors import NotFoundError
-from app.services.persona_service import PersonaService, persona_out_from_model
+from app.shared.domain.errors import NotFoundError
+from app.services.personas import PersonaService, persona_out_from_model
 
 # Operational rules that must survive any persona restructure. Each is a
 # behavior the agent must follow — losing any of these changes the bot's

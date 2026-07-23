@@ -10,7 +10,7 @@ For one document it runs: extract -> digest -> embed -> index -> product feature
   features -> LLM-extract the 11 worker "product features" for the project (best-effort)
 
 This module is the ORCHESTRATOR only: LLM/embed calls + business flow. SQL lives in
-``repository.py`` and coercion in ``coercion.py``. The LLM step is injected (``llm_json``)
+the repository modules and coercion in ``coercion.py``. The LLM step is injected (``llm_json``)
 so the pipeline is unit-testable without API keys; a fake returns canned JSON.
 
 STRICT grounding rule (existing persona contract): every unit carries a verbatim
@@ -46,9 +46,9 @@ from app.services.knowledge.canonical import (
 )
 from app.services.knowledge.extraction import DigestSections, split_for_digest
 from app.services.knowledge.prompts import DIGEST_SYSTEM_PROMPT, INDEX_SYSTEM_PROMPT
-from app.services.knowledge.repository import (
-    JobFeatureValueRepo,
-    KnowledgeChunkRepo,
+from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
+from app.services.knowledge.job_feature_repository import JobFeatureValueRepo
+from app.services.knowledge.project_index_repository import (
     ProjectIndexRepo,
     rebuild_bus_timetable,
 )

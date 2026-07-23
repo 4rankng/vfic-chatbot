@@ -409,7 +409,7 @@ class ConversationService:
         self, conv: Conversation, recruiter: User, body: str
     ) -> tuple[Message, bool]:
         """Persist then immediately dispatch a recruiter reply via the shared outbox."""
-        from app.services.errors import DeliveryEligibilityError
+        from app.shared.domain.errors import DeliveryEligibilityError
         from app.services.outbox_service import build_outbox_payload, dispatch_outbox
 
         quote_message_id = None

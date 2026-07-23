@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.schemas.installation import InstallationRevisionCreate
-from app.services.errors import InstallationError
+from app.shared.domain.errors import InstallationError
 from app.services.installation.service import InstallationService
 
 

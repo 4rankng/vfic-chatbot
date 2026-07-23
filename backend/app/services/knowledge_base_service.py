@@ -23,7 +23,7 @@ from app.schemas.knowledge_bases import (
     LegacyKnowledgeBootstrap,
 )
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError, NotFoundError
+from app.shared.domain.errors import ConflictError, NotFoundError
 from app.services.knowledge.text_ingestion import canonical_kb_text_stats
 from app.services.knowledge_base_capacity import require_direct_context_ready
 from app.schemas.knowledge_categories import KnowledgeCategoryKey

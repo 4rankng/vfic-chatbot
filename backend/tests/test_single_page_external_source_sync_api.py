@@ -10,7 +10,7 @@ import pytest
 from app.api import projects as projects_api
 from app.api.dependencies import get_db, require_admin
 from app.core.errors import register_domain_exception_handlers
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 from app.main import app as main_app
 
 

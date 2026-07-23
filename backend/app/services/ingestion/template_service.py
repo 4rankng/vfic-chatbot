@@ -17,7 +17,7 @@ from app.models.ingestion_template import (
 from app.models.company import Project
 from app.models.user import User
 from app.services.audit_service import record_audit
-from app.services.errors import NotFoundError
+from app.shared.domain.errors import NotFoundError
 from app.services.ingestion.template_compiler import compile_template
 
 

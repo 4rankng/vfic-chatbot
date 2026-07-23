@@ -36,7 +36,7 @@ from app.models.knowledge import (
 from app.models.user import User
 from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError, NotFoundError
+from app.shared.domain.errors import ConflictError, NotFoundError
 from app.services.knowledge import LLMJson
 from app.services.knowledge.canonical import (
     CANONICAL_SCHEMA_VERSIONS,
@@ -51,11 +51,9 @@ from app.services.knowledge.file_extraction import (
     _detect_upload_format,
     _extract_docx_text,
 )
-from app.services.knowledge.repository import (
-    KnowledgeChunkRepo,
-    KnowledgeDocumentRepo,
-    rebuild_bus_timetable,
-)
+from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
+from app.services.knowledge.document_repository import KnowledgeDocumentRepo
+from app.services.knowledge.project_index_repository import rebuild_bus_timetable
 from app.services.knowledge.text_ingestion import kb_text_stats
 from app.services.storage import persist_original_upload
 

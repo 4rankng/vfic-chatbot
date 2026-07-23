@@ -47,8 +47,8 @@ from app.schemas.projects import (
 )
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError, NotFoundError
-from app.services.knowledge.repository import JobFeatureValueRepo
+from app.shared.domain.errors import ConflictError, NotFoundError
+from app.services.knowledge.job_feature_repository import JobFeatureValueRepo
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.project.faq import ProjectFaqService
 from app.services.project.features import ProjectFeatureService

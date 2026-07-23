@@ -296,7 +296,7 @@ async def get_direct_context_file(
         )
     )
     if direct_file is None:
-        from app.services.errors import ConflictError
+        from app.shared.domain.errors import ConflictError
 
         raise ConflictError("A direct-context knowledge base needs one text file before use")
     return DirectContextFileDetailOut(
@@ -321,7 +321,7 @@ async def get_direct_context_capacity(
         )
     )
     if direct_file is None:
-        from app.services.errors import ConflictError
+        from app.shared.domain.errors import ConflictError
 
         raise ConflictError("A direct-context knowledge base needs one text file before use")
     capacity = await direct_context_capacity(db, direct_file)

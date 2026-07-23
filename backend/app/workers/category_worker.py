@@ -82,7 +82,9 @@ def _mark_category_revision_failed_sync(
 ) -> None:
     try:
         from app.core.config import get_settings
-        from app.services.knowledge.repository import mark_category_revision_failed_sync
+        from app.services.knowledge.document_repository import (
+            mark_category_revision_failed_sync,
+        )
 
         mark_category_revision_failed_sync(
             get_settings().database_url_sync,

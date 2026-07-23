@@ -25,7 +25,7 @@ from app.models.user import User
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.schemas.project_single_page_sync import SinglePageExternalSourceCreate
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError, NotFoundError, UpstreamError
+from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
 from app.services.knowledge.external_source_sync import (
     AUTO_DISABLE_THRESHOLD,
     LOCK_TTL_SECONDS,

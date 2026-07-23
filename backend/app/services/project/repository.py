@@ -21,7 +21,7 @@ from app.models.knowledge import (
     KnowledgeDocument,
     KnowledgeStatus,
 )
-from app.services.errors import NotFoundError
+from app.shared.domain.errors import NotFoundError
 from app.services.knowledge.text_ingestion import kb_text_stats
 
 

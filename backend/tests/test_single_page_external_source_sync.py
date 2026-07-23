@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models.knowledge import KnowledgeBaseMode
 from app.models.single_page_external_source_sync_state import SinglePageExternalSourceSyncState
 from app.schemas.project_single_page_sync import SinglePageExternalSourceCreate
-from app.services.errors import ConflictError, NotFoundError, UpstreamError
+from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
 from app.services.knowledge.external_source_sync import ExternalSourceSyncError
 from app.services.project import single_page_external_sources as single_page_sync
 from app.services.project.single_page_external_sources import (

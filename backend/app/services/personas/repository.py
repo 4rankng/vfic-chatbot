@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.persona import AdapterPersonaAssignment, Persona, PersonaVersion
 from app.schemas.personas import AdapterProvider, SUPPORTED_ADAPTER_PROVIDERS
-from app.services.errors import NotFoundError
+from app.shared.domain.errors import NotFoundError
 
 
 class PersonaRepository:

@@ -24,7 +24,7 @@ from typing import Any, Awaitable, Callable
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 from app.core.vector import vec_literal
 from app.graph.llm import Embedder
 from app.graph.ports import RetrievalPort

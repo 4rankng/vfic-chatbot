@@ -11,7 +11,7 @@ from app.models.knowledge import KnowledgeBase, KnowledgeBaseDirectFile, Knowled
 from app.models.single_page_external_source_sync_state import SinglePageExternalSourceSyncState
 from app.models.user import Role, User
 from app.schemas.knowledge_bases import DirectContextFileUpsert
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 from app.services.knowledge.external_source_sync import ExternalSourceSyncError
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.services.project.single_page_external_sources import (

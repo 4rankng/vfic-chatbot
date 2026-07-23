@@ -1529,7 +1529,7 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
         return "Chào bạn!"
 
     monkeypatch.setattr(runner, "_agent_turn", _fake)
-    from app.graph.outbound_telemetry import OutboundTelemetry
+    from app.shared.application.outbound import OutboundTelemetry
 
     telemetry = OutboundTelemetry(
         adapter="test_adapter",

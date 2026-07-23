@@ -29,7 +29,6 @@ from app.graph.clients import (
 )
 from app.graph.safety import DeterministicReplyPolicy
 from app.graph.types import GraphDeps
-from app.recruitment.infrastructure.legacy_adapters import LegacyLeadContextAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -100,9 +99,6 @@ def _is_general_or_comparative(normalized_message: str) -> bool:
     return bool(_SALARY_FIGURE_RE.search(text) and _SALARY_ACHIEVEMENT_RE.search(text))
 
 
-_LeadContextAdapter = LegacyLeadContextAdapter
-
-
 class _DirectContextAdapter:
     def __init__(self, db) -> None:
         self._db = db
@@ -112,9 +108,9 @@ class _DirectContextAdapter:
 
         from sqlalchemy import select
 
-        from app.core.text import normalize_vietnamese_text
+        from app.shared.domain.text import normalize_vietnamese_text
         from app.graph.direct_context import DirectContext, ProjectTurnContext
-        from app.graph.provider_scope import provider_from_conversation
+        from app.recruitment.domain.provider import provider_from_conversation
         from app.graph.prompts import AGENT_SYSTEM_PROMPT
         from app.models.company import Project
         from app.models.conversation import ConversationProjectState
@@ -313,7 +309,7 @@ class _RuntimePolicyAdapter:
 
     async def resolve_active_policy(self):
         from app.graph.runtime_policy import build_resolved_runtime_policy
-        from app.services.errors import InstallationError
+        from app.shared.domain.errors import InstallationError
         from app.services.installation.service import InstallationService
 
         installation = InstallationService(self._db)

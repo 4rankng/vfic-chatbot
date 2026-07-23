@@ -21,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import EMBEDDING_DIM, get_settings
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 from app.services.retrieval.fusion import reciprocal_rank_fuse
 
 logger = logging.getLogger(__name__)

@@ -27,7 +27,7 @@ from app.models.user import User
 from app.schemas.knowledge_categories import CategoryDocument, KnowledgeCategoryKey
 from app.schemas.project_knowledge import CategoryCatalogItemOut, CategorySourceOut
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError, NotFoundError, UpstreamError
+from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
 from app.services.knowledge.category_contracts import (
     CATEGORY_DEFINITIONS,
     canonical_category_json,

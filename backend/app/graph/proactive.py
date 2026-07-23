@@ -182,7 +182,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         PROACTIVE_SILENCE_LIMIT,
     )
     from app.graph.context import build_system_prompt
-    from app.graph.provider_scope import provider_from_conversation
+    from app.recruitment.domain.provider import provider_from_conversation
 
     svc = deps.conversation
     injected_proactive_state = getattr(deps, "proactive_state", None)

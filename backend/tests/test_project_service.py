@@ -10,7 +10,7 @@ from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.schemas.projects import ProjectOut, ProjectUpdate
 from app.services.project import service as project_service
 from app.services.project.repository import ProjectRepository
-from app.services.project_service import ProjectService
+from app.services.project import ProjectService
 
 
 class _FakeResult:

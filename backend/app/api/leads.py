@@ -29,7 +29,7 @@ from app.schemas.lead import (
     LeadUpdate,
     StageRequest,
 )
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 from app.services.lead import LeadService
 from app.services.memory_repository import MemoryRepository
 

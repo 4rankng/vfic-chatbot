@@ -22,7 +22,7 @@ from app.schemas.job import (
     JobUpdate,
 )
 from app.services.job_service import JobService
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 
 router = APIRouter(
     prefix="/jobs",

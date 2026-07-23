@@ -14,7 +14,7 @@ from app.schemas.knowledge_bases import (
     KnowledgeBaseCreate,
     LegacyKnowledgeBootstrap,
 )
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 from app.services import knowledge_base_service
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.services import knowledge_base_capacity

@@ -939,7 +939,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         generated_reply = False
         outcome_label = "sent"
         faq_metadata: dict | None = None
-        from app.graph.provider_scope import provider_from_conversation
+        from app.recruitment.domain.provider import provider_from_conversation
 
         provider = provider_from_conversation(conv)
 

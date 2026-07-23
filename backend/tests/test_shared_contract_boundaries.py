@@ -51,23 +51,6 @@ def test_shared_contracts_have_no_framework_or_infrastructure_imports() -> None:
     assert not violations
 
 
-def test_error_compatibility_imports_preserve_class_identity() -> None:
-    from app.services import errors as legacy
-    from app.shared.domain import errors as canonical
-
-    assert legacy.NotFoundError is canonical.NotFoundError
-    assert legacy.ConflictError is canonical.ConflictError
-    assert legacy.InstallationError is canonical.InstallationError
-
-
-def test_outbound_compatibility_imports_preserve_object_identity() -> None:
-    from app.graph import outbound_telemetry as legacy
-    from app.shared.application import outbound as canonical
-
-    assert legacy.OutboundTelemetry is canonical.OutboundTelemetry
-    assert legacy.combine_outbound_telemetry is canonical.combine_outbound_telemetry
-
-
 def test_outbound_contract_is_immutable_and_contains_no_payload_fields() -> None:
     from app.shared.application.outbound import OutboundTelemetry
 

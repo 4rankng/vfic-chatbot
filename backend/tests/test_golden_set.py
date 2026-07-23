@@ -183,7 +183,7 @@ def test_golden_faq_exact_accepts():
     """A normalized exact-variant match accepts at the exact tier."""
     from types import SimpleNamespace
 
-    from app.core.text import normalize_vietnamese_text as norm
+    from app.shared.domain.text import normalize_vietnamese_text as norm
 
     query = "Lương bao nhiêu?"
     rows = [

@@ -109,7 +109,7 @@ def _mark_doc_failed_sync(doc_id: str, exc: Exception) -> None:
     """
     try:
         from app.core.config import get_settings
-        from app.services.knowledge.repository import mark_document_failed_sync
+        from app.services.knowledge.document_repository import mark_document_failed_sync
 
         mark_document_failed_sync(
             get_settings().database_url_sync,
@@ -123,7 +123,7 @@ def _mark_doc_failed_sync(doc_id: str, exc: Exception) -> None:
 def _mark_version_failed_sync(version_id: str, exc: Exception) -> None:
     try:
         from app.core.config import get_settings
-        from app.services.knowledge.repository import mark_version_failed_sync
+        from app.services.knowledge.document_repository import mark_version_failed_sync
 
         mark_version_failed_sync(
             get_settings().database_url_sync,

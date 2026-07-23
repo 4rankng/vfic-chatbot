@@ -2,7 +2,7 @@
 
 A persona is the bot's voice (free-form markdown). Several may be stored; exactly one
 *global* persona is active at a time. All persistence and activation live in
-``app.services.persona_service``; this router only validates input, delegates,
+``app.services.personas``; this router only validates input, delegates,
 and serializes the response.
 """
 
@@ -28,7 +28,7 @@ from app.schemas.personas import (
     PersonaVersionListResponse,
     PersonaVersionMetadataOut,
 )
-from app.services.persona_service import (
+from app.services.personas import (
     PersonaService,
     load_persona_template,
     persona_out_from_model,
