@@ -26,6 +26,16 @@ class DeliveryResultPort(Protocol):
     def telemetry(self) -> OutboundTelemetry | None: ...
 
 
+class DeliveryStatusValuesPort(Protocol):
+    """Persistence-compatible delivery values injected into orchestration."""
+
+    @property
+    def suppressed(self) -> Any: ...
+
+    @property
+    def send_unknown(self) -> Any: ...
+
+
 class ConversationEventsPort(Protocol):
     """Publish committed conversation state without exposing Socket.IO/Redis."""
 
@@ -42,4 +52,9 @@ class BotTurnQueuePort(Protocol):
     def enqueue(self, payload: dict[str, Any]) -> bool: ...
 
 
-__all__ = ["BotTurnQueuePort", "ConversationEventsPort", "DeliveryResultPort"]
+__all__ = [
+    "BotTurnQueuePort",
+    "ConversationEventsPort",
+    "DeliveryResultPort",
+    "DeliveryStatusValuesPort",
+]

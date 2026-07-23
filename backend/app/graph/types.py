@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, NotRequired, TypedDict
 
 from app.graph.llm import AgentModel, Embedder, SafetyModel
+from app.graph.message_values import speaker_label
 from app.graph.ports import (
     ConversationPort,
     DirectContextPort,
@@ -18,6 +19,8 @@ from app.graph.ports import (
     RetrievalPort,
     RuntimePolicyPort,
 )
+from app.recruitment.application.ports import ProactiveStatePort
+from app.conversation_messaging.application.ports import DeliveryStatusValuesPort
 
 # TYPE_CHECKING avoids pulling asyncpg into the runtime import path; the
 # annotation is stringified by ``from __future__ import annotations`` anyway,
@@ -142,6 +145,10 @@ class GraphDeps:
     runtime_policy: RuntimePolicyPort | None = None
     # Resolves the active Agent's standalone KB without exposing retrieval/tools.
     direct_context: DirectContextPort | None = None
+    # Recruitment-owned persistence and history seam for proactive turns.
+    proactive_state: ProactiveStatePort | None = None
+    # Persistence enum translation injected by the messaging composition root.
+    delivery_statuses: DeliveryStatusValuesPort | None = None
 
 
 def _now() -> datetime:
@@ -154,12 +161,4 @@ def _speaker(msg) -> str:
     Shared by both ``runner.py`` (reactive turns) and ``proactive.py``
     (proactive nudges) to avoid drift between identical label maps.
     """
-    from app.models.conversation import MessageSender
-
-    if msg.sender == MessageSender.WORKER:
-        return "Ứng viên"
-    if msg.sender == MessageSender.BOT:
-        return "Bot"
-    if msg.sender == MessageSender.RECRUITER:
-        return "Nhân viên"
-    return "Hệ thống"
+    return speaker_label(msg)

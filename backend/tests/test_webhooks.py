@@ -1125,11 +1125,9 @@ def test_phase1_ambiguous_transport_classes_map_to_send_unknown():
         AMBIGUOUS_SEND_CLASSES,
         delivery_status_for_send_error,
     )
-    from app.models.conversation import DeliveryStatus
-
     for cls in AMBIGUOUS_SEND_CLASSES:
         assert (
-            delivery_status_for_send_error(cls, ok=False) is DeliveryStatus.SEND_UNKNOWN
+            delivery_status_for_send_error(cls, ok=False).value == "SEND_UNKNOWN"
         ), f"{cls} should map to SEND_UNKNOWN"
 
 

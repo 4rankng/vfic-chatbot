@@ -1,15 +1,8 @@
-"""Regression guard: the graph brain must not import concrete service modules.
+"""Regression guard: graph runtime modules must not import persistence adapters.
 
-The graph <-> services cycle was broken by depending on Protocol ports
-(:mod:`app.graph.ports`) wired through :class:`GraphDeps`, with
-:func:`app.graph.factories.build_deps` as the single composition root. The
-concrete services are constructed there with **function-level** (lazy) imports.
-
-A future *top-level* ``from app.services...`` added to any graph module would
-re-introduce a boot-time ``ImportError`` (services import graph utilities, so the
-edge must stay lazy / absent). This guard parses each graph module's source and
-fails fast if a top-level services import appears — function-level imports are
-still allowed, so the composition root keeps working.
+The designated compatibility composition root is ``graph/factories.py``.
+Every other graph module must consume inward Protocol/value contracts and
+graph-local policy only; imports nested in functions are violations too.
 """
 
 from __future__ import annotations
@@ -20,30 +13,47 @@ import pathlib
 _GRAPH_DIR = pathlib.Path(__file__).resolve().parent.parent / "app" / "graph"
 
 
-def _top_level_services_imports(path: pathlib.Path) -> list[str]:
+def _concrete_imports(path: pathlib.Path) -> list[str]:
     tree = ast.parse(path.read_text())
     offenders: list[str] = []
-    # `tree.body` is module-top-level only; imports nested inside functions live
-    # in their own FunctionDef bodies and are intentionally not flagged here.
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("app.services"):
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
+            ("app.models", "app.services")
+        ):
             names = ", ".join(alias.name for alias in node.names)
             offenders.append(f"from {node.module} import {names}")
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith("app.services"):
+                if alias.name.startswith(("app.models", "app.services")):
                     offenders.append(f"import {alias.name}")
     return offenders
 
 
-def test_graph_modules_have_no_top_level_service_imports() -> None:
+def test_graph_runtime_modules_have_no_concrete_imports() -> None:
     offenders: dict[str, list[str]] = {}
     for path in sorted(_GRAPH_DIR.glob("*.py")):
-        bad = _top_level_services_imports(path)
+        if path.name == "factories.py":
+            continue
+        bad = _concrete_imports(path)
         if bad:
             offenders[path.name] = bad
 
     assert not offenders, (
-        "graph modules must depend on ports, not concrete services — a top-level "
-        f"app.services import re-introduces the graph<->services cycle: {offenders}"
+        "graph runtime modules must depend on ports/values; concrete model or "
+        f"service imports belong in the designated composition root: {offenders}"
     )
+
+
+def test_guard_detects_nested_model_and_service_imports(tmp_path) -> None:
+    candidate = tmp_path / "candidate.py"
+    candidate.write_text(
+        "def load():\n"
+        "    from app.models.conversation import Message\n"
+        "    from app.services.lead import LeadService\n"
+        "    return Message, LeadService\n"
+    )
+
+    assert _concrete_imports(candidate) == [
+        "from app.models.conversation import Message",
+        "from app.services.lead import LeadService",
+    ]

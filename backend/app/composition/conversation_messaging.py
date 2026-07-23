@@ -11,12 +11,19 @@ from app.conversation_messaging.application.outbound_recovery import (
 from app.conversation_messaging.infrastructure.outbound_recovery import (
     SqlAlchemyOutboundRecoveryAdapter,
 )
+from app.conversation_messaging.infrastructure.delivery_status import (
+    SqlAlchemyDeliveryStatusValues,
+)
 from app.conversation_messaging.infrastructure.zalo_ingress import (
     LegacyZaloIngressAdapter,
 )
 from app.conversation_messaging.application.zalo_ingress import ZaloIngressUseCases
 
 logger = logging.getLogger(__name__)
+
+
+def build_delivery_status_values() -> SqlAlchemyDeliveryStatusValues:
+    return SqlAlchemyDeliveryStatusValues()
 
 
 async def run_zalo_ingress(
@@ -66,6 +73,7 @@ async def run_outbound_recovery() -> None:
 
 __all__ = [
     "SqlAlchemyOutboundRecoveryAdapter",
+    "build_delivery_status_values",
     "run_outbound_recovery",
     "run_zalo_ingress",
 ]

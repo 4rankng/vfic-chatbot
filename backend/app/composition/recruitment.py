@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.recruitment.application.ports import (
     FollowupEligibilityPort,
     LeadContextQueryPort,
+    ProactiveStatePort,
 )
 from app.recruitment.application.persistence import (
     PersistCandidateCommand,
@@ -14,6 +15,7 @@ from app.recruitment.infrastructure.legacy_adapters import (
     LegacyCandidatePersistenceAdapter,
     LegacyFollowupEligibilityAdapter,
     LegacyLeadContextAdapter,
+    LegacyProactiveStateAdapter,
 )
 
 
@@ -23,6 +25,10 @@ def build_lead_context(db) -> LeadContextQueryPort:
 
 def build_followup_eligibility(db) -> FollowupEligibilityPort:
     return LegacyFollowupEligibilityAdapter(db)
+
+
+def build_proactive_state(db) -> ProactiveStatePort:
+    return LegacyProactiveStateAdapter(db)
 
 
 async def run_candidate_persistence(
@@ -51,5 +57,6 @@ async def run_candidate_persistence(
 __all__ = [
     "build_followup_eligibility",
     "build_lead_context",
+    "build_proactive_state",
     "run_candidate_persistence",
 ]

@@ -683,6 +683,8 @@ async def build_deps(db, *, session_factory=None):
         enrich_oa_profile=_enrich_oa_profile,
         runtime_policy=_RuntimePolicyAdapter(db),
         direct_context=_DirectContextAdapter(db),
+        proactive_state=_build_proactive_state(db),
+        delivery_statuses=_build_delivery_statuses(),
     )
 
 
@@ -697,3 +699,15 @@ def _build_lead_context(db):
     from app.composition.recruitment import build_lead_context
 
     return build_lead_context(db)
+
+
+def _build_proactive_state(db):
+    from app.composition.recruitment import build_proactive_state
+
+    return build_proactive_state(db)
+
+
+def _build_delivery_statuses():
+    from app.composition.conversation_messaging import build_delivery_status_values
+
+    return build_delivery_status_values()

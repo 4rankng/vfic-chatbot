@@ -4,6 +4,18 @@ from __future__ import annotations
 
 from enum import Enum
 
+
+class DeliveryState(str, Enum):
+    PENDING = "PENDING"
+    SENDING = "SENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+    SUPPRESSED = "SUPPRESSED"
+    DELIVERED = "DELIVERED"
+    READ = "READ"
+    SEND_UNKNOWN = "SEND_UNKNOWN"
+
+
 _DELIVERY_RANK = {
     "PENDING": 0,
     "SENDING": 0,
@@ -25,4 +37,4 @@ def receipt_advances(current: str | Enum | None, target: str | Enum) -> bool:
     return delivery_rank(current) < delivery_rank(target)
 
 
-__all__ = ["delivery_rank", "receipt_advances"]
+__all__ = ["DeliveryState", "delivery_rank", "receipt_advances"]

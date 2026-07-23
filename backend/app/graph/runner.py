@@ -25,7 +25,9 @@ import time
 import uuid
 from contextlib import suppress
 from inspect import Parameter, iscoroutinefunction, signature
+from typing import Any
 
+from app.conversation_messaging.domain.delivery import DeliveryState
 from app.core.config import get_settings
 from app.graph.decision_trace import DecisionTraceBuilder
 from app.graph.ports import DeliveryResultPort, OutboundMessagePort, SendOutcome
@@ -51,7 +53,6 @@ from app.graph.router import (
 )
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
-from app.models.conversation import DeliveryStatus, Message
 
 logger = logging.getLogger(__name__)
 RECENT_HISTORY_LIMIT = 16
@@ -62,8 +63,24 @@ VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
 )
 
 
-def _delivery_status_for_send_error(error_class: str | None, *, ok: bool):
-    return DeliveryStatus.SEND_UNKNOWN if is_ambiguous_send(error_class, ok=ok) else None
+def _delivery_status_for_send_error(
+    error_class: str | None,
+    *,
+    ok: bool,
+    send_unknown: Any,
+):
+    return send_unknown if is_ambiguous_send(error_class, ok=ok) else None
+
+
+def _delivery_statuses(deps: GraphDeps):
+    if deps.delivery_statuses is not None:
+        return deps.delivery_statuses
+
+    class _NeutralDeliveryStatuses:
+        suppressed = DeliveryState.SUPPRESSED
+        send_unknown = DeliveryState.SEND_UNKNOWN
+
+    return _NeutralDeliveryStatuses()
 
 def _remaining(state: BotRunState) -> float:
     """Seconds left until the propagated turn deadline (``inf`` if unset).
@@ -177,7 +194,7 @@ async def _agent_turn(
     *,
     provider: str,
     chat_id: str,
-    recent_messages: list[Message],
+    recent_messages: list[Any],
     timings: dict | None = None,
     trace_sink=None,
     manifest_policy=None,
@@ -432,7 +449,7 @@ async def _direct_context_turn(
     context,
     deps: GraphDeps,
     user_text: str,
-    recent_messages: list[Message],
+    recent_messages: list[Any],
     timings: dict,
     *,
     trace_sink=None,
@@ -611,11 +628,14 @@ async def _finish_terminal_reply(
     # the error-reply path cannot produce a duplicate on reconcile recovery.
     _suppressed = bool(send_result and getattr(send_result, "suppressed", False))
     _error_class = send_result.error_class if (send_result and not send_result.ok) else None
+    statuses = _delivery_statuses(deps)
     _override = (
-        DeliveryStatus.SUPPRESSED
+        statuses.suppressed
         if _suppressed
         else _delivery_status_for_send_error(
-            _error_class, ok=bool(send_result and send_result.ok)
+            _error_class,
+            ok=bool(send_result and send_result.ok),
+            send_unknown=statuses.send_unknown,
         )
     )
     await svc.record_bot_outcome(
@@ -697,7 +717,7 @@ _FAQ_BYPASS_VOLATILE_MARKERS = (
     "liên hệ",
 )
 
-def _recent_vacancy_query(recent_messages: list[Message]) -> str | None:
+def _recent_vacancy_query(recent_messages: list[Any]) -> str | None:
     for message in reversed(recent_messages):
         sender = getattr(message, "sender", "")
         sender_value = getattr(sender, "value", sender)
@@ -728,7 +748,7 @@ def _vacancy_required_args(user_text: str) -> dict:
 
 def _vacancy_evidence_query(
     user_text: str,
-    recent_messages: list[Message],
+    recent_messages: list[Any],
     *,
     focused_project: bool = False,
 ) -> str | None:
@@ -743,7 +763,7 @@ def _vacancy_evidence_query(
     return f"{vacancy_query}\n{user_text}" if vacancy_query else None
 
 
-def _faq_bypass_allowed(user_text: str, recent_messages: list[Message]) -> bool:
+def _faq_bypass_allowed(user_text: str, recent_messages: list[Any]) -> bool:
     """Prefer canonical vacancy FAQs; keep other volatile claims on live paths."""
     if is_vacancy_lookup(user_text):
         return False
@@ -1230,11 +1250,12 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             # other failure stays FAILED (the reconciler may re-enqueue).
             send_suppressed = bool(getattr(send_result, "suppressed", False))
             send_error_class = send_result.error_class if not send_result.ok else None
-            override_status: DeliveryStatus | None = None
+            statuses = _delivery_statuses(deps)
+            override_status: Any | None = None
             if send_suppressed:
-                override_status = DeliveryStatus.SUPPRESSED
+                override_status = statuses.suppressed
             elif send_error_class in AMBIGUOUS_SEND_CLASSES:
-                override_status = DeliveryStatus.SEND_UNKNOWN
+                override_status = statuses.send_unknown
             await svc.record_bot_outcome(
                 conv,
                 version_at_start=state.version_at_start,
@@ -1262,7 +1283,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 return {
                     "outcome": (
                         "send_unknown"
-                        if override_status is DeliveryStatus.SEND_UNKNOWN
+                        if override_status is statuses.send_unknown
                         else "send_failed"
                     ),
                     "reason": send_result.error,

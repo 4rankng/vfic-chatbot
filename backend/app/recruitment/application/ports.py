@@ -77,11 +77,32 @@ class FollowupEligibilityPort(Protocol):
     async def allowed(self, conversation: Any) -> tuple[bool, str]: ...
 
 
+class ProactiveStatePort(Protocol):
+    """Persistence seam used by graph proactive orchestration."""
+
+    async def refresh(self, conversation: Any) -> None: ...
+
+    async def flush(self) -> None: ...
+
+    async def commit(self) -> None: ...
+
+    async def has_worker_reply_since(
+        self,
+        conversation_id: Any,
+        since: Any,
+    ) -> bool: ...
+
+    async def opt_out_for_silence(self, conversation: Any) -> None: ...
+
+    async def stamp_attempt(self, conversation: Any, attempted_at: Any) -> None: ...
+
+
 __all__ = [
     "ConversationAdapterProviderResolver",
     "FollowupEligibilityPort",
     "LeadContextQueryPort",
     "PersonaBodyResolver",
     "PersonaFollowupRulesResolver",
+    "ProactiveStatePort",
     "RecommendationQueryPort",
 ]

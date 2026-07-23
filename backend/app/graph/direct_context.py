@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from app.core.text import normalize_vietnamese_text
-from app.models.conversation import DeliveryStatus, Message, MessageSender
+from app.graph.message_values import delivery_is, sender_is, speaker_label
 
 
 @dataclass(frozen=True)
@@ -141,34 +142,27 @@ def direct_context_evidence_answer(knowledge_text: str, query: str) -> str | Non
     return best[2].strip()
 
 
-def _speaker(message: Message) -> str:
-    if message.sender == MessageSender.WORKER:
-        return "Ứng viên"
-    if message.sender == MessageSender.BOT:
-        return "Bot"
-    if message.sender == MessageSender.RECRUITER:
-        return "Nhân viên"
-    return "Hệ thống"
-
-
 def build_direct_user_text(
-    *, current_user_text: str, recent_messages: list[Message], history_token_budget: int
+    *,
+    current_user_text: str,
+    recent_messages: list[Any],
+    history_token_budget: int,
 ) -> str:
     """Keep newest complete messages that fit; the current message is never removed."""
     history = [
         message
         for message in recent_messages
         if (message.body or "").strip()
-        and getattr(message, "delivery_status", None) != DeliveryStatus.SUPPRESSED
+        and not delivery_is(message, "SUPPRESSED")
         and not (
-            message.sender == MessageSender.WORKER
+            sender_is(message, "WORKER")
             and message.body.strip() == current_user_text.strip()
         )
     ]
     used = 0
     lines: list[str] = []
     for message in reversed(history):
-        line = f"- {_speaker(message)}: {message.body.strip()}"
+        line = f"- {speaker_label(message)}: {message.body.strip()}"
         cost = (len(line) + 1) // 2
         if used + cost > history_token_budget:
             break

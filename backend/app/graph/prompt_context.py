@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from app.graph.message_values import delivery_is, sender_is
 from app.graph.types import _speaker
-from app.models.conversation import DeliveryStatus, Message, MessageSender
 
 
 def build_agent_user_text(
     *,
     chat_id: str,
     current_user_text: str,
-    recent_messages: list[Message],
+    recent_messages: list[Any],
     lead_profile: str = "",
     lead_collection_instruction: str = "",
     route_hint: str = "",
@@ -19,11 +21,11 @@ def build_agent_user_text(
     history = [
         m
         for m in recent_messages
-        if (m.body or "").strip() and m.delivery_status != DeliveryStatus.SUPPRESSED
+        if (m.body or "").strip() and not delivery_is(m, "SUPPRESSED")
     ]
     if (
         history
-        and history[-1].sender == MessageSender.WORKER
+        and sender_is(history[-1], "WORKER")
         and history[-1].body.strip() == current_user_text.strip()
     ):
         history = history[:-1]

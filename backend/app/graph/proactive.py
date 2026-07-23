@@ -14,10 +14,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 from inspect import iscoroutinefunction
-from typing import TypedDict
+from typing import Any, TypedDict
 
+from app.graph.message_values import delivery_is, sender_is
 from app.graph.ports import SendOutcome
 from app.graph.safety import (
     blocklist_hit,
@@ -25,7 +26,7 @@ from app.graph.safety import (
     retry_exhausted_fallback,
 )
 from app.graph.types import GraphDeps, TurnOutcome, _now, _speaker
-from app.models.conversation import DeliveryStatus, Message, MessageSender
+from app.recruitment.application.ports import ProactiveStatePort
 
 logger = logging.getLogger(__name__)
 
@@ -80,34 +81,47 @@ def parse_proactive_decision(raw: str | dict) -> ProactiveDecision:
     }
 
 
-async def _has_worker_reply_since(db, conv_id, since: datetime) -> bool:
-    """True if a WORKER message exists in the conversation after ``since``."""
-    from sqlalchemy import select, func
+class _GraphTestProactiveState:
+    """Compatibility state used only by graph tests that inject a fake DB."""
 
-    stmt = (
-        select(func.count())
-        .select_from(Message)
-        .where(
-            Message.conversation_id == conv_id,
-            Message.sender == MessageSender.WORKER,
-            Message.created_at > since,
-        )
-    )
-    result = await db.execute(stmt)
-    return result.scalar() > 0
+    def __init__(self, db) -> None:
+        self._db = db
+
+    async def refresh(self, conversation) -> None:
+        await self._db.refresh(conversation)
+
+    async def flush(self) -> None:
+        await self._db.flush()
+
+    async def commit(self) -> None:
+        await self._db.commit()
+
+    async def has_worker_reply_since(self, conversation_id, since) -> bool:
+        checker = getattr(self._db, "has_worker_reply_since", None)
+        if checker is None:
+            return True
+        return bool(await checker(conversation_id, since))
+
+    async def opt_out_for_silence(self, conversation) -> None:
+        conversation.followup_opted_out = True
+        await self._db.commit()
+
+    async def stamp_attempt(self, conversation, attempted_at) -> None:
+        conversation.last_followup_attempt_at = attempted_at
+        await self._db.flush()
 
 
 def _build_proactive_user_text(
     *,
     chat_id: str,
-    recent_messages: list[Message],
+    recent_messages: list[Any],
     lead_profile: str = "",
 ) -> str:
     """Build the contextual user text for the proactive LLM decision."""
     history_lines = [
         f"- {_speaker(m)}: {m.body.strip()}"
         for m in recent_messages
-        if (m.body or "").strip() and m.delivery_status != DeliveryStatus.SUPPRESSED
+        if (m.body or "").strip() and not delivery_is(m, "SUPPRESSED")
     ]
     if not history_lines:
         history_lines = ["- (chưa có tin nhắn trước đó)"]
@@ -171,6 +185,12 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     from app.graph.provider_scope import provider_from_conversation
 
     svc = deps.conversation
+    injected_proactive_state = getattr(deps, "proactive_state", None)
+    proactive_state: ProactiveStatePort = (
+        injected_proactive_state
+        if injected_proactive_state is not None
+        else _GraphTestProactiveState(deps.db)
+    )
     now = _now()
     margin = timedelta(seconds=PROACTIVE_48H_WINDOW_SECONDS)
     cap = PROACTIVE_FOLLOWUP_CAP
@@ -182,7 +202,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             return _outcome("suppressed", reason="proactive_not_enabled")
 
     # 1. Re-check guards
-    await deps.db.refresh(conv)
+    await proactive_state.refresh(conv)
     mode_value = getattr(conv.mode, "value", conv.mode)
     status_value = getattr(conv.status, "value", conv.status)
     if mode_value not in {"BOT", "SEMI_AUTO"} or status_value != "OPEN":
@@ -213,10 +233,12 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
 
     # 3. Silence check
     if conv.followup_count >= silence_limit and conv.last_followup_at:
-        silent = await _has_worker_reply_since(deps.db, conv.id, conv.last_followup_at)
+        silent = await proactive_state.has_worker_reply_since(
+            conv.id,
+            conv.last_followup_at,
+        )
         if not silent:
-            conv.followup_opted_out = True
-            await deps.db.commit()
+            await proactive_state.opt_out_for_silence(conv)
             logger.info(
                 "proactive silence opt-out: conversation=%s after %d nudges",
                 conv.zalo_chat_id,
@@ -267,8 +289,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         )
 
         # Stamp attempt timestamp (even before LLM — covers the time cost)
-        conv.last_followup_attempt_at = _now()
-        await deps.db.flush()
+        await proactive_state.stamp_attempt(conv, _now())
 
         # 6. Single LLM call → JSON decision
         if project_context is not None and project_context.direct_context is not None:
@@ -344,25 +365,25 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             return _outcome("suppressed", reason="safety_blocked")
 
         # 9. Last-chance guards (re-read from DB for takeovers/opt-outs)
-        await deps.db.refresh(conv)
+        await proactive_state.refresh(conv)
         if conv.followup_opted_out:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
-            await deps.db.commit()
+            await proactive_state.commit()
             return _outcome("suppressed", reason="opted_out_during_generation")
         rule_allowed, rule_reason = await deps.followup_allowed(conv)
         if not rule_allowed:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
-            await deps.db.commit()
+            await proactive_state.commit()
             return _outcome("suppressed", reason=f"rule_{rule_reason}")
         owned = await svc.recheck_ownership(conv, version_at_start, lock_owner=lock_owner)
         if not owned:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
-            await deps.db.commit()
+            await proactive_state.commit()
             return _outcome("suppressed", reason="ownership_lost")
         # Re-check 48h one more time (covers slow LLM/safety generation)
         if _now() - conv.last_inbound_at > margin:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
-            await deps.db.commit()
+            await proactive_state.commit()
             return _outcome("suppressed", reason="48h_window_post_generation")
 
         # 10. Persist the command, then dispatch it.  The production service
@@ -373,7 +394,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             (
                 item.zalo_message_id
                 for item in reversed(recent_messages)
-                if item.sender == MessageSender.WORKER and item.zalo_message_id
+                if sender_is(item, "WORKER") and item.zalo_message_id
             ),
             None,
         )

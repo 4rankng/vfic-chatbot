@@ -215,6 +215,10 @@ def _deps(
     db=None,
     reply_policy=None,
 ) -> GraphDeps:
+    from app.conversation_messaging.infrastructure.delivery_status import (
+        SqlAlchemyDeliveryStatusValues,
+    )
+
     return GraphDeps(
         db=db if db is not None else _FakeDB(),
         agent=object(),
@@ -227,6 +231,7 @@ def _deps(
         persist=persist,
         faq_bypass=faq_bypass,
         enrich_oa_profile=enrich_oa_profile,
+        delivery_statuses=SqlAlchemyDeliveryStatusValues(),
     )
 
 

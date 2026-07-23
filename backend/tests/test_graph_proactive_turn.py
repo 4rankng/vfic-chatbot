@@ -150,11 +150,11 @@ async def _always_allowed(conv):
     return True, ""
 
 
-def _deps(agent, zalo, *, conversation) -> "object":
+def _deps(agent, zalo, *, conversation, proactive_state=None) -> "object":
     from app.graph.safety import DeterministicReplyPolicy
     from app.graph.types import GraphDeps
 
-    return GraphDeps(
+    deps = GraphDeps(
         db=_FakeDB(),
         agent=agent,
         safety=object(),
@@ -166,6 +166,8 @@ def _deps(agent, zalo, *, conversation) -> "object":
         lead=_NoLead(),
         followup_allowed=_always_allowed,
     )
+    deps.proactive_state = proactive_state
+    return deps
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +211,42 @@ async def test_mode_not_bot_suppresses_without_agent_call(monkeypatch):
     assert res["outcome"] == "proactive:suppressed"
     assert res["reason"] == "mode/status"
     assert zalo.sent == []  # suppressed before any send
+
+
+@pytest.mark.asyncio
+async def test_silence_opt_out_uses_injected_recruitment_state(monkeypatch):
+    svc, _ = _stub_svc()
+    _patch_lazy_helpers(monkeypatch)
+    agent = _FakeAgent('{"send": true, "message": "never", "reason": "x"}')
+    zalo = _FakeZalo()
+    conv = _FakeConv(
+        followup_count=2,
+        last_followup_at=datetime.now(timezone.utc) - timedelta(hours=2),
+    )
+
+    class _ProactiveState:
+        opted_out = False
+
+        async def refresh(self, _conversation):
+            return None
+
+        async def has_worker_reply_since(self, _conversation_id, _since):
+            return False
+
+        async def opt_out_for_silence(self, conversation):
+            conversation.followup_opted_out = True
+            self.opted_out = True
+
+    state = _ProactiveState()
+    result = await run_proactive_turn(
+        conv,
+        _deps(agent, zalo, conversation=svc, proactive_state=state),
+    )
+
+    assert result["outcome"] == "proactive:suppressed"
+    assert result["reason"] == "silence_optout"
+    assert state.opted_out is True
+    assert zalo.sent == []
 
 
 @pytest.mark.asyncio
