@@ -67,7 +67,10 @@ const KnowledgeSourceEditContent = () => {
   };
 
   return (
-    <main className="kb-scope knowledge-source-subpage knowledge-source-edit-page">
+    <section
+      className="kb-scope knowledge-source-subpage knowledge-source-edit-page"
+      aria-labelledby="knowledge-source-edit-title"
+    >
       <TopToolbar className="knowledge-source-subpage-toolbar justify-start">
         <Button
           type="button"
@@ -86,7 +89,7 @@ const KnowledgeSourceEditContent = () => {
         </div>
         <div className="min-w-0">
           <p className="ops-kicker">Nguồn kiến thức</p>
-          <h1>Chỉnh sửa nguồn</h1>
+          <h1 id="knowledge-source-edit-title">Chỉnh sửa nguồn</h1>
           <p>{source.file_name}</p>
         </div>
       </header>
@@ -125,9 +128,7 @@ const KnowledgeSourceEditContent = () => {
             variant="outline"
             className="tt-btn-touch h-11 rounded-[9px]"
             disabled={submitting}
-            onClick={() =>
-              redirect("show", "knowledge_sources", source.id)
-            }
+            onClick={() => redirect("show", "knowledge_sources", source.id)}
           >
             Hủy
           </Button>
@@ -143,7 +144,7 @@ const KnowledgeSourceEditContent = () => {
           </Button>
         </footer>
       </form>
-    </main>
+    </section>
   );
 };
 

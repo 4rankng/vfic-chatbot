@@ -93,7 +93,12 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
 ### FR-4 Lead pipeline
 - **FR-4.1** Capture an explicit self-reported name during inbound webhook handling.
   Auto-extract remaining/ambiguous lead fields and memory after each SENT reply
-  (`persistence_low` queue).
+  (`persistence_low` queue). `Contact.display_name` remains provider profile
+  data: a clearly person-shaped OA display name may satisfy conversational
+  personalization without becoming canonical `Lead.name`. Canonical names come
+  from an explicit candidate self-introduction or an admin/recruiter correction.
+  Deferred extraction must not replace an existing canonical name unless the
+  current candidate message explicitly states a new name.
 - **FR-4.2** Kanban supports stage PATCH, assign, tag, follow-up tasks,
   chatops actions.
 - **FR-4.3** Open `lead_stage` PATCH issue tracked in roadmap (current state
@@ -111,6 +116,10 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
   (only after login), websocket-first with polling fallback.
 - **FR-6.3** Take-over / release / semi-auto / close / reopen, mark-as-read,
   clear conversation history (admin), send human reply.
+- **FR-6.4** Admins and recruiters may edit stored candidate profile fields
+  from the conversation context panel. The console submits the loaded lead
+  version for optimistic concurrency and refreshes after successful or
+  conflicting saves.
 
 ### FR-7 Knowledge base
 - **FR-7.1** Per-project document ingestion → chunked → embedded (3072-dim,

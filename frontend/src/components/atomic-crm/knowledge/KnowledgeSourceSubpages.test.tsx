@@ -106,10 +106,12 @@ describe("Knowledge source subpages", () => {
       )
       .toBeVisible();
     await expect.element(screen.getByText("LG Display")).toBeVisible();
-    expect(
-      screen.container.querySelector("[data-heading-as]"),
-    ).toHaveAttribute("data-heading-as", "h1");
+    expect(screen.container.querySelector("[data-heading-as]")).toHaveAttribute(
+      "data-heading-as",
+      "h1",
+    );
     expect(screen.container.querySelector("[data-slot='card']")).toBeNull();
+    expect(screen.container.querySelector("main")).toBeNull();
 
     await screen.getByRole("button", { name: "Tất cả nguồn" }).click();
     expect(mocks.redirect).toHaveBeenCalledWith("list", "knowledge_sources");
@@ -126,6 +128,7 @@ describe("Knowledge source subpages", () => {
     await expect.element(project).toHaveValue("project-a");
     await expect.element(save).toBeDisabled();
     expect(screen.container.querySelector("[data-slot='card']")).toBeNull();
+    expect(screen.container.querySelector("main")).toBeNull();
 
     await name.fill("  Chính sách tuyển dụng 2026.md  ");
     await project.selectOptions("project-b");
@@ -190,4 +193,3 @@ describe("Knowledge source subpages", () => {
     );
   });
 });
-

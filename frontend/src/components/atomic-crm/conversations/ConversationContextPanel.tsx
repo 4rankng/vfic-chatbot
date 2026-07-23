@@ -1,6 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import type { Lead } from "../types";
 import { formatCandidateNotes } from "./candidateNotes";
 import {
@@ -11,10 +15,14 @@ import {
   FileBadge,
   Handshake,
   Home,
+  LoaderCircle,
   MapPin,
   NotepadText,
+  Pencil,
   Phone,
+  Save,
   UserRound,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,6 +41,106 @@ type CandidateInfoItem = {
   Icon: LucideIcon;
 };
 
+export type CandidateProfileUpdate = {
+  name: string | null;
+  phone: string | null;
+  birth_year: number | null;
+  age: number | null;
+  living_area: string | null;
+  address: string | null;
+  gender: string | null;
+  region: string | null;
+  desired_job: string | null;
+  years_experience: string | null;
+  expected_salary: string | null;
+  notes: string | null;
+};
+
+type CandidateProfileDraft = {
+  [Key in keyof CandidateProfileUpdate]: string;
+};
+
+const editableProfileFields: Array<{
+  key: Exclude<keyof CandidateProfileUpdate, "notes">;
+  label: string;
+  inputMode?: "numeric" | "tel";
+  min?: number;
+  max?: number;
+}> = [
+  { key: "name", label: "Họ tên" },
+  { key: "phone", label: "Số điện thoại", inputMode: "tel" },
+  {
+    key: "birth_year",
+    label: "Năm sinh",
+    inputMode: "numeric",
+    min: 1900,
+    max: new Date().getFullYear(),
+  },
+  { key: "age", label: "Tuổi", inputMode: "numeric", min: 15, max: 80 },
+  { key: "gender", label: "Giới tính" },
+  { key: "region", label: "Khu vực muốn làm" },
+  { key: "living_area", label: "Khu vực đang sống" },
+  { key: "address", label: "Địa chỉ hiện tại" },
+  { key: "desired_job", label: "Công việc mong muốn" },
+  { key: "years_experience", label: "Kinh nghiệm" },
+  { key: "expected_salary", label: "Mức lương mong muốn" },
+];
+
+const nullableText = (value: unknown): string | null => {
+  const text = String(value ?? "").trim();
+  return text || null;
+};
+
+const nullableInteger = (value: string): number | null => {
+  const text = value.trim();
+  return text ? Number(text) : null;
+};
+
+const candidateProfileDraft = (lead: Lead): CandidateProfileDraft => ({
+  name: String(lead.name ?? ""),
+  phone: String(lead.phone ?? ""),
+  birth_year: lead.birth_year == null ? "" : String(lead.birth_year),
+  age: lead.age == null ? "" : String(lead.age),
+  living_area: String(lead.living_area ?? ""),
+  address: String(lead.address ?? ""),
+  gender: String(lead.gender ?? ""),
+  region: String(lead.region ?? ""),
+  desired_job: String(lead.desired_job ?? ""),
+  years_experience: String(lead.years_experience ?? ""),
+  expected_salary: String(lead.expected_salary ?? ""),
+  notes: String(lead.notes ?? ""),
+});
+
+const candidateProfileValues = (
+  draft: CandidateProfileDraft,
+): CandidateProfileUpdate => ({
+  name: nullableText(draft.name),
+  phone: nullableText(draft.phone),
+  birth_year: nullableInteger(draft.birth_year),
+  age: nullableInteger(draft.age),
+  living_area: nullableText(draft.living_area),
+  address: nullableText(draft.address),
+  gender: nullableText(draft.gender),
+  region: nullableText(draft.region),
+  desired_job: nullableText(draft.desired_job),
+  years_experience: nullableText(draft.years_experience),
+  expected_salary: nullableText(draft.expected_salary),
+  notes: nullableText(draft.notes),
+});
+
+const changedCandidateProfileValues = (
+  initial: CandidateProfileDraft,
+  draft: CandidateProfileDraft,
+): Partial<CandidateProfileUpdate> => {
+  const current = candidateProfileValues(initial);
+  const next = candidateProfileValues(draft);
+  return Object.fromEntries(
+    (Object.keys(next) as Array<keyof CandidateProfileUpdate>)
+      .filter((key) => current[key] !== next[key])
+      .map((key) => [key, next[key]]),
+  ) as Partial<CandidateProfileUpdate>;
+};
+
 const hasMeaningfulValue = (value: unknown) =>
   display(value) !== "Chưa có dữ liệu";
 
@@ -45,12 +153,19 @@ export const ConversationContextPanel = ({
   lead,
   open,
   persistent = false,
+  canEdit = false,
+  onSave,
   onClose,
   onCloseAutoFocus,
 }: {
   lead?: Lead;
   open: boolean;
   persistent?: boolean;
+  canEdit?: boolean;
+  onSave?: (
+    changes: Partial<CandidateProfileUpdate>,
+    version: number,
+  ) => Promise<void>;
   onClose: () => void;
   onCloseAutoFocus?: (event: Event) => void;
 }) => {
@@ -183,10 +298,13 @@ export const ConversationContextPanel = ({
       : 0;
   const content = (
     <CandidateContextBody
+      key={String(lead?.id ?? "empty")}
       lead={lead}
       candidateInfoItems={candidateInfoItems}
       completedInfoCount={completedInfoCount}
       completionPercent={completionPercent}
+      canEdit={canEdit}
+      onSave={onSave}
       onClose={onClose}
       showClose={!persistent}
     />
@@ -227,6 +345,8 @@ const CandidateContextBody = ({
   candidateInfoItems,
   completedInfoCount,
   completionPercent,
+  canEdit,
+  onSave,
   onClose,
   showClose,
 }: {
@@ -234,63 +354,211 @@ const CandidateContextBody = ({
   candidateInfoItems: CandidateInfoItem[];
   completedInfoCount: number;
   completionPercent: number;
+  canEdit: boolean;
+  onSave?: (
+    changes: Partial<CandidateProfileUpdate>,
+    version: number,
+  ) => Promise<void>;
   onClose: () => void;
   showClose: boolean;
-}) => (
-  <>
-    <header className="profile-header">
-      <div className="profile-title">
-        <UserRound className="icon" aria-hidden="true" />
-        <span className="profile-title-copy">
-          <span>{display(lead?.name, "Ứng viên")}</span>
-          <small>{display(lead?.phone, "Chưa có số điện thoại")}</small>
-        </span>
-      </div>
-      {showClose ? (
-        <div className="context-header-actions">
-          <button
-            type="button"
-            className="context-close"
-            onClick={onClose}
-            aria-label="Đóng thông tin ứng viên"
-          >
-            ×
-          </button>
-        </div>
-      ) : null}
-    </header>
+}) => {
+  const [editSession, setEditSession] = useState<{
+    initial: CandidateProfileDraft;
+    draft: CandidateProfileDraft;
+    version: number;
+  } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-    <div className="profile-scroll">
-      <section className="context-overview candidate-progress-card tt-card tt-card-sm">
-        <div className="candidate-progress-top">
-          <span className="context-overview-kicker">Thông tin đã thu thập</span>
-          <span className="candidate-progress-score tt-badge tt-badge-soft">
-            {completedInfoCount}/{candidateInfoItems.length}
+  const cancelEditing = () => {
+    if (isSaving) return;
+    setEditSession(null);
+  };
+
+  const saveProfile = async () => {
+    if (!editSession || !onSave || isSaving) return;
+    const changes = changedCandidateProfileValues(
+      editSession.initial,
+      editSession.draft,
+    );
+    if (Object.keys(changes).length === 0) {
+      setEditSession(null);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await onSave(changes, editSession.version);
+      setEditSession(null);
+    } catch {
+      // The capability adapter owns the user-facing notification and refetch.
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <header className="profile-header">
+        <div className="profile-title">
+          <UserRound className="icon" aria-hidden="true" />
+          <span className="profile-title-copy">
+            <span>{display(lead?.name, "Ứng viên")}</span>
+            <small>{display(lead?.phone, "Chưa có số điện thoại")}</small>
           </span>
         </div>
-        <div className="candidate-progress-meter" aria-hidden="true">
-          <span
-            className="candidate-progress-fill"
-            style={{ width: `${completionPercent}%` }}
-          />
-        </div>
-        <p>
-          Đã thu thập {completionPercent}% thông tin cần cho tư vấn tuyển dụng.
-        </p>
-      </section>
-      <section className="context-card tt-card tt-card-sm">
-        <div className="section-head">
-          <h3>Thông tin ứng viên</h3>
-        </div>
-        <div className="candidate-info-grid">
-          {candidateInfoItems.map((item) => (
-            <CandidateInfoRow key={item.key} item={item} />
-          ))}
-        </div>
-      </section>
-    </div>
-  </>
-);
+        {showClose ? (
+          <div className="context-header-actions">
+            <button
+              type="button"
+              className="context-close"
+              onClick={onClose}
+              aria-label="Đóng thông tin ứng viên"
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
+      </header>
+
+      <div className="profile-scroll">
+        <section className="context-overview candidate-progress-card tt-card tt-card-sm">
+          <div className="candidate-progress-top">
+            <span className="context-overview-kicker">Thông tin đã thu thập</span>
+            <span className="candidate-progress-score tt-badge tt-badge-soft">
+              {completedInfoCount}/{candidateInfoItems.length}
+            </span>
+          </div>
+          <div className="candidate-progress-meter" aria-hidden="true">
+            <span
+              className="candidate-progress-fill"
+              style={{ width: `${completionPercent}%` }}
+            />
+          </div>
+          <p>
+            Đã thu thập {completionPercent}% thông tin cần cho tư vấn tuyển dụng.
+          </p>
+        </section>
+        <section className="context-card tt-card tt-card-sm">
+          <div className="section-head">
+            <h3>Thông tin ứng viên</h3>
+            {canEdit && lead && lead.version != null && onSave && !editSession ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (lead.version == null) return;
+                  const initial = candidateProfileDraft(lead);
+                  setEditSession({
+                    initial,
+                    draft: { ...initial },
+                    version: lead.version,
+                  });
+                }}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2"
+                aria-label="Chỉnh sửa hồ sơ ứng viên"
+              >
+                <Pencil className="size-3.5" aria-hidden="true" />
+                Sửa
+              </button>
+            ) : null}
+          </div>
+          {editSession ? (
+            <form
+              className="grid gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveProfile();
+              }}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                {editableProfileFields.map((field) => {
+                  const inputId = `candidate-profile-${field.key}`;
+                  return (
+                    <div key={field.key} className="grid min-w-0 gap-1.5">
+                      <Label htmlFor={inputId}>{field.label}</Label>
+                      <Input
+                        id={inputId}
+                        value={editSession.draft[field.key]}
+                        inputMode={field.inputMode}
+                        type={field.inputMode === "numeric" ? "number" : "text"}
+                        min={field.min}
+                        max={field.max}
+                        disabled={isSaving}
+                        onChange={(event) =>
+                          setEditSession((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  draft: {
+                                    ...current.draft,
+                                    [field.key]: event.target.value,
+                                  },
+                                }
+                              : current,
+                          )
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="candidate-profile-notes">
+                  Ghi chú (CCCD, chỗ ở, xe đưa đón và thông tin khác)
+                </Label>
+                <Textarea
+                  id="candidate-profile-notes"
+                  value={editSession.draft.notes}
+                  rows={5}
+                  disabled={isSaving}
+                  onChange={(event) =>
+                    setEditSession((current) =>
+                      current
+                        ? {
+                            ...current,
+                            draft: {
+                              ...current.draft,
+                              notes: event.target.value,
+                            },
+                          }
+                        : current,
+                    )
+                  }
+                />
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSaving}
+                  onClick={cancelEditing}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving ? (
+                    <LoaderCircle
+                      className="size-4 animate-spin motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Save className="size-4" aria-hidden="true" />
+                  )}
+                  {isSaving ? "Đang lưu…" : "Lưu thay đổi"}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="candidate-info-grid">
+              {candidateInfoItems.map((item) => (
+                <CandidateInfoRow key={item.key} item={item} />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </>
+  );
+};
 
 const CandidateInfoRow = ({ item }: { item: CandidateInfoItem }) => {
   const Icon = item.Icon;

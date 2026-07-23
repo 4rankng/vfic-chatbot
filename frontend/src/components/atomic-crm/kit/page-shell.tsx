@@ -22,7 +22,7 @@ export function PageShell({
   return (
     <div
       className={cn(
-        "tt-page-shell mx-auto w-full px-4 py-5 pb-24 md:px-6 md:py-7 md:pb-8 lg:px-8",
+        "tt-page-shell mx-auto h-full min-h-0 w-full overflow-y-auto overscroll-contain px-4 py-5 pb-24 md:px-6 md:py-7 md:pb-8 lg:px-8",
         PAGE_WIDTHS[size],
         className,
       )}

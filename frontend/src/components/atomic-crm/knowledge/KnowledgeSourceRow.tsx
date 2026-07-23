@@ -50,7 +50,7 @@ export const KnowledgeSourceRow = ({
     <article
       role="listitem"
       className={cn(
-        "knowledge-source-row group border-b border-border transition-colors",
+        "knowledge-source-row group flex items-stretch border-b border-border transition-colors",
         selected
           ? "bg-[var(--kb-teal-soft)] shadow-[inset_2.5px_0_0_0_var(--kb-teal)]"
           : "hover:bg-secondary",
@@ -62,26 +62,25 @@ export const KnowledgeSourceRow = ({
         aria-pressed={selected}
         aria-controls="knowledge-source-detail"
         aria-label={`Xem ${source.file_name}`}
-        className="knowledge-source-row-main flex min-h-11 w-full gap-3 px-4 pb-2 pt-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="knowledge-source-row-main flex min-h-11 min-w-0 flex-1 gap-3 px-4 pb-3 pt-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="break-words text-body-sm font-semibold text-foreground">
-                {source.file_name}
-              </div>
-              <div className="kb-mono mt-1 break-words text-caption text-muted-foreground">
-                {project?.name ??
-                  source.project_name ??
-                  "Chưa gắn dự án"}{" "}
-                · {getRelativeTimeString(source.updated_at ?? source.created_at)}{" "}
-                · {source.digest_meta?.unit_count ?? 0} đơn vị
-              </div>
+          <div className="flex items-center justify-between gap-2">
+            <div
+              className="min-w-0 truncate text-body-sm font-semibold text-foreground"
+              title={source.file_name}
+            >
+              {source.file_name}
             </div>
             <div className="shrink-0 pt-0.5">
               <SourceStamp source={source} />
             </div>
+          </div>
+          <div className="kb-mono mt-1 truncate text-caption text-muted-foreground">
+            {project?.name ?? source.project_name ?? "Chưa gắn dự án"} ·{" "}
+            {getRelativeTimeString(source.updated_at ?? source.created_at)} ·{" "}
+            {source.digest_meta?.unit_count ?? 0} đơn vị
           </div>
 
           {processing && (
@@ -89,20 +88,18 @@ export const KnowledgeSourceRow = ({
               <PipelineMiniProgress source={source} />
             </div>
           )}
+
+          {flags > 0 && (
+            <div className="mt-2">
+              <Chip tone="warning">{flags} cần xem lại</Chip>
+            </div>
+          )}
         </div>
       </button>
 
       {(flags > 0 || selected) && (
-        <div className="knowledge-source-row-footer flex min-h-11 items-center gap-2 px-4 pb-2 pl-11">
-          {flags > 0 && <Chip tone="warning">{flags} cần xem lại</Chip>}
-          {selected && (
-            <span className="kb-mono text-caption font-semibold text-[var(--kb-teal)]">
-              Đang xem
-            </span>
-          )}
-          <div className="ml-auto">
-            <SourceRowActions source={source} />
-          </div>
+        <div className="flex shrink-0 items-center border-l border-border px-1">
+          <SourceRowActions source={source} />
         </div>
       )}
     </article>

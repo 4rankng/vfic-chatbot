@@ -90,16 +90,20 @@ describe("KnowledgeBaseShow direct file", () => {
     });
 
     const screen = await render(<KnowledgeBaseShow />);
-    const editor = screen.getByPlaceholder("Nhập nội dung .txt hoặc .md");
-    await editor.fill("Nội dung mới");
+    const editor = screen.getByRole("textbox", {
+      name: "Nội dung tệp ngữ cảnh",
+    });
+    await expect.element(editor).toBeDisabled();
     await expect
-      .element(screen.getByRole("button", { name: "Lưu tệp duy nhất" }))
+      .element(screen.getByRole("button", { name: "Lưu tệp" }))
       .toBeDisabled();
 
     resolveProjects([owner]);
 
+    await expect.element(editor).toBeEnabled();
+    await editor.fill("Nội dung mới");
     await expect
-      .element(screen.getByRole("button", { name: "Lưu tệp duy nhất" }))
+      .element(screen.getByRole("button", { name: "Lưu tệp" }))
       .toBeEnabled();
   });
 
@@ -116,7 +120,7 @@ describe("KnowledgeBaseShow direct file", () => {
     );
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const screen = await render(<KnowledgeBaseShow />);
-    const save = screen.getByRole("button", { name: "Lưu tệp duy nhất" });
+    const save = screen.getByRole("button", { name: "Lưu tệp" });
     await expect.element(save).toBeEnabled();
 
     await save.click();
@@ -143,17 +147,40 @@ describe("KnowledgeBaseShow direct file", () => {
     const screen = await render(<KnowledgeBaseShow />);
 
     await expect
-      .element(
-        screen.getByText(
-          "Chưa tải được trạng thái Knowledge Base. Vui lòng tải lại trang.",
-        ),
-      )
+      .element(screen.getByText("Chưa tải được dữ liệu kho."))
       .toBeVisible();
     await expect
-      .element(screen.getByRole("button", { name: "Lưu tệp duy nhất" }))
+      .element(screen.getByRole("button", { name: "Lưu tệp" }))
       .toBeDisabled();
+    await expect
+      .element(screen.getByRole("button", { name: "Thử lại" }))
+      .toBeVisible();
     expect(
       mocks.apiJson.mock.calls.some(([, options]) => options?.method === "PUT"),
     ).toBe(false);
+  });
+
+  it("uses real sections without nested cards", async () => {
+    mocks.apiJson.mockImplementation((path: string) => {
+      if (path.endsWith("/projects")) return Promise.resolve([owner]);
+      if (path.endsWith("/direct-file")) return Promise.resolve(currentFile);
+      if (path.endsWith("/direct-context-capacity"))
+        return Promise.resolve(capacity);
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    const screen = await render(<KnowledgeBaseShow />);
+
+    await expect
+      .element(screen.getByRole("heading", { name: "Agent được gắn" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("heading", { name: "Tệp ngữ cảnh" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Nội dung tệp ngữ cảnh" }))
+      .toBeEnabled();
+    expect(screen.container.querySelector("[data-slot='card']")).toBeNull();
+    expect(screen.container.querySelector(".tt-alternate-card")).toBeNull();
   });
 });

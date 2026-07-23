@@ -89,8 +89,8 @@ class CandidateExtractionService:
         """Persist an unambiguous self-introduced name on the inbound path.
 
         This intentionally does not wait for the deferred LLM extraction job.
-        The latter still enriches the rest of the candidate profile and can
-        overwrite this value only when it has a non-empty extracted name.
+        The deferred extractor still enriches the rest of the candidate profile,
+        while the persistence boundary protects this confirmed identity.
 
         ``prev_bot_message`` is the bot's immediately preceding reply; when it
         asked for the name, a bare reply ("Dũng") is captured here so the next
@@ -182,12 +182,13 @@ class CandidateExtractionService:
 
         existing_lead = await LeadRepository(db).by_zalo_id(chat_id)
         existing_notes = existing_lead.get("notes") if existing_lead else None
+        existing_name = str((existing_lead or {}).get("name") or "").strip()
         oa_profile_display_name = None
         if (
             chat_id.startswith("oa:")
             and conversation is not None
             and conversation.contact is not None
-            and not str((existing_lead or {}).get("name") or "").strip()
+            and not existing_name
         ):
             oa_profile_display_name = conversation.contact.display_name
         result = await CandidateExtractionService.extract(
@@ -198,6 +199,11 @@ class CandidateExtractionService:
             existing_notes=existing_notes,
             oa_profile_display_name=oa_profile_display_name,
         )
+        if result.lead_patch and result.lead_patch.get("name"):
+            # Canonical identity never comes from a deferred model guess. This
+            # also closes the race where a recruiter or the inbound explicit-name
+            # path writes while extraction is awaiting the model.
+            result.lead_patch["name"] = extract_self_reported_name(user_text)
 
         if result.requires_human_review:
             if not has_explicit_human_review_evidence(user_text, result.contact_intent):

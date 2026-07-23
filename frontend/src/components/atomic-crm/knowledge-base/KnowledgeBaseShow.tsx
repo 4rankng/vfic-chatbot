@@ -5,11 +5,10 @@ import {
   useRecordContext,
   useRefresh,
 } from "ra-core";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { Link } from "react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   KnowledgeBase,
@@ -34,7 +33,54 @@ type Capacity = {
   fits: boolean;
 };
 
-const Content = () => {
+const Fact = ({ label, value }: { label: string; value: ReactNode }) => (
+  <div className="min-w-0 border-b border-[var(--tt-border)] px-4 py-3 sm:odd:border-r">
+    <dt className="text-caption uppercase tracking-wide text-muted-foreground">
+      {label}
+    </dt>
+    <dd className="mt-1 break-words text-body font-semibold text-foreground">
+      {value}
+    </dd>
+  </div>
+);
+
+const KnowledgeSection = ({
+  id,
+  title,
+  count,
+  children,
+  className,
+}: {
+  id: string;
+  title: string;
+  count?: number;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <section
+    className={`min-w-0 border-t border-[var(--tt-border)] ${className ?? ""}`}
+    aria-labelledby={id}
+  >
+    <header className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
+      <h2 id={id} className="text-section-title font-semibold text-foreground">
+        {title}
+      </h2>
+      {count !== undefined ? (
+        <span
+          className="text-helper tabular-nums text-muted-foreground"
+          aria-label={`${count} mục`}
+        >
+          {count}
+        </span>
+      ) : null}
+    </header>
+    <div className="border-t border-[var(--tt-border)] px-4 py-3">
+      {children}
+    </div>
+  </section>
+);
+
+export const KnowledgeBaseShowContent = () => {
   const kb = useRecordContext<KnowledgeBase>();
   const notify = useNotify();
   const refresh = useRefresh();
@@ -52,7 +98,10 @@ const Content = () => {
   const [file, setFile] = useState<DirectFile | null>(null);
   const [capacity, setCapacity] = useState<Capacity | null>(null);
   const [text, setText] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [attachingProjectId, setAttachingProjectId] = useState<string | null>(
+    null,
+  );
+  const [savingFile, setSavingFile] = useState(false);
   const [knowledgeLoading, setKnowledgeLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -138,6 +187,7 @@ const Content = () => {
     ) {
       return;
     }
+    setSavingFile(true);
     try {
       await apiJson(`/api/v1/knowledge-bases/${kb.id}/direct-file`, {
         method: "PUT",
@@ -153,11 +203,13 @@ const Content = () => {
       refresh();
     } catch (error) {
       notify((error as Error).message, { type: "error" });
+    } finally {
+      setSavingFile(false);
     }
   };
 
   const attachProject = async (project: Project) => {
-    setLoading(true);
+    setAttachingProjectId(String(project.id));
     try {
       await apiJson(`/api/v1/knowledge-bases/${kb.id}/projects/${project.id}`, {
         method: "POST",
@@ -168,9 +220,11 @@ const Content = () => {
     } catch (error) {
       notify((error as Error).message, { type: "error" });
     } finally {
-      setLoading(false);
+      setAttachingProjectId(null);
     }
   };
+
+  const modeLabel = kb.mode === "RAG" ? "RAG" : "Trực tiếp";
 
   return (
     <PageShell>
@@ -179,144 +233,223 @@ const Content = () => {
         title={kb.name}
         subtitle={
           kb.mode === "RAG"
-            ? "Nhiều dự án, nhà máy, vị trí và pipeline trong một kho dùng chung."
-            : "Một tệp văn bản được gửi nguyên vẹn cho mỗi lượt xử lý."
+            ? "Dùng chung cho nhiều dự án và Agent."
+            : "Một tệp được gửi nguyên vẹn theo lượt."
         }
         actions={
           <Button asChild variant="outline" size="sm">
             <Link to="/knowledge_bases">
               <ArrowLeft className="size-4" aria-hidden="true" />
-              Quay lại
+              Kho kiến thức
             </Link>
           </Button>
         }
       />
-      <div className="mt-4 grid gap-4 sm:mt-0 lg:grid-cols-2">
-        <Card className="border-[var(--tt-border)] shadow-[var(--tt-shadow-xs)]">
-          <CardHeader>
-            <CardTitle>Agent được gắn</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {attached.length ? (
-              <ul className="space-y-2">
-                {attached.map((persona) => (
-                  <li key={persona.id}>{persona.name}</li>
+
+      <dl className="mt-4 grid border-y border-[var(--tt-border)] sm:grid-cols-3">
+        <Fact label="Chế độ" value={modeLabel} />
+        <Fact label="Agent" value={attached.length} />
+        <Fact
+          label="Dự án"
+          value={knowledgeLoading || loadFailed ? "—" : projects.length}
+        />
+      </dl>
+
+      {loadFailed ? (
+        <div
+          role="alert"
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 border-y border-destructive/30 px-4 py-3 text-body text-destructive"
+        >
+          <span>Chưa tải được dữ liệu kho.</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setReloadKey((value) => value + 1)}
+          >
+            Thử lại
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="mt-6 grid gap-x-8 gap-y-6 lg:grid-cols-2">
+        <KnowledgeSection
+          id="knowledge-base-agents-title"
+          title="Agent được gắn"
+          count={attached.length}
+        >
+          {attached.length ? (
+            <ul className="divide-y divide-[var(--tt-border)]">
+              {attached.map((persona) => (
+                <li key={persona.id} className="py-2.5 first:pt-0 last:pb-0">
+                  {persona.name}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-body text-muted-foreground">Chưa có Agent.</p>
+          )}
+        </KnowledgeSection>
+
+        {kb.mode === "RAG" ? (
+          <KnowledgeSection
+            id="knowledge-base-projects-title"
+            title="Dự án"
+            count={
+              knowledgeLoading || loadFailed ? undefined : projects.length
+            }
+          >
+            {knowledgeLoading ? (
+              <p role="status" className="text-body text-muted-foreground">
+                Đang tải dự án…
+              </p>
+            ) : loadFailed ? (
+              <p className="text-body text-muted-foreground">
+                Dữ liệu chưa sẵn sàng.
+              </p>
+            ) : projects.length ? (
+              <ul className="divide-y divide-[var(--tt-border)]">
+                {projects.map((project) => (
+                  <li key={project.id} className="py-3 first:pt-0 last:pb-0">
+                    <p className="font-medium text-foreground">
+                      {project.name}
+                    </p>
+                    <p className="mt-1 text-helper text-muted-foreground">
+                      {project.knowledge_document_count} tệp ·{" "}
+                      {project.active_job_count} vị trí đang tuyển
+                    </p>
+                    {project.factories.length > 0 ? (
+                      <details className="mt-2">
+                        <summary className="flex min-h-11 cursor-pointer items-center text-helper font-medium text-foreground">
+                          {project.factories.length} nhà máy
+                        </summary>
+                        <ul className="space-y-2 border-l border-[var(--tt-border)] pl-3 text-helper text-muted-foreground">
+                          {project.factories.map((factory) => (
+                            <li key={factory.name}>
+                              <span className="font-medium text-foreground">
+                                {factory.name}
+                              </span>
+                              {factory.aliases.length
+                                ? ` · ${factory.aliases.join(" · ")}`
+                                : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : null}
+                  </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-muted-foreground">Chưa có Agent.</p>
+              <p className="text-body text-muted-foreground">
+                Chưa có dự án được gắn.
+              </p>
             )}
-          </CardContent>
-        </Card>
-
-        {kb.mode === "RAG" ? (
-          <Card className="border-[var(--tt-border)] shadow-[var(--tt-shadow-xs)]">
-            <CardHeader>
-              <CardTitle>Dự án trong Knowledge Base</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {projects.length ? (
-                <ul className="space-y-4">
-                  {projects.map((project) => (
-                    <li
-                      key={project.id}
-                      className="border-b pb-3 last:border-0 last:pb-0"
-                    >
-                      <p className="font-medium">{project.name}</p>
-                      <p className="text-body-sm text-muted-foreground">
-                        {project.knowledge_document_count} tệp ·{" "}
-                        {project.active_job_count} vị trí đang tuyển
-                      </p>
-                      {project.factories.length > 0 && (
-                        <p className="mt-1 text-body-sm text-muted-foreground">
-                          Nhà máy:{" "}
-                          {project.factories
-                            .map((factory) =>
-                              [factory.name, ...factory.aliases].join(" · "),
-                            )
-                            .join("; ")}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground">Chưa có dự án được gắn.</p>
-              )}
-            </CardContent>
-          </Card>
+          </KnowledgeSection>
         ) : (
-          <Card className="border-[var(--tt-border)] shadow-[var(--tt-shadow-xs)]">
-            <CardHeader>
-              <CardTitle>Tệp ngữ cảnh trực tiếp</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {capacity && (
+          <KnowledgeSection
+            id="knowledge-base-direct-file-title"
+            title="Tệp ngữ cảnh"
+          >
+            <div className="space-y-3">
+              {knowledgeLoading ? (
+                <p role="status" className="text-body text-muted-foreground">
+                  Đang tải tệp…
+                </p>
+              ) : null}
+              {capacity ? (
                 <p
                   className={
-                    capacity.fits ? "text-muted-foreground" : "text-destructive"
+                    capacity.fits
+                      ? "text-helper text-muted-foreground"
+                      : "text-helper text-destructive"
                   }
                 >
                   {capacity.fits
-                    ? `Phù hợp ${capacity.model}: ${capacity.estimated_input_tokens}/${capacity.available_input_tokens} token`
-                    : "Tệp vượt giới hạn ngữ cảnh của model đang dùng."}
+                    ? `${capacity.estimated_input_tokens}/${capacity.available_input_tokens} token · ${capacity.model}`
+                    : "Tệp vượt giới hạn ngữ cảnh của model."}
                 </p>
-              )}
-              {loadFailed && (
-                <p className="text-destructive">
-                  Chưa tải được trạng thái Knowledge Base. Vui lòng tải lại
-                  trang.
-                </p>
-              )}
+              ) : null}
               <Textarea
                 value={text}
                 onChange={(event) => setText(event.target.value)}
                 rows={14}
+                aria-label="Nội dung tệp ngữ cảnh"
                 placeholder="Nhập nội dung .txt hoặc .md"
+                disabled={knowledgeLoading || loadFailed || savingFile}
               />
               <Button
                 onClick={saveDirectFile}
-                disabled={knowledgeLoading || loadFailed || !text.trim()}
+                disabled={
+                  knowledgeLoading || loadFailed || savingFile || !text.trim()
+                }
               >
-                Lưu tệp duy nhất
+                {savingFile ? (
+                  <LoaderCircle
+                    className="size-4 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                {savingFile ? "Đang lưu…" : "Lưu tệp"}
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </KnowledgeSection>
         )}
 
-        {kb.mode === "RAG" && (
-          <Card className="border-[var(--tt-border)] shadow-[var(--tt-shadow-xs)]">
-            <CardHeader>
-              <CardTitle>Gắn dự án có sẵn</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {attachableProjects.length ? (
-                <ul className="space-y-3">
-                  {attachableProjects.map((project) => (
+        {kb.mode === "RAG" ? (
+          <KnowledgeSection
+            id="knowledge-base-attach-project-title"
+            title="Gắn dự án"
+            className="lg:col-span-2"
+          >
+            {knowledgeLoading ? (
+              <p role="status" className="text-body text-muted-foreground">
+                Đang kiểm tra dự án…
+              </p>
+            ) : loadFailed ? (
+              <p className="text-body text-muted-foreground">
+                Dữ liệu chưa sẵn sàng.
+              </p>
+            ) : attachableProjects.length ? (
+              <ul className="divide-y divide-[var(--tt-border)]">
+                {attachableProjects.map((project) => {
+                  const isAttaching = attachingProjectId === String(project.id);
+                  return (
                     <li
                       key={project.id}
-                      className="flex items-center justify-between gap-3"
+                      className="flex min-h-14 items-center justify-between gap-3 py-2"
                     >
-                      <span>{project.name}</span>
+                      <span className="min-w-0 truncate">{project.name}</span>
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={loading}
+                        disabled={attachingProjectId !== null}
                         onClick={() => void attachProject(project)}
                       >
-                        Gắn vào KB
+                        {isAttaching ? (
+                          <LoaderCircle
+                            className="size-4 animate-spin motion-reduce:animate-none"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        {isAttaching ? "Đang gắn…" : "Gắn"}
                       </Button>
                     </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground">
-                  Không có dự án chưa gắn. Tạo dự án mới từ màn hình Dự án.
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-body text-muted-foreground">
+                  Không còn dự án chưa gắn.
                 </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/projects/create">Tạo dự án</Link>
+                </Button>
+              </div>
+            )}
+          </KnowledgeSection>
+        ) : null}
       </div>
     </PageShell>
   );
@@ -324,6 +457,6 @@ const Content = () => {
 
 export const KnowledgeBaseShow = () => (
   <ShowBase resource="knowledge_bases">
-    <Content />
+    <KnowledgeBaseShowContent />
   </ShowBase>
 );

@@ -327,8 +327,7 @@ const PipelineDigestHint = ({ source }: { source: KnowledgeSource }) => {
         className="text-body italic leading-6 text-[var(--kb-ink-300)]"
         style={{ fontFamily: "var(--kb-font-display)" }}
       >
-        Pipeline chưa trả về tóm tắt cho nguồn này. Tóm tắt sẽ hiện ra ở đây sau
-        khi xử lý xong.
+        Chưa có tóm tắt. Nội dung sẽ xuất hiện sau khi xử lý.
       </p>
     </div>
   );

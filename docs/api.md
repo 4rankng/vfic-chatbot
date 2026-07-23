@@ -89,6 +89,22 @@ Returned directly (no envelope):
 
 HTTP status codes follow REST conventions: 200 (OK), 201 (Created), 204 (No Content), 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 409 (Conflict), 422 (Validation Error), 429 (Too Many Requests), 502 (Bad Gateway).
 
+## Lead profile updates
+
+`PATCH /api/v1/leads/{lead_id}` updates a lead and returns the complete
+`LeadOut` resource. The closed request shape accepts `name`, `phone`,
+`birth_year`, `age`, `living_area`, `address`, `gender`, `region`,
+`desired_job`, `years_experience`, `expected_salary`, `notes`, `lead_score`,
+and `lead_stage`.
+
+The recruiter console sends the currently loaded `version` with candidate
+profile edits. The server applies those edits with compare-and-increment
+optimistic concurrency; a stale version returns `409` with a Vietnamese
+conflict detail so the client can refetch. Successful updates emit
+`lead.updated` to the lead realtime room. Internal callers may omit `version`,
+but interactive clients must include it to avoid lost updates. Stage workflow
+actions remain separate from the candidate profile form.
+
 ## Agent Thinking trace
 
 Administrators can inspect provider-returned reasoning and selected tool names for recent chatbot

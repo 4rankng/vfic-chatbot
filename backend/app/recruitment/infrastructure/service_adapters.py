@@ -18,7 +18,7 @@ class ServiceLeadContextAdapter:
 
     async def context(self, chat_id, current_user_text, recent_messages):
         from app.services.conversation import ConversationService
-        from app.services.lead import lead_profile_text
+        from app.services.lead import high_confidence_profile_name, lead_profile_text
         from app.services.lead.probing import (
             lead_collection_question,
             oa_profile_name_guidance,
@@ -33,11 +33,18 @@ class ServiceLeadContextAdapter:
                 oa_profile_display_name = conversation.contact.display_name
 
         collection_lead = lead
-        if oa_profile_display_name and not str((lead or {}).get("name") or "").strip():
+        effective_profile_name = high_confidence_profile_name(oa_profile_display_name)
+        if effective_profile_name and not str((lead or {}).get("name") or "").strip():
             collection_lead = dict(lead or {})
-            collection_lead["name"] = oa_profile_display_name
-            next_question = lead_collection_question(
+            collection_lead["name"] = effective_profile_name
+            collection_guidance = lead_collection_question(
                 lead=collection_lead,
+                current_user_text=current_user_text,
+                recent_messages=recent_messages,
+            )
+        elif oa_profile_display_name and not str((lead or {}).get("name") or "").strip():
+            next_question = lead_collection_question(
+                lead={**(lead or {}), "name": oa_profile_display_name},
                 current_user_text=current_user_text,
                 recent_messages=recent_messages,
             )
@@ -55,6 +62,7 @@ class ServiceLeadContextAdapter:
             lead_profile_text(
                 lead,
                 oa_profile_display_name=oa_profile_display_name,
+                use_oa_profile_name=effective_profile_name is not None,
                 personalize=chat_id.startswith("oa:"),
             ),
             collection_guidance,

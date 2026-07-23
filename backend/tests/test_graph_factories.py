@@ -266,8 +266,15 @@ async def test_lead_context_personalizes_only_oa_profiles(
                 {"contact": type("_Contact", (), {"display_name": "Bé Gấu"})()},
             )()
 
-    def _profile_text(_lead, *, oa_profile_display_name=None, personalize=False):
+    def _profile_text(
+        _lead,
+        *,
+        oa_profile_display_name=None,
+        use_oa_profile_name=False,
+        personalize=False,
+    ):
         profile_names.append(oa_profile_display_name)
+        assert use_oa_profile_name is False
         assert personalize is chat_id.startswith("oa:")
         return "profile"
 
@@ -289,6 +296,64 @@ async def test_lead_context_personalizes_only_oa_profiles(
     else:
         assert question == "phone question"
     assert profile_names == [expected_profile_name]
+
+
+@pytest.mark.asyncio
+async def test_lead_context_uses_clear_oa_profile_name_without_reasking(monkeypatch):
+    profile_leads = []
+    profile_kwargs = []
+    collection_leads = []
+
+    class _Repo:
+        def __init__(self, _db):
+            pass
+
+        async def by_zalo_id(self, _chat_id):
+            return {"name": None}
+
+    class _ConversationService:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_zalo(self, _chat_id):
+            return type(
+                "_Conversation",
+                (),
+                {"contact": type("_Contact", (), {"display_name": "Nguyễn Hùng"})()},
+            )()
+
+    def _profile_text(lead, **kwargs):
+        profile_leads.append(lead)
+        profile_kwargs.append(kwargs)
+        return "profile"
+
+    def _collection_question(**kwargs):
+        collection_leads.append(kwargs["lead"])
+        return "phone question"
+
+    monkeypatch.setattr("app.services.lead.repository.LeadRepository", _Repo)
+    monkeypatch.setattr("app.services.conversation.ConversationService", _ConversationService)
+    monkeypatch.setattr("app.services.lead.lead_profile_text", _profile_text)
+    monkeypatch.setattr(
+        "app.services.lead.probing.lead_collection_question",
+        _collection_question,
+    )
+
+    profile, question = await ServiceLeadContextAdapter(object()).context(
+        "oa:user-1", "CTY ở đâu vậy", []
+    )
+
+    assert profile == "profile"
+    assert question == "phone question"
+    assert profile_leads == [{"name": None}]
+    assert profile_kwargs == [
+        {
+            "oa_profile_display_name": "Nguyễn Hùng",
+            "use_oa_profile_name": True,
+            "personalize": True,
+        }
+    ]
+    assert collection_leads == [{"name": "Nguyễn Hùng"}]
 
 
 def test_minimax_json_missing_key_names_minimax(monkeypatch):

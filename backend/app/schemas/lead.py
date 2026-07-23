@@ -74,6 +74,7 @@ class LeadUpdate(BaseModel):
     name: str | None = None
     phone: str | None = None
     birth_year: int | None = None
+    age: int | None = Field(default=None, ge=15, le=80)
     living_area: str | None = None
     address: str | None = None
     gender: str | None = None

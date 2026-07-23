@@ -16,6 +16,20 @@ describe("PageShell", () => {
       screen.container.querySelector(".tt-page-shell.max-w-3xl"),
     ).not.toBeNull();
   });
+
+  it("owns vertical scrolling when content exceeds the workspace", async () => {
+    const screen = await render(
+      <div style={{ height: 160 }}>
+        <PageShell>
+          <div style={{ height: 480 }}>Nội dung dài</div>
+        </PageShell>
+      </div>,
+    );
+    const shell = screen.container.querySelector<HTMLElement>(".tt-page-shell");
+
+    expect(shell).not.toBeNull();
+    expect(shell).toHaveClass("h-full", "min-h-0", "overflow-y-auto");
+  });
 });
 
 describe("AlternateCard", () => {

@@ -736,6 +736,187 @@ class TestCandidateExtractionService:
         assert extract.await_args.kwargs["oa_profile_display_name"] is None
 
     @pytest.mark.asyncio
+    async def test_confirmed_name_survives_later_hallucinated_name(self, monkeypatch):
+        db = object()
+        extracted = CandidateExtraction(
+            lead_patch={
+                "zalo_id": "zalo_1",
+                "name": "CTY ở đâu vậy",
+                "desired_job": "CNC",
+            },
+            memory_facts=[],
+        )
+        upsert = AsyncMock(return_value=None)
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return {"name": "Hùng", "notes": None}
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return None
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "extract",
+            AsyncMock(return_value=extracted),
+        )
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+
+        result = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            AsyncMock(),
+            "zalo_1",
+            "CTY ở đâu vậy",
+            "Công ty ở Hải Phòng.",
+        )
+
+        assert result.lead_patch is not None
+        assert result.lead_patch["name"] is None
+        assert result.lead_patch["desired_job"] == "CNC"
+        upsert.assert_awaited_once_with(db, result.lead_patch)
+
+    @pytest.mark.asyncio
+    async def test_oa_profile_context_cannot_turn_question_into_canonical_name(
+        self, monkeypatch
+    ):
+        from app.models.conversation import ConversationMode, ConversationStatus
+
+        db = object()
+        extracted = CandidateExtraction(
+            lead_patch={"zalo_id": "oa:user-1", "name": "CTY ở đâu vậy"},
+            memory_facts=[],
+        )
+        upsert = AsyncMock(return_value=None)
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return {"name": None, "notes": None}
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return type(
+                    "_Conversation",
+                    (),
+                    {
+                        "mode": ConversationMode.BOT,
+                        "status": ConversationStatus.OPEN,
+                        "version": 3,
+                        "contact": type(
+                            "_Contact",
+                            (),
+                            {"display_name": "Nguyễn Hùng"},
+                        )(),
+                    },
+                )()
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "extract",
+            AsyncMock(return_value=extracted),
+        )
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+
+        result = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            AsyncMock(),
+            "oa:user-1",
+            "CTY ở đâu vậy",
+            "Công ty ở Hải Phòng.",
+            expected_conversation_version=3,
+        )
+
+        assert result.lead_patch is not None
+        assert result.lead_patch["name"] is None
+        upsert.assert_awaited_once_with(db, result.lead_patch)
+
+    @pytest.mark.asyncio
+    async def test_explicit_name_correction_replaces_confirmed_name(self, monkeypatch):
+        db = object()
+        extracted = CandidateExtraction(
+            lead_patch={
+                "zalo_id": "zalo_1",
+                "name": "wrong model value",
+                "desired_job": "CNC",
+            },
+            memory_facts=[],
+        )
+        upsert = AsyncMock(return_value=None)
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return {"name": "Hùng", "notes": None}
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return None
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "extract",
+            AsyncMock(return_value=extracted),
+        )
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+
+        result = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            AsyncMock(),
+            "zalo_1",
+            "Em là Nguyễn Văn Hưng, em muốn tìm việc",
+            "Cảm ơn bạn Hưng.",
+        )
+
+        assert result.lead_patch is not None
+        assert result.lead_patch["name"] == "Nguyễn Văn Hưng"
+        assert result.lead_patch["desired_job"] == "CNC"
+        upsert.assert_awaited_once_with(db, result.lead_patch)
+
+    @pytest.mark.asyncio
     async def test_persist_skips_llm_when_conversation_is_already_human(self, monkeypatch):
         from app.models.conversation import ConversationMode
 
@@ -1022,6 +1203,35 @@ class TestLeadProfileText:
         assert "Bé Gấu" in text
         assert "chưa được ứng viên xác nhận" in text
         assert "Tự đánh giá bằng ngữ cảnh" in text
+
+    def test_clear_oa_profile_name_suppresses_reask_without_confirming_identity(self):
+        text = lead_profile_text(
+            {"name": None},
+            oa_profile_display_name="Nguyễn Hùng",
+            use_oa_profile_name=True,
+            personalize=True,
+        )
+
+        assert '"Nguyễn Hùng"' in text
+        assert "chưa được ứng viên xác nhận" in text
+        assert "không hỏi lại tên" in text
+        assert "không tự ghi thành Lead.name" in text
+        assert "Đã biết tên ứng viên" not in text
+
+    @pytest.mark.parametrize(
+        ("display_name", "expected"),
+        [
+            ("Nguyễn Hùng", "Nguyễn Hùng"),
+            ("Trần Văn Nam", "Trần Văn Nam"),
+            ("CTY ở đâu", None),
+            ("Bé Gấu", None),
+            ("Nguyễn Hùng?", None),
+        ],
+    )
+    def test_high_confidence_profile_name(self, display_name, expected):
+        from app.services.lead import high_confidence_profile_name
+
+        assert high_confidence_profile_name(display_name) == expected
 
     def test_all_fields_populated(self):
         lead = {

@@ -36,6 +36,18 @@ def test_lead_update_accepts_stage_changes():
     assert body.lead_stage == LeadStage.SKIPPED
 
 
+def test_lead_update_accepts_candidate_age():
+    body = LeadUpdate.model_validate({"age": 32})
+
+    assert body.age == 32
+
+
+@pytest.mark.parametrize("age", [14, 81])
+def test_lead_update_rejects_implausible_candidate_age(age):
+    with pytest.raises(ValidationError):
+        LeadUpdate.model_validate({"age": age})
+
+
 @pytest.mark.parametrize(
     "schema, payload",
     [

@@ -1,9 +1,4 @@
-import {
-  ShowBase,
-  useGetOne,
-  useRecordContext,
-  useRedirect,
-} from "ra-core";
+import { ShowBase, useGetOne, useRecordContext, useRedirect } from "ra-core";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,7 +20,10 @@ const KnowledgeSourceShowContent = () => {
   if (!source) return null;
 
   return (
-    <main className="kb-scope knowledge-source-subpage">
+    <section
+      className="kb-scope knowledge-source-subpage"
+      aria-label="Chi tiết nguồn kiến thức"
+    >
       <TopToolbar className="knowledge-source-subpage-toolbar justify-start">
         <Button
           type="button"
@@ -44,7 +42,7 @@ const KnowledgeSourceShowContent = () => {
         headingId="knowledge-source-page-title"
         headingAs="h1"
       />
-    </main>
+    </section>
   );
 };
 

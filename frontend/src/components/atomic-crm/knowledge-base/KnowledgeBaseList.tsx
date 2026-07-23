@@ -1,11 +1,10 @@
 import { ListBase, useListContext, useRedirect } from "ra-core";
-import { BookOpen, Plus } from "lucide-react";
+import { BookOpen, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlternateCard, EmptyState, PageHeading, PageShell } from "../kit";
+import { EmptyState, PageHeading, PageShell } from "../kit";
 import type { KnowledgeBase } from "../types";
 
-const Content = () => {
+export const KnowledgeBaseListContent = () => {
   const { data = [], isPending } = useListContext<KnowledgeBase>();
   const redirect = useRedirect();
 
@@ -14,7 +13,7 @@ const Content = () => {
       <PageHeading
         eyebrow="Dữ liệu dùng chung"
         title="Kho kiến thức"
-        subtitle="Tổ chức nguồn kiến thức để nhiều Agent và dự án cùng sử dụng."
+        subtitle="Chia sẻ nguồn giữa Agent và dự án."
         actions={
           <Button
             size="sm"
@@ -26,18 +25,39 @@ const Content = () => {
         }
       />
 
-      {isPending ? (
-        <AlternateCard className="mt-4" bodyClassName="p-6">
-          <p className="text-body-sm text-muted-foreground" role="status">
+      <section
+        className="mt-4 border-y border-[var(--tt-border)] bg-[var(--tt-surface-lift)]"
+        aria-labelledby="knowledge-base-list-title"
+      >
+        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--tt-border)] px-4 py-3">
+          <h2
+            id="knowledge-base-list-title"
+            className="text-section-title font-semibold text-foreground"
+          >
+            Kho hiện có
+          </h2>
+          {!isPending && data.length > 0 ? (
+            <span
+              className="text-helper tabular-nums text-muted-foreground"
+              aria-label={`${data.length} kho`}
+            >
+              {data.length}
+            </span>
+          ) : null}
+        </header>
+
+        {isPending ? (
+          <p
+            className="px-4 py-6 text-body-sm text-muted-foreground"
+            role="status"
+          >
             Đang tải kho kiến thức…
           </p>
-        </AlternateCard>
-      ) : data.length === 0 ? (
-        <AlternateCard className="mt-4">
+        ) : data.length === 0 ? (
           <EmptyState
             icon={<BookOpen className="size-6" aria-hidden="true" />}
             title="Chưa có kho kiến thức"
-            description="Tạo kho đầu tiên để dùng chung dữ liệu giữa các Agent."
+            description="Tạo kho đầu tiên để chia sẻ dữ liệu."
             action={
               <Button
                 size="sm"
@@ -48,37 +68,52 @@ const Content = () => {
               </Button>
             }
           />
-        </AlternateCard>
-      ) : (
-        <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {data.map((kb) => (
-            <Card
-              key={kb.id}
-              className="tt-card-sm gap-3 border-[var(--tt-border)] py-4 shadow-[var(--tt-shadow-xs)] transition-colors hover:border-[var(--tt-accent)]"
-            >
-              <CardHeader className="gap-1 px-4">
-                <CardTitle className="text-card-title">{kb.name}</CardTitle>
-                <p className="text-helper text-muted-foreground">
-                  {kb.mode === "RAG" ? "RAG" : "Ngữ cảnh trực tiếp"}
-                </p>
-              </CardHeader>
-              <CardContent className="px-4">
-                <p className="text-body-sm">
-                  {kb.attached_agent_count} Agent · {kb.project_count} dự án
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => redirect("show", "knowledge_bases", kb.id)}
+        ) : (
+          <div role="list">
+            {data.map((kb) => {
+              const modeLabel =
+                kb.mode === "RAG" ? "RAG" : "Ngữ cảnh trực tiếp";
+              return (
+                <div
+                  key={kb.id}
+                  role="listitem"
+                  className="border-b border-[var(--tt-border)] last:border-b-0"
                 >
-                  Quản lý
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                  <button
+                    type="button"
+                    className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    aria-label={`Mở kho ${kb.name}: ${modeLabel}, ${kb.attached_agent_count} Agent, ${kb.project_count} dự án`}
+                    onClick={() => redirect("show", "knowledge_bases", kb.id)}
+                  >
+                    <BookOpen
+                      className="size-5 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="truncate text-body font-semibold text-foreground">
+                          {kb.name}
+                        </span>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-badge font-semibold uppercase tracking-wide text-muted-foreground">
+                          {modeLabel}
+                        </span>
+                      </span>
+                      <span className="mt-1 block text-helper text-muted-foreground">
+                        {kb.attached_agent_count} Agent · {kb.project_count} dự
+                        án
+                      </span>
+                    </span>
+                    <ChevronRight
+                      className="size-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </PageShell>
   );
 };
@@ -89,6 +124,6 @@ export const KnowledgeBaseList = () => (
     perPage={100}
     sort={{ field: "name", order: "ASC" }}
   >
-    <Content />
+    <KnowledgeBaseListContent />
   </ListBase>
 );

@@ -4,6 +4,7 @@ import { ConversationContextPanel } from "./ConversationContextPanel";
 
 const lead: Lead = {
   id: 1,
+  version: 1,
   zalo_id: "candidate-1",
   name: "Ứng viên mẫu",
   phone: "",
@@ -38,5 +39,86 @@ describe("ConversationContextPanel notes", () => {
     await expect
       .element(noteItems[1])
       .toHaveTextContent("Hỏi về bảo hiểm tại LG Display");
+  });
+
+  it("lets an authorized recruiter edit real profile fields atomically", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(
+      <div className="inbox-bg-container">
+        <ConversationContextPanel
+          lead={{ ...lead, version: 4 }}
+          open
+          persistent
+          canEdit
+          onSave={onSave}
+          onClose={() => undefined}
+        />
+      </div>,
+    );
+
+    await screen
+      .getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" })
+      .click();
+    await screen.getByLabelText("Họ tên").fill("  Nguyễn Hùng  ");
+    await screen.getByLabelText("Tuổi").fill("32");
+    await screen
+      .getByLabelText("Ghi chú (CCCD, chỗ ở, xe đưa đón và thông tin khác)")
+      .fill("");
+    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+
+    await expect.poll(() => onSave.mock.calls.length).toBe(1);
+    expect(onSave).toHaveBeenCalledWith({
+      name: "Nguyễn Hùng",
+      age: 32,
+      notes: null,
+    }, 4);
+  });
+
+  it("cancels edits without saving", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(
+      <div className="inbox-bg-container">
+        <ConversationContextPanel
+          lead={lead}
+          open
+          persistent
+          canEdit
+          onSave={onSave}
+          onClose={() => undefined}
+        />
+      </div>,
+    );
+
+    await screen
+      .getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" })
+      .click();
+    await screen.getByLabelText("Họ tên").fill("Tên chưa lưu");
+    await screen.getByRole("button", { name: "Hủy" }).click();
+
+    await expect
+      .element(screen.getByText("Ứng viên mẫu", { exact: true }).first())
+      .toBeVisible();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("does not expose profile editing without recruiter edit permission", async () => {
+    const screen = await render(
+      <div className="inbox-bg-container">
+        <ConversationContextPanel
+          lead={lead}
+          open
+          persistent
+          canEdit={false}
+          onSave={vi.fn().mockResolvedValue(undefined)}
+          onClose={() => undefined}
+        />
+      </div>,
+    );
+
+    await expect
+      .element(
+        screen.getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" }).query(),
+      )
+      .not.toBeInTheDocument();
   });
 });

@@ -1,9 +1,13 @@
 import { useEffect, useMemo } from "react";
-import { useGetList } from "ra-core";
+import { useDataProvider, useGetList, useNotify } from "ra-core";
 
 import { getRealtimeSocket } from "../../providers/realtime/realtime-socket";
 import { Dashboard } from "../../dashboard/Dashboard";
-import { ConversationContextPanel } from "../../conversations/ConversationContextPanel";
+import {
+  ConversationContextPanel,
+  type CandidateProfileUpdate,
+} from "../../conversations/ConversationContextPanel";
+import { useRoleActions } from "../../hooks/useRoleActions";
 import {
   getLeadPriorityChip,
   getLeadStatusColor,
@@ -16,6 +20,7 @@ import {
 } from "../../leads/domain/recruitmentPresentation";
 import { leadDirectoryApi } from "../../leads/infrastructure/leadDirectoryApi";
 import { createLeadRealtimePort } from "../../leads/infrastructure/leadRealtime";
+import type { CrmDataProvider } from "../../providers/types";
 import type {
   ConversationActionsSlot,
   ConversationContextAdapterProps,
@@ -91,6 +96,9 @@ const RecruitmentConversationContext = ({
   );
   const { data, refetch } = useGetList("leads", params, options);
   const lead = data?.[0] as Lead | undefined;
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const notify = useNotify();
+  const { canEdit } = useRoleActions();
 
   useEffect(() => {
     if (!lead?.id) return;
@@ -111,6 +119,30 @@ const RecruitmentConversationContext = ({
     conversation ?? { zalo_channel: "bot" as const, zalo_chat_id: null, contact: null };
   const identity = buildRecruitmentContextIdentity(source, lead);
   const colors = getLeadStatusColor(lead);
+  const saveCandidateProfile = async (
+    changes: Partial<CandidateProfileUpdate>,
+    version: number,
+  ) => {
+    if (!lead) return;
+    try {
+      await dataProvider.update<Lead>("leads", {
+        id: lead.id,
+        data: { ...changes, version },
+        previousData: lead,
+      });
+      notify("Đã cập nhật hồ sơ ứng viên", { type: "success" });
+      await refetch().catch(() => undefined);
+    } catch (error) {
+      await refetch().catch(() => undefined);
+      notify(
+        error instanceof Error
+          ? error.message
+          : "Không thể cập nhật hồ sơ ứng viên",
+        { type: "error" },
+      );
+      throw error;
+    }
+  };
   return (
     <>
       {children({
@@ -132,6 +164,8 @@ const RecruitmentConversationContext = ({
             lead={lead}
             open={open}
             persistent={persistent}
+            canEdit={canEdit}
+            onSave={saveCandidateProfile}
             onClose={onClose}
             onCloseAutoFocus={onCloseAutoFocus}
           />

@@ -41,11 +41,7 @@ describe("KnowledgeSourceRow", () => {
     const onSelect = vi.fn();
     const screen = await render(
       <div role="list">
-        <KnowledgeSourceRow
-          source={source}
-          selected
-          onSelect={onSelect}
-        />
+        <KnowledgeSourceRow source={source} selected onSelect={onSelect} />
       </div>,
     );
 
@@ -56,13 +52,25 @@ describe("KnowledgeSourceRow", () => {
     await expect
       .element(select)
       .toHaveAttribute("aria-controls", "knowledge-source-detail");
-    await expect.element(screen.getByText("LG Display", { exact: false })).toBeVisible();
+    await expect
+      .element(screen.getByText("LG Display", { exact: false }))
+      .toBeVisible();
+    expect(screen.container.textContent).not.toContain("Đang xem");
+    expect(
+      screen.container.querySelector(".knowledge-source-row-footer"),
+    ).toBeNull();
+    await expect
+      .element(
+        screen.getByRole("button", {
+          name: "Mở thao tác cho Chính sách tuyển dụng.md",
+        }),
+      )
+      .toBeVisible();
 
-    expect(select.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(
-      44,
-    );
+    expect(
+      select.element().getBoundingClientRect().height,
+    ).toBeGreaterThanOrEqual(44);
     await select.click();
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });
-
