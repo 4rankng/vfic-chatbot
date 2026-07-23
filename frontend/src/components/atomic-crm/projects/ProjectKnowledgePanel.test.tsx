@@ -1,4 +1,5 @@
 import { render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/apiClient";
 import type { KnowledgeCategoryStatus } from "./project-knowledge-service";
@@ -96,8 +97,9 @@ const deferred = <T,>() => {
 };
 
 describe("ProjectKnowledgePanel", () => {
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await page.viewport(1280, 720);
   });
 
   beforeEach(() => {
@@ -144,6 +146,49 @@ describe("ProjectKnowledgePanel", () => {
       );
       expect(mocks.refresh).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("stacks and bounds the single-page editor on phone screens", async () => {
+    await page.viewport(390, 844);
+    mocks.getProjectSinglePage.mockResolvedValue({
+      id: "direct-file-rorze",
+      knowledge_base_id: "kb-rorze",
+      filename: "rorze.md",
+      text: "Nội dung Rorze hiện tại.",
+      char_count: 24,
+      line_count: 1,
+      content_sha256: "checksum",
+      updated_at: "2026-07-18T00:00:00Z",
+    });
+
+    const screen = await render(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    const editor = screen.getByLabelText("Nội dung trang kiến thức");
+    await expect.element(editor).toBeVisible();
+
+    const title = screen.container.querySelector(".project-single-page-title");
+    const fileRow = screen.container.querySelector(
+      ".project-single-page-file-row",
+    );
+    const saveButton = screen
+      .getByRole("button", {
+        name: "Thay thế trang hiện tại",
+      })
+      .element();
+
+    expect(title).toBeInstanceOf(HTMLElement);
+    expect(fileRow).toBeInstanceOf(HTMLElement);
+    expect(window.getComputedStyle(title as HTMLElement).flexDirection).toBe(
+      "column",
+    );
+    expect(window.getComputedStyle(fileRow as HTMLElement).display).toBe(
+      "grid",
+    );
+    expect(editor.element().getBoundingClientRect().height).toBeLessThanOrEqual(
+      390,
+    );
+    expect(saveButton.getBoundingClientRect().width).toBeGreaterThan(300);
   });
 
   it("warns before replacing a page that will reactivate an inactive project", async () => {
@@ -580,6 +625,7 @@ describe("ProjectKnowledgePanel", () => {
   });
 
   it("stacks the selected category detail below the list in the phone viewport", async () => {
+    await page.viewport(390, 844);
     mocks.getProjectKnowledgeCategorySource.mockResolvedValue({
       key: "jobs",
       label_vi: "Vị trí tuyển dụng",
@@ -608,6 +654,7 @@ describe("ProjectKnowledgePanel", () => {
     const navigation = screen.container.querySelector(
       ".project-category-navigation",
     );
+    const mobileSelector = screen.getByLabelText("Chọn danh mục kiến thức");
     const detail = screen.container.querySelector("#project-category-detail");
     expect(workspace).toBeInstanceOf(HTMLElement);
     expect(navigation).toBeInstanceOf(HTMLElement);
@@ -618,6 +665,7 @@ describe("ProjectKnowledgePanel", () => {
       navigation as HTMLElement
     ).getBoundingClientRect();
     const detailBounds = (detail as HTMLElement).getBoundingClientRect();
+    await expect.element(mobileSelector).toBeVisible();
     expect(workspaceStyle.display).toBe("block");
     expect(detailBounds.top).toBeGreaterThanOrEqual(navigationBounds.bottom);
     expect(detailBounds.left).toBe(navigationBounds.left);

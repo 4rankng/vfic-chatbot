@@ -36,7 +36,10 @@ describe("project list visual hierarchy", () => {
       /\.project-accordion-content\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/,
     );
     expect(stylesheet).toMatch(
-      /@media \(max-width: 767px\)[\s\S]*?\.project-category-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+      /@media \(max-width: 767px\)[\s\S]*?\.project-category-mobile-select\s*\{[^}]*display:\s*block[^}]*min-height:\s*44px/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*?\.project-category-grid\s*\{[^}]*display:\s*none/,
     );
     expect(stylesheet).toMatch(
       /\.project-category-editor-actions\s*>\s*:last-child\s*\{[^}]*grid-column:\s*1 \/ -1/,

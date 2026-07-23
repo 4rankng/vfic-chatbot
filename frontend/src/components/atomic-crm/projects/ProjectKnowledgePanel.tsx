@@ -201,15 +201,17 @@ const SinglePagePanel = ({ project, editable }: Props) => {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-section-title">
-            <FileText className="size-5" />
-            Trang kiến thức duy nhất
+      <Card className="project-single-page-card">
+        <CardHeader className="project-single-page-header">
+          <CardTitle className="project-single-page-title text-section-title">
+            <span className="project-single-page-title-label">
+              <FileText className="size-5 shrink-0" aria-hidden="true" />
+              <span>Trang kiến thức duy nhất</span>
+            </span>
             <Badge variant="outline">Gửi toàn bộ cho Agent</Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="project-single-page-content space-y-4">
           <p className="text-body text-muted-foreground">
             Agent dùng toàn bộ trang này mỗi cuộc trò chuyện. Lưu sẽ thay thế
             nội dung cũ.
@@ -218,16 +220,20 @@ const SinglePagePanel = ({ project, editable }: Props) => {
             <Skeleton className="h-72 w-full" />
           ) : (
             <>
-              <div className="flex flex-wrap gap-2">
+              <div className="project-single-page-file-row">
                 <Input
                   value={filename}
                   onChange={(event) => setFilename(event.target.value)}
-                  className="max-w-sm"
+                  className="project-single-page-filename"
                   disabled={!editable}
                   aria-label="Tên file trang kiến thức"
                 />
                 {editable && (
-                  <Button variant="outline" asChild>
+                  <Button
+                    variant="outline"
+                    className="project-single-page-file-button"
+                    asChild
+                  >
                     <label>
                       <Upload className="size-4" />
                       Chọn file
@@ -250,10 +256,11 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                 readOnly={!editable}
                 placeholder="Dán toàn bộ kiến thức của dự án tại đây..."
                 aria-label="Nội dung trang kiến thức"
-                className="font-mono text-body"
+                className="project-single-page-textarea font-mono text-body"
               />
               {editable && (
                 <Button
+                  className="project-single-page-save"
                   onClick={() => void save()}
                   disabled={saving || loadFailed}
                 >
@@ -273,7 +280,7 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                   className="space-y-3 border-t border-border/60 pt-4"
                   aria-labelledby="single-page-sync-heading"
                 >
-                  <header className="flex flex-wrap items-center gap-x-2 gap-y-1 text-label font-semibold">
+                  <header className="project-single-page-sync-header flex flex-wrap items-center gap-x-2 gap-y-1 text-label font-semibold">
                     <div className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
                       <Link2
                         className="size-4 shrink-0 text-muted-foreground"
@@ -630,13 +637,12 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
       </header>
       <div className="project-knowledge-content">
         <p className="project-knowledge-description">
-          Mỗi mục cập nhật riêng. Việc làm: có trong file = đang tuyển.
+          Việc làm có trong file = đang tuyển.
         </p>
         {categories && (
           <div className="project-knowledge-progress" aria-live="polite">
-            <span>Tiến độ nội dung</span>
             <strong>
-              {activeCategoryCount}/{categories.length} mục đã có dữ liệu
+              {activeCategoryCount}/{categories.length} mục có dữ liệu
             </strong>
           </div>
         )}
@@ -645,6 +651,25 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
             className="project-category-navigation"
             aria-label="Danh mục kiến thức"
           >
+            {categories && (
+              <select
+                className="project-category-mobile-select"
+                value={selected}
+                aria-label="Chọn danh mục kiến thức"
+                onChange={(event) =>
+                  selectCategory(event.target.value as KnowledgeCategoryKey)
+                }
+              >
+                {categories.map((category) => (
+                  <option key={category.key} value={category.key}>
+                    {category.label_vi}
+                    {category.active_revision_id
+                      ? ` · v${category.active_revision_no ?? 1}`
+                      : " · Chưa có dữ liệu"}
+                  </option>
+                ))}
+              </select>
+            )}
             {!categories ? (
               <div className="project-category-grid">
                 {Array.from({ length: 12 }).map((_, index) => (
@@ -692,6 +717,7 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
                             <Badge
                               variant="secondary"
                               className="h-6 px-1.5 text-badge font-semibold"
+                              aria-label={`Đang dùng phiên bản ${category.active_revision_no ?? 1}`}
                             >
                               v{category.active_revision_no ?? 1}
                             </Badge>
@@ -720,11 +746,7 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
                           <span className="text-muted-foreground">
                             Chưa có dữ liệu
                           </span>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            Đang dùng
-                          </span>
-                        )}
+                        ) : null}
                       </div>
                       {category.updated_at && (
                         <p className="project-category-date">
@@ -977,40 +999,49 @@ const DiscoveryCardEditor = ({ project }: { project: Project }) => {
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="project-discovery-card">
+      <CardHeader className="project-discovery-header">
         <CardTitle className="text-section-title">
           Thông tin dùng khi gợi ý dự án
         </CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2">
+      <CardContent className="project-discovery-content grid gap-3 sm:grid-cols-2">
         <Input
           value={summary}
           onChange={(event) => setSummary(event.target.value)}
           placeholder="Tóm tắt"
+          aria-label="Tóm tắt dự án"
         />
         <Input
           value={location}
           onChange={(event) => setLocation(event.target.value)}
           placeholder="Địa điểm"
+          aria-label="Địa điểm dự án"
         />
         <Input
           value={roles}
           onChange={(event) => setRoles(event.target.value)}
           placeholder="Vị trí, cách nhau bằng dấu phẩy"
+          aria-label="Vị trí tuyển dụng"
         />
         <Input
           value={highlights}
           onChange={(event) => setHighlights(event.target.value)}
           placeholder="Điểm nổi bật, cách nhau bằng dấu phẩy"
+          aria-label="Điểm nổi bật"
         />
         <Input
           value={aliases}
           onChange={(event) => setAliases(event.target.value)}
           placeholder="Tên gọi khác: LG, LGD..."
+          aria-label="Tên gọi khác"
         />
         <div>
-          <Button onClick={() => void save()} disabled={saving}>
+          <Button
+            className="project-discovery-save"
+            onClick={() => void save()}
+            disabled={saving}
+          >
             {saving ? (
               <span
                 className="tt-loading tt-loading-spinner tt-loading-sm"

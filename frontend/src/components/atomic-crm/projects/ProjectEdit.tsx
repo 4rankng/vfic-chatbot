@@ -7,7 +7,6 @@ import {
   useRecordContext,
   useRedirect,
 } from "ra-core";
-import { Badge } from "@/components/ui/badge";
 import { TextInput } from "@/components/admin/text-input";
 import { BooleanInput } from "@/components/admin/boolean-input";
 import { Button } from "@/components/ui/button";
@@ -53,11 +52,27 @@ const ProjectEditContent = () => {
               Dự án
             </p>
             <h1 className="mt-1 truncate text-content-title font-semibold">
-              Chỉnh sửa {project.name}
+              {project.name}
             </h1>
-            <p className="mt-1 text-body text-muted-foreground">
-              Cập nhật trạng thái và nguồn tri thức dùng khi tư vấn ứng viên.
-            </p>
+            <div
+              className="project-edit-meta mt-1"
+              aria-label="Trạng thái dự án"
+            >
+              <span
+                className={
+                  project.is_active ? "text-success" : "text-muted-foreground"
+                }
+              >
+                <span className="project-edit-status-dot" aria-hidden="true" />
+                {project.is_active ? "Đang hoạt động" : "Đang tắt"}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {project.knowledge_mode === "DIRECT_CONTEXT"
+                  ? "Một nội dung"
+                  : "Theo danh mục"}
+              </span>
+            </div>
           </div>
           {isAdmin && (
             <DeleteButton
@@ -68,38 +83,32 @@ const ProjectEditContent = () => {
           )}
         </div>
 
-        <section className="project-form-surface project-edit-form-surface mt-4 max-w-2xl">
-          <header className="project-form-section-header flex items-center justify-between text-section-title">
-            <span>{project.name}</span>
-            <div className="flex gap-2">
-              <Badge variant="outline">
-                {project.knowledge_mode === "DIRECT_CONTEXT"
-                  ? "Một trang"
-                  : "Theo danh mục"}
-              </Badge>
-              <Badge
-                variant="outline"
-                className={
-                  project.is_active
-                    ? "tt-badge-success tt-badge-soft border-transparent text-success"
-                    : "border-border bg-muted/40 text-muted-foreground"
-                }
+        <section
+          className="project-form-surface project-edit-form-surface mt-4"
+          aria-label="Cài đặt dự án"
+        >
+          <Form record={project} onSubmit={onSubmit}>
+            <div className="project-edit-settings">
+              <TextInput
+                source="name"
+                label="Tên dự án"
+                className="project-edit-name"
+                isRequired
+              />
+              <BooleanInput
+                source="is_active"
+                label="Dự án hoạt động"
+                className="project-edit-active"
+              />
+              <Button
+                type="submit"
+                className="project-edit-save"
+                disabled={submitting}
               >
-                {project.is_active ? "Đang hoạt động" : "Tắt"}
-              </Badge>
+                Lưu thay đổi
+              </Button>
             </div>
-          </header>
-          <div className="project-form-content pt-2">
-            <Form record={project} onSubmit={onSubmit}>
-              <div className="flex flex-col gap-4">
-                <TextInput source="name" label="Tên dự án" isRequired />
-                <BooleanInput source="is_active" label="Đang hoạt động" />
-                <Button type="submit" disabled={submitting}>
-                  Lưu
-                </Button>
-              </div>
-            </Form>
-          </div>
+          </Form>
         </section>
 
         <div className="project-detail-stack mt-4">
