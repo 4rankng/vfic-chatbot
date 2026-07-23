@@ -9,6 +9,7 @@ import {
 import { TextInput } from "@/components/admin/text-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import {
@@ -16,6 +17,85 @@ import {
   type ProjectKnowledgeMode,
 } from "./domain/project-knowledge-policy";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
+
+type KnowledgeModeOptionProps = {
+  value: ProjectKnowledgeMode;
+  selected: boolean;
+  title: string;
+  description: string;
+  onSelect: (value: ProjectKnowledgeMode) => void;
+};
+
+const KnowledgeModeOption = ({
+  value,
+  selected,
+  title,
+  description,
+  onSelect,
+}: KnowledgeModeOptionProps) => {
+  const descriptionId = `knowledge-mode-${value.toLowerCase()}-description`;
+
+  return (
+    <label
+      className={cn("project-mode-option", selected && "is-selected")}
+      data-selected={selected ? "true" : "false"}
+    >
+      <input
+        className="sr-only"
+        type="radio"
+        name="knowledge-mode"
+        value={value}
+        checked={selected}
+        aria-describedby={descriptionId}
+        onChange={() => onSelect(value)}
+      />
+      <span className="project-mode-indicator" aria-hidden="true">
+        <span />
+      </span>
+      <span className="min-w-0">
+        <span className="block font-semibold text-foreground">{title}</span>
+        <span
+          id={descriptionId}
+          className="mt-1 block text-helper text-muted-foreground"
+        >
+          {description}
+        </span>
+      </span>
+    </label>
+  );
+};
+
+type ProjectInputFieldProps = {
+  id: string;
+  label: string;
+  value: string;
+  placeholder: string;
+  required?: boolean;
+  onChange: (value: string) => void;
+};
+
+const ProjectInputField = ({
+  id,
+  label,
+  value,
+  placeholder,
+  required = false,
+  onChange,
+}: ProjectInputFieldProps) => (
+  <div className="grid gap-1.5">
+    <label htmlFor={id} className="text-sm font-medium text-foreground">
+      {label}
+      {required ? <span aria-hidden="true"> *</span> : null}
+    </label>
+    <Input
+      id={id}
+      value={value}
+      required={required}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+    />
+  </div>
+);
 
 export const ProjectCreate = () => {
   const notify = useNotify();
@@ -80,9 +160,6 @@ export const ProjectCreate = () => {
                 <h1 className="mt-1 text-content-title font-semibold">
                   Tạo dự án
                 </h1>
-                <p className="mt-1 text-body text-muted-foreground">
-                  Tạo không gian huấn luyện riêng cho một dự án tuyển dụng.
-                </p>
               </div>
               <Button
                 type="button"
@@ -101,86 +178,93 @@ export const ProjectCreate = () => {
                   <TextInput source="name" label="Tên dự án" isRequired />
                   <TextInput
                     source="slug"
-                    label="Slug (không dấu, không khoảng cách)"
+                    label="Mã dự án"
+                    helperText="Không dấu hoặc khoảng trắng."
+                    placeholder="lg-display-hai-phong"
                     isRequired
                   />
-                  <fieldset className="project-mode-fieldset grid gap-2">
-                    <legend className="font-medium">Cách lưu kiến thức</legend>
-                    <label className="project-mode-option flex cursor-pointer gap-3">
-                      <input
-                        className="tt-radio tt-radio-primary tt-radio-sm mt-1"
-                        type="radio"
-                        name="knowledge-mode"
+                  <fieldset
+                    className="project-mode-fieldset grid gap-3"
+                    aria-required="true"
+                  >
+                    <legend className="font-medium">
+                      Cách quản lý kiến thức
+                      <span aria-hidden="true"> *</span>
+                    </legend>
+                    <div className="project-mode-grid">
+                      <KnowledgeModeOption
                         value="DIRECT_CONTEXT"
-                        checked={mode === "DIRECT_CONTEXT"}
-                        onChange={() => setMode("DIRECT_CONTEXT")}
+                        selected={mode === "DIRECT_CONTEXT"}
+                        title="Một nội dung"
+                        description="Nhanh gọn; cập nhật toàn bộ cùng lúc."
+                        onSelect={setMode}
                       />
-                      <span>
-                        <span className="block font-semibold">Một trang</span>
-                        <span className="text-helper text-muted-foreground">
-                          Quản lý toàn bộ thông tin trong một nội dung duy nhất.
-                          Mỗi lần cập nhật sẽ thay thế toàn bộ nội dung cũ.
-                        </span>
-                      </span>
-                    </label>
-                    <label className="project-mode-option flex cursor-pointer gap-3">
-                      <input
-                        className="tt-radio tt-radio-primary tt-radio-sm mt-1"
-                        type="radio"
-                        name="knowledge-mode"
+                      <KnowledgeModeOption
                         value="RAG"
-                        checked={mode === "RAG"}
-                        onChange={() => setMode("RAG")}
-                      />
-                      <span>
-                        <span className="block font-semibold">
-                          Theo danh mục
-                        </span>
-                        <span className="text-helper text-muted-foreground">
-                          Chia kiến thức thành 12 nhóm để cập nhật từng phần độc
-                          lập.
-                        </span>
-                      </span>
-                    </label>
-                    <p className="text-helper text-muted-foreground">
-                      Không thể đổi cách lưu sau khi dự án đã có dữ liệu.
-                    </p>
-                  </fieldset>
-                  <Input
-                    value={aliases}
-                    onChange={(event) => setAliases(event.target.value)}
-                    placeholder="Tên gọi khác, ví dụ: LG, LGD"
-                    aria-label="Tên gọi khác của dự án"
-                  />
-                  {mode === "DIRECT_CONTEXT" && (
-                    <div className="project-discovery-section grid gap-3">
-                      <p className="font-medium">
-                        Thông tin giúp ứng viên tìm thấy dự án
-                      </p>
-                      <Input
-                        value={summary}
-                        onChange={(event) => setSummary(event.target.value)}
-                        placeholder="Tóm tắt dự án"
-                      />
-                      <Input
-                        value={location}
-                        onChange={(event) => setLocation(event.target.value)}
-                        placeholder="Địa điểm"
-                      />
-                      <Input
-                        value={roles}
-                        onChange={(event) => setRoles(event.target.value)}
-                        placeholder="Vị trí, cách nhau bằng dấu phẩy"
-                      />
-                      <Input
-                        value={highlights}
-                        onChange={(event) => setHighlights(event.target.value)}
-                        placeholder="Điểm nổi bật, cách nhau bằng dấu phẩy"
+                        selected={mode === "RAG"}
+                        title="Theo danh mục"
+                        description="12 phần riêng; dễ cập nhật từng nội dung."
+                        onSelect={setMode}
                       />
                     </div>
+                    <p className="text-helper text-muted-foreground">
+                      Không đổi được sau khi có dữ liệu.
+                    </p>
+                  </fieldset>
+                  <ProjectInputField
+                    id="project-aliases"
+                    label="Tên gọi khác"
+                    value={aliases}
+                    placeholder="LG, LGD (không bắt buộc)"
+                    onChange={setAliases}
+                  />
+                  {mode === "DIRECT_CONTEXT" && (
+                    <section
+                      className="project-discovery-section grid gap-3"
+                      aria-labelledby="project-discovery-title"
+                    >
+                      <h2
+                        id="project-discovery-title"
+                        className="font-medium text-foreground"
+                      >
+                        Giúp ứng viên tìm đúng dự án
+                      </h2>
+                      <ProjectInputField
+                        id="project-summary"
+                        label="Tóm tắt"
+                        value={summary}
+                        placeholder="Dự án tuyển dụng nào?"
+                        required
+                        onChange={setSummary}
+                      />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <ProjectInputField
+                          id="project-location"
+                          label="Địa điểm"
+                          value={location}
+                          placeholder="Hải Phòng"
+                          required
+                          onChange={setLocation}
+                        />
+                        <ProjectInputField
+                          id="project-roles"
+                          label="Vị trí tuyển dụng"
+                          value={roles}
+                          placeholder="Sản xuất, kiểm tra"
+                          onChange={setRoles}
+                        />
+                      </div>
+                      <ProjectInputField
+                        id="project-highlights"
+                        label="Điểm nổi bật"
+                        value={highlights}
+                        placeholder="Không yêu cầu kinh nghiệm"
+                        onChange={setHighlights}
+                      />
+                    </section>
                   )}
                   <p className="text-helper text-muted-foreground">
-                    Dự án sẽ ở trạng thái tắt cho đến khi có kiến thức hợp lệ.
+                    Dự án chỉ hiển thị sau khi có kiến thức.
                   </p>
                   <Button type="submit" disabled={submitting}>
                     Tạo dự án

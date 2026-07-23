@@ -6,19 +6,28 @@ import type { BotRun } from "../types";
 // error     → the run failed
 export const OUTCOME_META: Record<
   BotRun["outcome"],
-  { label: string; classes: string }
+  { label: string; classes: string; indicatorClasses: string }
 > = {
-  sent: { label: "Đã gửi", classes: "bg-success text-white" },
+  sent: {
+    label: "Đã gửi",
+    classes: "bg-success text-white",
+    indicatorClasses: "text-success",
+  },
   suppressed: {
     label: "Đã chặn",
     classes: "bg-warning text-warning-foreground",
+    indicatorClasses: "text-warning-foreground",
   },
-  error: { label: "Lỗi", classes: "bg-destructive text-white" },
+  error: {
+    label: "Lỗi",
+    classes: "bg-destructive text-white",
+    indicatorClasses: "text-destructive",
+  },
 };
 
 export const outcomeMeta = (
   outcome: string,
-): { label: string; classes: string } =>
+): { label: string; classes: string; indicatorClasses: string } =>
   OUTCOME_META[outcome as BotRun["outcome"]] ?? OUTCOME_META.error;
 
 /** Run wall-clock duration (ended_at − started_at), or null if not finished. */

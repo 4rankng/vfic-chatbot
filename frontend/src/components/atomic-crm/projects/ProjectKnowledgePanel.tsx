@@ -907,7 +907,7 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
 
         {canManageSources && (
           <section className="space-y-2">
-            <h3 className="text-body font-semibold">
+            <h3 className="inline-flex items-center gap-2 text-body font-semibold">
               <Link2 className="size-4" aria-hidden="true" />
               Google Sheet
             </h3>

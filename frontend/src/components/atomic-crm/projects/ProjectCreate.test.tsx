@@ -61,4 +61,29 @@ describe("ProjectCreate", () => {
 
     expect(mocks.redirect).toHaveBeenCalledWith("/projects");
   });
+
+  it("presents a clear knowledge choice and labels conditional fields", async () => {
+    const screen = await render(<ProjectCreate />);
+    const directMode = screen.getByRole("radio", {
+      name: /Một nội dung/,
+    });
+
+    await expect.element(directMode).not.toBeChecked();
+    await directMode.click();
+    await expect.element(directMode).toBeChecked();
+    expect(
+      directMode.element().closest("[data-selected='true']"),
+    ).not.toBeNull();
+
+    await expect
+      .element(
+        screen.getByRole("heading", { name: "Giúp ứng viên tìm đúng dự án" }),
+      )
+      .toBeVisible();
+    await expect.element(screen.getByLabelText("Tóm tắt *")).toBeVisible();
+    await expect.element(screen.getByLabelText("Địa điểm *")).toBeVisible();
+    await expect
+      .element(screen.getByLabelText("Vị trí tuyển dụng"))
+      .toBeVisible();
+  });
 });

@@ -59,6 +59,16 @@ describe("Bot run pages", () => {
 
     await expect.element(row).toBeVisible();
     await expect.element(screen.getByText("#42")).toBeVisible();
+    const outcome = row.element().querySelector<HTMLElement>(
+      "[data-slot='bot-run-outcome']",
+    );
+    const rowText = row.element().textContent ?? "";
+
+    expect(outcome).not.toBeNull();
+    expect(outcome).not.toHaveClass("rounded-full", "px-2", "bg-success");
+    expect(rowText.indexOf("Đây là câu trả lời dài")).toBeLessThan(
+      rowText.indexOf("Đã gửi"),
+    );
     expect(row.element().getAttribute("aria-label")).not.toContain(
       "Đây là câu trả lời dài",
     );

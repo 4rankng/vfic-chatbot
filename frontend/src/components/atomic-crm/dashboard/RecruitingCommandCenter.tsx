@@ -151,7 +151,6 @@ export const RecruitingCommandCenter = ({
     <div className={shellClass}>
       <header className="recruiting-hero recruiting-hero-minimal">
         <div className="recruiting-hero-copy">
-          <span className="recruiting-eyebrow">Theo dõi trực tiếp</span>
           <h1>Tổng quan tuyển dụng</h1>
           <p>
             {dataUpdatedAt
@@ -169,6 +168,14 @@ export const RecruitingCommandCenter = ({
             </span>
           ) : null}
         </div>
+        <button
+          type="button"
+          className="dashboard-open-inbox"
+          onClick={() => navigate("/conversations")}
+        >
+          <MessageCircle className="size-4" aria-hidden="true" />
+          Mở hộp thư
+        </button>
         {queueHealth.title || queueHealth.detail ? (
           <div
             className={`dashboard-live-status is-${queueHealth.tone}`}
@@ -254,14 +261,11 @@ const AttentionPanel = ({
   onRetry,
 }: AttentionPanelProps) => {
   return (
-    <article className="recruiting-panel tt-card tt-card-border bg-base-100">
+    <article className="recruiting-panel">
       <div className="recruiting-panel-header">
-        <div>
-          <span className="recruiting-eyebrow">Hàng đợi ưu tiên</span>
-          <h2>{eyebrow}</h2>
-        </div>
+        <h2>{eyebrow}</h2>
         <span
-          className="dashboard-panel-count tt-badge tt-badge-error tt-badge-soft"
+          className="dashboard-panel-count"
           aria-label={`${rows.length} mục đang hiển thị`}
         >
           {rows.length}
@@ -303,14 +307,11 @@ const CandidatePanel = ({
   state: PanelState;
   onRetry: () => void;
 }) => (
-  <article className="recruiting-panel recruiting-candidate-panel tt-card tt-card-border bg-base-100">
+  <article className="recruiting-panel recruiting-candidate-panel">
     <div className="recruiting-panel-header">
-      <div>
-        <span className="recruiting-eyebrow">Cập nhật theo thời gian</span>
-        <h2>Ứng viên mới nhất</h2>
-      </div>
+      <h2>Ứng viên mới</h2>
       <span
-        className="dashboard-panel-count tt-badge tt-badge-primary tt-badge-soft"
+        className="dashboard-panel-count"
         aria-label={`${count} ứng viên có số điện thoại`}
       >
         {count}
@@ -443,6 +444,7 @@ const AttentionRow = ({
   const meta = (
     <span className="dashboard-candidate-meta">
       {elapsed ? <small>{elapsed}</small> : null}
+      {onClick ? <small className="dashboard-row-action">Mở</small> : null}
     </span>
   );
   if (onClick) {

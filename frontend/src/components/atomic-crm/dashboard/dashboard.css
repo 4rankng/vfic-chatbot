@@ -16,99 +16,139 @@
 
 .recruiting-command {
   display: grid;
-  gap: clamp(18px, 2vw, 28px);
+  gap: 24px;
 }
+
 .recruiting-hero {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 18px;
+  gap: 12px 20px;
+  padding-bottom: 20px;
   border-bottom: 1px solid var(--workspace-border, var(--border));
 }
-.dashboard-live-status {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid var(--workspace-border, var(--border));
-  border-radius: 14px;
-  padding: 13px 16px;
-  background: var(--workspace-surface, var(--card));
-  box-shadow: 0 12px 30px rgb(10 37 64 / 7%);
+
+.dashboard-workspace .recruiting-hero {
+  border: 0;
+  border-bottom: 1px solid var(--workspace-border, var(--border));
+  border-radius: 0;
+  padding: 0 0 20px;
+  background: transparent;
+  box-shadow: none;
 }
-.dashboard-live-dot {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 10px;
-  border-radius: 50%;
-  background: var(--workspace-muted, var(--muted-foreground));
-  box-shadow: 0 0 0 4px
-    color-mix(in srgb, var(--workspace-muted) 13%, transparent);
+
+.recruiting-hero-copy {
+  min-width: 0;
 }
-.dashboard-live-status.is-success .dashboard-live-dot {
-  background: var(--workspace-success, var(--color-success));
-  box-shadow: 0 0 0 4px
-    color-mix(in srgb, var(--workspace-success) 13%, transparent);
-}
-.dashboard-live-status.is-warning .dashboard-live-dot {
-  background: var(--workspace-warning, var(--color-warning));
-  box-shadow: 0 0 0 4px
-    color-mix(in srgb, var(--workspace-warning) 13%, transparent);
-}
-.dashboard-live-status > div {
-  display: grid;
-  gap: 2px;
-}
-.dashboard-live-status strong {
-  color: var(--workspace-ink, var(--foreground));
-  font-size: var(--fs-body);
-  font-weight: 650;
-}
-.dashboard-live-status span:last-child {
-  color: var(--workspace-ink-muted, var(--muted-foreground));
-  font-size: var(--fs-helper);
-}
+
 .recruiting-eyebrow {
   display: block;
-  color: var(--workspace-muted, var(--muted-foreground));
+  color: var(--workspace-action, var(--primary));
   font-size: var(--fs-caption);
   font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
+
 .recruiting-hero h1 {
-  margin: 2px 0 4px;
+  margin: 0 0 4px;
   color: var(--workspace-ink, var(--foreground));
   font-size: var(--fs-page-title);
   font-weight: var(--fw-bold);
   line-height: var(--lh-snug);
   letter-spacing: var(--tracking-tight);
 }
+
 .recruiting-hero p {
   margin: 0;
-  color: var(--workspace-muted, var(--muted-foreground));
+  color: var(--workspace-ink-muted, var(--muted-foreground));
   font-size: var(--fs-body);
   line-height: var(--lh-normal);
 }
+
+.dashboard-open-inbox,
 .dashboard-inline-error button,
 .dashboard-empty-list button {
-  min-height: 40px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  border: 1px solid var(--workspace-border, var(--border));
+  border: 1px solid var(--workspace-action, var(--primary));
   border-radius: 8px;
-  padding: 0 14px;
-  background: var(--workspace-surface, var(--card));
-  color: var(--workspace-action, var(--primary));
+  padding: 0 16px;
+  background: var(--workspace-action, var(--primary));
+  color: var(--primary-foreground);
   font-size: var(--fs-body);
-  font-weight: 600;
+  font-weight: 650;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--motion-fast, 160ms) ease-out,
+    border-color var(--motion-fast, 160ms) ease-out;
 }
-.dashboard-empty-list button:hover {
-  border-color: var(--workspace-action, var(--primary));
-  background: var(--accent);
+
+.dashboard-open-inbox:hover,
+.dashboard-open-inbox:focus-visible {
+  border-color: var(--workspace-action-strong, var(--primary));
+  background: var(--workspace-action-strong, var(--primary));
 }
+
+.dashboard-open-inbox:focus-visible,
+.dashboard-inline-error button:focus-visible,
+.dashboard-empty-list button:focus-visible {
+  outline: 2px solid var(--workspace-action, var(--primary));
+  outline-offset: 3px;
+}
+
+.dashboard-live-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+}
+
+.dashboard-live-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--workspace-muted, var(--muted-foreground));
+}
+
+.dashboard-live-status.is-success .dashboard-live-dot {
+  background: var(--workspace-success, var(--color-success));
+}
+
+.dashboard-live-status.is-warning .dashboard-live-dot {
+  background: var(--workspace-warning, var(--color-warning));
+}
+
+.dashboard-live-status > div {
+  display: grid;
+  gap: 2px;
+}
+
+.dashboard-live-status strong {
+  color: var(--workspace-ink, var(--foreground));
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+
+.dashboard-live-status span:last-child {
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  font-size: var(--fs-helper);
+}
+
+.attention-refetch-indicator {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  font-size: var(--fs-meta);
+}
+
 .dashboard-inline-error {
   display: flex;
   align-items: center;
@@ -117,7 +157,7 @@
   padding: 12px 14px;
   border: 1px solid
     color-mix(in srgb, var(--destructive) 32%, var(--workspace-border));
-  border-radius: 10px;
+  border-radius: 8px;
   background: color-mix(
     in srgb,
     var(--destructive) 6%,
@@ -126,76 +166,91 @@
   color: var(--workspace-ink, var(--foreground));
   font-size: var(--fs-body);
 }
+
+.dashboard-inline-error button,
+.dashboard-empty-list button {
+  min-height: 40px;
+  border-color: var(--workspace-border, var(--border));
+  background: var(--workspace-surface, var(--card));
+  color: var(--workspace-action, var(--primary));
+}
+
 .recruiting-two-column {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.82fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
   align-items: start;
-  gap: 24px;
-}
-.recruiting-panel {
-  overflow: hidden;
-  border: 1px solid var(--workspace-border, var(--border));
-  border-radius: 14px;
+  border-bottom: 1px solid var(--workspace-border, var(--border));
   background: var(--workspace-surface, var(--card));
-  box-shadow: 0 10px 28px rgb(10 37 64 / 5%);
 }
-.recruiting-panel:first-child {
-  border-top-color: var(--workspace-border, var(--border));
+
+.recruiting-panel {
+  min-width: 0;
+  background: transparent;
 }
+
+.dashboard-workspace .recruiting-panel {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .recruiting-candidate-panel {
-  border-top-color: var(--workspace-border, var(--border));
+  border-left: 1px solid var(--workspace-border, var(--border));
 }
+
 .recruiting-panel-header {
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 20px 12px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--workspace-border, var(--border));
-  background: color-mix(
-    in srgb,
-    var(--workspace-surface-muted, var(--secondary)) 58%,
-    var(--workspace-surface, var(--card))
-  );
 }
+
 .recruiting-panel-header h2 {
-  margin: 2px 0 0;
+  margin: 0;
   color: var(--workspace-ink, var(--foreground));
   font-size: var(--fs-body-lg);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 24px;
 }
+
 .dashboard-panel-count {
   min-width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--workspace-surface-muted, var(--secondary));
-  color: var(--workspace-ink, var(--foreground));
-  font-size: var(--fs-meta);
-  font-weight: 600;
+  color: var(--workspace-action, var(--primary));
+  font-size: var(--fs-body-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 24px;
+  text-align: right;
 }
+
 .dashboard-candidate-list {
-  padding: 4px 20px 12px;
+  padding: 0 20px 8px;
 }
+
 .dashboard-candidate-virtual-list {
   overscroll-behavior: contain;
 }
+
 .dashboard-candidate-day-header {
   position: sticky;
   top: 0;
   z-index: 1;
   margin: 0;
-  padding: 10px 12px 6px;
+  padding: 12px 0 6px;
   background: var(--workspace-surface, var(--card));
-  color: var(--workspace-muted, var(--muted-foreground));
+  color: var(--workspace-ink-muted, var(--muted-foreground));
   font-size: var(--fs-caption);
   font-weight: 700;
   letter-spacing: 0.06em;
   line-height: 16px;
   text-transform: uppercase;
 }
+
 .dashboard-candidate-row {
   position: relative;
   width: 100%;
@@ -204,47 +259,54 @@
   grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  border-radius: 10px;
-  padding: 12px;
   border: 0;
   border-bottom: 1px solid var(--workspace-border, var(--border));
+  padding: 12px 0;
   background: transparent;
   color: inherit;
   text-align: left;
-  transition:
-    background-color var(--motion-fast, 160ms) ease-out,
-    transform var(--motion-fast, 160ms) ease-out;
+  transition: background-color var(--motion-fast, 160ms) ease-out;
 }
+
 .dashboard-candidate-row:last-child {
   border-bottom: 0;
 }
-button.dashboard-candidate-row:hover {
-  background: var(--workspace-teal-soft, var(--accent));
-  transform: translateX(3px);
+
+button.dashboard-candidate-row {
+  cursor: pointer;
+  touch-action: manipulation;
 }
+
+button.dashboard-candidate-row:hover,
 button.dashboard-candidate-row:focus-visible {
-  background: var(--workspace-teal-soft, var(--accent));
+  background: color-mix(
+    in srgb,
+    var(--workspace-action, var(--primary)) 7%,
+    var(--workspace-surface, var(--card))
+  );
+}
+
+button.dashboard-candidate-row:focus-visible {
   outline: 2px solid var(--workspace-action, var(--primary));
   outline-offset: 2px;
 }
-button.dashboard-candidate-row:active {
-  background: color-mix(
-    in srgb,
-    var(--workspace-action, var(--primary)) 18%,
-    #fff
-  );
-}
+
 .dashboard-candidate-avatar {
   width: 36px;
   height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: var(--accent);
-  color: var(--workspace-action-strong, var(--primary));
-  font-size: var(--fs-meta);
-  font-weight: 700;
+  border: 1px solid
+    color-mix(in srgb, var(--workspace-action, var(--primary)) 28%, transparent);
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--workspace-action, var(--primary)) 7%,
+    var(--workspace-surface, var(--card))
+  );
+  color: var(--workspace-action, var(--primary));
 }
+
 .dashboard-candidate-avatar > span {
   width: 100%;
   height: 100%;
@@ -252,80 +314,128 @@ button.dashboard-candidate-row:active {
   place-items: center;
   border-radius: inherit;
 }
+
 .dashboard-candidate-main,
 .dashboard-candidate-meta {
   min-width: 0;
   display: grid;
   gap: 3px;
 }
-.dashboard-candidate-main strong {
-  color: var(--workspace-ink, var(--foreground));
-  font-size: var(--fs-body);
-  font-weight: 600;
-}
+
 .dashboard-candidate-main .dashboard-candidate-title {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
 }
+
 .dashboard-candidate-main .dashboard-candidate-title > strong {
   min-width: 0;
   flex: 1 1 auto;
 }
-.dashboard-candidate-main .dashboard-candidate-title .dashboard-stage-chip {
-  flex: 0 0 auto;
-  overflow: visible;
-  text-overflow: clip;
+
+.dashboard-candidate-main strong {
+  color: var(--workspace-ink, var(--foreground));
+  font-size: var(--fs-body);
+  font-weight: 650;
 }
+
 .dashboard-candidate-main strong,
 .dashboard-candidate-main span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .dashboard-candidate-main span,
 .dashboard-candidate-meta {
-  color: var(--muted-foreground);
+  color: var(--workspace-ink-muted, var(--muted-foreground));
   font-size: var(--fs-meta);
   line-height: 16px;
 }
+
+.dashboard-candidate-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.dashboard-job {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-phone-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+
 .dashboard-candidate-meta {
   justify-items: end;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
+
+.dashboard-row-action {
+  color: var(--workspace-action, var(--primary));
+  font-weight: 700;
+}
+
 .dashboard-empty-list {
-  min-height: 180px;
+  min-height: 152px;
   display: grid;
   align-content: center;
   justify-items: center;
   gap: 10px;
-  padding: 16px 12px 20px;
+  padding: 20px 12px;
   text-align: center;
 }
-.dashboard-empty-illustration {
-  width: clamp(112px, 28vw, 140px);
-  height: auto;
-  max-height: 88px;
-  display: block;
+
+.dashboard-empty-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--workspace-success, var(--color-success)) 10%,
+    var(--workspace-surface, var(--card))
+  );
+  color: var(--workspace-success, var(--color-success));
 }
+
+.dashboard-empty-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
 .dashboard-empty-copy {
   max-width: 290px;
   display: grid;
   gap: 4px;
 }
+
 .dashboard-empty-copy p {
   margin: 0;
   color: var(--workspace-ink, var(--foreground));
   font-size: var(--fs-body);
-  font-weight: 600;
+  font-weight: 650;
   line-height: 20px;
 }
+
 .dashboard-empty-copy span {
   color: var(--workspace-ink-muted, var(--muted-foreground));
   font-size: var(--fs-meta);
   line-height: 18px;
 }
+
 .dashboard-queue-error {
   min-height: 128px;
   display: flex;
@@ -333,63 +443,28 @@ button.dashboard-candidate-row:active {
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  padding: 20px 4px;
-  color: var(--workspace-muted, var(--muted-foreground));
-  text-align: left;
+  padding-inline: 4px;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
   font-size: var(--fs-body);
+  text-align: left;
 }
-.dashboard-empty-list button {
-  min-height: 36px;
-}
+
 .is-skeleton {
   pointer-events: none;
 }
 
-/* Attention dashboard additions
- * ------------------------------------------------------------------
- * - .dashboard-candidate-sub / .dashboard-candidate-meta: extra row slots
- *   for the desired job, phone hint, and elapsed time.
- * - .attention-refetch-indicator: polite background-refetch affordance.
- */
-.attention-refetch-indicator {
-  display: inline-block;
-  margin-top: 4px;
-  color: var(--workspace-muted, var(--muted-foreground));
-  font-size: var(--fs-meta);
-}
-.dashboard-candidate-sub {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-}
-.dashboard-job {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dashboard-phone-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--workspace-muted, var(--muted-foreground));
-  font-variant-numeric: tabular-nums;
-}
-@media (prefers-reduced-motion: reduce) {
-  .dashboard-candidate-row {
-    transition: none;
+@media (max-width: 1023px) {
+  .dashboard-workspace .recruiting-two-column {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  button.dashboard-candidate-row:hover {
-    transform: none;
+  .dashboard-workspace .recruiting-candidate-panel {
+    border-top: 1px solid var(--workspace-border, var(--border));
+    border-left: 0;
   }
 }
 
 @media (max-width: 767px) {
-  /* The mobile dashboard participates in the document flow. Keeping the
-     desktop height/overflow pair here creates a nested scroll container that
-     can trap touch scrolling before the second queue becomes reachable. */
   .dashboard-workspace {
     height: auto;
     min-height: 100dvh;
@@ -399,207 +474,80 @@ button.dashboard-candidate-row:active {
   }
 
   .dashboard-workspace-content {
-    padding: 20px 16px calc(5.75rem + env(safe-area-inset-bottom));
-    touch-action: pan-y;
+    padding: 24px 16px calc(104px + env(safe-area-inset-bottom));
   }
-  .recruiting-hero,
+
+  .recruiting-command {
+    gap: 20px;
+  }
+
+  .dashboard-workspace .recruiting-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+    padding-bottom: 16px;
+  }
+
+  .dashboard-open-inbox {
+    min-width: 44px;
+    width: 44px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .dashboard-open-inbox svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .dashboard-live-status,
+  .dashboard-inline-error {
+    grid-column: 1 / -1;
+  }
+
   .dashboard-inline-error {
     align-items: stretch;
     flex-direction: column;
   }
-  .dashboard-live-status {
-    width: 100%;
-    padding: 12px 14px;
-  }
-  .recruiting-two-column {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  .recruiting-panel:nth-child(2) {
-    order: 2;
-  }
-  .dashboard-candidate-list {
-    padding-inline: 16px;
-  }
+
   .recruiting-panel-header {
-    padding-inline: 16px;
+    min-height: 56px;
+    padding: 14px 16px;
   }
 
-  /* The desktop .recruiting-panel uses overflow:hidden to keep the rounded
-     card corners clean. On mobile that same rule traps touch events inside
-     the panel, so swiping a candidate row never bubbles up to scroll the
-     document. The card stays a solid block (border-radius still works on a
-     flat background with no overflowing children) — flip to visible so the
-     body owns the scroll. */
-  .dashboard-workspace .recruiting-panel,
-  .recruiting-panel {
-    overflow: visible;
-  }
-}
-
-/* The dashboard shares a few class names with the richer recruiting workspace.
-   Keep its compact operations composition scoped so a late-loaded workspace
-   stylesheet cannot turn a phone or narrow tablet into two squeezed columns. */
-.dashboard-workspace .recruiting-hero {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  padding: 0;
-}
-
-.dashboard-workspace .dashboard-candidate-row {
-  border-radius: 0;
-  background: transparent;
-}
-
-@media (max-width: 1023px) {
-  .dashboard-workspace .recruiting-two-column {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+  .dashboard-candidate-list {
+    padding: 0 16px 4px;
   }
 
-  .dashboard-workspace .recruiting-panel:nth-child(2) {
-    order: 2;
-  }
-}
-
-@media (max-width: 767px) {
-  .dashboard-workspace .dashboard-workspace-content {
-    padding: 20px 16px calc(5.75rem + env(safe-area-inset-bottom));
+  .dashboard-candidate-day-header {
+    position: static;
+    padding-top: 12px;
   }
 
-  .dashboard-workspace .recruiting-command {
-    gap: 16px;
-  }
-
-  .dashboard-workspace .recruiting-panel-header {
-    padding: 16px;
-  }
-
-  .dashboard-workspace .dashboard-candidate-list {
-    padding: 4px 16px 12px;
-  }
-
-  .dashboard-workspace .dashboard-candidate-row {
-    min-height: 72px;
-    grid-template-columns: 42px minmax(0, 1fr) auto;
-    gap: 12px;
-    padding: 12px 0;
-  }
-
-  .dashboard-workspace .dashboard-candidate-avatar {
-    width: 42px;
-    height: 42px;
-  }
-
-  .dashboard-workspace .dashboard-workspace-content {
-    padding: 24px 16px calc(96px + env(safe-area-inset-bottom));
-  }
-
-  .dashboard-workspace .recruiting-command {
-    gap: 12px;
-  }
-
-  .dashboard-workspace .recruiting-eyebrow {
-    color: var(--workspace-action, var(--primary));
-    font-size: var(--fs-caption);
-    font-weight: 700;
-    letter-spacing: 0.06em;
-  }
-
-  .dashboard-workspace .recruiting-hero h1 {
-    margin: 4px 0;
-    font-size: var(--fs-page-title);
-    font-weight: 700;
-    line-height: 1.15;
-  }
-
-  .dashboard-workspace .recruiting-hero p {
-    font-size: var(--fs-body);
-    font-weight: 500;
-    line-height: 20px;
-  }
-
-  .dashboard-workspace .recruiting-panel {
-    overflow: hidden;
-    border-color: color-mix(
-      in srgb,
-      var(--workspace-border, var(--border)) 82%,
-      transparent
-    );
-    border-radius: 14px;
-    box-shadow: 0 2px 12px rgb(10 37 64 / 4%);
-  }
-
-  .dashboard-workspace .recruiting-panel-header {
-    min-height: 64px;
-    padding: 12px 16px;
-    border-bottom-color: color-mix(
-      in srgb,
-      var(--workspace-border, var(--border)) 70%,
-      transparent
-    );
-  }
-
-  .dashboard-workspace .recruiting-panel-header h2 {
-    margin: 2px 0 0;
-    font-size: var(--fs-subsection);
-    font-weight: 700;
-    line-height: 24px;
-  }
-
-  .dashboard-workspace .dashboard-panel-count {
-    min-width: 28px;
-    height: 28px;
-    background: color-mix(
-      in srgb,
-      var(--workspace-action, var(--primary)) 10%,
-      white
-    );
-    color: var(--workspace-action, var(--primary));
-  }
-
-  .dashboard-workspace .dashboard-candidate-list {
-    padding: 0 16px;
-  }
-
-  .dashboard-workspace .dashboard-candidate-virtual-list {
+  .dashboard-candidate-virtual-list {
     overscroll-behavior: auto;
   }
 
-  .dashboard-workspace .dashboard-candidate-day-header {
-    position: static;
-    padding-inline: 0;
-  }
-
-  .dashboard-workspace .dashboard-candidate-row {
+  .dashboard-candidate-row {
     min-height: 72px;
     grid-template-columns: 40px minmax(0, 1fr) auto;
     gap: 12px;
     padding: 12px 0;
   }
 
-  .dashboard-workspace .dashboard-candidate-avatar {
+  .dashboard-candidate-avatar {
     width: 40px;
     height: 40px;
   }
 
-  .dashboard-workspace .dashboard-candidate-main strong {
+  .dashboard-candidate-main strong {
     font-size: var(--fs-body-lg);
-    font-weight: 600;
     line-height: 20px;
   }
 
-  .dashboard-workspace .dashboard-candidate-main span,
-  .dashboard-workspace .dashboard-candidate-meta {
-    font-size: var(--fs-meta);
-    font-weight: 500;
-    line-height: 16px;
-  }
-
-  .dashboard-workspace .dashboard-empty-list {
-    min-height: 88px;
+  .dashboard-empty-list {
+    min-height: 96px;
     grid-template-columns: 32px minmax(0, 1fr);
     align-items: center;
     justify-items: start;
@@ -608,125 +556,19 @@ button.dashboard-candidate-row:active {
     text-align: left;
   }
 
-  .dashboard-workspace .dashboard-empty-icon {
+  .dashboard-empty-icon {
     width: 32px;
     height: 32px;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    background: color-mix(
-      in srgb,
-      var(--workspace-action, var(--primary)) 12%,
-      white
-    );
-    color: var(--workspace-action, var(--primary));
   }
 
-  .dashboard-workspace .dashboard-empty-icon svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .dashboard-workspace .dashboard-empty-copy {
+  .dashboard-empty-copy {
     max-width: none;
-    gap: 4px;
-  }
-
-  .dashboard-workspace .dashboard-empty-copy p {
-    font-size: var(--fs-body-lg);
-    font-weight: 600;
-    line-height: 20px;
-  }
-
-  .dashboard-workspace .dashboard-empty-copy span {
-    font-size: var(--fs-body);
-    font-weight: 500;
-    line-height: 20px;
   }
 }
 
-/* =========================================================================
-   UntitledUI elevation layer — appended overrides (same specificity; later
-   source order wins). Adds premium depth/radius/gradient to the command
-   center without rewriting the rules above. Tokens: --radius-uu-*,
-   --shadow-uu-*, --color-uu-brand-* (indigo). Delete this block to revert.
-   ========================================================================= */
-
-.recruiting-panel {
-  border-radius: var(--radius-uu-2xl);
-  border-color: color-mix(
-    in srgb,
-    var(--workspace-border, var(--border)) 85%,
-    transparent
-  );
-  box-shadow: var(--shadow-uu-lg);
-}
-
-.recruiting-panel-header {
-  padding-top: 22px;
-  padding-bottom: 14px;
-}
-
-.recruiting-panel-header h2 {
-  letter-spacing: -0.01em;
-}
-
-/* Hero header — stronger responsive display title, refined live-status pill. */
-.recruiting-hero {
-  padding-bottom: 22px;
-}
-.recruiting-hero h1 {
-  font-size: clamp(1.375rem, 1.2rem + 0.6vw, 1.625rem);
-  letter-spacing: -0.02em;
-}
-.dashboard-live-status {
-  border-radius: var(--radius-uu-xl);
-  box-shadow: var(--shadow-uu-md);
-}
-
-/* Candidate rows — softer radius + indigo hover wash + gentler lift. */
-.dashboard-candidate-row {
-  border-radius: var(--radius-uu-xl);
-}
-button.dashboard-candidate-row:hover {
-  background: color-mix(
-    in srgb,
-    var(--color-uu-brand-500) 10%,
-    var(--workspace-surface, var(--card))
-  );
-  transform: translateX(2px);
-}
-
-/* Placeholder avatars — indigo gradient chip, white glyph. */
-.dashboard-candidate-avatar {
-  border-radius: 12px;
-  background: linear-gradient(
-    135deg,
-    var(--color-uu-brand-500),
-    var(--color-uu-brand-700)
-  );
-  color: #ffffff;
-  box-shadow: var(--shadow-uu-xs);
-}
-
-/* Empty-state icon — soft indigo chip for a premium zero-state. */
-.dashboard-empty-icon {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 999px;
-  background: color-mix(
-    in srgb,
-    var(--color-uu-brand-500) 10%,
-    var(--workspace-surface, var(--card))
-  );
-  color: var(--color-uu-brand-600, var(--workspace-action, var(--primary)));
-  box-shadow: var(--shadow-uu-xs);
-}
-
-@media (min-width: 1100px) {
-  .recruiting-two-column {
-    gap: 28px;
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-open-inbox,
+  .dashboard-candidate-row {
+    transition: none;
   }
 }

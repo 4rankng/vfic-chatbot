@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { render } from "vitest-browser-react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,6 +16,11 @@ vi.mock("@/hooks/use-mobile", () => ({
 }));
 
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
+
+const LocationProbe = () => {
+  const location = useLocation();
+  return <output data-testid="dashboard-location">{location.pathname}</output>;
+};
 
 describe("RecruitingCommandCenter candidate rows", () => {
   it("opens a conversation without rendering a redundant chevron", async () => {
@@ -60,6 +65,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
           <RecruitingCommandCenter />
+          <LocationProbe />
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -69,7 +75,15 @@ describe("RecruitingCommandCenter candidate rows", () => {
         screen.getByRole("button", { name: /Mở hội thoại với Ứng viên mẫu/ }),
       )
       .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Mở hộp thư" }))
+      .toBeVisible();
+    await screen.getByRole("button", { name: "Mở hộp thư" }).click();
+    await expect
+      .element(screen.getByTestId("dashboard-location"))
+      .toHaveTextContent("/conversations");
     await expect.element(screen.getByText("Quá hạn phản hồi")).toBeVisible();
+    await expect.element(screen.getByText("Mở", { exact: true })).toBeVisible();
     expect(
       screen.container.querySelector(".dashboard-candidate-chevron"),
     ).toBeNull();

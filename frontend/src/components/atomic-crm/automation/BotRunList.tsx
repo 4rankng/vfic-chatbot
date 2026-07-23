@@ -20,29 +20,42 @@ export const BotRunRow = ({ run }: { run: BotRun }) => {
       type="button"
       onClick={() => redirect("show", "bot_runs", run.id)}
       aria-label={`Xem lần chạy #${run.id}: ${meta.label}, ${relativeTime}${dur ? `, ${dur}` : ""}`}
-      className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      className="group flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5"
     >
-      <span
-        className={cn(
-          "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-badge font-semibold uppercase tracking-wide",
-          meta.classes,
-        )}
-      >
-        {meta.label}
-      </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-body">{preview}</p>
-        <p className="mt-0.5 text-helper text-muted-foreground">
+        <p className="truncate text-body font-medium text-foreground">
+          {preview}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-helper text-muted-foreground">
+          <span
+            data-slot="bot-run-outcome"
+            className={cn(
+              "inline-flex items-center gap-1 font-medium",
+              meta.indicatorClasses,
+            )}
+          >
+            <span
+              className="size-1.5 rounded-full bg-current"
+              aria-hidden="true"
+            />
+            {meta.label}
+          </span>
+          <span aria-hidden="true">·</span>
           <span className="font-mono text-[0.7rem] text-foreground/60">
             #{run.id}
           </span>
-          <span aria-hidden="true"> · </span>
-          {relativeTime}
-          {dur ? ` · ${dur}` : ""}
-        </p>
+          <span aria-hidden="true">·</span>
+          <span>{relativeTime}</span>
+          {dur ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>{dur}</span>
+            </>
+          ) : null}
+        </div>
       </div>
       <ChevronRight
-        className="size-4 shrink-0 text-muted-foreground"
+        className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
         aria-hidden="true"
       />
     </button>
@@ -54,35 +67,23 @@ export const BotRunListContent = () => {
 
   return (
     <PageShell>
-      <PageHeading
-        eyebrow="Vận hành"
-        title="Lần chạy bot"
-        subtitle="Kiểm tra kết quả và thời gian xử lý."
-      />
+      <PageHeading title="Lần chạy bot" />
       <section
         className="mt-4 border-y border-[var(--tt-border)] bg-[var(--tt-surface-lift)]"
-        aria-labelledby="bot-run-list-title"
+        aria-label="Nhật ký xử lý"
       >
-        <header className="border-b border-[var(--tt-border)] px-4 py-3">
-          <h2
-            id="bot-run-list-title"
-            className="text-section-title font-semibold text-foreground"
-          >
-            Nhật ký xử lý
-          </h2>
-        </header>
         {isPending ? (
           <div className="flex flex-col" role="status" aria-label="Đang tải">
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className="flex min-h-14 items-start gap-3 border-b p-4"
+                className="flex min-h-16 items-center gap-3 border-b px-4 py-3 sm:px-5"
               >
-                <Skeleton className="h-5 w-24" />
                 <div className="flex-1 space-y-2">
-                  <Skeleton className="h-3.5 w-3/4" />
-                  <Skeleton className="h-3 w-1/3" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-2/5" />
                 </div>
+                <Skeleton className="size-4" />
               </div>
             ))}
           </div>
