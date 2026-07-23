@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
 
@@ -24,26 +23,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
-
-
-class LeadScore(str, enum.Enum):
-    hot = "hot"
-    warm = "warm"
-    not_interested = "not_interested"
-
-
-class LeadStage(str, enum.Enum):
-    NEW = "NEW"
-    CONTACTING = "CONTACTING"
-    REGISTERED = "REGISTERED"
-    SKIPPED = "SKIPPED"
-
-
-class FollowupStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    DONE = "DONE"
-    SKIPPED = "SKIPPED"
-    CANCELLED = "CANCELLED"
+from app.recruitment.domain.statuses import FollowupStatus, LeadScore, LeadStage
 
 
 class Lead(Base):

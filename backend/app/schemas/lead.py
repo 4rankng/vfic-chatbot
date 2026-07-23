@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.lead import FollowupStatus, LeadScore, LeadStage
+from app.recruitment.domain.statuses import FollowupStatus, LeadScore, LeadStage
 
 
 class LeadOut(BaseModel):

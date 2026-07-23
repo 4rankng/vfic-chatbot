@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from app.models.conversation import (
+from app.conversation_messaging.domain.statuses import (
     ConversationMode,
     ConversationProjectState,
     ConversationStatus,

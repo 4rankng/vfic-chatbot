@@ -9,7 +9,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from app.models.conversation import BotRunOutcome
+from app.conversation_messaging.domain.statuses import BotRunOutcome
 
 MAX_DECISION_TRACE_EVENTS = 64
 MAX_DECISION_TRACE_BYTES = 128 * 1024

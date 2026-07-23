@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
 
@@ -11,15 +10,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
-
-
-class JobStatus(str, enum.Enum):
-    DRAFT = "DRAFT"
-    ACTIVE = "ACTIVE"
-    PAUSED = "PAUSED"
-    FULL = "FULL"
-    EXPIRED = "EXPIRED"
-    ARCHIVED = "ARCHIVED"
+from app.recruitment.domain.statuses import JobStatus
 
 
 class Job(Base):

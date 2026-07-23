@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.job import JobStatus
+from app.recruitment.domain.statuses import JobStatus
 
 
 class JobBase(BaseModel):
