@@ -10,10 +10,18 @@ export type ImportedPersona = {
   notes?: string | null;
   followup_rules?: PersonaFollowupRules;
 };
+export type PersonaImportFile = Readonly<{
+  name: string;
+  type: string;
+  bytes: ArrayBuffer;
+}>;
 
 export interface PersonaActionsPort {
   activatePersona(id: string): Promise<void>;
-  importPersona(file: File, knowledgeBaseId: string): Promise<ImportedPersona>;
+  importPersona(
+    file: PersonaImportFile,
+    knowledgeBaseId: string,
+  ): Promise<ImportedPersona>;
   listPersonaAssignments(): Promise<{ data: AdapterPersonaAssignment[] }>;
   updatePersonaAssignment(
     provider: AdapterProvider,

@@ -364,6 +364,19 @@ _CONVERSATION_LEGACY_STATE_TARGETS = (
     f"{_CONVERSATION_ROOT}/messageStore",
 )
 
+_FRONTEND_LAYERED_FEATURE_ROOTS = tuple(
+    f"frontend/src/components/atomic-crm/{feature}"
+    for feature in ("knowledge", "leads", "personas", "projects", "reporting")
+)
+_FRONTEND_FEATURE_COMPOSITION_FACADES = frozenset(
+    {
+        "frontend/src/components/atomic-crm/knowledge/knowledge-service.ts",
+        "frontend/src/components/atomic-crm/personas/personaService.ts",
+        "frontend/src/components/atomic-crm/projects/project-knowledge-service.ts",
+        "frontend/src/components/atomic-crm/reporting/reportingService.ts",
+    }
+)
+
 
 def _has_module_prefix(target: str, prefix: str) -> bool:
     return target == prefix or target.startswith(f"{prefix}/")
@@ -447,10 +460,96 @@ def _conversation_layer_rule(rel: str, target: str) -> str | None:
     return None
 
 
+def _feature_root(rel: str) -> str | None:
+    return next(
+        (
+            root
+            for root in _FRONTEND_LAYERED_FEATURE_ROOTS
+            if _has_module_prefix(rel, root)
+        ),
+        None,
+    )
+
+
+def _is_feature_layer_module(rel: str) -> bool:
+    root = _feature_root(rel)
+    return root is not None and any(
+        _has_module_prefix(rel, f"{root}/{layer}")
+        for layer in ("domain", "application", "infrastructure")
+    )
+
+
+def _feature_layer_rule(rel: str, target: str) -> str | None:
+    """Keep migrated frontend feature layers inward-only without exceptions."""
+    root = _feature_root(rel)
+    if root is None or ".test." in Path(rel).name:
+        return None
+
+    domain = f"{root}/domain"
+    application = f"{root}/application"
+    infrastructure = f"{root}/infrastructure"
+    shared_types = "frontend/src/components/atomic-crm/types"
+    framework_target = target.startswith(
+        (
+            "react",
+            "ra-core",
+            "zustand",
+            "@tanstack/",
+            "frontend/src/lib",
+            "frontend/src/components/atomic-crm/providers",
+        )
+    )
+
+    if _has_module_prefix(rel, domain):
+        if (
+            framework_target
+            or not (
+                _has_module_prefix(target, domain)
+                or _has_module_prefix(target, shared_types)
+            )
+        ):
+            return "frontend_feature_domain_outward"
+
+    if _has_module_prefix(rel, application):
+        if (
+            framework_target
+            or _has_module_prefix(target, infrastructure)
+            or not (
+                _has_module_prefix(target, domain)
+                or _has_module_prefix(target, application)
+                or _has_module_prefix(target, shared_types)
+            )
+        ):
+            return "frontend_feature_application_outward"
+
+    if _has_module_prefix(rel, infrastructure):
+        if _has_module_prefix(target, root) and not any(
+            _has_module_prefix(target, allowed)
+            for allowed in (domain, application, infrastructure)
+        ):
+            return "frontend_feature_infrastructure_outward"
+
+    if (
+        rel not in _FRONTEND_FEATURE_COMPOSITION_FACADES
+        and not any(
+            _has_module_prefix(rel, layer)
+            for layer in (domain, application, infrastructure)
+        )
+        and _has_module_prefix(target, infrastructure)
+    ):
+        return "frontend_feature_presentation_outward"
+
+    return None
+
+
 def _frontend_rule(rel: str, target: str) -> str | None:
     if rule := _conversation_layer_rule(rel, target):
         return rule
     if _is_conversation_layer_module(rel):
+        return None
+    if rule := _feature_layer_rule(rel, target):
+        return rule
+    if _is_feature_layer_module(rel):
         return None
     if rel.startswith("frontend/src/lib/vfic/") and target.startswith(
         "frontend/src/components/atomic-crm"
@@ -760,4 +859,80 @@ def test_root_reset_can_only_import_the_public_conversation_reset_facade() -> No
             f"{_CONVERSATION_ROOT}/infrastructure/runtime-epoch-adapter",
         )
         == "conversation_root_reset"
+    )
+
+
+def test_migrated_frontend_feature_layers_have_zero_allowlist_rules() -> None:
+    for root in _FRONTEND_LAYERED_FEATURE_ROOTS:
+        domain = f"{root}/domain/example.ts"
+        application = f"{root}/application/example.ts"
+        infrastructure = f"{root}/infrastructure/example.ts"
+        presentation = f"{root}/Example.tsx"
+
+        for importer in (domain, application):
+            for target in (
+                "react",
+                "ra-core",
+                "@tanstack/react-query",
+                "frontend/src/components/atomic-crm/providers/rest/api",
+                "frontend/src/lib/vfic/knowledgeService",
+            ):
+                assert _frontend_rule(importer, target) is not None
+
+        assert _frontend_rule(domain, f"{root}/domain/value") is None
+        assert _frontend_rule(
+            domain, "frontend/src/components/atomic-crm/types"
+        ) is None
+        assert _frontend_rule(application, f"{root}/domain/value") is None
+        assert _frontend_rule(application, f"{root}/application/ports") is None
+        assert _frontend_rule(application, f"{root}/infrastructure/http") == (
+            "frontend_feature_application_outward"
+        )
+        assert _frontend_rule(infrastructure, f"{root}/Example") == (
+            "frontend_feature_infrastructure_outward"
+        )
+        assert _frontend_rule(presentation, f"{root}/infrastructure/http") == (
+            "frontend_feature_presentation_outward"
+        )
+
+    for facade in _FRONTEND_FEATURE_COMPOSITION_FACADES:
+        root = _feature_root(facade)
+        assert root is not None
+        assert _frontend_rule(facade, f"{root}/infrastructure/http") is None
+
+
+def test_frontend_domain_and_application_layers_do_not_use_browser_globals() -> None:
+    browser_patterns = (
+        re.compile(r"\b(?:File|FormData|Blob|AbortSignal|AbortController)\b"),
+        re.compile(r"\b(?:window|document|localStorage|sessionStorage)\s*\."),
+        re.compile(r"\bfetch\s*\("),
+    )
+    paths: list[Path] = []
+    for root in _FRONTEND_LAYERED_FEATURE_ROOTS:
+        absolute = REPO_ROOT / root
+        for layer in ("domain", "application"):
+            paths.extend((absolute / layer).rglob("*.ts"))
+            paths.extend((absolute / layer).rglob("*.tsx"))
+    paths.extend(
+        REPO_ROOT
+        / "frontend/src/components/atomic-crm/installation"
+        / filename
+        for filename in (
+            "runtime-manifest-policy.ts",
+            "runtime-manifest-application.ts",
+        )
+    )
+
+    violations: list[str] = []
+    for path in paths:
+        if ".test." in path.name:
+            continue
+        source = path.read_text()
+        for pattern in browser_patterns:
+            if match := pattern.search(source):
+                violations.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}|{match.group(0)}"
+                )
+    assert not violations, "Browser globals in pure frontend layers:\n" + "\n".join(
+        sorted(violations)
     )

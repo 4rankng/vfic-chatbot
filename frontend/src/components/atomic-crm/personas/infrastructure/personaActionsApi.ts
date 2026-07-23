@@ -18,7 +18,11 @@ export const personaActionsApi: PersonaActionsPort = {
 
   importPersona(file, knowledgeBaseId) {
     const form = new FormData();
-    form.append("file", file);
+    form.append(
+      "file",
+      new Blob([file.bytes], { type: file.type }),
+      file.name,
+    );
     return apiJson<ImportedPersona>(
       `${BASE}/personas/import?knowledge_base_id=${encodeURIComponent(knowledgeBaseId)}`,
       {

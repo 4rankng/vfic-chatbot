@@ -8,7 +8,7 @@ import {
   type KnowledgeIngestHealth,
   type StageBreakdown,
 } from "../reporting/domain/dashboardMetrics";
-import { getReportingJson } from "../reporting/reportingService";
+import { getDashboardMetrics } from "../reporting/reportingService";
 
 export type {
   DashboardStats,
@@ -19,7 +19,7 @@ export type {
 export const useDashboardStats = (): DashboardStats => {
   const { data, isPending } = useQuery<DashboardMetricsPayload>({
     queryKey: ["dashboard-metrics"],
-    queryFn: () => getReportingJson<DashboardMetricsPayload>("/api/v1/dashboard/metrics"),
+    queryFn: () => getDashboardMetrics<DashboardMetricsPayload>(),
     staleTime: 1000 * 30, // 30s — KPI tiles stay fresh on refocus
   });
 

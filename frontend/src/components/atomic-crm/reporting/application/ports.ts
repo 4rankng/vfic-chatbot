@@ -1,3 +1,6 @@
 export interface ReportingReadPort {
-  getJson<T>(path: string): Promise<T>;
+  getAttentionDashboard<T>(): Promise<T>;
+  getDashboardCandidates<T>(): Promise<T>;
+  getDashboardMetrics<T>(): Promise<T>;
+  getPerformanceMetrics<T>(window: string): Promise<T>;
 }

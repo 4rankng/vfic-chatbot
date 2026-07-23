@@ -1,4 +1,4 @@
-import { getReportingJson } from "../reporting/reportingService";
+import { getDashboardCandidates } from "../reporting/reportingService";
 
 export interface DashboardCandidate {
   id: number;
@@ -93,14 +93,6 @@ export const groupCandidatesByDay = (
 export const fetchDashboardCandidates = async (): Promise<
   DashboardCandidate[]
 > => {
-  const search = new URLSearchParams({
-    page: "1",
-    per_page: "200",
-    sort: "created_at",
-    order: "DESC",
-  });
-  const response = await getReportingJson<CandidateListEnvelope>(
-    `/api/v1/leads?${search.toString()}`,
-  );
+  const response = await getDashboardCandidates<CandidateListEnvelope>();
   return response.data.filter((candidate) => candidate.phone?.trim());
 };

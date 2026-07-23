@@ -1,6 +1,6 @@
 import type { Conversation, Lead } from "../../types";
 import { buildRecruitmentRowPresentation } from "../domain/recruitmentPresentation";
-import type { LeadDirectoryPort } from "./ports";
+import type { CancellationSignal, LeadDirectoryPort } from "./ports";
 
 export type RecruitmentConversationRow = {
   lead?: Lead;
@@ -20,7 +20,7 @@ export const mapLeadsByZaloId = (leads: Lead[]) => {
 export const loadRecruitmentConversationRows = async (
   conversations: Conversation[],
   port: LeadDirectoryPort,
-  signal?: AbortSignal,
+  signal?: CancellationSignal,
 ) => {
   const zaloIds = Array.from(
     new Set(

@@ -14,10 +14,17 @@ export const leadDirectoryApi: LeadDirectoryPort = {
       zalo_ids: zaloIds.join(","),
       per_page: String(zaloIds.length),
     });
-    const response = await apiJson<LeadListEnvelope>(
-      `/api/v1/leads?${search.toString()}`,
-      { signal },
-    );
-    return response.data;
+    const controller = new AbortController();
+    if (signal?.aborted) controller.abort();
+    const dispose = signal?.onAbort(() => controller.abort());
+    try {
+      const response = await apiJson<LeadListEnvelope>(
+        `/api/v1/leads?${search.toString()}`,
+        { signal: controller.signal },
+      );
+      return response.data;
+    } finally {
+      dispose?.();
+    }
   },
 };

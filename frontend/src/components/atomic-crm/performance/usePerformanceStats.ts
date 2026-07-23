@@ -9,7 +9,7 @@ import {
   type PerfTrendBucket,
   type StagePercentiles,
 } from "../reporting/domain/contracts";
-import { getReportingJson } from "../reporting/reportingService";
+import { getPerformanceMetrics } from "../reporting/reportingService";
 
 // Fetches the per-stage turn-latency bundle from /admin/performance (admin-only).
 // Mirrors the useDashboardStats pattern: one TanStack useQuery over apiJson.
@@ -27,7 +27,6 @@ export type {
 export const usePerformanceStats = (window = "24h") =>
   useQuery<PerfMetrics>({
     queryKey: ["performance-metrics", window],
-    queryFn: () =>
-      getReportingJson<PerfMetrics>(`/api/v1/admin/performance?window=${window}`),
+    queryFn: () => getPerformanceMetrics<PerfMetrics>(window),
     staleTime: 1000 * 30,
   });

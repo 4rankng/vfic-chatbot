@@ -1,9 +1,14 @@
 import type { Lead } from "../../types";
 
+export interface CancellationSignal {
+  readonly aborted: boolean;
+  onAbort(listener: () => void): () => void;
+}
+
 export interface LeadDirectoryPort {
   listByZaloIds(
     zaloIds: string[],
-    signal?: AbortSignal,
+    signal?: CancellationSignal,
   ): Promise<Lead[]>;
 }
 

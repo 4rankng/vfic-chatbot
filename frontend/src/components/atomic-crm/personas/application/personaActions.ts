@@ -1,6 +1,7 @@
 import type { AdapterProvider } from "../../types";
 import type {
   ImportedPersona,
+  PersonaImportFile,
   PersonaActionsPort,
 } from "./ports";
 
@@ -9,7 +10,10 @@ export const createPersonaActions = (port: PersonaActionsPort) => ({
     return port.activatePersona(id);
   },
 
-  importPersona(file: File, knowledgeBaseId: string): Promise<ImportedPersona> {
+  importPersona(
+    file: PersonaImportFile,
+    knowledgeBaseId: string,
+  ): Promise<ImportedPersona> {
     return port.importPersona(file, knowledgeBaseId);
   },
 

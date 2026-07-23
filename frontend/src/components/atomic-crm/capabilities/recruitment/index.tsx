@@ -35,7 +35,15 @@ const loadRecruitmentRows: ConversationRowSlot["load"] = async (
   const rows = await loadRecruitmentConversationRows(
     conversations as Conversation[],
     leadDirectoryApi,
-    signal,
+    {
+      get aborted() {
+        return signal.aborted;
+      },
+      onAbort: (listener) => {
+        signal.addEventListener("abort", listener, { once: true });
+        return () => signal.removeEventListener("abort", listener);
+      },
+    },
   );
   const presentations = new Map<string, ConversationRowPresentation>();
   for (const conversation of conversations) {
