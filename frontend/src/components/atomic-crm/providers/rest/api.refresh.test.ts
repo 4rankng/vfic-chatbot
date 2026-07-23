@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiJson, clearTokens, getAccessToken, setTokens } from "./api";
 
+const accessTokenFor = (subject: string, generation: string): string =>
+  `header.${btoa(JSON.stringify({ sub: subject, generation }))}.signature`;
+
 /**
  * Coverage for the single 401->refresh->retry ladder in apiRequest. This is the
  * most security/UX-critical path in the REST client (a short-lived access token
@@ -105,6 +108,84 @@ describe("apiJson 401 refresh-retry", () => {
     // original (401) -> refresh (401, fails) -> no retry. 2 calls total.
     expect(count).toBe(2);
   });
+
+  it("retries with a token pair rotated by another browser tab", async () => {
+    const expiredAccess = accessTokenFor("admin-1", "expired");
+    const otherTabAccess = accessTokenFor("admin-1", "fresh");
+    setTokens(expiredAccess, "shared-refresh");
+    let refreshCalls = 0;
+    let protectedCalls = 0;
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = typeof input === "string" ? input : input.toString();
+      const headers = new Headers(init?.headers);
+      if (url.includes("/auth/refresh")) {
+        refreshCalls += 1;
+        // A different tab completes rotation while this tab's request is in
+        // flight. Its refresh then fails because the shared token was consumed.
+        setTokens(otherTabAccess, "other-tab-refresh");
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({}),
+        } as unknown as Response;
+      }
+      protectedCalls += 1;
+      if (headers.get("Authorization") === `Bearer ${expiredAccess}`) {
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({}),
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      } as unknown as Response;
+    }) as unknown as typeof globalThis.fetch;
+
+    await expect(
+      apiJson<{ ok: boolean }>("/api/v1/leads"),
+    ).resolves.toEqual({ ok: true });
+    expect(refreshCalls).toBe(1);
+    expect(protectedCalls).toBe(2);
+    expect(getAccessToken()).toBe(otherTabAccess);
+  });
+
+  it.each(["GET", "POST"])(
+    "does not replay a %s request after another tab changes accounts",
+    async (method) => {
+      const firstAccountAccess = accessTokenFor("admin-1", "expired");
+      const secondAccountAccess = accessTokenFor("admin-2", "fresh");
+      setTokens(firstAccountAccess, "first-account-refresh");
+      let refreshCalls = 0;
+      let protectedCalls = 0;
+      globalThis.fetch = (async (
+        input: RequestInfo | URL,
+      ): Promise<Response> => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/auth/refresh")) {
+          refreshCalls += 1;
+          setTokens(secondAccountAccess, "second-account-refresh");
+        } else {
+          protectedCalls += 1;
+        }
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({}),
+        } as unknown as Response;
+      }) as unknown as typeof globalThis.fetch;
+
+      await expect(apiJson("/api/v1/leads", { method })).rejects.toThrow();
+      expect(refreshCalls).toBe(1);
+      expect(protectedCalls).toBe(1);
+      expect(getAccessToken()).toBe(secondAccountAccess);
+    },
+  );
 
   it("coalesces concurrent 401 refresh attempts into a single refresh request", async () => {
     setTokens("expired-access", "good-refresh");

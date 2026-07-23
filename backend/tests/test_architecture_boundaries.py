@@ -901,10 +901,23 @@ def test_migrated_frontend_feature_layers_have_zero_allowlist_rules() -> None:
         assert _frontend_rule(facade, f"{root}/infrastructure/http") is None
 
 
-def test_frontend_domain_and_application_layers_do_not_use_browser_globals() -> None:
+def test_frontend_domain_and_application_layers_do_not_use_browser_io_globals() -> None:
+    # Deterministic platform value parsers such as URL and URLSearchParams are
+    # allowed. This gate rejects browser state and I/O capabilities that make a
+    # domain/application module depend on a concrete runtime adapter.
     browser_patterns = (
         re.compile(r"\b(?:File|FormData|Blob|AbortSignal|AbortController)\b"),
-        re.compile(r"\b(?:window|document|localStorage|sessionStorage)\s*\."),
+        re.compile(
+            r"\b(?:window|document|navigator|history|"
+            r"localStorage|sessionStorage|indexedDB)\s*\."
+        ),
+        re.compile(
+            r"\bglobalThis\s*\.\s*(?:location|history|navigator|"
+            r"localStorage|sessionStorage|indexedDB)\b"
+        ),
+        re.compile(
+            r"\b(?:WebSocket|EventSource|BroadcastChannel|Worker)\s*\("
+        ),
         re.compile(r"\bfetch\s*\("),
     )
     paths: list[Path] = []

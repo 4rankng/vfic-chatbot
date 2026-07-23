@@ -72,6 +72,39 @@ const isFormData = (body: unknown): body is FormData =>
 
 let refreshInFlight: Promise<boolean> | null = null;
 
+const jwtSubject = (token: string | null): string | null => {
+  if (!token) return null;
+  const encodedPayload = token.split(".")[1];
+  if (!encodedPayload) return null;
+  try {
+    const base64 = encodedPayload.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(padded)) as { sub?: unknown };
+    return typeof payload.sub === "string" && payload.sub
+      ? payload.sub
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const sharedSessionRotated = (
+  attemptedAccessToken: string | null,
+  attemptedRefreshToken: string,
+): boolean => {
+  const currentAccessToken = getAccessToken();
+  const currentRefreshToken = getRefreshToken();
+  const attemptedSubject = jwtSubject(attemptedAccessToken);
+  return (
+    attemptedSubject !== null &&
+    jwtSubject(currentAccessToken) === attemptedSubject &&
+    currentAccessToken !== null &&
+    currentRefreshToken !== null &&
+    (currentAccessToken !== attemptedAccessToken ||
+      currentRefreshToken !== attemptedRefreshToken)
+  );
+};
+
 const send = async (
   path: string,
   options: RequestOptions,
@@ -105,6 +138,7 @@ const send = async (
 };
 
 const runRefresh = async (): Promise<boolean> => {
+  const accessToken = getAccessToken();
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
   try {
@@ -116,22 +150,28 @@ const runRefresh = async (): Promise<boolean> => {
       },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
-    if (!response.ok) return false;
+    if (!response.ok) {
+      return sharedSessionRotated(accessToken, refreshToken);
+    }
     const tokens = (await response.json()) as {
       access_token: string;
       refresh_token: string;
     };
-    if (getRefreshToken() !== refreshToken) return false;
+    if (getRefreshToken() !== refreshToken) {
+      return sharedSessionRotated(accessToken, refreshToken);
+    }
     setTokens(tokens.access_token, tokens.refresh_token);
     return true;
   } catch {
-    return false;
+    return sharedSessionRotated(accessToken, refreshToken);
   }
 };
 
 // Exchange the stored refresh token for a fresh access/refresh pair. Concurrent
-// 401s share one in-flight refresh so the browser issues exactly one refresh
-// request and all waiters observe the rotated token pair.
+// 401s in one tab share a single request. Across tabs, localStorage is the
+// coordination boundary: a failed/stale refresh accepts a token pair another
+// tab already rotated only when both access JWTs identify the same subject.
+// Logout, malformed tokens, and an account change all fail closed.
 export const refreshOnce = async (): Promise<boolean> => {
   if (refreshInFlight) return refreshInFlight;
   const operation = runRefresh();
