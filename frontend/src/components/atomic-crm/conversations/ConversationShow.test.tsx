@@ -42,7 +42,7 @@ vi.mock("@/hooks/use-mobile", () => ({
   useIsWideDesktop: () => false,
 }));
 
-vi.mock("./useConversationActions", () => ({
+vi.mock("./presentation/use-conversation-actions", () => ({
   useConversationActions: (_record?: Conversation) => ({
     effectiveMode: "bot",
     isBotMode: true,
@@ -65,7 +65,7 @@ vi.mock("./conversation-capability", () => ({
   useConversationCapabilitySlots: () => ({ actions: null }),
 }));
 
-vi.mock("./ChatThread", () => ({
+vi.mock("./presentation/ChatThread", () => ({
   ChatThread: () => <div data-testid="chat-thread-stub" />,
 }));
 

@@ -65,6 +65,12 @@ const messageCreatedHandler = () => {
   return call[1] as (payload: unknown) => void;
 };
 
+const socketHandler = (eventName: string) => {
+  const call = mockSocket.on.mock.calls.find(([event]) => event === eventName);
+  if (!call) throw new Error(`${eventName} handler was not registered`);
+  return call[1] as () => void;
+};
+
 describe("chatRepository.getConversationMessages", () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => {
@@ -350,6 +356,26 @@ describe("chatRepository.subscribeToMessages", () => {
     });
   });
 
+  it("rejoins the active room after a socket reconnect", () => {
+    setTokens("access", "refresh");
+    const unsub = chatRepository.subscribeToMessages("c1", () => {});
+
+    socketHandler("disconnect")();
+    socketHandler("connect")();
+
+    expect(mockSocket.emit).toHaveBeenCalledTimes(2);
+    expect(mockSocket.emit).toHaveBeenLastCalledWith("join conversation", {
+      conversation_id: "c1",
+    });
+
+    unsub();
+    expect(mockSocket.off).toHaveBeenCalledWith(
+      "disconnect",
+      expect.any(Function),
+    );
+    expect(mockSocket.off).toHaveBeenCalledWith("connect", expect.any(Function));
+  });
+
   it("uses a full realtime message payload without refetching latest history", () => {
     setTokens("access", "refresh");
     globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
@@ -417,5 +443,32 @@ describe("chatRepository.subscribeToMessages", () => {
         content: "Legacy refresh",
       }),
     ]);
+  });
+});
+
+describe("chatRepository connection lifecycle", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mockSocket.connected = false;
+  });
+
+  it("exposes connection state and removes both listeners on cleanup", () => {
+    mockSocket.connected = true;
+    const onConnect = vi.fn();
+    const onDisconnect = vi.fn();
+
+    const cleanupConnection = chatRepository.subscribeToConnection(
+      onConnect,
+      onDisconnect,
+    );
+
+    expect(chatRepository.isConnected()).toBe(true);
+    expect(mockSocket.on).toHaveBeenCalledWith("connect", onConnect);
+    expect(mockSocket.on).toHaveBeenCalledWith("disconnect", onDisconnect);
+
+    cleanupConnection();
+
+    expect(mockSocket.off).toHaveBeenCalledWith("connect", onConnect);
+    expect(mockSocket.off).toHaveBeenCalledWith("disconnect", onDisconnect);
   });
 });

@@ -65,7 +65,7 @@ vi.mock("virtua", () => ({
   ),
 }));
 
-vi.mock("./messageStore", () => ({
+vi.mock("./presentation/conversation-message-state", () => ({
   useConversationMessages: (_convId?: string) => messageStoreState.messages,
   useConversationFlags: (_convId?: string) => ({
     isLoading: messageStoreState.isLoading,
@@ -76,11 +76,11 @@ vi.mock("./messageStore", () => ({
   }),
 }));
 
-vi.mock("./useConversationRealtime", () => ({
+vi.mock("./presentation/use-conversation-realtime", () => ({
   useConversationRealtime: () => realtimeControls,
 }));
 
-vi.mock("./useConversationActions", () => ({
+vi.mock("./presentation/use-conversation-actions", () => ({
   useConversationActions: (_record?: Conversation) => ({
     effectiveMode: "human",
     isBotMode: false,
@@ -95,6 +95,7 @@ vi.mock("./useConversationActions", () => ({
 const dataProviderMock = {
   markAsRead: vi.fn(() => Promise.resolve()),
   sendHumanReply: vi.fn(() => Promise.resolve()),
+  retryHumanReply: vi.fn(() => Promise.resolve()),
 };
 
 vi.mock("ra-core", () => ({
@@ -102,19 +103,6 @@ vi.mock("ra-core", () => ({
   useGetIdentity: () => ({ identity: { id: "recruiter-1" } }),
   useNotify: vi.fn(),
   useTranslate: () => (key: string) => key,
-}));
-
-vi.mock("@/lib/vfic/humanReplyService", () => ({
-  HumanReplyError: class HumanReplyError extends Error {
-    status: string;
-    httpStatus?: number;
-    constructor(message: string, status: string, httpStatus?: number) {
-      super(message);
-      this.status = status;
-      this.httpStatus = httpStatus;
-    }
-  },
-  retryHumanReply: vi.fn(() => Promise.resolve()),
 }));
 
 import { ChatThread, isUnseenWorthyArrival } from "./ChatThread";

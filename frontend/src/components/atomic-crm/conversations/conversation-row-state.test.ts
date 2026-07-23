@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Conversation } from "../types";
 import {
   botHasNotReplied,
+  compareConversationRows,
   getConversationAttentionLabel,
   getConversationUnreadCount,
   isHumanManagedConversation,
@@ -56,5 +57,40 @@ describe("conversation row state", () => {
 
     expect(botHasNotReplied(answeredBotConversation)).toBe(false);
     expect(getConversationAttentionLabel(answeredBotConversation)).toBe("");
+  });
+
+  it("orders by mode, attention, unread count, then recency", () => {
+    const rows = [
+      conversation({
+        id: "bot",
+        mode: "bot",
+        unread_count: 9,
+      }),
+      conversation({
+        id: "human-read",
+        mode: "human",
+        unread_count: 8,
+        last_outbound_at: "2026-07-16T12:01:00.000Z",
+      }),
+      conversation({
+        id: "human-attention",
+        mode: "human",
+        unread_count: 1,
+      }),
+      conversation({
+        id: "human-unread",
+        mode: "human",
+        unread_count: 3,
+        last_outbound_at: "2026-07-16T12:01:00.000Z",
+      }),
+    ];
+
+    expect(
+      rows
+        .sort((first, second) =>
+          compareConversationRows(first, second, new Set(["human-read"])),
+        )
+        .map((row) => row.id),
+    ).toEqual(["human-attention", "human-unread", "human-read", "bot"]);
   });
 });

@@ -12,7 +12,7 @@ import {
   type UpdateParams,
 } from "ra-core";
 import { apiJson, ApiError } from "./api";
-import { sendHumanReply } from "@/lib/vfic/humanReplyService";
+import { httpHumanReplyAdapter } from "../../conversations/infrastructure/http-human-reply-adapter";
 import type {
   BotRunTraceDetail,
   BotRunTraceSummary,
@@ -232,7 +232,11 @@ const getDataProviderWithCustomMethods = () => ({
   // only the message text — no recruiter_id — closing the spoof vector.
   // `conversationId` is the conversation UUID (react-admin record id).
   async sendHumanReply(conversationId: string, message: string) {
-    await sendHumanReply({ conversationId, message });
+    await httpHumanReplyAdapter.send({ conversationId, message });
+  },
+
+  async retryHumanReply(conversationId: string, messageId: string) {
+    await httpHumanReplyAdapter.retry({ conversationId, messageId });
   },
 
   async takeOverConversation(conversationId: string) {

@@ -7,7 +7,10 @@ import {
   getStaticRecruitmentRuntimeKey,
 } from "../capabilities/static-recruitment-runtime";
 import type { RuntimeGenerationBundle } from "../capabilities/types";
-import { useMessageStore } from "../conversations/messageStore";
+import {
+  bindConversationRuntimeEpoch,
+  resetConversationRuntimeState,
+} from "../conversations/reset-runtime";
 import { clearDecisionTraceQueries } from "../automation/decisionTraceQueries";
 
 const LEGACY_ADAPTER_KEYS = [
@@ -25,6 +28,11 @@ let inFlightBundle: Promise<RuntimeGenerationBundle> | null = null;
 export const getRuntimeEpoch = (): number => runtimeEpoch;
 export const isRuntimeEpochCurrent = (epoch: number): boolean =>
   epoch === runtimeEpoch;
+
+bindConversationRuntimeEpoch({
+  capture: getRuntimeEpoch,
+  isCurrent: isRuntimeEpochCurrent,
+});
 export const getActiveRuntimeBundle = (): RuntimeGenerationBundle | null =>
   activeBundle;
 
@@ -55,7 +63,7 @@ export const resetActiveRuntimeState = async (): Promise<void> => {
 
   closeRealtimeSocket();
   runtimeEpoch += 1;
-  useMessageStore.getState().resetAll();
+  resetConversationRuntimeState();
 
   if (previous) {
     clearDecisionTraceQueries(previous.queryClient);

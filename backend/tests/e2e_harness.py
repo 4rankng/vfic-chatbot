@@ -189,6 +189,10 @@ def reset(*, email: str, password: str) -> None:
     _, sync_url = _urls()
     from app.core.security import hash_password_sync
 
+    admin_id = uuid.uuid4()
+    contact_id = uuid.uuid4()
+    channel_identity_id = uuid.uuid4()
+    conversation_id = uuid.uuid4()
     with psycopg.connect(_plain_psycopg(sync_url)) as connection:
         _assert_database_owned(connection)
         tables = [
@@ -209,11 +213,35 @@ def reset(*, email: str, password: str) -> None:
             "INSERT INTO users (id, email, password_hash, full_name, role, disabled, token_version) "
             "VALUES (%s, %s, %s, %s, 'admin', false, 0)",
             (
-                uuid.uuid4(),
+                admin_id,
                 email.strip().lower(),
                 hash_password_sync(password),
                 "Universal E2E Admin",
             ),
+        )
+        connection.execute(
+            "INSERT INTO contacts (id, display_name, primary_phone) VALUES (%s, %s, %s)",
+            (contact_id, "E2E Candidate", "0900000000"),
+        )
+        connection.execute(
+            "INSERT INTO contact_channel_identities "
+            "(id, contact_id, provider, account_key, external_id) "
+            "VALUES (%s, %s, 'zalo_oa', 'e2e-oa', 'e2e-candidate')",
+            (channel_identity_id, contact_id),
+        )
+        connection.execute(
+            "INSERT INTO conversations "
+            "(id, zalo_chat_id, zalo_channel, mode, status, contact_id, "
+            "channel_identity_id, last_inbound_at, last_outbound_at) "
+            "VALUES (%s, 'oa:e2e-candidate', 'oa', 'BOT', 'OPEN', %s, %s, now(), now())",
+            (conversation_id, contact_id, channel_identity_id),
+        )
+        connection.execute(
+            "INSERT INTO messages "
+            "(conversation_id, sender, body, delivery_status, zalo_message_id) "
+            "VALUES (%s, 'WORKER', 'E2E inbound message', 'SENT', 'e2e-inbound'), "
+            "(%s, 'BOT', 'E2E bot reply', 'SENT', 'e2e-outbound')",
+            (conversation_id, conversation_id),
         )
         connection.commit()
     redis = _redis(require_owned=True)

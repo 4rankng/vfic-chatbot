@@ -6,14 +6,19 @@ import type { Message } from "../types";
 const { mockChatRepository } = vi.hoisted(() => ({
   mockChatRepository: {
     getConversationMessages: vi.fn(),
+    getMessagesSince: vi.fn(),
+    getLastMessages: vi.fn(),
+    getMessageCount: vi.fn(),
+    isConnected: vi.fn(() => false),
     subscribeToMessages: vi.fn(() => () => {
       /* cleanup */
     }),
+    subscribeToConnection: vi.fn(
+      (_onConnect: () => void, _onDisconnect: () => void) => () => {
+        /* cleanup */
+      },
+    ),
   },
-}));
-
-vi.mock("./chatRepository", () => ({
-  chatRepository: mockChatRepository,
 }));
 
 import {
@@ -22,6 +27,12 @@ import {
   useConversationRealtime,
 } from "./useConversationRealtime";
 import { useMessageStore } from "./messageStore";
+import {
+  bindConversationApplication,
+  type ConversationMessageStatePort,
+} from "./application/conversation-runtime";
+import type { ConversationMessageRepository } from "./application/ports";
+import { conversationMessageStatePort } from "./infrastructure/message-store";
 
 const msg = (id: number, conversationId = "c1"): Message => ({
   id: String(id),
@@ -56,6 +67,12 @@ afterEach(async () => {
 });
 
 beforeEach(() => {
+  bindConversationApplication({
+    messageRepository:
+      mockChatRepository as unknown as ConversationMessageRepository,
+    messageStatePort:
+      conversationMessageStatePort as ConversationMessageStatePort,
+  });
   useMessageStore.setState({
     conversations: new Map(),
     pendingOptimistic: new Map(),
@@ -329,6 +346,155 @@ describe("useConversationRealtime", () => {
       delivery_status: "failed",
       delivery_attempts: 2,
     });
+  });
+
+  it("pages through every missed message after reconnect", async () => {
+    let reconnect: (() => void | Promise<void>) | undefined;
+    mockChatRepository.isConnected.mockReturnValue(false);
+    mockChatRepository.subscribeToConnection.mockImplementation(
+      (onConnect: () => void | Promise<void>) => {
+        reconnect = onConnect;
+        return () => {
+          /* cleanup */
+        };
+      },
+    );
+    mockChatRepository.getConversationMessages.mockResolvedValue({
+      messages: [msg(1, "active-conversation")],
+      hasMore: false,
+    });
+    const firstMissedPage = Array.from({ length: 200 }, (_, index) => ({
+      ...msg(index + 2, "active-conversation"),
+      created_at: new Date(
+        Date.UTC(2026, 5, 29, 0, 0, 1, index + 2),
+      ).toISOString(),
+    }));
+    const finalMissedMessage = {
+      ...msg(202, "active-conversation"),
+      created_at: new Date(
+        Date.UTC(2026, 5, 29, 0, 0, 1, 202),
+      ).toISOString(),
+    };
+    mockChatRepository.getMessagesSince
+      .mockResolvedValueOnce({
+        messages: firstMissedPage,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        messages: [finalMissedMessage],
+        hasMore: false,
+      });
+
+    const hook = await renderHook(() =>
+      useConversationRealtime("active-conversation"),
+    );
+    await vi.waitFor(() => {
+      expect(hook.result.current.messages).toHaveLength(1);
+    });
+
+    await hook.act(async () => {
+      await reconnect?.();
+    });
+
+    expect(mockChatRepository.getMessagesSince).toHaveBeenNthCalledWith(
+      1,
+      "active-conversation",
+      "1",
+    );
+    expect(mockChatRepository.getMessagesSince).toHaveBeenNthCalledWith(
+      2,
+      "active-conversation",
+      "201",
+    );
+    expect(hook.result.current.messages).toHaveLength(202);
+    expect(hook.result.current.messages.at(-1)?.id).toBe("202");
+  });
+
+  it("keeps successful reconnect pages when a later page fails", async () => {
+    let reconnect: (() => void | Promise<void>) | undefined;
+    mockChatRepository.isConnected.mockReturnValue(false);
+    mockChatRepository.subscribeToConnection.mockImplementation(
+      (onConnect: () => void | Promise<void>) => {
+        reconnect = onConnect;
+        return () => {
+          /* cleanup */
+        };
+      },
+    );
+    mockChatRepository.getConversationMessages.mockResolvedValue({
+      messages: [msg(1, "active-conversation")],
+      hasMore: false,
+    });
+    const recoveredPage = Array.from({ length: 200 }, (_, index) => ({
+      ...msg(index + 2, "active-conversation"),
+      created_at: new Date(
+        Date.UTC(2026, 5, 29, 0, 0, 1, index + 2),
+      ).toISOString(),
+    }));
+    mockChatRepository.getMessagesSince
+      .mockResolvedValueOnce({
+        messages: recoveredPage,
+        hasMore: true,
+      })
+      .mockRejectedValueOnce(new Error("temporary reconnect failure"));
+
+    const hook = await renderHook(() =>
+      useConversationRealtime("active-conversation"),
+    );
+    await vi.waitFor(() => {
+      expect(hook.result.current.messages).toHaveLength(1);
+    });
+
+    await hook.act(async () => {
+      await reconnect?.();
+    });
+
+    expect(hook.result.current.messages).toHaveLength(201);
+    expect(hook.result.current.messages.at(-1)?.id).toBe("201");
+  });
+
+  it("does not let load-more completion mutate the store after unmount", async () => {
+    const lateHistory = deferred<MessagesPage>();
+    mockChatRepository.getConversationMessages
+      .mockResolvedValueOnce({
+        messages: [msg(10, "active-conversation")],
+        hasMore: true,
+      })
+      .mockReturnValueOnce(lateHistory.promise);
+
+    const hook = await renderHook(() =>
+      useConversationRealtime("active-conversation"),
+    );
+    await vi.waitFor(() => {
+      expect(hook.result.current.hasMore).toBe(true);
+    });
+
+    let pendingHistory!: Promise<void>;
+    await hook.act(async () => {
+      pendingHistory = hook.result.current.loadMore("10");
+      await Promise.resolve();
+    });
+    await cleanup();
+
+    useMessageStore
+      .getState()
+      .setMessages(
+        "active-conversation",
+        [msg(99, "active-conversation")],
+        false,
+      );
+    lateHistory.resolve({
+      messages: [msg(9, "active-conversation")],
+      hasMore: true,
+    });
+    await pendingHistory;
+
+    const current = useMessageStore
+      .getState()
+      .conversations.get("active-conversation");
+    expect(current?.sortedCache.map((message) => message.id)).toEqual(["99"]);
+    expect(current?.hasMore).toBe(false);
+    expect(current?.historyError).toBeNull();
   });
 
   it("discards middle-mount late resolve in a 3-way rapid switch (A→B→C, resolve C→A→B)", async () => {

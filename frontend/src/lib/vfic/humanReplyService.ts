@@ -1,17 +1,3 @@
-// Recruiter reply bridge: SPA -> FastAPI recruiter-reply endpoint.
-//
-// SECURITY: ownership is established by the Bearer JWT (the user's access
-// token), NOT by a body field. The backend verifies the caller is the
-// assigned recruiter (or an admin) AND that the conversation is in HUMAN mode
-// before sending via Zalo (server-side OA token). The request body carries
-// only the message text — no recruiter_id — so a client cannot spoof another
-// recruiter. `conversationId` is the conversation UUID (react-admin record id).
-
-import {
-  ApiError,
-  apiJson,
-} from "../../components/atomic-crm/providers/rest/api";
-
 export type HumanReplyStatus =
   | "disabled"
   | "unauthorized"
@@ -22,21 +8,30 @@ export type HumanReplyStatus =
   | "network"
   | "error";
 
-/**
- * Typed error surfaced to the UI. `status` maps 1:1 to an i18n key
- * (`resources.conversations.reply.<status>`); `message` is an English
- * fallback for logs only and is not shown to users.
- */
 export class HumanReplyError extends Error {
   constructor(
     public readonly status: HumanReplyStatus,
     message: string,
-    /** Present for HTTP failures; absent when the request never reached the API. */
     public readonly httpStatus?: number,
   ) {
     super(message);
     this.name = "HumanReplyError";
   }
+}
+
+export type SendHumanReplyCommand = {
+  conversationId: string;
+  message: string;
+};
+
+export type RetryHumanReplyCommand = {
+  conversationId: string;
+  messageId: string;
+};
+
+export interface HumanReplyServicePort {
+  send(command: SendHumanReplyCommand): Promise<void>;
+  retry(command: RetryHumanReplyCommand): Promise<void>;
 }
 
 const statusFor = (httpStatus: number): HumanReplyStatus => {
@@ -48,59 +43,43 @@ const statusFor = (httpStatus: number): HumanReplyStatus => {
   return "error";
 };
 
-export const sendHumanReply = async ({
-  conversationId,
-  message,
-}: {
-  conversationId: string;
-  message: string;
-}): Promise<void> => {
+const mapReplyError = (error: unknown, operation: string): HumanReplyError => {
+  if (error instanceof ApiError) {
+    return new HumanReplyError(
+      statusFor(error.status),
+      `${operation} returned ${error.status}`,
+      error.status,
+    );
+  }
+  return new HumanReplyError("network", `Network error calling ${operation}`);
+};
+
+export const sendHumanReply = async (
+  command: SendHumanReplyCommand,
+): Promise<void> => {
   try {
     await apiJson(
-      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
+      `/api/v1/conversations/${encodeURIComponent(command.conversationId)}/messages`,
       {
         method: "POST",
-        body: { body: message },
+        body: { body: command.message },
       },
     );
   } catch (error: unknown) {
-    if (error instanceof ApiError) {
-      throw new HumanReplyError(
-        statusFor(error.status),
-        `Reply endpoint returned ${error.status}`,
-        error.status,
-      );
-    }
-    throw new HumanReplyError("network", "Network error calling reply endpoint");
+    throw mapReplyError(error, "Reply endpoint");
   }
 };
 
-/**
- * Optional forward-compatible hook for the durable-delivery retry action.
- * The service intentionally treats the endpoint response as empty: the
- * authoritative message state arrives through the existing REST/realtime
- * message feed, so no speculative response contract is introduced here.
- */
-export const retryHumanReply = async ({
-  conversationId,
-  messageId,
-}: {
-  conversationId: string;
-  messageId: string;
-}): Promise<void> => {
+export const retryHumanReply = async (
+  command: RetryHumanReplyCommand,
+): Promise<void> => {
   try {
     await apiJson<void>(
-      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/retry`,
+      `/api/v1/conversations/${encodeURIComponent(command.conversationId)}/messages/${encodeURIComponent(command.messageId)}/retry`,
       { method: "POST" },
     );
   } catch (error: unknown) {
-    if (error instanceof ApiError) {
-      throw new HumanReplyError(
-        statusFor(error.status),
-        `Reply retry endpoint returned ${error.status}`,
-        error.status,
-      );
-    }
-    throw new HumanReplyError("network", "Network error calling reply retry endpoint");
+    throw mapReplyError(error, "Reply retry endpoint");
   }
 };
+import { ApiError, apiJson } from "@/lib/apiClient";
