@@ -11,8 +11,8 @@ from app.graph.clients import (
     _chat_for_role,
     _ground_reply,
     _extract_returned_reasoning,
+    _ground_active_job_reply,
     _negative_job_authority,
-    _negative_job_reply_is_consistent,
     _minimax_chat,
     _openrouter_chat,
     _reasoning_chat_class,
@@ -86,49 +86,49 @@ def test_negative_vacancy_authority_requires_llm_abstention_composition():
     no_match = _vacancy_result("no_match", "Không có việc ACTIVE phù hợp.")
 
     assert _negative_job_authority([no_match]) == "Không có việc ACTIVE phù hợp."
-    assert _negative_job_reply_is_consistent("Hiện chưa tìm thấy việc phù hợp.") is True
-    assert _negative_job_reply_is_consistent("LG đang tuyển, lương 30 triệu.") is False
+    # The reply-consistency regex gate was removed. Actual authority turns now
+    # use this trusted renderer output directly, without a third model rewrite.
 
 
-@pytest.mark.parametrize(
-    "reply",
-    [
-        # Real no_match replies naturally embed affirmative vocabulary inside a
-        # negated phrase ("chưa có vị trí nào đang tuyển") or while offering to
-        # check other openings. The guard must read these as consistent so the
-        # grounded reply is sent instead of triggering a wasteful direct()
-        # rewrite that surfaces the generic "chưa thể xác minh" fallback.
-        "Hiện tại chưa có vị trí nhân viên lắp ráp nào đang tuyển.",
-        "Không có vị trí lắp ráp nào đang tuyển active.",
-        "Hiện chưa có vị trí ACTIVE phù hợp. Bạn muốn xem các vị trí khác đang tuyển không?",
-        "VFIC không còn tuyển vị trí nào.",
-        "Chưa có vị trí lắp ráp. Trước đó bạn hỏi về CNC cũng chưa có. Bạn có muốn xem các vị trí khác không?",
-    ],
-)
-def test_negative_job_reply_consistent_when_negation_outweighs_affirmative(reply):
-    """Negation marker anywhere wins over affirmative vocabulary (regression).
+def test_negative_vacancy_reply_uses_trusted_text_without_llm_rewrite():
+    no_match = _vacancy_result("no_match", "Không có việc ACTIVE phù hợp.")
 
-    Previously the affirmative check ran first and short-circuited to False on
-    legitimate no_match replies that happened to contain 'dang tuyen' or
-    'co vi tri' inside a negated clause, discarding the grounded answer and
-    forcing a generic "chưa thể xác minh" fallback.
-    """
-    assert _negative_job_reply_is_consistent(reply) is True
+    assert (
+        _ground_active_job_reply("LG đang tuyển, lương 30 triệu.", [no_match])
+        == "Không có việc ACTIVE phù hợp."
+    )
+    assert (
+        _ground_active_job_reply("Hiện chưa có vị trí phù hợp.", [no_match])
+        == "Không có việc ACTIVE phù hợp."
+    )
 
 
-@pytest.mark.parametrize(
-    "reply",
-    [
-        # Pure affirmative — model ignored the negative authority and invented.
-        "LG đang tuyển thợ hàn, lương 30 triệu.",
-        "Có việc CNC lương 15 triệu.",
-        "VFIC đang tuyển vị trí lắp ráp.",
-        # No negation and no clear abstention — must not be falsely accepted.
-        "Tôi sẽ chuyển thông tin cho chuyên viên tuyển dụng.",
-    ],
-)
-def test_negative_job_reply_inconsistent_without_negation(reply):
-    assert _negative_job_reply_is_consistent(reply) is False
+def test_matched_vacancy_reply_uses_structured_safe_reply_deterministically():
+    payload = json.dumps(
+        {
+            "status": "matched",
+            "jobs": [
+                {
+                    "id": "11111111-1111-4111-8111-111111111111",
+                    "title": "Công nhân sản xuất",
+                    "company": "LG Display",
+                    "salary_min": 10_000_000,
+                    "salary_max": 14_000_000,
+                }
+            ],
+            "safe_reply": "LG Display tuyển công nhân, lương 10-14 triệu.",
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    tool_result = f"ACTIVE_JOB_LOOKUP_JSON={payload}"
+
+    assert (
+        _ground_active_job_reply("LG Display tuyển, lương 30 triệu.", [tool_result])
+        == "LG Display tuyển công nhân, lương 10-14 triệu."
+    )
+    grounded = "LG Display tuyển công nhân, lương 10-14 triệu."
+    assert _ground_active_job_reply(grounded, [tool_result]) == grounded
 
 
 def test_malformed_vacancy_tool_payload_does_not_short_circuit_llm_answer():
@@ -441,23 +441,20 @@ def test_openrouter_agent_client_requests_returned_reasoning(monkeypatch):
 # the gate enforces.
 
 def test_authority_override_invariant_documented():
-    """Authority overrides require list_active_jobs to have been dispatched.
+    """The trusted abstention text is surfaced from the active-job payload.
 
-    The pure guard ``_negative_job_authority`` still scans ``tool_results`` for
-    the prefix, but the caller (``agent()``) now AND-s it with the
-    ``authority_tool_dispatched`` flag so a stray prefix in a search_knowledge
-    output cannot trigger the override. This test exists so the invariant is
-    not silently removed.
+    The reply-consistency regex gates that consumed this output (and fired a
+    third ``self.direct()`` LLM call) were removed — they over-fired on
+    legitimate replies (the no_match safe_reply itself contains "lương" for
+    alternatives; salary reformulation like 7000000→"7 triệu" never matches the
+    raw JSON digits). Actual authority turns now return the structured safe
+    reply directly. This test pins that extraction contract.
     """
-    # The prefix scanner still detects the string (it has to — list_active_jobs
-    # output starts with it). The protection lives at the call site, not here.
     fake_active_job_output = (
         'ACTIVE_JOB_LOOKUP_JSON={"status":"no_match","total":0,"jobs":[],'
         '"safe_reply":"Không có việc ACTIVE."}'
     )
     assert _negative_job_authority([fake_active_job_output]) == "Không có việc ACTIVE."
-    # Document that the guard alone is necessary but NOT sufficient — the caller
-    # must also confirm list_active_jobs was actually dispatched before acting.
 
 
 def test_ground_reply_preserves_answer_when_no_authority_dispatched():

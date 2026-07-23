@@ -333,7 +333,14 @@ def _ground_reply(reply: str, tool_results: list[str], *, trace_sink=None) -> st
 
 
 def _negative_job_authority(tool_results: list[str]) -> str | None:
-    """Return the trusted abstention text for a negative active-job lookup."""
+    """Return the trusted abstention text for a negative active-job lookup.
+
+    Retained for the test-suite invariant that documents the authority-extraction
+    contract. The reply-consistency regex gates that consumed this output were
+    removed (they over-fired and each firing cost a full LLM round-trip); the
+    trusted abstention text is still surfaced through the tool payload and used
+    as the deterministic final reply for an actual authority-tool dispatch.
+    """
     for tool_result in reversed(tool_results or []):
         first_line = str(tool_result).partition("\n")[0]
         if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
@@ -349,47 +356,8 @@ def _negative_job_authority(tool_results: list[str]) -> str | None:
     return None
 
 
-def _negative_job_reply_is_consistent(reply: str) -> bool:
-    """Fast semantic guard; uncertain negative replies go through one LLM rewrite.
-
-    Precedence: a negation marker anywhere in the reply wins over affirmative
-    vocabulary. Real abstention replies routinely combine both — e.g.
-    "Hiện chưa có vị trí nào đang tuyển" contains ``chua co`` (negative) AND
-    ``dang tuyen`` / ``co vi tri`` (affirmative, appearing inside the negated
-    phrase and in the offer to check other openings). Checking affirmative
-    markers first discarded those grounded replies and forced a wasteful — and
-    user-visible — ``direct()`` rewrite that produced the generic
-    "chưa thể xác minh" fallback. Only when no negation is present does an
-    affirmative marker indicate the model ignored the negative authority.
-    """
-    normalized = _normalize_query_hint(reply)
-    negative = (
-        "chua co",
-        "chua tim",
-        "chua the",
-        "khong co",
-        "khong con",
-        "khong tim",
-        "khong tuyen",
-        "hien chua",
-    )
-    if any(marker in normalized for marker in negative):
-        return True
-    affirmative = (
-        "dang tuyen",
-        "con tuyen",
-        "co viec",
-        "co vi tri",
-        "tuyen vi tri",
-        "luong ",
-    )
-    if any(marker in normalized for marker in affirmative):
-        return False
-    return False
-
-
 def _matched_job_authority(tool_results: list[str]) -> tuple[str, str] | None:
-    """Return the matched tool payload and its trusted human-readable summary."""
+    """Return the matched payload row and its trusted renderer output."""
     for tool_result in reversed(tool_results or []):
         first_line = str(tool_result).partition("\n")[0]
         if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
@@ -407,13 +375,20 @@ def _matched_job_authority(tool_results: list[str]) -> tuple[str, str] | None:
     return None
 
 
-def _matched_job_reply_is_consistent(reply: str, authority_payload: str) -> bool:
-    """Reject invented numeric claims while preserving the normal two-call path."""
-    claimed_numbers = set(re.findall(r"(?<![\w-])\d+(?![\w-])", reply))
-    if not claimed_numbers:
-        return True
-    authority_numbers = set(re.findall(r"(?<![\w-])\d+(?![\w-])", authority_payload))
-    return claimed_numbers <= authority_numbers
+def _ground_active_job_reply(reply: str, tool_results: list[str]) -> str:
+    """Fail closed to trusted tool text without spending a third LLM call.
+
+    Active-job results carry a complete candidate-facing ``safe_reply`` rendered
+    from structured evidence. Returning it for an actual ``list_active_jobs``
+    dispatch avoids both the old third model rewrite and partial claim parsers
+    that can miss invented titles, locations, vacancy counts, or salary formats.
+
+    ``reply`` remains the fallback for malformed or non-authority tool output.
+    """
+    matched = _matched_job_authority(tool_results)
+    if matched is not None:
+        return matched[1]
+    return _negative_job_authority(tool_results) or reply
 
 
 async def _llm_call_with_retry(bound, messages, *, metrics: dict | None = None):
@@ -907,14 +882,6 @@ class MiniMaxAgent:
         required_tool_called = bool(
             required_tool and required_tool in prefetched_tools
         )
-        # True only when ``list_active_jobs`` was actually dispatched in this turn.
-        # The authority-override branches below (``_negative_job_authority`` /
-        # ``_matched_job_authority``) sanity-check the LLM's reply against the
-        # authoritative job evidence, and on a mismatch replace it with a blind
-        # ``self.direct()`` call that has no tool context. Without this gate the
-        # override can misfire on turns where the model called ``search_knowledge``
-        # (or any tool whose result happens to contain the ``ACTIVE_JOB_LOOKUP_JSON``
-        # prefix) and discard a perfectly grounded reply from another tool path.
         authority_tool_dispatched = bool(
             required_tool == "list_active_jobs" and required_tool_called
         )
@@ -1051,43 +1018,15 @@ class MiniMaxAgent:
                         metrics=metrics,
                         trace_sink=trace_sink,
                     )
-                negative_authority = _negative_job_authority(tool_results)
-                if (
-                    authority_tool_dispatched
-                    and negative_authority is not None
-                    and not _negative_job_reply_is_consistent(str(ai.content or ""))
-                ):
-                    return await self.direct(
-                        user_text,
-                        system=(
-                            "Bạn là tư vấn viên tuyển dụng. Kết quả có thẩm quyền dưới đây xác nhận "
-                            "không có việc phù hợp hoặc chưa thể kiểm tra. Hãy diễn đạt tự nhiên bằng "
-                            "tiếng Việt, giữ nguyên ý nghĩa, không thêm công việc hay dữ liệu mới:\n\n"
-                            f"{negative_authority}"
-                        ),
-                        metrics=metrics,
-                        trace_sink=trace_sink,
-                    )
-                matched_authority = _matched_job_authority(tool_results)
-                if (
-                    authority_tool_dispatched
-                    and matched_authority is not None
-                    and not _matched_job_reply_is_consistent(
-                        str(ai.content or ""), matched_authority[0]
-                    )
-                ):
-                    return await self.direct(
-                        user_text,
-                        system=(
-                            "Bạn là tư vấn viên tuyển dụng. Hãy trả lời tự nhiên bằng tiếng Việt "
-                            "chỉ từ danh sách việc đã xác minh dưới đây. Không thêm vị trí, số lượng, "
-                            "mức lương hoặc địa điểm mới:\n\n"
-                            f"{matched_authority[1]}"
-                        ),
-                        metrics=metrics,
-                        trace_sink=trace_sink,
-                    )
-                return _ground_reply(ai.content, tool_results, trace_sink=trace_sink)
+                # Active-job authority turns fail closed to the tool-rendered
+                # safe reply. This removes the former third LLM rewrite while
+                # avoiding partial regex validation of titles, locations,
+                # vacancy counts, and salary formats. Other tools retain the
+                # sanitize-only ID/entity grounding path.
+                final_reply = str(ai.content or "")
+                if authority_tool_dispatched:
+                    final_reply = _ground_active_job_reply(final_reply, tool_results)
+                return _ground_reply(final_reply, tool_results, trace_sink=trace_sink)
             if metrics is not None:
                 metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
                 metrics["tool_rounds"] = metrics.get("tool_rounds", 0) + 1
@@ -1176,8 +1115,6 @@ class MiniMaxAgent:
                 tool_name = tc["name"] if "name" in tc else ""
                 if tool_name == required_tool:
                     required_tool_called = True
-                    if tool_name == "list_active_jobs":
-                        authority_tool_dispatched = True
                     if _active_job_safe_reply(out) is None:
                         logger.warning("required LLM tool returned invalid evidence: %s", required_tool)
                         return await self.direct(
@@ -1190,8 +1127,7 @@ class MiniMaxAgent:
                             metrics=metrics,
                             trace_sink=trace_sink,
                         )
-                elif tool_name == "list_active_jobs":
-                    # Model called list_active_jobs voluntarily (not as required_tool).
+                if tool_name == "list_active_jobs":
                     authority_tool_dispatched = True
                 tool_results.append(str(out))
                 messages.append(
@@ -1216,40 +1152,10 @@ class MiniMaxAgent:
                 trace_sink=trace_sink,
             )
         final = messages[-1].content if hasattr(messages[-1], "content") else ""
-        negative_authority = _negative_job_authority(tool_results)
-        if (
-            authority_tool_dispatched
-            and negative_authority is not None
-            and not _negative_job_reply_is_consistent(str(final))
-        ):
-            return await self.direct(
-                user_text,
-                system=(
-                    "Bạn là tư vấn viên tuyển dụng. Kết quả có thẩm quyền dưới đây xác nhận không "
-                    "có việc phù hợp hoặc chưa thể kiểm tra. Hãy diễn đạt tự nhiên bằng tiếng Việt, "
-                    "giữ nguyên ý nghĩa, không thêm công việc hay dữ liệu mới:\n\n"
-                    f"{negative_authority}"
-                ),
-                metrics=metrics,
-                trace_sink=trace_sink,
-            )
-        matched_authority = _matched_job_authority(tool_results)
-        if (
-            authority_tool_dispatched
-            and matched_authority is not None
-            and not _matched_job_reply_is_consistent(str(final), matched_authority[0])
-        ):
-            return await self.direct(
-                user_text,
-                system=(
-                    "Bạn là tư vấn viên tuyển dụng. Hãy trả lời tự nhiên bằng tiếng Việt chỉ từ "
-                    "danh sách việc đã xác minh dưới đây. Không thêm vị trí, số lượng, mức lương "
-                    "hoặc địa điểm mới:\n\n"
-                    f"{matched_authority[1]}"
-                ),
-                metrics=metrics,
-                trace_sink=trace_sink,
-            )
+        if authority_tool_dispatched:
+            final = _ground_active_job_reply(str(final or ""), tool_results)
+        # Apply the same deterministic authority boundary on loop exhaustion;
+        # no third LLM rewrite call is needed.
         return _ground_reply(final, tool_results, trace_sink=trace_sink)
 
     async def direct(

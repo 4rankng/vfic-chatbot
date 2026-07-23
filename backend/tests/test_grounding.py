@@ -145,6 +145,59 @@ def test_extract_surfaced_entities_empty_on_no_payloads():
     assert extract_surfaced_entities(["Không tìm thấy thông tin."]) == set()
 
 
+# A no_match payload now carries ``alternative_jobs`` structurally so the model
+# can pivot the candidate AND the entity-grounding layer can verify it only
+# names companies that were actually surfaced (replacing the removed regex
+# consistency gate that fired a third LLM call). ``jobs`` stays empty so the
+# abstention signal the authority layer keys on is unchanged.
+_NO_MATCH_WITH_ALTERNATIVES = (
+    'ACTIVE_JOB_LOOKUP_JSON={"status":"no_match","jobs":[],"alternative_jobs":['
+    '{"id":"alt1","title":"Công nhân","company":"Samsung","factory":"Bắc Ninh",'
+    '"project":"Samsung Bắc Ninh","project_slug":"samsung-bac-ninh"}'
+    '],"safe_reply":"Hiện chưa có vị trí phù hợp. Hiện đang tuyển Samsung."}\n'
+    "SURFACED_JOB_IDS=id=alt1"
+)
+
+
+def test_extract_surfaced_entities_reads_alternative_jobs_on_no_match():
+    """No-match alternatives are surfaced as entities, not just safe_reply text.
+
+    This is the structural replacement for the removed regex consistency gate:
+    the entity-grounding layer can now verify a no_match reply names only
+    companies/factories that were actually returned as alternatives.
+    """
+    entities = extract_surfaced_entities([_NO_MATCH_WITH_ALTERNATIVES])
+    assert "Samsung" in entities
+    assert "Bắc Ninh" in entities
+    assert "Samsung Bắc Ninh" in entities
+
+
+def test_validate_grounding_flags_invented_entity_on_no_match_alternative():
+    """An invented company on a no_match turn is hedged, not LLM-rewritten.
+
+    Replaces the old negative-authority regex rewrite (which fired a third LLM
+    call). The reply is preserved and a hedging footer is appended — same
+    sanitize-only pattern used on matched turns.
+    """
+    surfaced = extract_surfaced_entities([_NO_MATCH_WITH_ALTERNATIVES])
+    # LG was never returned as an alternative (only Samsung was).
+    reply = "Hiện chưa có vị trí phù hợp. Nhưng LG Display có mức lương 30 triệu."
+    result = validate_grounding(reply, set(), surfaced)
+    assert not result.is_grounded
+    assert "lg display" in result.unsupported_entities
+    assert "chưa được xác minh" in result.sanitized_reply
+    # Reply body preserved; only a footer appended (no full rewrite).
+    assert "LG Display có mức lương" in result.sanitized_reply
+
+
+def test_validate_grounding_accepts_alternative_entity_on_no_match():
+    """Naming a legitimately-surfaced alternative company is grounded."""
+    surfaced = extract_surfaced_entities([_NO_MATCH_WITH_ALTERNATIVES])
+    reply = "Hiện chưa có vị trí phù hợp. Samsung đang tuyển, bạn muốn xem không?"
+    result = validate_grounding(reply, set(), surfaced)
+    assert result.is_grounded
+
+
 # --- asserted entities -------------------------------------------------------
 
 

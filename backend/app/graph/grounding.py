@@ -89,7 +89,10 @@ def validate_grounding(
 
     Entity path: property assertions about entities absent from ``surfaced_entities``
     (e.g. "Rorze không có KTX" when no tool returned Rorze data) get a hedging
-    footer appended. Sanitize-only — the reply body is preserved.
+    footer appended. Sanitize-only — the reply body is preserved. On a no_match
+    turn, ``surfaced_entities`` is populated from ``alternative_jobs``, so an
+    invented company on an abstention reply (e.g. "LG đang tuyển 30 triệu" when
+    only Samsung was returned as an alternative) is hedged the same way.
 
     An empty ``surfaced_ids`` set means no job data was retrieved this turn; any
     job_id citation is then suspect, but we don't false-positive on an empty reply.
@@ -141,7 +144,14 @@ def validate_grounding(
 
 
 def _extract_entities_from_json_payload(first_line: str) -> set[str]:
-    """Pull company/factory/project names from one ``ACTIVE_JOB_LOOKUP_JSON=`` row."""
+    """Pull company/factory/project names from one ``ACTIVE_JOB_LOOKUP_JSON=`` row.
+
+    Reads both ``jobs`` (matched evidence) and ``alternative_jobs`` (the concrete
+    open roles surfaced on a no_match so the model can pivot the candidate).
+    Surfacing alternatives structurally means a no_match turn still gets entity
+    grounding — the model may only name companies/factories that were actually
+    returned — without needing a regex consistency check or a second LLM call.
+    """
     entities: set[str] = set()
     try:
         payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
@@ -149,16 +159,19 @@ def _extract_entities_from_json_payload(first_line: str) -> set[str]:
         return entities
     if not isinstance(payload, dict):
         return entities
-    jobs = payload.get("jobs")
-    if not isinstance(jobs, list):
-        return entities
-    for job in jobs:
-        if not isinstance(job, dict):
-            continue
-        for key in _ENTITY_JSON_KEYS:
-            value = job.get(key)
-            if isinstance(value, str) and value.strip():
-                entities.add(value.strip())
+    job_lists = []
+    for key in ("jobs", "alternative_jobs"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            job_lists.append(value)
+    for jobs in job_lists:
+        for job in jobs:
+            if not isinstance(job, dict):
+                continue
+            for key in _ENTITY_JSON_KEYS:
+                value = job.get(key)
+                if isinstance(value, str) and value.strip():
+                    entities.add(value.strip())
     return entities
 
 

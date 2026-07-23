@@ -393,8 +393,12 @@ async def test_list_active_jobs_no_match_surfaces_alternatives_in_safe_reply(no_
     # Candidate-facing pivot: the alternative title appears in the trusted text.
     assert "Công nhân sản xuất" in payload["safe_reply"]
     assert "Hiện chưa có vị trí ACTIVE phù hợp" in payload["safe_reply"]
-    # No surfaced IDs: alternatives are text only, not groundable evidence.
-    assert "SURFACED_JOB_IDS=" not in out
+    # Alternatives are structured grounding evidence even though ``jobs`` stays
+    # empty, so their IDs and entities can be validated without changing the
+    # trusted no-match status.
+    assert payload["alternative_jobs"][0]["id"] == alt_job.id
+    assert payload["alternative_jobs"][0]["company"] == "LG Display"
+    assert f"SURFACED_JOB_IDS=id={alt_job.id}" in out
 
 
 @pytest.mark.asyncio

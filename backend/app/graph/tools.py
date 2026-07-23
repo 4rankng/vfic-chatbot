@@ -480,13 +480,33 @@ def _active_job_tool_result(
     safe_reply: str,
     *,
     total: int = 0,
+    alternative_jobs: list[dict[str, object]] | None = None,
 ) -> str:
-    payload = json.dumps(
-        {"status": status, "total": total, "jobs": jobs, "safe_reply": safe_reply},
-        ensure_ascii=False,
-        separators=(",", ":"),
+    """Render the structured active-job payload.
+
+    ``alternative_jobs`` carries the concrete open roles surfaced on a no_match
+    (so the model can pivot the candidate in the same turn). They are surfaced
+    *structurally* — not just inside ``safe_reply`` text — so the existing
+    entity-grounding layer can verify the model only names companies/factories
+    that were actually returned, without needing a regex consistency check or a
+    second LLM call. ``status`` and ``jobs`` are unchanged (``jobs`` stays empty
+    on a no_match) so the abstention signal the authority layer keys on is
+    preserved.
+    """
+    body: dict[str, object] = {
+        "status": status,
+        "total": total,
+        "jobs": jobs,
+        "safe_reply": safe_reply,
+    }
+    if alternative_jobs:
+        body["alternative_jobs"] = alternative_jobs
+    payload = json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+    surfaced_ids = ",".join(
+        f"id={job['id']}"
+        for job in (jobs + (alternative_jobs or []))
+        if job.get("id")
     )
-    surfaced_ids = ",".join(f"id={job['id']}" for job in jobs if job.get("id"))
     return "\n".join(
         part
         for part in (
@@ -503,13 +523,17 @@ async def _no_match_safe_reply(
     *,
     project_slug: str | None,
     k: int,
-) -> str:
-    """Render the candidate-facing text when no ACTIVE job matches the filter.
+) -> tuple[str, list[dict[str, object]]]:
+    """Render the candidate-facing text + structured alternatives on a no-match.
 
     The structured payload stays ``jobs=[]`` (so the no-match status remains a
     trusted abstention signal for the authority layer), but the ``safe_reply``
     text now carries concrete alternatives so the LLM can pivot the candidate
     in the same turn instead of asking a round-trip yes/no question.
+
+    The alternative jobs are also returned as structured payloads so they can be
+    surfaced in ``alternative_jobs`` and verified by the entity-grounding layer
+    (the model may only name companies/factories that were actually returned).
 
     A second unscoped lookup fetches what *is* currently open. If the catalog is
     empty or the lookup fails, we stay honest and offer nothing.
@@ -527,15 +551,24 @@ async def _no_match_safe_reply(
         logger.warning("no_match alternatives lookup failed", exc_info=True)
         fallback = None
     if getattr(fallback, "status", None) != "matched":
-        return f"{head} Bạn nhắn \"xem vị trí đang tuyển\" để tôi kiểm tra lại nhé."
+        return (
+            f"{head} Bạn nhắn \"xem vị trí đang tuyển\" để tôi kiểm tra lại nhé.",
+            [],
+        )
     alt_jobs = tuple(getattr(fallback, "jobs", ()) or ())[:k]
     if not alt_jobs:
-        return f"{head} Bạn nhắn \"xem vị trí đang tuyển\" để tôi kiểm tra lại nhé."
-    payload = [_active_job_payload(job) for job in alt_jobs]
-    digest = _active_jobs_brief_reply(payload)
+        return (
+            f"{head} Bạn nhắn \"xem vị trí đang tuyển\" để tôi kiểm tra lại nhé.",
+            [],
+        )
+    alt_payload = [_active_job_payload(job) for job in alt_jobs]
+    digest = _active_jobs_brief_reply(alt_payload)
     return (
-        f"{head} Hiện đang tuyển các vị trí sau:\n{digest}\n"
-        "Bạn muốn tìm hiểu vị trí nào ạ?"
+        (
+            f"{head} Hiện đang tuyển các vị trí sau:\n{digest}\n"
+            "Bạn muốn tìm hiểu vị trí nào ạ?"
+        ),
+        alt_payload,
     )
 
 
@@ -592,15 +625,17 @@ async def list_active_jobs(
             "matched", payload, _active_jobs_safe_reply(payload), total=total
         )
     if status == "no_match":
+        safe_reply, alternative_jobs = await _no_match_safe_reply(
+            retrieval,
+            project_slug=project_slug,
+            k=k,
+        )
         return _active_job_tool_result(
             "no_match",
             [],
-            await _no_match_safe_reply(
-                retrieval,
-                project_slug=project_slug,
-                k=k,
-            ),
+            safe_reply,
             total=total,
+            alternative_jobs=alternative_jobs or None,
         )
     if status == "catalog_empty":
         return _active_job_tool_result(

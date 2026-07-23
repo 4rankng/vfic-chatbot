@@ -354,6 +354,14 @@ async def test_focused_rag_knowledge_lookup_miss_falls_back_safely(monkeypatch):
 
 
 async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():
+    """Required-tool turn forces tool_choice, overrides args, and renders evidence in 2 calls.
+
+    Previously this test also asserted a third ``self.direct()`` rewrite fired
+    on a deliberately fabricated call-2 reply ("Bịa lương 30 triệu"). That
+    regex-gated rewrite was removed (it over-fired on legitimate replies and
+    each firing cost a full LLM round-trip). The turn completes in 2 calls and
+    returns the structured authority tool's safe renderer output.
+    """
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
@@ -370,9 +378,8 @@ async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():
                     }
                 ],
             ),
-            SimpleNamespace(content="Bịa lương 30 triệu", tool_calls=None),
             SimpleNamespace(
-                content="LG Display tuyển công nhân sản xuất, lương 10-14 triệu.",
+                content="Bịa lương 30 triệu",
                 tool_calls=None,
             ),
         ]
@@ -413,8 +420,12 @@ async def test_required_vacancy_tool_uses_forced_args_then_renders_evidence():
         required_tool_args={"top_k": 10},
     )
 
+    # tool_choice forced on round 1, then None (final turn) — no third call.
     assert llm.tool_choices == ["list_active_jobs", None]
-    assert result == "LG Display tuyển công nhân sản xuất, lương 10-14 triệu."
+    assert "Công nhân sản xuất" in result
+    assert "lương 10-14 triệu" in result
+    assert "30 triệu" not in result
+    # The model's hallucinated args were overridden by required_tool_args.
     assert repo.received == {
         "project_slug": None,
         "role": None,
@@ -477,3 +488,163 @@ async def test_required_vacancy_tool_dispatch_error_fails_closed(monkeypatch):
     )
 
     assert "chưa thể kiểm tra" in result.lower()
+
+
+class _CountingRequiredToolLLM:
+    """Like _RequiredToolLLM but counts ainvoke calls (for 3rd-call regression)."""
+
+    def __init__(self, responses) -> None:
+        self.responses = iter(responses)
+        self.tool_choices: list[str | None] = []
+        self.calls = 0
+
+    def bind_tools(self, tools, *, tool_choice=None):
+        self.tool_choices.append(tool_choice)
+        return self
+
+    async def ainvoke(self, messages, **kwargs):  # noqa: ARG002
+        self.calls += 1
+        return next(self.responses)
+
+
+class _NoMatchWithAlternativeRepo:
+    """Repo whose first call is no_match; the alternatives lookup returns Samsung."""
+
+    def __init__(self) -> None:
+        self.first_call = True
+
+    async def list_active_jobs(self, **kwargs):  # noqa: ARG002
+        # The no_match path issues a second unscoped lookup for alternatives.
+        if self.first_call:
+            self.first_call = False
+            return SimpleNamespace(status="no_match", jobs=())
+        return SimpleNamespace(
+            status="matched",
+            jobs=(
+                SimpleNamespace(
+                    id="alt-samsung",
+                    title="Công nhân",
+                    company_name="Samsung",
+                    factory_name="Bắc Ninh",
+                    project_name="Samsung Bắc Ninh",
+                    project_slug="samsung-bac-ninh",
+                    province="Bắc Ninh",
+                    district=None,
+                    salary_min=7_000_000,
+                    salary_max=10_000_000,
+                    vacancy_count=50,
+                ),
+            ),
+        )
+
+
+async def test_no_match_authority_does_not_fire_third_llm_call():
+    """No-match turn completes in 2 LLM calls — no third self.direct() rewrite.
+
+    The authoritative tool renderer already includes grounded alternatives, so
+    the final result uses that safe reply directly instead of asking the model
+    to rewrite its own answer a third time.
+    """
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    llm = _CountingRequiredToolLLM(
+        [
+            # Call 1: model dispatches the required authority tool.
+            SimpleNamespace(
+                content="",
+                tool_calls=[{"name": "list_active_jobs", "args": {}, "id": "c1"}],
+            ),
+            # Call 2: model synthesizes a grounded reply naming the surfaced
+            # alternative. This reply contains "lương" — which previously tripped
+            # the negative-authority regex and fired a 3rd call. The model reply
+            # is no longer trusted as the final authority rendering.
+            SimpleNamespace(
+                content=(
+                    "Hiện chưa có vị trí phù hợp với yêu cầu này. "
+                    "Samsung đang tuyển công nhân tại Bắc Ninh, lương 7-10 triệu. "
+                    "Bạn muốn tìm hiểu không?"
+                ),
+                tool_calls=None,
+            ),
+        ]
+    )
+
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        "có việc CNC không",
+        system="sys",
+        retrieval=_NoMatchWithAlternativeRepo(),
+        embedder=None,
+        allowed_tools=("list_active_jobs",),
+        required_tool="list_active_jobs",
+    )
+
+    assert llm.calls == 2, "the third self.direct() rewrite must not fire on no_match"
+    assert "chưa có vị trí ACTIVE phù hợp" in result
+    assert "Samsung" in result
+
+
+async def test_matched_authority_salary_reformulation_does_not_fire_third_llm_call():
+    """Matched turn with salary reformulation completes in 2 LLM calls.
+
+    Regression: the removed matched-authority regex extracted every digit from
+    the reply and rejected any not literally in the JSON payload. A legitimate
+    reformulation (salary_min 7000000 → "7 triệu") never matched the raw digits
+    and fired a third ``self.direct()`` call. The structured safe reply already
+    renders salary values in millions, so no model rewrite is needed.
+    """
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    job_id = "22222222-2222-4222-9222-222222222222"
+    llm = _CountingRequiredToolLLM(
+        [
+            SimpleNamespace(
+                content="",
+                tool_calls=[{"name": "list_active_jobs", "args": {}, "id": "c1"}],
+            ),
+            # Salary reformulated to "7-10 triệu" — digits 7, 10 are NOT in the
+            # raw JSON (which has 7000000, 10000000). Previously tripped the
+            # matched-authority regex → 3rd call. The tool renderer handles it.
+            SimpleNamespace(
+                content=(
+                    "VFIC đang tuyển công nhân Samsung tại Bắc Ninh, lương 7-10 triệu. "
+                    "Bạn muốn ứng tuyển không?"
+                ),
+                tool_calls=None,
+            ),
+        ]
+    )
+
+    class _MatchedRepo:
+        async def list_active_jobs(self, **kwargs):  # noqa: ARG002
+            return SimpleNamespace(
+                status="matched",
+                jobs=(
+                    SimpleNamespace(
+                        id=job_id,
+                        title="Công nhân",
+                        company_name="Samsung",
+                        factory_name="Bắc Ninh",
+                        project_name="Samsung Bắc Ninh",
+                        project_slug="samsung-bac-ninh",
+                        province="Bắc Ninh",
+                        district=None,
+                        salary_min=7_000_000,
+                        salary_max=10_000_000,
+                        vacancy_count=50,
+                    ),
+                ),
+            )
+
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        "Samsung đang tuyển gì",
+        system="sys",
+        retrieval=_MatchedRepo(),
+        embedder=None,
+        allowed_tools=("list_active_jobs",),
+        required_tool="list_active_jobs",
+    )
+
+    assert llm.calls == 2, "salary reformulation must not fire a third LLM call"
+    assert "Samsung" in result

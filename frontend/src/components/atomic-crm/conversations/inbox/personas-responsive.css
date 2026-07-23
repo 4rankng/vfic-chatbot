@@ -114,6 +114,11 @@
     -webkit-overflow-scrolling: touch;
   }
 
+  .settings-embedded-resource .persona-workspace-content {
+    max-height: none;
+    overflow-y: visible;
+  }
+
   .persona-page-shell {
     border-inline: 0;
   }
