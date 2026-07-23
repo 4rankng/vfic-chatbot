@@ -254,99 +254,73 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                 </Button>
               )}
               {editable && (
-                <div className="space-y-3 pt-2">
-                  <Card className="border-border/80 shadow-none">
-                    <CardHeader className="space-y-4">
-                      <CardTitle className="flex items-center gap-2 text-section-title">
-                        <Link2 className="size-5" aria-hidden="true" />
-                        Google Sheet → trang kiến thức
-                      </CardTitle>
-
-                      <div
-                        className="rounded-lg border border-border/70 bg-muted/25 px-3 py-3"
-                        role="img"
-                        aria-label={
-                          singlePageAutoSyncOn
-                            ? "Google Sheet tự động đồng bộ vào trang kiến thức mỗi ngày"
-                            : "Google Sheet đồng bộ vào trang kiến thức khi bạn yêu cầu"
-                        }
+                <section
+                  className="space-y-3 border-t border-border/60 pt-4"
+                  aria-labelledby="single-page-sync-heading"
+                >
+                  <header className="flex flex-wrap items-center gap-x-2 gap-y-1 text-label font-semibold">
+                    <Link2
+                      className="size-4 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <h3
+                      id="single-page-sync-heading"
+                      className="flex items-center gap-1.5"
+                    >
+                      <span>Google Sheet</span>
+                      <ArrowRight
+                        className="size-3.5 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <span>Trang kiến thức</span>
+                    </h3>
+                    {refreshingPage && (
+                      <span
+                        className="text-body-sm font-normal text-muted-foreground"
+                        aria-live="polite"
                       >
-                        <div
-                          className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
-                          aria-hidden="true"
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="grid size-9 shrink-0 place-items-center rounded-md border border-border bg-background text-foreground shadow-xs">
-                              <Database className="size-4" />
-                            </span>
-                            <span className="truncate text-label font-semibold">
-                              Google Sheet
-                            </span>
-                          </div>
+                        · Đang nạp nội dung mới nhất…
+                      </span>
+                    )}
+                  </header>
 
-                          <div className="flex w-20 min-w-16 justify-self-center items-center gap-1 text-primary sm:w-auto">
-                            <span className="hidden h-px flex-1 bg-primary/30 sm:block" />
-                            <ArrowRight className="size-4 shrink-0 rotate-90 sm:rotate-0" />
-                          </div>
-
-                          <div className="flex min-w-0 items-center justify-self-end gap-2 text-right sm:justify-self-stretch sm:justify-end">
-                            <span className="truncate text-label font-semibold">
-                              Trang kiến thức
-                            </span>
-                            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground shadow-xs">
-                              <FileText className="size-4" />
-                            </span>
-                          </div>
+                  <div className="space-y-3">
+                    {singlePageAutoSyncOn && (
+                      <details className="group rounded-md border border-warning/30 bg-warning/10 text-warning-foreground">
+                        <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 px-3 py-1.5 text-label font-medium outline-none transition-colors hover:bg-warning/10 focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+                          <AlertCircle
+                            className="size-4 shrink-0 text-warning"
+                            aria-hidden="true"
+                          />
+                          <span className="flex-1">
+                            Sheet sẽ ghi đè nội dung sửa tay
+                          </span>
+                          <ChevronDown
+                            className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+                            aria-hidden="true"
+                          />
+                        </summary>
+                        <div className="border-t border-warning/20 px-9 py-2 text-body-sm text-muted-foreground">
+                          Khi lịch hàng ngày đang bật, dữ liệu mới từ Google
+                          Sheet sẽ thay thế nội dung sửa thủ công ở lần đồng
+                          bộ tiếp theo.
                         </div>
-                      </div>
-
-                      {refreshingPage && (
-                        <p
-                          className="text-body-sm text-muted-foreground"
-                          aria-live="polite"
-                        >
-                          Đang nạp nội dung mới nhất…
-                        </p>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {singlePageAutoSyncOn && (
-                        <details className="group rounded-lg border border-warning/30 bg-warning/10 text-warning-foreground">
-                          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-3 py-2 text-label font-semibold outline-none transition-colors hover:bg-warning/10 focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-                            <AlertCircle
-                              className="size-5 shrink-0 text-warning"
-                              aria-hidden="true"
-                            />
-                            <span className="flex-1">
-                              Sheet sẽ ghi đè nội dung sửa tay
-                            </span>
-                            <ChevronDown
-                              className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
-                              aria-hidden="true"
-                            />
-                          </summary>
-                          <div className="border-t border-warning/20 px-11 py-3 text-body-sm text-muted-foreground">
-                            Khi lịch hàng ngày đang bật, dữ liệu mới từ Google
-                            Sheet sẽ thay thế nội dung sửa thủ công ở lần đồng
-                            bộ tiếp theo.
-                          </div>
-                        </details>
-                      )}
-                      <ExternalSourceLinkForm
-                        projectId={String(project.id)}
-                        variant="single-page"
-                        onCreated={handleSinglePageSourceChange}
-                      />
-                      <ExternalSourceList
-                        projectId={String(project.id)}
-                        variant="single-page"
-                        refreshSignal={singlePageSyncRefreshKey}
-                        onChange={handleSinglePageSourceChange}
-                        onSynchronized={handleSinglePageSynchronized}
-                      />
-                    </CardContent>
-                  </Card>
-                </div>
+                      </details>
+                    )}
+                    <ExternalSourceLinkForm
+                      projectId={String(project.id)}
+                      variant="single-page"
+                      onCreated={handleSinglePageSourceChange}
+                    />
+                    <ExternalSourceList
+                      projectId={String(project.id)}
+                      variant="single-page"
+                      refreshSignal={singlePageSyncRefreshKey}
+                      onChange={handleSinglePageSourceChange}
+                      onSynchronized={handleSinglePageSynchronized}
+                    />
+                  </div>
+                </section>
               )}
             </>
           )}

@@ -64,11 +64,23 @@ const STATUS_LABEL: Record<string, string> = {
   FAILED: "Lỗi",
 };
 
-const statusTone = (row: Pick<ExternalSourceRow, "last_status">): string => {
-  if (row.last_status === "FAILED") return "text-destructive";
-  if (row.last_status === "OK") return "text-primary";
-  return "text-muted-foreground";
+const statusDotClass = (
+  row: Pick<ExternalSourceRow, "last_status">,
+): string => {
+  if (row.last_status === "FAILED") return "bg-destructive";
+  if (row.last_status === "OK" || row.last_status === "NO_OP") {
+    return "bg-primary";
+  }
+  if (row.last_status === "NEW" || row.last_status === "PROCESSING") {
+    return "bg-amber-500";
+  }
+  return "bg-muted-foreground";
 };
+
+const statusErrorClass = (
+  row: Pick<ExternalSourceRow, "last_status">,
+): string =>
+  row.last_status === "FAILED" ? "text-destructive" : "text-muted-foreground";
 
 const formatTimestamp = (value?: string | null): string => {
   if (!value) return "—";
@@ -412,10 +424,18 @@ export const ExternalSourceList = ({
         return (
           <div
             key={row.id}
-            className="project-external-source-row flex flex-col items-stretch gap-3 rounded-md border border-border p-3 sm:flex-row sm:items-center sm:gap-2"
+            className="project-external-source-row flex flex-col items-stretch gap-2 rounded-md border border-border px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3"
           >
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    statusDotClass(row),
+                  )}
+                  aria-label={STATUS_LABEL[row.last_status] ?? row.last_status}
+                  title={STATUS_LABEL[row.last_status] ?? row.last_status}
+                />
                 {"category_key" in row && row.category_key ? (
                   <Badge variant="outline" className="font-mono">
                     {row.category_key}
@@ -434,11 +454,6 @@ export const ExternalSourceList = ({
                 {autoDisabled && (
                   <Badge variant="destructive">Đã tự động tắt</Badge>
                 )}
-                <span
-                  className={cn("text-body-sm font-medium", statusTone(row))}
-                >
-                  {STATUS_LABEL[row.last_status] ?? row.last_status}
-                </span>
               </div>
               <p
                 className="mt-1 truncate text-body-sm text-muted-foreground"
@@ -446,7 +461,12 @@ export const ExternalSourceList = ({
               >
                 {truncate(row.sheet_url)}
               </p>
-              <p className="break-words text-body-sm text-muted-foreground [overflow-wrap:anywhere]">
+              <p
+                className={cn(
+                  "break-words text-body-sm [overflow-wrap:anywhere]",
+                  statusErrorClass(row),
+                )}
+              >
                 Đồng bộ gần nhất: {formatTimestamp(row.last_synced_at)}
                 {typeof row.last_row_count === "number"
                   ? ` · ${row.last_row_count} hàng`
