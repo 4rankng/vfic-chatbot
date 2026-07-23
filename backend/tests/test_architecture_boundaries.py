@@ -1,9 +1,4 @@
-"""Freeze exact dependency inversions while the DDD migration removes them.
-
-The baseline is deliberately one-way: removing a legacy edge passes, while a
-new importer-to-symbol edge fails. Relative imports and the TypeScript import
-forms supported by the application are normalized before comparison.
-"""
+"""Enforce the certified DDD dependency matrix with zero exceptions."""
 
 from __future__ import annotations
 
@@ -17,30 +12,7 @@ import subprocess
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Generated from the accepted 2026-07-22 baseline. Entries are exact normalized
-# rule|importer|target edges; this is intentionally data, not a runtime snapshot.
-ALLOWED_EDGES: frozenset[str] = frozenset(
-    line.strip()
-    for line in """
-api_outward|backend/app/api/conversations.py|app.core.config:get_settings
-api_outward|backend/app/api/conversations.py|app.core.db:get_db
-api_outward|backend/app/api/conversations.py|app.graph.factories:build_deps
-api_outward|backend/app/api/conversations.py|app.graph.runner:run_turn
-api_outward|backend/app/api/conversations.py|app.graph.types:BotRunState
-api_outward|backend/app/api/conversations.py|app.models.conversation:Conversation
-api_outward|backend/app/api/conversations.py|app.models.conversation:ConversationMode
-api_outward|backend/app/api/conversations.py|app.models.conversation:ConversationStatus
-api_outward|backend/app/api/conversations.py|app.models.user:Role
-api_outward|backend/app/api/conversations.py|app.models.user:User
-api_outward|backend/app/api/conversations.py|app.workers.chatbot_worker:enqueue_chat_run
-api_outward|backend/app/api/leads.py|app.core.db:get_db
-api_outward|backend/app/api/leads.py|app.models.lead:LeadStage
-api_outward|backend/app/api/leads.py|app.models.user:User
-api_outward|backend/app/api/personas.py|app.core.db:get_db
-api_outward|backend/app/api/personas.py|app.models.user:User
-""".splitlines()
-    if line.strip()
-)
+ALLOWED_EDGES: frozenset[str] = frozenset()
 
 _TS_SCANNER = Path(__file__).parent / "helpers" / "typescript_import_scanner.cjs"
 

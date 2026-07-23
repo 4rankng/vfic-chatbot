@@ -8,9 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import get_current_user
 from app.api.installation_dependencies import require_capability_or_legacy
-from app.core.db import get_db
-from app.models.lead import LeadStage
-from app.models.user import User
+from app.identity.application.http import AuthenticatedUser as User
+from app.recruitment.domain.statuses import LeadStage
 from app.schemas.lead import (
     AssignRequest,
     LeadBoardQuery,
@@ -32,6 +31,7 @@ from app.schemas.lead import (
 from app.shared.domain.errors import ConflictError
 from app.services.lead import LeadService
 from app.services.memory_repository import MemoryRepository
+from app.shared.infrastructure.db import get_request_db as get_db
 
 router = APIRouter(
     prefix="/leads",
