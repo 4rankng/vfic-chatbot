@@ -154,7 +154,7 @@ export const StoredKnowledgePanel = ({
 
       {!isPublished(source) && !needsReview(source) ? (
         <div className="mt-3 flex items-center gap-2 border-l-2 border-[var(--kb-teal)] py-2 pl-3 text-body text-[var(--kb-teal)]">
-          <RefreshCw className="size-4 animate-spin" />
+          <RefreshCw className="size-4 animate-spin motion-reduce:animate-none" />
           Kiến thức sẽ hiện ở đây sau khi pipeline xuất bản các đơn vị truy
           xuất.
         </div>

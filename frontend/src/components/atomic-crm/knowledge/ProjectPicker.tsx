@@ -28,9 +28,11 @@ import { normalizeSearch, slugifyProject } from "./projectPickerUtils";
 export const ProjectPicker = ({
   value,
   onChange,
+  id,
 }: {
   value: string;
   onChange: (value: string) => void;
+  id?: string;
 }) => {
   const notify = useNotify();
   const refresh = useRefresh();
@@ -133,6 +135,7 @@ export const ProjectPicker = ({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           type="button"
           variant="outline"
           role="combobox"
@@ -208,7 +211,7 @@ export const ProjectPicker = ({
                     disabled={creating}
                   >
                     {creating ? (
-                      <RefreshCw className="size-4 animate-spin" />
+                      <RefreshCw className="size-4 animate-spin motion-reduce:animate-none" />
                     ) : (
                       <Plus className="size-4" />
                     )}
@@ -225,12 +228,12 @@ export const ProjectPicker = ({
           <Button
             type="button"
             variant={canCreate ? "default" : "ghost"}
-            className="h-9 w-full justify-start rounded-[8px] px-2 text-button"
+            className="h-11 w-full justify-start rounded-[8px] px-2 text-button"
             disabled={!canCreate || creating}
             onClick={() => void createProject()}
           >
             {creating ? (
-              <RefreshCw className="size-4 animate-spin" />
+              <RefreshCw className="size-4 animate-spin motion-reduce:animate-none" />
             ) : (
               <Plus className="size-4" />
             )}

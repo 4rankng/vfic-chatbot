@@ -1,21 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ListBase, useNotify, usePermissions, useRefresh } from "ra-core";
 import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
 import { BookOpen, FileText, RefreshCw, Search, Upload } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Confirm } from "@/components/admin/confirm";
 import { ListPagination } from "@/components/admin/list-pagination";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { KnowledgeUpload } from "./KnowledgeUpload";
 import { KnowledgeVersionManager } from "./KnowledgeVersionManager";
 import {
@@ -25,6 +17,7 @@ import {
 } from "./knowledgePipelineUtils";
 import { InlineKnowledgeUploader } from "./InlineKnowledgeUploader";
 import { KnowledgeDetailPanel } from "./KnowledgeDetailPanel";
+import { KnowledgeSourceRow } from "./KnowledgeSourceRow";
 import {
   ALL_PROJECTS,
   useKnowledgeSourceFilters,
@@ -149,11 +142,6 @@ const KnowledgeSourceListContent = () => {
     (sum, source) => sum + flaggedCount(source),
     0,
   );
-  const unitCount = sources.reduce(
-    (sum, source) => sum + (source.digest_meta?.unit_count ?? 0),
-    0,
-  );
-
   const content = (
     <div className="kb-scope knowledge-workspace-content text-foreground">
       <div className="ops-page-shell knowledge-page-shell">
@@ -168,7 +156,7 @@ const KnowledgeSourceListContent = () => {
               <p>Tìm, kiểm tra và cập nhật nguồn agent đang sử dụng.</p>
               {hasActive && (
                 <span className="ops-live-pill">
-                  <RefreshCw className="size-3.5 animate-spin" />
+                  <RefreshCw className="size-3.5 animate-spin motion-reduce:animate-none" />
                   Đang xử lý, tự làm mới mỗi 5 giây
                 </span>
               )}
@@ -216,10 +204,6 @@ const KnowledgeSourceListContent = () => {
           <div>
             <span className="ops-status-label">Xử lý</span>
             <strong>{processingCount}</strong>
-          </div>
-          <div>
-            <span className="ops-status-label">Đơn vị</span>
-            <strong>{unitCount}</strong>
           </div>
           <div>
             <span className="ops-status-label">Cần xem</span>
@@ -270,28 +254,12 @@ const KnowledgeSourceListContent = () => {
             <InlineKnowledgeUploader />
           </div>
         ) : (
-          <>
-            <SourceSelector
-              sources={sources}
-              selectedSource={selectedSource}
-              total={total}
-              onSelect={setSelectedId}
-            />
-            <ListPagination
-              rowsPerPageOptions={[10, 25, 50, 100]}
-              className="ops-pagination"
-            />
-            {selectedSource ? (
-              <KnowledgeDetailPanel source={selectedSource} />
-            ) : (
-              <EmptyState
-                icon={<FileText className="size-6" />}
-                title="Chọn một nguồn kiến thức"
-                description="Chi tiết và thao tác quản lý sẽ hiện ở đây."
-                className="min-h-[420px] rounded-[14px] bg-card"
-              />
-            )}
-          </>
+          <KnowledgeSourceWorkspace
+            sources={sources}
+            selectedSource={selectedSource}
+            total={total}
+            onSelect={setSelectedId}
+          />
         )}
       </div>
     </div>
@@ -309,7 +277,7 @@ const KnowledgeSourceListContent = () => {
   );
 };
 
-const SourceSelector = ({
+export const KnowledgeSourceWorkspace = ({
   sources,
   selectedSource,
   total,
@@ -322,64 +290,130 @@ const SourceSelector = ({
   total: number;
   onSelect: (id: string) => void;
 }) => {
+  const detailRef = useRef<HTMLElement>(null);
+
+  const selectSource = (id: string) => {
+    onSelect(id);
+
+    if (!window.matchMedia("(max-width: 760px)").matches) return;
+
+    window.requestAnimationFrame(() => {
+      const detail = detailRef.current;
+      if (!detail) return;
+      const reducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      detail.scrollIntoView({
+        behavior: reducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+      detail.focus({ preventScroll: true });
+    });
+  };
+
   return (
-    <section className="knowledge-selector-panel">
-      <div className="knowledge-selector-header">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+    <section
+      className="knowledge-source-workspace"
+      aria-label="Duyệt nguồn kiến thức"
+    >
+      <aside
+        className="knowledge-source-navigation"
+        aria-labelledby="knowledge-source-list-title"
+      >
+        <header className="knowledge-source-navigation-header">
           <div className="ops-panel-title">
             <p className="ops-panel-eyebrow">Tài liệu</p>
-            <h2>Nguồn kiến thức</h2>
+            <h2 id="knowledge-source-list-title">Nguồn kiến thức</h2>
           </div>
-          <Badge variant="outline" className="border-border bg-background/70">
-            {total} nguồn
-          </Badge>
-          {selectedSource && (
-            <span className="ops-meta-text">
-              {selectedSource.project_name ?? "Chưa gắn dự án"} ·{" "}
-              {selectedSource.digest_meta?.unit_count ?? 0} đơn vị
-            </span>
-          )}
+          <span className="knowledge-source-count">{total}</span>
+        </header>
+
+        <div className="knowledge-source-list" role="list">
+          {sources.map((source) => (
+            <KnowledgeSourceRow
+              key={source.id}
+              source={source}
+              selected={String(source.id) === String(selectedSource?.id)}
+              onSelect={() => selectSource(String(source.id))}
+            />
+          ))}
         </div>
-        <Select
-          value={selectedSource ? String(selectedSource.id) : undefined}
-          onValueChange={onSelect}
-        >
-          <SelectTrigger className="h-11 w-full rounded-[9px] border-border bg-background text-control md:w-[380px] lg:w-[460px]">
-            <SelectValue placeholder="Chọn nguồn kiến thức" />
-          </SelectTrigger>
-          <SelectContent className="max-h-96">
-            {sources.map((source) => {
-              return (
-                <SelectItem key={source.id} value={String(source.id)}>
-                  <span className="block truncate">
-                    {source.file_name} ·{" "}
-                    {source.project_name ?? "Chưa gắn dự án"} ·{" "}
-                    {source.digest_meta?.unit_count ?? 0} đơn vị
-                  </span>
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
-      </div>
+
+        <ListPagination
+          rowsPerPageOptions={[10, 25, 50, 100]}
+          className="knowledge-source-pagination"
+        />
+      </aside>
+
+      <section
+        ref={detailRef}
+        id="knowledge-source-detail"
+        className="knowledge-source-detail"
+        tabIndex={-1}
+        aria-labelledby={
+          selectedSource ? "knowledge-source-detail-title" : undefined
+        }
+      >
+        {selectedSource ? (
+          <KnowledgeDetailPanel
+            source={selectedSource}
+            headingId="knowledge-source-detail-title"
+          />
+        ) : (
+          <EmptyState
+            icon={<FileText className="size-6" />}
+            title="Chọn một nguồn kiến thức"
+            description="Nội dung và thao tác sẽ hiện tại đây."
+            className="min-h-[420px]"
+          />
+        )}
+      </section>
     </section>
   );
 };
 
 const SourceSelectorSkeleton = () => (
-  <section className="knowledge-selector-skeleton p-4">
-    <div className="flex items-center gap-3">
-      <Skeleton className="size-10 rounded-[10px]" />
-      <div className="flex-1 space-y-2">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-3 w-64 max-w-full" />
+  <section className="knowledge-source-workspace knowledge-source-workspace--loading">
+    <div className="knowledge-source-navigation" aria-hidden="true">
+      <div className="knowledge-source-navigation-header">
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-5 w-36" />
+        </div>
+        <Skeleton className="size-8 rounded-full" />
       </div>
+      <div className="knowledge-source-list">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div
+            key={index}
+            className="flex min-h-[88px] items-start gap-3 border-b border-border px-4 py-3"
+          >
+            <Skeleton className="mt-1 size-4 shrink-0" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-4/5" />
+              <Skeleton className="h-3 w-3/5" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+    <div
+      className="knowledge-source-detail flex min-h-[420px] flex-col gap-4"
+      aria-hidden="true"
+    >
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-2/3" />
+        <Skeleton className="h-3 w-1/2" />
+      </div>
+      <Skeleton className="h-11 w-64 max-w-full" />
+      <Skeleton className="h-20 w-full" />
+      <Skeleton className="h-48 w-full" />
     </div>
   </section>
 );
 
 export const KnowledgeSourceList = () => (
-  <ListBase perPage={25} sort={{ field: "updated_at", order: "DESC" }}>
+  <ListBase perPage={10} sort={{ field: "updated_at", order: "DESC" }}>
     <KnowledgeSourceListContent />
   </ListBase>
 );

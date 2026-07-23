@@ -122,7 +122,6 @@
 
 .inbox-bg-container .center-panel {
   padding: 0;
-  overflow: hidden;
   background: var(--uu-inbox-surface);
 }
 

@@ -47,55 +47,65 @@ export const KnowledgeSourceRow = ({
   const processing = isProcessing(source);
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onSelect();
-      }}
+    <article
+      role="listitem"
       className={cn(
-        "group flex gap-3 border-b border-border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "knowledge-source-row group border-b border-border transition-colors",
         selected
           ? "bg-[var(--kb-teal-soft)] shadow-[inset_2.5px_0_0_0_var(--kb-teal)]"
           : "hover:bg-secondary",
       )}
     >
-      <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="break-words text-body-sm font-semibold text-foreground">
-              {source.file_name}
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={selected}
+        aria-controls="knowledge-source-detail"
+        aria-label={`Xem ${source.file_name}`}
+        className="knowledge-source-row-main flex min-h-11 w-full gap-3 px-4 pb-2 pt-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
+        <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="break-words text-body-sm font-semibold text-foreground">
+                {source.file_name}
+              </div>
+              <div className="kb-mono mt-1 break-words text-caption text-muted-foreground">
+                {project?.name ??
+                  source.project_name ??
+                  "Chưa gắn dự án"}{" "}
+                · {getRelativeTimeString(source.updated_at ?? source.created_at)}{" "}
+                · {source.digest_meta?.unit_count ?? 0} đơn vị
+              </div>
             </div>
-            <div className="kb-mono mt-1 break-words text-caption text-muted-foreground">
-              {project?.name ?? "Chưa gắn dự án"} ·{" "}
-              {getRelativeTimeString(source.updated_at ?? source.created_at)} ·{" "}
-              {source.digest_meta?.unit_count ?? 0} đơn vị
+            <div className="shrink-0 pt-0.5">
+              <SourceStamp source={source} />
             </div>
           </div>
-          <div className="shrink-0 pt-0.5">
-            <SourceStamp source={source} />
-          </div>
+
+          {processing && (
+            <div className="mt-3">
+              <PipelineMiniProgress source={source} />
+            </div>
+          )}
         </div>
+      </button>
 
-        {processing && (
-          <div className="mt-3">
-            <PipelineMiniProgress source={source} />
-          </div>
-        )}
-
-        <div
-          className="mt-2 flex flex-wrap items-center gap-2"
-          onClick={(event) => event.stopPropagation()}
-        >
+      {(flags > 0 || selected) && (
+        <div className="knowledge-source-row-footer flex min-h-11 items-center gap-2 px-4 pb-2 pl-11">
           {flags > 0 && <Chip tone="warning">{flags} cần xem lại</Chip>}
+          {selected && (
+            <span className="kb-mono text-caption font-semibold text-[var(--kb-teal)]">
+              Đang xem
+            </span>
+          )}
           <div className="ml-auto">
             <SourceRowActions source={source} />
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </article>
   );
 };
 
@@ -139,7 +149,9 @@ export const SourceStamp = ({ source }: { source: KnowledgeSource }) => {
     return (
       <Stamp
         tone="processing"
-        icon={<RefreshCw className="size-3 animate-spin" />}
+        icon={
+          <RefreshCw className="size-3 animate-spin motion-reduce:animate-none" />
+        }
       >
         Đang xử lý
       </Stamp>
@@ -225,7 +237,7 @@ const SourceRowActions = ({ source }: { source: KnowledgeSource }) => {
         <Button
           variant="ghost"
           size="icon"
-          className="size-7 rounded-lg text-muted-foreground opacity-70 transition-opacity hover:opacity-100"
+          className="size-11 rounded-lg text-muted-foreground opacity-70 transition-opacity hover:opacity-100"
           aria-label={`Mở thao tác cho ${source.file_name}`}
         >
           <MoreHorizontal className="size-4" />
@@ -248,7 +260,7 @@ const SourceRowActions = ({ source }: { source: KnowledgeSource }) => {
           redirect={false}
           successMessage="Đã xóa tài liệu."
           mutationOptions={{ onSuccess: () => refresh() }}
-          className="h-8 w-full justify-start px-2 text-button text-destructive hover:bg-destructive/10"
+          className="h-11 w-full justify-start px-2 text-button text-destructive hover:bg-destructive/10"
         />
       </DropdownMenuContent>
     </DropdownMenu>
