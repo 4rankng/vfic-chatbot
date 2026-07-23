@@ -24,6 +24,12 @@ export const createProjectKnowledgeOperations = (
       projectId: string,
       key: ProjectKnowledgeCategory,
     ) => port.getCategorySource(projectId, key),
+    replaceCategory: (
+      projectId: string,
+      key: ProjectKnowledgeCategory,
+      filename: string,
+      content: string,
+    ) => port.replaceCategory(projectId, key, filename, content),
     uploadCategory: (
       projectId: string,
       key: ProjectKnowledgeCategory,

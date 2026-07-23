@@ -228,7 +228,8 @@ export const ProjectAccordionList = ({
               <ProjectKnowledgePanel
                 key={projectId}
                 project={project}
-                editable={isAdmin && canEdit}
+                editable={canEdit}
+                canManageSources={isAdmin}
               />
             </AccordionContent>
           </AccordionItem>

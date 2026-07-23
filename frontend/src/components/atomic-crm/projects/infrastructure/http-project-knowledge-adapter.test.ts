@@ -88,4 +88,26 @@ describe("HTTP project-knowledge adapter", () => {
       expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
     );
   });
+
+  it("replaces manually edited category content through the JSON endpoint", async () => {
+    mocks.apiJson.mockResolvedValue({});
+
+    await httpProjectKnowledgeAdapter.replaceCategory(
+      "project-1",
+      "jobs",
+      "jobs.yaml",
+      "jobs:\n  - id: operator",
+    );
+
+    expect(mocks.apiJson).toHaveBeenCalledWith(
+      "/api/v1/knowledge/projects/project-1/categories/jobs",
+      {
+        method: "PUT",
+        body: {
+          filename: "jobs.yaml",
+          content: "jobs:\n  - id: operator",
+        },
+      },
+    );
+  });
 });

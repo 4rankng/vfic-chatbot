@@ -38,6 +38,15 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
   getCategorySource: (projectId, key) =>
     apiJson(`${projectPath(projectId)}/categories/${encodeURIComponent(key)}`),
 
+  replaceCategory: (projectId, key, filename, content) =>
+    apiJson(
+      `${projectPath(projectId)}/categories/${encodeURIComponent(key)}`,
+      {
+        method: "PUT",
+        body: { filename, content },
+      },
+    ),
+
   uploadCategory: (projectId, key, file) => {
     const form = new FormData();
     form.append("file", new Blob([file.bytes], { type: file.type }), file.name);

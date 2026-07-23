@@ -280,7 +280,7 @@ async def replace_project_category(
     project_id: uuid.UUID,
     category_key: KnowledgeCategoryKey,
     body: CategoryReplaceRequest,
-    admin: Any = Depends(require_admin),
+    editor: Any = Depends(require_recruiter),
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> CategoryReplaceOut:
     revision, job_id = await build_category_use_cases(db).stage_replacement(
@@ -288,7 +288,7 @@ async def replace_project_category(
         category_key=category_key,
         filename=body.filename,
         source_yaml=body.content,
-        actor=admin,
+        actor=editor,
     )
     return CategoryReplaceOut(
         revision=CategoryRevisionOut.model_validate(revision),

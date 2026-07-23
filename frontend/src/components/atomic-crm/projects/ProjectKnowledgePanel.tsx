@@ -10,6 +10,8 @@ import {
   Download,
   FileText,
   Link2,
+  Pencil,
+  Save,
   Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +30,7 @@ import {
   getProjectSinglePage,
   listSinglePageExternalSources,
   listExternalSources,
+  replaceProjectKnowledgeCategory,
   replaceProjectSinglePage,
   uploadProjectKnowledgeCategory,
   type KnowledgeCategoryKey,
@@ -40,13 +43,26 @@ import { ExternalSourceList } from "./ExternalSourceList";
 type Props = {
   project: Project;
   editable?: boolean;
+  canManageSources?: boolean;
 };
 
-export const ProjectKnowledgePanel = ({ project, editable = false }: Props) => {
+export const ProjectKnowledgePanel = ({
+  project,
+  editable = false,
+  canManageSources = editable,
+}: Props) => {
   if (project.knowledge_mode === "DIRECT_CONTEXT") {
-    return <SinglePagePanel project={project} editable={editable} />;
+    return (
+      <SinglePagePanel project={project} editable={canManageSources} />
+    );
   }
-  return <RagCategoriesPanel project={project} editable={editable} />;
+  return (
+    <RagCategoriesPanel
+      project={project}
+      editable={editable}
+      canManageSources={canManageSources}
+    />
+  );
 };
 
 const SinglePagePanel = ({ project, editable }: Props) => {
@@ -332,13 +348,19 @@ const SinglePagePanel = ({ project, editable }: Props) => {
   );
 };
 
-const RagCategoriesPanel = ({ project, editable }: Props) => {
+const RagCategoriesPanel = ({
+  project,
+  editable,
+  canManageSources,
+}: Props) => {
   const notify = useNotify();
   const [categories, setCategories] = useState<
     KnowledgeCategoryStatus[] | null
   >(null);
   const [selected, setSelected] = useState<KnowledgeCategoryKey>("jobs");
   const [editorContent, setEditorContent] = useState("");
+  const [savedContent, setSavedContent] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   const [blankTemplate, setBlankTemplate] = useState("");
   const [templateFilename, setTemplateFilename] = useState("jobs.yaml");
   const [filename, setFilename] = useState("jobs.yaml");
@@ -353,6 +375,10 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
   const categoryDetailRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    if (!canManageSources) {
+      setFaqAutoSyncOn(false);
+      return;
+    }
     let active = true;
     listExternalSources(String(project.id))
       .then((rows) => {
@@ -369,7 +395,7 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
     return () => {
       active = false;
     };
-  }, [project.id, extSrcRefreshKey]);
+  }, [canManageSources, project.id, extSrcRefreshKey]);
 
   const loadCatalog = async () => {
     const catalog = await getProjectKnowledgeCategories(String(project.id));
@@ -391,6 +417,8 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
     let active = true;
     setLoadingCategory(true);
     setEditorContent("");
+    setSavedContent("");
+    setIsEditing(false);
     setBlankTemplate("");
     setFilename(`${selected}.yaml`);
     setHasCurrentSource(false);
@@ -403,6 +431,7 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
 
       if (sourceResult.status === "fulfilled") {
         setEditorContent(sourceResult.value.content);
+        setSavedContent(sourceResult.value.content);
         setFilename(sourceResult.value.filename);
         setHasCurrentSource(true);
       } else if (
@@ -483,8 +512,57 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
         selected,
         file,
       );
+      setSavedContent(content);
       setProcessingKey(selected);
       notify("Đã tải file. Hệ thống đang kiểm tra và chuẩn bị cho Agent.", {
+        type: "info",
+      });
+      pollUntilActive(result.revision.id);
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEditing = () => {
+    if (!hasCurrentSource && !editorContent.trim() && blankTemplate) {
+      setEditorContent(blankTemplate);
+    }
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setEditorContent(savedContent);
+    setIsEditing(false);
+  };
+
+  const saveManualEdit = async () => {
+    if (!editorContent.trim()) {
+      notify("Vui lòng nhập nội dung YAML.", { type: "warning" });
+      return;
+    }
+    if (
+      hasCurrentSource &&
+      !window.confirm(
+        "Nội dung đã sửa sẽ tạo phiên bản mới và thay thế dữ liệu đang dùng sau khi kiểm tra. Tiếp tục?",
+      )
+    ) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await replaceProjectKnowledgeCategory(
+        String(project.id),
+        selected,
+        filename,
+        editorContent,
+      );
+      setSavedContent(editorContent);
+      setIsEditing(false);
+      setProcessingKey(selected);
+      notify("Đã lưu thay đổi. Hệ thống đang kiểm tra cho Agent.", {
         type: "info",
       });
       pollUntilActive(result.revision.id);
@@ -507,11 +585,24 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
   };
 
   const selectedCategory = categories?.find((item) => item.key === selected);
+  const selectedIsProcessing =
+    processingKey === selected ||
+    selectedCategory?.status === "STAGED" ||
+    selectedCategory?.status === "PROCESSING";
 
   const activeCategoryCount =
     categories?.filter((item) => item.active_revision_id).length ?? 0;
+  const hasUnsavedChanges = editorContent !== savedContent;
 
   const selectCategory = (key: KnowledgeCategoryKey) => {
+    if (
+      isEditing &&
+      hasUnsavedChanges &&
+      !window.confirm("Bạn có thay đổi chưa lưu. Chuyển sang mục khác?")
+    ) {
+      return;
+    }
+    setIsEditing(false);
     setSelected(key);
 
     if (!window.matchMedia("(max-width: 767px)").matches) return;
@@ -669,20 +760,75 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                     {selectedCategory?.label_vi ?? selected}
                   </h3>
                   {!loadingCategory && (
-                    <Badge variant={hasCurrentSource ? "secondary" : "outline"}>
-                      {hasCurrentSource
-                        ? `Đang dùng v${selectedCategory?.active_revision_no ?? 1}`
-                        : "Chưa có dữ liệu"}
+                    <Badge
+                      variant={
+                        hasCurrentSource || selectedIsProcessing
+                          ? "secondary"
+                          : "outline"
+                      }
+                    >
+                      {selectedIsProcessing
+                        ? "Đang kiểm tra"
+                        : hasCurrentSource
+                          ? `Đang dùng v${selectedCategory?.active_revision_no ?? 1}`
+                          : "Chưa có dữ liệu"}
                     </Badge>
                   )}
                 </div>
-                <p className="project-category-editor-description">
-                  {hasCurrentSource
-                    ? `Dữ liệu hiện tại Agent đang sử dụng · ${filename}`
-                    : "Danh mục này chưa có dữ liệu đang dùng. Tải mẫu để chuẩn bị nội dung mới."}
+                <p
+                  className="project-category-editor-description"
+                  aria-live="polite"
+                >
+                  {isEditing
+                    ? "Chỉnh sửa YAML trực tiếp, sau đó lưu để hệ thống kiểm tra."
+                    : selectedIsProcessing
+                      ? `Phiên bản mới đang được kiểm tra · ${filename}`
+                      : hasCurrentSource
+                        ? `Dữ liệu hiện tại Agent đang sử dụng · ${filename}`
+                        : "Danh mục này chưa có dữ liệu đang dùng. Tải mẫu để chuẩn bị nội dung mới."}
                 </p>
               </div>
               <div className="project-category-editor-actions">
+                {editable && !isEditing && (
+                  <Button
+                    size="sm"
+                    className="tt-btn-touch"
+                    onClick={startEditing}
+                    disabled={saving || loadingCategory || selectedIsProcessing}
+                  >
+                    <Pencil className="size-4" />
+                    Sửa nội dung
+                  </Button>
+                )}
+                {editable && isEditing && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="tt-btn-touch"
+                      onClick={cancelEditing}
+                      disabled={saving}
+                    >
+                      Hủy
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="tt-btn-touch"
+                      onClick={() => void saveManualEdit()}
+                      disabled={saving || !hasUnsavedChanges}
+                    >
+                      {saving ? (
+                        <span
+                          className="tt-loading tt-loading-spinner tt-loading-sm"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Save className="size-4" />
+                      )}
+                      Lưu thay đổi
+                    </Button>
+                  </>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -692,7 +838,7 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                 >
                   <Download className="size-4" /> Tải mẫu
                 </Button>
-                {editable && (
+                {canManageSources && !isEditing && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -722,7 +868,7 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
                     </label>
                   </Button>
                 )}
-                {editable && (
+                {canManageSources && !isEditing && (
                   <ExternalSourceLinkForm
                     projectId={String(project.id)}
                     defaultCategory={selected}
@@ -736,9 +882,13 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
             ) : (
               <Textarea
                 value={editorContent}
-                readOnly
+                onChange={(event) => setEditorContent(event.target.value)}
+                readOnly={!isEditing}
                 rows={20}
-                className="project-category-textarea font-mono"
+                className={cn(
+                  "project-category-textarea font-mono",
+                  isEditing && "border-primary ring-3 ring-primary/10",
+                )}
                 aria-label={`Dữ liệu hiện tại của danh mục ${selectedCategory?.label_vi ?? selected}`}
                 placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
               />
@@ -756,7 +906,7 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
           </p>
         )}
 
-        {editable && (
+        {canManageSources && (
           <section className="space-y-2">
             <h3 className="text-body font-semibold">
               Nguồn đồng bộ từ link công khai

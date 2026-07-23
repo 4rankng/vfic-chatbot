@@ -40,6 +40,12 @@ export type ProjectKnowledgePort = Readonly<{
     projectId: string,
     key: ProjectKnowledgeCategory,
   ) => Promise<KnowledgeCategorySource>;
+  replaceCategory: (
+    projectId: string,
+    key: ProjectKnowledgeCategory,
+    filename: string,
+    content: string,
+  ) => Promise<{ revision: KnowledgeCategoryRevision; job_id: string }>;
   uploadCategory: (
     projectId: string,
     key: ProjectKnowledgeCategory,

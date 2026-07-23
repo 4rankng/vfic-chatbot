@@ -3,8 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 import type { Project } from "../types";
 
 vi.mock("./ProjectKnowledgePanel", () => ({
-  ProjectKnowledgePanel: ({ project }: { project: Project }) => (
-    <div data-testid={`knowledge-${project.id}`}>
+  ProjectKnowledgePanel: ({
+    project,
+    editable,
+    canManageSources,
+  }: {
+    project: Project;
+    editable?: boolean;
+    canManageSources?: boolean;
+  }) => (
+    <div
+      data-testid={`knowledge-${project.id}`}
+      data-editable={String(Boolean(editable))}
+      data-can-manage-sources={String(Boolean(canManageSources))}
+    >
       {project.knowledge_mode === "DIRECT_CONTEXT"
         ? "Kiến thức một trang"
         : "Kiến thức theo danh mục"}
@@ -103,5 +115,31 @@ describe("ProjectAccordionList", () => {
         '[data-testid="knowledge-single-project"]',
       ),
     ).toBeNull();
+  });
+
+  it("lets recruiters edit text without exposing admin source management", async () => {
+    const screen = await render(
+      <ProjectAccordionList
+        projects={[projects[0]]}
+        isAdmin={false}
+        canEdit
+        onEdit={vi.fn()}
+        onDeleted={vi.fn()}
+      />,
+    );
+
+    await screen
+      .getByRole("button", {
+        name: "Mở hoặc đóng kiến thức dự án LG Display",
+      })
+      .click();
+
+    const knowledgePanel = screen.getByTestId("knowledge-rag-project");
+    await expect
+      .element(knowledgePanel)
+      .toHaveAttribute("data-editable", "true");
+    await expect
+      .element(knowledgePanel)
+      .toHaveAttribute("data-can-manage-sources", "false");
   });
 });

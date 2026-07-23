@@ -23,7 +23,7 @@ const ProjectEditContent = () => {
   const project = useRecordContext<Project>();
   const notify = useNotify();
   const redirect = useRedirect();
-  const { isAdmin } = useRoleActions();
+  const { isAdmin, canEdit } = useRoleActions();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
   if (!project) return null;
@@ -106,7 +106,11 @@ const ProjectEditContent = () => {
         </Card>
 
         <div className="project-detail-stack mt-4">
-          <ProjectKnowledgePanel project={project} editable={isAdmin} />
+          <ProjectKnowledgePanel
+            project={project}
+            editable={canEdit}
+            canManageSources={isAdmin}
+          />
         </div>
       </div>
     </ProjectWorkspaceShell>

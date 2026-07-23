@@ -104,7 +104,11 @@ const ProjectShowContent = () => {
           </Card>
 
           <div className="project-detail-stack">
-            <ProjectKnowledgePanel project={project} editable={isAdmin} />
+            <ProjectKnowledgePanel
+              project={project}
+              editable={canEdit}
+              canManageSources={isAdmin}
+            />
           </div>
         </div>
       </div>

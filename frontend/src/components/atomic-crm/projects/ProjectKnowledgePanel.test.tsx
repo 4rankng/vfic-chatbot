@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   runSinglePageExternalSourceNow: vi.fn(),
   deleteSinglePageExternalSource: vi.fn(),
   replaceProjectSinglePage: vi.fn(),
+  replaceProjectKnowledgeCategory: vi.fn(),
   uploadProjectKnowledgeCategory: vi.fn(),
   listExternalSources: vi.fn(),
 }));
@@ -40,6 +41,7 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
   runSinglePageExternalSourceNow: mocks.runSinglePageExternalSourceNow,
   deleteSinglePageExternalSource: mocks.deleteSinglePageExternalSource,
   replaceProjectSinglePage: mocks.replaceProjectSinglePage,
+  replaceProjectKnowledgeCategory: mocks.replaceProjectKnowledgeCategory,
   uploadProjectKnowledgeCategory: mocks.uploadProjectKnowledgeCategory,
   listExternalSources: mocks.listExternalSources,
 }));
@@ -442,6 +444,9 @@ describe("ProjectKnowledgePanel", () => {
     );
     await expect.element(jobsEditor).toHaveValue("CURRENT JOBS");
     await expect.element(jobsEditor).toHaveAttribute("readonly");
+    await expect
+      .element(screen.getByRole("button", { name: "Sửa nội dung" }))
+      .toBeVisible();
     expect(screen.container.textContent).not.toContain(
       "Kiểm tra và thay thế mục này",
     );
@@ -472,6 +477,93 @@ describe("ProjectKnowledgePanel", () => {
         '.project-category-editor-heading [data-slot="badge"]',
       )?.textContent,
     ).toBe("Chưa có dữ liệu");
+  });
+
+  it("lets an authorized editor save YAML manually through the review pipeline", async () => {
+    mocks.getProjectKnowledgeCategorySource.mockResolvedValue({
+      key: "jobs",
+      label_vi: "Vị trí tuyển dụng",
+      revision_id: "revision-jobs",
+      revision_no: 2,
+      filename: "jobs-current.yaml",
+      content: "jobs:\n  - id: old",
+      checksum: "checksum",
+      updated_at: "2026-07-18T00:00:00Z",
+    });
+    mocks.replaceProjectKnowledgeCategory.mockResolvedValue({
+      revision: { id: "revision-new" },
+      job_id: "job-new",
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const screen = await render(
+      <ProjectKnowledgePanel
+        project={project}
+        editable
+        canManageSources={false}
+      />,
+    );
+    const editor = screen.getByLabelText(
+      "Dữ liệu hiện tại của danh mục Vị trí tuyển dụng",
+    );
+
+    await screen.getByRole("button", { name: "Sửa nội dung" }).click();
+    await expect.element(editor).not.toHaveAttribute("readonly");
+    await editor.fill("jobs:\n  - id: operator");
+    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+
+    await vi.waitFor(() => {
+      expect(mocks.replaceProjectKnowledgeCategory).toHaveBeenCalledWith(
+        "project-1",
+        "jobs",
+        "jobs-current.yaml",
+        "jobs:\n  - id: operator",
+      );
+    });
+    expect(confirm).toHaveBeenCalledWith(
+      "Nội dung đã sửa sẽ tạo phiên bản mới và thay thế dữ liệu đang dùng sau khi kiểm tra. Tiếp tục?",
+    );
+    await expect.element(editor).toHaveAttribute("readonly");
+    await expect
+      .element(screen.getByRole("button", { name: "Sửa nội dung" }))
+      .toBeVisible();
+    expect(screen.container.textContent).not.toContain("Tải file YAML");
+    expect(screen.container.textContent).not.toContain(
+      "Nguồn đồng bộ từ link công khai",
+    );
+    expect(mocks.listExternalSources).not.toHaveBeenCalled();
+  });
+
+  it("restores the current YAML when manual editing is cancelled", async () => {
+    mocks.getProjectKnowledgeCategorySource.mockResolvedValue({
+      key: "jobs",
+      label_vi: "Vị trí tuyển dụng",
+      revision_id: "revision-jobs",
+      revision_no: 2,
+      filename: "jobs-current.yaml",
+      content: "CURRENT JOBS",
+      checksum: "checksum",
+      updated_at: "2026-07-18T00:00:00Z",
+    });
+
+    const screen = await render(
+      <ProjectKnowledgePanel
+        project={project}
+        editable
+        canManageSources={false}
+      />,
+    );
+    const editor = screen.getByLabelText(
+      "Dữ liệu hiện tại của danh mục Vị trí tuyển dụng",
+    );
+
+    await screen.getByRole("button", { name: "Sửa nội dung" }).click();
+    await editor.fill("UNSAVED CONTENT");
+    await screen.getByRole("button", { name: "Hủy" }).click();
+
+    await expect.element(editor).toHaveValue("CURRENT JOBS");
+    await expect.element(editor).toHaveAttribute("readonly");
+    expect(mocks.replaceProjectKnowledgeCategory).not.toHaveBeenCalled();
   });
 
   it("stacks the selected category detail below the list in the phone viewport", async () => {
