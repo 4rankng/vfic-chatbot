@@ -7,6 +7,7 @@ must NEVER reach the frontend — the CRM holds only the user JWT.
 from functools import lru_cache
 from typing import ClassVar
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
@@ -363,10 +364,31 @@ class Settings(BaseSettings):
     decision_trace_retention_days: int = 30
     decision_trace_retention_batch_size: int = 200
     decision_trace_retention_interval_seconds: int = 86400  # daily
-    # External knowledge-source sync (public Google Sheet → category revision)
-    # has no global kill switch: per-link auto_sync_enabled on each
-    # external_source_sync_state row is the sole control. Interval/job-timeout
-    # are module constants in external_source_sync_worker.py.
+    # External knowledge-source sync (public Google Sheet → category revision /
+    # single-page direct-context file) has no global kill switch: per-link
+    # auto_sync_enabled on each *_sync_state row is the sole control. The daily
+    # re-ingest cadence is pinned to a wall-clock time via `kb_sync_cron` below
+    # so a web-container restart mid-day no longer pushes the next sync out by
+    # 24h. Job-timeout/retry remain code constants in the worker modules.
+    # Cron expression in UTC, evaluated by rq-scheduler (croniter). Default
+    # `0 20 * * *` = 03:00 ICT (UTC+7, no DST) — middle of the 2–5 AM low-traffic
+    # window. Override per-env to shift the time-of-day.
+    kb_sync_cron: str = "0 20 * * *"
+
+    @field_validator("kb_sync_cron")
+    @classmethod
+    def _validate_kb_sync_cron(cls, value: str) -> str:
+        # Fail fast at startup on a malformed env value rather than silently
+        # mis-firing (or never firing) at the first scheduled tick.
+        from croniter import croniter
+
+        try:
+            croniter(value)
+        except (ValueError, KeyError) as exc:
+            raise ValueError(
+                f"kb_sync_cron must be a valid cron expression (got {value!r})"
+            ) from exc
+        return value
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -202,8 +202,10 @@ describe("ProjectKnowledgePanel", () => {
     await expect
       .element(screen.getByText("Google Sheet", { exact: true }))
       .toBeVisible();
+    // Auto-sync state now surfaces via the source-row badge, not the flow
+    // diagram caption (which was removed to cut visual noise).
     await expect
-      .element(screen.getByText("Mỗi ngày", { exact: true }))
+      .element(screen.getByText("Tự động mỗi ngày"))
       .toBeVisible();
     await expect
       .element(screen.getByText("Trang kiến thức", { exact: true }))
@@ -222,7 +224,6 @@ describe("ProjectKnowledgePanel", () => {
   });
 
   it("ignores an older single-page refresh response after a newer one wins", async () => {
-    let singlePageSourceCalls = 0;
     const firstRefresh = deferred<{
       id: string;
       knowledge_base_id: string;
@@ -243,29 +244,36 @@ describe("ProjectKnowledgePanel", () => {
       content_sha256: string;
       updated_at: string;
     }>();
+
+    // Without the manual "Nạp lại" button, overlapping single-page reloads are
+    // driven by ExternalSourceList's onSynchronized callback, which fires each
+    // time a sync signature changes. Each list call returns a row with a fresh
+    // signature so every post-runNow poll fires onSynchronized → loadPage.
+    let sourceCall = 0;
     mocks.listSinglePageExternalSources.mockImplementation(() => {
-      singlePageSourceCalls += 1;
-      if (singlePageSourceCalls < 3) {
-        return Promise.resolve([]);
-      }
+      sourceCall += 1;
       return Promise.resolve([
         {
           id: "src-sp-1",
           project_id: "project-rorze",
           source_kind: "google_sheet",
-          sheet_url: "https://docs.google.com/spreadsheets/d/demo/edit#gid=42",
+          sheet_url:
+            "https://docs.google.com/spreadsheets/d/demo/edit#gid=42",
           sheet_gid: 42,
           auto_sync_enabled: false,
           consecutive_failures: 0,
           last_status: "OK",
-          last_synced_at: "2026-07-22T00:04:00Z",
-          created_at: "2026-07-22T00:04:00Z",
-          updated_at: "2026-07-22T00:04:00Z",
+          last_content_hash: `h${sourceCall}`,
+          last_synced_at: `2026-07-22T00:0${sourceCall}:00Z`,
+          created_at: "2026-07-22T00:00:00Z",
+          updated_at: `2026-07-22T00:0${sourceCall}:00Z`,
         },
       ]);
     });
+    mocks.runSinglePageExternalSourceNow.mockResolvedValue({ job_id: "job-1" });
 
     mocks.getProjectSinglePage
+      // mount loadPage (non-background) → editor becomes interactive
       .mockResolvedValueOnce({
         id: "single-page-1",
         knowledge_base_id: "kb-1",
@@ -276,21 +284,31 @@ describe("ProjectKnowledgePanel", () => {
         content_sha256: "sha-1",
         updated_at: "2026-07-22T00:00:00Z",
       })
+      // onSynchronized #1 → the older in-flight request
       .mockImplementationOnce(() => firstRefresh.promise)
+      // onSynchronized #2 → the newer in-flight request
       .mockImplementationOnce(() => secondRefresh.promise);
 
     const screen = await render(
       <ProjectKnowledgePanel project={singlePageProject} editable />,
     );
 
-    const editor = screen.getByLabelText("Nội dung trang kiến thức");
-    await expect.element(editor).toHaveValue("Nội dung ban đầu");
+    await expect
+      .element(screen.getByLabelText("Nội dung trang kiến thức"))
+      .toHaveValue("Nội dung ban đầu");
 
-    const refreshButton = screen.getByRole("button", {
-      name: "Làm mới nội dung",
-    });
-    await refreshButton.click();
+    vi.useFakeTimers();
 
+    // First sync completion → onSynchronized → loadPage (firstRefresh, pending).
+    await screen.getByRole("button", { name: "Xử lý ngay" }).click();
+    await vi.advanceTimersByTimeAsync(4000);
+
+    // Clear the 5-minute run-now cooldown before triggering a second sync.
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    await screen.getByRole("button", { name: "Xử lý ngay" }).click();
+    await vi.advanceTimersByTimeAsync(4000);
+
+    // Newer request resolves first → its content is applied.
     secondRefresh.resolve({
       id: "single-page-1",
       knowledge_base_id: "kb-1",
@@ -307,6 +325,7 @@ describe("ProjectKnowledgePanel", () => {
       ).toHaveValue("Bản mới nhất"),
     );
 
+    // Older request resolves after → discarded by loadPage's request guard.
     firstRefresh.resolve({
       id: "single-page-1",
       knowledge_base_id: "kb-1",

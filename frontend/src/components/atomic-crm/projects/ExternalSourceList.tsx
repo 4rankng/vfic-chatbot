@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNotify } from "ra-core";
-import { Loader2, Play, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Play, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -497,16 +497,6 @@ export const ExternalSourceList = ({
           </div>
         );
       })}
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => void load()}
-        disabled={disabled}
-      >
-        <RefreshCw className="size-4" />
-        Làm mới
-      </Button>
     </div>
   );
 };

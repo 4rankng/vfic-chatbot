@@ -64,9 +64,7 @@ const ProjectListContent = () => {
           <header className="ops-command-header project-command-header">
             <div className="ops-command-title">
               <div className="min-w-0">
-                <p className="ops-kicker">Không gian dự án</p>
                 <h1>Dự án tuyển dụng</h1>
-                <p>Quản lý dự án, tài liệu training và trạng thái tư vấn.</p>
               </div>
             </div>
             <div className="project-command-actions">
@@ -168,10 +166,9 @@ export const ProjectAccordionList = ({
               <div className="project-accordion-summary">
                 <div className="project-accordion-heading">
                   <div className="min-w-0">
-                    <span className="project-accordion-eyebrow">Dự án</span>
                     <h2>{project.name}</h2>
                     <span className="project-accordion-slug">
-                      Mã dự án: {project.slug}
+                      {project.slug}
                     </span>
                   </div>
                   <div className="project-accordion-badges">
@@ -204,7 +201,7 @@ export const ProjectAccordionList = ({
                   <div>
                     <dt>
                       <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                      {isSinglePage ? "Trang kiến thức" : "Thông tin đủ"}
+                      Sẵn sàng
                     </dt>
                     <dd>{readinessText}</dd>
                   </div>

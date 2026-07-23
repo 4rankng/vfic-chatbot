@@ -267,16 +267,6 @@
   gap: 16px;
 }
 
-.project-accordion-eyebrow {
-  display: block;
-  color: var(--ink-muted);
-  font-size: var(--crm-fs-eyebrow);
-  font-weight: var(--chat-fw-bold);
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
 .project-accordion-heading h2 {
   margin: 3px 0 0;
   color: var(--ink);
@@ -716,10 +706,6 @@
     margin-top: 2px;
     font-size: var(--fs-body-lg);
     line-height: 1.25;
-  }
-
-  .project-accordion-eyebrow {
-    display: none;
   }
 
   .project-accordion-slug {

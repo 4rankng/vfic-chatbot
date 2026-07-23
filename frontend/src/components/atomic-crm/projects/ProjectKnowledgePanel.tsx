@@ -4,13 +4,11 @@ import { ApiError } from "@/components/atomic-crm/providers/rest/api";
 import {
   AlertCircle,
   ArrowRight,
-  CalendarClock,
   ChevronDown,
   Database,
   Download,
   FileText,
   Link2,
-  RefreshCw,
   Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -198,9 +196,8 @@ const SinglePagePanel = ({ project, editable }: Props) => {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-body text-muted-foreground">
-            Agent nhận toàn bộ trang này trong mỗi cuộc trò chuyện đã chọn dự
-            án. Trang này không được chia nhỏ hoặc tìm kiếm theo danh mục. Mỗi
-            lần lưu sẽ thay thế toàn bộ nội dung cũ.
+            Agent dùng toàn bộ trang này mỗi cuộc trò chuyện. Lưu sẽ thay thế
+            nội dung cũ.
           </p>
           {loading ? (
             <Skeleton className="h-72 w-full" />
@@ -260,32 +257,10 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                 <div className="space-y-3 pt-2">
                   <Card className="border-border/80 shadow-none">
                     <CardHeader className="space-y-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <CardTitle className="flex items-center gap-2 text-section-title">
-                          <Link2 className="size-5" aria-hidden="true" />
-                          Google Sheet → trang kiến thức
-                        </CardTitle>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            void loadPage({ background: true });
-                            void loadSinglePageSyncState();
-                            setSinglePageSyncRefreshKey((value) => value + 1);
-                          }}
-                          disabled={loading || refreshingPage}
-                        >
-                          <RefreshCw
-                            className={cn(
-                              "size-4",
-                              refreshingPage && "animate-spin",
-                            )}
-                          />
-                          <span aria-hidden="true">Nạp lại</span>
-                          <span className="sr-only">Làm mới nội dung</span>
-                        </Button>
-                      </div>
+                      <CardTitle className="flex items-center gap-2 text-section-title">
+                        <Link2 className="size-5" aria-hidden="true" />
+                        Google Sheet → trang kiến thức
+                      </CardTitle>
 
                       <div
                         className="rounded-lg border border-border/70 bg-muted/25 px-3 py-3"
@@ -309,15 +284,9 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                             </span>
                           </div>
 
-                          <div className="flex w-20 min-w-16 justify-self-center flex-col items-center gap-1 text-primary sm:w-auto">
-                            <div className="flex w-full items-center">
-                              <span className="hidden h-px flex-1 bg-primary/30 sm:block" />
-                              <ArrowRight className="size-4 shrink-0 rotate-90 sm:rotate-0" />
-                            </div>
-                            <span className="flex items-center gap-1 whitespace-nowrap text-helper font-semibold text-muted-foreground">
-                              <CalendarClock className="size-3.5" />
-                              {singlePageAutoSyncOn ? "Mỗi ngày" : "Khi chạy"}
-                            </span>
+                          <div className="flex w-20 min-w-16 justify-self-center items-center gap-1 text-primary sm:w-auto">
+                            <span className="hidden h-px flex-1 bg-primary/30 sm:block" />
+                            <ArrowRight className="size-4 shrink-0 rotate-90 sm:rotate-0" />
                           </div>
 
                           <div className="flex min-w-0 items-center justify-self-end gap-2 text-right sm:justify-self-stretch sm:justify-end">
@@ -579,9 +548,7 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
       </header>
       <div className="project-knowledge-content">
         <p className="project-knowledge-description">
-          Mỗi mục được cập nhật riêng. Cập nhật một mục không làm thay đổi các
-          mục khác. Riêng Việc làm: có trong file nghĩa là đang tuyển; không còn
-          trong file nghĩa là không còn tuyển.
+          Mỗi mục cập nhật riêng. Việc làm: có trong file = đang tuyển.
         </p>
         {categories && (
           <div className="project-knowledge-progress" aria-live="polite">
@@ -775,9 +742,7 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
         {selected === "transportation" && (
           <section className="project-transport-panel">
             <p className="project-transport-description">
-              Đây là lịch xe chi tiết Agent tra cứu khi ứng viên hỏi tuyến, điểm
-              đón hoặc giờ đón. Mỗi tuyến hiển thị toàn bộ điểm dừng và thời
-              gian hiện có trong dữ liệu đang dùng.
+              Lịch xe Agent tra cứu khi ứng viên hỏi tuyến, điểm đón, giờ đón.
             </p>
             <BusTimetableSection projectId={String(project.id)} />
           </section>

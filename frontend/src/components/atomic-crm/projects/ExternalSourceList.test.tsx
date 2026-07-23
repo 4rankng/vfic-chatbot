@@ -284,7 +284,11 @@ describe("ExternalSourceList", () => {
 
   it("renders single-page sync details and refreshes from the single-page endpoint", async () => {
     const screen = await render(
-      <ExternalSourceList projectId="project-1" variant="single-page" />,
+      <ExternalSourceList
+        projectId="project-1"
+        variant="single-page"
+        refreshSignal={0}
+      />,
     );
     await vi.waitFor(() =>
       expect(mocks.listSinglePageExternalSources).toHaveBeenCalledWith(
@@ -296,7 +300,15 @@ describe("ExternalSourceList", () => {
     await expect.element(screen.getByText("gid=987654321")).toBeVisible();
     await expect.element(screen.getByText(/18 hàng/)).toBeVisible();
 
-    await screen.getByRole("button", { name: "Làm mới" }).click();
+    // The parent (SinglePagePanel) bumps refreshSignal after a source change to
+    // re-trigger load() — that is now the primary refresh path on this page.
+    await screen.rerender(
+      <ExternalSourceList
+        projectId="project-1"
+        variant="single-page"
+        refreshSignal={1}
+      />,
+    );
 
     await vi.waitFor(() =>
       expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(2),
