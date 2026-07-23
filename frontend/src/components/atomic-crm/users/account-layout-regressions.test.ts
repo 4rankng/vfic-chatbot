@@ -45,4 +45,13 @@ describe("account layout regressions", () => {
     expect(userEditSource).toContain("Đang lưu");
     expect(profileSource).toContain("isSaving");
   });
+
+  it("validates required account details before sending data", () => {
+    expect(userCreateSource).toContain('required("Vui lòng nhập thông tin.")');
+    expect(userCreateSource).toContain('email("Email chưa đúng định dạng.")');
+    expect(userCreateSource).toContain(
+      "validate={[REQUIRED_FIELD, VALID_EMAIL]}",
+    );
+    expect(userEditSource).toContain("validate={REQUIRED_FIELD}");
+  });
 });

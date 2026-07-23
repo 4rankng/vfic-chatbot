@@ -33,7 +33,9 @@ const mocks = vi.hoisted(() => ({
         status: "ACTIVE" | "INACTIVE";
       }
     | Error,
-  loadStatus: vi.fn(() => Promise.resolve({ enabled: true, accounts: mocks.accounts })),
+  loadStatus: vi.fn(() =>
+    Promise.resolve({ enabled: true, accounts: mocks.accounts }),
+  ),
   loadCredentials: vi.fn(() =>
     Promise.resolve({
       facebook_app_id: { configured: false, value: null },
@@ -120,27 +122,29 @@ afterEach(async () => {
 });
 
 describe("FacebookMessengerIntegrationPage", () => {
-  it("keeps the empty state and recovery form inside their card content shells", async () => {
+  it("keeps the empty state and recovery form inside flat settings groups", async () => {
     const screen = await renderPage();
 
     const emptyTitle = screen.getByText("Chưa kết nối");
     await expect.element(emptyTitle).toBeVisible();
 
-    const emptyContent = emptyTitle.element().closest(".settings-card-content");
+    const emptyContent = emptyTitle
+      .element()
+      .closest(".settings-group-content");
     expect(emptyContent).not.toBeNull();
     expect(
       screen
         .getByRole("button", { name: "Kết nối Facebook" })
         .element()
-        .closest(".settings-card-content"),
+        .closest(".settings-group-content"),
     ).toBe(emptyContent);
 
     const recoverySummary = screen.getByText("Nhập mã phiên OAuth");
-    const recoveryCard = recoverySummary.element().closest("details");
-    expect(recoveryCard).not.toBeNull();
-    expect(recoveryCard?.classList.contains("settings-card")).toBe(true);
+    const recoveryGroup = recoverySummary.element().closest("details");
+    expect(recoveryGroup).not.toBeNull();
+    expect(recoveryGroup?.classList.contains("settings-group")).toBe(true);
     expect(
-      recoveryCard?.querySelector(".settings-messenger-recovery-content"),
+      recoveryGroup?.querySelector(".settings-messenger-recovery-content"),
     ).not.toBeNull();
   });
 
@@ -254,9 +258,7 @@ describe("FacebookMessengerIntegrationPage", () => {
 
     await screen.getByRole("button", { name: "Ngắt kết nối" }).click();
 
-    await expect
-      .poll(() => mocks.disconnect.mock.calls.length)
-      .toBe(1);
+    await expect.poll(() => mocks.disconnect.mock.calls.length).toBe(1);
     expect(mocks.disconnect.mock.calls.every((call) => call.length === 0)).toBe(
       true,
     );

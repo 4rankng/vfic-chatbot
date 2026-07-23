@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
   CreateBase,
+  email,
   Form,
+  required,
   useDataProvider,
   useNotify,
   useRedirect,
@@ -19,6 +21,9 @@ const ROLE_CHOICES = [
   { id: "admin", name: "Quản trị" },
   { id: "recruiter", name: "Tuyển dụng" },
 ];
+
+const REQUIRED_FIELD = required("Vui lòng nhập thông tin.");
+const VALID_EMAIL = email("Email chưa đúng định dạng.");
 
 export const UserCreate = () => {
   const notify = useNotify();
@@ -75,12 +80,14 @@ export const UserCreate = () => {
                   label="Email"
                   type="email"
                   isRequired
+                  validate={[REQUIRED_FIELD, VALID_EMAIL]}
                   className="user-account-field user-account-field-wide"
                 />
                 <TextInput
                   source="full_name"
                   label="Họ và tên"
                   isRequired
+                  validate={REQUIRED_FIELD}
                   className="user-account-field"
                 />
                 <SelectInput
@@ -89,6 +96,7 @@ export const UserCreate = () => {
                   choices={ROLE_CHOICES}
                   defaultValue="recruiter"
                   isRequired
+                  validate={REQUIRED_FIELD}
                   className="user-account-field"
                 />
                 <TextInput
@@ -96,6 +104,7 @@ export const UserCreate = () => {
                   label="Mật khẩu"
                   type="password"
                   isRequired
+                  validate={REQUIRED_FIELD}
                   className="user-account-field"
                 />
                 <TextInput
@@ -103,6 +112,7 @@ export const UserCreate = () => {
                   label="Xác nhận mật khẩu"
                   type="password"
                   isRequired
+                  validate={REQUIRED_FIELD}
                   className="user-account-field"
                 />
               </div>

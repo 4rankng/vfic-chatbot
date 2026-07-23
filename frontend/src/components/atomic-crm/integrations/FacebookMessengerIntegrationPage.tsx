@@ -350,12 +350,12 @@ export const FacebookMessengerIntegrationPage = () => {
       {/* Meta App credentials (DB-first, env fallback). Required before the
           OAuth flow can build a valid authorization URL. */}
       <form
-        className="settings-card settings-messenger-card tt-card tt-card-border"
+        className="settings-group settings-messenger-group"
         onSubmit={submitCredentials}
       >
-        <div className="settings-card-content settings-messenger-card-content">
-          <div className="settings-messenger-card-heading">
-            <h3 className="settings-messenger-card-title">Ứng dụng Meta</h3>
+        <div className="settings-group-content settings-messenger-group-content">
+          <div className="settings-messenger-group-heading">
+            <h3 className="settings-messenger-group-title">Ứng dụng Meta</h3>
             <p className="settings-field-hint">
               Để trống bí mật để giữ giá trị đã lưu.
             </p>
@@ -399,8 +399,9 @@ export const FacebookMessengerIntegrationPage = () => {
           <div className="settings-oa-actions settings-messenger-actions">
             <Button
               type="submit"
-              className="settings-test-button settings-messenger-solid-action tt-btn tt-btn-primary tt-btn-sm"
+              className="settings-test-button settings-messenger-solid-action tt-btn-touch"
               disabled={saveCredentials.isPending}
+              aria-busy={saveCredentials.isPending}
             >
               {saveCredentials.isPending ? "Đang lưu…" : "Lưu thông tin"}
             </Button>
@@ -410,8 +411,8 @@ export const FacebookMessengerIntegrationPage = () => {
 
       {/* Active connection */}
       {activeAccount ? (
-        <div className="settings-card settings-messenger-card tt-card tt-card-border">
-          <div className="settings-card-content settings-messenger-card-content">
+        <div className="settings-group settings-messenger-group">
+          <div className="settings-group-content settings-messenger-group-content">
             <div className="settings-field">
               <span className="settings-field-label">Trang đang kết nối</span>
               <span className="settings-field-value">
@@ -424,9 +425,10 @@ export const FacebookMessengerIntegrationPage = () => {
             <div className="settings-oa-actions settings-messenger-actions">
               <button
                 type="button"
-                className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
+                className="settings-test-button tt-btn-touch"
                 onClick={() => testConnection.mutate()}
                 disabled={testConnection.isPending}
+                aria-busy={testConnection.isPending}
               >
                 {testConnection.isPending
                   ? "Đang kiểm tra…"
@@ -434,9 +436,10 @@ export const FacebookMessengerIntegrationPage = () => {
               </button>
               <button
                 type="button"
-                className="settings-test-button tt-btn tt-btn-error tt-btn-outline tt-btn-sm"
+                className="settings-test-button settings-danger-action tt-btn-touch"
                 onClick={() => disconnect.mutate()}
                 disabled={disconnect.isPending}
+                aria-busy={disconnect.isPending}
               >
                 {disconnect.isPending ? "Đang ngắt…" : "Ngắt kết nối"}
               </button>
@@ -457,10 +460,10 @@ export const FacebookMessengerIntegrationPage = () => {
           </div>
         </div>
       ) : (
-        <div className="settings-card settings-messenger-card tt-card tt-card-border">
-          <div className="settings-card-content settings-messenger-card-content settings-messenger-empty">
+        <div className="settings-group settings-messenger-group">
+          <div className="settings-group-content settings-messenger-group-content settings-messenger-empty">
             <div className="settings-messenger-empty-copy">
-              <h3 className="settings-messenger-card-title">Chưa kết nối</h3>
+              <h3 className="settings-messenger-group-title">Chưa kết nối</h3>
               <p className="settings-field-hint">
                 {appIdConfigured
                   ? "Kết nối một Trang để nhận tin nhắn."
@@ -469,9 +472,10 @@ export const FacebookMessengerIntegrationPage = () => {
             </div>
             <button
               type="button"
-              className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn tt-btn-primary tt-btn-sm"
+              className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn-touch"
               onClick={() => startOAuth.mutate()}
               disabled={startOAuth.isPending || !appIdConfigured}
+              aria-busy={startOAuth.isPending}
               title={
                 appIdConfigured
                   ? undefined
@@ -486,9 +490,9 @@ export const FacebookMessengerIntegrationPage = () => {
 
       {/* Page selection after OAuth callback */}
       {pendingFlowId && pageList?.pages && pageList.pages.length > 0 ? (
-        <div className="settings-card settings-messenger-card tt-card tt-card-border">
-          <div className="settings-card-content settings-messenger-card-content">
-            <h3 className="settings-messenger-card-title">
+        <div className="settings-group settings-messenger-group">
+          <div className="settings-group-content settings-messenger-group-content">
+            <h3 className="settings-messenger-group-title">
               Chọn Trang để kích hoạt
             </h3>
             <ul className="settings-page-list">
@@ -510,7 +514,7 @@ export const FacebookMessengerIntegrationPage = () => {
             </ul>
             <button
               type="button"
-              className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn tt-btn-primary tt-btn-sm"
+              className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn-touch"
               onClick={() =>
                 selectedPageId &&
                 completeOAuth.mutate({
@@ -519,6 +523,7 @@ export const FacebookMessengerIntegrationPage = () => {
                 })
               }
               disabled={!selectedPageId || completeOAuth.isPending}
+              aria-busy={completeOAuth.isPending}
             >
               {completeOAuth.isPending ? "Đang kích hoạt…" : "Kích hoạt Trang"}
             </button>
@@ -539,7 +544,7 @@ export const FacebookMessengerIntegrationPage = () => {
           <p>Vui lòng kết nối lại hoặc nhập một mã phiên khác.</p>
           <button
             type="button"
-            className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
+            className="settings-test-button tt-btn-touch"
             onClick={resetPageSelection}
           >
             Quay lại kết nối
@@ -549,7 +554,7 @@ export const FacebookMessengerIntegrationPage = () => {
 
       {/* Manual flow-id entry (after OAuth redirect back to frontend) */}
       {!activeAccount && !pendingFlowId ? (
-        <details className="settings-card settings-messenger-recovery tt-collapse tt-collapse-arrow tt-card tt-card-border">
+        <details className="settings-group settings-messenger-recovery tt-collapse tt-collapse-arrow">
           <summary className="settings-messenger-recovery-summary tt-collapse-title">
             Nhập mã phiên OAuth
           </summary>
@@ -579,7 +584,7 @@ export const FacebookMessengerIntegrationPage = () => {
               </span>
               <button
                 type="submit"
-                className="settings-test-button settings-messenger-solid-action tt-btn tt-btn-primary tt-btn-sm"
+                className="settings-test-button settings-messenger-solid-action tt-btn-touch"
                 disabled={!flowIdDraft.trim()}
               >
                 Tải danh sách Trang
@@ -591,9 +596,9 @@ export const FacebookMessengerIntegrationPage = () => {
 
       {/* Archived Page scopes (read-only history) */}
       {archivedAccounts.length > 0 ? (
-        <div className="settings-card settings-messenger-card tt-card tt-card-border">
-          <div className="settings-card-content settings-messenger-card-content">
-            <h3 className="settings-messenger-card-title">
+        <div className="settings-group settings-messenger-group">
+          <div className="settings-group-content settings-messenger-group-content">
+            <h3 className="settings-messenger-group-title">
               Trang đã ngắt kết nối
             </h3>
             <p className="settings-field-hint">

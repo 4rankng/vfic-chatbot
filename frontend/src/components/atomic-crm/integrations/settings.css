@@ -11,6 +11,132 @@
   line-height: var(--lh-snug);
   text-align: right;
 }
+
+.settings-group-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.settings-group-status::before {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--ink-faint);
+  content: "";
+}
+
+.settings-group-status.is-ready {
+  color: var(--settings-accent-strong);
+}
+
+.settings-group-status.is-ready::before {
+  background: var(--settings-accent);
+}
+
+.settings-group-status.is-incomplete {
+  color: var(--warning, #a16207);
+}
+
+.settings-group-status.is-incomplete::before {
+  background: var(--warning, #a16207);
+}
+
+.settings-workspace-content .settings-test-button {
+  min-height: 44px !important;
+  height: 44px !important;
+  border-radius: 8px;
+  padding-inline: 14px;
+}
+
+.settings-workspace-content .settings-primary-action {
+  border-color: var(--settings-accent-strong);
+  background: var(--settings-accent-strong);
+  color: var(--primary-foreground);
+}
+
+.settings-workspace-content .settings-primary-action:hover:not(:disabled) {
+  border-color: var(--settings-accent);
+  background: var(--settings-accent);
+  color: var(--primary-foreground);
+}
+
+.settings-workspace-content .settings-danger-action {
+  border: 1px solid color-mix(in srgb, var(--destructive) 36%, var(--border));
+  background: transparent;
+  color: var(--destructive);
+}
+
+.settings-workspace-content .settings-danger-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
+  color: var(--destructive);
+}
+
+.settings-switch-row,
+.settings-readonly-field {
+  border: 0;
+  border-bottom: 1px solid var(--settings-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 0;
+}
+
+.settings-switch-row [role="switch"] {
+  position: relative;
+}
+
+.settings-switch-row [role="switch"]::after {
+  position: absolute;
+  inset: -10px -2px;
+  content: "";
+}
+
+.settings-embedded-resource {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-embedded-users {
+  padding: 0;
+}
+
+.settings-embedded-resource [data-slot="button"],
+.settings-embedded-resource .persona-studio-command {
+  min-height: 44px !important;
+  height: 44px !important;
+}
+
+.settings-messenger-recovery-form .tt-input {
+  min-height: 44px;
+  height: 44px;
+}
+
+.settings-advanced {
+  border: 0;
+  border-top: 1px solid var(--settings-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-advanced-summary {
+  padding-inline: 0 32px;
+}
+
+.settings-page-list li {
+  border-bottom: 1px solid var(--settings-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 0;
+}
+
 @media (max-width: 767px) {
   .settings-header-actions {
     width: 100%;
@@ -206,18 +332,28 @@
     gap: 10px;
   }
 
-  .settings-section-panel,
+  .settings-section-panel {
+    gap: 0;
+    border-block: 1px solid var(--settings-border);
+  }
+
   .settings-grid {
-    gap: 8px;
+    gap: 0;
   }
 
-  .settings-card {
-    border-radius: 10px;
-    background: var(--settings-elevated);
-    box-shadow: 0 1px 2px rgb(10 37 64 / 4%);
+  .settings-grid > .settings-group + .settings-group,
+  .settings-messenger > .settings-group + .settings-group {
+    border-top: 1px solid var(--settings-border);
   }
 
-  .settings-mobile-card-summary {
+  .settings-group {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .settings-mobile-group-summary {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 20px;
     align-items: center;
@@ -225,11 +361,11 @@
     list-style: none;
   }
 
-  .settings-mobile-card-summary::-webkit-details-marker {
+  .settings-mobile-group-summary::-webkit-details-marker {
     display: none;
   }
 
-  .settings-mobile-card-summary > svg {
+  .settings-mobile-group-summary > svg {
     width: 16px;
     height: 16px;
     margin-right: 12px;
@@ -237,43 +373,45 @@
     transition: transform 180ms ease;
   }
 
-  .settings-mobile-card[open] .settings-mobile-card-summary > svg {
+  .settings-mobile-group[open] .settings-mobile-group-summary > svg {
     transform: rotate(180deg);
   }
 
-  .settings-mobile-card .settings-card-header {
-    min-height: 48px;
-    padding: 9px 12px;
+  .settings-mobile-group .settings-group-header {
+    min-height: 56px;
+    padding: 10px 0;
     border-bottom: 0;
   }
 
-  .settings-mobile-card .settings-card-title-group {
+  .settings-mobile-group .settings-group-title-group {
     gap: 8px;
   }
 
-  .settings-mobile-card .settings-card-icon {
+  .settings-mobile-group .settings-group-icon {
     width: 28px;
     height: 28px;
     border-radius: 7px;
   }
 
-  .settings-mobile-card .settings-card-icon svg {
+  .settings-mobile-group .settings-group-icon svg {
     width: 14px;
     height: 14px;
   }
 
-  .settings-mobile-card .settings-card-header [data-slot="card-title"] {
+  .settings-mobile-group
+    .settings-group-header
+    [data-slot="settings-group-title"] {
     font-size: var(--fs-body-sm);
     line-height: 1.3;
   }
 
-  .settings-mobile-card[open] .settings-card-header {
+  .settings-mobile-group[open] .settings-group-header {
     border-bottom: 1px solid var(--settings-border);
   }
 
-  .settings-mobile-card .settings-card-content {
+  .settings-mobile-group .settings-group-content {
     gap: 9px;
-    padding: 11px 12px 12px;
+    padding: 14px 0 18px;
   }
 
   .settings-field-label-row {
@@ -341,21 +479,19 @@
     grid-column: 1 / -1;
   }
 
-  .settings-workspace-content .settings-card .settings-test-button {
+  .settings-workspace-content .settings-group .settings-test-button {
     position: relative;
     width: auto;
-    min-height: 32px !important;
-    height: 32px !important;
-    margin-block: 6px;
+    min-height: 44px !important;
+    height: 44px !important;
+    margin-block: 0;
     border-radius: 8px;
-    padding-inline: 10px;
+    padding-inline: 14px;
     font-size: var(--fs-body-sm);
   }
 
-  .settings-workspace-content .settings-card .settings-test-button::after {
-    content: "";
-    position: absolute;
-    inset: -6px;
+  .settings-workspace-content .settings-group .settings-test-button::after {
+    content: none;
   }
 
   .settings-oa-actions {
@@ -375,7 +511,7 @@
     margin: 0;
     border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
     color: var(--ink-muted);
-    padding: 12px;
+    padding: 12px 0;
     font-size: var(--fs-body);
     font-weight: 500;
     line-height: 20px;
@@ -391,14 +527,14 @@
 }
 
 @media (min-width: 480px) and (max-width: 767px) {
-  .settings-mobile-card .settings-card-content {
+  .settings-mobile-group .settings-group-content {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px 12px;
   }
 
-  .settings-mobile-card .settings-oa-fields,
-  .settings-mobile-card .settings-oa-actions,
-  .settings-mobile-card .settings-advanced {
+  .settings-mobile-group .settings-oa-fields,
+  .settings-mobile-group .settings-oa-actions,
+  .settings-mobile-group .settings-advanced {
     grid-column: 1 / -1;
   }
 }
@@ -429,13 +565,13 @@
     grid-template-columns: minmax(0, 1fr) 44px;
   }
 
-  .settings-workspace-content .settings-card .settings-test-button {
+  .settings-workspace-content .settings-group .settings-test-button {
     min-height: 44px !important;
     height: 44px !important;
     margin-block: 0;
   }
 
-  .settings-workspace-content .settings-card .settings-test-button::after {
+  .settings-workspace-content .settings-group .settings-test-button::after {
     content: none;
   }
 }
@@ -443,13 +579,13 @@
 /* Facebook Messenger: Tailkit a-c-form-layouts-03, a-c-form-elements-10/16,
    a-c-card-headings-02, and a-c-form-actions-03 adapted to the console theme. */
 
-.settings-messenger-card-content {
+.settings-messenger-group-content {
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  padding: 16px;
+  padding: 16px 0 18px;
 }
 
-.settings-messenger-card-heading {
+.settings-messenger-group-heading {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -459,7 +595,7 @@
   border-bottom: 1px solid var(--settings-border);
 }
 
-.settings-messenger-card-heading .settings-field-hint {
+.settings-messenger-group-heading .settings-field-hint {
   margin: 0;
 }
 
@@ -475,13 +611,13 @@
 }
 
 .settings-messenger-credentials-grid .settings-input {
-  min-height: 40px;
-  height: 40px;
+  min-height: 44px;
+  height: 44px;
 }
 
 .settings-messenger .settings-sensitive-input {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) 44px;
   gap: 6px;
 }
 
@@ -490,9 +626,9 @@
 }
 
 .settings-messenger .settings-input-action {
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
   border: 1px solid var(--settings-border);
   border-radius: 8px;
   background: var(--surface-solid);
@@ -504,7 +640,7 @@
   color: var(--ink);
 }
 
-.settings-messenger-card-title {
+.settings-messenger-group-title {
   margin: 0;
   color: var(--ink);
   font-size: var(--crm-fs-body);
@@ -581,7 +717,7 @@
   align-items: center;
   cursor: pointer;
   color: var(--ink);
-  padding: 10px 48px 10px 16px;
+  padding: 10px 48px 10px 0;
   font-size: var(--crm-fs-body-sm);
   font-weight: var(--chat-fw-semibold);
   line-height: var(--crm-lh-title);
@@ -593,7 +729,7 @@
 
 .settings-messenger-recovery-content {
   border-top: 1px solid var(--settings-border);
-  padding: 14px 16px 16px;
+  padding: 14px 0 18px;
 }
 
 .settings-messenger-recovery-form {
@@ -653,8 +789,8 @@
 }
 
 @media (max-width: 767px) {
-  .settings-messenger-card-content {
-    padding: 16px;
+  .settings-messenger-group-content {
+    padding: 14px 0 18px;
   }
 
   .settings-messenger-empty {
@@ -688,11 +824,11 @@
 
   .settings-messenger-recovery-summary {
     min-height: 52px;
-    padding: 12px 44px 12px 16px;
+    padding: 12px 44px 12px 0;
   }
 
   .settings-messenger-recovery-content {
-    padding: 16px;
+    padding: 14px 0 18px;
   }
 }
 
@@ -744,14 +880,15 @@
 
   .settings-section-panel {
     gap: 0;
-    padding-top: 22px;
+    border-block: 1px solid var(--settings-border);
+    padding-block: 22px;
   }
 
   .settings-grid {
     gap: 0;
   }
 
-  .settings-card {
+  .settings-group {
     overflow: visible;
     border: 0;
     border-radius: 0;
@@ -760,18 +897,18 @@
     transition: none;
   }
 
-  .settings-card:hover {
+  .settings-group:hover {
     border-color: transparent;
   }
 
-  .settings-card-header {
+  .settings-group-header {
     min-height: 36px;
     padding: 0 0 14px;
     border: 0;
   }
 
-  .settings-card-content,
-  .settings-messenger-card-content {
+  .settings-group-content,
+  .settings-messenger-group-content {
     gap: 14px 16px;
     padding: 0;
   }
@@ -785,6 +922,12 @@
     border: 0;
     border-radius: 0;
     background: transparent;
+  }
+
+  .settings-messenger > .settings-group + .settings-group {
+    margin-top: 22px;
+    padding-top: 22px;
+    border-top: 1px solid var(--settings-border);
   }
 }
 
@@ -808,11 +951,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .settings-grid-zalo > .settings-card:first-child {
+  .settings-grid-zalo > .settings-group:first-child {
     padding-right: 28px;
   }
 
-  .settings-grid-zalo > .settings-card + .settings-card {
+  .settings-grid-zalo > .settings-group + .settings-group {
+    border-top: 0;
     padding-left: 28px;
     border-left: 1px solid var(--settings-border);
   }
@@ -824,7 +968,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .settings-grid > .settings-card + .settings-card {
+  .settings-grid > .settings-group + .settings-group {
     margin-top: 24px;
     padding-top: 24px;
     border-top: 1px solid var(--settings-border);

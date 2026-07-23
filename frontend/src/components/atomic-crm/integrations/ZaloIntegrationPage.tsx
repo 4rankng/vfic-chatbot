@@ -420,7 +420,7 @@ const DefaultProviderSwitch = ({
   />
 );
 
-const SettingsCard = ({
+const SettingsGroup = ({
   id,
   title,
   description,
@@ -441,31 +441,31 @@ const SettingsCard = ({
 }) => {
   const isMobile = useIsMobile();
   const header = (
-    <div className="settings-card-header">
-      <div className="settings-card-title-group">
-        <div className="settings-card-icon">{icon}</div>
+    <div className="settings-group-header">
+      <div className="settings-group-title-group">
+        <div className="settings-group-icon">{icon}</div>
         <div className="min-w-0">
-          <div data-slot="card-title">{title}</div>
+          <div data-slot="settings-group-title">{title}</div>
           {description ? (
-            <p className="settings-card-description">{description}</p>
+            <p className="settings-group-description">{description}</p>
           ) : null}
         </div>
       </div>
-      {meta ? <div className="settings-card-meta">{meta}</div> : null}
+      {meta ? <div className="settings-group-meta">{meta}</div> : null}
     </div>
   );
 
   if (isMobile) {
     return (
       <details
-        className={`settings-card settings-mobile-card tt-collapse tt-collapse-arrow tt-card tt-card-border ${className}`}
+        className={`settings-group settings-mobile-group tt-collapse tt-collapse-arrow ${className}`}
         id={id}
         open={defaultOpen}
       >
-        <summary className="settings-mobile-card-summary tt-collapse-title">
+        <summary className="settings-mobile-group-summary tt-collapse-title">
           {header}
         </summary>
-        <div className="settings-card-content tt-collapse-content">
+        <div className="settings-group-content tt-collapse-content">
           {children}
         </div>
       </details>
@@ -473,15 +473,28 @@ const SettingsCard = ({
   }
 
   return (
-    <section
-      className={`settings-card tt-card tt-card-border ${className}`}
-      id={id}
-    >
+    <section className={`settings-group ${className}`} id={id}>
       {header}
-      <div className="settings-card-content">{children}</div>
+      <div className="settings-group-content">{children}</div>
     </section>
   );
 };
+
+const SettingsGroupStatus = ({
+  ready,
+  disabled = false,
+}: {
+  ready: boolean;
+  disabled?: boolean;
+}) => (
+  <span
+    className={`settings-group-status ${
+      disabled ? "is-off" : ready ? "is-ready" : "is-incomplete"
+    }`}
+  >
+    {disabled ? "Đang tắt" : ready ? "Sẵn sàng" : "Cần cấu hình"}
+  </span>
+);
 
 const SettingsSectionPanel = ({
   id,
@@ -835,8 +848,9 @@ export const ZaloIntegrationPage = () => {
   const saveMinimaxChanges = async () => {
     if (Object.keys(changedMinimaxPayload).length === 0) return minimaxSettings;
 
-    const nextMinimax =
-      await zaloIntegrationGateway.saveMinimaxSettings(changedMinimaxPayload);
+    const nextMinimax = await zaloIntegrationGateway.saveMinimaxSettings(
+      changedMinimaxPayload,
+    );
     setMinimaxSettings(nextMinimax);
     setMinimaxForm(emptyMinimaxForm);
     setMinimaxEnabled(nextMinimax.minimax_enable);
@@ -848,10 +862,9 @@ export const ZaloIntegrationPage = () => {
     if (Object.keys(changedOpenRouterPayload).length === 0)
       return openRouterSettings;
 
-    const nextOpenRouter =
-      await zaloIntegrationGateway.saveOpenRouterSettings(
-        changedOpenRouterPayload,
-      );
+    const nextOpenRouter = await zaloIntegrationGateway.saveOpenRouterSettings(
+      changedOpenRouterPayload,
+    );
     setOpenRouterSettings(nextOpenRouter);
     setOpenRouterForm(emptyOpenRouterForm);
     setOpenRouterEnabled(nextOpenRouter.openrouter_enable);
@@ -980,6 +993,22 @@ export const ZaloIntegrationPage = () => {
   const webhookHealth = describeOaSignatureHealth(
     settings?.zalo_oa_webhook_signature ?? null,
   );
+  const botReady = Boolean(
+    settings?.zalo_bot_token.configured &&
+      settings.zalo_bot_webhook_secret.configured,
+  );
+  const oaReady = Boolean(
+    settings?.zalo_oa_app_id.configured &&
+      settings.zalo_oa_secret_key.configured &&
+      settings.zalo_oa_access_token.configured &&
+      settings.zalo_oa_refresh_token.configured,
+  );
+  const minimaxReady = Boolean(
+    minimaxEnabled && minimaxSettings?.minimax_api_key.configured,
+  );
+  const openRouterReady = Boolean(
+    openRouterEnabled && openRouterSettings?.openrouter_api_key.configured,
+  );
 
   const selectSettingsItem = (itemId: SettingsItemId) => {
     setActiveItemId(itemId);
@@ -1034,9 +1063,10 @@ export const ZaloIntegrationPage = () => {
       return (
         <SettingsSectionPanel id="settings-zalo-channel">
           <div className="settings-grid settings-grid-zalo">
-            <SettingsCard
+            <SettingsGroup
               title="Zalo Chatbot"
               icon={<PlugZap className="size-4" />}
+              meta={<SettingsGroupStatus ready={botReady} />}
               defaultOpen
             >
               <SecretInput
@@ -1060,20 +1090,21 @@ export const ZaloIntegrationPage = () => {
               <div className="settings-oa-actions">
                 <Button
                   type="button"
-                  variant="outline"
-                  className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
+                  className="settings-test-button settings-primary-action tt-btn-touch"
                   onClick={testBotConnection}
                   disabled={testingBot || !settings}
+                  aria-busy={testingBot}
                 >
                   <Wifi className="size-4" />
                   {testingBot ? "Đang kiểm tra" : "Lưu & kiểm tra"}
                 </Button>
               </div>
-            </SettingsCard>
+            </SettingsGroup>
 
-            <SettingsCard
+            <SettingsGroup
               title="Zalo OA"
               icon={<MessageCircle className="size-4" />}
+              meta={<SettingsGroupStatus ready={oaReady} />}
             >
               <div className="settings-oa-fields">
                 <div className="settings-field">
@@ -1135,10 +1166,10 @@ export const ZaloIntegrationPage = () => {
                 <div className="settings-oa-actions">
                   <Button
                     type="button"
-                    variant="outline"
-                    className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
+                    className="settings-test-button settings-primary-action tt-btn-touch"
                     onClick={testOaConnection}
                     disabled={testingOa || !settings}
+                    aria-busy={testingOa}
                   >
                     <Wifi className="size-4" />
                     {testingOa ? "Đang kiểm tra" : "Lưu & kiểm tra"}
@@ -1156,7 +1187,7 @@ export const ZaloIntegrationPage = () => {
                   </p>
                 </details>
               </div>
-            </SettingsCard>
+            </SettingsGroup>
           </div>
         </SettingsSectionPanel>
       );
@@ -1166,7 +1197,16 @@ export const ZaloIntegrationPage = () => {
       return (
         <SettingsSectionPanel id="settings-minimax">
           <div className="settings-grid settings-grid-models">
-            <SettingsCard title="Minimax" icon={<Bot className="size-4" />}>
+            <SettingsGroup
+              title="Minimax"
+              icon={<Bot className="size-4" />}
+              meta={
+                <SettingsGroupStatus
+                  ready={minimaxReady}
+                  disabled={!minimaxEnabled}
+                />
+              }
+            >
               <ProviderSwitchField
                 id="minimax_enable"
                 label={minimaxEnabled ? "Bật" : "Tắt"}
@@ -1196,16 +1236,16 @@ export const ZaloIntegrationPage = () => {
               <div className="settings-oa-actions">
                 <Button
                   type="button"
-                  variant="outline"
-                  className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
+                  className="settings-test-button settings-primary-action tt-btn-touch"
                   onClick={testMinimaxConnection}
                   disabled={testingMinimax || !minimaxSettings}
+                  aria-busy={testingMinimax}
                 >
                   <Wifi className="size-4" />
                   {testingMinimax ? "Đang kiểm tra" : "Lưu & kiểm tra"}
                 </Button>
               </div>
-            </SettingsCard>
+            </SettingsGroup>
           </div>
         </SettingsSectionPanel>
       );
@@ -1214,7 +1254,16 @@ export const ZaloIntegrationPage = () => {
     return (
       <SettingsSectionPanel id="settings-openrouter">
         <div className="settings-grid settings-grid-models">
-          <SettingsCard title="OpenRouter" icon={<Cpu className="size-4" />}>
+          <SettingsGroup
+            title="OpenRouter"
+            icon={<Cpu className="size-4" />}
+            meta={
+              <SettingsGroupStatus
+                ready={openRouterReady}
+                disabled={!openRouterEnabled}
+              />
+            }
+          >
             <ProviderSwitchField
               id="openrouter_enable"
               label={openRouterEnabled ? "Bật" : "Tắt"}
@@ -1263,16 +1312,16 @@ export const ZaloIntegrationPage = () => {
             <div className="settings-oa-actions">
               <Button
                 type="button"
-                variant="outline"
-                className="settings-test-button tt-btn tt-btn-outline tt-btn-sm"
+                className="settings-test-button settings-primary-action tt-btn-touch"
                 onClick={testOpenRouterConnection}
                 disabled={testingOpenRouter || !openRouterSettings}
+                aria-busy={testingOpenRouter}
               >
                 <Wifi className="size-4" />
                 {testingOpenRouter ? "Đang kiểm tra" : "Lưu & kiểm tra"}
               </Button>
             </div>
-          </SettingsCard>
+          </SettingsGroup>
         </div>
       </SettingsSectionPanel>
     );

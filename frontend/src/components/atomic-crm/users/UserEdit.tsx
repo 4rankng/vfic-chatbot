@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
   EditBase,
+  email,
   Form,
+  required,
   useDataProvider,
   useNotify,
   useRecordContext,
@@ -23,6 +25,9 @@ const ROLE_CHOICES = [
   { id: "admin", name: "Quản trị" },
   { id: "recruiter", name: "Tuyển dụng" },
 ];
+
+const REQUIRED_FIELD = required("Vui lòng nhập thông tin.");
+const VALID_EMAIL = email("Email chưa đúng định dạng.");
 
 const UserEditContent = () => {
   const user = useRecordContext<UserAccount>();
@@ -88,14 +93,21 @@ const UserEditContent = () => {
               label="Email"
               type="email"
               isRequired
+              validate={[REQUIRED_FIELD, VALID_EMAIL]}
               className="user-account-field user-account-field-wide"
             />
-            <TextInput source="full_name" label="Họ tên" isRequired />
+            <TextInput
+              source="full_name"
+              label="Họ tên"
+              isRequired
+              validate={REQUIRED_FIELD}
+            />
             <SelectInput
               source="role"
               label="Vai trò"
               choices={ROLE_CHOICES}
               isRequired
+              validate={REQUIRED_FIELD}
             />
             <div className="user-account-toggle-row user-account-field-wide">
               <BooleanInput source="disabled" label="Vô hiệu hóa tài khoản" />
