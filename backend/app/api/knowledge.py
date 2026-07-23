@@ -12,29 +12,16 @@ via ``GET /documents/{id}`` (``stage`` / ``digest_meta`` / ``error``).
 from __future__ import annotations
 
 import uuid
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import exists, or_, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin
 from app.api.provider_dependencies import get_embedder
-from app.core.cache import bump_cache_version
-from app.core.db import get_db
-from app.core.redis import get_redis
-from app.models.knowledge import (
-    KBTextFile,
-    KBVersion,
-    KBVersionStatus,
-    KnowledgeDocument,
-    KnowledgeStatus,
-)
-from app.models.company import Project
-from app.models.external_source_sync_state import ExternalSourceSyncState
-from app.models.user import User
+from app.project_knowledge.infrastructure.api_dependencies import get_project_knowledge_db
 from app.schemas.knowledge import (
     ExternalSourceCreate,
     ExternalSourceSyncStateOut,
@@ -48,11 +35,11 @@ from app.schemas.knowledge import (
     KnowledgeDocumentUpdate,
     KnowledgeDocumentListResponse,
     KnowledgeDocumentOut,
+    KnowledgeStatus,
     SearchTestRequest,
     SearchTestResult,
     UploadRequest,
 )
-from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.audit_service import record_audit
 from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeService
 from app.services.knowledge.canonical import (
@@ -60,10 +47,8 @@ from app.services.knowledge.canonical import (
     load_faq_template,
     load_template,
 )
-from app.services.knowledge.external_source_sync import (
-    ExternalSourceSyncError,
-    validate_sheet_url,
-)
+from app.services.knowledge.external_source_sync import ExternalSourceSyncError
+from app.services.knowledge.external_source_admin import KnowledgeExternalSourceAdminService
 from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -88,7 +73,7 @@ def enqueue_one_shot(state_id: object, *, job_id: str | None = None) -> str | No
 @router.get("/format/template", response_class=PlainTextResponse)
 async def get_knowledge_format_template(
     kind: str = Query("knowledge", pattern="^(knowledge|faq)$"),
-    _admin: User = Depends(require_admin),
+    _admin: Any = Depends(require_admin),
 ) -> PlainTextResponse:
     if kind == "faq":
         return PlainTextResponse(
@@ -110,8 +95,8 @@ async def get_knowledge_format_template(
 )
 async def create_kb_version(
     project_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KBVersionOut:
     version = await KnowledgeService(db).create_version(project_id, actor=admin)
     await record_audit(
@@ -129,8 +114,8 @@ async def create_kb_version(
 @router.get("/projects/{project_id}/kb/versions", response_model=KBVersionListResponse)
 async def list_kb_versions(
     project_id: uuid.UUID,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KBVersionListResponse:
     versions = await KnowledgeService(db).list_versions(project_id)
     return KBVersionListResponse(
@@ -146,8 +131,8 @@ async def list_kb_versions(
 async def list_kb_version_files(
     project_id: uuid.UUID,
     version_id: uuid.UUID,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KBTextFileListResponse:
     service = KnowledgeService(db)
     await service._require_version(project_id, version_id)
@@ -167,8 +152,8 @@ async def upload_kb_version_file(
     project_id: uuid.UUID,
     version_id: uuid.UUID,
     file: UploadFile = File(...),
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KBTextFileOut:
     data = await file.read()
     try:
@@ -192,8 +177,8 @@ async def upload_kb_version_file(
 async def ingest_kb_version(
     project_id: uuid.UUID,
     version_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KBIngestResponse:
     service = KnowledgeService(db)
     await service._require_legacy_mutation_allowed(project_id)
@@ -218,8 +203,8 @@ async def ingest_kb_version(
 async def publish_kb_version(
     project_id: uuid.UUID,
     version_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KBVersionOut:
     try:
         version = await KnowledgeService(db).publish_version(project_id, version_id)
@@ -242,8 +227,8 @@ async def project_rag_test(
     project_id: uuid.UUID,
     body: SearchTestRequest,
     embedder=Depends(get_embedder),
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> list[SearchTestResult]:
     rows = await KnowledgeService(db).search_test(
         embedder, body.query, body.top_k, project_id=project_id
@@ -273,8 +258,8 @@ async def list_documents(
         None, description="Sort field (updated_at, created_at, file_name, stage, status)"
     ),
     order: str | None = Query("desc", description="Sort direction: asc | desc"),
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentListResponse:
     docs, total = await KnowledgeService(db).list(
         page=page,
@@ -294,7 +279,9 @@ async def list_documents(
 
 @router.get("/documents/{doc_id}", response_model=KnowledgeDocumentOut)
 async def get_document(
-    doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    doc_id: uuid.UUID,
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     return KnowledgeDocumentOut.model_validate(await _load(doc_id, db))
 
@@ -302,8 +289,8 @@ async def get_document(
 @router.get("/documents/{doc_id}/raw", response_class=PlainTextResponse)
 async def download_raw_document(
     doc_id: uuid.UUID,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> PlainTextResponse:
     doc = await _load(doc_id, db)
     filename = (
@@ -330,8 +317,8 @@ async def download_raw_document(
 async def list_document_chunks(
     doc_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=200),
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeChunkListResponse:
     await _load(doc_id, db)
     rows = await KnowledgeService(db).list_chunks(doc_id, limit=limit)
@@ -345,8 +332,8 @@ async def list_document_chunks(
 async def update_document(
     doc_id: uuid.UUID,
     body: KnowledgeDocumentUpdate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     service = KnowledgeService(db)
     result = await service.update(await _load(doc_id, db), body, actor=admin)
@@ -355,7 +342,9 @@ async def update_document(
 
 @router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
-    doc_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    doc_id: uuid.UUID,
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> None:
     service = KnowledgeService(db)
     await service.delete(await _load(doc_id, db), actor=admin)
@@ -365,7 +354,9 @@ async def delete_document(
     "/documents/upload", response_model=KnowledgeDocumentOut, status_code=status.HTTP_201_CREATED
 )
 async def upload(
-    body: UploadRequest, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    body: UploadRequest,
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     doc = await KnowledgeService(db).upload(
         body.file_name, body.content, body.drive_file_id, body.project_id
@@ -382,8 +373,8 @@ async def upload(
 async def upload_file(
     file: UploadFile = File(...),
     project_id: uuid.UUID | None = Form(None),
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     """Multipart upload: extract text, store original, enqueue the training pipeline."""
     data = await file.read()
@@ -406,7 +397,9 @@ async def upload_file(
 
 @router.post("/documents/{doc_id}/process", response_model=KnowledgeDocumentOut)
 async def process(
-    doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    doc_id: uuid.UUID,
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     """(Re)run the async LLM training pipeline for a document."""
     doc = await _load(doc_id, db)
@@ -417,7 +410,9 @@ async def process(
 
 @router.post("/documents/{doc_id}/archive", response_model=KnowledgeDocumentOut)
 async def archive(
-    doc_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    doc_id: uuid.UUID,
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     return KnowledgeDocumentOut.model_validate(
         await KnowledgeService(db).archive(await _load(doc_id, db), actor=admin)
@@ -426,7 +421,9 @@ async def archive(
 
 @router.post("/documents/{doc_id}/reindex", response_model=KnowledgeDocumentOut)
 async def reindex(
-    doc_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    doc_id: uuid.UUID,
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     doc = await _load(doc_id, db)
     await KnowledgeService(db)._require_legacy_mutation_allowed(doc.project_id)
@@ -436,53 +433,15 @@ async def reindex(
 
 @router.post("/reindex-all")
 async def reindex_all(
-    admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> dict:
     """Re-queue every RAG knowledge source for authoritative rebuilding.
 
     The offline pipeline refreshes chunks and all structured projections,
     including the KB-authoritative active-job catalog.
     """
-    active_versioned_document_ids = (
-        select(KBTextFile.document_id)
-        .join(KBVersion, KBVersion.id == KBTextFile.kb_version_id)
-        .where(KBVersion.status == KBVersionStatus.ACTIVE)
-    )
-    has_version_file = exists(
-        select(KBTextFile.id).where(KBTextFile.document_id == KnowledgeDocument.id)
-    )
-    result = await db.execute(
-        select(KnowledgeDocument)
-        .join(Project, Project.id == KnowledgeDocument.project_id)
-        .where(
-            KnowledgeDocument.status != KnowledgeStatus.ARCHIVED,
-            KnowledgeDocument.project_id.is_not(None),
-            Project.knowledge_base_id.is_(None),
-            KnowledgeDocument.raw_text.is_not(None),
-            or_(
-                KnowledgeDocument.id.in_(active_versioned_document_ids),
-                ~has_version_file,
-            ),
-        )
-    )
-    docs = result.scalars().all()
-    for doc in docs:
-        enqueue_ingest(doc.id)
-    queued = len(docs)
-
-    # Bump caches so the bot picks up fresh chunks immediately.
-    await bump_cache_version("knowledge")
-    await bump_cache_version("semantic_cache")
-    await record_audit(
-        db,
-        action="knowledge_relearn_all_enqueued",
-        actor_id=admin.id,
-        target_type="knowledge",
-        target_id="all",
-        payload={"queued": queued},
-    )
-    await db.commit()
-
+    queued = await KnowledgeService(db).reindex_all(admin)
     return {"status": "ok", "queued": queued}
 
 
@@ -490,8 +449,8 @@ async def reindex_all(
 async def search_test(
     body: SearchTestRequest,
     embedder=Depends(get_embedder),
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> list[SearchTestResult]:
     rows = await KnowledgeService(db).search_test(
         embedder, body.query, body.top_k, project_id=body.project_id
@@ -518,38 +477,16 @@ async def record_audit_safe(
 # worker does the SSRF-hardened fetch + parse + hash-skip + stage; these
 # endpoints only manage the row + enqueue.
 
-RUN_NOW_COOLDOWN_SECONDS = 300
-
-
-async def _load_external_source(
-    project_id: uuid.UUID, source_id: uuid.UUID, db: AsyncSession
-) -> ExternalSourceSyncState:
-    row = await db.get(ExternalSourceSyncState, source_id)
-    if row is None or row.project_id != project_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "external_source_not_found")
-    return row
-
-
 @router.get(
     "/projects/{project_id}/external-sources",
     response_model=list[ExternalSourceSyncStateOut],
 )
 async def list_external_sources(
     project_id: uuid.UUID,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> list[ExternalSourceSyncStateOut]:
-    rows = (
-        (
-            await db.execute(
-                select(ExternalSourceSyncState)
-                .where(ExternalSourceSyncState.project_id == project_id)
-                .order_by(ExternalSourceSyncState.created_at)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    rows = await KnowledgeExternalSourceAdminService(db).list_sources(project_id)
     return [ExternalSourceSyncStateOut.model_validate(row) for row in rows]
 
 
@@ -561,57 +498,28 @@ async def list_external_sources(
 async def create_external_source(
     project_id: uuid.UUID,
     body: ExternalSourceCreate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> ExternalSourceSyncStateOut:
-    # Defense-in-depth SSRF gate at the API layer (the worker re-validates on
-    # fetch). Rejects non-HTTPS, IP literals, and non-Google hosts before the
-    # row is created. Category key is normalised lowercase (Finding 17).
     try:
-        validate_sheet_url(body.sheet_url)
-        category_key = KnowledgeCategoryKey(body.category_key.strip().lower()).value
+        row = await KnowledgeExternalSourceAdminService(db).create_source(project_id, body, admin)
     except ExternalSourceSyncError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, exc.code) from exc
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid_category_key") from exc
-    # Only one source_kind ships in v1; reject others so the unique-constraint
-    # row never silently persists an unsupported value (the fetch URL is fixed).
-    if body.source_kind != "google_sheet":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unsupported_source_kind")
-
-    row = ExternalSourceSyncState(
-        project_id=project_id,
-        category_key=category_key,
-        source_kind=body.source_kind,
-        sheet_url=body.sheet_url.strip(),
-        sheet_gid=body.sheet_gid,
-        auto_sync_enabled=body.auto_sync_enabled,
-        created_by=admin.id,
-    )
-    db.add(row)
-    try:
-        await db.flush()
-    except IntegrityError as exc:  # unique (project_id, category_key, source_kind)
-        await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "external_source_already_exists") from exc
-    await record_audit(
-        db,
-        action="external_source_created",
-        actor_id=admin.id,
-        target_type="external_source_sync_state",
-        target_id=str(row.id),
-        payload={
-            "project_id": str(project_id),
-            "category_key": category_key,
-            "sheet_url": body.sheet_url,
-        },
-    )
-    await db.commit()
-    await db.refresh(row)
-    # Enqueue an immediate one-shot import so the admin sees content right away.
-    # Fire-and-forget: the row's last_status transitions NEW → OK/FAILED as the
-    # worker runs; the UI refreshes the source list + category catalog.
-    enqueue_one_shot(row.id)
+    except Exception as exc:
+        if str(exc) in {
+            "external_source_already_exists",
+            "unsupported_source_kind",
+            "invalid_category_key",
+        }:
+            code = (
+                status.HTTP_409_CONFLICT
+                if str(exc) == "external_source_already_exists"
+                else status.HTTP_400_BAD_REQUEST
+            )
+            raise HTTPException(code, str(exc)) from exc
+        raise
     return ExternalSourceSyncStateOut.model_validate(row)
 
 
@@ -621,30 +529,22 @@ async def create_external_source(
 async def run_external_source_now(
     project_id: uuid.UUID,
     source_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> dict:
     """Trigger an immediate sync (admin edited the sheet, wants the bot updated now).
 
     Redis 5-minute cooldown per source (Finding 14); unique-per-click job_id so a
     retry after a fix within the same day actually runs (Finding 9).
     """
-    row = await _load_external_source(project_id, source_id, db)
-    redis = get_redis()
-    cooldown_key = f"ext-src-run-now:{source_id}"
-    acquired = await redis.set(cooldown_key, "1", nx=True, ex=RUN_NOW_COOLDOWN_SECONDS)
-    if not acquired:
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "run_now_cooldown")
-    job_id = enqueue_one_shot(row.id, job_id=f"ext-src-sync-{source_id}-{uuid.uuid4().hex}")
-    await record_audit(
-        db,
-        action="external_source_run_now",
-        actor_id=admin.id,
-        target_type="external_source_sync_state",
-        target_id=str(source_id),
-        payload={"project_id": str(project_id), "category_key": row.category_key, "job_id": job_id},
-    )
-    await db.commit()
+    try:
+        job_id = await KnowledgeExternalSourceAdminService(db).run_now(project_id, source_id, admin)
+    except Exception as exc:
+        if str(exc) == "run_now_cooldown":
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "run_now_cooldown") from exc
+        if str(exc) == "external_source_not_found":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "external_source_not_found") from exc
+        raise
     return {"job_id": job_id}
 
 
@@ -655,19 +555,13 @@ async def run_external_source_now(
 async def delete_external_source(
     project_id: uuid.UUID,
     source_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> None:
     """Remove a sync config. Published FAQ chunks survive (no FK on last_revision_id)."""
-    row = await _load_external_source(project_id, source_id, db)
-    category_key = row.category_key
-    await db.delete(row)
-    await record_audit(
-        db,
-        action="external_source_deleted",
-        actor_id=admin.id,
-        target_type="external_source_sync_state",
-        target_id=str(source_id),
-        payload={"project_id": str(project_id), "category_key": category_key},
-    )
-    await db.commit()
+    try:
+        await KnowledgeExternalSourceAdminService(db).delete_source(project_id, source_id, admin)
+    except Exception as exc:
+        if str(exc) == "external_source_not_found":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "external_source_not_found") from exc
+        raise

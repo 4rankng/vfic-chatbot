@@ -63,6 +63,22 @@ from app.project_knowledge.domain.project import (
 logger = logging.getLogger(__name__)
 
 
+def _enqueue_direct_context_index(
+    knowledge_base_id: uuid.UUID,
+    project_id: uuid.UUID,
+    text_blob: str,
+) -> None:
+    from app.composition.project_knowledge_jobs import (
+        build_project_knowledge_direct_context_jobs,
+    )
+
+    build_project_knowledge_direct_context_jobs().index_direct_context(
+        knowledge_base_id,
+        project_id,
+        text_blob,
+    )
+
+
 class ProjectService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -309,13 +325,11 @@ class ProjectService:
         # cross-project retrieval (otherwise it is only reachable via FOCUSED-turn
         # system-prompt injection). Best-effort: the enqueue swallows Redis errors so a
         # transient queue failure never rolls back this publish.
-        from app.workers.direct_context_worker import enqueue_direct_context_index
-
         text_blob = getattr(direct_file, "normalized_text", None) or getattr(
             direct_file, "raw_text", None
         )
         if text_blob:
-            enqueue_direct_context_index(knowledge_base.id, project_id, text_blob)
+            _enqueue_direct_context_index(knowledge_base.id, project_id, text_blob)
         if activating:
             await bump_cache_version(NS_PREAMBLE)
         return direct_file

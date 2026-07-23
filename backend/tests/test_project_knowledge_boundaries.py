@@ -8,7 +8,9 @@ from collections.abc import Callable
 import pytest
 
 from app.project_knowledge.application.jobs import (
+    DirectContextIndexRequest,
     EnqueueReceiptUnknown,
+    ProjectKnowledgeDirectContextJobs,
     ProjectKnowledgeJobKind,
     ProjectKnowledgeJobRequest,
     ProjectKnowledgeJobs,
@@ -31,6 +33,9 @@ from app.project_knowledge.domain.project import (
     project_activation_error,
 )
 from app.project_knowledge.infrastructure.cache import RedisProjectKnowledgeCacheRepair
+from app.composition.project_knowledge_jobs import (
+    WorkerDirectContextIndexAdapter,
+)
 from app.composition.project_knowledge_jobs import RqProjectKnowledgeJobAdapter
 from app.workers.utils import EnqueueStatusUnknown
 
@@ -294,6 +299,14 @@ class _RecordingJobPort:
         return self.receipt
 
 
+class _RecordingDirectContextPort:
+    def __init__(self) -> None:
+        self.requests: list[DirectContextIndexRequest] = []
+
+    def enqueue(self, request: DirectContextIndexRequest) -> None:
+        self.requests.append(request)
+
+
 def test_project_knowledge_jobs_document_ingest_is_fire_and_forget() -> None:
     port = _RecordingJobPort("ignored-worker-receipt")
     jobs = ProjectKnowledgeJobs(port)
@@ -301,6 +314,20 @@ def test_project_knowledge_jobs_document_ingest_is_fire_and_forget() -> None:
     assert jobs.ingest_document(42) is None
     assert port.requests == [
         ProjectKnowledgeJobRequest(ProjectKnowledgeJobKind.DOCUMENT_INGEST, 42)
+    ]
+
+
+def test_project_knowledge_direct_context_jobs_preserve_enqueue_arguments() -> None:
+    port = _RecordingDirectContextPort()
+    jobs = ProjectKnowledgeDirectContextJobs(port)
+
+    assert jobs.index_direct_context("kb-1", "project-1", "raw text") is None
+    assert port.requests == [
+        DirectContextIndexRequest(
+            knowledge_base_id="kb-1",
+            project_id="project-1",
+            text_blob="raw text",
+        )
     ]
 
 
@@ -455,3 +482,25 @@ def test_rq_adapter_maps_unknown_worker_receipt_to_application_error(
         )
 
     assert isinstance(exc_info.value.__cause__, EnqueueStatusUnknown)
+
+
+def test_direct_context_index_adapter_delegates_to_worker_facade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[object, object, str]] = []
+    monkeypatch.setattr(
+        "app.workers.direct_context_worker.enqueue_direct_context_index",
+        lambda knowledge_base_id, project_id, text_blob: calls.append(
+            (knowledge_base_id, project_id, text_blob)
+        ),
+    )
+
+    WorkerDirectContextIndexAdapter().enqueue(
+        DirectContextIndexRequest(
+            knowledge_base_id="kb-1",
+            project_id="project-1",
+            text_blob="raw text",
+        )
+    )
+
+    assert calls == [("kb-1", "project-1", "raw text")]

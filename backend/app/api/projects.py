@@ -9,13 +9,13 @@ status codes.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin, require_recruiter
-from app.core.db import get_db
-from app.models.user import User
+from app.project_knowledge.infrastructure.api_dependencies import get_project_knowledge_db
 from app.schemas.projects import (
     BusTimetableResponse,
     FeatureListResponse,
@@ -87,8 +87,8 @@ async def list_projects(
         None, description="Sort field (name, created_at, updated_at, is_active)"
     ),
     order: str | None = Query("desc", description="Sort direction: asc | desc"),
-    _user: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> ProjectListResponse:
     data, total = await ProjectService(db).list_with_readiness(
         is_active,
@@ -104,15 +104,17 @@ async def list_projects(
 @router.get("/{project_id}", response_model=ProjectOut)
 async def get_project(
     project_id: uuid.UUID,
-    _user: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> ProjectOut:
     return await ProjectService(db).get_with_readiness(project_id)
 
 
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 async def create_project(
-    body: ProjectCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    body: ProjectCreate,
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> ProjectOut:
     project = await ProjectService(db).create(body, admin)
     return await ProjectService(db).get_with_readiness(project.id)
@@ -122,8 +124,8 @@ async def create_project(
 async def update_project(
     project_id: uuid.UUID,
     body: ProjectUpdate,
-    actor: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    actor: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> ProjectOut:
     project = await ProjectService(db).update(project_id, body, actor)
     return await ProjectService(db).get_with_readiness(project.id)
@@ -132,8 +134,8 @@ async def update_project(
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> None:
     await ProjectService(db).delete(project_id, admin)
 
@@ -141,8 +143,8 @@ async def delete_project(
 @router.get("/{project_id}/single-page", response_model=DirectContextFileDetailOut)
 async def get_project_single_page(
     project_id: uuid.UUID,
-    _user: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> DirectContextFileDetailOut:
     direct_file = await ProjectService(db).get_single_page(project_id)
     return DirectContextFileDetailOut(
@@ -155,8 +157,8 @@ async def get_project_single_page(
 async def replace_project_single_page(
     project_id: uuid.UUID,
     body: DirectContextFileUpsert,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> DirectContextFileOut:
     direct_file = await ProjectService(db).replace_single_page(project_id, body, admin)
     return DirectContextFileOut.model_validate(direct_file)
@@ -168,8 +170,8 @@ async def replace_project_single_page(
 )
 async def list_project_single_page_external_sources(
     project_id: uuid.UUID,
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> list[SinglePageExternalSourceOut]:
     rows = await ProjectService(db).list_single_page_external_sources(project_id)
     return [SinglePageExternalSourceOut.model_validate(row) for row in rows]
@@ -183,8 +185,8 @@ async def list_project_single_page_external_sources(
 async def create_project_single_page_external_source(
     project_id: uuid.UUID,
     body: SinglePageExternalSourceCreate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> SinglePageExternalSourceOut:
     try:
         row = await ProjectService(db).create_single_page_external_source(project_id, body, admin)
@@ -199,8 +201,8 @@ async def create_project_single_page_external_source(
 async def run_project_single_page_external_source_now(
     project_id: uuid.UUID,
     source_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> dict[str, str]:
     try:
         job_id = await ProjectService(db).run_single_page_external_source_now(
@@ -220,8 +222,8 @@ async def run_project_single_page_external_source_now(
 async def delete_project_single_page_external_source(
     project_id: uuid.UUID,
     source_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> None:
     await ProjectService(db).delete_single_page_external_source(project_id, source_id, admin)
 
@@ -229,8 +231,8 @@ async def delete_project_single_page_external_source(
 @router.get("/{project_id}/categories", response_model=CategoryCatalogOut)
 async def list_project_categories(
     project_id: uuid.UUID,
-    _user: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> CategoryCatalogOut:
     data = await build_category_use_cases(db).list_catalog(project_id)
     return CategoryCatalogOut(data=data, total=len(data))
@@ -243,8 +245,8 @@ async def list_project_categories(
 async def get_project_category_template(
     project_id: uuid.UUID,
     category_key: KnowledgeCategoryKey,
-    _user: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> CategoryTemplateOut:
     await build_category_use_cases(db).list_catalog(project_id)
     definition = get_category_definition(category_key)
@@ -263,8 +265,8 @@ async def get_project_category_template(
 async def get_project_category_source(
     project_id: uuid.UUID,
     category_key: KnowledgeCategoryKey,
-    _user: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> CategorySourceOut:
     return await build_category_use_cases(db).get_active_source(project_id, category_key)
 
@@ -278,8 +280,8 @@ async def replace_project_category(
     project_id: uuid.UUID,
     category_key: KnowledgeCategoryKey,
     body: CategoryReplaceRequest,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> CategoryReplaceOut:
     revision, job_id = await build_category_use_cases(db).stage_replacement(
         project_id=project_id,
@@ -303,8 +305,8 @@ async def upload_project_category(
     project_id: uuid.UUID,
     category_key: KnowledgeCategoryKey,
     file: UploadFile = File(...),
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> CategoryReplaceOut:
     filename = file.filename or f"{category_key.value}.yaml"
     if not filename.lower().endswith((".yaml", ".yml")):
@@ -343,8 +345,8 @@ async def clear_project_category(
     project_id: uuid.UUID,
     category_key: KnowledgeCategoryKey,
     _body: CategoryClearRequest,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> CategoryRevisionOut:
     revision = await build_category_use_cases(db).clear(
         project_id=project_id,
@@ -358,8 +360,8 @@ async def clear_project_category(
 async def cutover_project_categories(
     project_id: uuid.UUID,
     _body: CategoryCutoverRequest,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> CategoryAuthorityOut:
     project = await build_category_use_cases(db).cutover_category_authority(
         project_id=project_id,
@@ -376,8 +378,8 @@ async def cutover_project_categories(
 async def rollback_project_categories(
     project_id: uuid.UUID,
     _body: CategoryRollbackRequest,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> CategoryAuthorityOut:
     project = await build_category_use_cases(db).rollback_category_authority(
         project_id=project_id,
@@ -392,7 +394,9 @@ async def rollback_project_categories(
 
 @router.post("/{project_id}/reindex", response_model=ProjectOut)
 async def reindex_project(
-    project_id: uuid.UUID, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    project_id: uuid.UUID,
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> ProjectOut:
     return ProjectOut.model_validate(await ProjectService(db).reindex(project_id))
 
@@ -400,8 +404,8 @@ async def reindex_project(
 @router.get("/{project_id}/features", response_model=FeatureListResponse)
 async def list_project_features(
     project_id: uuid.UUID,
-    _user: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> FeatureListResponse:
     """List the project's active extracted worker product features (catalog order)."""
     return await ProjectService(db).list_features(project_id)
@@ -412,8 +416,8 @@ async def list_project_bus_timetable(
     project_id: uuid.UUID,
     page: int = Query(1, ge=1),
     per_page: int = Query(6, ge=1, le=25),
-    _user: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> BusTimetableResponse:
     """List the project's structured bus routes with ordered pickup stops."""
     return await ProjectService(db).list_bus_timetable(project_id, page=page, per_page=per_page)
@@ -423,8 +427,8 @@ async def list_project_bus_timetable(
 async def list_project_faq(
     project_id: uuid.UUID,
     limit: int = Query(12, ge=1, le=50),
-    _user: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> ProjectFaqResponse:
     """List the project's published FAQ answers."""
     return await ProjectService(db).list_faq(project_id, limit=limit)
@@ -438,8 +442,8 @@ async def list_project_faq(
 async def create_project_faq(
     project_id: uuid.UUID,
     body: ProjectFaqCreate,
-    actor: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    actor: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> ProjectFaqOut:
     """Create a question/answer pair in the project's FAQ knowledge."""
     raise ConflictError("FAQ is read-only here; update the Project FAQ YAML category")
@@ -450,8 +454,8 @@ async def update_project_faq(
     project_id: uuid.UUID,
     faq_id: uuid.UUID,
     body: ProjectFaqUpdate,
-    actor: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    actor: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> ProjectFaqOut:
     """Edit a question/answer pair in the project's FAQ knowledge."""
     raise ConflictError("FAQ is read-only here; update the Project FAQ YAML category")
@@ -461,8 +465,8 @@ async def update_project_faq(
 async def delete_project_faq(
     project_id: uuid.UUID,
     faq_id: uuid.UUID,
-    actor: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    actor: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> None:
     """Delete a question/answer pair from the project's FAQ knowledge."""
     raise ConflictError("FAQ is read-only here; clear or replace the Project FAQ YAML category")
@@ -473,8 +477,8 @@ async def update_project_feature(
     project_id: uuid.UUID,
     feature_id: uuid.UUID,
     body: FeatureUpdate,
-    actor: User = Depends(require_recruiter),
-    db: AsyncSession = Depends(get_db),
+    actor: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> FeatureOut:
     """Recruiter/admin review-edit of one feature value; re-syncs product highlights."""
     raise ConflictError("Project features are read-only projections of category YAML")
@@ -482,7 +486,9 @@ async def update_project_feature(
 
 @router.post("/{project_id}/features/extract", response_model=FeatureListResponse)
 async def extract_project_features(
-    project_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    project_id: uuid.UUID,
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> FeatureListResponse:
     """Synchronously re-extract active product features from the project's latest posting."""
     raise ConflictError("Project features are read-only projections of category YAML")

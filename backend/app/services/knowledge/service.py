@@ -56,6 +56,7 @@ from app.services.knowledge.document_repository import KnowledgeDocumentRepo
 from app.services.knowledge.project_index_repository import rebuild_bus_timetable
 from app.services.knowledge.text_ingestion import kb_text_stats
 from app.services.storage import persist_original_upload
+from app.project_knowledge.application.jobs import ProjectKnowledgeJobs
 
 Embedder = Callable[[str], Awaitable[list[float]]]
 
@@ -63,6 +64,14 @@ Embedder = Callable[[str], Awaitable[list[float]]]
 class KnowledgeService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+        self._jobs: ProjectKnowledgeJobs | None = None
+
+    def _job_scheduler(self) -> ProjectKnowledgeJobs:
+        if self._jobs is None:
+            from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
+
+            self._jobs = build_project_knowledge_jobs()
+        return self._jobs
 
     async def get(self, doc_id: uuid.UUID) -> KnowledgeDocument | None:
         return await self.db.get(KnowledgeDocument, doc_id)
@@ -278,6 +287,44 @@ class KnowledgeService:
         await bump_kb_caches()
         await self.db.refresh(version)
         return version
+
+    async def reindex_all(self, actor: User) -> int:
+        active_versioned_document_ids = (
+            select(KBTextFile.document_id)
+            .join(KBVersion, KBVersion.id == KBTextFile.kb_version_id)
+            .where(KBVersion.status == KBVersionStatus.ACTIVE)
+        )
+        has_version_file = select(KBTextFile.id).where(KBTextFile.document_id == KnowledgeDocument.id)
+        docs = (
+            await self.db.scalars(
+                select(KnowledgeDocument)
+                .join(Project, Project.id == KnowledgeDocument.project_id)
+                .where(
+                    KnowledgeDocument.status != KnowledgeStatus.ARCHIVED,
+                    KnowledgeDocument.project_id.is_not(None),
+                    Project.knowledge_base_id.is_(None),
+                    KnowledgeDocument.raw_text.is_not(None),
+                    (
+                        KnowledgeDocument.id.in_(active_versioned_document_ids)
+                        | ~has_version_file.exists()
+                    ),
+                )
+            )
+        ).all()
+        for doc in docs:
+            self._job_scheduler().ingest_document(doc.id)
+        queued = len(docs)
+        await bump_kb_caches()
+        await record_audit(
+            self.db,
+            action="knowledge_relearn_all_enqueued",
+            actor_id=actor.id,
+            target_type="knowledge",
+            target_id="all",
+            payload={"queued": queued},
+        )
+        await self.db.commit()
+        return queued
 
     async def list_chunks(self, doc_id: uuid.UUID, *, limit: int = 50) -> list[dict]:
         return await KnowledgeChunkRepo(self.db).list_for_doc(doc_id, limit=limit)

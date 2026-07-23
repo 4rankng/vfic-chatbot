@@ -3,11 +3,24 @@
 from __future__ import annotations
 
 from app.project_knowledge.application.jobs import (
+    DirectContextIndexRequest,
     EnqueueReceiptUnknown,
+    ProjectKnowledgeDirectContextJobs,
     ProjectKnowledgeJobKind,
     ProjectKnowledgeJobRequest,
     ProjectKnowledgeJobs,
 )
+
+
+class WorkerDirectContextIndexAdapter:
+    def enqueue(self, request: DirectContextIndexRequest) -> None:
+        from app.workers.direct_context_worker import enqueue_direct_context_index
+
+        enqueue_direct_context_index(
+            request.knowledge_base_id,
+            request.project_id,
+            request.text_blob,
+        )
 
 
 class RqProjectKnowledgeJobAdapter:
@@ -54,5 +67,13 @@ def build_project_knowledge_jobs() -> ProjectKnowledgeJobs:
     return ProjectKnowledgeJobs(RqProjectKnowledgeJobAdapter())
 
 
-__all__ = ["RqProjectKnowledgeJobAdapter", "build_project_knowledge_jobs"]
+def build_project_knowledge_direct_context_jobs() -> ProjectKnowledgeDirectContextJobs:
+    return ProjectKnowledgeDirectContextJobs(WorkerDirectContextIndexAdapter())
 
+
+__all__ = [
+    "RqProjectKnowledgeJobAdapter",
+    "WorkerDirectContextIndexAdapter",
+    "build_project_knowledge_direct_context_jobs",
+    "build_project_knowledge_jobs",
+]

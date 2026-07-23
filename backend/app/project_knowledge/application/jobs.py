@@ -95,8 +95,43 @@ class ProjectKnowledgeJobs:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class DirectContextIndexRequest:
+    knowledge_base_id: object
+    project_id: object
+    text_blob: str
+
+
+class DirectContextIndexPort(Protocol):
+    def enqueue(self, request: DirectContextIndexRequest) -> None: ...
+
+
+class ProjectKnowledgeDirectContextJobs:
+    """Application facade for best-effort DIRECT_CONTEXT re-indexing."""
+
+    def __init__(self, port: DirectContextIndexPort) -> None:
+        self._port = port
+
+    def index_direct_context(
+        self,
+        knowledge_base_id: object,
+        project_id: object,
+        text_blob: str,
+    ) -> None:
+        self._port.enqueue(
+            DirectContextIndexRequest(
+                knowledge_base_id=knowledge_base_id,
+                project_id=project_id,
+                text_blob=text_blob,
+            )
+        )
+
+
 __all__ = [
+    "DirectContextIndexPort",
+    "DirectContextIndexRequest",
     "EnqueueReceiptUnknown",
+    "ProjectKnowledgeDirectContextJobs",
     "ProjectKnowledgeJobKind",
     "ProjectKnowledgeJobPort",
     "ProjectKnowledgeJobRequest",
