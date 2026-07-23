@@ -40,8 +40,9 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [feedbackByProvider, setFeedbackByProvider] =
-    useState<Record<AdapterProvider, RowFeedback>>(createInitialAssignmentFeedback);
+  const [feedbackByProvider, setFeedbackByProvider] = useState<
+    Record<AdapterProvider, RowFeedback>
+  >(createInitialAssignmentFeedback);
   const [activating, setActivating] = useState(false);
   const assignmentRequestId = useRef(0);
 
@@ -205,6 +206,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 className="tt-btn-touch"
                 onClick={setGlobalDefault}
                 disabled={activating}
+                aria-busy={activating}
               >
                 {activating ? (
                   <span
@@ -253,6 +255,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 <Button
                   type="button"
                   variant="outline"
+                  className="tt-btn-touch"
                   onClick={() => void loadAssignments(true)}
                 >
                   <RefreshCcw className="size-4" />
@@ -310,6 +313,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                           void refreshProvider(assignment.provider)
                         }
                         disabled={feedback.pending}
+                        aria-busy={feedback.pending}
                         aria-label={`Tải lại trạng thái ${assignment.label}`}
                       >
                         {feedback.pending ? (
@@ -335,6 +339,7 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                             : undefined
                         }
                         disabled={feedback.pending || state.actionDisabled}
+                        aria-busy={feedback.pending}
                         aria-label={`${state.actionLabel} cho ${assignment.label}`}
                       >
                         {feedback.pending ? (

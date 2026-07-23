@@ -1,9 +1,10 @@
 import { render } from "vitest-browser-react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/components/atomic-crm/providers/rest/api";
 import type { KnowledgeCategoryStatus } from "./project-knowledge-service";
 import type * as KnowledgeServiceModule from "./project-knowledge-service";
 import type { Project } from "../types";
+import "./projects.css";
 
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
@@ -93,6 +94,10 @@ const deferred = <T,>() => {
 };
 
 describe("ProjectKnowledgePanel", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.getProjectKnowledgeCategories.mockResolvedValue({
@@ -204,9 +209,7 @@ describe("ProjectKnowledgePanel", () => {
       .toBeVisible();
     // Auto-sync state now surfaces via the source-row badge, not the flow
     // diagram caption (which was removed to cut visual noise).
-    await expect
-      .element(screen.getByText("Tự động mỗi ngày"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Tự động mỗi ngày")).toBeVisible();
     await expect
       .element(screen.getByText("Trang kiến thức", { exact: true }))
       .toBeVisible();
@@ -257,8 +260,7 @@ describe("ProjectKnowledgePanel", () => {
           id: "src-sp-1",
           project_id: "project-rorze",
           source_kind: "google_sheet",
-          sheet_url:
-            "https://docs.google.com/spreadsheets/d/demo/edit#gid=42",
+          sheet_url: "https://docs.google.com/spreadsheets/d/demo/edit#gid=42",
           sheet_gid: 42,
           auto_sync_enabled: false,
           consecutive_failures: 0,
@@ -472,6 +474,50 @@ describe("ProjectKnowledgePanel", () => {
     ).toBe("Chưa có dữ liệu");
   });
 
+  it("stacks the selected category detail below the list in the phone viewport", async () => {
+    mocks.getProjectKnowledgeCategorySource.mockResolvedValue({
+      key: "jobs",
+      label_vi: "Vị trí tuyển dụng",
+      revision_id: "revision-jobs",
+      revision_no: 2,
+      filename: "jobs-current.yaml",
+      content: "CURRENT JOBS",
+      checksum: "checksum",
+      updated_at: "2026-07-18T00:00:00Z",
+    });
+
+    const screen = await render(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    await expect
+      .element(
+        screen.getByLabelText(
+          "Dữ liệu hiện tại của danh mục Vị trí tuyển dụng",
+        ),
+      )
+      .toBeVisible();
+
+    const workspace = screen.container.querySelector(
+      ".project-category-workspace",
+    );
+    const navigation = screen.container.querySelector(
+      ".project-category-navigation",
+    );
+    const detail = screen.container.querySelector("#project-category-detail");
+    expect(workspace).toBeInstanceOf(HTMLElement);
+    expect(navigation).toBeInstanceOf(HTMLElement);
+    expect(detail).toBeInstanceOf(HTMLElement);
+
+    const workspaceStyle = window.getComputedStyle(workspace as HTMLElement);
+    const navigationBounds = (
+      navigation as HTMLElement
+    ).getBoundingClientRect();
+    const detailBounds = (detail as HTMLElement).getBoundingClientRect();
+    expect(workspaceStyle.display).toBe("block");
+    expect(detailBounds.top).toBeGreaterThanOrEqual(navigationBounds.bottom);
+    expect(detailBounds.left).toBe(navigationBounds.left);
+  });
+
   it("ignores a late response from a previously selected category", async () => {
     const lateJobs = deferred<{
       key: string;
@@ -528,5 +574,52 @@ describe("ProjectKnowledgePanel", () => {
     await expect
       .element(compensationEditor)
       .toHaveValue("CURRENT COMPENSATION");
+  });
+
+  it("brings the selected category detail into focus on a small screen", async () => {
+    mocks.getProjectKnowledgeCategorySource.mockImplementation(
+      (_projectId: string, key: string) =>
+        Promise.resolve({
+          key,
+          label_vi: key === "jobs" ? "Vị trí tuyển dụng" : "Lương & thu nhập",
+          revision_id: `revision-${key}`,
+          revision_no: 1,
+          filename: `${key}-current.yaml`,
+          content: `CURRENT ${key}`,
+          checksum: "checksum",
+          updated_at: "2026-07-18T00:00:00Z",
+        }),
+    );
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query) =>
+        ({
+          matches: query === "(max-width: 767px)",
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(() => true),
+        }) as MediaQueryList,
+    );
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+
+    const screen = await render(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    await screen.getByRole("button", { name: "Lương & thu nhập" }).click();
+
+    await vi.waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+    expect(document.activeElement).toBe(
+      screen.container.querySelector("#project-category-detail"),
+    );
   });
 });

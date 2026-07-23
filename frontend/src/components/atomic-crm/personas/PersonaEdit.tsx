@@ -137,14 +137,7 @@ const PersonaEditContent = () => {
             onSubmit={onSubmit}
             extraActions={
               <>
-                {persona.is_active ? (
-                  <Badge
-                    variant="outline"
-                    className="border-primary/20 bg-primary/5 text-primary"
-                  >
-                    Đang bật
-                  </Badge>
-                ) : (
+                {!persona.is_active ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -154,7 +147,7 @@ const PersonaEditContent = () => {
                     <Zap className="size-4" />
                     Kích hoạt
                   </Button>
-                )}
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"

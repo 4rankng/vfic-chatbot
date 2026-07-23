@@ -48,4 +48,19 @@ describe("project list visual hierarchy", () => {
       /@media \(max-width: 359px\)[\s\S]*?\.project-category-editor-actions\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/,
     );
   });
+
+  it("keeps the selected category content beside the category list on desktop", () => {
+    expect(stylesheet).toMatch(
+      /\.project-category-workspace\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(220px, 280px\) minmax\(0, 1fr\)/,
+    );
+    expect(stylesheet).toMatch(
+      /\.project-category-navigation\s*\{[^}]*border-right:\s*1px solid var\(--border\)/,
+    );
+    expect(stylesheet).toMatch(
+      /\.project-category-workspace \.project-category-editor\s*\{[^}]*border-top:\s*0/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*?\.project-category-workspace\s*\{[^}]*display:\s*block/,
+    );
+  });
 });

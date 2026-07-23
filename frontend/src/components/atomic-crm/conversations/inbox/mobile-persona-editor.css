@@ -26,9 +26,10 @@
 
 .persona-editor-back {
   width: fit-content;
-  height: 26px;
+  min-height: 44px;
+  height: 44px;
   gap: 5px;
-  padding: 0 6px;
+  padding: 0 8px;
   color: var(--ink-muted);
   font-size: var(--fs-meta);
   font-weight: 700;
@@ -895,8 +896,22 @@
 }
 
 .persona-edit-surface {
+  overflow: visible;
   border: 0;
   border-radius: 0;
+}
+
+.inbox-bg-container .app.persona-app .persona-center-panel {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.persona-editor-status-strip {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .persona-edit-identity {
@@ -962,8 +977,8 @@
 }
 
 .persona-edit-import-actions [data-slot="button"] {
-  min-height: 40px;
-  height: 40px;
+  min-height: 44px;
+  height: 44px;
 }
 
 .persona-edit-grid {
@@ -1099,17 +1114,30 @@
 
 .persona-followup-editor-card [data-slot="input"],
 .persona-followup-editor-card input {
-  min-height: 40px;
-  height: 40px;
+  min-height: 44px;
+  height: 44px;
   font-size: var(--fs-body-sm);
 }
 
-.persona-followup-editor-card [role="switch"] {
+.persona-followup-switch-target {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  cursor: pointer;
+}
+
+.persona-followup-editor-card .persona-followup-switch-target [role="switch"] {
+  width: 40px !important;
+  min-width: 40px;
+  height: 24px !important;
+  min-height: 24px;
   transform: none;
 }
 
 .persona-followup-stage {
-  min-height: 36px;
+  min-height: 44px;
 }
 
 .tailkit-workspace-content .persona-followup-stage [data-slot="checkbox"] {
@@ -1119,7 +1147,11 @@
 }
 
 .persona-edit-savebar {
+  position: sticky;
+  bottom: 0;
   padding: 12px 16px;
+  background: var(--surface-solid);
+  backdrop-filter: none;
 }
 
 .tailkit-workspace-content .persona-edit-savebar button[data-slot="button"] {
@@ -1179,7 +1211,8 @@
 }
 
 .persona-assignment-row-actions [data-slot="button"] {
-  min-height: 40px;
+  min-height: 44px !important;
+  height: 44px !important;
 }
 
 @media (max-width: 900px) {
@@ -1194,6 +1227,17 @@
 }
 
 @media (max-width: 760px) {
+  .inbox-bg-container .app.persona-app .persona-center-panel {
+    overflow: visible;
+    overflow-x: clip;
+    overflow-y: visible;
+  }
+
+  .inbox-bg-container .app.persona-app .persona-workspace-content {
+    max-height: none;
+    overflow-y: visible;
+  }
+
   .persona-editor-hero,
   .persona-edit-identity,
   .persona-edit-main,
@@ -1227,6 +1271,13 @@
   .persona-assignment-row-actions [data-slot="button"] {
     min-height: 44px !important;
     height: 44px !important;
+  }
+
+  .persona-edit-savebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    align-items: center;
+    bottom: calc(76px + env(safe-area-inset-bottom));
   }
 
   .persona-edit-section-heading {
@@ -1276,6 +1327,12 @@
   .persona-assignment-table-head,
   .persona-assignment-row-card {
     padding-inline: 0;
+  }
+}
+
+@media (min-width: 761px) and (max-height: 520px) {
+  .persona-edit-savebar {
+    position: static;
   }
 }
 

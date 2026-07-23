@@ -5,6 +5,7 @@ import {
   AlertCircle,
   ArrowRight,
   ChevronDown,
+  ChevronRight,
   Database,
   Download,
   FileText,
@@ -302,8 +303,8 @@ const SinglePagePanel = ({ project, editable }: Props) => {
                         </summary>
                         <div className="border-t border-warning/20 px-9 py-2 text-body-sm text-muted-foreground">
                           Khi lịch hàng ngày đang bật, dữ liệu mới từ Google
-                          Sheet sẽ thay thế nội dung sửa thủ công ở lần đồng
-                          bộ tiếp theo.
+                          Sheet sẽ thay thế nội dung sửa thủ công ở lần đồng bộ
+                          tiếp theo.
                         </div>
                       </details>
                     )}
@@ -349,6 +350,7 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
   const pollRef = useRef<number | null>(null);
   const [faqAutoSyncOn, setFaqAutoSyncOn] = useState(false);
   const [extSrcRefreshKey, setExtSrcRefreshKey] = useState(0);
+  const categoryDetailRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -509,6 +511,25 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
   const activeCategoryCount =
     categories?.filter((item) => item.active_revision_id).length ?? 0;
 
+  const selectCategory = (key: KnowledgeCategoryKey) => {
+    setSelected(key);
+
+    if (!window.matchMedia("(max-width: 767px)").matches) return;
+
+    window.requestAnimationFrame(() => {
+      const detail = categoryDetailRef.current;
+      if (!detail) return;
+      const reducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      detail.scrollIntoView({
+        behavior: reducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+      detail.focus({ preventScroll: true });
+    });
+  };
+
   return (
     <section
       className="project-knowledge-panel"
@@ -532,163 +553,198 @@ const RagCategoriesPanel = ({ project, editable }: Props) => {
             </strong>
           </div>
         )}
-        {!categories ? (
-          <div className="project-category-grid">
-            {Array.from({ length: 12 }).map((_, index) => (
-              <Skeleton key={index} className="h-24" />
-            ))}
-          </div>
-        ) : (
-          <div className="project-category-grid">
-            {categories.map((category) => {
-              const isProcessing = processingKey === category.key;
-              const hasPendingRevision =
-                category.status === "STAGED" ||
-                category.status === "PROCESSING";
-              const hasError = category.status === "FAILED";
-              const isActive = Boolean(category.active_revision_id);
-              return (
-                <button
-                  key={category.key}
-                  type="button"
-                  onClick={() => setSelected(category.key)}
-                  aria-pressed={selected === category.key}
-                  className={cn(
-                    "project-category-card",
-                    selected === category.key && "is-selected",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="project-category-name">
-                      {category.label_vi}
-                    </span>
-                    {isProcessing || hasPendingRevision ? (
-                      <span
-                        className="tt-loading tt-loading-spinner tt-loading-sm text-primary"
-                        aria-hidden="true"
-                      />
-                    ) : hasError ? (
-                      <AlertCircle
-                        className="size-4 text-destructive"
-                        aria-hidden="true"
-                      />
-                    ) : isActive ? (
-                      <Badge
-                        variant="secondary"
-                        className="h-6 px-1.5 text-badge font-semibold"
-                      >
-                        v{category.active_revision_no ?? 1}
-                      </Badge>
-                    ) : (
-                      <span
-                        className="project-category-empty-dot"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </div>
-                  <div className="project-category-status">
-                    {isProcessing || hasPendingRevision ? (
-                      <span className="text-muted-foreground">Đang xử lý</span>
-                    ) : hasError ? (
-                      <span className="text-destructive">
-                        Cập nhật lỗi — nội dung cũ vẫn đang dùng
-                      </span>
-                    ) : !isActive ? (
-                      <span className="text-muted-foreground">
-                        Chưa có dữ liệu
-                      </span>
-                    ) : null}
-                  </div>
-                  {category.updated_at && (
-                    <p className="project-category-date">
-                      Cập nhật {formatDate(category.updated_at)}
-                    </p>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <section className="project-category-editor">
-          <div className="project-category-editor-header">
-            <div className="project-category-editor-heading">
-              <div className="project-category-editor-title-row">
-                <h3 className="project-category-editor-title">
-                  {selectedCategory?.label_vi ?? selected}
-                </h3>
-                {!loadingCategory && (
-                  <Badge variant={hasCurrentSource ? "secondary" : "outline"}>
-                    {hasCurrentSource
-                      ? `Đang dùng v${selectedCategory?.active_revision_no ?? 1}`
-                      : "Chưa có dữ liệu"}
-                  </Badge>
-                )}
+        <div className="project-category-workspace">
+          <nav
+            className="project-category-navigation"
+            aria-label="Danh mục kiến thức"
+          >
+            {!categories ? (
+              <div className="project-category-grid">
+                {Array.from({ length: 12 }).map((_, index) => (
+                  <Skeleton key={index} className="h-[72px]" />
+                ))}
               </div>
-              <p className="project-category-editor-description">
-                {hasCurrentSource
-                  ? `Dữ liệu hiện tại Agent đang sử dụng · ${filename}`
-                  : "Danh mục này chưa có dữ liệu đang dùng. Tải mẫu để chuẩn bị nội dung mới."}
-              </p>
-            </div>
-            <div className="project-category-editor-actions">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={downloadTemplate}
-                disabled={!blankTemplate || loadingCategory}
-              >
-                <Download className="size-4" /> Tải mẫu
-              </Button>
-              {editable && (
+            ) : (
+              <div className="project-category-grid">
+                {categories.map((category) => {
+                  const isProcessing = processingKey === category.key;
+                  const hasPendingRevision =
+                    category.status === "STAGED" ||
+                    category.status === "PROCESSING";
+                  const hasError = category.status === "FAILED";
+                  const isActive = Boolean(category.active_revision_id);
+                  const isSelected = selected === category.key;
+                  return (
+                    <button
+                      key={category.key}
+                      type="button"
+                      onClick={() => selectCategory(category.key)}
+                      aria-pressed={isSelected}
+                      aria-controls="project-category-detail"
+                      className={cn(
+                        "project-category-card",
+                        isSelected && "is-selected",
+                      )}
+                    >
+                      <div className="project-category-card-heading">
+                        <span className="project-category-name">
+                          {category.label_vi}
+                        </span>
+                        <span className="project-category-card-state">
+                          {isProcessing || hasPendingRevision ? (
+                            <span
+                              className="tt-loading tt-loading-spinner tt-loading-sm text-primary"
+                              aria-hidden="true"
+                            />
+                          ) : hasError ? (
+                            <AlertCircle
+                              className="size-4 text-destructive"
+                              aria-hidden="true"
+                            />
+                          ) : isActive ? (
+                            <Badge
+                              variant="secondary"
+                              className="h-6 px-1.5 text-badge font-semibold"
+                            >
+                              v{category.active_revision_no ?? 1}
+                            </Badge>
+                          ) : (
+                            <span
+                              className="project-category-empty-dot"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <ChevronRight
+                            className="project-category-chevron"
+                            aria-hidden="true"
+                          />
+                        </span>
+                      </div>
+                      <div className="project-category-status">
+                        {isProcessing || hasPendingRevision ? (
+                          <span className="text-muted-foreground">
+                            Đang xử lý
+                          </span>
+                        ) : hasError ? (
+                          <span className="text-destructive">
+                            Cập nhật lỗi — nội dung cũ vẫn đang dùng
+                          </span>
+                        ) : !isActive ? (
+                          <span className="text-muted-foreground">
+                            Chưa có dữ liệu
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Đang dùng
+                          </span>
+                        )}
+                      </div>
+                      {category.updated_at && (
+                        <p className="project-category-date">
+                          Cập nhật {formatDate(category.updated_at)}
+                        </p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </nav>
+
+          <section
+            ref={categoryDetailRef}
+            id="project-category-detail"
+            className="project-category-editor"
+            tabIndex={-1}
+            aria-labelledby="project-category-detail-title"
+            aria-busy={loadingCategory}
+          >
+            <div className="project-category-editor-header">
+              <div className="project-category-editor-heading">
+                <div className="project-category-editor-title-row">
+                  <h3
+                    id="project-category-detail-title"
+                    className="project-category-editor-title"
+                  >
+                    {selectedCategory?.label_vi ?? selected}
+                  </h3>
+                  {!loadingCategory && (
+                    <Badge variant={hasCurrentSource ? "secondary" : "outline"}>
+                      {hasCurrentSource
+                        ? `Đang dùng v${selectedCategory?.active_revision_no ?? 1}`
+                        : "Chưa có dữ liệu"}
+                    </Badge>
+                  )}
+                </div>
+                <p className="project-category-editor-description">
+                  {hasCurrentSource
+                    ? `Dữ liệu hiện tại Agent đang sử dụng · ${filename}`
+                    : "Danh mục này chưa có dữ liệu đang dùng. Tải mẫu để chuẩn bị nội dung mới."}
+                </p>
+              </div>
+              <div className="project-category-editor-actions">
                 <Button
                   variant="outline"
                   size="sm"
-                  asChild
-                  disabled={saving || loadingCategory}
+                  className="tt-btn-touch"
+                  onClick={downloadTemplate}
+                  disabled={!blankTemplate || loadingCategory}
                 >
-                  <label>
-                    {saving ? (
-                      <span
-                        className="tt-loading tt-loading-spinner tt-loading-sm"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <Upload className="size-4" />
-                    )}
-                    Tải file YAML
-                    <input
-                      type="file"
-                      accept=".yaml,.yml,application/yaml,text/yaml"
-                      className="sr-only"
-                      disabled={saving || loadingCategory}
-                      onChange={(event) => void upload(event.target.files?.[0])}
-                    />
-                  </label>
+                  <Download className="size-4" /> Tải mẫu
                 </Button>
-              )}
-              {editable && (
-                <ExternalSourceLinkForm
-                  projectId={String(project.id)}
-                  defaultCategory={selected}
-                  onCreated={() => setExtSrcRefreshKey((value) => value + 1)}
-                />
-              )}
+                {editable && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="tt-btn-touch"
+                    asChild
+                    disabled={saving || loadingCategory}
+                  >
+                    <label>
+                      {saving ? (
+                        <span
+                          className="tt-loading tt-loading-spinner tt-loading-sm"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Upload className="size-4" />
+                      )}
+                      Tải file YAML
+                      <input
+                        type="file"
+                        accept=".yaml,.yml,application/yaml,text/yaml"
+                        className="sr-only"
+                        disabled={saving || loadingCategory}
+                        onChange={(event) =>
+                          void upload(event.target.files?.[0])
+                        }
+                      />
+                    </label>
+                  </Button>
+                )}
+                {editable && (
+                  <ExternalSourceLinkForm
+                    projectId={String(project.id)}
+                    defaultCategory={selected}
+                    onCreated={() => setExtSrcRefreshKey((value) => value + 1)}
+                  />
+                )}
+              </div>
             </div>
-          </div>
-          {loadingCategory ? (
-            <Skeleton className="project-category-editor-skeleton" />
-          ) : (
-            <Textarea
-              value={editorContent}
-              readOnly
-              rows={20}
-              className="project-category-textarea font-mono"
-              aria-label={`Dữ liệu hiện tại của danh mục ${selectedCategory?.label_vi ?? selected}`}
-              placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
-            />
-          )}
-        </section>
+            {loadingCategory ? (
+              <Skeleton className="project-category-editor-skeleton" />
+            ) : (
+              <Textarea
+                value={editorContent}
+                readOnly
+                rows={20}
+                className="project-category-textarea font-mono"
+                aria-label={`Dữ liệu hiện tại của danh mục ${selectedCategory?.label_vi ?? selected}`}
+                placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
+              />
+            )}
+          </section>
+        </div>
 
         {selected === "faq" && faqAutoSyncOn && (
           <p

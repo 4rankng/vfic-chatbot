@@ -359,6 +359,7 @@ const PersonaForm = ({
               variant="outline"
               className="tt-btn-touch"
               disabled={importing || !knowledgeBaseId}
+              aria-busy={importing}
               onClick={() => fileInputRef.current?.click()}
             >
               {importing ? (
@@ -495,13 +496,15 @@ const PersonaForm = ({
                           <strong>{FOLLOWUP_SCORE_LABELS[score]}</strong>
                           <span>Tính từ tin nhắn cuối của ứng viên</span>
                         </div>
-                        <Switch
-                          checked={rule.enabled}
-                          onCheckedChange={(enabled) =>
-                            updateFollowupRule(score, { enabled })
-                          }
-                          aria-label={`Bật follow-up ${FOLLOWUP_SCORE_LABELS[score]}`}
-                        />
+                        <label className="persona-followup-switch-target">
+                          <Switch
+                            checked={rule.enabled}
+                            onCheckedChange={(enabled) =>
+                              updateFollowupRule(score, { enabled })
+                            }
+                            aria-label={`Bật follow-up ${FOLLOWUP_SCORE_LABELS[score]}`}
+                          />
+                        </label>
                       </div>
 
                       <div className="persona-followup-field">
@@ -522,7 +525,7 @@ const PersonaForm = ({
                             })
                           }
                           placeholder="VD: 10 22 46"
-                          className="h-9 font-mono text-control"
+                          className="h-11 font-mono text-control"
                         />
                       </div>
 
@@ -584,6 +587,7 @@ const PersonaForm = ({
             type="submit"
             className="tt-btn-touch sm:min-w-32"
             disabled={submitting}
+            aria-busy={submitting}
           >
             {submitting ? (
               <>

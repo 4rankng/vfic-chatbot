@@ -261,17 +261,9 @@ const PersonaStudioOverview = ({
                     : "persona-studio-badge"
                 }
               >
-                <CheckCircle2 className="size-3" />
-                {persona.is_active ? "Đang bật" : "Đang xem"}
+                {persona.is_active ? <CheckCircle2 className="size-3" /> : null}
+                {persona.is_active ? "Mặc định" : "Dự phòng"}
               </Badge>
-              {persona.is_active ? (
-                <Badge
-                  variant="outline"
-                  className="persona-studio-badge is-brand"
-                >
-                  Mặc định
-                </Badge>
-              ) : null}
               <Badge variant="outline" className="persona-studio-badge">
                 {getScopeLabel(persona, stats)}
               </Badge>
@@ -282,6 +274,7 @@ const PersonaStudioOverview = ({
             <Button
               variant="outline"
               type="button"
+              className="persona-overview-edit-action tt-btn-touch"
               onClick={() => onEdit(persona)}
             >
               <Pencil className="size-3.5" />
@@ -294,13 +287,17 @@ const PersonaStudioOverview = ({
       <section className="persona-studio-section">
         <div className="persona-studio-section-title">
           <div>
-            <h2>Sẵn sàng</h2>
-            <p>Nội dung, follow-up và phạm vi vận hành.</p>
+            <h2>Mức hoàn thiện</h2>
+            <p>
+              {stats.sectionCount}/{PERSONA_SECTION_TOTAL} phần ·{" "}
+              {stats.followupEnabledCount}/{FOLLOWUP_TOTAL} follow-up ·{" "}
+              {stats.adapterCount} adapter
+            </p>
           </div>
         </div>
         <div className="persona-readiness-bar-card">
           <div>
-            <span>Sẵn sàng</span>
+            <span>Hồ sơ</span>
             <strong>{readinessPercent}%</strong>
           </div>
           <progress
@@ -374,14 +371,6 @@ const PersonaStudioOverview = ({
             <h2>Prompt Agent</h2>
             <p>7 phần định hình cách Agent tư vấn.</p>
           </div>
-          <Button
-            variant="outline"
-            type="button"
-            onClick={() => onEdit(persona)}
-          >
-            <Pencil className="size-3.5" />
-            Sửa prompt
-          </Button>
         </div>
         <div className="persona-prompt-list">
           {sections.map((section) => (
@@ -422,14 +411,6 @@ const PersonaStudioOverview = ({
             <h2>Follow-up</h2>
             <p>Lịch nhắc theo mức ưu tiên.</p>
           </div>
-          <Button
-            variant="outline"
-            type="button"
-            onClick={() => onEdit(persona)}
-          >
-            <Pencil className="size-3.5" />
-            Sửa
-          </Button>
         </div>
         <div className="persona-followup-grid">
           {FOLLOWUP_KEYS.map((key) => {
@@ -485,24 +466,10 @@ const PersonaStudioOverview = ({
             <div className="persona-scope-row">
               <span>Đang dùng</span>
               <strong>{adapterScopeSummary}</strong>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => onEdit(persona)}
-              >
-                Quản lý
-              </Button>
             </div>
             <div className="persona-scope-row">
               <span>Ghi chú</span>
               <strong>{persona.notes?.trim() || "Chưa có"}</strong>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => onEdit(persona)}
-              >
-                Sửa
-              </Button>
             </div>
           </div>
           <details className="persona-activity-disclosure">
@@ -552,14 +519,6 @@ const PersonaStudioOverview = ({
 
       {!persona.is_active ? (
         <footer className="persona-profile-footer">
-          <Button
-            variant="outline"
-            type="button"
-            onClick={() => onEdit(persona)}
-          >
-            <Pencil className="size-3.5" />
-            Sửa
-          </Button>
           <Button type="button" onClick={() => onActivate(persona)}>
             <Zap className="size-3.5" />
             Đặt mặc định
@@ -694,14 +653,14 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
           />
         ) : (
           <>
-            <div className="tt-card tt-card-border persona-studio-layout persona-agent-stack">
+            <div className="persona-studio-layout persona-agent-stack">
               <section
                 className="persona-agent-picker"
                 aria-label="Danh sách Agent"
               >
                 <div className="persona-panel-header">
                   <div>
-                    <h2>Hồ sơ Agent</h2>
+                    <h2>Agent</h2>
                   </div>
                   <Badge
                     variant="outline"
@@ -724,7 +683,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
 
                 <Button
                   type="button"
-                  className="persona-create-action"
+                  className="persona-create-action tt-btn-touch"
                   onClick={() => redirect("create", "personas")}
                 >
                   <Plus className="size-4" />

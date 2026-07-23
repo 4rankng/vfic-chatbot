@@ -116,8 +116,8 @@
   max-width: 100%;
   display: grid;
   grid-template-columns: minmax(260px, 292px) minmax(0, 1fr);
-  border-color: var(--border);
-  border-radius: 10px;
+  border: 0;
+  border-radius: 0;
   background: var(--surface-solid);
   overflow-x: clip;
 }
@@ -770,18 +770,18 @@
 
 .persona-page-shell .persona-agent-picker .persona-studio-command {
   width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   background: var(--surface-solid);
 }
 
 .persona-page-shell .persona-agent-picker .persona-studio-command input {
-  min-height: 38px;
+  min-height: 44px;
 }
 
 .persona-page-shell .persona-agent-picker .persona-create-action {
   width: 100%;
-  min-height: 40px;
-  height: 40px;
+  min-height: 44px !important;
+  height: 44px !important;
   box-shadow: none;
 }
 
@@ -808,13 +808,18 @@
 }
 
 .persona-page-shell .persona-studio-profile-actions [data-slot="button"] {
-  min-height: 36px;
-  height: 36px;
+  min-height: 44px;
+  height: 44px;
   padding: 0 11px;
   border-radius: 8px;
   font-size: var(--fs-body-sm);
   font-weight: 740;
   line-height: 1;
+}
+
+.persona-page-shell .persona-overview-edit-action {
+  min-height: 44px;
+  height: 44px;
 }
 
 .persona-page-shell .persona-readiness-bar-card {
