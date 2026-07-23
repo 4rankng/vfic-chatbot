@@ -16,7 +16,7 @@ from app.graph.ports import (
     FaqBypassPort,
     LeadContextPort,
     ReplyPolicyPort,
-    RetrievalPort,
+    GraphRetrievalPort,
     RuntimePolicyPort,
 )
 from app.recruitment.application.ports import ProactiveStatePort
@@ -119,17 +119,17 @@ class GraphDeps:
     embedder: Embedder
     zalo: Any
     conversation: ConversationPort
-    retrieval: RetrievalPort
+    retrieval: GraphRetrievalPort
     reply_policy: ReplyPolicyPort
     # Unused after the LLM-judge removal; kept for GraphDeps API stability (tests
     # still inject safety=...). Sits with the other defaulted fields by dataclass rule.
     safety: SafetyModel | None = None
     # Lead-profile context for the agent prompt. None in tests that stub the turn.
     lead: LeadContextPort | None = None
-    # Factory that yields a fresh RetrievalPort on its own DB session, enabling
+    # Factory that yields a fresh GraphRetrievalPort on its own DB session, enabling
     # parallel tool dispatch (each concurrent tool call gets an isolated session).
     # None → tools run sequentially on the shared ``retrieval`` (tests, legacy).
-    make_retrieval: Callable[[], AsyncContextManager[RetrievalPort]] | None = None
+    make_retrieval: Callable[[], AsyncContextManager[GraphRetrievalPort]] | None = None
     # Deterministic FAQ short-circuit (runs before the agent node). None in tests.
     faq_bypass: FaqBypassPort | None = None
     # Proactive follow-up guard: (allowed, reason). None in reactive-only tests.

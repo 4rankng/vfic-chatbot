@@ -33,7 +33,7 @@ from app.schemas.installation import (
     InstallationValidationOut,
 )
 from app.services.audit_service import record_audit
-from app.services.errors import InstallationError
+from app.shared.domain.errors import InstallationError
 from app.services.installation.authority import RuntimeAuthorityFingerprint, RuntimeAuthorityStamp
 from app.services.installation.hashing import sha256_json
 from app.services.installation.catalog import (

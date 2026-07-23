@@ -37,6 +37,12 @@ class GraphKnowledgeProviderFactory:
         )
 
 
+def build_default_embedder() -> Any:
+    from app.graph.clients import build_embedder
+
+    return build_embedder()
+
+
 def build_knowledge_provider_factory() -> KnowledgeProviderFactory:
     return GraphKnowledgeProviderFactory()
 
@@ -62,6 +68,7 @@ def build_knowledge_ingestion_use_cases(db: AsyncSession) -> KnowledgeIngestionU
 
 __all__ = [
     "GraphKnowledgeProviderFactory",
+    "build_default_embedder",
     "build_category_use_cases",
     "build_knowledge_ingestion_use_cases",
     "build_knowledge_provider_factory",

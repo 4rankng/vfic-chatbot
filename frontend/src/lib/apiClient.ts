@@ -7,7 +7,7 @@
 // token) before the error surfaces, so a short-lived access token expiring
 // mid-session does not log the user out.
 
-import { vficConfig } from "@/lib/vfic/config";
+import { vficConfig } from "@/lib/runtime-config";
 
 const ACCESS_KEY = "RaStore.auth.access_token";
 const REFRESH_KEY = "RaStore.auth.refresh_token";

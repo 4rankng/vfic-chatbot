@@ -60,18 +60,13 @@ EXPECTED_ROUTE_COUNTS = {
 }
 EXPECTED_ROUTE_INVENTORY_SHA256 = "3fecf58e9c1f3e94b0b692db4564e8e1cef6d94f57c7a5143adf09ae39737fec"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
-    # Recovery dispatch moved behind the conversation/messaging application port.
-    "outbox_boundary": 9,
-    "provider_boundary": 75,  # identity lookup moved behind an infrastructure gateway
-    # Three service-owned worker calls moved behind the project/knowledge
-    # application scheduler port; queue names and durable worker paths are unchanged.
-    # +1 queue_producer: single-page sheet sync now enqueues direct-context indexing
-    # so sheet-sourced DIRECT_CONTEXT content participates in cross-project retrieval.
-    # OA profile enrichment moved from the compatibility service to composition,
-    # removing one service-owned worker edge.
-    "queue_producer": 32,
+    # Scan the complete application tree so composition roots and bounded-context
+    # adapters remain covered after transport logic moves out of legacy packages.
+    "outbox_boundary": 10,
+    "provider_boundary": 91,
+    "queue_producer": 37,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "dd909b443433e9b8d084d945dfff6b3f7f6c0b70fa0d9c3f62dddbeed6e81ab1"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "115f0529fc06009d7cbd5de045d51cbf9c2f986d064d0073aa9378061a242a02"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
@@ -242,8 +237,6 @@ def _route_records() -> list[dict[str, str]]:
 def _runtime_calls(*, broad: bool = False) -> list[dict]:
     counter: Counter[tuple[str, str, str, str]] = Counter()
     for path in sorted(APP_DIR.rglob("*.py")):
-        if not any(part in {"api", "services", "workers", "graph"} for part in path.parts):
-            continue
         relative_path = path.relative_to(APP_DIR.parent).as_posix()
         source = path.read_text(encoding="utf-8")
         provider_transport = any(

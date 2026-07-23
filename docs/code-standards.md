@@ -52,8 +52,8 @@ surrounding code.
 - Models in `app/models/` **do not generate migrations** — they mirror the
   schema. Alembic baseline `0001` is ~58 KB of raw `op.execute` SQL; later
   revisions are normal Alembic.
-- **HEAD = `0023_kb_versioned_ingestion`** (7 Jul 2026). 23 migrations + 1
-  merge head (`091e7edc9f76_merge...` merging the two `0013_*` heads).
+- The current Alembic head is the repository source of truth; never hard-code a
+  historical head in application logic or documentation.
 - Run migrations: `docker compose run --rm web alembic upgrade head` (prod,
   5× SSH retry) or `.venv/bin/python -m alembic upgrade head` (local).
 
@@ -139,8 +139,9 @@ surrounding code.
 - `signUp` is **disabled** — users are admin-provisioned only.
 
 ### HTTP client & JWT
-- `providers/rest/api.ts`:
-  - Base URL: `vficConfig.apiBaseUrl` → `window.__VFIC__.API_BASE` →
+- `src/lib/apiClient.ts`:
+  - Base URL comes from `src/lib/runtime-config.ts`:
+    `window.__VFIC__.API_BASE` →
     `VITE_API_BASE` → `""` (same-origin).
   - All paths `/api/v1`.
   - JWT in `Authorization: Bearer` (read via `getAccessToken()`).
@@ -157,7 +158,8 @@ surrounding code.
   shared with react-admin's `CoreAdminContext`. Realtime invalidations drive
   freshness.
 - **Zustand** for the chat message store:
-  `components/atomic-crm/conversations/messageStore.ts` (Rocket.Chat-pattern
+  `components/atomic-crm/conversations/infrastructure/message-store.ts`
+  (Rocket.Chat-pattern
   normalized store). Per-conversation `Map<id,Message>` with lazily-recomputed
   sorted-array cache, O(1) dedup, optimistic-temp + server-echo merge.
   Selectors: `useConversationMessages`, `useConversationFlags`,
@@ -196,8 +198,8 @@ surrounding code.
 - `providers/commons/i18nProvider.ts`:
   `polyglotI18nProvider(() => vietnameseCatalog, "vi", ...)`. `getInitialLocale()`
   hard-returns `"vi"`. Do not wire other locales.
-- Catalog merge: `vietnameseCrmMessages.ts` over `englishCrmMessages.ts` over
-  `ra-language-english` (`allowMissing: true` → English fallback, never raw keys).
+- Catalog merge: `vietnameseCrmMessages.ts` over `ra-language-english`
+  (`allowMissing: true` → library fallback, never raw keys).
 - Hard-coded Vietnamese in components is acceptable for one-off strings.
 - Diacritic-insensitive search via `lib/vietnameseSearch.ts` (uses the
   `diacritic` package).

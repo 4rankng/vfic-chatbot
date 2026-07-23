@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 from app.graph.fast_lane import match as fast_lane_match
 
 TurnIntent = Literal[

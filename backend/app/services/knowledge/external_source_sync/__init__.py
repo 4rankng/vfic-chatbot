@@ -40,7 +40,7 @@ from app.models.external_source_sync_state import ExternalSourceSyncState
 from app.models.knowledge import KnowledgeCategory, KnowledgeCategoryRevision
 from app.models.user import User
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
-from app.services.errors import ConflictError, UpstreamError
+from app.shared.domain.errors import ConflictError, UpstreamError
 from app.services.knowledge.category_contracts import (
     EmptyCategoryError,
     category_checksum,

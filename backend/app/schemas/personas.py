@@ -9,8 +9,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.core.config import PROACTIVE_48H_WINDOW_SECONDS, PROACTIVE_FOLLOWUP_CAP
-from app.models.lead import LeadScore, LeadStage
+from app.recruitment.domain.proactive_policy import (
+    PROACTIVE_48H_WINDOW_SECONDS,
+    PROACTIVE_FOLLOWUP_CAP,
+)
+from app.recruitment.domain.statuses import LeadScore, LeadStage
 
 
 MAX_FOLLOWUP_CADENCE_HOURS = PROACTIVE_48H_WINDOW_SECONDS // 3600

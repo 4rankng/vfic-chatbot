@@ -19,7 +19,7 @@ All endpoints except `/auth/login`, `/auth/refresh`, `/auth/forgot-password`,
 Authorization: Bearer <access_token>
 ```
 
-### Auth dependencies (`backend/app/api/dependencies.py`)
+### Auth dependencies (`backend/app/api/auth_dependencies.py`)
 | Dependency | Access |
 |---|---|
 | `get_current_user` | Any authenticated user |
@@ -339,11 +339,18 @@ The Messenger settings flow lives under `/settings` and is documented below.
 
 ## Custom DataProvider Methods
 
-The frontend dataProvider (`frontend/src/components/atomic-crm/providers/rest/dataProvider.ts`) extends react-admin with custom methods:
+The frontend data provider
+(`frontend/src/components/atomic-crm/providers/rest/dataProvider.ts`) extends
+react-admin with custom methods. Conversation reply transport is implemented by
+`frontend/src/components/atomic-crm/conversations/infrastructure/http-human-reply-adapter.ts`;
+all methods share `frontend/src/lib/apiClient.ts`.
 
 | Method | Purpose |
 |---|---|
+| `getConversationBotRuns` | List recent bot-run trace summaries for a conversation |
+| `getBotRunTrace` | Read an individual bot-run decision trace |
 | `sendHumanReply` | Recruiter sends a manual reply to a candidate |
+| `retryHumanReply` | Retry a failed recruiter reply |
 | `takeOverConversation` | Recruiter takes over a conversation from the bot |
 | `releaseConversation` | Recruiter releases conversation back to the bot |
 | `setConversationMode` | Toggle conversation mode (bot/manual) |
@@ -352,8 +359,8 @@ The frontend dataProvider (`frontend/src/components/atomic-crm/providers/rest/da
 | `createProfile` | Create user profile |
 | `disableUser` | Disable a user account |
 | `enableUser` | Enable a user account |
-| `getConfiguration` | Get app configuration |
-| `updateConfiguration` | Update app configuration |
+| `resetUserPassword` | Set a new password for a user (admin only) |
+| `signUp` | Reject public sign-up; accounts are admin-provisioned |
 
 ## Knowledge ingestion templates
 

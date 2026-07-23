@@ -22,28 +22,6 @@ ZALO_OA_API_BASE: str = "https://openapi.zalo.me"
 ZALO_BOT_WEBHOOK_URL: str = "https://bot.tingting.vip/webhooks/zalo/chatbot"
 
 # ---------------------------------------------------------------------------
-# Proactive follow-up constants (not configurable via env — policy is in code)
-# ---------------------------------------------------------------------------
-PROACTIVE_FOLLOWUP_GAPS_HOURS: list[int] = [6, 24, 46]
-PROACTIVE_FOLLOWUP_CAP: int = 3
-PROACTIVE_SILENCE_LIMIT: int = 2
-PROACTIVE_TICK_INTERVAL_SECONDS: int = 1800  # 30 min
-PROACTIVE_PER_TICK_CAP: int = 5
-# 48h Zalo rule minus 1h safety margin for in-flight latency (MiniMax + safety).
-PROACTIVE_48H_WINDOW_SECONDS: int = 169200  # 47h
-PROACTIVE_RETRY_COOLDOWN_SECONDS: int = 21600  # 6h
-PROACTIVE_JOB_MAX_AGE_SECONDS: int = 3300  # 55 min
-# Vietnamese + English opt-out phrases (substring match on inbound).
-PROACTIVE_OPTOUT_PHRASES: list[str] = [
-    p.strip().lower()
-    for p in (
-        "dừng,đừng nhắn,ko quan tâm,không quan tâm,stop,unsubscribe,để yên,bận rồi,"
-        "đừng làm phiền,không cần nữa,tôi không thích,không thích"
-    ).split(",")
-    if p.strip()
-]
-
-# ---------------------------------------------------------------------------
 # Knowledge pipeline constants (not configurable via env)
 # ---------------------------------------------------------------------------
 DIGEST_SECTION_CHARS: int = 6000

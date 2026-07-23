@@ -50,7 +50,7 @@ class _FakeEmbedder:
 
 
 def _make_repo(**methods):
-    """Build a fake RetrievalPort with the given async methods (each ``self, ...``).
+    """Build a fake GraphRetrievalPort with the given async methods (each ``self, ...``).
 
     Methods are set on the class so they bind as bound methods; the returned
     instance is passed straight to a tool as its ``retrieval`` argument.

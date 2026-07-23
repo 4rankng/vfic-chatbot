@@ -1,7 +1,7 @@
 """Parallel tool dispatch — ``MiniMaxAgent.agent`` runs multiple tool_calls concurrently.
 
 When the LLM returns 2+ tool_calls in one response, each call gets its own
-``RetrievalPort`` via ``make_retrieval`` (an isolated DB session) and runs
+``GraphRetrievalPort`` via ``make_retrieval`` (an isolated DB session) and runs
 concurrently via ``asyncio.gather``. This test suite pins:
 
 * Parallel dispatch actually happens (concurrency synchronization test).
@@ -64,7 +64,7 @@ class _ScriptedLLM:
 
 
 class _FakeRetrieval:
-    """A minimal RetrievalPort that delegates to a handler function.
+    """A minimal GraphRetrievalPort that delegates to a handler function.
 
     ``handler(name, args)`` is called for every tool dispatch. This lets each
     test inject custom behavior (return value, delay, side effects).
@@ -88,9 +88,6 @@ class _FakeRetrieval:
 
     async def active_projects_with_card(self):
         return await self._handler("recommend_projects", {})
-
-    async def match_jobs_for_lead(self, *args, **kwargs):  # noqa: ARG002
-        return await self._handler("recommend_jobs", {})
 
     async def search_bus_timetable(self, *args, **kwargs):  # noqa: ARG002
         return await self._handler("search_bus_timetable", {})

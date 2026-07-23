@@ -10,7 +10,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import bump_cache_version
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 from app.models.company import Company, Project
 from app.models.job import Job, JobStatus
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeStatus

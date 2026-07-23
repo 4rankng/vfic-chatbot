@@ -24,7 +24,8 @@ from app.conversation_messaging.domain.ownership import (
     lock_still_live as _lock_still_live,
     normalize_lock_owner as _normalize_lock_owner,
 )
-from app.core.config import PROACTIVE_OPTOUT_PHRASES, get_settings
+from app.core.config import get_settings
+from app.recruitment.domain.proactive_policy import PROACTIVE_OPTOUT_PHRASES
 from app.schemas.bot_run import parse_decision_trace
 from app.models.conversation import (
     BotRun,
@@ -93,14 +94,11 @@ class ConversationState:
 
     # --- webhook-side primitives (used by US-006 chatbot) ---
     async def ensure(self, zalo_chat_id: str, *, zalo_channel: str = "bot") -> Conversation:
-        """Compatibility facade: resolve a Zalo (channel, chat_id) to the neutral
-        identity and delegate to :meth:`ensure_by_identity`.
+        """Resolve a Zalo channel/chat pair to its canonical channel identity.
 
-        Retained during the Zalo→neutral migration (Phase 2–3) so existing
-        webhook/sender callers keep working. New code should call
-        ``ensure_by_identity`` directly. The Zalo account keys are the stable
-        synthetic values backfilled by Alembic 0047. OA's ``oa:`` storage prefix
-        is stripped from the external id, matching the backfill normalization.
+        The Zalo account keys are the stable synthetic values backfilled by
+        Alembic 0047. OA's ``oa:`` storage prefix is stripped from the external
+        id, matching the backfill normalization.
         """
         if zalo_channel == "oa":
             provider = "zalo_oa"

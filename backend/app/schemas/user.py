@@ -8,7 +8,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.user import Role
+from app.identity.domain.role import Role
 
 
 class UserCreate(BaseModel):

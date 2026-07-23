@@ -9,7 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import personas
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 from app.schemas.personas import PersonaAssignmentOut, PersonaAssignmentUpdate
 
 

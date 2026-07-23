@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearTokens } from "./api";
+import { clearTokens } from "@/lib/apiClient";
 import { getDataProvider } from "./dataProvider";
 
 /**

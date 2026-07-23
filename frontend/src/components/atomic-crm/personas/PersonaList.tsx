@@ -29,7 +29,7 @@ import {
   getCompletedPersonaSectionCount,
   getPersonaAuthoredContentLength,
   getPersonaSectionSummaries,
-} from "./personaMarkdown";
+} from "./domain/personaMarkdown";
 import {
   PERSONA_SECTION_TOTAL,
   getPersonaReadinessPercent,

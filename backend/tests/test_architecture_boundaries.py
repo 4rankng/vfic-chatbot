@@ -1,9 +1,4 @@
-"""Freeze exact dependency inversions while the DDD migration removes them.
-
-The baseline is deliberately one-way: removing a legacy edge passes, while a
-new importer-to-symbol edge fails. Relative imports and the TypeScript import
-forms supported by the application are normalized before comparison.
-"""
+"""Enforce the certified DDD dependency matrix with zero exceptions."""
 
 from __future__ import annotations
 
@@ -17,152 +12,7 @@ import subprocess
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Generated from the accepted 2026-07-22 baseline. Entries are exact normalized
-# rule|importer|target edges; this is intentionally data, not a runtime snapshot.
-ALLOWED_EDGES: frozenset[str] = frozenset(
-    line.strip()
-    for line in """
-api_outward|backend/app/api/auth.py|app.core.config:get_settings
-api_outward|backend/app/api/auth.py|app.core.db:get_db
-api_outward|backend/app/api/auth.py|app.core.ratelimit:enforce_rate_limit
-api_outward|backend/app/api/auth.py|app.core.ratelimit:enforce_rate_limit_key
-api_outward|backend/app/api/auth.py|app.core.security:create_access_token
-api_outward|backend/app/api/auth.py|app.core.security:create_refresh_token
-api_outward|backend/app/api/auth.py|app.core.security:decode_token
-api_outward|backend/app/api/auth.py|app.core.security:hash_password
-api_outward|backend/app/api/auth.py|app.core.security:verify_password
-api_outward|backend/app/api/auth.py|app.models.user:User
-api_outward|backend/app/api/bot_runs.py|app.core.db:get_db
-api_outward|backend/app/api/bot_runs.py|app.models.conversation:BotRunOutcome
-api_outward|backend/app/api/bot_runs.py|app.models.user:User
-api_outward|backend/app/api/conversations.py|app.core.config:get_settings
-api_outward|backend/app/api/conversations.py|app.core.db:get_db
-api_outward|backend/app/api/conversations.py|app.graph.factories:build_deps
-api_outward|backend/app/api/conversations.py|app.graph.runner:run_turn
-api_outward|backend/app/api/conversations.py|app.graph.types:BotRunState
-api_outward|backend/app/api/conversations.py|app.models.conversation:Conversation
-api_outward|backend/app/api/conversations.py|app.models.conversation:ConversationMode
-api_outward|backend/app/api/conversations.py|app.models.conversation:ConversationStatus
-api_outward|backend/app/api/conversations.py|app.models.user:Role
-api_outward|backend/app/api/conversations.py|app.models.user:User
-api_outward|backend/app/api/conversations.py|app.workers.chatbot_worker:enqueue_chat_run
-api_outward|backend/app/api/dashboard.py|app.core.db:get_db
-api_outward|backend/app/api/dashboard.py|app.models.user:User
-api_outward|backend/app/api/dependencies.py|app.core.db:get_db
-api_outward|backend/app/api/dependencies.py|app.graph.clients:build_embedder
-api_outward|backend/app/api/installation.py|app.core.db:get_db
-api_outward|backend/app/api/installation.py|app.models.user:User
-api_outward|backend/app/api/integrations.py|app.core.config:ZALO_BOT_WEBHOOK_URL
-api_outward|backend/app/api/integrations.py|app.core.config:get_settings
-api_outward|backend/app/api/integrations.py|app.core.db:get_db
-api_outward|backend/app/api/integrations.py|app.core.http:get_http_client
-api_outward|backend/app/api/integrations.py|app.core.redis:get_redis
-api_outward|backend/app/api/integrations.py|app.models.user:Role
-api_outward|backend/app/api/integrations.py|app.models.user:User
-api_outward|backend/app/api/jobs.py|app.core.db:get_db
-api_outward|backend/app/api/jobs.py|app.models.job:JobStatus
-api_outward|backend/app/api/jobs.py|app.models.user:User
-api_outward|backend/app/api/knowledge.py|app.core.cache:bump_cache_version
-api_outward|backend/app/api/knowledge.py|app.core.db:get_db
-api_outward|backend/app/api/knowledge.py|app.core.redis:get_redis
-api_outward|backend/app/api/knowledge.py|app.models.company:Project
-api_outward|backend/app/api/knowledge.py|app.models.external_source_sync_state:ExternalSourceSyncState
-api_outward|backend/app/api/knowledge.py|app.models.knowledge:KBTextFile
-api_outward|backend/app/api/knowledge.py|app.models.knowledge:KBVersion
-api_outward|backend/app/api/knowledge.py|app.models.knowledge:KBVersionStatus
-api_outward|backend/app/api/knowledge.py|app.models.knowledge:KnowledgeDocument
-api_outward|backend/app/api/knowledge.py|app.models.knowledge:KnowledgeStatus
-api_outward|backend/app/api/knowledge.py|app.models.user:User
-api_outward|backend/app/api/knowledge_bases.py|app.core.db:get_db
-api_outward|backend/app/api/knowledge_bases.py|app.models.company:Company
-api_outward|backend/app/api/knowledge_bases.py|app.models.company:Project
-api_outward|backend/app/api/knowledge_bases.py|app.models.job:Job
-api_outward|backend/app/api/knowledge_bases.py|app.models.job:JobStatus
-api_outward|backend/app/api/knowledge_bases.py|app.models.knowledge:KnowledgeBase
-api_outward|backend/app/api/knowledge_bases.py|app.models.knowledge:KnowledgeBaseDirectFile
-api_outward|backend/app/api/knowledge_bases.py|app.models.knowledge:KnowledgeDocument
-api_outward|backend/app/api/knowledge_bases.py|app.models.persona:Persona
-api_outward|backend/app/api/knowledge_bases.py|app.models.user:User
-api_outward|backend/app/api/leads.py|app.core.db:get_db
-api_outward|backend/app/api/leads.py|app.models.lead:LeadStage
-api_outward|backend/app/api/leads.py|app.models.user:User
-api_outward|backend/app/api/performance.py|app.core.cache:cache_get_json
-api_outward|backend/app/api/performance.py|app.core.cache:cache_set_json
-api_outward|backend/app/api/performance.py|app.core.db:async_session
-api_outward|backend/app/api/performance.py|app.core.ops_health:collect_queue_health
-api_outward|backend/app/api/performance.py|app.core.redis:get_redis
-api_outward|backend/app/api/performance.py|app.models.user:User
-api_outward|backend/app/api/personas.py|app.core.db:get_db
-api_outward|backend/app/api/personas.py|app.models.user:User
-api_outward|backend/app/api/projects.py|app.core.db:get_db
-api_outward|backend/app/api/projects.py|app.models.user:User
-api_outward|backend/app/api/users.py|app.core.db:get_db
-api_outward|backend/app/api/users.py|app.models.user:Role
-api_outward|backend/app/api/users.py|app.models.user:User
-api_outward|backend/app/api/webhooks.py|app.core.config:get_settings
-api_outward|backend/app/api/webhooks.py|app.core.db:get_db
-api_outward|backend/app/api/webhooks.py|app.models.contact:ContactChannelIdentity
-api_outward|backend/app/api/webhooks.py|app.models.conversation:Conversation
-api_outward|backend/app/api/webhooks.py|app.models.conversation:DeliveryStatus
-api_outward|backend/app/api/webhooks.py|app.models.conversation:Message
-api_outward|backend/app/api/webhooks.py|app.workers.chatbot_worker:enqueue_chat_run
-lib_product|frontend/src/lib/vfic/knowledgeService.ts|frontend/src/components/atomic-crm/providers/rest/api
-lib_product|frontend/src/lib/vfic/knowledgeService.ts|frontend/src/components/atomic-crm/types
-lib_product|frontend/src/lib/vfic/realtimeSocket.ts|frontend/src/components/atomic-crm/providers/rest/api
-product_lib|frontend/src/components/atomic-crm/capabilities/recruitment/index.tsx|frontend/src/lib/vfic/realtimeSocket
-product_lib|frontend/src/components/atomic-crm/conversations/ChatThread.tsx|frontend/src/lib/vfic/humanReplyService
-product_lib|frontend/src/components/atomic-crm/conversations/chatRepository.ts|frontend/src/lib/vfic/realtimeSocket
-product_lib|frontend/src/components/atomic-crm/conversations/useConversationRealtime.ts|frontend/src/lib/vfic/realtimeSocket
-product_lib|frontend/src/components/atomic-crm/knowledge/InlineKnowledgeUploader.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeDetailPanel.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeSourceList.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeSourceShow.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeUpload.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/KnowledgeVersionManager.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/knowledge/StoredKnowledgePanel.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/personas/PersonaAssignments.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/personas/PersonaEdit.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/personas/PersonaForm.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/personas/PersonaList.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ExternalSourceLinkForm.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ExternalSourceList.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectBusTimetable.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectFaqEditor.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectFeatures.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.test.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/ProjectKnowledgePanel.tsx|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/projects/singlePageSheetUrl.test.ts|frontend/src/lib/vfic/knowledgeService
-product_lib|frontend/src/components/atomic-crm/providers/rest/api.ts|frontend/src/lib/vfic/config
-product_lib|frontend/src/components/atomic-crm/providers/rest/authProvider.ts|frontend/src/lib/vfic/realtimeSocket
-product_lib|frontend/src/components/atomic-crm/providers/rest/dataProvider.ts|frontend/src/lib/vfic/humanReplyService
-product_lib|frontend/src/components/atomic-crm/root/reset-runtime-state.ts|frontend/src/lib/vfic/realtimeSocket
-schema_infra|backend/app/schemas/bot_run.py|app.models.conversation:BotRunOutcome
-schema_infra|backend/app/schemas/conversation.py|app.models.conversation:ConversationMode
-schema_infra|backend/app/schemas/conversation.py|app.models.conversation:ConversationProjectState
-schema_infra|backend/app/schemas/conversation.py|app.models.conversation:ConversationStatus
-schema_infra|backend/app/schemas/conversation.py|app.models.conversation:DeliveryStatus
-schema_infra|backend/app/schemas/conversation.py|app.models.conversation:MessageSender
-schema_infra|backend/app/schemas/ingestion_templates.py|app.models.ingestion_template:IngestionRunStatus
-schema_infra|backend/app/schemas/ingestion_templates.py|app.models.ingestion_template:TemplateVersionStatus
-schema_infra|backend/app/schemas/job.py|app.models.job:JobStatus
-schema_infra|backend/app/schemas/knowledge.py|app.models.knowledge:KBVersionStatus
-schema_infra|backend/app/schemas/knowledge.py|app.models.knowledge:KnowledgeStatus
-schema_infra|backend/app/schemas/knowledge_bases.py|app.models.knowledge:KnowledgeBaseMode
-schema_infra|backend/app/schemas/lead.py|app.models.lead:FollowupStatus
-schema_infra|backend/app/schemas/lead.py|app.models.lead:LeadScore
-schema_infra|backend/app/schemas/lead.py|app.models.lead:LeadStage
-schema_infra|backend/app/schemas/personas.py|app.core.config:PROACTIVE_48H_WINDOW_SECONDS
-schema_infra|backend/app/schemas/personas.py|app.core.config:PROACTIVE_FOLLOWUP_CAP
-schema_infra|backend/app/schemas/personas.py|app.models.lead:LeadScore
-schema_infra|backend/app/schemas/personas.py|app.models.lead:LeadStage
-schema_infra|backend/app/schemas/project_knowledge.py|app.models.knowledge:KnowledgeCategoryRevisionStatus
-schema_infra|backend/app/schemas/projects.py|app.models.knowledge:KnowledgeBaseMode
-schema_infra|backend/app/schemas/user.py|app.models.user:Role
-service_outward|backend/app/services/project/service.py|app.workers.direct_context_worker:enqueue_direct_context_index
-service_outward|backend/app/services/project/single_page_external_sources.py|app.workers.direct_context_worker:enqueue_direct_context_index
-""".splitlines()
-    if line.strip()
-)
+ALLOWED_EDGES: frozenset[str] = frozenset()
 
 _TS_SCANNER = Path(__file__).parent / "helpers" / "typescript_import_scanner.cjs"
 
@@ -335,11 +185,15 @@ def _backend_rule(rel: str, target: str) -> str | None:
             "app.core",
             "app.graph",
             "app.models",
+            "app.schemas",
             "app.services",
             "app.workers",
+            "app.composition",
         )
     ):
         return "pure_outward"
+    if "/infrastructure/" in rel and module.startswith("app.composition"):
+        return "infrastructure_composition"
     if rel.startswith("backend/app/services/") and module.startswith(
         ("app.graph", "app.workers", "app.api")
     ):
@@ -368,7 +222,7 @@ _FRONTEND_LAYERED_FEATURE_ROOTS = tuple(
     f"frontend/src/components/atomic-crm/{feature}"
     for feature in ("knowledge", "leads", "personas", "projects", "reporting")
 )
-_FRONTEND_FEATURE_COMPOSITION_FACADES = frozenset(
+_FRONTEND_FEATURE_COMPOSITION_MODULES = frozenset(
     {
         "frontend/src/components/atomic-crm/knowledge/knowledge-service.ts",
         "frontend/src/components/atomic-crm/personas/personaService.ts",
@@ -376,8 +230,6 @@ _FRONTEND_FEATURE_COMPOSITION_FACADES = frozenset(
         "frontend/src/components/atomic-crm/reporting/reportingService.ts",
     }
 )
-
-
 def _has_module_prefix(target: str, prefix: str) -> bool:
     return target == prefix or target.startswith(f"{prefix}/")
 
@@ -409,7 +261,13 @@ def _conversation_layer_rule(rel: str, target: str) -> str | None:
     framework_or_browser_target = target.startswith(
         ("react", "ra-core", "zustand", "@tanstack/")
     )
-    outer_infrastructure_target = target.startswith("frontend/src/lib/vfic") or any(
+    outer_infrastructure_target = target.startswith(
+        (
+            "frontend/src/lib/apiClient",
+            "frontend/src/lib/runtime-config",
+            "frontend/src/lib/vfic",
+        )
+    ) or any(
         _has_module_prefix(target, prefix)
         for prefix in (
             "frontend/src/components/atomic-crm/providers",
@@ -479,6 +337,11 @@ def _is_feature_layer_module(rel: str) -> bool:
     )
 
 
+def _is_feature_composition_module(rel: str) -> bool:
+    """Recognize only the explicitly certified feature composition roots."""
+    return rel in _FRONTEND_FEATURE_COMPOSITION_MODULES
+
+
 def _feature_layer_rule(rel: str, target: str) -> str | None:
     """Keep migrated frontend feature layers inward-only without exceptions."""
     root = _feature_root(rel)
@@ -530,7 +393,7 @@ def _feature_layer_rule(rel: str, target: str) -> str | None:
             return "frontend_feature_infrastructure_outward"
 
     if (
-        rel not in _FRONTEND_FEATURE_COMPOSITION_FACADES
+        not _is_feature_composition_module(rel)
         and not any(
             _has_module_prefix(rel, layer)
             for layer in (domain, application, infrastructure)
@@ -593,6 +456,11 @@ def test_boundary_allowlist_only_names_existing_files() -> None:
         edge for edge in ALLOWED_EDGES if not (REPO_ROOT / edge.split("|", 2)[1]).is_file()
     )
     assert not missing, f"Remove stale architecture allowlist entries: {missing}"
+
+
+def test_boundary_allowlist_only_contains_active_edges() -> None:
+    stale = sorted(ALLOWED_EDGES - _current_edges())
+    assert not stale, "Remove inactive architecture allowlist edges:\n" + "\n".join(stale)
 
 
 def test_python_scanner_normalizes_relative_imports_and_symbols() -> None:
@@ -667,13 +535,25 @@ def test_context_domain_and_application_modules_reject_outward_imports() -> None
             "redis.asyncio:Redis",
             "rq:Queue",
             "socketio:AsyncServer",
-            "app.api.dependencies:get_current_user",
+            "app.api.auth_dependencies:get_current_user",
             "app.core.security:decode_token",
             "app.models.user:User",
+            "app.schemas.user:UserOut",
             "app.services.installation.service:InstallationService",
             "app.workers.chatbot_worker:enqueue_chat_run",
+            "app.composition.identity:build_identity",
         ):
             assert _backend_rule(importer, target) == "pure_outward"
+
+
+def test_infrastructure_layers_cannot_import_composition_roots() -> None:
+    assert (
+        _backend_rule(
+            "backend/app/conversation_messaging/infrastructure/example.py",
+            "app.composition.conversation_messaging:enqueue_chat_turn",
+        )
+        == "infrastructure_composition"
+    )
 
 
 def test_project_knowledge_package_has_no_graph_or_worker_backedge() -> None:
@@ -813,8 +693,8 @@ def test_conversation_layers_have_zero_allowlist_dependency_rules() -> None:
             "ra-core",
             "zustand",
             "@tanstack/react-query",
-            "frontend/src/components/atomic-crm/providers/rest/api",
-            "frontend/src/lib/vfic/realtimeSocket",
+            "frontend/src/lib/apiClient",
+            "frontend/src/components/atomic-crm/providers/realtime/realtime-socket",
             "frontend/src/components/atomic-crm/root/reset-runtime-state",
         ):
             assert _frontend_rule(importer, target) is not None
@@ -834,12 +714,18 @@ def test_conversation_layers_have_zero_allowlist_dependency_rules() -> None:
         infrastructure,
         "frontend/src/components/atomic-crm/capabilities/static-recruitment-runtime",
     ) == "conversation_infrastructure_outward"
-    assert _frontend_rule(infrastructure, "frontend/src/lib/vfic/realtimeSocket") is None
+    assert (
+        _frontend_rule(
+            infrastructure,
+            "frontend/src/components/atomic-crm/providers/realtime/realtime-socket",
+        )
+        is None
+    )
 
     for target in (
         f"{_CONVERSATION_ROOT}/infrastructure/repository",
-        "frontend/src/components/atomic-crm/providers/rest/api",
-        "frontend/src/lib/vfic/realtimeSocket",
+        "frontend/src/lib/apiClient",
+        "frontend/src/components/atomic-crm/providers/realtime/realtime-socket",
         "frontend/src/components/atomic-crm/root/reset-runtime-state",
         f"{_CONVERSATION_ROOT}/chatRepository",
         f"{_CONVERSATION_ROOT}/messageStore",
@@ -874,8 +760,8 @@ def test_migrated_frontend_feature_layers_have_zero_allowlist_rules() -> None:
                 "react",
                 "ra-core",
                 "@tanstack/react-query",
-                "frontend/src/components/atomic-crm/providers/rest/api",
-                "frontend/src/lib/vfic/knowledgeService",
+                "frontend/src/lib/apiClient",
+                f"{root}/infrastructure/http",
             ):
                 assert _frontend_rule(importer, target) is not None
 
@@ -895,10 +781,23 @@ def test_migrated_frontend_feature_layers_have_zero_allowlist_rules() -> None:
             "frontend_feature_presentation_outward"
         )
 
-    for facade in _FRONTEND_FEATURE_COMPOSITION_FACADES:
+    for facade in _FRONTEND_FEATURE_COMPOSITION_MODULES:
         root = _feature_root(facade)
         assert root is not None
+        assert _is_feature_composition_module(facade)
         assert _frontend_rule(facade, f"{root}/infrastructure/http") is None
+
+    arbitrary_service = (
+        "frontend/src/components/atomic-crm/knowledge/totally-unrelated-service.ts"
+    )
+    assert not _is_feature_composition_module(arbitrary_service)
+    assert (
+        _frontend_rule(
+            arbitrary_service,
+            "frontend/src/components/atomic-crm/knowledge/infrastructure/http",
+        )
+        == "frontend_feature_presentation_outward"
+    )
 
 
 def test_frontend_domain_and_application_layers_do_not_use_browser_io_globals() -> None:

@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.text import normalize_vietnamese_text as norm
+from app.shared.domain.text import normalize_vietnamese_text as norm
 from app.graph.ports import FaqBypassResult
 from app.services.retrieval import faq_bypass as fb
 

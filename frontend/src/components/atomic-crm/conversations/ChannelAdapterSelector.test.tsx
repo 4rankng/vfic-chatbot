@@ -7,7 +7,7 @@ const { mockApiJson } = vi.hoisted(() => ({
   mockApiJson: vi.fn(),
 }));
 
-vi.mock("../providers/rest/api", () => ({
+vi.mock("@/lib/apiClient", () => ({
   apiJson: mockApiJson,
 }));
 

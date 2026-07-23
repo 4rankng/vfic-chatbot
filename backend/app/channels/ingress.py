@@ -1,4 +1,4 @@
-"""Provider-facing compatibility facade for neutral message ingress."""
+"""Provider-facing adapter for neutral message ingress."""
 
 from __future__ import annotations
 
@@ -8,14 +8,10 @@ from app.conversation_messaging.application.ingress import (
     InboundIngressResult,
     InboundMessageUseCases,
     InboundTextCommand,
-    inbound_dedup_key,
 )
 from app.conversation_messaging.infrastructure.ingress import (
     SqlAlchemyInboundMessageAdapter,
 )
-
-IngressOutcome = InboundIngressResult
-
 
 def _command(message: ct.ChannelInboundMessage) -> InboundTextCommand:
     return InboundTextCommand(
@@ -29,19 +25,14 @@ def _command(message: ct.ChannelInboundMessage) -> InboundTextCommand:
     )
 
 
-def neutral_dedup_key(message: ct.ChannelInboundMessage) -> str:
-    """Compatibility helper retaining the existing provider-scoped key."""
-    return inbound_dedup_key(_command(message))
-
-
 class ChannelIngressService:
     """Translate provider values and delegate to the messaging use case."""
 
     def __init__(self, db) -> None:
         self._use_cases = InboundMessageUseCases(SqlAlchemyInboundMessageAdapter(db))
 
-    async def ingest(self, message: ct.ChannelInboundMessage) -> IngressOutcome:
+    async def ingest(self, message: ct.ChannelInboundMessage) -> InboundIngressResult:
         return await self._use_cases.ingest(_command(message))
 
 
-__all__ = ["ChannelIngressService", "IngressOutcome", "neutral_dedup_key"]
+__all__ = ["ChannelIngressService"]

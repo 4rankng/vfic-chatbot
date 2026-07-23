@@ -23,7 +23,7 @@ from app.schemas.projects import (
     ProjectFaqUpdate,
 )
 from app.services.audit_service import record_audit
-from app.services.errors import NotFoundError
+from app.shared.domain.errors import NotFoundError
 from app.services.knowledge.text_ingestion import (
     estimate_token_count,
     hash_text,

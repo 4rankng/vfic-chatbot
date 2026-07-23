@@ -12,15 +12,12 @@ from app.conversation_messaging.application.ingress import (
     InboundMessagePort,
     InboundMessageUseCases,
     InboundTextCommand,
+    PersistedInboundMessage,
     inbound_dedup_key,
 )
 from app.conversation_messaging.application.ports import (
     BotTurnQueuePort,
     ConversationEventsPort,
-)
-from app.conversation_messaging.application.zalo_ingress import (
-    ZaloIngressPort,
-    ZaloIngressUseCases,
 )
 
 __all__ = [
@@ -31,11 +28,10 @@ __all__ = [
     "InboundMessagePort",
     "InboundMessageUseCases",
     "InboundTextCommand",
+    "PersistedInboundMessage",
     "OutboundRecoveryCandidate",
     "OutboundRecoveryPort",
     "OutboundRecoverySummary",
-    "ZaloIngressPort",
-    "ZaloIngressUseCases",
     "recover_outbound_batch",
     "inbound_dedup_key",
 ]

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError } from "../providers/rest/api";
+import { ApiError } from "@/lib/apiClient";
 import { requestPasswordResetOtp } from "./passwordRecoveryService";
 
 /** Frontend cooldown between resend clicks. The backend allows 3 requests per

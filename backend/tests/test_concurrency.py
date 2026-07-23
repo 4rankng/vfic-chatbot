@@ -24,7 +24,7 @@ from app.models.conversation import (
 from app.models.lead import Lead, LeadStage
 from app.models.user import Role, User
 from app.services.conversation.state import ConversationConflict, ConversationState, utcnow
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 from app.services.lead import LeadService
 from app.services.presence import _get_viewers, join_viewing, leave_viewing
 

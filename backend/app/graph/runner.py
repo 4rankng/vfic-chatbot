@@ -30,7 +30,7 @@ from typing import Any
 from app.conversation_messaging.domain.delivery import DeliveryState
 from app.core.config import get_settings
 from app.graph.decision_trace import DecisionTraceBuilder
-from app.graph.ports import DeliveryResultPort, OutboundMessagePort, SendOutcome
+from app.graph.ports import DeliveryResultPort, DirectMessageSenderPort, SendOutcome
 from app.shared.application.outbound import (
     AMBIGUOUS_SEND_CLASSES,
     OutboundTelemetry,
@@ -105,11 +105,6 @@ def _channel_for_conversation(conv) -> str:
     return "zalo_oa" if getattr(conv, "zalo_channel", "bot") == "oa" else "zalo_bot"
 
 
-def _detect_channel(zalo) -> str:
-    """Compatibility helper for legacy callers without a Conversation row."""
-    return "zalo_oa" if "OA" in type(zalo).__name__ else "zalo_bot"
-
-
 def _build_outbox_payload(chat_id: str, text: str, quote_message_id: str | None) -> dict:
     """Build the Zalo send payload recorded in the outbox.
 
@@ -125,7 +120,7 @@ def _build_outbox_payload(chat_id: str, text: str, quote_message_id: str | None)
 
 async def _dispatch_claimed_message(
     svc,
-    zalo: OutboundMessagePort,
+    zalo: DirectMessageSenderPort,
     conv,
     *,
     message_id: int | None,
@@ -167,7 +162,7 @@ def _stamp_outbound_telemetry(timings: dict | None, send_result) -> None:
 
 
 def _with_optional_trace(callable_obj, kwargs: dict, trace_sink) -> dict:
-    """Add the trace sink without breaking legacy adapters or test doubles.
+    """Add the trace sink when the injected agent supports it.
 
     The graph protocol keeps trace capture additive. Existing installations may
     provide an agent implementation that predates the optional keyword, so the
@@ -939,7 +934,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         generated_reply = False
         outcome_label = "sent"
         faq_metadata: dict | None = None
-        from app.graph.provider_scope import provider_from_conversation
+        from app.recruitment.domain.provider import provider_from_conversation
 
         provider = provider_from_conversation(conv)
 

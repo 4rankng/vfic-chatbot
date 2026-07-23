@@ -12,8 +12,8 @@ from app.models.persona import PersonaVersion
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseMode
 from app.models.user import Role, User
 from app.schemas.personas import PersonaCreate, PersonaUpdate
-from app.services.errors import ConflictError
-from app.services.persona_service import PersonaService
+from app.shared.domain.errors import ConflictError
+from app.services.personas import PersonaService
 
 pytestmark = pytest.mark.integration
 

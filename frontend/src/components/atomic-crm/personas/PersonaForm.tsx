@@ -42,7 +42,7 @@ import {
   PERSONA_SECTIONS,
   PERSONA_TEMPLATE,
   type PersonaSectionValues,
-} from "./personaMarkdown";
+} from "./domain/personaMarkdown";
 import {
   FOLLOWUP_SCORE_ORDER,
   normalizePersonaFollowupRules,

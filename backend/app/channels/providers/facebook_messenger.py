@@ -43,7 +43,8 @@ class FacebookMessengerNormalizer:
 
     One webhook POST may carry multiple ``entry[]`` blocks, each with multiple
     ``messaging[]`` items. Each item independently reaches a durable outcome
-    (persist, ignore, or dedup) — see :class:`app.channels.ingress.IngressOutcome`.
+    (persist, ignore, or dedup) — see
+    :class:`app.conversation_messaging.application.ingress.InboundIngressResult`.
     The normalizer is pure: it neither persists nor enqueues.
 
     Only candidate-initiated ``message.text`` events become

@@ -11,7 +11,7 @@ from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 from app.models.conversation import ConversationMode, ConversationStatus
 from app.models.lead import Lead
 from app.prompts.candidate_extraction import CANDIDATE_EXTRACT_SYSTEM_PROMPT

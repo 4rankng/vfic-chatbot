@@ -8,7 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { apiJson } from "../providers/rest/api";
+import { apiJson } from "@/lib/apiClient";
 import {
   type ConversationChannelProvider,
   getChannelProviderSearchParams,

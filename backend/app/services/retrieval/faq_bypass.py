@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 
 # ── tunable constants (edit here to tune) ────────────────────────────────────
 SCORE_FLOOR = 0.78  # final hybrid score required to accept

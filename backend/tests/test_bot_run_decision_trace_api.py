@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.api import bot_runs, conversations
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 from app.models.conversation import BotRunOutcome
 
 
@@ -124,4 +124,3 @@ async def test_detail_returns_only_sanitized_trace_contract(monkeypatch) -> None
         "name": "search_knowledge",
         "selected_by": "model",
     }
-

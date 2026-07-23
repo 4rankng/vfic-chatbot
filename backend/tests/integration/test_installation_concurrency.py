@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.services.errors import InstallationError
+from app.shared.domain.errors import InstallationError
 from app.services.installation.service import ActiveInstallation, InstallationService
 from tests.integration.conftest import IntegrationDatabase
 from tests.integration.test_installation_lifecycle import (

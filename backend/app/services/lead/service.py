@@ -16,7 +16,7 @@ from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadS
 from app.models.user import User
 from app.services.viewer_scope import viewer_scope_condition, viewer_scope_filter
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 from app.services.lead import tags as _tag_lib
 from app.services.lead import viewmodels as _vm_lib
 from app.services.lead.chatops import ChatopsService

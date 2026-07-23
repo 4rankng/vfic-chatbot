@@ -17,8 +17,8 @@ from app.models.persona import (
 )
 from app.models.user import Role, User
 from app.schemas.personas import PersonaAssignmentUpdate
-from app.services.errors import ConflictError
-from app.services.persona_service import PersonaService, persona_out_from_model
+from app.shared.domain.errors import ConflictError
+from app.services.personas import PersonaService, persona_out_from_model
 from tests.integration.conftest import IntegrationDatabase
 
 pytestmark = pytest.mark.integration

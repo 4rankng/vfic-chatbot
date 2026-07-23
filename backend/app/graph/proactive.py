@@ -176,13 +176,13 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
      10. Send (``deps.zalo.send``).
      11. Persist (``record_proactive_outcome`` clears lock on any path).
     """
-    from app.core.config import (
+    from app.recruitment.domain.proactive_policy import (
         PROACTIVE_48H_WINDOW_SECONDS,
         PROACTIVE_FOLLOWUP_CAP,
         PROACTIVE_SILENCE_LIMIT,
     )
     from app.graph.context import build_system_prompt
-    from app.graph.provider_scope import provider_from_conversation
+    from app.recruitment.domain.provider import provider_from_conversation
 
     svc = deps.conversation
     injected_proactive_state = getattr(deps, "proactive_state", None)

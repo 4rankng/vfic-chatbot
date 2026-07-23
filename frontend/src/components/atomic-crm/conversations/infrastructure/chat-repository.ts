@@ -1,5 +1,5 @@
-import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
-import { apiJson, getAccessToken } from "../../providers/rest/api";
+import { getRealtimeSocket } from "../../providers/realtime/realtime-socket";
+import { apiJson, getAccessToken } from "@/lib/apiClient";
 import type {
   ConversationMessagePage,
   ConversationMessageRepository,

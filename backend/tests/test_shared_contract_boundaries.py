@@ -30,7 +30,12 @@ FORBIDDEN_PREFIXES = (
 
 def test_shared_contracts_have_no_framework_or_infrastructure_imports() -> None:
     violations: list[str] = []
-    for path in SHARED_ROOT.rglob("*.py"):
+    contract_paths = (
+        path
+        for layer in ("domain", "application")
+        for path in (SHARED_ROOT / layer).rglob("*.py")
+    )
+    for path in contract_paths:
         tree = ast.parse(path.read_text())
         modules = [
             node.module
@@ -51,23 +56,6 @@ def test_shared_contracts_have_no_framework_or_infrastructure_imports() -> None:
     assert not violations
 
 
-def test_error_compatibility_imports_preserve_class_identity() -> None:
-    from app.services import errors as legacy
-    from app.shared.domain import errors as canonical
-
-    assert legacy.NotFoundError is canonical.NotFoundError
-    assert legacy.ConflictError is canonical.ConflictError
-    assert legacy.InstallationError is canonical.InstallationError
-
-
-def test_outbound_compatibility_imports_preserve_object_identity() -> None:
-    from app.graph import outbound_telemetry as legacy
-    from app.shared.application import outbound as canonical
-
-    assert legacy.OutboundTelemetry is canonical.OutboundTelemetry
-    assert legacy.combine_outbound_telemetry is canonical.combine_outbound_telemetry
-
-
 def test_outbound_contract_is_immutable_and_contains_no_payload_fields() -> None:
     from app.shared.application.outbound import OutboundTelemetry
 
@@ -77,14 +65,13 @@ def test_outbound_contract_is_immutable_and_contains_no_payload_fields() -> None
     assert not {"text", "recipient_id", "token", "payload"} & telemetry.__dict__.keys()
 
 
-def test_classification_compatibility_matches_canonical_policy() -> None:
-    from app.graph.send_classification import AMBIGUOUS_SEND_CLASSES as legacy_classes
+def test_canonical_outbound_classification_policy() -> None:
     from app.shared.application.outbound import (
         AMBIGUOUS_SEND_CLASSES,
         is_ambiguous_send,
     )
 
-    assert legacy_classes is AMBIGUOUS_SEND_CLASSES
+    assert "read_timeout" in AMBIGUOUS_SEND_CLASSES
     assert is_ambiguous_send("read_timeout", ok=False)
     assert not is_ambiguous_send("connect_error", ok=False)
     assert not is_ambiguous_send("read_timeout", ok=True)

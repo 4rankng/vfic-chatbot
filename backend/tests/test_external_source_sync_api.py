@@ -17,7 +17,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api import knowledge as knowledge_api
-from app.api.dependencies import get_db, require_admin
+from app.api.auth_dependencies import require_admin
+from app.shared.infrastructure.db import get_request_db as get_db
 from app.models.external_source_sync_state import ExternalSourceSyncState
 
 VALID_URL = "https://docs.google.com/spreadsheets/d/1rRk4wfKb90IxJAbywimgGDOV3Y7g8RbW1EpBabZmFw8/edit"
@@ -68,8 +69,6 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     unsafe_db = AsyncMock()
     unsafe_db.add.side_effect = AssertionError("rejection path must not touch the DB")
     app.dependency_overrides[get_db] = lambda: unsafe_db
-    # The create endpoint enqueues a one-shot import only on success.
-    monkeypatch.setattr(knowledge_api, "enqueue_one_shot", lambda *a, **k: "job-id")
     return TestClient(app)
 
 

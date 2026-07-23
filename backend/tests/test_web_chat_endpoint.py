@@ -121,7 +121,7 @@ async def test_web_chat_turn_uses_admin_only_dependency(monkeypatch) -> None:
     import inspect
 
     from app.api import conversations
-    from app.api.dependencies import require_admin
+    from app.api.auth_dependencies import require_admin
 
     sig = inspect.signature(conversations.web_chat_turn)
     user_param = sig.parameters["user"]

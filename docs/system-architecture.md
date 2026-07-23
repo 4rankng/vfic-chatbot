@@ -149,17 +149,20 @@ runtime abstractions. Multi-tenancy is deferred until 2026-10-22 and requires a
 new explicit decision before implementation; it must later consume these
 boundaries rather than reshape them prematurely.
 
-Phase 2 keeps the shared kernel intentionally narrow: the only new cross-context
-contracts are framework-free domain errors and provider-neutral outbound
-telemetry. Everything else stays with its owning context or composition root so
-the next slice can replace one layer without forcing unrelated layer changes.
+The migration is certified at zero exceptions by
+`backend/tests/test_architecture_boundaries.py`. Domain modules are
+framework-free, application modules depend on domain contracts and ports,
+infrastructure implements those ports, and `app/api`, `app/realtime`,
+`app/workers`, provider modules, and the React presentation tree remain
+adapters. `app/composition` owns cross-context construction; graph-local
+construction remains explicit in `app/graph/factories.py`.
 
-Phase 3 moves access-token validation, role policy, and single-installation
-capability/legacy decisions into framework-free domain and application modules.
-FastAPI and Socket.IO adapters retain the existing user object, denial order,
-status codes, details, and bearer header; `api/dependencies.py` remains a
-compatibility export only. Installation runtime projection is a pure allowlist
-policy that also drops nested credential-shaped legacy values.
+Identity/access, project/knowledge, conversation/messaging, recruitment, and
+reporting now own their domain values and application entry points. Transport
+routers depend on those entry points or infrastructure adapters rather than
+importing another context's persistence details. The former
+`api/dependencies.py` compatibility export and frontend `lib/vfic` migration
+facades have been removed.
 
 Resolved Zalo, MiniMax, OpenRouter, and Facebook OAuth credentials are cached
 only in a bounded process-local, namespace-versioned cache. Redis holds the
@@ -169,29 +172,21 @@ capsules remain encrypted in Redis behind dedicated state/flow ports. Page
 activation and disconnect stage account, encrypted Page token, and audit writes
 in one database transaction, then invalidate caches after commit.
 
-Phase 4 establishes `app/project_knowledge` as the inward boundary for project,
-knowledge, ingestion, and retrieval behavior. Ingestion lifecycle transitions,
-category reference/checksum rules, canonical format identifiers, and project
-activation readiness are framework-free domain policies. Project/knowledge job
-scheduling and provider construction are application ports wired to RQ and the
-current graph clients only in `app/composition`. The five existing worker enqueue facades,
-queue names, dotted callable paths, timeouts, retries, job IDs, and distinct
-receipt semantics remain operational contracts.
-
-The graph compatibility retrieval port now extends the narrower project/knowledge
-query port; conversation-memory and recruitment/persona reads remain graph-owned
-compatibility methods until Phases 5 and 6. Retrieval SQL, visibility, ANN gating,
-RRF, reranking, FAQ thresholds, grounding, and ordering are unchanged. Category
-and single-page commits still precede best-effort cache repair; Phase 4 records
-that bounded stale-cache risk and does not introduce a schema-backed outbox.
+Project/knowledge job scheduling and provider construction are application
+ports wired to RQ and current graph clients only in `app/composition`.
+Conversation delivery, webhook persistence, identity authentication/rate
+limits, reporting queries, and integration runtime access follow the same
+inward rule. Stable worker enqueue facades, queue names, dotted callable paths,
+timeouts, retries, job IDs, and N/N-1 payload decoders remain durable
+operational contracts rather than migration scaffolding.
 
 The normative context/package map, inward dependency rules, exact legacy-edge
 baseline, runtime contract inventory, and layer-removal ownership are recorded
 in [`decisions/ddd-context-boundaries.md`](./decisions/ddd-context-boundaries.md).
-`backend/tests/test_architecture_boundaries.py` prevents new statically
-analyzable forbidden edges while later phases remove the accepted legacy set.
-The migration keeps public routes, schemas, queues, realtime events, and worker
-callable paths compatible until their owning phase proves a safe cutover.
+`backend/tests/test_runtime_surface_inventory.py` scans the complete backend
+application tree and hashes the reviewed HTTP, queue, outbox, and provider
+boundaries. Public routes, schemas, queues, realtime events, worker callable
+paths, bot policy, and user experience remain compatible.
 
 ---
 
@@ -723,7 +718,7 @@ failure cannot roll those transactions back.
 
 ## 5. Reconcile worker — reliability guarantee
 
-`app/workers/reconcile.py` (line 43) is **load-bearing**. It guarantees that
+`app/workers/reconcile_worker.py` is **load-bearing**. It guarantees that
 no candidate message is ever silently lost when a worker crashes or restarts
 mid-turn.
 
@@ -821,7 +816,8 @@ Per-chat bot locks are durable conversation-row fields:
 - **Rooms:** per-conversation `conv:<id>`. Workers emit via the cross-process
   bridge (Redis pub/sub) so any web process can deliver to any connected
   client.
-- Client (`lib/vfic/realtimeSocket.ts`): singleton, `autoConnect: false`
+- Client (`components/atomic-crm/providers/realtime/realtime-socket.ts`):
+  singleton, `autoConnect: false`
   (connects only after login), websocket-first with polling fallback, JWT
   re-read on reconnect, closed on logout.
 - Caddy route `/realtime/*` uses `flush_interval -1` (SSE unbuffered) for the
@@ -938,9 +934,11 @@ be shared by another Project.
   - `POST /webhooks/zalo/chatbot` (line 34) verifies
     `X-Bot-Api-Secret-Token` via `hmac.compare_digest`. In non-dev with no
     secret → 503 (refuses blind).
-  - `POST /webhooks/zalo/oa` (line 71) verifies `X-Zevent-Signature` as
-    `sha256(appId+data+timestamp+OAsecretKey)` via `_verify_oa_signature`
-    (line 115).
+  - `POST /webhooks/zalo/oa` accepts Zalo's unsigned empty-object verification
+    probe. Real OA events are not checked with the stored OA access-token
+    secret because it is not webhook-signing material; the explicit risk and
+    future cutover gate are recorded in
+    `docs/decisions/channel-authenticity-matrix.md`.
   - Acks <1s after the guard chain; enqueues via
     `ZaloWebhookService.handle(..., enqueue=enqueue_chat_run)`. Returns 503
     on enqueue failure so Zalo retries.
@@ -986,12 +984,13 @@ be shared by another Project.
 
 ## 12. Proactive follow-up
 
-`app/workers/followup.py` (line 74) fans out per-lead `run_followup_job`:
+`app/workers/followup_worker.py` fans out per-lead `run_followup_job`:
 - Gaps: 6h / 24h / 46h, cap 3 per lead.
 - 48h Zalo rule minus 1h margin → 47h window (`PROACTIVE_48H_WINDOW_SECONDS`).
 - Per-tick cap 5 (`PROACTIVE_PER_TICK_CAP`); tick every 1800s.
-- Opt-out phrase matching (Vietnamese + English substrings, code constant in
-  `core/config.py`): `dừng`, `ko quan tâm`, `stop`, `unsubscribe`, etc.
+- Opt-out phrase matching (Vietnamese + English substrings, policy constant in
+  `recruitment/domain/proactive_policy.py`): `dừng`, `ko quan tâm`, `stop`,
+  `unsubscribe`, etc.
 - Single `worker-followup` replica (proactive volume is low).
 
 ---

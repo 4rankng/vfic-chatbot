@@ -1,4 +1,4 @@
-import { ApiError, apiUrl } from "../providers/rest/api";
+import { ApiError, apiUrl } from "@/lib/apiClient";
 
 const publicJson = async (
   path: string,

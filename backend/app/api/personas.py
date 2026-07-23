@@ -2,7 +2,7 @@
 
 A persona is the bot's voice (free-form markdown). Several may be stored; exactly one
 *global* persona is active at a time. All persistence and activation live in
-``app.services.persona_service``; this router only validates input, delegates,
+``app.services.personas``; this router only validates input, delegates,
 and serializes the response.
 """
 
@@ -15,8 +15,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin
-from app.core.db import get_db
-from app.models.user import User
+from app.identity.application.http import AuthenticatedUser as User
 from app.schemas.personas import (
     PersonaAssignmentListResponse,
     PersonaAssignmentOut,
@@ -28,11 +27,12 @@ from app.schemas.personas import (
     PersonaVersionListResponse,
     PersonaVersionMetadataOut,
 )
-from app.services.persona_service import (
+from app.services.personas import (
     PersonaService,
     load_persona_template,
     persona_out_from_model,
 )
+from app.shared.infrastructure.db import get_request_db as get_db
 
 router = APIRouter(prefix="/knowledge/personas", tags=["personas"])
 versions_router = APIRouter(prefix="/personas", tags=["personas"])

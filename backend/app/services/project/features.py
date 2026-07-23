@@ -24,9 +24,9 @@ from app.schemas.projects import (
     FeatureUpdate,
 )
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError, NotFoundError, UpstreamError
+from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
 from app.services.knowledge import sync_project_highlights
-from app.services.knowledge.repository import JobFeatureValueRepo
+from app.services.knowledge.job_feature_repository import JobFeatureValueRepo
 from app.services.project.mapping import _feature_from_row
 from app.services.project.repository import ProjectRepository, require_project
 from app.project_knowledge.application.providers import KnowledgeProviderFactory

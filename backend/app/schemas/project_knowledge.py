@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.knowledge import KnowledgeCategoryRevisionStatus
+from app.project_knowledge.domain.statuses import KnowledgeCategoryRevisionStatus
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 
 

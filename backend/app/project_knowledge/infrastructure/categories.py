@@ -1,4 +1,4 @@
-"""SQLAlchemy-backed compatibility adapter for category lifecycle use cases."""
+"""SQLAlchemy-backed adapter for category lifecycle use cases."""
 
 from __future__ import annotations
 

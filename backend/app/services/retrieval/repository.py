@@ -21,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import EMBEDDING_DIM, get_settings
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 from app.services.retrieval.fusion import reciprocal_rank_fuse
 
 logger = logging.getLogger(__name__)
@@ -848,33 +848,6 @@ class RetrievalRepository:
                 {"pid": str(project_id)},
             )
         ).all()
-
-    async def match_jobs_for_lead(
-        self, chat_id: str, *, top_k: int = 5, province: str | None = None
-    ) -> list:
-        """Structured Job↔Lead recommendation (Phase 2).
-
-        Loads the lead by ``chat_id`` (zalo_id), builds a :class:`LeadProfile`,
-        and runs the two-stage ranker (:class:`RecommendationRepository`).
-        Returns :class:`ScoredJob` objects (job + score + matched reasons).
-        Deprecated compatibility method. New callers should use
-        :meth:`recommend_jobs_for_lead`, which keeps no-match, missing-profile,
-        and unavailable states distinct.
-        """
-        from app.services.lead.repository import LeadRepository
-        from app.services.recommendation import RecommendationRepository, LeadProfile
-
-        try:
-            lead = await LeadRepository(self.db).by_zalo_id(chat_id)
-            profile = LeadProfile.from_lead(lead)
-            if not profile.has_any_signal:
-                return []
-            return await RecommendationRepository(self.db).match_jobs(
-                profile, top_k=top_k, province=province
-            )
-        except Exception:
-            logger.warning("match_jobs_for_lead failed for chat_id=%s", chat_id, exc_info=True)
-            return []
 
     async def recommend_jobs_for_lead(
         self, chat_id: str, *, top_k: int = 5, province: str | None = None

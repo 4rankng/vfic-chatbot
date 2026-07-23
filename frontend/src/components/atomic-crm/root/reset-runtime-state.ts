@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { localStorageStore } from "ra-core";
 
-import { closeRealtimeSocket } from "@/lib/vfic/realtimeSocket";
+import { closeRealtimeSocket } from "../providers/realtime/realtime-socket";
 import {
   buildStaticRecruitmentRuntime,
   getStaticRecruitmentRuntimeKey,

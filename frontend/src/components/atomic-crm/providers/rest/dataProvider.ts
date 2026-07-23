@@ -11,7 +11,7 @@ import {
   type UpdateManyParams,
   type UpdateParams,
 } from "ra-core";
-import { apiJson, ApiError } from "./api";
+import { apiJson, ApiError } from "@/lib/apiClient";
 import { httpHumanReplyAdapter } from "../../conversations/infrastructure/http-human-reply-adapter";
 import type {
   BotRunTraceDetail,
@@ -232,11 +232,11 @@ const getDataProviderWithCustomMethods = () => ({
   // only the message text — no recruiter_id — closing the spoof vector.
   // `conversationId` is the conversation UUID (react-admin record id).
   async sendHumanReply(conversationId: string, message: string) {
-    await httpHumanReplyAdapter.send({ conversationId, message });
+    await httpHumanReplyAdapter.sendHumanReply(conversationId, message);
   },
 
   async retryHumanReply(conversationId: string, messageId: string) {
-    await httpHumanReplyAdapter.retry({ conversationId, messageId });
+    await httpHumanReplyAdapter.retryHumanReply(conversationId, messageId);
   },
 
   async takeOverConversation(conversationId: string) {

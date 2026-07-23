@@ -9,7 +9,6 @@ LLM-digest payload (``source_quote``/``summary``/``questions``/``category``/
 
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
 
@@ -18,38 +17,12 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
-
-
-class KnowledgeStatus(str, enum.Enum):
-    UPLOADED = "UPLOADED"
-    PROCESSING = "PROCESSING"
-    PUBLISHED = "PUBLISHED"
-    ARCHIVED = "ARCHIVED"
-    FAILED = "FAILED"
-
-
-class KBVersionStatus(str, enum.Enum):
-    DRAFT = "DRAFT"
-    INDEXING = "INDEXING"
-    REVIEW_REQUIRED = "REVIEW_REQUIRED"
-    READY = "READY"
-    ACTIVE = "ACTIVE"
-    ARCHIVED = "ARCHIVED"
-    FAILED = "FAILED"
-
-
-class KnowledgeBaseMode(str, enum.Enum):
-    RAG = "RAG"
-    DIRECT_CONTEXT = "DIRECT_CONTEXT"
-
-
-class KnowledgeCategoryRevisionStatus(str, enum.Enum):
-    STAGED = "STAGED"
-    PROCESSING = "PROCESSING"
-    ACTIVE = "ACTIVE"
-    ARCHIVED = "ARCHIVED"
-    FAILED = "FAILED"
-    CLEARED = "CLEARED"
+from app.project_knowledge.domain.statuses import (
+    KBVersionStatus,
+    KnowledgeBaseMode,
+    KnowledgeCategoryRevisionStatus,
+    KnowledgeStatus,
+)
 
 
 class KnowledgeBase(Base):

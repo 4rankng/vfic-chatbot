@@ -1,4 +1,4 @@
-import { apiJson } from "../../providers/rest/api";
+import { apiJson } from "@/lib/apiClient";
 import type { Lead } from "../../types";
 import type { LeadDirectoryPort } from "../application/ports";
 

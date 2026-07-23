@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.knowledge import KBVersionStatus, KnowledgeStatus
+from app.project_knowledge.domain.statuses import KBVersionStatus, KnowledgeStatus
 
 
 class ExternalSourceCreate(BaseModel):

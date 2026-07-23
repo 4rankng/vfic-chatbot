@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from app.api import personas
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 
 
 def test_persona_versions_route_uses_exact_admin_path_and_rbac() -> None:

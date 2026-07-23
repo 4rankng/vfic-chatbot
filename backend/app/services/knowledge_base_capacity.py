@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.http import get_http_client
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseDirectFile, KnowledgeBaseMode
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 from app.services.integration_settings import IntegrationSettingsService
 
 # The MiniMax API documents a 204,800-token total window for these models.  Keep

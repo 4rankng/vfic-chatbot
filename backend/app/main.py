@@ -26,7 +26,8 @@ from app.api import (
     users,
     webhooks,
 )
-from app.core.config import PROACTIVE_TICK_INTERVAL_SECONDS, get_settings
+from app.core.config import get_settings
+from app.recruitment.domain.proactive_policy import PROACTIVE_TICK_INTERVAL_SECONDS
 from app.workers.scheduler_utils import register_unique_cron_tick, register_unique_tick
 from app.core.db import engine
 from app.core.errors import register_domain_exception_handlers

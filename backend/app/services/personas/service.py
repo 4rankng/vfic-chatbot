@@ -34,7 +34,7 @@ from app.schemas.personas import (
     _slugify,
 )
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 from app.services.knowledge_base_capacity import require_direct_context_ready
 
 from .parsing import parse_persona_markdown

@@ -8,7 +8,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 
 
 @dataclass(frozen=True)

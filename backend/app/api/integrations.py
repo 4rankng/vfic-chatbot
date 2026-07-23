@@ -10,9 +10,14 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin
-from app.core.config import ZALO_BOT_WEBHOOK_URL
-from app.core.db import get_db
-from app.models.user import Role, User
+from app.identity.application.http import AuthenticatedUser as User
+from app.integrations.admin_runtime import (
+    ZALO_BOT_WEBHOOK_URL,
+    get_integration_http_client,
+    get_integration_redis,
+    get_integration_settings,
+    load_enabled_admin,
+)
 from app.schemas.integrations import (
     FacebookAccountStatusOut,
     FacebookChannelTestOut,
@@ -43,6 +48,7 @@ from app.services.integration_settings import (
 from app.services.zalo_bot_service import ZaloBotAdminClient, SendResult
 from app.services.zalo_oa_service import ZaloOASender
 from app.services.zalo_oa_signature import verify_signature
+from app.shared.infrastructure.db import get_request_db as get_db
 
 router = APIRouter(prefix="/admin/integrations", tags=["integrations"])
 
@@ -243,10 +249,10 @@ async def test_zalo_oa(
                     # Reuse the process-scoped OA-token diagnostic client (Tech-Lead
                     # Directive §4) — a different oauth host from the runtime refresh,
                     # so a distinct name. Per-request secret_key header (admin-entered).
-                    from app.core.http import get_http_client
-
                     try:
-                        client = await get_http_client("zalo_oa_oauth_diag", timeout=10)
+                        client = await get_integration_http_client(
+                            "zalo_oa_oauth_diag", timeout=10
+                        )
                         resp = await client.post(
                             "https://oauth.zaloapp.com/v4/oa/access_token",
                             data={
@@ -450,16 +456,12 @@ _FB_OAUTH_TTL_SECONDS = 300  # 5 minutes — single-use, short-lived
 
 
 async def _redis():
-    from app.core.redis import get_redis
-
-    return get_redis()
+    return get_integration_redis()
 
 
 def _fb_callback_origin() -> str:
     """Return the deployment-owned first allowlisted OAuth origin."""
-    from app.core.config import get_settings
-
-    settings = get_settings()
+    settings = get_integration_settings()
     return next(iter(settings.facebook_callback_allowlist or ["http://localhost:5173"])).rstrip("/")
 
 
@@ -594,8 +596,8 @@ async def facebook_oauth_callback(
     except FacebookOAuthInvalidState:
         return _fb_oauth_redirect_error("invalid_state")
 
-    admin = await db.get(User, bound_session.admin_id)
-    if admin is None or admin.disabled or admin.role != Role.admin:
+    admin = await load_enabled_admin(db, bound_session.admin_id)
+    if admin is None:
         return _fb_oauth_redirect_error("invalid_admin")
     if admin.token_version != bound_session.token_version:
         return _fb_oauth_redirect_error("session_changed")

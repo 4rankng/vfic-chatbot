@@ -24,10 +24,10 @@ from typing import Any, Awaitable, Callable
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 from app.core.vector import vec_literal
 from app.graph.llm import Embedder
-from app.graph.ports import RetrievalPort
+from app.graph.ports import GraphRetrievalPort
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,11 @@ async def _cached_embed(embedder: Embedder, query: str) -> list[float]:
 
 
 async def search_user_memory(
-    retrieval: RetrievalPort, embedder: Embedder, chat_id: str, query: str, top_k: int = 5
+    retrieval: GraphRetrievalPort,
+    embedder: Embedder,
+    chat_id: str,
+    query: str,
+    top_k: int = 5,
 ) -> str:
     s = get_settings()
     memory_version = await cache_version(f"memory:{chat_id}") if s.rag_cache_enabled else "0"
@@ -158,7 +162,7 @@ def _format_knowledge_row(r) -> str:
 
 
 async def search_knowledge(
-    retrieval: RetrievalPort,
+    retrieval: GraphRetrievalPort,
     embedder: Embedder,
     query: str,
     project_slug: str | None = None,
@@ -385,7 +389,7 @@ async def _search_knowledge_compute(
     return result
 
 
-async def list_active_projects(retrieval: RetrievalPort) -> str:
+async def list_active_projects(retrieval: GraphRetrievalPort) -> str:
     """Return the active-product catalog (name/slug/summary) for the agent."""
     rows = await retrieval.list_active_projects()
     if not rows:
@@ -495,7 +499,7 @@ def _active_job_tool_result(
 
 
 async def _no_match_safe_reply(
-    retrieval: RetrievalPort,
+    retrieval: GraphRetrievalPort,
     *,
     project_slug: str | None,
     k: int,
@@ -543,7 +547,7 @@ _ALLOWED_SORT_BY = frozenset({"updated_at", "salary_desc", "salary_asc", "create
 
 
 async def list_active_jobs(
-    retrieval: RetrievalPort,
+    retrieval: GraphRetrievalPort,
     *,
     project_slug: str | None = None,
     role: str | None = None,
@@ -638,7 +642,7 @@ def _project_haystack(row) -> tuple[str, list[str], str]:
 
 
 async def recommend_projects(
-    retrieval: RetrievalPort,
+    retrieval: GraphRetrievalPort,
     query: str,
     top_k: int = 3,
 ) -> str:
@@ -709,7 +713,7 @@ async def recommend_projects(
 
 
 async def search_bus_timetable(
-    retrieval: RetrievalPort,
+    retrieval: GraphRetrievalPort,
     company: str,
     question: str,
     limit: int = 50,
@@ -759,7 +763,9 @@ async def search_bus_timetable(
     return result
 
 
-async def get_product_features(retrieval: RetrievalPort, project_slug: str) -> str:
+async def get_product_features(
+    retrieval: GraphRetrievalPort, project_slug: str
+) -> str:
     """Return the project's active structured worker product features (catalog order).
 
     No embeddings — pure SQL over ``job_feature_values``. Precedent: ``search_bus_timetable``
@@ -805,7 +811,7 @@ async def get_product_features(retrieval: RetrievalPort, project_slug: str) -> s
 
 
 async def recommend_jobs(
-    retrieval: RetrievalPort,
+    retrieval: GraphRetrievalPort,
     chat_id: str,
     *,
     top_k: int = 3,

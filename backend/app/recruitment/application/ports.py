@@ -43,14 +43,6 @@ class LeadContextQueryPort(Protocol):
 class RecommendationQueryPort(Protocol):
     """Neutral recruitment reads over projected active-job authority."""
 
-    async def match_jobs_for_lead(
-        self,
-        chat_id: str,
-        *,
-        top_k: int = 5,
-        province: str | None = None,
-    ) -> list[Any]: ...
-
     async def recommend_jobs_for_lead(
         self,
         chat_id: str,

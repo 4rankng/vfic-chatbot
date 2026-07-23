@@ -10,7 +10,7 @@ from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.schemas.projects import ProjectOut, ProjectUpdate
 from app.services.project import service as project_service
 from app.services.project.repository import ProjectRepository
-from app.services.project_service import ProjectService
+from app.services.project import ProjectService
 
 
 class _FakeResult:
@@ -94,12 +94,25 @@ async def test_replace_single_page_activates_ready_project_and_invalidates_catal
     service = ProjectService(SimpleNamespace())
     service._require_project = AsyncMock(return_value=project)
     service._require_project_mode = AsyncMock(return_value=knowledge_base)
-    direct_file = SimpleNamespace(id=uuid.uuid4())
+    direct_file = SimpleNamespace(
+        id=uuid.uuid4(),
+        raw_text="Rorze tuyển nhân viên vận hành máy CNC.",
+    )
     upsert_direct_file = AsyncMock(return_value=direct_file)
     audit = AsyncMock()
     bump = AsyncMock()
     monkeypatch.setattr(project_service, "record_audit", audit)
     monkeypatch.setattr(project_service, "bump_cache_version", bump)
+    enqueue_jobs: list[tuple[uuid.UUID, uuid.UUID, str]] = []
+    fake_jobs = SimpleNamespace(
+        index_direct_context=lambda knowledge_base_id, project_id_arg, text_blob: enqueue_jobs.append(
+            (knowledge_base_id, project_id_arg, text_blob)
+        )
+    )
+    monkeypatch.setattr(
+        "app.composition.project_knowledge_jobs.build_project_knowledge_direct_context_jobs",
+        lambda: fake_jobs,
+    )
 
     with patch(
         "app.services.project.service.KnowledgeBaseService"
@@ -125,6 +138,13 @@ async def test_replace_single_page_activates_ready_project_and_invalidates_catal
         payload={"is_active": True, "reason": "single_page_ready"},
     )
     upsert_direct_file.assert_awaited_once()
+    assert enqueue_jobs == [
+        (
+            knowledge_base_id,
+            project_id,
+            "Rorze tuyển nhân viên vận hành máy CNC.",
+        )
+    ]
     bump.assert_awaited_once_with(project_service.NS_PREAMBLE)
 
 

@@ -25,7 +25,7 @@ from app.models.user import User
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.schemas.project_single_page_sync import SinglePageExternalSourceCreate
 from app.services.audit_service import record_audit
-from app.services.errors import ConflictError, NotFoundError, UpstreamError
+from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
 from app.services.knowledge.external_source_sync import (
     AUTO_DISABLE_THRESHOLD,
     LOCK_TTL_SECONDS,
@@ -53,6 +53,22 @@ SINGLE_PAGE_SHEET_MAX_BYTES = 300_000
 SYNC_FILENAME = "single-page-google-sheet-sync.md"
 _SAFE_JS_INTEGER_MAX = 9_007_199_254_740_991
 _DECIMAL_RE = re.compile(r"^\d+$")
+
+
+def _enqueue_direct_context_index(
+    knowledge_base_id: uuid.UUID,
+    project_id: uuid.UUID,
+    text_blob: str,
+) -> None:
+    from app.composition.project_knowledge_jobs import (
+        build_project_knowledge_direct_context_jobs,
+    )
+
+    build_project_knowledge_direct_context_jobs().index_direct_context(
+        knowledge_base_id,
+        project_id,
+        text_blob,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,10 +428,8 @@ async def _sync_locked(
     # reachable via FOCUSED-turn system-prompt injection and stays invisible to
     # search_knowledge from other projects' turns. Best-effort: the enqueue swallows
     # Redis errors so a transient queue failure never rolls back this sync.
-    from app.workers.direct_context_worker import enqueue_direct_context_index
-
     if markdown:
-        enqueue_direct_context_index(knowledge_base.id, project.id, markdown)
+        _enqueue_direct_context_index(knowledge_base.id, project.id, markdown)
     if activating:
         await bump_cache_version(NS_PREAMBLE)
     return SinglePageExternalSourceSyncOutcome(

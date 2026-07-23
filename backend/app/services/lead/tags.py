@@ -1,4 +1,4 @@
-"""ORM compatibility adapter for pure recruitment lead-tag policy."""
+"""ORM adapter for pure recruitment lead-tag policy."""
 
 from __future__ import annotations
 

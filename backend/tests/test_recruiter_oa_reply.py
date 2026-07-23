@@ -65,7 +65,7 @@ async def test_recruiter_oa_reply_quotes_latest_inbound_message(
 @pytest.mark.asyncio
 async def test_recruiter_oa_reply_without_inbound_anchor_does_not_create_message() -> None:
     from app.services.conversation import ConversationService
-    from app.services.errors import DeliveryEligibilityError
+    from app.shared.domain.errors import DeliveryEligibilityError
 
     conversation = SimpleNamespace(
         id=uuid.uuid4(),

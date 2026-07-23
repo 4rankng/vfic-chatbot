@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearTokens, setTokens } from "../providers/rest/api";
+import { clearTokens, setTokens } from "@/lib/apiClient";
 
 // Socket.IO singleton mock. vi.hoisted makes the mock object available to the
 // hoisted vi.mock factory (the factory runs before top-level imports).
@@ -13,12 +13,15 @@ const { mockSocket } = vi.hoisted(() => ({
     connect: vi.fn(),
   },
 }));
-vi.mock("@/lib/vfic/realtimeSocket", () => ({
+vi.mock("../providers/realtime/realtime-socket", () => ({
   getRealtimeSocket: () => mockSocket,
   closeRealtimeSocket: vi.fn(),
 }));
 
-import { chatRepository, RuntimeEpochMismatchError } from "./chatRepository";
+import {
+  chatRepository,
+  RuntimeEpochMismatchError,
+} from "./infrastructure/chat-repository";
 import { resetActiveRuntimeState } from "../root/reset-runtime-state";
 
 /**

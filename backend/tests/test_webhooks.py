@@ -91,7 +91,7 @@ async def test_bot_webhook_dispatches_turn_through_rq(monkeypatch):
     )
 
     assert response.status_code == 503
-    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn
     assert handle.await_args.kwargs["runtime_authority"] == _runtime_authority()
 
 
@@ -125,7 +125,7 @@ async def test_valid_oa_webhook_preserves_start_failed_retry_mapping(monkeypatch
     )
 
     assert response.status_code == 503
-    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn
 
 
 @pytest.mark.asyncio
@@ -210,7 +210,7 @@ async def test_oa_webhook_dispatches_verifiably_signed_event(monkeypatch):
 
     assert response.status_code == 200
     handle.assert_awaited_once()
-    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_run
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn
     assert handle.await_args.kwargs["runtime_authority"] == _runtime_authority()
 
 
@@ -1112,8 +1112,8 @@ def test_phase1_typing_difference_bot_fires_oa_does_not():
 
 # ─── Phase 1 characterization: send-error classification taxonomy ────────────
 #
-# The neutral ChannelSendResult reuses the existing error_class taxonomy from
-# app.graph.send_classification. These tests freeze that mapping so Phase 3's
+# The neutral ChannelSendResult reuses the canonical error_class taxonomy from
+# app.shared.application.outbound. These tests freeze that mapping so adapters
 # adapter wrappers and Phase 5's Messenger adapter cannot drift it.
 
 
@@ -1121,23 +1121,22 @@ def test_phase1_ambiguous_transport_classes_map_to_send_unknown():
     """The conservative classifier: any failure that MAY have reached the
     provider after the request was written is non-retriable SEND_UNKNOWN.
     """
-    from app.graph.send_classification import (
+    from app.shared.application.outbound import (
         AMBIGUOUS_SEND_CLASSES,
-        delivery_status_for_send_error,
+        is_ambiguous_send,
     )
+
     for cls in AMBIGUOUS_SEND_CLASSES:
-        assert (
-            delivery_status_for_send_error(cls, ok=False).value == "SEND_UNKNOWN"
-        ), f"{cls} should map to SEND_UNKNOWN"
+        assert is_ambiguous_send(cls, ok=False), f"{cls} should map to SEND_UNKNOWN"
 
 
 def test_phase1_connect_error_is_retryable_failed_not_send_unknown():
     """A definite pre-send connection failure is retryable FAILED, not
     terminal SEND_UNKNOWN. Phase 3/5 adapters must preserve this distinction.
     """
-    from app.graph.send_classification import delivery_status_for_send_error
+    from app.shared.application.outbound import is_ambiguous_send
 
-    assert delivery_status_for_send_error("connect_error", ok=False) is None
+    assert not is_ambiguous_send("connect_error", ok=False)
     # None → caller falls back to default FAILED (retryable)
 
 
@@ -1150,9 +1149,9 @@ def test_phase1_send_classification_is_provider_neutral():
     import ast
     import inspect
 
-    from app.graph import send_classification
+    from app.shared.application import outbound
 
-    src = inspect.getsource(send_classification)
+    src = inspect.getsource(outbound)
     # Strip docstrings and comments by parsing to AST and back, leaving only
     # executable code. Provider names in prose are acceptable; in code they are not.
     tree = ast.parse(src)

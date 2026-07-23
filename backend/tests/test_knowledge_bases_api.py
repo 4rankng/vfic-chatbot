@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.api import knowledge_bases
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 
 

@@ -8,8 +8,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin
-from app.core.db import get_db
-from app.models.user import User
+from app.identity.application.http import AuthenticatedUser
 from app.schemas.installation import (
     InstallationAdminOut,
     InstallationRevisionCreate,
@@ -17,6 +16,7 @@ from app.schemas.installation import (
     InstallationRuntimeOut,
     InstallationValidationOut,
 )
+from app.shared.infrastructure.db import get_request_db
 from app.services.installation.service import InstallationService
 
 router = APIRouter(tags=["installation"])
@@ -25,7 +25,7 @@ router = APIRouter(tags=["installation"])
 @router.get("/installation/runtime", response_model=InstallationRuntimeOut)
 async def get_installation_runtime(
     response: Response,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_request_db),
 ) -> InstallationRuntimeOut:
     response.headers["Cache-Control"] = "no-store"
     return await InstallationService(db).runtime_view()
@@ -33,8 +33,8 @@ async def get_installation_runtime(
 
 @router.get("/admin/installation", response_model=InstallationAdminOut)
 async def get_installation_admin(
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> InstallationAdminOut:
     return await InstallationService(db).admin_view()
 
@@ -46,8 +46,8 @@ async def get_installation_admin(
 )
 async def create_installation_revision(
     body: InstallationRevisionCreate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> InstallationRevisionOut:
     revision = await InstallationService(db).create_revision(body, admin.id)
     return InstallationRevisionOut.model_validate(revision)
@@ -59,8 +59,8 @@ async def create_installation_revision(
 )
 async def validate_installation_revision(
     revision_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> InstallationValidationOut:
     validation = await InstallationService(db).validate_revision(revision_id, admin.id)
     return InstallationValidationOut.model_validate(validation)
@@ -72,8 +72,8 @@ async def validate_installation_revision(
 )
 async def activate_installation_revision(
     revision_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> InstallationAdminOut:
     service = InstallationService(db)
     await service.activate_revision(revision_id, admin.id)
@@ -86,8 +86,8 @@ async def activate_installation_revision(
 )
 async def rollback_installation_revision(
     revision_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> InstallationAdminOut:
     service = InstallationService(db)
     await service.rollback_revision(revision_id, admin.id)
@@ -96,8 +96,8 @@ async def rollback_installation_revision(
 
 @router.post("/admin/installation/suspend", response_model=InstallationAdminOut)
 async def suspend_installation(
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> InstallationAdminOut:
     service = InstallationService(db)
     await service.suspend(admin.id)
@@ -106,8 +106,8 @@ async def suspend_installation(
 
 @router.post("/admin/installation/resume", response_model=InstallationAdminOut)
 async def resume_installation(
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> InstallationAdminOut:
     service = InstallationService(db)
     await service.resume(admin.id)

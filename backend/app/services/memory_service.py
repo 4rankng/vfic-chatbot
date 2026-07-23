@@ -16,7 +16,7 @@ from typing import Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.embedding import embed_with_fallback
-from app.core.text import normalize_vietnamese_text
+from app.shared.domain.text import normalize_vietnamese_text
 from app.core.vector import vec_literal
 from app.services.memory_repository import MemoryRepository
 

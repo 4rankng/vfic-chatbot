@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models.knowledge import KnowledgeBaseMode
 from app.models.single_page_external_source_sync_state import SinglePageExternalSourceSyncState
 from app.schemas.project_single_page_sync import SinglePageExternalSourceCreate
-from app.services.errors import ConflictError, NotFoundError, UpstreamError
+from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
 from app.services.knowledge.external_source_sync import ExternalSourceSyncError
 from app.services.project import single_page_external_sources as single_page_sync
 from app.services.project.single_page_external_sources import (
@@ -402,9 +402,14 @@ async def test_sync_locked_enqueues_direct_context_index_on_changed_content(
     monkeypatch.setattr(single_page_sync, "_mark_ok", AsyncMock())
 
     enqueued: list[tuple] = []
+    fake_jobs = SimpleNamespace(
+        index_direct_context=lambda knowledge_base_id, project_id_arg, text_blob: enqueued.append(
+            (knowledge_base_id, project_id_arg, text_blob)
+        )
+    )
     monkeypatch.setattr(
-        "app.workers.direct_context_worker.enqueue_direct_context_index",
-        lambda *args: enqueued.append(args),
+        "app.composition.project_knowledge_jobs.build_project_knowledge_direct_context_jobs",
+        lambda: fake_jobs,
     )
 
     outcome = await single_page_sync._sync_locked(db, state, SimpleNamespace())
@@ -433,9 +438,14 @@ async def test_sync_locked_does_not_enqueue_direct_context_index_on_noop(
     monkeypatch.setattr(single_page_sync, "_mark_noop", AsyncMock())
 
     enqueued: list[tuple] = []
+    fake_jobs = SimpleNamespace(
+        index_direct_context=lambda knowledge_base_id, project_id_arg, text_blob: enqueued.append(
+            (knowledge_base_id, project_id_arg, text_blob)
+        )
+    )
     monkeypatch.setattr(
-        "app.workers.direct_context_worker.enqueue_direct_context_index",
-        lambda *args: enqueued.append(args),
+        "app.composition.project_knowledge_jobs.build_project_knowledge_direct_context_jobs",
+        lambda: fake_jobs,
     )
 
     outcome = await single_page_sync._sync_locked(db, state, SimpleNamespace())

@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { InboxIcons } from "../conversations/InboxIcons";
-import { apiJson, ApiError } from "../providers/rest/api";
+import { apiJson, ApiError } from "@/lib/apiClient";
 import type { Profile } from "../types";
 import "../conversations/inbox.css";
 

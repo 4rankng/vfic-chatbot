@@ -18,7 +18,7 @@ from app.models.persona import Persona, PersonaVersion
 from app.models.case_workflow import CaseWorkflowStage, CaseWorkflowVersion
 from app.models.user import Role, User
 from app.schemas.installation import InstallationRevisionCreate
-from app.services.errors import InstallationError
+from app.shared.domain.errors import InstallationError
 from app.services.installation.hashing import sha256_json
 from app.services.installation.service import InstallationService
 

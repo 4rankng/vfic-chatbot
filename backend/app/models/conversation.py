@@ -1,6 +1,5 @@
 """Conversation / message / bot-run / outbound ORM models (mirror Alembic baseline)."""
 
-import enum
 import uuid
 from datetime import datetime
 
@@ -24,56 +23,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 from app.models.contact import Contact, ContactChannelIdentity
-
-
-class ConversationMode(str, enum.Enum):
-    BOT = "BOT"
-    HUMAN = "HUMAN"
-    SEMI_AUTO = "SEMI_AUTO"
-    CLOSED = "CLOSED"
-
-
-class ConversationStatus(str, enum.Enum):
-    OPEN = "OPEN"
-    CLOSED = "CLOSED"
-
-
-class ConversationProjectState(str, enum.Enum):
-    EXPLORE = "EXPLORE"
-    FOCUSED = "FOCUSED"
-
-
-class MessageSender(str, enum.Enum):
-    WORKER = "WORKER"
-    BOT = "BOT"
-    RECRUITER = "RECRUITER"
-    SYSTEM = "SYSTEM"
-
-
-class DeliveryStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    # SENDING: an atomic pre-send claim flipped the pending BOT row just before the
-    # Zalo POST. Transient during a normal turn; if a worker crashes between the
-    # send and the SENT write, reconcile treats a stale SENDING row as
-    # sent-but-unconfirmed (at-most-once) instead of re-enqueuing a duplicate.
-    SENDING = "SENDING"
-    SENT = "SENT"
-    FAILED = "FAILED"
-    SUPPRESSED = "SUPPRESSED"
-    DELIVERED = "DELIVERED"
-    READ = "READ"
-    # SEND_UNKNOWN: the Zalo POST raised a transport exception (timeout / reset)
-    # AFTER the request may have reached Zalo. Non-retriable — the reconciler skips
-    # these rows (blindly re-running would risk a duplicate reply). Surfaced on the
-    # recruiter console for manual confirm/cancel. Conservative classifier (the
-    # blanket "unknown" catch-all also lands here) biases toward at-most-once.
-    SEND_UNKNOWN = "SEND_UNKNOWN"
-
-
-class BotRunOutcome(str, enum.Enum):
-    SENT = "SENT"
-    SUPPRESSED = "SUPPRESSED"
-    ERROR = "ERROR"
+from app.conversation_messaging.domain.statuses import (
+    BotRunOutcome,
+    ConversationMode,
+    ConversationProjectState,
+    ConversationStatus,
+    DeliveryStatus,
+    MessageSender,
+)
 
 
 class Conversation(Base):

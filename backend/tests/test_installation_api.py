@@ -6,12 +6,12 @@ import json
 from unittest.mock import Mock
 
 from app.api import installation
-from app.api.dependencies import require_admin
+from app.api.auth_dependencies import require_admin
 from app.core.errors import _installation_handler, _request_validation_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.requests import Request
 from app.schemas.installation import InstallationRuntimeOut
-from app.services.errors import InstallationError
+from app.shared.domain.errors import InstallationError
 
 
 def _route(path: str):

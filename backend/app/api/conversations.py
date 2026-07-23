@@ -12,10 +12,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import get_current_user, require_admin
+from app.composition.conversation_messaging import (
+    enqueue_chat_turn,
+    run_inline_web_chat_turn,
+)
 from app.composition.reporting import run_conversation_attention_query
-from app.core.db import get_db
-from app.models.conversation import Conversation, ConversationMode, ConversationStatus
-from app.models.user import Role, User
+from app.conversation_messaging.application.http import ConversationHttpRecord
+from app.conversation_messaging.domain.statuses import ConversationMode, ConversationStatus
+from app.conversation_messaging.infrastructure.http import load_conversation_record
+from app.identity.application.http import AuthenticatedUser
+from app.identity.domain.role import Role
 from app.schemas.bot_run import BotRunTraceSummaryListResponse
 from app.schemas.conversation import (
     ConversationListResponse,
@@ -25,18 +31,22 @@ from app.schemas.conversation import (
     SendMessageRequest,
 )
 from app.schemas.dashboard import AttentionReason
+from app.shared.infrastructure.db import get_request_db
 from app.services.bot_run_service import BotRunService
 from app.services.conversation import ConversationConflict, ConversationService
-from app.workers.chatbot_worker import enqueue_chat_run
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 ChannelProvider = Literal["zalo_bot", "zalo_oa"]
 
 
-async def _load(conv_id: uuid.UUID, db: AsyncSession, user: User | None = None) -> Conversation:
+async def _load(
+    conv_id: uuid.UUID,
+    db: AsyncSession,
+    user: AuthenticatedUser | None = None,
+) -> ConversationHttpRecord:
     if user is None:
-        conv = await db.get(Conversation, conv_id)
+        conv = await load_conversation_record(db, conv_id)
     else:
         conv = await ConversationService(db).get_visible(conv_id, viewer=user)
     if conv is None:
@@ -67,8 +77,8 @@ async def list_conversations(
             "dashboard surfaced for this reason."
         ),
     ),
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> ConversationListResponse:
     svc = ConversationService(db)
     if reason is not None:
@@ -108,8 +118,8 @@ async def list_conversations(
 @router.get("/last-messages/batch")
 async def last_messages_batch(
     ids: str = Query(..., description="Comma-separated conversation UUIDs (max 200)"),
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> dict:
     """Latest message snippet per conversation (inbox row previews) in ONE request.
 
@@ -128,8 +138,8 @@ async def last_messages_batch(
 @router.get("/needs-attention")
 async def needs_attention(
     channel_provider: ChannelProvider | None = None,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> dict:
     """Count of conversations where the latest user message is still unanswered,
     scoped to the viewer. Lightweight count for the topbar notification badge —
@@ -146,7 +156,9 @@ async def needs_attention(
 
 @router.get("/{conv_id}", response_model=ConversationOut)
 async def get_conversation(
-    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    conv_id: uuid.UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     return ConversationOut.model_validate(await _load(conv_id, db, user))
 
@@ -156,8 +168,8 @@ async def list_conversation_bot_runs(
     conv_id: uuid.UUID,
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=50),
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> BotRunTraceSummaryListResponse:
     await _load(conv_id, db)
     rows, total = await BotRunService(db).list_conversation_trace_summaries(
@@ -171,8 +183,8 @@ async def list_conversation_bot_runs(
 @router.delete("/{conv_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_conversation(
     conv_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> Response:
     """Permanently remove a spam or test conversation from the inbox.
 
@@ -187,8 +199,8 @@ async def delete_conversation(
 async def last_messages(
     conv_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=200),
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> list[MessageOut]:
     conv = await _load(conv_id, db, user)
     svc = ConversationService(db)
@@ -212,8 +224,8 @@ async def list_messages(
         None,
         description="Reconnect gap-fill: return messages NEWER than this message id",
     ),
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> MessageListResponse:
     conv = await _load(conv_id, db, user)
     svc = ConversationService(db)
@@ -231,7 +243,9 @@ async def list_messages(
 
 @router.post("/{conv_id}/take-over", response_model=ConversationOut)
 async def take_over(
-    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    conv_id: uuid.UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     conv = await _load(conv_id, db, user)
     try:
@@ -244,14 +258,16 @@ async def take_over(
 
 @router.post("/{conv_id}/release", response_model=ConversationOut)
 async def release(
-    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    conv_id: uuid.UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     svc = ConversationService(db)
     try:
         conv = await svc.release_and_enqueue_unanswered(
             await _load(conv_id, db, user),
             user,
-            enqueue=enqueue_chat_run,
+            enqueue=enqueue_chat_turn,
         )
     except ConversationConflict as exc:
         who = exc.owner_name or "một nhân viên"
@@ -264,7 +280,9 @@ async def release(
 
 @router.post("/{conv_id}/semi-auto", response_model=ConversationOut)
 async def semi_auto(
-    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    conv_id: uuid.UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     conv = await _load(conv_id, db, user)
     try:
@@ -277,7 +295,9 @@ async def semi_auto(
 
 @router.post("/{conv_id}/close", response_model=ConversationOut)
 async def close(
-    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    conv_id: uuid.UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     return ConversationOut.model_validate(
         await ConversationService(db).close(await _load(conv_id, db, user), user)
@@ -286,7 +306,9 @@ async def close(
 
 @router.post("/{conv_id}/reopen", response_model=ConversationOut)
 async def reopen(
-    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    conv_id: uuid.UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     return ConversationOut.model_validate(
         await ConversationService(db).reopen(await _load(conv_id, db, user), user)
@@ -295,7 +317,9 @@ async def reopen(
 
 @router.post("/{conv_id}/read", response_model=ConversationOut)
 async def mark_read(
-    conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    conv_id: uuid.UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     return ConversationOut.model_validate(
         await ConversationService(db).mark_read(await _load(conv_id, db, user))
@@ -305,8 +329,8 @@ async def mark_read(
 @router.delete("/{conv_id}/history", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_conversation_history(
     conv_id: uuid.UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> Response:
     conv = await _load(conv_id, db)
     await ConversationService(db).clear_history(conv, admin)
@@ -318,8 +342,8 @@ async def send_recruiter_message(
     conv_id: uuid.UUID,
     body: SendMessageRequest,
     response: Response,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> MessageOut:
     conv = await _load(conv_id, db, user)
     owns = conv.assigned_recruiter_id == user.id
@@ -344,8 +368,8 @@ async def retry_recruiter_message(
     conv_id: uuid.UUID,
     message_id: int,
     response: Response,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
 ) -> MessageOut:
     """Retry one definite recruiter delivery failure without adding a message row."""
     conv = await _load(conv_id, db, user)
@@ -373,8 +397,8 @@ async def retry_recruiter_message(
 async def web_chat_turn(
     conv_id: uuid.UUID,
     body: SendMessageRequest,
-    user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_request_db),
 ) -> dict:
     """Run a bot turn INLINE (not via RQ) for recruiter-side bot testing.
 
@@ -396,51 +420,11 @@ async def web_chat_turn(
     (candidates chat via Zalo). A candidate-facing web-chat surface would need
     a different architecture (WebSocket-first, not HTTP).
     """
-    import time
-
     conv = await _load(conv_id, db, user)
-    # Build the BotRunState. execution_source="web_chat" so the turn stamps it
-    # into stage_timings and the SLO dashboard can filter it out of the
-    # candidate-facing latency SLOs (web-chat turns are recruiter-initiated,
-    # not candidate-visible).
-    from app.core.config import get_settings
-    from app.graph.factories import build_deps
-    from app.graph.runner import run_turn
-    from app.graph.types import BotRunState
-    from app.services.installation.service import InstallationService
-
-    settings = get_settings()
-    active = await InstallationService(db).resolve_active()
-    if active is None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Chatbot chưa được bật. Hãy hoàn tất cấu hình rồi bật chatbot trước khi thử hội thoại.",
-        )
-    authority = active.fingerprint
-    now = time.time()
-    state = BotRunState(
-        conversation_id=str(conv_id),
-        version_at_start=conv.version,
-        user_text=body.body,
-        user_name="",
-        reply_to_message_id="",
-        lock_owner="web_chat",
-        received_at_epoch=now,
-        deadline_at_epoch=now + settings.sla_seconds,
-        preamble_start_epoch=now,
-        queue_depth=None,
-        execution_source="web_chat",
-        trace_id=f"webchat-{user.id.hex}-{int(now)}",
-        runtime_revision_id=str(authority.revision_id),
-        authority_generation=authority.authority_generation,
-        runtime_fingerprint=authority.checksum(),
+    return await run_inline_web_chat_turn(
+        db=db,
+        conversation=conv,
+        conversation_id=conv_id,
+        message_body=body.body,
+        actor_id=user.id,
     )
-    try:
-        outcome = await run_turn(state, deps=await build_deps(db))
-    except Exception as exc:  # noqa: BLE001 — surface as 500 with detail
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
-    return {
-        "outcome": outcome.get("outcome"),
-        "reply": outcome.get("reply"),
-        "conversation_id": str(conv_id),
-    }

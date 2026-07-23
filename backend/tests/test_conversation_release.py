@@ -70,7 +70,7 @@ async def test_release_dispatches_unanswered_turn_through_rq(monkeypatch) -> Non
 
     assert result is expected
     kwargs = service.release_and_enqueue_unanswered.await_args.kwargs
-    assert kwargs["enqueue"] is conversations.enqueue_chat_run
+    assert kwargs["enqueue"] is conversations.enqueue_chat_turn
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/components/atomic-crm/providers/rest/api";
+import { ApiError } from "@/lib/apiClient";
 import type { KnowledgeCategoryStatus } from "./project-knowledge-service";
 import type * as KnowledgeServiceModule from "./project-knowledge-service";
 import type { Project } from "../types";

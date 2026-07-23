@@ -15,7 +15,8 @@ from fastapi import FastAPI
 from httpx import ASGITransport
 
 from app.api.conversations import router as conversations_router
-from app.api.dependencies import get_db, get_current_user
+from app.api.auth_dependencies import get_current_user
+from app.shared.infrastructure.db import get_request_db as get_db
 
 # Standalone FastAPI app with just the conversations router — avoids the
 # socketio.ASGIApp wrapper that the real app.main exports.

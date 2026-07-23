@@ -1,8 +1,31 @@
-"""SQLAlchemy compatibility adapter for neutral inbound messages."""
+"""SQLAlchemy adapter for provider-neutral inbound messages."""
 
 from __future__ import annotations
 
-from app.conversation_messaging.application.ingress import InboundTextCommand
+from sqlalchemy.exc import IntegrityError
+
+from app.conversation_messaging.application.ingress import (
+    InboundTextCommand,
+    PersistedInboundMessage,
+)
+
+_MESSAGE_PROVIDER_ID_UNIQUE_CONSTRAINT = "uq_messages_conv_provider_message"
+
+
+def _is_duplicate_message_integrity_error(error: IntegrityError) -> bool:
+    sqlstate: str | None = None
+    constraint_name: str | None = None
+    current: BaseException | None = error.orig
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        sqlstate = sqlstate or getattr(current, "sqlstate", None)
+        constraint_name = constraint_name or getattr(current, "constraint_name", None)
+        current = current.__cause__ or current.__context__
+    return (
+        sqlstate == "23505"
+        and constraint_name == _MESSAGE_PROVIDER_ID_UNIQUE_CONSTRAINT
+    )
 
 
 class SqlAlchemyInboundMessageAdapter:
@@ -19,7 +42,7 @@ class SqlAlchemyInboundMessageAdapter:
             dedup_key,
         )
 
-    async def persist(self, command: InboundTextCommand) -> str | None:
+    async def persist(self, command: InboundTextCommand) -> PersistedInboundMessage | None:
         from app.services.conversation import ConversationService
 
         identity = command.identity
@@ -40,7 +63,7 @@ class SqlAlchemyInboundMessageAdapter:
         )
         await self._db.refresh(conversation)
         try:
-            await service.record_inbound(
+            message = await service.record_inbound(
                 conversation,
                 body=command.text,
                 provider_message_id=command.external_message_id,
@@ -48,12 +71,20 @@ class SqlAlchemyInboundMessageAdapter:
                 authority_generation=None,
                 runtime_fingerprint=None,
             )
-        except Exception:
-            # Preserve the compatibility facade's durable-uniqueness behavior:
-            # a late duplicate (or post-commit publish failure) is acknowledged.
+        except IntegrityError as exc:
             await self._db.rollback()
+            if not _is_duplicate_message_integrity_error(exc):
+                raise
+            # A racing delivery won the exact durable message-id uniqueness
+            # constraint after the transient claim.
             return None
-        return str(conversation.id)
+        return PersistedInboundMessage(
+            conversation_id=str(conversation.id),
+            message_id=message.id,
+            body=message.body,
+            provider_message_id=message.provider_message_id or "",
+            created_at=message.created_at,
+        )
 
 
 __all__ = ["SqlAlchemyInboundMessageAdapter"]

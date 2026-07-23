@@ -1,6 +1,13 @@
 [
   {
     "category": "outbox_boundary",
+    "file": "app/conversation_messaging/infrastructure/outbound_recovery.py",
+    "scope": "dispatch_pending",
+    "call": "dispatch_outbox",
+    "count": 1
+  },
+  {
+    "category": "outbox_boundary",
     "file": "app/services/conversation/__init__.py",
     "scope": "deliver_recruiter_message",
     "call": "dispatch_outbox",
@@ -64,6 +71,27 @@
   },
   {
     "category": "provider_boundary",
+    "file": "app/channels/providers/zalo_bot.py",
+    "scope": "send_text",
+    "call": "send_message",
+    "count": 1
+  },
+  {
+    "category": "provider_boundary",
+    "file": "app/channels/providers/zalo_bot.py",
+    "scope": "send_typing",
+    "call": "send_chat_action",
+    "count": 1
+  },
+  {
+    "category": "provider_boundary",
+    "file": "app/channels/providers/zalo_oa.py",
+    "scope": "send_text",
+    "call": "send_message",
+    "count": 1
+  },
+  {
+    "category": "provider_boundary",
     "file": "app/graph/proactive.py",
     "scope": "run_proactive_turn",
     "call": "send_message",
@@ -120,44 +148,72 @@
   },
   {
     "category": "queue_producer",
-    "file": "app/api/knowledge.py",
-    "scope": "ingest_kb_version",
+    "file": "app/composition/conversation_messaging.py",
+    "scope": "enqueue_chat_turn",
+    "call": "enqueue_chat_run",
+    "count": 1
+  },
+  {
+    "category": "queue_producer",
+    "file": "app/composition/project_knowledge_jobs.py",
+    "scope": "enqueue",
+    "call": "enqueue_ingest",
+    "count": 1
+  },
+  {
+    "category": "queue_producer",
+    "file": "app/composition/project_knowledge_jobs.py",
+    "scope": "enqueue",
     "call": "enqueue_ingest_version",
     "count": 1
   },
   {
     "category": "queue_producer",
-    "file": "app/api/knowledge.py",
-    "scope": "process",
-    "call": "enqueue_ingest",
+    "file": "app/conversation_messaging/infrastructure/webhook_delivery.py",
+    "scope": "enqueue_facebook_turn",
+    "call": "enqueue",
     "count": 1
   },
   {
     "category": "queue_producer",
-    "file": "app/api/knowledge.py",
-    "scope": "reindex",
-    "call": "enqueue_ingest",
+    "file": "app/project_knowledge/application/jobs.py",
+    "scope": "index_direct_context",
+    "call": "enqueue",
     "count": 1
   },
   {
     "category": "queue_producer",
-    "file": "app/api/knowledge.py",
-    "scope": "reindex_all",
-    "call": "enqueue_ingest",
+    "file": "app/project_knowledge/application/jobs.py",
+    "scope": "ingest_document",
+    "call": "enqueue",
     "count": 1
   },
   {
     "category": "queue_producer",
-    "file": "app/api/knowledge.py",
-    "scope": "upload_file",
-    "call": "enqueue_ingest",
+    "file": "app/project_knowledge/application/jobs.py",
+    "scope": "ingest_version",
+    "call": "enqueue",
     "count": 1
   },
   {
     "category": "queue_producer",
-    "file": "app/api/webhooks.py",
-    "scope": "_enqueue_facebook_turn",
-    "call": "enqueue_chat_run",
+    "file": "app/project_knowledge/application/jobs.py",
+    "scope": "process_category_revision",
+    "call": "enqueue",
+    "count": 1
+  },
+  {
+    "category": "queue_producer",
+    "file": "app/project_knowledge/application/jobs.py",
+    "scope": "sync_external_source",
+    "call": "enqueue",
+    "count": 1
+  },
+  {
+    "category": "queue_producer",
+    "file": "app/project_knowledge/application/jobs.py",
+    "scope": "sync_single_page_source",
+    "call": "enqueue",
     "count": 1
   },
   {

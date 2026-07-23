@@ -14,7 +14,7 @@ persona/index hiccup can never break a chat turn. SQL lives in
 from __future__ import annotations
 
 from app.core.preamble_cache import cached_system_prompt
-from app.graph.ports import RetrievalPort
+from app.graph.ports import GraphRetrievalPort
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
 
 _INDEX_HEADER = "\n\n=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ==="
@@ -60,7 +60,9 @@ def _strip_stale_refusal_rules(persona: str) -> str:
     return "\n".join(lines).strip()
 
 
-async def resolve_persona(retrieval: RetrievalPort, *, provider: str | None = None) -> str:
+async def resolve_persona(
+    retrieval: GraphRetrievalPort, *, provider: str | None = None
+) -> str:
     """Return the effective provider persona body, or persona.md if none is active."""
     try:
         body = await retrieval.active_persona_body(provider=provider)
@@ -71,7 +73,7 @@ async def resolve_persona(retrieval: RetrievalPort, *, provider: str | None = No
     return AGENT_SYSTEM_PROMPT
 
 
-async def active_projects_index(retrieval: RetrievalPort) -> str:
+async def active_projects_index(retrieval: GraphRetrievalPort) -> str:
     """Compact catalog of active projects (the agent's master index). '' if none/err."""
     try:
         rows = await retrieval.active_projects_with_card()
@@ -111,7 +113,7 @@ async def active_projects_index(retrieval: RetrievalPort) -> str:
 
 
 async def build_system_prompt(
-    retrieval: RetrievalPort, *, provider: str | None = None
+    retrieval: GraphRetrievalPort, *, provider: str | None = None
 ) -> tuple[str, bool]:
     """Persona body + active-product index, with a hard fallback to persona.md.
 

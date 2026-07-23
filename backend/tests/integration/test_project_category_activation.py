@@ -27,7 +27,7 @@ from app.models.knowledge import (
 from app.models.user import Role, User
 from app.core.config import INGEST_JOB_TIMEOUT_SECONDS
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
-from app.services.errors import ConflictError
+from app.shared.domain.errors import ConflictError
 from app.services.knowledge.category_contracts import (
     CATEGORY_DEFINITIONS,
     category_checksum,

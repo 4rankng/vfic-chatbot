@@ -1,6 +1,6 @@
 """Unit tests for the /admin/performance endpoint + the worker preamble-timings helper.
 
-No DB / Redis: the endpoint's SQL is exercised against a fake ``async_session``
+No DB / Redis: the endpoint's SQL is exercised against a fake session factory
 factory whose sessions return canned Row-like objects (routed by SQL content so
 the test is insensitive to ``asyncio.gather`` scheduling order), and
 ``collect_queue_health`` + the cache primitives are stubbed. Pins the response
@@ -18,8 +18,8 @@ from typing import Any
 
 import pytest
 
-from app.api import performance as perf_mod
 from app.api.performance import performance
+from app.reporting.infrastructure import performance_dashboard as perf_mod
 
 CONV_ID = "00000000-0000-0000-0000-0000000000aa"
 
@@ -75,7 +75,7 @@ def _make_session_factory(routes: list[tuple[str, _FakeResult]]):
     """Return a no-arg factory + a shared ``queries`` list.
 
     Each call yields a fresh session backed by the same route table and sharing
-    one ``queries`` list, mirroring the real ``async_session`` factory where each
+    one ``queries`` list, mirroring the real session factory where each
     ``async with`` gets its own session but the pool is shared.
     """
     queries: list[str] = []
@@ -240,13 +240,13 @@ def _standard_routes() -> list[tuple[str, _FakeResult]]:
 
 
 def _install_compute_stubs(monkeypatch, routes=None) -> SimpleNamespace:
-    """Patch ``async_session`` + queue health + force cache miss.
+    """Patch the session factory + queue health + force cache miss.
 
     Returns a namespace with ``.queries`` (issued SQL strings) and ``.captured``
     (what ``cache_set_json`` was called with) for assertions.
     """
     factory, queries = _make_session_factory(routes if routes is not None else _standard_routes())
-    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "open_background_session", factory)
     monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     # Force cache miss so _compute runs.
@@ -465,7 +465,7 @@ async def test_performance_cache_hit_short_circuits(monkeypatch):
     }
     factory, queries = _make_session_factory(_standard_routes())
     # Even though the factory is installed, a cache hit should never touch it.
-    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "open_background_session", factory)
     monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     async def _hit(_key):
@@ -512,7 +512,7 @@ async def test_performance_cache_hit_preserves_key_order(monkeypatch):
     cached_payload["slow_turns"] = []
     cached_payload["trend"] = []
     factory, queries = _make_session_factory(_standard_routes())
-    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "open_background_session", factory)
     monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     async def _hit(_key):
@@ -552,7 +552,7 @@ async def test_performance_cache_failure_falls_through(monkeypatch):
     the source of truth and must run regardless of cache state.
     """
     factory, _ = _make_session_factory(_standard_routes())
-    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "open_background_session", factory)
     monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     async def _raises(_key):
@@ -581,7 +581,7 @@ async def test_performance_cache_hit_serves_falsy_value(monkeypatch):
     regression to ``if cached`` (which would silently recompute on empty payloads).
     """
     factory, queries = _make_session_factory(_standard_routes())
-    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "open_background_session", factory)
     monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     async def _hit(_key):
@@ -650,7 +650,7 @@ async def test_performance_queries_dispatched_concurrently(monkeypatch):
     def factory():
         return _CM()
 
-    monkeypatch.setattr(perf_mod, "async_session", factory)
+    monkeypatch.setattr(perf_mod, "open_background_session", factory)
     monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     async def _miss(_key):

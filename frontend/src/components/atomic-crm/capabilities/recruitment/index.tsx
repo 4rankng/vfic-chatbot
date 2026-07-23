@@ -1,13 +1,13 @@
 import { useEffect, useMemo } from "react";
 import { useGetList } from "ra-core";
 
-import { getRealtimeSocket } from "@/lib/vfic/realtimeSocket";
+import { getRealtimeSocket } from "../../providers/realtime/realtime-socket";
 import { Dashboard } from "../../dashboard/Dashboard";
 import { ConversationContextPanel } from "../../conversations/ConversationContextPanel";
 import {
   getLeadPriorityChip,
   getLeadStatusColor,
-} from "../../conversations/conversationDisplay";
+} from "../../conversations/domain/conversation-display";
 import type { Conversation, Lead } from "../../types";
 import { loadRecruitmentConversationRows } from "../../leads/application/loadRecruitmentConversationRows";
 import {

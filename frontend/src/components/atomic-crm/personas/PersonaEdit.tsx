@@ -20,7 +20,7 @@ import { PersonaForm, type PersonaValues } from "./PersonaForm";
 import {
   getCompletedPersonaSectionCount,
   getPersonaAuthoredContentLength,
-} from "./personaMarkdown";
+} from "./domain/personaMarkdown";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Persona } from "../types";
 import { activatePersona } from "./personaService";

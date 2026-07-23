@@ -24,7 +24,7 @@ vi.mock("ra-core", () => ({
   useRefresh: () => mocks.refresh,
 }));
 
-vi.mock("../providers/rest/api", () => ({
+vi.mock("@/lib/apiClient", () => ({
   apiJson: mocks.apiJson,
   ApiError: class ApiError extends Error {
     status: number;

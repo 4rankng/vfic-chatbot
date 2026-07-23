@@ -1,6 +1,5 @@
 """User model (replaces Supabase `profiles` + `auth.users`)."""
 
-import enum
 import uuid
 from datetime import datetime
 
@@ -10,11 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
-
-
-class Role(str, enum.Enum):
-    admin = "admin"
-    recruiter = "recruiter"
+from app.identity.domain.role import Role
 
 
 class User(Base):
