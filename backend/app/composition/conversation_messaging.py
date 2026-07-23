@@ -104,7 +104,7 @@ async def run_zalo_ingress(
     bot_token: str | None = None,
     runtime_authority=None,
 ):
-    """Build the compatibility adapter at the HTTP composition boundary."""
+    """Build the Zalo ingress adapter at the HTTP composition boundary."""
     from app.workers.persistence_worker import enqueue_enrich_oa_profile
 
     return await ZaloIngressUseCases(LegacyZaloIngressAdapter(db)).handle(

@@ -1,9 +1,9 @@
-"""Adapters over the legacy recruitment persistence services."""
+"""Adapters over the established recruitment persistence services."""
 
 from __future__ import annotations
 
 
-class LegacyLeadContextAdapter:
+class ServiceLeadContextAdapter:
     """Lead-context query adapter preserving the established prompt behavior."""
 
     def __init__(self, db) -> None:
@@ -66,7 +66,7 @@ class LegacyLeadContextAdapter:
         return lead_collection_instruction(question=question)
 
 
-class LegacyFollowupEligibilityAdapter:
+class ServiceFollowupEligibilityAdapter:
     """Follow-up decision adapter preserving provider rules and reason codes."""
 
     def __init__(self, db) -> None:
@@ -80,7 +80,7 @@ class LegacyFollowupEligibilityAdapter:
         return await conversation_allowed_by_followup_rules(self._db, conversation)
 
 
-class LegacyCandidatePersistenceAdapter:
+class ServiceCandidatePersistenceAdapter:
     """Candidate persistence adapter over the established transactional service."""
 
     def __init__(self, db) -> None:
@@ -100,7 +100,7 @@ class LegacyCandidatePersistenceAdapter:
         )
 
 
-class LegacyProactiveStateAdapter:
+class ServiceProactiveStateAdapter:
     """SQLAlchemy adapter for proactive turn state and history checks."""
 
     def __init__(self, db) -> None:
@@ -141,8 +141,8 @@ class LegacyProactiveStateAdapter:
 
 
 __all__ = [
-    "LegacyCandidatePersistenceAdapter",
-    "LegacyFollowupEligibilityAdapter",
-    "LegacyLeadContextAdapter",
-    "LegacyProactiveStateAdapter",
+    "ServiceCandidatePersistenceAdapter",
+    "ServiceFollowupEligibilityAdapter",
+    "ServiceLeadContextAdapter",
+    "ServiceProactiveStateAdapter",
 ]

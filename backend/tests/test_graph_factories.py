@@ -18,7 +18,7 @@ from app.graph.factories import (
     reset_client_cache,
 )
 from app.graph.types import GraphDeps
-from app.recruitment.infrastructure.legacy_adapters import LegacyLeadContextAdapter
+from app.recruitment.infrastructure.service_adapters import ServiceLeadContextAdapter
 
 
 @pytest.mark.parametrize(
@@ -279,7 +279,9 @@ async def test_lead_context_personalizes_only_oa_profiles(
         lambda **_kwargs: "phone question",
     )
 
-    profile, question = await LegacyLeadContextAdapter(object()).context(chat_id, "hello", [])
+    profile, question = await ServiceLeadContextAdapter(object()).context(
+        chat_id, "hello", []
+    )
 
     assert profile == "profile"
     if chat_id.startswith("oa:"):

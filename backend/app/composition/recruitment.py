@@ -11,24 +11,24 @@ from app.recruitment.application.persistence import (
     PersistCandidateCommand,
     persist_candidate,
 )
-from app.recruitment.infrastructure.legacy_adapters import (
-    LegacyCandidatePersistenceAdapter,
-    LegacyFollowupEligibilityAdapter,
-    LegacyLeadContextAdapter,
-    LegacyProactiveStateAdapter,
+from app.recruitment.infrastructure.service_adapters import (
+    ServiceCandidatePersistenceAdapter,
+    ServiceFollowupEligibilityAdapter,
+    ServiceLeadContextAdapter,
+    ServiceProactiveStateAdapter,
 )
 
 
 def build_lead_context(db) -> LeadContextQueryPort:
-    return LegacyLeadContextAdapter(db)
+    return ServiceLeadContextAdapter(db)
 
 
 def build_followup_eligibility(db) -> FollowupEligibilityPort:
-    return LegacyFollowupEligibilityAdapter(db)
+    return ServiceFollowupEligibilityAdapter(db)
 
 
 def build_proactive_state(db) -> ProactiveStatePort:
-    return LegacyProactiveStateAdapter(db)
+    return ServiceProactiveStateAdapter(db)
 
 
 async def run_candidate_persistence(
@@ -42,7 +42,7 @@ async def run_candidate_persistence(
     expected_conversation_version: int | None,
 ):
     return await persist_candidate(
-        LegacyCandidatePersistenceAdapter(db),
+        ServiceCandidatePersistenceAdapter(db),
         PersistCandidateCommand(
             chat_id=chat_id,
             user_text=user_text,

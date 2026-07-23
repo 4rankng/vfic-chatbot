@@ -89,9 +89,6 @@ class _FakeRetrieval:
     async def active_projects_with_card(self):
         return await self._handler("recommend_projects", {})
 
-    async def match_jobs_for_lead(self, *args, **kwargs):  # noqa: ARG002
-        return await self._handler("recommend_jobs", {})
-
     async def search_bus_timetable(self, *args, **kwargs):  # noqa: ARG002
         return await self._handler("search_bus_timetable", {})
 
