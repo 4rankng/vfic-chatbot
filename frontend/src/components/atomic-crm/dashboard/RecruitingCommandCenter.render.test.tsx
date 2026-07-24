@@ -2,16 +2,29 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { render } from "vitest-browser-react";
-import { describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockApiJson } = vi.hoisted(() => ({
-  mockApiJson: vi.fn(),
-}));
+const { mockApiJson, mockDataProviderUpdate, mockNotify, mockPermissions } =
+  vi.hoisted(() => ({
+    mockApiJson: vi.fn(),
+    mockDataProviderUpdate: vi.fn(),
+    mockNotify: vi.fn(),
+    mockPermissions: { value: "recruiter" },
+  }));
 
 vi.mock("@/lib/apiClient", () => ({
   apiJson: mockApiJson,
 }));
+
+vi.mock("ra-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ra-core")>();
+  return {
+    ...actual,
+    useDataProvider: () => ({ update: mockDataProviderUpdate }),
+    useNotify: () => mockNotify,
+    usePermissions: () => ({ permissions: mockPermissions.value }),
+  };
+});
 
 vi.mock("@/hooks/use-mobile", () => ({
   useIsMobile: () => false,
@@ -41,6 +54,7 @@ vi.mock("react-virtuoso", () => ({
 }));
 
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
+import "@/index.css";
 import "./dashboard.css";
 
 const LocationProbe = () => {
@@ -54,6 +68,13 @@ const LocationProbe = () => {
 };
 
 describe("RecruitingCommandCenter candidate rows", () => {
+  beforeEach(() => {
+    mockDataProviderUpdate.mockReset();
+    mockDataProviderUpdate.mockResolvedValue({ data: {} });
+    mockNotify.mockReset();
+    mockPermissions.value = "recruiter";
+  });
+
   it("opens a conversation without rendering a redundant chevron", async () => {
     const attention = {
       updated_at: "2026-07-12T10:00:00Z",
@@ -142,6 +163,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
                   avatar_url: null,
                   desired_job: "Công nhân sản xuất",
                   years_experience: "2 năm",
+                  version: 3,
                   created_at: "2026-07-14T08:30:00Z",
                 },
               ],
@@ -193,9 +215,6 @@ describe("RecruitingCommandCenter candidate rows", () => {
     await expect
       .element(screen.getByText("Xem", { exact: true }))
       .toBeVisible();
-    await page.locator(".recruiting-command").screenshot({
-      path: "/tmp/dashboard-uui-desktop.png",
-    });
     await expect
       .element(screen.getByAltText("Ảnh đại diện của Phạm Hùng"))
       .toHaveAttribute("src", "https://example.com/pham-hung.jpg");
@@ -220,6 +239,35 @@ describe("RecruitingCommandCenter candidate rows", () => {
     await expect
       .element(screen.getByTestId("dashboard-location"))
       .toHaveTextContent("/");
+
+    await screen.getByRole("button", { name: "Chỉnh sửa" }).click();
+    const nameInput = screen.getByLabelText("Họ tên");
+    await expect.element(nameInput).toHaveValue("");
+    await nameInput.fill("Bùi Hải Anh");
+    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+    expect(mockDataProviderUpdate).toHaveBeenCalledWith("leads", {
+      id: 42,
+      data: {
+        name: "Bùi Hải Anh",
+        version: 3,
+      },
+      previousData: expect.objectContaining({
+        id: 42,
+        name: "",
+        phone: "0900000042",
+        version: 3,
+      }),
+    });
+    expect(mockNotify).toHaveBeenCalledWith("Đã cập nhật hồ sơ ứng viên", {
+      type: "success",
+    });
+    await expect
+      .element(screen.getByRole("dialog", { name: "Thông tin ứng viên" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByTestId("dashboard-location"))
+      .toHaveTextContent("/");
+
     await screen.getByRole("button", { name: "Đóng" }).click();
     await expect
       .element(screen.getByRole("dialog", { name: "Thông tin ứng viên" }))

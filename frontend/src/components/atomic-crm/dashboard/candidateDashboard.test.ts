@@ -39,6 +39,25 @@ const candidate = (
   },
 });
 
+const candidateApiRow = (
+  id: number,
+  createdAt: string,
+  phone: string | null = `090000000${id}`,
+) => ({
+  id,
+  zalo_id: `oa:user-${id}`,
+  name: `Ứng viên ${id}`,
+  phone,
+  avatar_url: null,
+  desired_job: "",
+  expected_salary: "",
+  lead_score: null,
+  lead_stage: "",
+  version: 1,
+  created_at: createdAt,
+  updated_at: createdAt,
+});
+
 describe("groupCandidatesByDay", () => {
   it("keeps only candidates with a phone, newest first, grouped by Vietnam day", () => {
     const groups = groupCandidatesByDay(
@@ -75,8 +94,8 @@ describe("fetchDashboardCandidates", () => {
         url?.startsWith("/api/v1/leads")
           ? {
               data: [
-                candidate(1, "2026-07-18T03:00:00Z"),
-                candidate(2, "2026-07-18T02:00:00Z", null),
+                candidateApiRow(1, "2026-07-18T03:00:00Z"),
+                candidateApiRow(2, "2026-07-18T02:00:00Z", null),
               ],
               total: 2,
             }
@@ -112,7 +131,7 @@ describe("fetchDashboardCandidates", () => {
         avatar_url: "https://example.com/avatar-1.jpg",
         conversation_id: "conversation-1",
         lead: expect.objectContaining({
-          name: "Nguyễn Văn Một",
+          name: "Ứng viên 1",
           avatar_url: "https://example.com/avatar-1.jpg",
         }),
       }),
@@ -124,7 +143,7 @@ describe("fetchDashboardCandidates", () => {
       Promise.resolve(
         url?.startsWith("/api/v1/leads")
           ? {
-              data: [candidate(1, "2026-07-18T03:00:00Z")],
+              data: [candidateApiRow(1, "2026-07-18T03:00:00Z")],
               total: 1,
             }
           : {
@@ -158,7 +177,7 @@ describe("fetchDashboardCandidates", () => {
     apiJsonMock.mockResolvedValue({
       data: [
         {
-          ...candidate(3, "2026-07-18T03:00:00Z"),
+          ...candidateApiRow(3, "2026-07-18T03:00:00Z"),
           zalo_id: null,
           avatar_url: "https://example.com/lead-avatar.jpg",
         },

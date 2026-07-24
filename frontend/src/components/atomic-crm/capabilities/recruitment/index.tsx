@@ -3,10 +3,8 @@ import { useDataProvider, useGetList, useNotify } from "ra-core";
 
 import { getRealtimeSocket } from "../../providers/realtime/realtime-socket";
 import { Dashboard } from "../../dashboard/Dashboard";
-import {
-  ConversationContextPanel,
-  type CandidateProfileUpdate,
-} from "../../conversations/ConversationContextPanel";
+import { ConversationContextPanel } from "../../conversations/ConversationContextPanel";
+import type { CandidateProfileUpdate } from "../../leads/domain/candidateProfile";
 import { useRoleActions } from "../../hooks/useRoleActions";
 import {
   getLeadPriorityChip,
@@ -73,7 +71,9 @@ const loadRecruitmentRows: ConversationRowSlot["load"] = async (
   return presentations;
 };
 
-const rowSlot: ConversationRowSlot = Object.freeze({ load: loadRecruitmentRows });
+const rowSlot: ConversationRowSlot = Object.freeze({
+  load: loadRecruitmentRows,
+});
 const filterSlot: ConversationFilterSlot = Object.freeze({
   priorityLabel: "Ứng viên ưu tiên",
   matchesPriority: (presentation) => Boolean(presentation.priorityTone),
@@ -103,7 +103,9 @@ const RecruitmentConversationContext = ({
   useEffect(() => {
     if (!lead?.id) return;
     return leadRealtimePort.subscribeToLeadUpdates(lead.id, (payload) => {
-      if (shouldRefreshLeadIdentity(lead.id, conversation?.zalo_chat_id, payload)) {
+      if (
+        shouldRefreshLeadIdentity(lead.id, conversation?.zalo_chat_id, payload)
+      ) {
         void refetch();
       }
     });
@@ -115,8 +117,11 @@ const RecruitmentConversationContext = ({
   // profile name is a nickname. The conversation LIST keeps the inverse priority
   // (lead name first) via resolveRecruitmentProfile, since recruiters scanning
   // the directory want the confirmed name; the two views need not match.
-  const source =
-    conversation ?? { zalo_channel: "bot" as const, zalo_chat_id: null, contact: null };
+  const source = conversation ?? {
+    zalo_channel: "bot" as const,
+    zalo_chat_id: null,
+    contact: null,
+  };
   const identity = buildRecruitmentContextIdentity(source, lead);
   const colors = getLeadStatusColor(lead);
   const saveCandidateProfile = async (

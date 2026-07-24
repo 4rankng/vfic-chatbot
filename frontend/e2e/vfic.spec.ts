@@ -8,7 +8,7 @@ test.describe("current recruitment workspace baseline", () => {
     await loginAsAdmin();
 
     await expect(
-      page.getByRole("heading", { name: "Tổng quan tuyển dụng" }),
+      page.getByRole("heading", { name: "Tổng quan" }),
     ).toBeVisible();
   });
 

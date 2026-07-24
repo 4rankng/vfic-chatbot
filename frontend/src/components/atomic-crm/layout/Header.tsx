@@ -13,7 +13,7 @@ export const WorkspaceSidebarBrand = () => (
   >
     <img
       className="workspace-sidebar-brand-mark"
-      src="/brand/tinghire-icon-192.png"
+      src="/brand/tinghire-icon-transparent.png"
       alt=""
       aria-hidden="true"
       width="192"
@@ -28,7 +28,11 @@ const Header = () => {
   return (
     <header className="workspace-topbar">
       <Link to="/" className="workspace-topbar-brand" aria-label="TingHire">
-        <img src="/brand/tinghire-icon-192.png" alt="" aria-hidden="true" />
+        <img
+          src="/brand/tinghire-icon-transparent.png"
+          alt=""
+          aria-hidden="true"
+        />
         <span>TingHire</span>
       </Link>
 

@@ -182,7 +182,7 @@ export const fetchDashboardCandidates = async (): Promise<
       lead: {
         ...candidate,
         zalo_id: candidate.zalo_id ?? "",
-        name: profile.displayName,
+        name: candidate.name ?? "",
         phone: candidate.phone ?? "",
         desired_job: candidate.desired_job ?? "",
         expected_salary: candidate.expected_salary ?? "",

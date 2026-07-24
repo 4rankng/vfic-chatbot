@@ -41,7 +41,7 @@ async function loginAsAdmin(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Đăng nhập" }).click();
   await loginResponse;
   await expect(
-    page.getByRole("heading", { name: "Tổng quan tuyển dụng" }),
+    page.getByRole("heading", { name: "Tổng quan" }),
   ).toBeVisible({ timeout: 15_000 });
 }
 

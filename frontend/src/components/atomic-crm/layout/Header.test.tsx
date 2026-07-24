@@ -45,7 +45,9 @@ describe("Header", () => {
 
     const images = brand.element().querySelectorAll("img");
     expect(images).toHaveLength(1);
-    expect(images[0]?.getAttribute("src")).toBe("/brand/tinghire-icon-192.png");
+    expect(images[0]?.getAttribute("src")).toBe(
+      "/brand/tinghire-icon-transparent.png",
+    );
   });
 
   it("keeps the TingHire logo visible when the responsive layout hides the brand name", async () => {
@@ -59,7 +61,7 @@ describe("Header", () => {
     const brand = screen.getByRole("link", { name: "TingHire" });
     await expect.element(brand).toBeVisible();
     expect(brand.element().querySelector("img")?.getAttribute("src")).toBe(
-      "/brand/tinghire-icon-192.png",
+      "/brand/tinghire-icon-transparent.png",
     );
   });
 

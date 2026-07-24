@@ -656,11 +656,11 @@ button.dashboard-candidate-row:focus-visible {
 }
 
 @media (max-width: 1023px) {
-  .dashboard-workspace .recruiting-two-column {
+  .recruiting-two-column {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .dashboard-workspace .recruiting-candidate-panel {
+  .recruiting-candidate-panel {
     border-top: 1px solid var(--workspace-border, var(--border));
     border-left: 0;
   }

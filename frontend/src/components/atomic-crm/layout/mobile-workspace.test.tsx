@@ -42,6 +42,11 @@ describe("desktop workspace rail", () => {
       <div className="workspace-frame">
         <header className="workspace-topbar">
           <a className="workspace-topbar-brand" href="#/">
+            <img
+              src="/brand/tinghire-icon-transparent.png"
+              alt=""
+              aria-hidden="true"
+            />
             <span>TingHire</span>
           </a>
         </header>
@@ -53,7 +58,7 @@ describe("desktop workspace rail", () => {
           >
             <img
               className="workspace-sidebar-brand-mark"
-              src="/brand/tinghire-icon-192.png"
+              src="/brand/tinghire-icon-transparent.png"
               alt=""
             />
           </a>
@@ -72,6 +77,7 @@ describe("desktop workspace rail", () => {
     const topbarBrand = screen.container.querySelector<HTMLElement>(
       ".workspace-topbar-brand",
     )!;
+    const topbarBrandMark = topbarBrand.querySelector<HTMLElement>("img")!;
     const frame = screen.container.querySelector<HTMLElement>(
       ".workspace-frame",
     )!;
@@ -92,6 +98,9 @@ describe("desktop workspace rail", () => {
     expect(topbar.getBoundingClientRect().height).toBeCloseTo(52, 0);
     expect(getComputedStyle(compactMark).display).toBe("block");
     expect(getComputedStyle(topbarBrand).display).not.toBe("none");
+    expect(getComputedStyle(topbarBrandMark).borderTopWidth).toBe("0px");
+    expect(getComputedStyle(topbarBrandMark).borderRadius).toBe("0px");
+    expect(getComputedStyle(topbarBrandMark).objectFit).toBe("contain");
   });
 
   it("pins the notification and account controls to the far right of the top bar", async () => {

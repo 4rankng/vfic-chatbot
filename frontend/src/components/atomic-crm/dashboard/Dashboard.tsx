@@ -26,7 +26,7 @@ export const Dashboard = () => (
     <InboxIcons />
     <section
       className="dashboard-workspace-content"
-      aria-label="Tổng quan tuyển dụng"
+      aria-label="Tổng quan"
     >
       {ATTENTION_DASHBOARD_ENABLED ? (
         <RecruitingCommandCenter />
@@ -35,7 +35,7 @@ export const Dashboard = () => (
           <header className="recruiting-hero recruiting-hero-minimal">
             <div className="recruiting-hero-copy">
               <span className="recruiting-eyebrow">Theo dõi trực tiếp</span>
-              <h1>Tổng quan tuyển dụng</h1>
+              <h1>Tổng quan</h1>
               <p>
                 Bảng điều khiển đang tạm bảo trì. Vui lòng quay lại sau ít phút.
               </p>

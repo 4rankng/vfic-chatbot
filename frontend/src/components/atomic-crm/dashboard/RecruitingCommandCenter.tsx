@@ -6,6 +6,7 @@ import {
   Phone,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useDataProvider, useNotify } from "ra-core";
 import { useRef, useState } from "react";
 import { GroupedVirtuoso } from "react-virtuoso";
 import { useNavigate } from "react-router";
@@ -20,6 +21,10 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { LeadAvatar } from "../conversations/LeadAvatar";
+import { useRoleActions } from "../hooks/useRoleActions";
+import type { CandidateProfileUpdate } from "../leads/domain/candidateProfile";
+import type { CrmDataProvider } from "../providers/types";
+import type { Lead } from "../types";
 import {
   ATTENTION_QUERY_KEY,
   REASON_LABELS,
@@ -65,6 +70,11 @@ const formatClock = (value: string | null | undefined): string => {
 };
 
 type Navigate = ReturnType<typeof useNavigate>;
+type SaveCandidateProfile = (
+  lead: Lead,
+  changes: Partial<CandidateProfileUpdate>,
+  version: number,
+) => Promise<void>;
 
 /**
  * One primary action per row (no nested interactive controls — spec Risks).
@@ -85,6 +95,9 @@ export const RecruitingCommandCenter = ({
   variant = "desktop",
 }: RecruitingCommandCenterProps) => {
   const navigate = useNavigate();
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const notify = useNotify();
+  const { canEdit } = useRoleActions();
   // TanStack caching contract (Red-team Medium 14 — exact):
   //   - skeleton iff isPending && !data (first load only)
   //   - cached data + background-refetch indicator iff data && isFetching
@@ -109,6 +122,30 @@ export const RecruitingCommandCenter = ({
     staleTime: 25_000,
     gcTime: 5 * 60_000,
   });
+  const saveCandidateProfile: SaveCandidateProfile = async (
+    lead,
+    changes,
+    version,
+  ) => {
+    try {
+      await dataProvider.update<Lead>("leads", {
+        id: lead.id,
+        data: { ...changes, version },
+        previousData: lead,
+      });
+      notify("Đã cập nhật hồ sơ ứng viên", { type: "success" });
+      await candidatesQuery.refetch().catch(() => undefined);
+    } catch (error) {
+      await candidatesQuery.refetch().catch(() => undefined);
+      notify(
+        error instanceof Error
+          ? error.message
+          : "Không thể cập nhật hồ sơ ứng viên",
+        { type: "error" },
+      );
+      throw error;
+    }
+  };
 
   const shellClass =
     variant === "mobile"
@@ -191,8 +228,7 @@ export const RecruitingCommandCenter = ({
     <div className={shellClass}>
       <header className="recruiting-hero recruiting-hero-minimal">
         <div className="recruiting-hero-copy">
-          <span className="recruiting-eyebrow">Bàn điều phối tuyển dụng</span>
-          <h1>Tổng quan tuyển dụng</h1>
+          <h1>Tổng quan</h1>
           <p className="recruiting-hero-description">
             Ưu tiên hội thoại cần phản hồi, sau đó xem người vừa để lại thông
             tin liên hệ.
@@ -297,6 +333,8 @@ export const RecruitingCommandCenter = ({
           }}
           navigate={navigate}
           onRetry={candidatesQuery.refetch}
+          canEdit={canEdit}
+          onSave={saveCandidateProfile}
         />
       </section>
     </div>
@@ -372,12 +410,16 @@ const CandidatePanel = ({
   state,
   navigate,
   onRetry,
+  canEdit,
+  onSave,
 }: {
   groups: ReturnType<typeof groupCandidatesByDay>;
   count: number;
   state: PanelState;
   navigate: Navigate;
   onRetry: () => void;
+  canEdit: boolean;
+  onSave: SaveCandidateProfile;
 }) => (
   <article className="recruiting-panel recruiting-candidate-panel">
     <div className="recruiting-panel-header">
@@ -407,6 +449,8 @@ const CandidatePanel = ({
           groups={groups}
           count={count}
           navigate={navigate}
+          canEdit={canEdit}
+          onSave={onSave}
         />
       ) : (
         <EmptyDashboardList
@@ -426,10 +470,14 @@ const CandidateGroupedList = ({
   groups,
   count,
   navigate,
+  canEdit,
+  onSave,
 }: {
   groups: ReturnType<typeof groupCandidatesByDay>;
   count: number;
   navigate: Navigate;
+  canEdit: boolean;
+  onSave: SaveCandidateProfile;
 }) => {
   const isMobile = useIsMobile();
   const candidates = groups.flatMap((group) => group.candidates);
@@ -450,6 +498,8 @@ const CandidateGroupedList = ({
                 key={`candidate-${candidate.id}`}
                 candidate={candidate}
                 navigate={navigate}
+                canEdit={canEdit}
+                onSave={onSave}
               />
             ))}
           </div>
@@ -474,7 +524,12 @@ const CandidateGroupedList = ({
         </h3>
       )}
       itemContent={(_index, _groupIndex, candidate) => (
-        <CandidateRow candidate={candidate} navigate={navigate} />
+        <CandidateRow
+          candidate={candidate}
+          navigate={navigate}
+          canEdit={canEdit}
+          onSave={onSave}
+        />
       )}
     />
   );
@@ -574,9 +629,13 @@ const AttentionRow = ({
 const CandidateRow = ({
   candidate,
   navigate,
+  canEdit,
+  onSave,
 }: {
   candidate: DashboardCandidate;
   navigate: Navigate;
+  canEdit: boolean;
+  onSave: SaveCandidateProfile;
 }) => {
   const [isCandidateDataOpen, setIsCandidateDataOpen] = useState(false);
   const actionTriggerRef = useRef<HTMLButtonElement>(null);
@@ -645,9 +704,15 @@ const CandidateRow = ({
         </DropdownMenu>
         <CandidateDataDialog
           lead={candidate.lead}
+          displayName={name}
+          displayAvatarUrl={candidate.avatar_url}
           open={isCandidateDataOpen}
           onOpenChange={setIsCandidateDataOpen}
           returnFocusRef={actionTriggerRef}
+          canEdit={canEdit}
+          onSave={(changes, version) =>
+            onSave(candidate.lead, changes, version)
+          }
         />
       </>
     );
