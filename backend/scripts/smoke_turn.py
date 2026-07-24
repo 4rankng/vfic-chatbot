@@ -112,6 +112,7 @@ def _build_smoke_deps(db) -> GraphDeps:
     """Wire the real turn services without constructing unused provider clients."""
     from app.services.conversation import ConversationService
     from app.services.retrieval import RetrievalRepository
+    from app.composition.recruitment import build_lead_context
 
     return GraphDeps(
         db=db,
@@ -121,6 +122,7 @@ def _build_smoke_deps(db) -> GraphDeps:
         conversation=ConversationService(db),
         retrieval=RetrievalRepository(db),
         reply_policy=DeterministicReplyPolicy(),
+        lead=build_lead_context(db),
     )
 
 

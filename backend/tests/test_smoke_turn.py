@@ -5,6 +5,7 @@ from scripts.smoke_turn import _StubAgent, _StubZalo, _build_smoke_deps, _stub_e
 
 def test_smoke_deps_skip_provider_client_construction(monkeypatch):
     from app.graph import factories
+    from app.recruitment.infrastructure.service_adapters import ServiceLeadContextAdapter
     from app.services.conversation import ConversationService
     from app.services.retrieval import RetrievalRepository
 
@@ -22,3 +23,4 @@ def test_smoke_deps_skip_provider_client_construction(monkeypatch):
     assert deps.embedder is _stub_embedder
     assert isinstance(deps.conversation, ConversationService)
     assert isinstance(deps.retrieval, RetrievalRepository)
+    assert isinstance(deps.lead, ServiceLeadContextAdapter)
