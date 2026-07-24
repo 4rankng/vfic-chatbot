@@ -42,7 +42,7 @@ EXPECTED_ROUTE_COUNTS = {
     # fail this gate and force an explicit authority-classification review.
     "auth": 6,
     "bot_runs": 2,
-    "conversations": 18,
+    "conversations": 19,
     "dashboard": 2,
     "integrations": 20,  # Phase 4: +7 Facebook OAuth lifecycle endpoints
     # Meta App credentials UI: +2 (GET/PUT /facebook/credentials)
@@ -58,15 +58,15 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "3fecf58e9c1f3e94b0b692db4564e8e1cef6d94f57c7a5143adf09ae39737fec"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "457fa601291c0a677c415b319a6b3342d2e64e8a02788f92f1db823b97c68403"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
     "outbox_boundary": 10,
-    "provider_boundary": 91,
+    "provider_boundary": 92,
     "queue_producer": 37,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "115f0529fc06009d7cbd5de045d51cbf9c2f986d064d0073aa9378061a242a02"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "e3f71535990d2e34be2867f7e317582fec69bfa3a0f6943cef46222d7f7da3d7"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
