@@ -11,6 +11,7 @@ import {
 import {
   InfiniteListBase,
   useInfinitePaginationContext,
+  useGetOne,
   useListContext,
   RecordContextProvider,
 } from "ra-core";
@@ -41,7 +42,10 @@ import {
   getConversationUnreadCount,
   needsHumanReply,
 } from "../domain/conversation-row-state";
-import { conversationSelectionParams } from "../domain/conversation-navigation";
+import {
+  conversationSelectionParams,
+  findSelectedConversation,
+} from "../domain/conversation-navigation";
 import type { ConversationRowPresentation } from "../../capabilities/types";
 import conversationWorkspaceIllustration from "@/assets/empty-states/conversation-workspace-illustration.webp";
 import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
@@ -616,6 +620,20 @@ const ConversationListContent = () => {
   }, [conversationIdsKey]);
 
   const urlId = searchParams.get("id");
+  const conversationFromCurrentPage =
+    conversations?.find((conversation) => conversation.id === urlId) ?? null;
+  const shouldLoadDeepLink = Boolean(
+    urlId && conversations && !conversationFromCurrentPage,
+  );
+  const {
+    data: deepLinkedConversation,
+    isPending: isDeepLinkPending,
+    isError: isDeepLinkError,
+  } = useGetOne<Conversation>(
+    "conversations",
+    { id: urlId ?? "" },
+    { enabled: shouldLoadDeepLink },
+  );
   // BLOCKER #1: the `?reason=` URL param is now consumed at the
   // `<ConversationList>` mount (passed to `InfiniteListBase filter`) so the
   // backend `list_by_attention_reason` filter runs and the server returns the
@@ -633,16 +651,29 @@ const ConversationListContent = () => {
   // desktop auto-selects the first for an immediate detail view, while mobile
   // stays list-first until the user taps a row.
   useEffect(() => {
-    if (!conversations || conversations.length === 0) return;
-    const hasUrlConversation =
-      !!urlId && conversations.some((c) => c.id === urlId);
+    if (!conversations) return;
+    const hasUrlConversation = Boolean(
+      urlId &&
+      (conversationFromCurrentPage || deepLinkedConversation?.id === urlId),
+    );
     const hasSelectedConversation =
-      !!selectedId && conversations.some((c) => c.id === selectedId);
+      !!findSelectedConversation(
+        conversations,
+        selectedId,
+        deepLinkedConversation,
+      );
+
+    if (urlId && shouldLoadDeepLink && isDeepLinkPending) return;
 
     // A stale deep link (?id= for a deleted/invalid conversation) would leave
     // detailOpen true with no selectable conversation, stranding the user on
     // an empty detail pane. Clear it so the list shows instead.
-    if (isMobile && urlId && !hasUrlConversation) {
+    if (
+      isMobile &&
+      urlId &&
+      !hasUrlConversation &&
+      (!shouldLoadDeepLink || isDeepLinkError)
+    ) {
       setSearchParams(
         (prev) => {
           prev.delete("id");
@@ -660,10 +691,14 @@ const ConversationListContent = () => {
 
     if (hasSelectedConversation) return;
 
-    if (!isMobile) {
+    if (!isMobile && conversations.length > 0) {
       const firstId = (conversations[0] as Conversation).id;
       setSelectedId(firstId);
-      if (urlId) {
+      if (
+        urlId &&
+        !hasUrlConversation &&
+        (!shouldLoadDeepLink || isDeepLinkError)
+      ) {
         setSearchParams(
           (prev) => {
             prev.set("id", firstId);
@@ -675,9 +710,24 @@ const ConversationListContent = () => {
     } else if (selectedId) {
       setSelectedId(null);
     }
-  }, [conversations, urlId, selectedId, isMobile, setSearchParams]);
+  }, [
+    conversations,
+    conversationFromCurrentPage,
+    deepLinkedConversation,
+    isDeepLinkError,
+    isDeepLinkPending,
+    isMobile,
+    selectedId,
+    setSearchParams,
+    shouldLoadDeepLink,
+    urlId,
+  ]);
 
-  const selected = conversations?.find((c) => c.id === selectedId) ?? null;
+  const selected = findSelectedConversation(
+    conversations,
+    selectedId,
+    deepLinkedConversation,
+  );
 
   // Stable identity so memoized ConversationListItem children don't re-render
   // on every list state change (the parent re-renders on search/selection, but

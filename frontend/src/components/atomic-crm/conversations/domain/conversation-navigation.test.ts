@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { conversationSelectionParams } from "./conversation-navigation";
+import {
+  conversationSelectionParams,
+  findSelectedConversation,
+} from "./conversation-navigation";
 
 describe("conversationSelectionParams", () => {
   it("clears the candidate-panel deep link when another conversation is selected", () => {
@@ -19,5 +22,18 @@ describe("conversationSelectionParams", () => {
     );
 
     expect(result.toString()).toBe("");
+  });
+
+  it("selects a fetched deep-link conversation outside the current inbox page", () => {
+    const visibleConversations = [{ id: "hang-do" }];
+    const deepLinkedConversation = { id: "bui-hai-anh" };
+
+    expect(
+      findSelectedConversation(
+        visibleConversations,
+        "bui-hai-anh",
+        deepLinkedConversation,
+      ),
+    ).toBe(deepLinkedConversation);
   });
 });

@@ -11,3 +11,17 @@ export const conversationSelectionParams = (
   next.delete("panel");
   return next;
 };
+
+export const findSelectedConversation = <Conversation extends { id: string }>(
+  conversations: readonly Conversation[] | undefined,
+  selectedId: string | null,
+  deepLinkedConversation?: Conversation,
+): Conversation | null => {
+  if (!selectedId) return null;
+  return (
+    conversations?.find((conversation) => conversation.id === selectedId) ??
+    (deepLinkedConversation?.id === selectedId
+      ? deepLinkedConversation
+      : null)
+  );
+};
