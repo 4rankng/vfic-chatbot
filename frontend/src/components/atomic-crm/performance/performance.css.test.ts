@@ -61,6 +61,22 @@ describe("performance trend chart layers", () => {
     expect(attentionPanel).toMatch(/border-left:\s*1px solid var\(--border\)/);
   });
 
+  it("integrates the review table header with the page canvas", () => {
+    const tableHead = rule("\\.performance-slow-turns thead");
+    const tableHeadRow = rule("\\.performance-slow-turns thead tr");
+    const tableHeader = rule("\\.performance-slow-turns thead th");
+    const expand = rule("\\.performance-expand");
+
+    expect(tableHead).toMatch(/background:\s*transparent/);
+    expect(tableHeadRow).toMatch(/background:\s*transparent/);
+    expect(tableHeader).toMatch(/position:\s*static/);
+    expect(tableHeader).toMatch(/background:\s*transparent/);
+    expect(tableHeader).toMatch(/border-bottom:\s*1px solid var\(--border\)/);
+    expect(tableHeader).not.toMatch(/position:\s*sticky/);
+    expect(tableHeader).not.toMatch(/background:\s*var\(--card\)/);
+    expect(expand).toMatch(/border:\s*0/);
+  });
+
   it("uses the page title as the top of the mobile type and spacing scale", () => {
     const mobile = stylesheet.slice(
       stylesheet.indexOf("@media (max-width: 720px)"),
@@ -74,6 +90,15 @@ describe("performance trend chart layers", () => {
     );
     expect(mobile).toMatch(
       /\.performance-window button\s*\{[^}]*min-height:\s*36px[^}]*font-size:\s*var\(--fs-body-sm\)/s,
+    );
+    expect(mobile).toMatch(
+      /\.performance-page > \.performance-slow-turns\s*\{[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s,
+    );
+    expect(mobile).toMatch(
+      /\.performance-turn-cards article\s*\{[^}]*border:\s*0[^}]*border-radius:\s*0[^}]*background:\s*transparent/s,
+    );
+    expect(mobile).toMatch(
+      /\.performance-turn-cards article \+ article\s*\{[^}]*border-top:\s*1px solid var\(--border\)/s,
     );
     expect(mobile).toMatch(/\.performance-metric\s*\{[^}]*padding:\s*10px/s);
     expect(mobile).not.toMatch(/\.performance-metric\s*\{[^}]*box-shadow:/s);

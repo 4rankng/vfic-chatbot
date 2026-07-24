@@ -294,6 +294,18 @@
   border-top: 2px dashed var(--danger);
   background: transparent;
 }
+.performance-legend i.is-tone {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 0.12rem;
+  background: var(--primary);
+}
+.performance-legend i.is-tone.is-success {
+  background: var(--success);
+}
+.performance-legend i.is-tone.is-warning {
+  background: #f5b301;
+}
 
 .performance-trend {
   position: relative;
@@ -340,15 +352,18 @@
   border-top: 1px dashed var(--danger);
   pointer-events: none;
 }
-.performance-target-line b {
+.performance-target-label {
   position: absolute;
-  right: 0.2rem;
-  top: -1.35rem;
-  padding: 0.1rem 0.25rem;
+  z-index: 3;
+  top: 0.25rem;
+  left: 0.4rem;
+  padding: 0.1rem 0.35rem;
   border-radius: 0.25rem;
   color: var(--danger);
   background: var(--card);
   font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  pointer-events: none;
 }
 .performance-trend-bar {
   position: relative;
@@ -366,6 +381,12 @@
 }
 .performance-trend-bar.is-error {
   background: var(--danger);
+}
+.performance-trend-bar.is-warning {
+  background: #f5b301;
+}
+.performance-trend-bar.is-success {
+  background: var(--success);
 }
 .performance-trend-axis {
   position: relative;
@@ -540,11 +561,20 @@
   overflow-x: auto;
   overflow-y: visible;
 }
+.performance-slow-turns thead {
+  background: transparent;
+}
+.performance-slow-turns thead tr {
+  background: transparent;
+}
 .performance-slow-turns thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--card);
+  position: static;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  background: transparent;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.015em;
 }
 .performance-slow-turns table tr:not(.performance-detail-row):hover,
 .performance-slow-turns table tr.is-open {
@@ -559,12 +589,12 @@
   place-items: center;
   width: 2.5rem;
   height: 2.5rem;
-  border: 1px solid var(--border);
-  border-radius: 0.4rem;
+  border: 0;
+  border-radius: 999px;
 }
 .performance-expand:hover {
   color: var(--primary);
-  background: var(--card);
+  background: var(--muted);
 }
 .performance-show-more {
   justify-self: center;
@@ -1074,7 +1104,16 @@
 
   .performance-turn-cards {
     display: grid;
-    gap: 8px;
+    gap: 0;
+  }
+
+  .performance-page > .performance-slow-turns {
+    padding: 12px 2px;
+    border: 0;
+    border-block: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .performance-turn-cards article {
@@ -1082,9 +1121,24 @@
     display: grid;
     gap: 8px;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    border-radius: 16px;
-    padding: 16px;
+    border: 0;
+    border-radius: 0;
+    padding: 14px 2px 14px 12px;
+    background: transparent;
+  }
+
+  .performance-turn-cards article + article {
+    border-top: 1px solid var(--border);
+  }
+
+  .performance-turn-cards article::before {
+    top: 14px;
+    bottom: 14px;
+    left: 0;
+    width: 2px;
+    height: auto;
+    border-radius: 999px;
+    transform: none;
   }
 
   .performance-turn-cards article.is-danger::before {

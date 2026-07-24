@@ -150,6 +150,17 @@ const TrendChart = ({
             <i className="is-target" />
             Mục tiêu 10 giây
           </span>
+          <span>
+            <i className="is-tone is-success" />
+            &lt; 10 giây
+          </span>
+          <span>
+            <i className="is-tone is-warning" />
+            10–20 giây
+          </span>
+          <span>
+            <i className="is-tone" />≥ 20 giây
+          </span>
         </div>
       </div>
       {trend.length === 0 ? (
@@ -161,18 +172,30 @@ const TrendChart = ({
             role="img"
             aria-label={`Xu hướng độ trễ p95; ${totalErrors} lượt lỗi trong khoảng đã chọn`}
           >
+            <span className="performance-target-label" aria-hidden="true">
+              10 giây
+            </span>
             <span
               className="performance-target-line"
               style={{ bottom: `${Math.min(96, (10_000 / maxP95) * 100)}%` }}
-            >
-              <b>10 giây</b>
-            </span>
+            />
             {trend.map((bucket, index) => {
               const height = Math.max(2, ((bucket.p95_ms ?? 0) / maxP95) * 100);
+              const p95 = bucket.p95_ms;
+              const toneClass =
+                bucket.errors > 0
+                  ? " is-error"
+                  : p95 == null
+                    ? ""
+                    : p95 < 10_000
+                      ? " is-success"
+                      : p95 < 20_000
+                        ? " is-warning"
+                        : "";
               const tooltip = `${formatTrendBucket(bucket.bucket, true)} · p95 ${fmtMs(bucket.p95_ms)} · ${bucket.turns} lượt · ${bucket.errors} lỗi`;
               return (
                 <span
-                  className={`performance-trend-bar${bucket.errors > 0 ? " is-error" : ""}`}
+                  className={`performance-trend-bar${toneClass}`}
                   key={`${bucket.bucket ?? index}`}
                   style={{ height: `${height}%` }}
                   title={tooltip}
@@ -770,9 +793,15 @@ const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
                             }
                           >
                             {isOpen ? (
-                              <ChevronDown className="size-4" />
+                              <ChevronDown
+                                className="size-4"
+                                aria-hidden="true"
+                              />
                             ) : (
-                              <ChevronRight className="size-4" />
+                              <ChevronRight
+                                className="size-4"
+                                aria-hidden="true"
+                              />
                             )}
                           </button>
                         </td>
