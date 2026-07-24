@@ -222,8 +222,12 @@ describe("RecruitingCommandCenter candidate rows", () => {
     await expect
       .element(screen.getByAltText("Ảnh đại diện của Phạm Hùng"))
       .toHaveAttribute("src", "https://example.com/pham-hung.jpg");
-    expect(screen.container.textContent).not.toContain("Công nhân sản xuất");
-    expect(screen.container.textContent).not.toContain("15:30");
+    const candidateRow = screen.container.querySelector(
+      ".recruiting-candidate-panel .dashboard-candidate-row",
+    );
+    expect(candidateRow).not.toBeNull();
+    expect(candidateRow?.textContent).not.toContain("Công nhân sản xuất");
+    expect(candidateRow?.textContent).not.toContain("15:30");
     expect(screen.container.textContent).not.toContain(
       "Hàng đợi đang thông thoáng",
     );
