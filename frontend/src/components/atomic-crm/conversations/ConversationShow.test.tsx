@@ -61,7 +61,17 @@ vi.mock("./conversation-capability", () => ({
   }: {
     children: (ctx: Record<string, unknown>) => ReactNode;
   }) => (
-    <>{children({ renderPanel: null, displayName: "Tester" })}</>
+    <>
+      {children({
+        displayName: "Tester",
+        panelLabel: "Dữ liệu ứng viên",
+        renderPanel: ({ open }: { open: boolean }) => (
+          <div data-testid="candidate-panel-state">
+            {open ? "candidate-panel-open" : "candidate-panel-closed"}
+          </div>
+        ),
+      })}
+    </>
   ),
   useConversationCapabilitySlots: () => ({ actions: null }),
 }));
@@ -171,5 +181,24 @@ describe("ConversationShowContent — delete conversation", () => {
     expect(onDeleted).not.toHaveBeenCalled();
     expect(refreshMock).not.toHaveBeenCalled();
     expect(notifyMock).toHaveBeenCalledWith("boom", { type: "error" });
+  });
+});
+
+describe("ConversationShowContent — candidate profile deep link", () => {
+  it("opens Dữ liệu ứng viên when the dashboard supplies panel=candidate", async () => {
+    const screen = await render(
+      <MemoryRouter
+        initialEntries={["/conversations?id=conv-1&panel=candidate"]}
+      >
+        <ConversationShowContent
+          onOpenList={vi.fn()}
+          showWorkspacePanel
+        />
+      </MemoryRouter>,
+    );
+
+    await expect
+      .element(screen.getByTestId("candidate-panel-state"))
+      .toHaveTextContent("candidate-panel-open");
   });
 });
