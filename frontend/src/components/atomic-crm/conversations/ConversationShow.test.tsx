@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 
 import type { Conversation } from "../types";
 
@@ -110,11 +111,13 @@ describe("ConversationShowContent — delete conversation", () => {
   it("calls onDeleted after a successful delete so the parent drops the stale selection", async () => {
     const onDeleted = vi.fn();
     const screen = await render(
-      <ConversationShowContent
-        onOpenList={vi.fn()}
-        onDeleted={onDeleted}
-        showWorkspacePanel={false}
-      />,
+      <MemoryRouter>
+        <ConversationShowContent
+          onOpenList={vi.fn()}
+          onDeleted={onDeleted}
+          showWorkspacePanel={false}
+        />
+      </MemoryRouter>,
     );
 
     await screen
@@ -144,11 +147,13 @@ describe("ConversationShowContent — delete conversation", () => {
     dataProviderMock.delete.mockRejectedValueOnce(new Error("boom"));
     const onDeleted = vi.fn();
     const screen = await render(
-      <ConversationShowContent
-        onOpenList={vi.fn()}
-        onDeleted={onDeleted}
-        showWorkspacePanel={false}
-      />,
+      <MemoryRouter>
+        <ConversationShowContent
+          onOpenList={vi.fn()}
+          onDeleted={onDeleted}
+          showWorkspacePanel={false}
+        />
+      </MemoryRouter>,
     );
 
     await screen
