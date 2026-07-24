@@ -41,6 +41,7 @@ import {
   getConversationUnreadCount,
   needsHumanReply,
 } from "../domain/conversation-row-state";
+import { conversationSelectionParams } from "../domain/conversation-navigation";
 import type { ConversationRowPresentation } from "../../capabilities/types";
 import conversationWorkspaceIllustration from "@/assets/empty-states/conversation-workspace-illustration.webp";
 import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
@@ -694,20 +695,14 @@ const ConversationListContent = () => {
       });
       // Push (not replace) so each opened conversation is a history entry and the
       // browser back button returns to the list.
-      setSearchParams((prev) => {
-        prev.set("id", c.id);
-        return prev;
-      });
+      setSearchParams((prev) => conversationSelectionParams(prev, c.id));
     },
     [setSearchParams],
   );
 
   const backToList = () => {
     setSearchParams(
-      (prev) => {
-        prev.delete("id");
-        return prev;
-      },
+      (prev) => conversationSelectionParams(prev, null),
       { replace: true },
     );
   };
