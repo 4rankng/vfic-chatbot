@@ -123,6 +123,14 @@ describe("Bot run pages", () => {
       .toBeVisible();
     await expect
       .element(screen.getByText("Đã kiểm tra dữ liệu trước khi trả lời."))
+      .not.toBeVisible();
+    await screen
+      .getByLabelText(
+        /^Chi tiết lượt suy luận 1: .*minimax.*MiniMax-M2\.7$/,
+      )
+      .click();
+    await expect
+      .element(screen.getByText("Đã kiểm tra dữ liệu trước khi trả lời."))
       .toBeVisible();
     expect(screen.container.querySelector("[data-slot='card']")).toBeNull();
     expect(screen.container.querySelector(".tt-alternate-card")).toBeNull();

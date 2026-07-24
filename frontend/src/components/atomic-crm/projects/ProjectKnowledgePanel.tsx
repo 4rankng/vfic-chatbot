@@ -900,20 +900,45 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
             </div>
             {loadingCategory ? (
               <Skeleton className="project-category-editor-skeleton" />
-            ) : (
+            ) : isEditing ? (
               <Textarea
                 value={editorContent}
                 onChange={(event) => setEditorContent(event.target.value)}
-                readOnly={!isEditing}
                 rows={20}
-                className={cn(
-                  "project-category-textarea font-mono",
-                  isEditing && "border-primary ring-3 ring-primary/10",
-                )}
+                className="project-category-textarea border-primary font-mono ring-3 ring-primary/10"
                 aria-label={`Dữ liệu hiện tại của danh mục ${selectedCategory?.label_vi ?? selected}`}
                 placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
               />
-            )}
+            ) : hasCurrentSource ? (
+              <details className="group border-y border-border">
+                <summary
+                  aria-label={`Xem dữ liệu danh mục ${selectedCategory?.label_vi ?? selected}`}
+                  className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-1 py-2 text-body font-semibold outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+                >
+                  <Database
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    Xem dữ liệu đang dùng
+                  </span>
+                  <ChevronDown
+                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                    aria-hidden="true"
+                  />
+                </summary>
+                <div className="pb-3 pt-1">
+                  <Textarea
+                    value={editorContent}
+                    readOnly
+                    rows={14}
+                    className="project-category-textarea font-mono"
+                    aria-label={`Dữ liệu hiện tại của danh mục ${selectedCategory?.label_vi ?? selected}`}
+                    placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
+                  />
+                </div>
+              </details>
+            ) : null}
           </section>
         </div>
 

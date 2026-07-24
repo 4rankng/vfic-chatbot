@@ -128,7 +128,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
       )
       .toBeVisible();
     await expect
-      .element(screen.getByText("1 hội thoại cần xử lý"))
+      .element(screen.getByLabelText("1 hội thoại cần xử lý"))
       .toBeVisible();
     await expect.element(screen.getByText("Quá hạn phản hồi")).toBeVisible();
     await expect.element(screen.getByText("Mở", { exact: true })).toBeVisible();
@@ -202,8 +202,12 @@ describe("RecruitingCommandCenter candidate rows", () => {
     await expect.element(screen.getByText("Phạm Hùng")).toBeVisible();
     await expect.element(screen.getByText("0900000042")).toBeVisible();
     await expect
-      .element(screen.getByText("Hàng đợi đang thông thoáng"))
+      .element(screen.getByLabelText("0 hội thoại cần xử lý"))
       .toBeVisible();
+    await expect.element(screen.getByLabelText("1 ứng viên mới")).toBeVisible();
+    const worklist = screen.container.querySelector(".recruiting-worklist");
+    expect(worklist).not.toBeNull();
+    expect(worklist?.querySelectorAll(".recruiting-panel")).toHaveLength(2);
     await expect
       .element(
         screen.getByRole("heading", {
@@ -220,6 +224,14 @@ describe("RecruitingCommandCenter candidate rows", () => {
       .toHaveAttribute("src", "https://example.com/pham-hung.jpg");
     expect(screen.container.textContent).not.toContain("Công nhân sản xuất");
     expect(screen.container.textContent).not.toContain("15:30");
+    expect(screen.container.textContent).not.toContain(
+      "Hàng đợi đang thông thoáng",
+    );
+    expect(screen.container.textContent).not.toContain(
+      "Không có hội thoại cần can thiệp",
+    );
+    expect(screen.container.textContent).not.toContain("Ưu tiên phản hồi");
+    expect(screen.container.textContent).not.toContain("Luồng ứng viên");
 
     const candidateActionTrigger = screen.getByRole("button", {
       name: /Chọn thao tác cho Phạm Hùng/,
@@ -292,7 +304,10 @@ describe("RecruitingCommandCenter candidate rows", () => {
     );
 
     await expect
-      .element(screen.getByText("Đang chờ kết nối dữ liệu"))
+      .element(screen.getByText("Không tải được hội thoại."))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Không tải được ứng viên."))
       .toBeVisible();
     expect(screen.container.textContent).not.toContain(
       "Hàng đợi đang hoạt động",

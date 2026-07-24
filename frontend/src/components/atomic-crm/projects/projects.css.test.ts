@@ -3,6 +3,24 @@ import { describe, expect, it } from "vitest";
 import stylesheet from "./projects.css?raw";
 
 describe("project list visual hierarchy", () => {
+  it("keeps the project ledger on one continuous workspace surface", () => {
+    expect(stylesheet).toMatch(
+      /\.project-rollup-strip\s*\{[^}]*border-block:\s*1px solid var\(--border\)[^}]*border-radius:\s*0[^}]*background:\s*transparent/,
+    );
+    expect(stylesheet).toMatch(
+      /\.project-rollup-strip span\s*\{[^}]*border-radius:\s*0[^}]*background:\s*transparent/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(min-width: 768px\)[\s\S]*?\.inbox-bg-container\.project-workspace\s*\{[^}]*padding:\s*0/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(min-width: 768px\)[\s\S]*?\.inbox-bg-container\.project-workspace \.project-app\s*\{[^}]*border-radius:\s*0[^}]*background:\s*transparent[^}]*box-shadow:\s*none/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(min-width: 768px\)[\s\S]*?\.inbox-bg-container\.project-workspace \.project-center-panel\s*\{[^}]*background:\s*transparent/,
+    );
+  });
+
   it("keeps the mobile create action subordinate to the page title", () => {
     expect(stylesheet).toMatch(
       /\.project-command-header h1[\s\S]*font-size:\s*var\(--fs-page-title\)/,

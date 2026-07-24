@@ -7,7 +7,14 @@ import {
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDataProvider, useGetIdentity } from "ra-core";
-import { AlertTriangle, Brain, History, Info, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  Brain,
+  ChevronDown,
+  History,
+  Info,
+  RefreshCw,
+} from "lucide-react";
 
 import {
   Accordion,
@@ -56,52 +63,70 @@ const ModelTurnEventRow = ({
 }: {
   event: DecisionTraceModelTurnEvent;
 }) => (
-  <li className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 py-4">
-    <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-      <Brain className="size-4" aria-hidden="true" />
-    </span>
-    <div className="min-w-0 space-y-2 pt-0.5">
-      <div>
-        <p className="break-words text-body font-semibold text-foreground">
-          Lượt suy luận {event.turn}
-        </p>
-        <p className="mt-0.5 break-words text-helper text-muted-foreground">
-          {modelPhaseLabel(event.phase)} · {event.provider} · {event.model}
-        </p>
-      </div>
-      {event.reasoning_status === "not_returned" ? (
-        <p className="decision-trace-reasoning-empty border-l-2 border-dashed border-border pl-3 text-helper text-muted-foreground">
-          Nhà cung cấp không trả về nội dung suy luận cho lượt này.
-        </p>
-      ) : (
-        <div className="decision-trace-reasoning border-l-2 border-primary/20 pl-3">
-          <p className="mb-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
-            Thinking
-            {event.reasoning_status === "truncated" ? " · đã rút gọn" : ""}
+  <li className="py-1">
+    <details className="group">
+      <summary
+        aria-label={`Chi tiết lượt suy luận ${event.turn}: ${modelPhaseLabel(event.phase)} · ${event.provider} · ${event.model}${
+          event.tool_names.length > 0
+            ? ` · ${event.tool_names.length} công cụ`
+            : ""
+        }`}
+        className="grid min-h-14 cursor-pointer list-none grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-2 outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+      >
+        <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Brain className="size-4" aria-hidden="true" />
+        </span>
+        <span className="min-w-0">
+          <span className="block break-words text-body font-semibold text-foreground">
+            Lượt suy luận {event.turn}
+          </span>
+          <span className="mt-0.5 block break-words text-helper text-muted-foreground">
+            {modelPhaseLabel(event.phase)} · {event.provider} · {event.model}
+            {event.tool_names.length > 0
+              ? ` · ${event.tool_names.length} công cụ`
+              : ""}
+          </span>
+        </span>
+        <ChevronDown
+          className="size-4 text-muted-foreground transition-transform group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="ml-11 space-y-3 pb-4 pr-1 pt-2">
+        {event.reasoning_status === "not_returned" ? (
+          <p className="decision-trace-reasoning-empty border-l-2 border-dashed border-border pl-3 text-helper text-muted-foreground">
+            Nhà cung cấp không trả về nội dung suy luận cho lượt này.
           </p>
-          <p className="whitespace-pre-wrap break-words text-body leading-6 text-foreground">
-            {event.reasoning}
-          </p>
-        </div>
-      )}
-      {event.tool_names.length > 0 ? (
-        <div>
-          <p className="mb-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
-            Công cụ được chọn
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {event.tool_names.map((name, index) => (
-              <span
-                key={`${name}-${index}`}
-                className="rounded-full border bg-background px-2 py-1 text-helper text-foreground"
-              >
-                {toolNameLabel(name)}
-              </span>
-            ))}
+        ) : (
+          <div className="decision-trace-reasoning border-l-2 border-primary/20 pl-3">
+            <p className="mb-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
+              Thinking
+              {event.reasoning_status === "truncated" ? " · đã rút gọn" : ""}
+            </p>
+            <p className="whitespace-pre-wrap break-words text-body leading-6 text-foreground">
+              {event.reasoning}
+            </p>
           </div>
-        </div>
-      ) : null}
-    </div>
+        )}
+        {event.tool_names.length > 0 ? (
+          <div>
+            <p className="mb-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
+              Công cụ được chọn
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {event.tool_names.map((name, index) => (
+                <span
+                  key={`${name}-${index}`}
+                  className="rounded-full border bg-background px-2 py-1 text-helper text-foreground"
+                >
+                  {toolNameLabel(name)}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </details>
   </li>
 );
 

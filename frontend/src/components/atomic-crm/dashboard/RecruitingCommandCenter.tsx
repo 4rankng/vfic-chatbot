@@ -1,10 +1,4 @@
-import {
-  AlertTriangle,
-  CheckCircle2,
-  MessageCircle,
-  PanelRight,
-  Phone,
-} from "lucide-react";
+import { AlertTriangle, MessageCircle, PanelRight, Phone } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDataProvider, useNotify } from "ra-core";
 import { useRef, useState } from "react";
@@ -167,55 +161,6 @@ export const RecruitingCommandCenter = ({
     showPartialError,
     showRefetchIndicator,
   } = deriveCacheDiscriminators({ isPending, isFetching, isError, data });
-  const queueHealth =
-    showInitialError || (candidatesQuery.isError && !candidatesQuery.data)
-      ? {
-          tone: "warning",
-          title: "Đang chờ kết nối dữ liệu",
-          detail: "Thử lại để tải hàng đợi",
-        }
-      : showPartialError ||
-          (candidatesQuery.isError && Boolean(candidatesQuery.data))
-        ? {
-            tone: "warning",
-            title: "Đang hiển thị dữ liệu gần nhất",
-            detail: "Kết nối làm mới đang gián đoạn",
-          }
-        : showSkeleton || (candidatesQuery.isPending && !candidatesQuery.data)
-          ? {
-              tone: "neutral",
-              title: "Đang kết nối hàng đợi",
-              detail: "Đang tải dữ liệu tuyển dụng",
-            }
-          : {
-              tone: "success",
-              title: "",
-              detail: "",
-            };
-  const countsAreLoading =
-    showSkeleton || (candidatesQuery.isPending && !candidatesQuery.data);
-  const intakeSummary = queueHealth.title
-    ? queueHealth
-    : interventionRows.length > 0
-      ? {
-          tone: "attention",
-          title: `${interventionRows.length} hội thoại cần xử lý`,
-          detail:
-            candidateCount > 0
-              ? `Ưu tiên phản hồi trước, sau đó xem ${candidateCount} ứng viên mới.`
-              : "Ưu tiên phản hồi để giữ nhịp tuyển dụng.",
-        }
-      : candidateCount > 0
-        ? {
-            tone: "success",
-            title: "Hàng đợi đang thông thoáng",
-            detail: `${candidateCount} ứng viên mới đang chờ bạn xem thông tin.`,
-          }
-        : {
-            tone: "success",
-            title: "Hàng đợi đang thông thoáng",
-            detail: "Chưa có hội thoại hoặc ứng viên mới cần xử lý.",
-          };
   const latestUpdate = dataUpdatedAt
     ? formatClock(
         new Date(
@@ -229,10 +174,6 @@ export const RecruitingCommandCenter = ({
       <header className="recruiting-hero recruiting-hero-minimal">
         <div className="recruiting-hero-copy">
           <h1>Tổng quan</h1>
-          <p className="recruiting-hero-description">
-            Ưu tiên hội thoại cần phản hồi, sau đó xem người vừa để lại thông
-            tin liên hệ.
-          </p>
           <div className="recruiting-hero-meta">
             <span
               className="dashboard-live-dot is-success"
@@ -257,35 +198,6 @@ export const RecruitingCommandCenter = ({
         </div>
       </header>
 
-      <section
-        className={`dashboard-intake-summary is-${intakeSummary.tone}`}
-        aria-label="Trạng thái hàng đợi tuyển dụng"
-      >
-        <span className="dashboard-intake-marker" aria-hidden="true">
-          {intakeSummary.tone === "attention" ||
-          intakeSummary.tone === "warning" ? (
-            <MessageCircle />
-          ) : (
-            <CheckCircle2 />
-          )}
-        </span>
-        <div className="dashboard-intake-copy" aria-live="polite">
-          <span>Trạng thái hàng đợi</span>
-          <strong>{intakeSummary.title}</strong>
-          <p>{intakeSummary.detail}</p>
-        </div>
-        <dl className="dashboard-intake-counts">
-          <div>
-            <dt>Cần xử lý</dt>
-            <dd>{countsAreLoading ? "—" : interventionRows.length}</dd>
-          </div>
-          <div>
-            <dt>Ứng viên mới</dt>
-            <dd>{countsAreLoading ? "—" : candidateCount}</dd>
-          </div>
-        </dl>
-      </section>
-
       {showPartialError || (candidatesQuery.isError && candidatesQuery.data) ? (
         <div
           className="dashboard-inline-error tt-alert tt-alert-error tt-alert-soft"
@@ -308,11 +220,10 @@ export const RecruitingCommandCenter = ({
       ) : null}
 
       <section
-        className="recruiting-two-column"
+        className="recruiting-worklist"
         aria-label="Các hàng đợi tuyển dụng"
       >
         <AttentionPanel
-          eyebrow="Cần can thiệp"
           rows={interventionRows}
           state={{
             showSkeleton,
@@ -348,7 +259,6 @@ type PanelState = {
 };
 
 type AttentionPanelProps = {
-  eyebrow: string;
   rows: AttentionItem[];
   state: PanelState;
   navigate: Navigate;
@@ -356,50 +266,50 @@ type AttentionPanelProps = {
 };
 
 const AttentionPanel = ({
-  eyebrow,
   rows,
   state,
   navigate,
   onRetry,
 }: AttentionPanelProps) => {
+  const isEmpty =
+    !state.showSkeleton && !state.showInitialError && !state.hasRows;
+  const countLabel = state.showSkeleton
+    ? "Đang tải số hội thoại cần xử lý"
+    : state.showInitialError
+      ? "Không tải được số hội thoại cần xử lý"
+      : `${rows.length} hội thoại cần xử lý`;
+
   return (
-    <article className="recruiting-panel">
+    <article className={`recruiting-panel${isEmpty ? " is-empty" : ""}`}>
       <div className="recruiting-panel-header">
-        <div className="recruiting-panel-heading">
-          <span>Ưu tiên phản hồi</span>
-          <h2>{eyebrow}</h2>
-          <p>Hội thoại đang chờ người tuyển dụng xử lý.</p>
+        <div className="recruiting-panel-title">
+          <MessageCircle aria-hidden="true" />
+          <h2>Cần xử lý</h2>
         </div>
-        <span
+        <strong
           className="dashboard-panel-count"
-          aria-label={`${rows.length} mục đang hiển thị`}
+          aria-label={countLabel}
+          aria-live="polite"
         >
-          <strong>{rows.length}</strong>
-          <small>hội thoại</small>
-        </span>
+          {state.showSkeleton || state.showInitialError ? "—" : rows.length}
+        </strong>
       </div>
-      <div className="dashboard-candidate-list">
-        {state.showSkeleton ? (
-          <DashboardListSkeleton />
-        ) : state.showInitialError ? (
-          <DashboardQueueError
-            label="Không tải được các hội thoại cần can thiệp."
-            onRetry={onRetry}
-          />
-        ) : state.hasRows ? (
-          rows.map((row) => (
-            <AttentionRow key={row.key} row={row} navigate={navigate} />
-          ))
-        ) : (
-          <EmptyDashboardList
-            content={{
-              title: "Không có hội thoại cần can thiệp",
-              description:
-                "Mọi cuộc trò chuyện hiện đã được xử lý. Bạn có thể chuyển sang xem ứng viên mới.",
-            }}
-          />
-        )}
-      </div>
+      {!isEmpty ? (
+        <div className="dashboard-candidate-list">
+          {state.showSkeleton ? (
+            <DashboardListSkeleton />
+          ) : state.showInitialError ? (
+            <DashboardQueueError
+              label="Không tải được hội thoại."
+              onRetry={onRetry}
+            />
+          ) : (
+            rows.map((row) => (
+              <AttentionRow key={row.key} row={row} navigate={navigate} />
+            ))
+          )}
+        </div>
+      ) : null}
     </article>
   );
 };
@@ -420,51 +330,57 @@ const CandidatePanel = ({
   onRetry: () => void;
   canEdit: boolean;
   onSave: SaveCandidateProfile;
-}) => (
-  <article className="recruiting-panel recruiting-candidate-panel">
-    <div className="recruiting-panel-header">
-      <div className="recruiting-panel-heading">
-        <span>Luồng ứng viên</span>
-        <h2>Ứng viên mới</h2>
-        <p>Người vừa để lại số liên hệ trong các hội thoại.</p>
+}) => {
+  const isEmpty =
+    !state.showSkeleton && !state.showInitialError && !state.hasRows;
+  const countLabel = state.showSkeleton
+    ? "Đang tải số ứng viên mới"
+    : state.showInitialError
+      ? "Không tải được số ứng viên mới"
+      : `${count} ứng viên mới`;
+
+  return (
+    <article
+      className={`recruiting-panel recruiting-candidate-panel${
+        isEmpty ? " is-empty" : ""
+      }`}
+    >
+      <div className="recruiting-panel-header">
+        <div className="recruiting-panel-title">
+          <Phone aria-hidden="true" />
+          <h2>Ứng viên mới</h2>
+        </div>
+        <strong
+          className="dashboard-panel-count"
+          aria-label={countLabel}
+          aria-live="polite"
+        >
+          {state.showSkeleton || state.showInitialError ? "—" : count}
+        </strong>
       </div>
-      <span
-        className="dashboard-panel-count"
-        aria-label={`${count} ứng viên có số điện thoại`}
-      >
-        <strong>{count}</strong>
-        <small>ứng viên</small>
-      </span>
-    </div>
-    <div className="dashboard-candidate-list">
-      {state.showSkeleton ? (
-        <DashboardListSkeleton />
-      ) : state.showInitialError ? (
-        <DashboardQueueError
-          label="Không tải được danh sách ứng viên."
-          onRetry={onRetry}
-        />
-      ) : state.hasRows ? (
-        <CandidateGroupedList
-          groups={groups}
-          count={count}
-          navigate={navigate}
-          canEdit={canEdit}
-          onSave={onSave}
-        />
-      ) : (
-        <EmptyDashboardList
-          tone="neutral"
-          content={{
-            title: "Chưa có ứng viên có số điện thoại",
-            description:
-              "Ứng viên sẽ xuất hiện tại đây sau khi cung cấp số liên hệ.",
-          }}
-        />
-      )}
-    </div>
-  </article>
-);
+      {!isEmpty ? (
+        <div className="dashboard-candidate-list">
+          {state.showSkeleton ? (
+            <DashboardListSkeleton />
+          ) : state.showInitialError ? (
+            <DashboardQueueError
+              label="Không tải được ứng viên."
+              onRetry={onRetry}
+            />
+          ) : (
+            <CandidateGroupedList
+              groups={groups}
+              count={count}
+              navigate={navigate}
+              canEdit={canEdit}
+              onSave={onSave}
+            />
+          )}
+        </div>
+      ) : null}
+    </article>
+  );
+};
 
 const CandidateGroupedList = ({
   groups,
@@ -481,7 +397,7 @@ const CandidateGroupedList = ({
 }) => {
   const isMobile = useIsMobile();
   const candidates = groups.flatMap((group) => group.candidates);
-  const desktopHeight = Math.min(720, count * 68 + groups.length * 32);
+  const desktopHeight = Math.min(640, count * 58 + groups.length * 30);
 
   // The dashboard usually contains only a handful of recent candidates. A
   // direct list keeps those rows visible and avoids a virtualizer viewport
@@ -727,27 +643,6 @@ const CandidateRow = ({
     </div>
   );
 };
-
-const EmptyDashboardList = ({
-  content,
-  tone = "success",
-}: {
-  content: {
-    title: string;
-    description: string;
-  };
-  tone?: "success" | "neutral";
-}) => (
-  <div className={`dashboard-empty-list is-${tone}`}>
-    <span className="dashboard-empty-icon" aria-hidden="true">
-      {tone === "success" ? <CheckCircle2 /> : <MessageCircle />}
-    </span>
-    <div className="dashboard-empty-copy">
-      <p>{content.title}</p>
-      <span>{content.description}</span>
-    </div>
-  </div>
-);
 
 const DashboardQueueError = ({
   label,

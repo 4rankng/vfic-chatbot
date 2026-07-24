@@ -135,7 +135,7 @@ const TrendChart = ({
   const totalErrors = trend.reduce((sum, bucket) => sum + bucket.errors, 0);
   const axisTicks = getTrendAxisTicks(trend, window === "7d");
   return (
-    <section className="performance-panel performance-trend-panel tt-card tt-card-border">
+    <section className="performance-panel performance-trend-panel">
       <div className="performance-section-heading">
         <div>
           <h2>Xu hướng độ trễ ứng viên chờ</h2>
@@ -283,7 +283,7 @@ const AttentionQueue = ({ data }: { data: PerfMetrics }) => {
       icon: CheckCircle2,
     });
   return (
-    <section className="performance-panel performance-attention-panel tt-card tt-card-border">
+    <section className="performance-panel performance-attention-panel">
       <div className="performance-section-heading">
         <div>
           <h2>

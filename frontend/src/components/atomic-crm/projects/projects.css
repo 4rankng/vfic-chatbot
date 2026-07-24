@@ -851,6 +851,33 @@
   white-space: nowrap;
 }
 
+/* The rollup is part of the project ledger, not a separate card. */
+.project-rollup-strip {
+  min-height: 44px;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-block: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.project-rollup-strip span {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 0 16px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.project-rollup-strip span:first-child {
+  padding-left: 4px;
+}
+
+.project-rollup-strip span + span {
+  border-left: 1px solid var(--border);
+}
+
 @media (max-width: 767px) {
   .inbox-bg-container.project-workspace::before {
     content: "";
@@ -1475,10 +1502,20 @@
 /* Flat project workspace: the project summary, actions, and knowledge editor
    read as one continuous operational surface instead of nested cards. */
 @media (min-width: 768px) {
+  .inbox-bg-container.project-workspace {
+    padding: 0;
+  }
+
+  .inbox-bg-container.project-workspace .project-app {
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
   .inbox-bg-container.project-workspace .project-center-panel {
     border: 0;
     border-radius: 0;
-    background: var(--chat-bg);
+    background: transparent;
     box-shadow: none;
   }
 

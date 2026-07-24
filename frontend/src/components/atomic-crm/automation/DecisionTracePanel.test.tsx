@@ -269,10 +269,23 @@ describe("DecisionTraceRenderer", () => {
     await expect.element(screen.getByText("Lượt suy luận 1")).toBeVisible();
     await expect
       .element(screen.getByText("Cần kiểm tra dữ liệu tuyển dụng hiện tại."))
+      .not.toBeVisible();
+    await screen
+      .getByLabelText(
+        /^Chi tiết lượt suy luận 1: .*minimax.*MiniMax-M2\.7.*1 công cụ$/,
+      )
+      .click();
+    await expect
+      .element(screen.getByText("Cần kiểm tra dữ liệu tuyển dụng hiện tại."))
       .toBeVisible();
     await expect
       .element(screen.getByText("Tra cứu cơ sở kiến thức"))
       .toBeVisible();
+    await screen
+      .getByLabelText(
+        /^Chi tiết lượt suy luận 2: .*minimax.*MiniMax-M2\.7$/,
+      )
+      .click();
     await expect
       .element(
         screen.getByText(
@@ -280,6 +293,11 @@ describe("DecisionTraceRenderer", () => {
         ),
       )
       .toBeVisible();
+    await screen
+      .getByLabelText(
+        /^Chi tiết lượt suy luận 3: .*openrouter.*deepseek\/deepseek-v4-flash$/,
+      )
+      .click();
     await expect
       .element(screen.getByText("Thinking · đã rút gọn"))
       .toBeVisible();

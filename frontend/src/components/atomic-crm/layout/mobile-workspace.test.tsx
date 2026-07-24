@@ -58,7 +58,7 @@ describe("desktop workspace rail", () => {
           >
             <img
               className="workspace-sidebar-brand-mark"
-              src="/brand/tinghire-icon-transparent.png"
+              src="/brand/tinghire-icon-rail.png"
               alt=""
             />
           </a>
@@ -86,8 +86,8 @@ describe("desktop workspace rail", () => {
     )!;
 
     expect(getComputedStyle(rail).width).toBe("72px");
-    expect(getComputedStyle(frame).gridTemplateRows.split(" ")[0]).toBe("52px");
-    expect(topbar.getBoundingClientRect().height).toBeCloseTo(52, 0);
+    expect(getComputedStyle(frame).gridTemplateRows.split(" ")[0]).toBe("44px");
+    expect(topbar.getBoundingClientRect().height).toBeCloseTo(44, 0);
     expect(getComputedStyle(compactMark).display).toBe("block");
     expect(getComputedStyle(compactMark).width).toBe("44px");
     expect(getComputedStyle(topbarBrand).display).toBe("none");
@@ -95,7 +95,7 @@ describe("desktop workspace rail", () => {
     await page.viewport(900, 720);
 
     expect(getComputedStyle(rail).width).toBe("72px");
-    expect(topbar.getBoundingClientRect().height).toBeCloseTo(52, 0);
+    expect(topbar.getBoundingClientRect().height).toBeCloseTo(44, 0);
     expect(getComputedStyle(compactMark).display).toBe("block");
     expect(getComputedStyle(topbarBrand).display).not.toBe("none");
     expect(getComputedStyle(topbarBrandMark).borderTopWidth).toBe("0px");

@@ -81,4 +81,9 @@ describe("Agent workspace layout regressions", () => {
     expect(formSource.match(/aria-busy=\{/g) ?? []).toHaveLength(2);
     expect(assignmentsSource).toContain("aria-busy={feedback.pending}");
   });
+
+  it("keeps empty prompt guidance inside the opened editor", () => {
+    expect(formSource).toContain("placeholder={section.hint}");
+    expect(formSource).not.toContain(": section.hint}");
+  });
 });

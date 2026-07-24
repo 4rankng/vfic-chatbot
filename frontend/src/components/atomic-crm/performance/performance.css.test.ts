@@ -43,6 +43,24 @@ describe("performance trend chart layers", () => {
     expect(metric).toMatch(/background:\s*transparent/);
   });
 
+  it("treats the primary diagnostic comparison as one divided workbench", () => {
+    const primaryGrid = rule("\\.performance-primary-grid");
+    const primaryPanel = rule(
+      "\\.performance-primary-grid > \\.performance-panel",
+    );
+    const attentionPanel = rule(
+      "\\.performance-primary-grid > \\.performance-attention-panel",
+    );
+
+    expect(primaryGrid).toMatch(/gap:\s*0/);
+    expect(primaryGrid).toMatch(/border-block:\s*1px solid var\(--border\)/);
+    expect(primaryPanel).toMatch(/border:\s*0/);
+    expect(primaryPanel).toMatch(/border-radius:\s*0/);
+    expect(primaryPanel).toMatch(/background:\s*transparent/);
+    expect(primaryPanel).toMatch(/box-shadow:\s*none/);
+    expect(attentionPanel).toMatch(/border-left:\s*1px solid var\(--border\)/);
+  });
+
   it("uses the page title as the top of the mobile type and spacing scale", () => {
     const mobile = stylesheet.slice(
       stylesheet.indexOf("@media (max-width: 720px)"),

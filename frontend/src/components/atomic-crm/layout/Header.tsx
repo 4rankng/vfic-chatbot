@@ -13,11 +13,11 @@ export const WorkspaceSidebarBrand = () => (
   >
     <img
       className="workspace-sidebar-brand-mark"
-      src="/brand/tinghire-icon-transparent.png"
+      src="/brand/tinghire-icon-rail.png"
       alt=""
       aria-hidden="true"
-      width="192"
-      height="192"
+      width="131"
+      height="106"
     />
   </Link>
 );

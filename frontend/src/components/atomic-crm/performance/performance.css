@@ -229,7 +229,18 @@
 .performance-primary-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(20rem, 1fr);
-  gap: 0.75rem;
+  gap: 0;
+  border-block: 1px solid var(--border);
+}
+.performance-primary-grid > .performance-panel {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.performance-primary-grid > .performance-attention-panel {
+  border-left: 1px solid var(--border);
 }
 .performance-panel {
   display: grid;
@@ -788,6 +799,10 @@
   .performance-primary-grid {
     grid-template-columns: 1fr;
   }
+  .performance-primary-grid > .performance-attention-panel {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
   .performance-row-detail {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -912,7 +927,7 @@
   }
 
   .performance-primary-grid {
-    gap: 8px;
+    gap: 0;
   }
 
   .performance-panel {

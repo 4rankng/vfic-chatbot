@@ -414,11 +414,9 @@ const PersonaForm = ({
                         >
                           {section.title.replace(/^\d+\.\s*/, "")}
                         </strong>
-                        <small>
-                          {completed
-                            ? value.trim().replace(/\s+/g, " ")
-                            : section.hint}
-                        </small>
+                        {completed ? (
+                          <small>{value.trim().replace(/\s+/g, " ")}</small>
+                        ) : null}
                       </div>
                       <span className="persona-edit-prompt-state">
                         <Badge

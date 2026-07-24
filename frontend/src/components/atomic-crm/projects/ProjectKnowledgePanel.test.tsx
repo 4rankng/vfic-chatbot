@@ -499,6 +499,11 @@ describe("ProjectKnowledgePanel", () => {
     );
     await expect.element(jobsEditor).toHaveValue("CURRENT JOBS");
     await expect.element(jobsEditor).toHaveAttribute("readonly");
+    await expect.element(jobsEditor).not.toBeVisible();
+    await screen
+      .getByLabelText("Xem dữ liệu danh mục Vị trí tuyển dụng")
+      .click();
+    await expect.element(jobsEditor).toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Sửa nội dung" }))
       .toBeVisible();
@@ -519,10 +524,16 @@ describe("ProjectKnowledgePanel", () => {
 
     await screen.getByRole("button", { name: "Lương & thu nhập" }).click();
 
-    const emptyEditor = screen.getByLabelText(
-      "Dữ liệu hiện tại của danh mục Lương & thu nhập",
-    );
-    await expect.element(emptyEditor).toHaveValue("");
+    expect(
+      screen.container.querySelector(
+        '[aria-label="Xem dữ liệu danh mục Lương & thu nhập"]',
+      ),
+    ).toBeNull();
+    expect(
+      screen.container.querySelector(
+        '[aria-label="Dữ liệu hiện tại của danh mục Lương & thu nhập"]',
+      ),
+    ).toBeNull();
     expect(screen.container.textContent).not.toContain("TEMPLATE compensation");
     await expect
       .element(screen.getByRole("button", { name: "Tải mẫu" }))
@@ -640,6 +651,16 @@ describe("ProjectKnowledgePanel", () => {
     const screen = await render(
       <ProjectKnowledgePanel project={project} editable />,
     );
+    await expect
+      .element(
+        screen.getByLabelText(
+          "Dữ liệu hiện tại của danh mục Vị trí tuyển dụng",
+        ),
+      )
+      .not.toBeVisible();
+    await screen
+      .getByLabelText("Xem dữ liệu danh mục Vị trí tuyển dụng")
+      .click();
     await expect
       .element(
         screen.getByLabelText(
