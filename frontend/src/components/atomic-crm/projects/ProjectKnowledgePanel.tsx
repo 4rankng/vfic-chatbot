@@ -310,7 +310,7 @@ const SinglePagePanel = ({ project, editable }: Props) => {
 
                   <div className="space-y-3">
                     {singlePageAutoSyncOn && (
-                      <details className="group rounded-md border border-warning/30 bg-warning/10 text-warning-foreground">
+                      <details className="group rounded-md border border-warning/30 bg-warning/10 text-foreground">
                         <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 px-3 py-1.5 text-label font-medium outline-none transition-colors hover:bg-warning/10 focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
                           <AlertCircle
                             className="size-4 shrink-0 text-warning"

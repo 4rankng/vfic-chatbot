@@ -222,6 +222,7 @@ describe("ProjectKnowledgePanel", () => {
   });
 
   it("shows the sync flow and progressively discloses the overwrite warning", async () => {
+    await page.viewport(390, 844);
     mocks.getProjectSinglePage.mockResolvedValue({
       id: "single-page-1",
       knowledge_base_id: "kb-1",
@@ -275,6 +276,9 @@ describe("ProjectKnowledgePanel", () => {
     );
     await expect.element(warning).toBeVisible();
     await expect.element(warningDetail).not.toBeVisible();
+    const warningCallout = warning.element().closest("details");
+    expect(warningCallout?.className).toContain("text-foreground");
+    expect(warningCallout?.className).not.toContain("text-warning-foreground");
 
     await warning.click();
 
