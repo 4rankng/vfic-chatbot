@@ -30,6 +30,24 @@
   min-width: 0;
   overflow: visible;
 }
+.inbox-bg-container .header-avatar-button {
+  appearance: none;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  margin-inline: -2px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  padding: 2px;
+  cursor: pointer;
+}
+.inbox-bg-container .header-avatar-button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .inbox-bg-container .header-avatar {
   position: relative;
   width: 42px;

@@ -221,6 +221,7 @@ export const ConversationContextPanel = ({
     return (
       <Sheet open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
         <SheetContent
+          id="conversation-context-panel"
           side="right"
           className="candidate-context-sheet p-0 gap-0 sm:max-w-sm"
           aria-describedby={undefined}

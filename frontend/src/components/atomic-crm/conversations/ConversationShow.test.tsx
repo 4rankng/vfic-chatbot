@@ -65,9 +65,28 @@ vi.mock("./conversation-capability", () => ({
       {children({
         displayName: "Tester",
         panelLabel: "Dữ liệu ứng viên",
-        renderPanel: ({ open }: { open: boolean }) => (
-          <div data-testid="candidate-panel-state">
+        renderPanel: ({
+          open,
+          onClose,
+        }: {
+          open: boolean;
+          onClose: () => void;
+        }) => (
+          <div
+            id="conversation-context-panel"
+            data-testid="candidate-panel-state"
+          >
             {open ? "candidate-panel-open" : "candidate-panel-closed"}
+            {open ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                }}
+              >
+                Đóng hồ sơ thử nghiệm
+              </button>
+            ) : null}
           </div>
         ),
       })}
@@ -185,6 +204,36 @@ describe("ConversationShowContent — delete conversation", () => {
 });
 
 describe("ConversationShowContent — candidate profile deep link", () => {
+  it("opens Dữ liệu ứng viên from the accessible profile avatar button", async () => {
+    const screen = await render(
+      <MemoryRouter>
+        <ConversationShowContent
+          onOpenList={vi.fn()}
+          showWorkspacePanel
+        />
+      </MemoryRouter>,
+    );
+
+    await expect
+      .element(screen.getByTestId("candidate-panel-state"))
+      .toHaveTextContent("candidate-panel-closed");
+
+    const avatarTrigger = screen.getByRole("button", {
+      name: "Xem thông tin ứng viên của Tester",
+    });
+    await avatarTrigger.click();
+
+    await expect
+      .element(screen.getByTestId("candidate-panel-state"))
+      .toHaveTextContent("candidate-panel-open");
+    await expect.element(avatarTrigger).toHaveAttribute("aria-expanded", "true");
+
+    await screen
+      .getByRole("button", { name: "Đóng hồ sơ thử nghiệm" })
+      .click();
+    await expect.element(avatarTrigger).toHaveFocus();
+  });
+
   it("opens Dữ liệu ứng viên when the dashboard supplies panel=candidate", async () => {
     const screen = await render(
       <MemoryRouter

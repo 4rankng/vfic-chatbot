@@ -106,7 +106,8 @@ export const ConversationShowContent = ({
   const { permissions } = usePermissions();
   const slots = useConversationCapabilitySlots();
   const CapabilityActions = slots.actions;
-  const contextTriggerRef = useRef<HTMLButtonElement>(null);
+  const contextNameTriggerRef = useRef<HTMLButtonElement>(null);
+  const lastContextTriggerRef = useRef<HTMLButtonElement>(null);
   const conversationActionsTriggerRef = useRef<HTMLButtonElement>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const shouldOpenCandidatePanel = searchParams.get("panel") === "candidate";
@@ -133,12 +134,22 @@ export const ConversationShowContent = ({
     setIsDecisionTraceOpen(false);
   }, [isWideDesktop, record?.id, shouldOpenCandidatePanel]);
 
-  const openContextPanel = () => {
+  const openContextPanel = (trigger?: HTMLButtonElement) => {
+    lastContextTriggerRef.current =
+      trigger ?? contextNameTriggerRef.current;
     setIsContextOpen(true);
+  };
+
+  const focusContextTrigger = () => {
+    (
+      lastContextTriggerRef.current ??
+      contextNameTriggerRef.current
+    )?.focus();
   };
 
   const closeContextPanel = () => {
     setIsContextOpen(false);
+    if (!isMobile) focusContextTrigger();
     if (searchParams.get("panel") !== "candidate") return;
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("panel");
@@ -194,22 +205,44 @@ export const ConversationShowContent = ({
                 </svg>
               </button>
               <div className="header-person">
-                <LeadAvatar
-                  src={context.avatarUrl}
-                  bg={context.avatarBackground}
-                  ink={context.avatarForeground}
-                  iconSize={18}
-                  className="header-avatar"
-                  alt={context.avatarAlt}
-                />
+                {showWorkspacePanel && context.renderPanel ? (
+                  <button
+                    type="button"
+                    className="header-avatar-button"
+                    onClick={(event) => openContextPanel(event.currentTarget)}
+                    aria-label={`Xem thông tin ứng viên của ${context.displayName}`}
+                    aria-expanded={isWideDesktop || isContextOpen}
+                    aria-controls="conversation-context-panel"
+                  >
+                    <LeadAvatar
+                      src={context.avatarUrl}
+                      bg={context.avatarBackground}
+                      ink={context.avatarForeground}
+                      iconSize={18}
+                      className="header-avatar"
+                      alt={context.avatarAlt}
+                    />
+                  </button>
+                ) : (
+                  <LeadAvatar
+                    src={context.avatarUrl}
+                    bg={context.avatarBackground}
+                    ink={context.avatarForeground}
+                    iconSize={18}
+                    className="header-avatar"
+                    alt={context.avatarAlt}
+                  />
+                )}
                 <div className="person-copy">
                   <div className="person-name-row">
                     {showWorkspacePanel && context.renderPanel ? (
                       <button
                         type="button"
                         className="person-name person-name-button"
-                        ref={contextTriggerRef}
-                        onClick={openContextPanel}
+                        ref={contextNameTriggerRef}
+                        onClick={(event) =>
+                          openContextPanel(event.currentTarget)
+                        }
                         aria-expanded={isWideDesktop || isContextOpen}
                         aria-controls="conversation-context-panel"
                       >
@@ -333,7 +366,9 @@ export const ConversationShowContent = ({
                         </DropdownMenuItem>
                       ) : null}
                       {!isWideDesktop && context.renderPanel ? (
-                        <DropdownMenuItem onSelect={openContextPanel}>
+                        <DropdownMenuItem
+                          onSelect={() => openContextPanel()}
+                        >
                           <PanelRight className="size-4" aria-hidden="true" />
                           {context.panelLabel}
                         </DropdownMenuItem>
@@ -402,7 +437,7 @@ export const ConversationShowContent = ({
                 onClose: closeContextPanel,
                 onCloseAutoFocus: (event) => {
                   event.preventDefault();
-                  contextTriggerRef.current?.focus();
+                  focusContextTrigger();
                 },
               })
             : null}
