@@ -580,7 +580,7 @@ async def test_no_match_authority_does_not_fire_third_llm_call():
     )
 
     assert llm.calls == 2, "the third self.direct() rewrite must not fire on no_match"
-    assert "chưa có vị trí ACTIVE phù hợp" in result
+    assert "chưa có vị trí đang tuyển phù hợp" in result
     assert "Samsung" in result
 
 

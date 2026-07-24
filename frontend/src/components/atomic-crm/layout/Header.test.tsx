@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe("Header", () => {
-  it("renders the full TingHire lockup and compact mark for the sidebar", async () => {
+  it("renders only the compact TingHire mark in the icon rail", async () => {
     const screen = await render(
       <MemoryRouter>
         <WorkspaceSidebarBrand />
@@ -44,9 +44,8 @@ describe("Header", () => {
     await expect.element(brand).toBeVisible();
 
     const images = brand.element().querySelectorAll("img");
-    expect(images).toHaveLength(2);
-    expect(images[0]?.getAttribute("src")).toBe("/brand/tinghire-logo.png");
-    expect(images[1]?.getAttribute("src")).toBe("/brand/tinghire-icon-192.png");
+    expect(images).toHaveLength(1);
+    expect(images[0]?.getAttribute("src")).toBe("/brand/tinghire-icon-192.png");
   });
 
   it("keeps the TingHire logo visible when the responsive layout hides the brand name", async () => {
@@ -81,5 +80,20 @@ describe("Header", () => {
     await expect
       .element(screen.getByRole("dialog", { name: "Thông báo" }))
       .toBeVisible();
+  });
+
+  it("does not mix DaisyUI navbar sizing into the workspace header", async () => {
+    mockUseNotifications.mockReturnValue({ count: 0 });
+    const screen = await render(
+      <MemoryRouter>
+        <Header />
+      </MemoryRouter>,
+    );
+
+    const header = screen.container.querySelector(".workspace-topbar");
+    const actions = screen.container.querySelector(".workspace-topbar-actions");
+
+    expect(header?.classList.contains("tt-navbar")).toBe(false);
+    expect(actions?.classList.contains("tt-navbar-end")).toBe(false);
   });
 });

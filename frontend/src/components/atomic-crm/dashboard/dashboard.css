@@ -180,7 +180,7 @@
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
   align-items: start;
   border-bottom: 1px solid var(--workspace-border, var(--border));
-  background: var(--workspace-surface, var(--card));
+  background: var(--workspace-canvas, var(--background));
 }
 
 .recruiting-panel {
@@ -242,7 +242,7 @@
   z-index: 1;
   margin: 0;
   padding: 12px 0 6px;
-  background: var(--workspace-surface, var(--card));
+  background: var(--workspace-canvas, var(--background));
   color: var(--workspace-ink-muted, var(--muted-foreground));
   font-size: var(--fs-caption);
   font-weight: 700;

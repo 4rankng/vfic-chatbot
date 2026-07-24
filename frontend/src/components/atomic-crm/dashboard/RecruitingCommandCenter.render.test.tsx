@@ -104,13 +104,6 @@ describe("RecruitingCommandCenter candidate rows", () => {
         screen.getByRole("button", { name: /Mở hội thoại với Ứng viên mẫu/ }),
       )
       .toBeVisible();
-    await expect
-      .element(screen.getByRole("button", { name: "Mở hộp thư" }))
-      .toBeVisible();
-    await screen.getByRole("button", { name: "Mở hộp thư" }).click();
-    await expect
-      .element(screen.getByTestId("dashboard-location"))
-      .toHaveTextContent("/conversations");
     await expect.element(screen.getByText("Quá hạn phản hồi")).toBeVisible();
     await expect.element(screen.getByText("Mở", { exact: true })).toBeVisible();
     expect(

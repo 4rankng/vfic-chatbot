@@ -445,15 +445,22 @@ def _salary_summary(job: dict[str, object]) -> str:
 
 
 def _active_jobs_safe_reply(jobs: list[dict[str, object]]) -> str:
-    lines = ["VFIC hiện có các vị trí ACTIVE sau:"]
+    lines = ["VFIC hiện có các vị trí đang tuyển sau:"]
     for job in jobs:
-        details = [
-            str(job.get("company") or ""),
-            str(job.get("factory") or ""),
-            str(job.get("province") or ""),
+        details: list[str] = []
+        seen_details: set[str] = set()
+        for value in (
+            job.get("company"),
+            job.get("factory"),
+            job.get("province"),
             _salary_summary(job),
-        ]
-        suffix = "; ".join(part for part in details if part)
+        ):
+            detail = str(value or "").strip()
+            normalized = detail.casefold()
+            if detail and normalized not in seen_details:
+                details.append(detail)
+                seen_details.add(normalized)
+        suffix = "; ".join(details)
         title = str(job.get("title") or "Vị trí đang tuyển")
         lines.append(f"- {title}" + (f": {suffix}" if suffix else ""))
     lines.append("Bạn muốn tìm hiểu vị trí nào ạ?")
@@ -664,7 +671,7 @@ async def _no_match_safe_reply(
     A second unscoped lookup fetches what *is* currently open. If the catalog is
     empty or the lookup fails, we stay honest and offer nothing.
     """
-    head = "Hiện chưa có vị trí ACTIVE phù hợp với yêu cầu này."
+    head = "Hiện chưa có vị trí đang tuyển phù hợp với yêu cầu này."
     try:
         fallback = await retrieval.list_active_jobs(
             project_slug=project_slug,
@@ -1037,7 +1044,7 @@ async def recommend_jobs(
     if status == "insufficient_profile":
         return "Chưa đủ thông tin hồ sơ để gợi ý việc phù hợp. Bạn cho tôi biết vị trí hoặc khu vực mong muốn nhé."
     if status == "no_match":
-        return "Hiện chưa có việc làm ACTIVE phù hợp với hồ sơ này."
+        return "Hiện chưa có việc làm đang tuyển phù hợp với hồ sơ này."
     scored = tuple(getattr(recommendation, "jobs", ()) or ())
     if not scored:
         return "Hiện chưa thể tra cứu việc làm phù hợp. Bạn vui lòng thử lại sau nhé."

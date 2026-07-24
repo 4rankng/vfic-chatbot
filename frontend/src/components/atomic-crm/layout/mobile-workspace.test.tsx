@@ -11,6 +11,7 @@ import {
 
 import "@/index.css";
 import workspaceStyles from "@/index.css?raw";
+import "./desktop-workspace.css";
 import "./mobile-workspace.css";
 
 const destinations = [
@@ -34,7 +35,7 @@ afterEach(async () => {
 });
 
 describe("desktop workspace rail", () => {
-  it("shows the full TingHire lockup on desktop and the compact mark on tablet", async () => {
+  it("keeps the compact TingHire mark in an icon-only rail at desktop and tablet widths", async () => {
     await page.viewport(1280, 720);
 
     const screen = await render(
@@ -51,11 +52,6 @@ describe("desktop workspace rail", () => {
             aria-label="TingHire - về trang tổng quan"
           >
             <img
-              className="workspace-sidebar-brand-full"
-              src="/brand/tinghire-logo.png"
-              alt=""
-            />
-            <img
               className="workspace-sidebar-brand-mark"
               src="/brand/tinghire-icon-192.png"
               alt=""
@@ -70,9 +66,6 @@ describe("desktop workspace rail", () => {
     const rail = screen.container.querySelector<HTMLElement>(
       ".workspace-navigation-rail",
     )!;
-    const fullLogo = screen.container.querySelector<HTMLElement>(
-      ".workspace-sidebar-brand-full",
-    )!;
     const compactMark = screen.container.querySelector<HTMLElement>(
       ".workspace-sidebar-brand-mark",
     )!;
@@ -80,17 +73,47 @@ describe("desktop workspace rail", () => {
       ".workspace-topbar-brand",
     )!;
 
-    expect(getComputedStyle(rail).width).toBe("224px");
-    expect(getComputedStyle(fullLogo).display).toBe("block");
-    expect(getComputedStyle(compactMark).display).toBe("none");
+    expect(getComputedStyle(rail).width).toBe("76px");
+    expect(getComputedStyle(compactMark).display).toBe("block");
+    expect(getComputedStyle(compactMark).width).toBe("32px");
     expect(getComputedStyle(topbarBrand).display).toBe("none");
 
     await page.viewport(900, 720);
 
-    expect(getComputedStyle(rail).width).toBe("64px");
-    expect(getComputedStyle(fullLogo).display).toBe("none");
+    expect(getComputedStyle(rail).width).toBe("76px");
     expect(getComputedStyle(compactMark).display).toBe("block");
     expect(getComputedStyle(topbarBrand).display).not.toBe("none");
+  });
+
+  it("pins the notification and account controls to the far right of the top bar", async () => {
+    await page.viewport(1280, 720);
+
+    const screen = await render(
+      <div className="workspace-frame">
+        <header className="workspace-topbar">
+          <a className="workspace-topbar-brand" href="#/">
+            <span>TingHire</span>
+          </a>
+          <div className="workspace-topbar-actions">
+            <button type="button">Thông báo</button>
+            <button type="button">Tài khoản</button>
+          </div>
+        </header>
+        <nav className="workspace-navigation-rail" />
+        <main className="workspace-frame-content" />
+      </div>,
+    );
+
+    const header = screen.container.querySelector<HTMLElement>(
+      ".workspace-topbar",
+    )!;
+    const actions = screen.container.querySelector<HTMLElement>(
+      ".workspace-topbar-actions",
+    )!;
+    const headerRect = header.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+
+    expect(actionsRect.right).toBeCloseTo(headerRect.right - 12, 0);
   });
 
   it("wins the active-state cascade with the brand surface", async () => {

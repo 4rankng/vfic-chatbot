@@ -175,14 +175,6 @@ export const RecruitingCommandCenter = ({
             </span>
           ) : null}
         </div>
-        <button
-          type="button"
-          className="dashboard-open-inbox"
-          onClick={() => navigate("/conversations")}
-        >
-          <MessageCircle className="size-4" aria-hidden="true" />
-          Mở hộp thư
-        </button>
         {queueHealth.title || queueHealth.detail ? (
           <div
             className={`dashboard-live-status is-${queueHealth.tone}`}

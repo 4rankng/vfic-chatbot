@@ -468,12 +468,52 @@ async def test_list_active_jobs_formats_bounded_evidence_with_groundable_uuid(no
     assert payload["jobs"][0]["title"] == "Công nhân sản xuất"
     assert payload["jobs"][0]["company"] == "LG Display"
     assert payload["jobs"][0]["vacancy_count"] == 20
+    assert (
+        "LG Display; Tràng Duệ; Hải Phòng; lương 10-14 triệu"
+        in payload["safe_reply"]
+    )
     assert "description" not in payload["jobs"][0]
     assert "requirements" not in payload["jobs"][0]
     assert "benefits" not in payload["jobs"][0]
     assert untrusted_id not in out
     assert "SECURITY_BOUNDARY" in out
     assert extract_surfaced_job_ids([out]) == {job_id}
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_renders_vietnamese_status_without_duplicate_company_factory(
+    no_cache_io,
+):
+    jobs = (
+        SimpleNamespace(
+            id="f7daba3b-9882-49d9-97c5-893b34b16995",
+            title="Nhân viên lắp ráp / Nhân viên vận hành máy CNC",
+            company_name="Rorze",
+            factory_name="Rorze",
+            project_name="Rorze",
+            project_slug="rorze",
+            province="KCN Nhật Bản (Nomura), Hồng An, Hải Phòng",
+            district=None,
+            salary_min=None,
+            salary_max=None,
+            vacancy_count=None,
+        ),
+    )
+    repo = _make_repo(
+        list_active_jobs=lambda self, **kwargs: _const(
+            SimpleNamespace(status="matched", jobs=jobs)
+        )
+    )
+
+    out = await list_active_jobs(retrieval=repo)
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
+    assert payload["safe_reply"] == (
+        "VFIC hiện có các vị trí đang tuyển sau:\n"
+        "- Nhân viên lắp ráp / Nhân viên vận hành máy CNC: "
+        "Rorze; KCN Nhật Bản (Nomura), Hồng An, Hải Phòng\n"
+        "Bạn muốn tìm hiểu vị trí nào ạ?"
+    )
 
 
 @pytest.mark.asyncio
@@ -549,7 +589,7 @@ async def test_list_active_jobs_no_match_surfaces_alternatives_in_safe_reply(no_
     assert payload["jobs"] == []
     # Candidate-facing pivot: the alternative title appears in the trusted text.
     assert "Công nhân sản xuất" in payload["safe_reply"]
-    assert "Hiện chưa có vị trí ACTIVE phù hợp" in payload["safe_reply"]
+    assert "Hiện chưa có vị trí đang tuyển phù hợp" in payload["safe_reply"]
     # Alternatives are structured grounding evidence even though ``jobs`` stays
     # empty, so their IDs and entities can be validated without changing the
     # trusted no-match status.
@@ -579,7 +619,7 @@ async def test_list_active_jobs_no_match_without_alternatives_stays_honest(no_ca
     payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
     assert payload["status"] == "no_match"
     assert payload["jobs"] == []
-    assert "Hiện chưa có vị trí ACTIVE phù hợp" in payload["safe_reply"]
+    assert "Hiện chưa có vị trí đang tuyển phù hợp" in payload["safe_reply"]
     # No fake alternative title leaks in.
     assert "đang tuyển các vị trí" not in payload["safe_reply"]
 
@@ -881,7 +921,7 @@ async def test_recommend_jobs_no_match_is_distinct_from_unavailable(no_cache_io)
 
     out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
 
-    assert out == "Hiện chưa có việc làm ACTIVE phù hợp với hồ sơ này."
+    assert out == "Hiện chưa có việc làm đang tuyển phù hợp với hồ sơ này."
 
 
 # ---------------------------------------------------------------------------

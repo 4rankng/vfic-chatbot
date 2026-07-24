@@ -15,6 +15,7 @@ import { useRoleActions } from "../hooks/useRoleActions";
 import { useCompiledRuntime } from "../capabilities/runtime-context";
 import { useNotifications } from "./topbar/useNotifications";
 import "./mobile-workspace.css";
+import "./desktop-workspace.css";
 import Header, { WorkspaceSidebarBrand } from "./Header";
 import {
   getWorkspaceDestinations,
