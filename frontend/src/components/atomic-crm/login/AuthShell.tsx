@@ -49,16 +49,16 @@ export const AuthShell = ({ children, productName }: AuthShellProps) => (
         <div className="w-full max-w-sm" aria-label={productName}>
           <div className="mb-5 flex items-center gap-3 px-1">
             <img
-              src="/tingting-mark.webp"
+              src="/brand/tinghire-icon-192.png"
               alt=""
               aria-hidden="true"
               className="size-11 rounded-xl border border-base-300 object-cover shadow-sm"
             />
             <div className="min-w-0">
               <strong className="block text-subsection font-semibold tracking-tight text-base-content">
-                Ting Ting
+                TingHire
               </strong>
-              {productName !== "Ting Ting" ? (
+              {productName !== "TingHire" ? (
                 <span className="block truncate text-body-sm text-muted-foreground">
                   {productName}
                 </span>

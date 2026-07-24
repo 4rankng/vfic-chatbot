@@ -90,17 +90,21 @@ describe("runtime metadata", () => {
       .forEach((element) => element.remove());
   });
 
-  it("resets every customer-controlled metadata surface to neutral", () => {
+  it("resets every customer-controlled metadata surface to TingHire", () => {
     resetRuntimeMetadata();
 
-    expect(document.title).toBe("Ting Ting");
+    expect(document.title).toBe("TingHire");
     expect(document.documentElement.lang).toBe("vi");
-    expect(metadataContent('meta[name="theme-color"]')).toBe("");
-    expect(metadataContent('meta[name="description"]')).toBe("");
-    expect(metadataContent('meta[property="og:title"]')).toBe("");
-    expect(metadataContent('meta[property="og:description"]')).toBe("");
-    expect(metadataContent('meta[name="twitter:title"]')).toBe("");
-    expect(metadataContent('meta[name="twitter:description"]')).toBe("");
+    expect(metadataContent('meta[name="theme-color"]')).toBe("#172033");
+    expect(metadataContent('meta[name="description"]')).toContain("TingHire");
+    expect(metadataContent('meta[property="og:title"]')).toBe("TingHire");
+    expect(metadataContent('meta[property="og:description"]')).toBe(
+      "Tuyển đúng người. Nhanh hơn.",
+    );
+    expect(metadataContent('meta[name="twitter:title"]')).toBe("TingHire");
+    expect(metadataContent('meta[name="twitter:description"]')).toBe(
+      "Tuyển đúng người. Nhanh hơn.",
+    );
     expect(
       document.head.querySelector('[data-runtime-metadata="favicon"]'),
     ).toBeNull();
@@ -109,12 +113,12 @@ describe("runtime metadata", () => {
   it("applies only configured fields from an ACTIVE manifest", () => {
     applyRuntimeMetadata(activeManifest());
 
-    expect(document.title).toBe("Cổng Hoa Sen");
+    expect(document.title).toBe("Cổng Hoa Sen · TingHire");
     expect(document.documentElement.lang).toBe("vi-VN");
-    expect(metadataContent('meta[name="theme-color"]')).toBe("#1255AA");
-    expect(metadataContent('meta[name="description"]')).toBe("");
-    expect(metadataContent('meta[property="og:title"]')).toBe("");
-    expect(metadataContent('meta[name="twitter:title"]')).toBe("");
+    expect(metadataContent('meta[name="theme-color"]')).toBe("#172033");
+    expect(metadataContent('meta[name="description"]')).toContain("TingHire");
+    expect(metadataContent('meta[property="og:title"]')).toBe("TingHire");
+    expect(metadataContent('meta[name="twitter:title"]')).toBe("TingHire");
     expect(
       document.head.querySelector('[data-runtime-metadata="favicon"]'),
     ).toBeNull();
@@ -133,8 +137,8 @@ describe("runtime metadata", () => {
       }),
     );
 
-    expect(document.title).toBe("Công ty Hoa Sen");
-    expect(metadataContent('meta[name="theme-color"]')).toBe("");
+    expect(document.title).toBe("Công ty Hoa Sen · TingHire");
+    expect(metadataContent('meta[name="theme-color"]')).toBe("#172033");
   });
 
   it("refuses to apply draft branding and leaves a neutral document", () => {
@@ -149,9 +153,9 @@ describe("runtime metadata", () => {
       }),
     );
 
-    expect(document.title).toBe("Ting Ting");
+    expect(document.title).toBe("TingHire");
     expect(document.documentElement.lang).toBe("vi");
-    expect(metadataContent('meta[name="theme-color"]')).toBe("");
+    expect(metadataContent('meta[name="theme-color"]')).toBe("#172033");
   });
 
   it("clears the previous customer before applying a new active customer", () => {
@@ -181,9 +185,9 @@ describe("runtime metadata", () => {
       }),
     );
 
-    expect(document.title).toBe("Khách hàng B");
+    expect(document.title).toBe("Khách hàng B · TingHire");
     expect(document.documentElement.lang).toBe("en-US");
-    expect(metadataContent('meta[name="theme-color"]')).toBe("");
+    expect(metadataContent('meta[name="theme-color"]')).toBe("#172033");
     expect(document.head.textContent).not.toContain("Khách hàng A");
     expect(document.head.innerHTML).not.toContain("customer-a.png");
   });

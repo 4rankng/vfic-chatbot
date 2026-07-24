@@ -362,6 +362,14 @@ count used by the global navigation badge. This count uses the same open
 Human-mode + unanswered-inbound rule as the dashboard. Unsupported providers return `422`.
 The Messenger settings flow lives under `/settings` and is documented below.
 
+### `GET /api/v1/conversations/by-zalo-ids?ids=<comma-separated ids>`
+
+Viewer-scoped batch lookup used by the recent-candidate dashboard. It accepts
+1–200 deduplicated Zalo chat IDs and returns every matching conversation in
+newest-updated order using the standard `ConversationListResponse` shape. The
+dashboard uses the newest conversation for drill-down and may use an OA contact
+from the same identity set for the candidate's profile name and avatar.
+
 ## Custom DataProvider Methods
 
 The frontend data provider

@@ -712,3 +712,69 @@ async def test_voluntary_list_active_jobs_does_not_fire_third_llm_call():
     assert "kỹ sư" not in result
     assert "Đà Nẵng" not in result
     assert "99 vị trí" not in result
+
+
+async def test_rorze_location_is_not_split_into_multiple_locations():
+    """One Rorze address remains one location on the voluntary fallback-tool path."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    llm = _CountingRequiredToolLLM(
+        [
+            SimpleNamespace(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "list_active_jobs",
+                        "args": {"role": "nhân viên vận hành máy CNC"},
+                        "id": "c1",
+                    }
+                ],
+            ),
+            SimpleNamespace(
+                content=(
+                    "VFIC đang tuyển dụng tại các địa điểm:\n"
+                    "- Rorze – Hải Phòng\n"
+                    "- KCN Nhật Bản (Nomura) – Hải Phòng\n"
+                    "- Hồng An – Hải Phòng"
+                ),
+                tool_calls=None,
+            ),
+        ]
+    )
+
+    class _RorzeRepo:
+        async def list_active_jobs(self, **kwargs):  # noqa: ARG002
+            return SimpleNamespace(
+                status="matched",
+                jobs=(
+                    SimpleNamespace(
+                        id="f7daba3b-9882-49d9-97c5-893b34b16995",
+                        title="Nhân viên lắp ráp / Nhân viên vận hành máy CNC",
+                        company_name="Rorze",
+                        factory_name="Rorze",
+                        project_name="Rorze",
+                        project_slug="rorze",
+                        province="KCN Nhật Bản (Nomura), Hồng An, Hải Phòng",
+                        district=None,
+                        salary_min=None,
+                        salary_max=None,
+                        vacancy_count=None,
+                    ),
+                ),
+            )
+
+    result = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        "Thông tin vị trí nhân viên vận hành máy CNC",
+        system="sys",
+        retrieval=_RorzeRepo(),
+        embedder=None,
+        allowed_tools=("list_active_jobs",),
+    )
+
+    assert llm.calls == 2
+    assert result.count("\n- ") == 1
+    assert "KCN Nhật Bản (Nomura), Hồng An, Hải Phòng" in result
+    assert "- Rorze – Hải Phòng" not in result
+    assert "- KCN Nhật Bản (Nomura) – Hải Phòng" not in result
+    assert "- Hồng An – Hải Phòng" not in result

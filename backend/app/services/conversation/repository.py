@@ -222,6 +222,26 @@ class ConversationRepository:
         ).all()
         return list(rows), int(total or 0)
 
+    async def list_by_zalo_ids(
+        self,
+        *,
+        viewer: User,
+        zalo_chat_ids: list[str],
+    ) -> list[Conversation]:
+        if not zalo_chat_ids:
+            return []
+        query = viewer_scope_filter(
+            select(Conversation),
+            Conversation.assigned_recruiter_id,
+            viewer,
+        ).where(Conversation.zalo_chat_id.in_(zalo_chat_ids))
+        rows = (
+            await self.db.scalars(
+                query.order_by(Conversation.updated_at.desc(), Conversation.id.asc())
+            )
+        ).all()
+        return list(rows)
+
     async def needs_attention_count(
         self, *, viewer: User, channel_provider: str | None = None
     ) -> int:

@@ -15,6 +15,10 @@ from app.services.recommendation.availability import (
     ActiveJobLookupStatus,
     select_matching_active_jobs,
 )
+from app.recruitment.domain.recommendation import (
+    ActiveProjectIncomeSummary,
+    IncomeFeatureEvidence,
+)
 from app.services.recommendation.repository import LeadJobRecommendation, RecommendationRepository
 from app.services.recommendation.scoring import (
     JobCandidate,
@@ -29,6 +33,8 @@ __all__ = [
     "ActiveJob",
     "ActiveJobLookup",
     "ActiveJobLookupStatus",
+    "ActiveProjectIncomeSummary",
+    "IncomeFeatureEvidence",
     "LeadJobRecommendation",
     "select_matching_active_jobs",
     "JobCandidate",

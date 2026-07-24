@@ -607,6 +607,15 @@ load_conversation_state -> typing -> direct_context?
   `_dispatch_tool` dispatch by name. The deterministic router prefetches
   `search_bus_timetable` for high-confidence timetable turns and
   `search_knowledge` for high-confidence contact/admin and FAQ-detail turns.
+  A factory-agnostic salary target such as “lương 20 triệu” requires
+  `compare_income`, which reads a bounded set of active-project income, bonus,
+  and cashflow features in one query. Its deterministic renderer lists the
+  verified feature text verbatim for each project, preserving distinctions such
+  as ordinary monthly income versus annual-average income including bonus; it
+  does not infer a yes/no threshold verdict from the first number in a mixed
+  compensation field. A numeric target with no project name releases any stale
+  project focus; an explicitly named project remains on the focused feature/KB
+  path.
   FAQ bypass is deterministic and can abstain on low confidence; when it hits,
   curated FAQ text is returned verbatim. The legacy `path_b_faq` shortcut now
   requires `published_vacancy_evidence=True` before it can return volatile

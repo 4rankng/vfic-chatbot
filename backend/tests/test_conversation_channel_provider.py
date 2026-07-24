@@ -92,6 +92,43 @@ async def test_omitted_provider_preserves_aggregate_count_call(transport) -> Non
     }
 
 
+@pytest.mark.asyncio
+async def test_batch_zalo_lookup_deduplicates_exact_requested_ids(transport) -> None:
+    http_transport, _db = transport
+    with patch("app.api.conversations.ConversationService") as service_class:
+        service_class.return_value.list_by_zalo_ids = AsyncMock(return_value=[])
+        async with httpx.AsyncClient(
+            transport=http_transport,
+            base_url="http://test",
+        ) as client:
+            response = await client.get(
+                "/api/v1/conversations/by-zalo-ids",
+                params={"ids": "oa:user-1,oa:user-1,bot:user-2"},
+            )
+
+    assert response.status_code == 200
+    assert response.json() == {"data": [], "total": 0}
+    assert service_class.return_value.list_by_zalo_ids.await_args.kwargs == {
+        "viewer": ANY,
+        "zalo_chat_ids": ["oa:user-1", "bot:user-2"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_batch_zalo_lookup_rejects_more_than_200_ids(transport) -> None:
+    http_transport, _db = transport
+    async with httpx.AsyncClient(
+        transport=http_transport,
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/api/v1/conversations/by-zalo-ids",
+            params={"ids": ",".join(f"user-{index}" for index in range(201))},
+        )
+
+    assert response.status_code == 422
+
+
 class _ScalarRows:
     def all(self):
         return []
@@ -116,6 +153,23 @@ async def test_provider_and_search_reuse_one_identity_join() -> None:
     assert page_sql.count("JOIN contact_channel_identities") == 1
     assert "contact_channel_identities.provider" in page_sql
     assert "contact_channel_identities.external_id" in page_sql
+
+
+@pytest.mark.asyncio
+async def test_batch_zalo_lookup_is_viewer_scoped_and_newest_first() -> None:
+    from app.services.conversation.repository import ConversationRepository
+
+    db = SimpleNamespace(scalars=AsyncMock(return_value=_ScalarRows()))
+    viewer = SimpleNamespace(id=uuid.uuid4(), role=Role.admin)
+
+    await ConversationRepository(db).list_by_zalo_ids(
+        viewer=viewer,
+        zalo_chat_ids=["oa:user-1", "bot:user-2"],
+    )
+
+    sql = str(db.scalars.await_args.args[0])
+    assert "conversations.zalo_chat_id IN" in sql
+    assert "conversations.updated_at DESC" in sql
 
 
 @pytest.mark.asyncio

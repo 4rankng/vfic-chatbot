@@ -120,37 +120,35 @@
   logs: false;
 }
 
-/* Custom daisyUI theme for the recruiter console — Stripe Heritage indigo.
-   Primary indigo (#635bff) carries actions/focus/selection; deep navy
-   (#0a2540) carries the navigation shell and ink; cool-white (#f6f9fc) is
-   the canvas. Semantic success/warning/error stay distinct from brand so
-   status is never read by color alone. Maps 1:1 onto the --workspace-*
-   contract so legacy feature CSS and daisyUI components share one identity. */
+/* TingHire's recruiter-console theme. The product-owned coral connection
+   accent is paired with deep ink navigation and a warm cream workspace.
+   Tenant branding never participates in this layer. Semantic success,
+   warning, and error hues stay distinct from the brand. */
 @plugin "daisyui/theme" {
-  name: "tingting";
+  name: "tinghire";
   default: true;
   prefersdark: false;
   color-scheme: light;
-  --color-base-100: oklch(99% 0.003 240); /* #ffffff surface */
-  --color-base-200: oklch(98% 0.005 240); /* #f6f9fc canvas */
-  --color-base-300: oklch(95% 0.008 240); /* muted surface */
-  --color-base-content: oklch(24% 0.04 245); /* #0a2540 navy ink */
-  --color-primary: oklch(48% 0.21 264); /* #635bff indigo */
-  --color-primary-content: oklch(99% 0.003 240); /* #ffffff on indigo */
-  --color-secondary: oklch(24% 0.04 245); /* #0a2540 navy shell */
-  --color-secondary-content: oklch(99% 0.003 240); /* #ffffff on navy */
-  --color-accent: oklch(96% 0.018 264); /* indigo-soft selected surface */
-  --color-accent-content: oklch(48% 0.21 264); /* indigo on indigo-soft */
-  --color-neutral: oklch(24% 0.04 245); /* navy-neutral */
-  --color-neutral-content: oklch(99% 0.003 240);
-  --color-info: oklch(55% 0.18 252); /* #1f6feb azure */
-  --color-info-content: oklch(99% 0.003 240);
-  --color-success: oklch(58% 0.16 158); /* #00a36f emerald */
-  --color-success-content: oklch(99% 0.003 240);
-  --color-warning: oklch(68% 0.14 75); /* #c2750a amber */
-  --color-warning-content: oklch(24% 0.04 245);
-  --color-error: oklch(57% 0.22 18); /* #df1b41 crimson */
-  --color-error-content: oklch(99% 0.003 240);
+  --color-base-100: #fffcf8;
+  --color-base-200: #fff6ed;
+  --color-base-300: #f5ede5;
+  --color-base-content: #172033;
+  --color-primary: #b73522;
+  --color-primary-content: #ffffff;
+  --color-secondary: #172033;
+  --color-secondary-content: #fffaf5;
+  --color-accent: #ffe1d6;
+  --color-accent-content: #922d20;
+  --color-neutral: #24304a;
+  --color-neutral-content: #fffaf5;
+  --color-info: #2463a7;
+  --color-info-content: #ffffff;
+  --color-success: #18845c;
+  --color-success-content: #ffffff;
+  --color-warning: #a9630b;
+  --color-warning-content: #ffffff;
+  --color-error: #c53b4a;
+  --color-error-content: #ffffff;
   --radius-selector: 0.65rem;
   --radius-field: 0.55rem;
   --radius-box: 0.8rem;
@@ -214,13 +212,11 @@
   --color-feature-gap-soft: var(--feature-gap-soft);
   --color-feature-gap-border: var(--feature-gap-border);
 
-  /* VFIC semantic accents — Stripe Heritage indigo workspace. Indigo carries
-     selection / active / focus / link signals; navy carries shell + ink. These
-     accents stay decoratively restrained on the cool-white canvas. Semantic
-     status hues (green/ember) stay distinct from brand so color is never the
-     only status cue. */
-  --color-steel: #687385; /* slate neutral */
-  --color-steel-soft: #f0f3f7;
+  /* TingHire semantic accents. The legacy "teal" aliases remain because older
+     feature CSS consumes them, but their role is now the accessible coral
+     action color rather than a hue-specific promise. */
+  --color-steel: #6d625c;
+  --color-steel-soft: #f5ede5;
   /* Tier B — perceptual tint. --primary and --background are real :root vars
      (not @theme inline), so this resolves per-theme at runtime. */
   --color-amber-soft: color-mix(
@@ -230,19 +226,15 @@
   );
   --color-ember: #c2750a; /* amber status */
   --color-ember-soft: color-mix(in oklab, #c2750a 12%, var(--background));
-  --color-muted-dim: #687385;
-  --color-green: #00a36f; /* emerald status */
-  /* Workspace brand accents. Hoisted from the kb-only --kb-* pattern so the
-     whole workspace shares one indigo/paper/ink identity. The "teal" name is
-     retained for backward compatibility with feature CSS that predates the
-     indigo migration — its value now follows the indigo action role. */
-  --color-teal: #635bff; /* indigo — aliased to action (see design-tokens doc) */
-  --color-teal-soft: #eef0fe; /* indigo-soft */
-  --color-paper: #f6f9fc; /* cool-white canvas */
-  --color-paper-deep: #f0f3f7; /* muted canvas */
-  --color-ink-900: #0a2540; /* navy ink */
-  --color-ink-500: #687385; /* slate ink */
-  --color-line: #e3e8ee; /* hairline border */
+  --color-muted-dim: #6d625c;
+  --color-green: #18845c;
+  --color-teal: #b73522;
+  --color-teal-soft: #ffe1d6;
+  --color-paper: #fff6ed;
+  --color-paper-deep: #f5ede5;
+  --color-ink-900: #172033;
+  --color-ink-500: #6d625c;
+  --color-line: #e6d8ce;
 }
 
 /* Typography scale — site-wide, single source of truth.
@@ -377,32 +369,28 @@
   --tracking-normal: 0;
   --tracking-wide: 0.06em;
 
-  /* Shared authenticated-console roles — Stripe Heritage indigo. The shell
-     uses deep navy; actions/focus/selection use indigo; semantic success/
-     warning/danger stay distinct. The teal name is retained for backward
-     compatibility with feature CSS that predates the indigo migration — its
-     value now follows the indigo action role. */
-  --workspace-shell: #0a2540; /* deep navy topbar + rail */
-  --workspace-shell-active: #0e2d54; /* lifted navy */
-  --workspace-shell-rail-active: #11315c; /* rail active */
-  --workspace-shell-hover: #143663; /* hover */
-  --workspace-canvas: #f6f9fc; /* cool-white content bg */
-  --workspace-surface: #ffffff;
-  --workspace-surface-muted: #f0f3f7;
-  --workspace-ink: #0a2540; /* navy primary text */
-  --workspace-ink-muted: #687385; /* slate secondary text */
-  --workspace-border: #e3e8ee; /* hairline */
-  --workspace-focus: #635bff; /* indigo focus */
-  --workspace-action: #635bff; /* indigo primary action */
-  --workspace-action-strong: #4a3fff; /* indigo-strong hover/pressed */
-  --workspace-success: #00a36f; /* emerald */
-  --workspace-warning: #c2750a; /* amber */
-  --workspace-danger: #df1b41; /* crimson */
-  --workspace-teal: #635bff; /* indigo (alias of action — see note above) */
-  --workspace-teal-strong: #4a3fff;
-  --workspace-teal-soft: #eef0fe; /* indigo-soft selected/active surface */
+  /* Shared authenticated-console roles — TingHire coral, ink, and cream. */
+  --workspace-shell: #172033;
+  --workspace-shell-active: #24304a;
+  --workspace-shell-rail-active: #fff6ed;
+  --workspace-shell-hover: #2d3953;
+  --workspace-canvas: #fff6ed;
+  --workspace-surface: #fffcf8;
+  --workspace-surface-muted: #f5ede5;
+  --workspace-ink: #172033;
+  --workspace-ink-muted: #6d625c;
+  --workspace-border: #e6d8ce;
+  --workspace-focus: #f15a3a;
+  --workspace-action: #b73522;
+  --workspace-action-strong: #922d20;
+  --workspace-success: #18845c;
+  --workspace-warning: #a9630b;
+  --workspace-danger: #c53b4a;
+  --workspace-teal: #b73522;
+  --workspace-teal-strong: #922d20;
+  --workspace-teal-soft: #ffe1d6;
   --workspace-paper: #ffffff;
-  --workspace-paper-deep: #f0f3f7;
+  --workspace-paper-deep: #f5ede5;
   --workspace-space-1: 0.25rem;
   --workspace-space-2: 0.5rem;
   --workspace-space-3: 0.75rem;
@@ -410,25 +398,25 @@
   --workspace-space-6: 1.5rem;
   --workspace-radius-control: 0.5rem;
   --workspace-radius-panel: 0.625rem;
-  --workspace-shadow-panel: 0 1px 2px rgba(10, 37, 64, 0.05);
+  --workspace-shadow-panel: 0 1px 2px rgba(23, 32, 51, 0.06);
   --workspace-motion-fast: 160ms;
   --workspace-motion-standard: 240ms;
   --radius: 10px;
-  --background: #f6f9fc; /* cool-white canvas */
-  --foreground: #0a2540; /* navy ink */
-  --card: #ffffff;
-  --card-foreground: #0a2540;
-  --popover: #ffffff;
-  --popover-foreground: #0a2540;
-  --primary: #635bff; /* indigo primary action */
+  --background: #fff6ed;
+  --foreground: #172033;
+  --card: #fffcf8;
+  --card-foreground: #172033;
+  --popover: #fffcf8;
+  --popover-foreground: #172033;
+  --primary: #b73522;
   --primary-foreground: #ffffff;
-  --secondary: #f0f3f7;
-  --secondary-foreground: #0a2540;
-  --muted: #f0f3f7;
-  --muted-foreground: #687385;
-  --accent: #eef0fe; /* indigo-soft */
-  --accent-foreground: #635bff;
-  --destructive: #df1b41; /* crimson */
+  --secondary: #f5ede5;
+  --secondary-foreground: #172033;
+  --muted: #f5ede5;
+  --muted-foreground: #6d625c;
+  --accent: #ffe1d6;
+  --accent-foreground: #922d20;
+  --destructive: #c53b4a;
   --destructive-foreground: #ffffff;
   --info: #1f6feb; /* azure status */
   --info-foreground: #ffffff;
@@ -438,12 +426,12 @@
   --warning-soft: #fbf0dd;
   --border: #e3e8ee;
   --input: #cbd5e1;
-  --ring: #635bff; /* indigo focus */
+  --ring: #f15a3a;
   --ember: #c2750a;
   /* Global semantic accents. Promoted here (not just in inbox/tokens.css) so
      pages that don't import the inbox barrel — e.g. ZaloIntegrationPage's
      webhook-health badges — resolve --success/--warning without coupling to
-     inbox CSS. Track the indigo/amber/crimson identity. */
+     inbox CSS. Track the coral/amber/crimson identity. */
   --success: var(--color-green);
   --success-soft: #dff7ec; /* emerald-soft */
   --feature-ready: var(--color-green);
@@ -464,22 +452,22 @@
     var(--background)
   );
   --grid-color: transparent;
-  --shimmer-highlight: rgba(10, 37, 64, 0.06);
+  --shimmer-highlight: rgba(23, 32, 51, 0.06);
 
-  --chart-1: #635bff; /* indigo */
-  --chart-2: #7c3aed; /* violet */
-  --chart-3: #00a36f; /* emerald */
-  --chart-4: #c2750a; /* amber */
-  --chart-5: #687385; /* slate */
+  --chart-1: #b73522;
+  --chart-2: #2463a7;
+  --chart-3: #18845c;
+  --chart-4: #a9630b;
+  --chart-5: #6d625c;
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0a2540;
-  --sidebar-primary: #635bff;
+  --sidebar: #172033;
+  --sidebar-foreground: #fffaf5;
+  --sidebar-primary: #f15a3a;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef0fe;
-  --sidebar-accent-foreground: #635bff;
-  --sidebar-border: #e3e8ee;
-  --sidebar-ring: #635bff;
+  --sidebar-accent: #fff6ed;
+  --sidebar-accent-foreground: #172033;
+  --sidebar-border: #2d3953;
+  --sidebar-ring: #f15a3a;
 
   /* Lead-priority avatar tones (inbox). bg tints use runtime var() so they
      adapt per-theme; inks use the rust/amber/slate status palette. Cold tone
@@ -497,30 +485,30 @@
 }
 
 .dark {
-  --background: oklch(0.1542 0.0185 263.2); /* #080c14 */
-  --foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --card: oklch(0.1979 0.0317 266.9); /* #0f1524 */
-  --card-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --popover: oklch(0.1979 0.0317 266.9); /* #0f1524 */
-  --popover-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --primary: oklch(0.72 0.18 264); /* lifted indigo for dark */
-  --primary-foreground: oklch(0.13 0.04 264); /* deep indigo ink on bright indigo */
-  --secondary: oklch(0.2394 0.0354 262.6); /* #161f30 */
-  --secondary-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --muted: oklch(0.2101 0.0318 264.7); /* #111827 */
-  --muted-foreground: oklch(0.6778 0.0342 255.6); /* #8a99ad */
-  --accent: oklch(0.2394 0.0354 262.6); /* #161f30 */
-  --accent-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --destructive: oklch(0.6117 0.1934 28); /* #e0453b */
-  --info: oklch(0.65 0.16 252); /* lifted azure */
-  --info-foreground: oklch(0.13 0.04 252);
-  --info-soft: oklch(0.27 0.04 252);
-  --warning: oklch(0.7 0.11 75);
-  --warning-foreground: oklch(0.18 0.04 75);
-  --warning-soft: oklch(0.28 0.035 75);
-  --border: oklch(0.33 0.02 263); /* dark hairline */
-  --input: oklch(0.33 0.02 263); /* dark hairline */
-  --ring: oklch(0.72 0.18 264); /* lifted indigo focus */
+  --background: #111827;
+  --foreground: #fff7f0;
+  --card: #192235;
+  --card-foreground: #fff7f0;
+  --popover: #192235;
+  --popover-foreground: #fff7f0;
+  --primary: #ff8a6f;
+  --primary-foreground: #172033;
+  --secondary: #24304a;
+  --secondary-foreground: #fff7f0;
+  --muted: #202a3e;
+  --muted-foreground: #b7aaa1;
+  --accent: #41251f;
+  --accent-foreground: #ffb29e;
+  --destructive: #e45b68;
+  --info: #67a5e5;
+  --info-foreground: #172033;
+  --info-soft: #1d3652;
+  --warning: #e1a64d;
+  --warning-foreground: #172033;
+  --warning-soft: #45331d;
+  --border: #364158;
+  --input: #364158;
+  --ring: #ff8a6f;
   --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
     in oklab,
@@ -542,20 +530,16 @@
   --shimmer-highlight: oklch(1 0 0 / 0.06); /* rgba(255,255,255,0.06) */
 
   /* Sidebar styling for a seamless premium dark sidebar */
-  --sidebar: oklch(0.1745 0.0263 266.4); /* #0b101c */
-  --sidebar-foreground: oklch(0.9683 0.0069 247.9); /* #f1f5f9 */
-  --sidebar-primary: oklch(0.72 0.18 264); /* lifted indigo active */
-  --sidebar-primary-foreground: oklch(0.13 0.04 264); /* deep indigo ink */
-  --sidebar-accent: color-mix(
-    in oklab,
-    var(--primary) 28%,
-    var(--background)
-  ); /* dark indigo-soft selected — bumped from 16% for visibility */
-  --sidebar-accent-foreground: oklch(0.78 0.16 264); /* lifted indigo ink for active icon + label */
+  --sidebar: #111827;
+  --sidebar-foreground: #fff7f0;
+  --sidebar-primary: #ff8a6f;
+  --sidebar-primary-foreground: #172033;
+  --sidebar-accent: color-mix(in oklab, var(--primary) 28%, var(--background));
+  --sidebar-accent-foreground: #ffb29e;
   --sidebar-border: oklch(
     0.7107 0.0351 256.8 / 0.08
   ); /* rgba(148,163,184,0.08) */
-  --sidebar-ring: oklch(0.72 0.18 264); /* lifted indigo */
+  --sidebar-ring: #ff8a6f;
 
   /* Lift fixed ember/steel lead inks so they read on dark tinted surfaces;
      --primary and the bg tints already adapt via runtime var(). */
@@ -570,6 +554,15 @@ button {
 
 input {
   cursor: text;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  box-shadow: 0 0 0 1000px var(--card) inset;
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
+  transition: background-color 9999s ease-out;
 }
 
 /* Mobile typography scale. The root stays 16px (so rem math is identical to
@@ -662,19 +655,31 @@ input {
   --destructive: var(--workspace-danger);
   --info: var(--workspace-info);
   --info-foreground: var(--color-info-content);
-  --info-soft: color-mix(in oklab, var(--workspace-info) 10%, var(--workspace-surface));
+  --info-soft: color-mix(
+    in oklab,
+    var(--workspace-info) 10%,
+    var(--workspace-surface)
+  );
   --success: var(--workspace-success);
-  --success-soft: color-mix(in oklab, var(--workspace-success) 10%, var(--workspace-surface));
+  --success-soft: color-mix(
+    in oklab,
+    var(--workspace-success) 10%,
+    var(--workspace-surface)
+  );
   --warning: var(--workspace-warning);
   --warning-foreground: var(--color-warning-content);
-  --warning-soft: color-mix(in oklab, var(--workspace-warning) 12%, var(--workspace-surface));
+  --warning-soft: color-mix(
+    in oklab,
+    var(--workspace-warning) 12%,
+    var(--workspace-surface)
+  );
   --border: var(--workspace-border);
   --input: var(--workspace-border);
   --ring: var(--workspace-focus);
   min-height: 100dvh;
   height: 100dvh;
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
+  grid-template-columns: 14rem minmax(0, 1fr);
   grid-template-rows: 4rem minmax(0, 1fr);
   background: var(--workspace-shell);
   color: var(--workspace-ink);
@@ -713,7 +718,7 @@ input {
 
 .workspace-topbar {
   z-index: 40;
-  grid-column: 1 / -1;
+  grid-column: 2;
   grid-row: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -739,9 +744,15 @@ input {
 .workspace-topbar-brand img {
   width: 2.35rem;
   height: 2.35rem;
-  border: 2px solid rgba(255, 255, 255, 0.82);
-  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--workspace-focus) 52%, #ffffff);
+  border-radius: 0.7rem;
   object-fit: cover;
+}
+
+@media (min-width: 1021px) {
+  .workspace-topbar-brand {
+    display: none;
+  }
 }
 
 .workspace-topbar-actions a:focus-visible,
@@ -1030,13 +1041,41 @@ input {
 .workspace-navigation-rail {
   z-index: 20;
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 1 / -1;
   display: flex;
-  width: 4rem;
+  width: 14rem;
   min-height: 0;
+  flex-direction: column;
   border-right: 0;
   background: var(--workspace-shell);
-  padding: 0.75rem 0.45rem;
+  padding: 0.9rem 0.75rem 0.75rem;
+}
+
+.workspace-sidebar-brand {
+  display: flex;
+  min-height: 3.1rem;
+  flex: 0 0 auto;
+  align-items: center;
+  margin: 0 0 1rem;
+  border-radius: 0.85rem;
+  background: #fff6ed;
+  padding: 0.65rem 0.8rem;
+  text-decoration: none;
+}
+
+.workspace-sidebar-brand:focus-visible {
+  outline: 3px solid var(--workspace-focus);
+  outline-offset: 3px;
+}
+
+.workspace-sidebar-brand-full {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.workspace-sidebar-brand-mark {
+  display: none;
 }
 
 .workspace-navigation-items {
@@ -1049,6 +1088,8 @@ input {
   flex: 1 1 auto;
   flex-direction: column;
   width: 100%;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .workspace-navigation-link--account {
@@ -1060,11 +1101,11 @@ input {
   display: flex;
   min-height: 2.75rem;
   align-items: center;
-  justify-content: center;
-  gap: 0;
+  justify-content: flex-start;
+  gap: 0.75rem;
   border-radius: 0.65rem;
   color: rgba(255, 255, 255, 0.9);
-  padding: 0.5rem;
+  padding: 0.55rem 0.7rem;
   font-size: var(--fs-body);
   font-weight: 650;
   text-decoration: none;
@@ -1085,16 +1126,30 @@ input {
 
 .workspace-navigation-link.is-active {
   background: var(--workspace-shell-rail-active);
-  color: #ffffff;
+  color: var(--workspace-ink);
 }
 
 .workspace-navigation-rail .workspace-navigation-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+  min-width: 0;
   overflow: hidden;
-  clip: rect(0 0 0 0);
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspace-navigation-rail .workspace-navigation-link.is-active::before {
+  content: "";
+  position: absolute;
+  left: -0.75rem;
+  width: 0.22rem;
+  height: 1.4rem;
+  border-radius: 0 999px 999px 0;
+  background: var(--color-uu-brand-500);
+}
+
+.workspace-navigation-rail
+  .workspace-navigation-link.is-active
+  .workspace-navigation-icon {
+  color: var(--color-uu-brand-600);
 }
 
 .workspace-navigation-icon {
@@ -1140,7 +1195,7 @@ input {
   position: absolute;
   left: calc(100% + 0.65rem);
   z-index: 30;
-  display: block;
+  display: none;
   width: max-content;
   max-width: 12rem;
   pointer-events: none;
@@ -1155,9 +1210,55 @@ input {
 }
 
 @media (min-width: 768px) and (max-width: 1020px) {
+  .workspace-frame {
+    grid-template-columns: 4rem minmax(0, 1fr);
+  }
+
   .workspace-topbar {
+    grid-column: 2;
     grid-template-columns: minmax(0, 1fr) auto;
     padding-left: 0.65rem;
+  }
+
+  .workspace-navigation-rail {
+    width: 4rem;
+    padding: 0.45rem;
+  }
+
+  .workspace-sidebar-brand {
+    min-height: auto;
+    margin: 0.2rem 0 0.85rem;
+    border-radius: 0.75rem;
+    padding: 0.42rem;
+  }
+
+  .workspace-sidebar-brand-full {
+    display: none;
+  }
+
+  .workspace-sidebar-brand-mark {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .workspace-navigation-rail .workspace-navigation-link {
+    justify-content: center;
+    gap: 0;
+    padding: 0.5rem;
+  }
+
+  .workspace-navigation-rail .workspace-navigation-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .workspace-navigation-rail .workspace-navigation-tooltip {
+    display: block;
   }
 
   .workspace-topbar-brand span,
@@ -1377,44 +1478,44 @@ input[type="time"] {
    re-declares the app's semantic tokens inside .kb-scope so every shadcn
    primitive + Tailwind utility (bg-background, bg-primary,
    text-muted-foreground, border-border, ...) re-skins to the console's
-   cool canvas / indigo / crimson / amber identity WITHOUT touching global
-   :root or .dark. Light values track the Stripe Heritage indigo palette;
+   cream canvas / coral / crimson / amber identity WITHOUT touching global
+   :root or .dark. Light values track the TingHire product palette;
    the dark variant (.dark .kb-scope below) inverts lightness so dark-mode
    users get a deep cool surface instead of a bright flash. Editorial
    typeface (Fraunces display + IBM Plex body) is preserved so the page
    keeps its distinct reading rhythm.
    -------------------------------------------------------------------------- */
 .kb-scope {
-  --background: #f6f9fc; /* cool-white canvas (tracks console identity) */
-  --foreground: #0a2540; /* navy ink */
-  --card: #ffffff; /* surface */
-  --card-foreground: #0a2540;
-  --popover: #ffffff;
-  --popover-foreground: #0a2540;
-  --primary: #635bff; /* indigo — primary buttons */
+  --background: #fff6ed;
+  --foreground: #172033;
+  --card: #fffcf8;
+  --card-foreground: #172033;
+  --popover: #fffcf8;
+  --popover-foreground: #172033;
+  --primary: #b73522;
   --primary-foreground: #ffffff;
-  --secondary: #f0f3f7; /* muted canvas */
-  --secondary-foreground: #0a2540;
-  --muted: #f0f3f7;
-  --muted-foreground: #687385; /* slate */
-  --accent: #eef0fe; /* indigo-soft */
-  --accent-foreground: #635bff;
-  --destructive: #df1b41; /* crimson */
+  --secondary: #f5ede5;
+  --secondary-foreground: #172033;
+  --muted: #f5ede5;
+  --muted-foreground: #6d625c;
+  --accent: #ffe1d6;
+  --accent-foreground: #922d20;
+  --destructive: #c53b4a;
   --destructive-foreground: #ffffff;
-  --border: #e3e8ee; /* hairline */
-  --input: #e3e8ee;
-  --ring: #635bff; /* indigo focus */
+  --border: #e6d8ce;
+  --input: #e6d8ce;
+  --ring: #f15a3a;
   /* kb-only accents (no standard-token equivalent) — names retained for
-     backward compatibility; values now track the console indigo identity. */
-  --kb-teal: #635bff;
-  --kb-teal-soft: #eef0fe;
-  --kb-rust: #df1b41;
+     backward compatibility; values now track the TingHire identity. */
+  --kb-teal: #b73522;
+  --kb-teal-soft: #ffe1d6;
+  --kb-rust: #c53b4a;
   --kb-rust-soft: #fbe4e8;
   --kb-ochre: #c2750a;
   --kb-ochre-soft: #fbf0dd;
-  --kb-ink-700: #1f2a3d;
-  --kb-ink-300: #8a94a6;
-  --kb-line-strong: #cbd5e1;
+  --kb-ink-700: #2d3953;
+  --kb-ink-300: #8b7d74;
+  --kb-line-strong: #d8c7bc;
   --kb-font-display: "Fraunces", Georgia, "Times New Roman", serif;
   color: var(--foreground);
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -1434,21 +1535,21 @@ input[type="time"] {
   --card-foreground: oklch(0.94 0.008 245);
   --popover: oklch(0.205 0.012 245);
   --popover-foreground: oklch(0.94 0.008 245);
-  --primary: oklch(0.72 0.18 264); /* lifted indigo */
-  --primary-foreground: oklch(0.13 0.04 264);
+  --primary: #ff8a6f;
+  --primary-foreground: #172033;
   --secondary: oklch(0.245 0.012 245); /* muted surface */
   --secondary-foreground: oklch(0.94 0.008 245);
   --muted: oklch(0.225 0.012 245);
   --muted-foreground: oklch(0.71 0.012 245);
-  --accent: oklch(0.27 0.05 264); /* dark indigo-soft */
-  --accent-foreground: oklch(0.8 0.12 264);
+  --accent: #41251f;
+  --accent-foreground: #ffb29e;
   --destructive: oklch(0.64 0.19 18); /* lifted crimson */
   --destructive-foreground: oklch(0.98 0.005 245);
   --border: oklch(0.32 0.012 245);
   --input: oklch(0.32 0.012 245);
-  --ring: oklch(0.72 0.18 264); /* lifted indigo focus */
-  --kb-teal: oklch(0.72 0.18 264);
-  --kb-teal-soft: oklch(0.27 0.05 264);
+  --ring: #ff8a6f;
+  --kb-teal: #ff8a6f;
+  --kb-teal-soft: #41251f;
   --kb-rust: oklch(0.66 0.19 18);
   --kb-rust-soft: oklch(0.28 0.05 18);
   --kb-ochre: oklch(0.7 0.11 75);
@@ -1460,10 +1561,10 @@ input[type="time"] {
 .login-paper {
   background-color: var(--background);
   background-image:
-    linear-gradient(rgba(10, 37, 64, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(10, 37, 64, 0.018) 1px, transparent 1px),
-    linear-gradient(rgba(99, 91, 255, 0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 91, 255, 0.012) 1px, transparent 1px);
+    linear-gradient(rgba(23, 32, 51, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 32, 51, 0.022) 1px, transparent 1px),
+    linear-gradient(rgba(241, 90, 58, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(241, 90, 58, 0.018) 1px, transparent 1px);
   background-position:
     0 0,
     0 0,
@@ -1622,16 +1723,16 @@ body {
 }
 
 /* =========================================================================
-   UntitledUI shell elevation (appended; same specificity, later source wins).
-   The navy shell gets an indigo-tinted active rail pill + a topbar hairline.
-   Tokens: --color-uu-brand-* (indigo). Delete this block to revert.
+   Untitled UI shell elevation. The ink sidebar uses a warm active surface and
+   the logo's coral connection accent; the topbar keeps a restrained hairline.
    ========================================================================= */
 .workspace-topbar {
   box-shadow: 0 1px 0 0 color-mix(in srgb, #000 16%, transparent);
 }
 
 .workspace-navigation-rail .workspace-navigation-link.is-active {
-  background: var(--color-uu-brand-500);
+  background: #fff6ed;
+  color: #172033;
   box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--color-uu-brand-400) 42%, transparent);
+    color-mix(in srgb, var(--color-uu-brand-300) 58%, transparent);
 }

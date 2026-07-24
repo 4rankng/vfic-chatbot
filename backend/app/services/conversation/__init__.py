@@ -67,6 +67,17 @@ class ConversationService:
     async def last_messages_batch(self, *, viewer: User, ids_str: str) -> dict[str, str]:
         return await self.repo.last_messages_batch(viewer=viewer, ids_str=ids_str)
 
+    async def list_by_zalo_ids(
+        self,
+        *,
+        viewer: User,
+        zalo_chat_ids: list[str],
+    ) -> list[Conversation]:
+        return await self.repo.list_by_zalo_ids(
+            viewer=viewer,
+            zalo_chat_ids=zalo_chat_ids,
+        )
+
     async def list(
         self,
         *,

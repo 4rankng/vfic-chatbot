@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 
 from app.graph.tools import (
+    compare_income,
     get_product_features,
     list_active_jobs,
     list_active_projects,
@@ -24,6 +25,29 @@ logger = logging.getLogger(__name__)
 
 # OpenAI-compatible function schemas handed to MiniMax.
 TOOL_SCHEMAS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_income",
+            "description": (
+                "So sánh dữ liệu thu nhập giữa các dự án đang hoạt động khi ứng viên chưa nêu "
+                "rõ nhà máy/dự án nhưng hỏi mốc lương hoặc muốn đối chiếu thu nhập. Tool trả "
+                "về nguyên văn bằng chứng thu nhập/thưởng/kỳ lương theo từng dự án."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target_monthly_vnd": {
+                        "type": "integer",
+                        "minimum": 1000000,
+                        "description": (
+                            "Mốc thu nhập theo VND/tháng cần đối chiếu, ví dụ 20000000 cho 20 triệu."
+                        ),
+                    }
+                },
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -283,6 +307,11 @@ async def _dispatch_tool(
             )
         elif name == "list_active_projects":
             result = await list_active_projects(retrieval)
+        elif name == "compare_income":
+            result = await compare_income(
+                retrieval,
+                target_monthly_vnd=args.get("target_monthly_vnd"),
+            )
         elif name == "list_active_jobs":
             result = await list_active_jobs(
                 retrieval,

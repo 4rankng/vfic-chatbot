@@ -1,8 +1,8 @@
 /*
- * UntitledUI visual layer (additive) — Ting Ting / VFIC miniCRM.
+ * Untitled UI visual layer (additive) — TingHire recruiter console.
  *
  * Cherry-picked from UntitledUI v8 tokens, ADAPTED to this console's identity:
- *   - brand remapped from UntitledUI violet → indigo #635bff (Stripe Heritage)
+ *   - brand remapped from Untitled UI violet → TingHire coral #f15a3a
  *   - display / shadow / radius / brand tokens NAMESPACED (--*-uu-*) so they
  *     never clobber the existing shadcn / daisyUI(tt-) / --workspace-* / --fs-*
  *     design system already living in index.css
@@ -12,18 +12,18 @@
  */
 
 @theme {
-  /* ---- Brand: indigo scale (#635bff primary) ---- */
-  --color-uu-brand-50: #eef0fe;
-  --color-uu-brand-100: #e0e3fe;
-  --color-uu-brand-200: #c7ccfd;
-  --color-uu-brand-300: #a5abfc;
-  --color-uu-brand-400: #818cf8;
-  --color-uu-brand-500: #635bff;
-  --color-uu-brand-600: #4a3fff;
-  --color-uu-brand-700: #3d2fd9;
-  --color-uu-brand-800: #3128a8;
-  --color-uu-brand-900: #282384;
-  --color-uu-brand-950: #1a164f;
+  /* ---- Brand: TingHire coral scale (#f15a3a identity accent) ---- */
+  --color-uu-brand-50: #fff1ec;
+  --color-uu-brand-100: #ffe1d6;
+  --color-uu-brand-200: #ffc4b1;
+  --color-uu-brand-300: #ff9b7d;
+  --color-uu-brand-400: #fa7252;
+  --color-uu-brand-500: #f15a3a;
+  --color-uu-brand-600: #d9482b;
+  --color-uu-brand-700: #b73522;
+  --color-uu-brand-800: #922d20;
+  --color-uu-brand-900: #77291f;
+  --color-uu-brand-950: #41120c;
 
   /* ---- Display type ramp (UntitledUI scale, tight tracking; hero headings) ---- */
   --text-uu-display-xs: 1.5rem;
@@ -48,13 +48,18 @@
 
   /* ---- Soft layered shadows (UntitledUI elevation) ---- */
   --shadow-uu-xs: 0px 1px 2px rgb(16 24 40 / 0.05);
-  --shadow-uu-sm: 0px 1px 3px rgb(16 24 40 / 0.1), 0px 1px 2px -1px rgb(16 24 40 / 0.1);
-  --shadow-uu-md: 0px 4px 8px -2px rgb(16 24 40 / 0.1), 0px 2px 4px -2px rgb(16 24 40 / 0.06);
-  --shadow-uu-lg: 0px 12px 16px -4px rgb(16 24 40 / 0.08),
+  --shadow-uu-sm:
+    0px 1px 3px rgb(16 24 40 / 0.1), 0px 1px 2px -1px rgb(16 24 40 / 0.1);
+  --shadow-uu-md:
+    0px 4px 8px -2px rgb(16 24 40 / 0.1), 0px 2px 4px -2px rgb(16 24 40 / 0.06);
+  --shadow-uu-lg:
+    0px 12px 16px -4px rgb(16 24 40 / 0.08),
     0px 4px 6px -2px rgb(16 24 40 / 0.03), 0px 2px 2px -1px rgb(16 24 40 / 0.04);
-  --shadow-uu-xl: 0px 20px 24px -4px rgb(16 24 40 / 0.1),
+  --shadow-uu-xl:
+    0px 20px 24px -4px rgb(16 24 40 / 0.1),
     0px 8px 8px -4px rgb(16 24 40 / 0.04);
-  --shadow-uu-2xl: 0px 24px 48px -12px rgb(16 24 40 / 0.2),
+  --shadow-uu-2xl:
+    0px 24px 48px -12px rgb(16 24 40 / 0.2),
     0px 4px 4px -2px rgb(16 24 40 / 0.04);
   --shadow-uu-3xl: 0px 32px 64px -12px rgb(16 24 40 / 0.18);
 
@@ -114,17 +119,17 @@
   box-shadow: var(--shadow-uu-xs);
 }
 
-/* Indigo → navy hero gradient (UntitledUI-style brand panels). */
+/* Coral → ink hero gradient (Untitled UI-style brand panels). */
 @utility uu-hero-gradient {
   background-image: linear-gradient(
     135deg,
     var(--color-uu-brand-600) 0%,
     var(--color-uu-brand-800) 52%,
-    #0a2540 100%
+    #172033 100%
   );
 }
 
-/* Soft indigo radial spotlight, composited over a surface. */
+/* Soft coral radial spotlight, composited over a surface. */
 @utility uu-spotlight {
   background-image: radial-gradient(
     120% 120% at 50% -10%,
@@ -135,14 +140,23 @@
 
 /* Restrained grid texture for hero canvases; masked to fade toward the edges. */
 @utility uu-grid-texture {
-  background-image: linear-gradient(
+  background-image:
+    linear-gradient(
       var(--workspace-border, rgb(227 232 238)) 1px,
       transparent 1px
     ),
-    linear-gradient(90deg, var(--workspace-border, rgb(227 232 238)) 1px, transparent 1px);
+    linear-gradient(
+      90deg,
+      var(--workspace-border, rgb(227 232 238)) 1px,
+      transparent 1px
+    );
   background-size: 28px 28px;
   background-position: center;
-  -webkit-mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(
+    120% 100% at 50% 0%,
+    #000 30%,
+    transparent 75%
+  );
   mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 75%);
 }
 

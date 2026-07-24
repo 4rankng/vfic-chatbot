@@ -34,15 +34,74 @@ afterEach(async () => {
 });
 
 describe("desktop workspace rail", () => {
+  it("shows the full TingHire lockup on desktop and the compact mark on tablet", async () => {
+    await page.viewport(1280, 720);
+
+    const screen = await render(
+      <div className="workspace-frame">
+        <header className="workspace-topbar">
+          <a className="workspace-topbar-brand" href="#/">
+            <span>TingHire</span>
+          </a>
+        </header>
+        <nav className="workspace-navigation-rail">
+          <a
+            className="workspace-sidebar-brand"
+            href="#/"
+            aria-label="TingHire - về trang tổng quan"
+          >
+            <img
+              className="workspace-sidebar-brand-full"
+              src="/brand/tinghire-logo.png"
+              alt=""
+            />
+            <img
+              className="workspace-sidebar-brand-mark"
+              src="/brand/tinghire-icon-192.png"
+              alt=""
+            />
+          </a>
+          <div className="workspace-navigation-items" />
+        </nav>
+        <main className="workspace-frame-content" />
+      </div>,
+    );
+
+    const rail = screen.container.querySelector<HTMLElement>(
+      ".workspace-navigation-rail",
+    )!;
+    const fullLogo = screen.container.querySelector<HTMLElement>(
+      ".workspace-sidebar-brand-full",
+    )!;
+    const compactMark = screen.container.querySelector<HTMLElement>(
+      ".workspace-sidebar-brand-mark",
+    )!;
+    const topbarBrand = screen.container.querySelector<HTMLElement>(
+      ".workspace-topbar-brand",
+    )!;
+
+    expect(getComputedStyle(rail).width).toBe("224px");
+    expect(getComputedStyle(fullLogo).display).toBe("block");
+    expect(getComputedStyle(compactMark).display).toBe("none");
+    expect(getComputedStyle(topbarBrand).display).toBe("none");
+
+    await page.viewport(900, 720);
+
+    expect(getComputedStyle(rail).width).toBe("64px");
+    expect(getComputedStyle(fullLogo).display).toBe("none");
+    expect(getComputedStyle(compactMark).display).toBe("block");
+    expect(getComputedStyle(topbarBrand).display).not.toBe("none");
+  });
+
   it("wins the active-state cascade with the brand surface", async () => {
     const screen = await render(
       <div className="workspace-frame">
         <style>{`
           .workspace-frame {
-            --color-uu-brand-500: #635bff;
-            --workspace-action: #635bff;
-            --workspace-shell-active: #0e2d54;
-            --workspace-shell-rail-active: #11315c;
+            --color-uu-brand-500: #f15a3a;
+            --workspace-action: #b73522;
+            --workspace-shell-active: #24304a;
+            --workspace-shell-rail-active: #fff6ed;
           }
           ${activeNavigationRules}
         `}</style>
@@ -67,10 +126,10 @@ describe("desktop workspace rail", () => {
     )!;
 
     expect(getComputedStyle(desktopActive).backgroundColor).toBe(
-      "rgb(99, 91, 255)",
+      "rgb(255, 246, 237)",
     );
     expect(getComputedStyle(mobileActive).backgroundColor).not.toBe(
-      "rgb(99, 91, 255)",
+      "rgb(255, 246, 237)",
     );
   });
 });

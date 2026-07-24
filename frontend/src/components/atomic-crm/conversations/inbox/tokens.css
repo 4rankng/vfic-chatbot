@@ -122,14 +122,14 @@
   --crm-fs-hint: var(--crm-fs-meta);
 
   --chat-bg: var(--workspace-canvas);
-  /* Bubble roles (see chat.css): candidate/applicant (incoming .message-row.user)
-     stays neutral white; bot + admin (outgoing) own the indigo-soft surface. */
-  --chat-bubble-in: #ffffff;
-  --chat-bubble-out: #eef0fe;
-  --chat-bubble-user: #ffffff;
+  /* Bubble roles (see chat.css): candidate/applicant stays neutral while bot
+     and admin messages use TingHire's restrained coral-soft surface. */
+  --chat-bubble-in: #fffcf8;
+  --chat-bubble-out: #fff1ec;
+  --chat-bubble-user: #fffcf8;
   --chat-bubble-user-text: var(--ink);
-  --chat-bubble-bot: #eef0fe;
-  --chat-bubble-agent: #e8ecfe;
+  --chat-bubble-bot: #fff1ec;
+  --chat-bubble-agent: #ffe8df;
   --chat-bubble-agent-text: var(--ink);
   --chat-header-bg: rgba(255, 255, 255, 0.98);
   --chat-shadow: none;
@@ -150,7 +150,7 @@
   --workspace-switcher-active: var(--workspace-shell-rail-active);
   --workspace-switcher-hover: #f8fafc;
 
-  --workspace-blue-wash: #eef0fe;
+  --workspace-blue-wash: #fff1ec;
   --workspace-blue-line: var(--border);
 
   /* ───────────────────────────────────────────────────────────────────────
@@ -300,12 +300,12 @@
   --workspace-faint: rgba(148, 163, 184, 0.62);
   --workspace-hover: rgba(148, 163, 184, 0.14);
   --workspace-active: var(--primary);
-  --workspace-active-border: rgba(99, 91, 255, 0.45);
+  --workspace-active-border: rgba(255, 138, 111, 0.48);
   --workspace-switcher-bg: #0f172a;
   --workspace-switcher-bg-deep: #0b1220;
   --workspace-switcher-active: var(--primary);
   --workspace-switcher-hover: rgba(148, 163, 184, 0.16);
-  --workspace-blue-wash: rgba(99, 91, 255, 0.1);
+  --workspace-blue-wash: rgba(255, 138, 111, 0.12);
   --workspace-blue-line: rgba(148, 163, 184, 0.2);
   --workspace-canvas-grid: rgba(148, 163, 184, 0.07);
 

@@ -36,7 +36,7 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
       .finally(() => setLoading(false));
   };
 
-  const productName = activeName ?? "Ting Ting";
+  const productName = activeName ?? "TingHire";
 
   return (
     <>

@@ -28,7 +28,8 @@ export const vietnameseCrmMessages = {
           "Hội thoại đang được người khác tiếp quản. Hãy Tiếp nhận trước khi trả lời.",
         unavailable:
           "Không thể gửi tin qua Zalo lúc này. Hãy chờ ứng viên nhắn lại rồi thử lại.",
-        provider: "Zalo chưa nhận được tin nhắn. Bạn có thể thử lại ngay trên bong bóng tin nhắn.",
+        provider:
+          "Zalo chưa nhận được tin nhắn. Bạn có thể thử lại ngay trên bong bóng tin nhắn.",
         network: "Không kết nối được đến máy chủ. Vui lòng thử lại.",
         error: "Gửi tin nhắn thất bại.",
       },
@@ -219,7 +220,7 @@ export const vietnameseCrmMessages = {
       welcome_subtitle: "Đăng nhập để tiếp tục với %{title}",
       recover_now: "Khôi phục ngay",
       or_divider: "hoặc",
-      footer_tagline: "Giải pháp phần mềm Ting Ting",
+      footer_tagline: "Giải pháp tuyển dụng TingHire",
       welcome_title: "Chào mừng đến với VFIC CRM",
       first_name: "Tên",
       last_name: "Họ",

@@ -10,16 +10,6 @@ vi.mock("@/components/admin/user-menu", () => ({
   UserMenu: () => <div data-testid="user-menu" />,
 }));
 
-vi.mock("../installation/installation-context", () => ({
-  useInstallationContext: () => ({
-    manifest: {
-      lifecycle: "ACTIVE",
-      branding: { app_name: "Ting Ting" },
-      customer_identity: { display_name: "VFIC" },
-    },
-  }),
-}));
-
 vi.mock("./topbar/useNotifications", () => ({
   useNotifications: mockUseNotifications,
 }));
@@ -34,14 +24,32 @@ vi.mock("./topbar/useNeedsAttention", () => ({
   }),
 }));
 
-import Header from "./Header";
+import Header, { WorkspaceSidebarBrand } from "./Header";
 
 afterEach(() => {
   vi.clearAllMocks();
 });
 
 describe("Header", () => {
-  it("keeps the Ting Ting logo visible when the responsive layout hides the brand name", async () => {
+  it("renders the full TingHire lockup and compact mark for the sidebar", async () => {
+    const screen = await render(
+      <MemoryRouter>
+        <WorkspaceSidebarBrand />
+      </MemoryRouter>,
+    );
+
+    const brand = screen.getByRole("link", {
+      name: "TingHire - về trang tổng quan",
+    });
+    await expect.element(brand).toBeVisible();
+
+    const images = brand.element().querySelectorAll("img");
+    expect(images).toHaveLength(2);
+    expect(images[0]?.getAttribute("src")).toBe("/brand/tinghire-logo.png");
+    expect(images[1]?.getAttribute("src")).toBe("/brand/tinghire-icon-192.png");
+  });
+
+  it("keeps the TingHire logo visible when the responsive layout hides the brand name", async () => {
     mockUseNotifications.mockReturnValue({ count: 0 });
     const screen = await render(
       <MemoryRouter>
@@ -49,10 +57,10 @@ describe("Header", () => {
       </MemoryRouter>,
     );
 
-    const brand = screen.getByRole("link", { name: "Ting Ting" });
+    const brand = screen.getByRole("link", { name: "TingHire" });
     await expect.element(brand).toBeVisible();
     expect(brand.element().querySelector("img")?.getAttribute("src")).toBe(
-      "/ttsoft-logo.png",
+      "/brand/tinghire-icon-192.png",
     );
   });
 

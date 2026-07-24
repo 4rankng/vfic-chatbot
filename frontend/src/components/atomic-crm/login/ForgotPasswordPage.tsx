@@ -88,7 +88,7 @@ export const ForgotPasswordPage = () => {
     }
   };
 
-  const productName = activeName ?? "Ting Ting";
+  const productName = activeName ?? "TingHire";
 
   return (
     <>

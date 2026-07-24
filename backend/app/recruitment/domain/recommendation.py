@@ -20,6 +20,16 @@ _RANGE_RE = re.compile(r"(\d[\d.]*)\s*[-–]\s*(\d[\d.]*)")
 _IDENTITY_FUZZY_MIN_LENGTH = 5
 _IDENTITY_FUZZY_THRESHOLD = 0.86
 _MAX_RESULTS = 10
+_SALARY_PROFILE_MARKERS = (
+    "mong muon",
+    "ky vong",
+    "expected salary",
+    "salary expectation",
+    "dang nhan luong",
+    "dang co thu nhap",
+    "luong hien tai cua",
+    "thu nhap hien tai cua",
+)
 
 
 @dataclass(frozen=True)
@@ -51,14 +61,20 @@ def parse_salary_band(text: str | None) -> tuple[int | None, int | None]:
 
     rng = _RANGE_RE.search(normalized)
     if rng:
-        low, high = _scale(rng.group(1)), _scale(rng.group(2))
+        try:
+            low, high = _scale(rng.group(1)), _scale(rng.group(2))
+        except (OverflowError, ValueError):
+            return None, None
         if low > high:
             low, high = high, low
         return low, high
 
     match = _TRIEU_RE.search(normalized) or _NGHIN_RE.search(normalized)
     if match:
-        value = _scale(next(group for group in match.groups() if group))
+        try:
+            value = _scale(next(group for group in match.groups() if group))
+        except (OverflowError, ValueError):
+            return None, None
         return int(value * 0.8), value
 
     plain = _PLAIN_RE.search(normalized)
@@ -67,6 +83,30 @@ def parse_salary_band(text: str | None) -> tuple[int | None, int | None]:
         return int(value * 0.8), value
 
     return None, None
+
+
+def is_salary_profile_statement(text: str | None) -> bool:
+    """Return true for first-person current/expected salary declarations."""
+    normalized = normalize_vietnamese_text(text or "")
+    return any(marker in normalized for marker in _SALARY_PROFILE_MARKERS)
+
+
+@dataclass(frozen=True)
+class IncomeFeatureEvidence:
+    feature_key: str
+    category: str
+    name_vi: str
+    value_text: str
+    is_missing: bool = False
+    needs_clarification: bool = False
+
+
+@dataclass(frozen=True)
+class ActiveProjectIncomeSummary:
+    project_id: str
+    project_slug: str
+    project_name: str
+    evidence: tuple[IncomeFeatureEvidence, ...] = ()
 
 
 @dataclass

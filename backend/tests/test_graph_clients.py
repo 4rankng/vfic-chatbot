@@ -9,6 +9,7 @@ from app.graph.clients import (
     OpenRouterEmbedder,
     _active_llm_provider,
     _chat_for_role,
+    _compare_income_safe_reply,
     _ground_reply,
     _extract_returned_reasoning,
     _ground_active_job_reply,
@@ -50,6 +51,7 @@ class _Settings:
 
 # Tool names _dispatch_tool knows how to route.
 _DISPATCHED = {
+    "compare_income",
     "search_user_memory",
     "search_knowledge",
     "list_active_jobs",
@@ -100,6 +102,43 @@ def test_negative_vacancy_reply_uses_trusted_text_without_llm_rewrite():
     assert (
         _ground_active_job_reply("Hiện chưa có vị trí phù hợp.", [no_match])
         == "Không có việc ACTIVE phù hợp."
+    )
+
+
+def test_compare_income_safe_reply_rejects_mismatched_or_contradictory_payload():
+    payload = {
+        "status": "matched",
+        "target_monthly_vnd": 15_000_000,
+        "projects": [
+            {
+                "project_name": "Rorze",
+                "evidence": [
+                    {
+                        "name_vi": "Thu nhập",
+                        "value_text": "20-21 triệu/tháng bình quân năm gồm thưởng.",
+                    }
+                ],
+            }
+        ],
+        "safe_reply": "Hiện chưa có dự án nào đạt 20 triệu.",
+    }
+    tool_result = "COMPARE_INCOME_JSON=" + json.dumps(payload, ensure_ascii=False)
+
+    assert (
+        _compare_income_safe_reply(
+            tool_result,
+            expected_target_monthly_vnd=20_000_000,
+        )
+        is None
+    )
+    payload["target_monthly_vnd"] = 20_000_000
+    tool_result = "COMPARE_INCOME_JSON=" + json.dumps(payload, ensure_ascii=False)
+    assert (
+        _compare_income_safe_reply(
+            tool_result,
+            expected_target_monthly_vnd=20_000_000,
+        )
+        is None
     )
 
 
@@ -208,6 +247,33 @@ async def test_dispatch_list_active_jobs_forwards_optional_filters(monkeypatch):
             "location": "Hải Phòng",
             "top_k": 7,
             "sort_by": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_compare_income_forwards_target(monkeypatch):
+    calls: list[dict] = []
+
+    async def fake_compare_income(retrieval, **kwargs):
+        calls.append({"retrieval": retrieval, **kwargs})
+        return "COMPARE_INCOME_JSON={}"
+
+    monkeypatch.setattr("app.graph.schemas.compare_income", fake_compare_income)
+    retrieval = object()
+
+    result = await _dispatch_tool(
+        retrieval,
+        None,
+        "compare_income",
+        {"target_monthly_vnd": 20_000_000},
+    )
+
+    assert result == "COMPARE_INCOME_JSON={}"
+    assert calls == [
+        {
+            "retrieval": retrieval,
+            "target_monthly_vnd": 20_000_000,
         }
     ]
 

@@ -27,6 +27,7 @@ _VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
 )
 _ACTIVE_JOB_LOOKUP_PREFIX = "ACTIVE_JOB_LOOKUP_JSON="
 _ACTIVE_JOB_LOOKUP_STATUSES = frozenset({"matched", "no_match", "catalog_empty", "unavailable"})
+_COMPARE_INCOME_PREFIX = "COMPARE_INCOME_JSON="
 _REASONING_RESPONSE_FIELDS = ("reasoning_details", "reasoning_content", "reasoning")
 _THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>(.*?)</think\s*>", re.IGNORECASE | re.DOTALL)
 
@@ -281,6 +282,72 @@ def _active_job_safe_reply(tool_result: object) -> str | None:
     if not isinstance(safe_reply, str) or not safe_reply.strip():
         return None
     return safe_reply.strip()
+
+
+def _compare_income_safe_reply(
+    tool_result: object,
+    *,
+    expected_target_monthly_vnd: int | None,
+) -> str | None:
+    """Validate a cross-project income payload and return its trusted renderer output."""
+    first_line = str(tool_result).partition("\n")[0]
+    if not first_line.startswith(_COMPARE_INCOME_PREFIX):
+        return None
+    try:
+        payload = json.loads(first_line.removeprefix(_COMPARE_INCOME_PREFIX))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    status = payload.get("status")
+    target_monthly_vnd = payload.get("target_monthly_vnd")
+    projects = payload.get("projects")
+    safe_reply = payload.get("safe_reply")
+    if status not in {"matched", "catalog_empty", "unavailable"} or not isinstance(projects, list):
+        return None
+    if target_monthly_vnd != expected_target_monthly_vnd:
+        return None
+    if not isinstance(safe_reply, str) or not safe_reply.strip():
+        return None
+    safe_reply = safe_reply.strip()
+    if status == "matched" and not projects:
+        return None
+    if status in {"catalog_empty", "unavailable"} and projects:
+        return None
+    if status == "unavailable":
+        expected = "Hiện tôi chưa thể kiểm tra dữ liệu thu nhập. Bạn vui lòng thử lại sau nhé."
+        return safe_reply if safe_reply == expected else None
+    if status == "catalog_empty":
+        expected = "Hiện tôi chưa có dữ liệu thu nhập đã xác minh để so sánh giữa các dự án."
+        return safe_reply if safe_reply == expected else None
+    for project in projects:
+        if (
+            not isinstance(project, dict)
+            or not isinstance(project.get("project_name"), str)
+            or not isinstance(project.get("evidence"), list)
+            or not project["evidence"]
+        ):
+            return None
+        if any(
+            not isinstance(evidence, dict)
+            or not isinstance(evidence.get("name_vi"), str)
+            or not isinstance(evidence.get("value_text"), str)
+            for evidence in project["evidence"]
+        ):
+            return None
+    first_project = projects[0]
+    if first_project["project_name"] not in safe_reply:
+        return None
+    if any(
+        evidence["name_vi"] not in safe_reply or evidence["value_text"] not in safe_reply
+        for evidence in first_project["evidence"]
+    ):
+        return None
+    if expected_target_monthly_vnd is not None:
+        target_text = f"{expected_target_monthly_vnd / 1_000_000:g} triệu/tháng"
+        if target_text not in safe_reply:
+            return None
+    return safe_reply
 
 
 def _ground_reply(reply: str, tool_results: list[str], *, trace_sink=None) -> str:
@@ -638,6 +705,7 @@ class MiniMaxAgent:
 
         knowledge_lookup_route = allowed_tools == ("search_knowledge",)
         timetable_route = allowed_tools == ("search_bus_timetable",)
+        income_compare_route = allowed_tools == ("compare_income",)
         faq_detail_route = allowed_tools == (
             "get_product_features",
             "search_knowledge",
@@ -737,6 +805,32 @@ class MiniMaxAgent:
                 # tool-free generation guarantees this path cannot re-enter a
                 # model→tool→model loop for already-resolved timetable data.
                 schemas = []
+        elif income_compare_route:
+            if trace_sink is not None:
+                trace_sink.record_tool_selection("compare_income", selected_by="prefetch")
+            prefetched, prefetch_hit = await _prefetch_tool(
+                retrieval,
+                embedder,
+                "compare_income",
+                dict(required_tool_args or {}),
+                metrics,
+                resolved_tool_registry,
+            )
+            if prefetch_hit:
+                safe_reply = _compare_income_safe_reply(
+                    prefetched,
+                    expected_target_monthly_vnd=(required_tool_args or {}).get(
+                        "target_monthly_vnd"
+                    ),
+                )
+                if safe_reply is not None:
+                    if trace_sink is not None:
+                        trace_sink.record_decision("grounding_verdict", "grounded")
+                    return safe_reply
+                logger.warning("compare-income tool returned malformed authority payload")
+                prefetch_hit = False
+                if metrics is not None:
+                    metrics["prefetch_hit"] = False
         elif faq_detail_route:
             if trace_sink is not None:
                 trace_sink.record_tool_selection("search_knowledge", selected_by="prefetch")
@@ -873,6 +967,8 @@ class MiniMaxAgent:
             prefetched_tools.add("search_knowledge")
         if timetable_route and prefetch_hit:
             prefetched_tools.add("search_bus_timetable")
+        if income_compare_route and prefetch_hit:
+            prefetched_tools.add("compare_income")
         if faq_detail_route and prefetch_hit:
             prefetched_tools.add("search_knowledge")
             # Focused faq_detail turns also prefetch get_product_features in
@@ -1115,7 +1211,20 @@ class MiniMaxAgent:
                 tool_name = tc["name"] if "name" in tc else ""
                 if tool_name == required_tool:
                     required_tool_called = True
-                    if _active_job_safe_reply(out) is None:
+                    authority_valid = True
+                    if required_tool == "compare_income":
+                        safe_reply = _compare_income_safe_reply(
+                            out,
+                            expected_target_monthly_vnd=(required_tool_args or {}).get(
+                                "target_monthly_vnd"
+                            ),
+                        )
+                        if safe_reply is not None:
+                            return safe_reply
+                        authority_valid = False
+                    elif required_tool == "list_active_jobs":
+                        authority_valid = _active_job_safe_reply(out) is not None
+                    if not authority_valid:
                         logger.warning("required LLM tool returned invalid evidence: %s", required_tool)
                         return await self.direct(
                             user_text,

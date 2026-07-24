@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -26,6 +25,10 @@ from app.graph.clients import (
     _minimax_chat,
     _openrouter_chat,
     build_embedder,
+)
+from app.recruitment.domain.recommendation import (
+    is_salary_profile_statement,
+    parse_salary_band,
 )
 from app.graph.safety import DeterministicReplyPolicy
 from app.graph.types import GraphDeps
@@ -46,17 +49,6 @@ def _asks_to_explore(normalized_message: str) -> bool:
             "quay lai tim viec",
         )
     )
-
-
-# A salary/income figure in Vietnamese ("20 trieu", "20tr", "15 trieu"). Matches
-# the diacritic-stripped, lowercased form produced by ``normalize_vietnamese_text``.
-_SALARY_FIGURE_RE = re.compile(r"\b\d+\s*(?:trieu|tr)\b", re.IGNORECASE)
-# Phrasing that turns a figure into a cross-factory achievement/hypothetical
-# question: "co dc ... ko", "duoc khong", "co the", "dat duoc", "chia deu 12 thang".
-_SALARY_ACHIEVEMENT_RE = re.compile(
-    r"(?:co\s+dc|co\s+duoc|duoc\s+ko|duoc\s+khong|co\s+the|dat\s+duoc|dat\s+nguong|chia\s+deu|lam\s+duoc)",
-    re.IGNORECASE,
-)
 
 
 def _is_general_or_comparative(normalized_message: str) -> bool:
@@ -95,8 +87,15 @@ def _is_general_or_comparative(normalized_message: str) -> bool:
         )
     ):
         return True
-    # Salary threshold + achievement question carrying a money figure.
-    return bool(_SALARY_FIGURE_RE.search(text) and _SALARY_ACHIEVEMENT_RE.search(text))
+    if is_salary_profile_statement(text):
+        return False
+    _minimum, target = parse_salary_band(text)
+    if target is None:
+        return False
+    if "luong" in text or "thu nhap" in text:
+        return True
+    tokens = set(text.split())
+    return "lam" in tokens and bool(tokens & {"duoc", "dc"})
 
 
 class _DirectContextAdapter:

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import {
   useDataProvider,
   useNotify,
@@ -107,6 +108,8 @@ export const ConversationShowContent = ({
   const CapabilityActions = slots.actions;
   const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const conversationActionsTriggerRef = useRef<HTMLButtonElement>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const shouldOpenCandidatePanel = searchParams.get("panel") === "candidate";
   const [isContextOpen, setIsContextOpen] = useState(false);
   const [isDecisionTraceOpen, setIsDecisionTraceOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -126,12 +129,20 @@ export const ConversationShowContent = ({
   const ActiveModeIcon = activeModeOption?.Icon ?? Bot;
 
   useEffect(() => {
-    setIsContextOpen(isWideDesktop);
+    setIsContextOpen(isWideDesktop || shouldOpenCandidatePanel);
     setIsDecisionTraceOpen(false);
-  }, [isWideDesktop, record?.id]);
+  }, [isWideDesktop, record?.id, shouldOpenCandidatePanel]);
 
   const openContextPanel = () => {
     setIsContextOpen(true);
+  };
+
+  const closeContextPanel = () => {
+    setIsContextOpen(false);
+    if (searchParams.get("panel") !== "candidate") return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("panel");
+    setSearchParams(nextParams, { replace: true });
   };
 
   const handleDeleteConversation = async () => {
@@ -308,7 +319,11 @@ export const ConversationShowContent = ({
                         <MoreHorizontal className="icon" aria-hidden="true" />
                       </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" sideOffset={10}>
+                    <DropdownMenuContent
+                      align="end"
+                      sideOffset={10}
+                      className="conversation-actions-menu"
+                    >
                       {permissions === "admin" && record ? (
                         <DropdownMenuItem
                           onSelect={() => setIsDecisionTraceOpen(true)}
@@ -376,7 +391,7 @@ export const ConversationShowContent = ({
                   type="button"
                   className="context-overlay-scrim"
                   aria-label="Đóng ngữ cảnh"
-                  onClick={() => setIsContextOpen(false)}
+                  onClick={closeContextPanel}
                 />
               )}
           </section>
@@ -384,7 +399,7 @@ export const ConversationShowContent = ({
             ? context.renderPanel({
                 open: isWideDesktop || isContextOpen,
                 persistent: isWideDesktop,
-                onClose: () => setIsContextOpen(false),
+                onClose: closeContextPanel,
                 onCloseAutoFocus: (event) => {
                   event.preventDefault();
                   contextTriggerRef.current?.focus();

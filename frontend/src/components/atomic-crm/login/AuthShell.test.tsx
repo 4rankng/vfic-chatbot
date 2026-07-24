@@ -8,22 +8,22 @@ afterEach(async () => {
 });
 
 describe("AuthShell", () => {
-  it("renders the Ting Ting brand and project-owned recruiting artwork", async () => {
+  it("renders the TingHire brand and project-owned recruiting artwork", async () => {
     const screen = await render(
-      <AuthShell productName="Ting Ting">
+      <AuthShell productName="TingHire">
         <h1>Đăng nhập</h1>
       </AuthShell>,
     );
 
     await expect
-      .element(screen.getByText("Ting Ting", { exact: true }))
+      .element(screen.getByText("TingHire", { exact: true }))
       .toBeVisible();
     await expect
       .element(screen.getByRole("heading", { name: "Đăng nhập" }))
       .toBeVisible();
     expect(screen.container.querySelector("main.tt-hero")).not.toBeNull();
     expect(
-      screen.container.querySelector('img[src="/tingting-mark.webp"]'),
+      screen.container.querySelector('img[src="/brand/tinghire-icon-192.png"]'),
     ).not.toBeNull();
     expect(
       screen.container.querySelector(

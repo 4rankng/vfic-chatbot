@@ -73,7 +73,7 @@ export const buildRecruitmentRowPresentation = (
 
 export const buildRecruitmentContextIdentity = (
   conversation: RecruitmentProfileSource,
-  lead: Lead | undefined,
+  lead: Pick<Lead, "name" | "avatar_url" | "phone"> | undefined,
 ): RecruitmentContextIdentity => {
   const profileName =
     conversation.zalo_channel === "oa"

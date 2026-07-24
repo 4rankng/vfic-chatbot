@@ -6,6 +6,7 @@ Repository-level hard filters are covered by the tool test's fake-retrieval path
 
 from __future__ import annotations
 
+from app.recruitment.domain.recommendation import is_salary_profile_statement
 from app.services.recommendation.scoring import (
     JobCandidate,
     LeadProfile,
@@ -40,6 +41,17 @@ def test_parse_salary_band_none_when_unparseable():
     assert parse_salary_band(None) == (None, None)
     assert parse_salary_band("") == (None, None)
     assert parse_salary_band("thỏa thuận") == (None, None)
+    assert parse_salary_band(f"{'9' * 400} triệu") == (None, None)
+
+
+def test_salary_profile_statement_is_not_a_project_comparison():
+    statements = (
+        "Lương mong muốn của em là 20 triệu",
+        "Em đang nhận lương 20 triệu",
+        "Thu nhập hiện tại của em là 15 triệu",
+    )
+
+    assert all(is_salary_profile_statement(text) for text in statements)
 
 
 # --- LeadProfile.from_lead ---------------------------------------------------

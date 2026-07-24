@@ -2,16 +2,23 @@ import {
   AlertTriangle,
   CheckCircle2,
   MessageCircle,
+  PanelRight,
   Phone,
-  UserRound,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { GroupedVirtuoso } from "react-virtuoso";
 import { useNavigate } from "react-router";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
 
+import { LeadAvatar } from "../conversations/LeadAvatar";
 import {
   ATTENTION_QUERY_KEY,
   REASON_LABELS,
@@ -232,6 +239,7 @@ export const RecruitingCommandCenter = ({
             showInitialError: candidatesQuery.isError && !candidatesQuery.data,
             hasRows: candidateCount > 0,
           }}
+          navigate={navigate}
           onRetry={candidatesQuery.refetch}
         />
       </section>
@@ -300,11 +308,13 @@ const CandidatePanel = ({
   groups,
   count,
   state,
+  navigate,
   onRetry,
 }: {
   groups: ReturnType<typeof groupCandidatesByDay>;
   count: number;
   state: PanelState;
+  navigate: Navigate;
   onRetry: () => void;
 }) => (
   <article className="recruiting-panel recruiting-candidate-panel">
@@ -326,7 +336,11 @@ const CandidatePanel = ({
           onRetry={onRetry}
         />
       ) : state.hasRows ? (
-        <CandidateGroupedList groups={groups} count={count} />
+        <CandidateGroupedList
+          groups={groups}
+          count={count}
+          navigate={navigate}
+        />
       ) : (
         <EmptyDashboardList
           content={{
@@ -343,9 +357,11 @@ const CandidatePanel = ({
 const CandidateGroupedList = ({
   groups,
   count,
+  navigate,
 }: {
   groups: ReturnType<typeof groupCandidatesByDay>;
   count: number;
+  navigate: Navigate;
 }) => {
   const isMobile = useIsMobile();
   const candidates = groups.flatMap((group) => group.candidates);
@@ -365,6 +381,7 @@ const CandidateGroupedList = ({
               <CandidateRow
                 key={`candidate-${candidate.id}`}
                 candidate={candidate}
+                navigate={navigate}
               />
             ))}
           </div>
@@ -389,21 +406,25 @@ const CandidateGroupedList = ({
         </h2>
       )}
       itemContent={(_index, _groupIndex, candidate) => (
-        <CandidateRow candidate={candidate} />
+        <CandidateRow candidate={candidate} navigate={navigate} />
       )}
     />
   );
 };
 
-const CandidateAvatar = () => (
-  <span
+const CandidateAvatar = ({
+  name,
+  src,
+}: {
+  name: string;
+  src?: string | null;
+}) => (
+  <LeadAvatar
     className="dashboard-candidate-avatar tt-avatar tt-avatar-placeholder"
-    aria-hidden
-  >
-    <span>
-      <UserRound className="size-5" />
-    </span>
-  </span>
+    src={src}
+    alt={`Ảnh đại diện của ${name}`}
+    iconSize={20}
+  />
 );
 
 const AttentionRow = ({
@@ -455,7 +476,7 @@ const AttentionRow = ({
         onClick={onClick}
         aria-label={`Mở hội thoại với ${name}${elapsed ? `, ${elapsed}` : ""}`}
       >
-        <CandidateAvatar />
+        <CandidateAvatar name={name} />
         <span className="dashboard-candidate-main">
           {candidateTitle}
           {sub}
@@ -472,7 +493,7 @@ const AttentionRow = ({
         phone ? `, số điện thoại ${phone}` : ""
       }`}
     >
-      <CandidateAvatar />
+      <CandidateAvatar name={name} />
       <span className="dashboard-candidate-main">
         {candidateTitle}
         {sub}
@@ -482,25 +503,19 @@ const AttentionRow = ({
   );
 };
 
-const CandidateRow = ({ candidate }: { candidate: DashboardCandidate }) => {
+const CandidateRow = ({
+  candidate,
+  navigate,
+}: {
+  candidate: DashboardCandidate;
+  navigate: Navigate;
+}) => {
   const name = normalizeText(candidate.name) || "Ứng viên mới";
   const phone = normalizeText(candidate.phone);
-  const desiredJob = normalizeText(candidate.desired_job);
-  const createdAt = new Date(candidate.created_at);
-  const time = Number.isNaN(createdAt.getTime())
-    ? ""
-    : new Intl.DateTimeFormat("vi-VN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "Asia/Ho_Chi_Minh",
-      }).format(createdAt);
-
-  return (
-    <div
-      className="dashboard-candidate-row is-static"
-      aria-label={`${name}, số điện thoại ${phone}${time ? `, lúc ${time}` : ""}`}
-    >
-      <CandidateAvatar />
+  const conversationId = candidate.conversation_id;
+  const content = (
+    <>
+      <CandidateAvatar name={name} src={candidate.avatar_url} />
       <span className="dashboard-candidate-main">
         <span className="dashboard-candidate-title">
           <strong>{name}</strong>
@@ -513,16 +528,55 @@ const CandidateRow = ({ candidate }: { candidate: DashboardCandidate }) => {
             <Phone className="size-3" aria-hidden="true" />
             {phone}
           </span>
-          {desiredJob ? (
-            <span className="dashboard-job">{desiredJob}</span>
-          ) : null}
         </span>
       </span>
-      {time ? (
-        <span className="dashboard-candidate-meta">
-          <small>{time}</small>
-        </span>
-      ) : null}
+    </>
+  );
+
+  if (conversationId) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="dashboard-candidate-row"
+            aria-label={`Chọn thao tác cho ${name}, số điện thoại ${phone}`}
+          >
+            {content}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          sideOffset={8}
+          className="dashboard-candidate-action-menu"
+        >
+          <DropdownMenuItem
+            className="dashboard-candidate-action-item"
+            onSelect={() => navigate(`/conversations?id=${conversationId}`)}
+          >
+            <MessageCircle aria-hidden="true" />
+            Xem hội thoại
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="dashboard-candidate-action-item"
+            onSelect={() =>
+              navigate(`/conversations?id=${conversationId}&panel=candidate`)
+            }
+          >
+            <PanelRight aria-hidden="true" />
+            Dữ liệu ứng viên
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  return (
+    <div
+      className="dashboard-candidate-row is-static"
+      aria-label={`${name}, số điện thoại ${phone}`}
+    >
+      {content}
     </div>
   );
 };

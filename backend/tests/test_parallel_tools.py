@@ -42,7 +42,7 @@ class _ScriptedLLM:
         self.model_name = "scripted-model"
         self.trace_provider = "minimax"
 
-    def bind_tools(self, tools):
+    def bind_tools(self, tools, **_kwargs):
         self.bind_calls += 1
         self.bound_names = [tool["function"]["name"] for tool in tools]
         return self
@@ -94,6 +94,9 @@ class _FakeRetrieval:
 
     async def job_features_for_project(self, *args, **kwargs):  # noqa: ARG002
         return await self._handler("get_product_features", {})
+
+    async def income_summary_for_active_projects(self, *args, **kwargs):  # noqa: ARG002
+        return await self._handler("compare_income", {})
 
     async def project_id_by_slug(self, *args, **kwargs):  # noqa: ARG002
         return "fake-pid"
@@ -443,6 +446,93 @@ async def test_faq_detail_unguided_prefetches_only_knowledge(monkeypatch):
     assert llm.calls == 1
     assert llm.bind_calls == 0
     assert metrics["prefetch_hit"] is True
+
+
+async def test_compare_income_prefetches_required_threshold_evidence(monkeypatch):
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    dispatched: list[tuple[str, dict]] = []
+
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
+        dispatched.append((name, args))
+        return (
+            'COMPARE_INCOME_JSON={"status":"matched","target_monthly_vnd":20000000,'
+            '"projects":[{"project_slug":"rorze","project_name":"Rorze","evidence":['
+            '{"feature_key":"take_home_income","name_vi":"Thu nhập","value_text":'
+            '"14-15 triệu/tháng chưa gồm thưởng; 20-21 triệu/tháng bình quân năm gồm thưởng."}'
+            ']}],"safe_reply":"Với mốc 20 triệu/tháng, dữ liệu thu nhập đã xác minh là:\\n'
+            '- Rorze:\\n  • Thu nhập: 14-15 triệu/tháng chưa gồm thưởng; '
+            '20-21 triệu/tháng bình quân năm gồm thưởng."}'
+        )
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+    llm = _ScriptedLLM(["Rorze có dòng thu nhập bình quân năm chia 12 đạt mốc 20 triệu."])
+    agent = MiniMaxAgent(llm, embedder=None, max_iters=3)
+    metrics: dict = {}
+
+    reply = await agent.agent(
+        "context",
+        system="sys",
+        retrieval=_FakeRetrieval(lambda *_args, **_kwargs: None),
+        embedder=None,
+        allowed_tools=("compare_income",),
+        lookup_query="lương 20 triệu",
+        required_tool="compare_income",
+        required_tool_args={"target_monthly_vnd": 20_000_000},
+        metrics=metrics,
+    )
+
+    assert "14-15 triệu/tháng chưa gồm thưởng" in reply
+    assert "20-21 triệu/tháng bình quân năm gồm thưởng" in reply
+    assert dispatched == [("compare_income", {"target_monthly_vnd": 20_000_000})]
+    assert llm.calls == 0
+    assert llm.bind_calls == 0
+    assert metrics["prefetch_hit"] is True
+
+
+async def test_compare_income_valid_model_retry_returns_deterministic_evidence(monkeypatch):
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    calls = 0
+    safe_reply = (
+        "Với mốc 20.5 triệu/tháng, dữ liệu thu nhập đã xác minh là:\n"
+        "- Rorze:\n"
+        "  • Thu nhập: 20.5-21 triệu/tháng bình quân năm gồm thưởng.\n"
+        "Bạn muốn tôi tư vấn kỹ dự án nào ạ?"
+    )
+    payload = (
+        'COMPARE_INCOME_JSON={"status":"matched","target_monthly_vnd":20500000,'
+        '"projects":[{"project_name":"Rorze","evidence":[{"name_vi":"Thu nhập",'
+        '"value_text":"20.5-21 triệu/tháng bình quân năm gồm thưởng."}]}],'
+        f'"safe_reply":{__import__("json").dumps(safe_reply, ensure_ascii=False)}}}'
+    )
+
+    async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
+        nonlocal calls
+        calls += 1
+        return "Không có dữ liệu phù hợp." if calls == 1 else payload
+
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
+    llm = _ScriptedLLM(
+        [[{"name": "compare_income", "args": {}, "id": "compare-retry"}]]
+    )
+
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=3).agent(
+        "context",
+        system="sys",
+        retrieval=_FakeRetrieval(lambda *_args, **_kwargs: None),
+        embedder=None,
+        allowed_tools=("compare_income",),
+        lookup_query="lương 20.5 triệu",
+        required_tool="compare_income",
+        required_tool_args={"target_monthly_vnd": 20_500_000},
+    )
+
+    assert reply == safe_reply
+    assert calls == 2
+    assert llm.calls == 1
 
 
 async def test_faq_detail_focused_prefetches_both_knowledge_and_product_features(monkeypatch):

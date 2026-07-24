@@ -12,6 +12,7 @@ _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
     "candidate_intake": frozenset({"search_user_memory"}),
     "job_advisory": frozenset(
         {
+            "compare_income",
             "list_active_jobs",
             "list_active_projects",
             "recommend_projects",

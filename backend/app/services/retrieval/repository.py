@@ -849,6 +849,12 @@ class RetrievalRepository:
             )
         ).all()
 
+    async def income_summary_for_active_projects(self):
+        """Return verbatim income/bonus/cashflow evidence for active projects."""
+        from app.services.recommendation import RecommendationRepository
+
+        return await RecommendationRepository(self.db).income_summary_for_active_projects()
+
     async def recommend_jobs_for_lead(
         self, chat_id: str, *, top_k: int = 5, province: str | None = None
     ):

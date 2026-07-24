@@ -8,21 +8,21 @@
  */
 
 .inbox-bg-container {
-  --uu-inbox-brand: var(--color-uu-brand-600, #4a3fff);
-  --uu-inbox-brand-hover: var(--color-uu-brand-700, #3d2fd9);
-  --uu-inbox-brand-strong: var(--color-uu-brand-800, #3128a8);
-  --uu-inbox-brand-soft: var(--color-uu-brand-50, #eef0fe);
-  --uu-inbox-brand-line: var(--color-uu-brand-200, #c7ccfd);
-  --uu-inbox-navy: #0a2540;
-  --uu-inbox-ink: #101828;
-  --uu-inbox-message-meta: #475467;
-  --uu-inbox-muted: #667085;
-  --uu-inbox-faint: #98a2b3;
-  --uu-inbox-canvas: #f2f5f9;
-  --uu-inbox-surface: #ffffff;
-  --uu-inbox-surface-subtle: #f8fafc;
-  --uu-inbox-line: #e4e7ec;
-  --uu-inbox-line-strong: #d0d5dd;
+  --uu-inbox-brand: var(--color-uu-brand-700, #b73522);
+  --uu-inbox-brand-hover: var(--color-uu-brand-800, #922d20);
+  --uu-inbox-brand-strong: var(--color-uu-brand-900, #77291f);
+  --uu-inbox-brand-soft: var(--color-uu-brand-50, #fff1ec);
+  --uu-inbox-brand-line: var(--color-uu-brand-200, #ffc4b1);
+  --uu-inbox-navy: #172033;
+  --uu-inbox-ink: #172033;
+  --uu-inbox-message-meta: #5d5550;
+  --uu-inbox-muted: #6d625c;
+  --uu-inbox-faint: #9a8c83;
+  --uu-inbox-canvas: #fff6ed;
+  --uu-inbox-surface: #fffcf8;
+  --uu-inbox-surface-subtle: #f5ede5;
+  --uu-inbox-line: #e6d8ce;
+  --uu-inbox-line-strong: #d8c7bc;
   --uu-inbox-focus: 0 0 0 3px
     color-mix(in srgb, var(--uu-inbox-brand) 18%, transparent);
 
@@ -74,7 +74,7 @@
       color-mix(in srgb, var(--uu-inbox-brand) 9%, transparent),
       transparent 27rem
     ),
-    linear-gradient(180deg, #f7f9fc 0%, var(--uu-inbox-canvas) 100%);
+    linear-gradient(180deg, #fffaf5 0%, var(--uu-inbox-canvas) 100%);
 }
 
 .inbox-bg-container::before {

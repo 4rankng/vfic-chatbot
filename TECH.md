@@ -1,6 +1,6 @@
 # TECH.md — Tech Stack & High-Level Design
 
-> **Ting Ting / VFIC miniCRM** — a Vietnamese recruiting chatbot + recruiter console built on Zalo.
+> **TingHire** (formerly Ting Ting / VFIC miniCRM) — a Vietnamese recruiting chatbot + recruiter console built on Zalo.
 > Production: `bot.tingting.vip` (DigitalOcean 2 vCPU droplet).
 >
 This document is the single-page summary of *what we run* and *how it fits

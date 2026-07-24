@@ -1751,6 +1751,58 @@ async def test_focused_rag_detail_forces_project_scoped_category_search(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_cross_project_salary_target_requires_compare_income(monkeypatch):
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str, object] = {}
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        assert provider == "zalo_bot"
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "Rorze có bằng chứng đạt mốc 20 triệu."
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="lương 20 triệu"),
+        deps,
+        "lương 20 triệu",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        project_context=SimpleNamespace(
+            state="EXPLORE",
+            knowledge_mode=None,
+            project_slug=None,
+            project_name=None,
+        ),
+    )
+
+    assert reply == "Rorze có bằng chứng đạt mốc 20 triệu."
+    assert captured["allowed_tools"] == ("compare_income",)
+    assert captured["required_tool"] == "compare_income"
+    assert captured["required_tool_args"] == {"target_monthly_vnd": 20_000_000}
+    assert "forced_project_slug" not in captured
+
+
+@pytest.mark.asyncio
 async def test_generic_vacancy_listing_requires_active_job_catalog(monkeypatch):
     from app.graph.runner import _agent_turn
 

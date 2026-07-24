@@ -105,7 +105,7 @@ type EmptyStateProps = {
   className?: string;
 };
 
-/** Tailkit a-c-empty-states-03 adapted to Ting Ting tokens. */
+/** Tailkit a-c-empty-states-03 adapted to TingHire tokens. */
 export function EmptyState({
   icon,
   title,

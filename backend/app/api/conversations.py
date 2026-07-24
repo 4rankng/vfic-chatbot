@@ -115,6 +115,28 @@ async def list_conversations(
     )
 
 
+@router.get("/by-zalo-ids", response_model=ConversationListResponse)
+async def list_conversations_by_zalo_ids(
+    ids: str = Query(..., description="Comma-separated Zalo chat ids (max 200)"),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
+) -> ConversationListResponse:
+    zalo_chat_ids = list(dict.fromkeys(value for value in ids.split(",") if value))
+    if not zalo_chat_ids or len(zalo_chat_ids) > 200:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "ids must contain between 1 and 200 Zalo chat ids",
+        )
+    rows = await ConversationService(db).list_by_zalo_ids(
+        viewer=user,
+        zalo_chat_ids=zalo_chat_ids,
+    )
+    return ConversationListResponse(
+        data=[ConversationOut.model_validate(row) for row in rows],
+        total=len(rows),
+    )
+
+
 @router.get("/last-messages/batch")
 async def last_messages_batch(
     ids: str = Query(..., description="Comma-separated conversation UUIDs (max 200)"),

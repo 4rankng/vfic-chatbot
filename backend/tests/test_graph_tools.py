@@ -19,9 +19,11 @@ import pytest
 
 from app.graph import tools
 from app.graph.grounding import extract_surfaced_job_ids
+from app.recruitment.domain.recommendation import ActiveProjectIncomeSummary, IncomeFeatureEvidence
 from app.graph.tools import (
     TOOLS_REGISTRY,
     _format_knowledge_row,
+    compare_income,
     get_product_features,
     list_active_jobs,
     list_active_projects,
@@ -107,6 +109,7 @@ def no_cache_io(monkeypatch):
 def test_tools_registry_exposes_expected_tools():
     """No tool silently disappears/renames during a refactor (F-CRIT-2 guard)."""
     assert set(TOOLS_REGISTRY) == {
+        "compare_income",
         "search_user_memory",
         "search_knowledge",
         "list_active_jobs",
@@ -117,6 +120,160 @@ def test_tools_registry_exposes_expected_tools():
         "get_product_features",
     }
     assert all(callable(fn) for fn in TOOLS_REGISTRY.values())
+
+
+@pytest.mark.asyncio
+async def test_compare_income_formats_threshold_evidence(no_cache_io):
+    repo = _make_repo(
+        income_summary_for_active_projects=lambda self: _const(
+            (
+                ActiveProjectIncomeSummary(
+                    project_id="p1",
+                    project_slug="lg-display",
+                    project_name="LG Display",
+                    evidence=(
+                        IncomeFeatureEvidence(
+                            feature_key="take_home_income",
+                            category="income",
+                            name_vi="Thu nhập",
+                            value_text="Thu nhập thực tế 10-13 triệu/tháng khi có tăng ca, chưa bao gồm thưởng.",
+                        ),
+                    ),
+                ),
+                ActiveProjectIncomeSummary(
+                    project_id="p2",
+                    project_slug="rorze",
+                    project_name="Rorze",
+                    evidence=(
+                        IncomeFeatureEvidence(
+                            feature_key="salary_transparency",
+                            category="income",
+                            name_vi="Dữ liệu cũ",
+                            value_text="Không dùng dòng chưa xác minh này.",
+                            is_missing=True,
+                        ),
+                        IncomeFeatureEvidence(
+                            feature_key="take_home_income",
+                            category="income",
+                            name_vi="Thu nhập",
+                            value_text=(
+                                "Thu nhập trung bình thực nhận theo tháng (có OVT, chưa bao gồm "
+                                "thưởng): 14-15 triệu/tháng. Thu nhập trung bình theo năm (bao "
+                                "gồm thưởng): 20-21 triệu/tháng."
+                            ),
+                        ),
+                        IncomeFeatureEvidence(
+                            feature_key="salary_transparency",
+                            category="income",
+                            name_vi="Cách công bố",
+                            value_text="Công bố riêng thu nhập tháng và bình quân năm.",
+                        ),
+                        IncomeFeatureEvidence(
+                            feature_key="overtime_rate",
+                            category="income",
+                            name_vi="Tăng ca",
+                            value_text="Thu nhập tháng có OVT.",
+                        ),
+                        IncomeFeatureEvidence(
+                            feature_key="joining_bonus",
+                            category="bonus",
+                            name_vi="Thưởng",
+                            value_text="Thưởng được tính trong bình quân năm.",
+                        ),
+                        IncomeFeatureEvidence(
+                            feature_key="pay_frequency",
+                            category="cashflow",
+                            name_vi="Kỳ lương",
+                            value_text="Chốt công từ ngày 01 đến cuối tháng, trả lương ngày 10 tháng sau.",
+                        ),
+                    ),
+                ),
+            )
+        )
+    )
+
+    out = await compare_income(retrieval=repo, target_monthly_vnd=20_000_000)
+
+    payload = json.loads(out.splitlines()[0].removeprefix("COMPARE_INCOME_JSON="))
+    assert payload["status"] == "matched"
+    assert payload["target_monthly_vnd"] == 20_000_000
+    assert payload["projects"][0]["project_slug"] == "rorze"
+    assert "comparison" not in payload["projects"][0]
+    assert "comparison" not in payload["projects"][1]
+    assert "14-15 triệu/tháng" in out
+    assert "20-21 triệu/tháng" in out
+    assert "Kỳ lương" in out
+    assert [item["feature_key"] for item in payload["projects"][0]["evidence"]] == [
+        "take_home_income",
+        "salary_transparency",
+        "overtime_rate",
+        "joining_bonus",
+        "pay_frequency",
+    ]
+    assert "Không dùng dòng chưa xác minh này." not in out
+    assert "chưa thấy bằng chứng đạt mốc" not in out
+    assert "chưa có vị trí nào" not in out
+    assert "SECURITY_BOUNDARY" in out
+
+
+@pytest.mark.asyncio
+async def test_compare_income_ranks_target_evidence_before_project_cap(no_cache_io):
+    summaries = tuple(
+        ActiveProjectIncomeSummary(
+            project_id=f"p{index}",
+            project_slug=f"project-{index:02d}",
+            project_name=f"Project {index:02d}",
+            evidence=(
+                IncomeFeatureEvidence(
+                    feature_key="take_home_income",
+                    category="income",
+                    name_vi="Thu nhập",
+                    value_text="Khoảng 10-13 triệu/tháng.",
+                ),
+            ),
+        )
+        for index in range(21)
+    ) + (
+        ActiveProjectIncomeSummary(
+            project_id="rorze",
+            project_slug="rorze",
+            project_name="Rorze",
+            evidence=(
+                IncomeFeatureEvidence(
+                    feature_key="take_home_income",
+                    category="income",
+                    name_vi="Thu nhập",
+                    value_text="14-15 triệu/tháng chưa gồm thưởng; 20-21 triệu/tháng gồm thưởng.",
+                ),
+            ),
+        ),
+    )
+    repo = _make_repo(
+        income_summary_for_active_projects=lambda self: _const(summaries)
+    )
+
+    out = await compare_income(retrieval=repo, target_monthly_vnd=20_000_000)
+
+    payload = json.loads(out.splitlines()[0].removeprefix("COMPARE_INCOME_JSON="))
+    assert len(payload["projects"]) == 20
+    assert payload["projects"][0]["project_slug"] == "rorze"
+
+
+@pytest.mark.asyncio
+async def test_compare_income_reports_retrieval_failure_as_unavailable(no_cache_io):
+    async def fail(self):
+        raise RuntimeError("database unavailable")
+
+    out = await compare_income(
+        retrieval=_make_repo(income_summary_for_active_projects=fail),
+        target_monthly_vnd=20_000_000,
+    )
+
+    payload = json.loads(out.splitlines()[0].removeprefix("COMPARE_INCOME_JSON="))
+    assert payload["status"] == "unavailable"
+    assert payload["projects"] == []
+    assert "chưa thể kiểm tra dữ liệu thu nhập" in payload["safe_reply"]
+    assert "chưa có dữ liệu thu nhập" not in payload["safe_reply"]
 
 
 # ---------------------------------------------------------------------------

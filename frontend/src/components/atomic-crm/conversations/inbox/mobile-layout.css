@@ -471,6 +471,20 @@
   .inbox-bg-container .profile-info-btn span {
     display: none;
   }
+  .conversation-actions-menu {
+    width: min(20rem, calc(100vw - 1rem));
+    max-width: calc(100vw - 1rem);
+    padding: 6px;
+  }
+  .conversation-actions-menu [data-slot="dropdown-menu-item"] {
+    min-height: 48px;
+    gap: 12px;
+    padding: 10px 12px;
+  }
+  .conversation-actions-menu [data-slot="dropdown-menu-item"] > svg {
+    width: 20px;
+    height: 20px;
+  }
   .inbox-bg-container .chat-mode-chip {
     width: 36px;
     padding: 0;

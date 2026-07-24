@@ -51,8 +51,13 @@ from app.graph.router import (
     routing_instruction,
     should_use_fast_model,
 )
+from app.recruitment.domain.recommendation import (
+    is_salary_profile_statement,
+    parse_salary_band,
+)
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
+from app.shared.domain.text import normalize_vietnamese_text
 
 logger = logging.getLogger(__name__)
 RECENT_HISTORY_LIMIT = 16
@@ -60,6 +65,11 @@ DIRECT_HISTORY_TOKEN_BUDGET = 12_000
 OA_PROFILE_LOOKUP_TIMEOUT_SECONDS = 2.0
 VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
     "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
+)
+_INCOME_COMPARE_HINT = (
+    "Ý định: hỏi mốc thu nhập chung khi chưa chốt dự án. Phải dùng compare_income trước, "
+    "trả lời theo từng dự án bằng đúng cơ sở dữ liệu (thu nhập tháng, bình quân năm chia 12, "
+    "thưởng, kỳ lương), không gộp các cơ sở tính thành một con số duy nhất."
 )
 
 
@@ -207,8 +217,15 @@ async def _agent_turn(
     vacancy_catalog_required = route.reason == "vacancy_listing" or (
         route.intent == "general" and _recent_vacancy_query(recent_messages) is not None
     )
-    vacancy_authority_tool = (
-        "list_active_jobs" if vacancy_catalog_required else None
+    compare_income_required_args = _compare_income_required_args(
+        user_text,
+        route_intent=route.intent,
+        project_context=project_context,
+    )
+    required_authority_tool = (
+        "list_active_jobs"
+        if vacancy_catalog_required
+        else "compare_income" if compare_income_required_args is not None else None
     )
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
         allowed_tools = (
@@ -216,12 +233,14 @@ async def _agent_turn(
         )
         if vacancy_catalog_required:
             allowed_tools = ("list_active_jobs",)
+        elif compare_income_required_args is not None:
+            allowed_tools = ("compare_income",)
         if allowed_tools is not None:
             allowed_tools = tuple(
                 name for name in allowed_tools if name in manifest_policy.tool_registry.names
             )
-        if vacancy_authority_tool is not None and not manifest_policy.tool_registry.allows(
-            vacancy_authority_tool
+        if required_authority_tool is not None and not manifest_policy.tool_registry.allows(
+            required_authority_tool
         ):
             return await deps.agent.direct(
                 user_text,
@@ -244,8 +263,16 @@ async def _agent_turn(
             policy=manifest_policy,
             allowed_tools=allowed_tools,
             lookup_query=evidence_query or user_text,
-            required_tool="list_active_jobs" if vacancy_catalog_required else None,
-            required_tool_args=_vacancy_required_args(user_text) if vacancy_catalog_required else None,
+            required_tool=(
+                "list_active_jobs"
+                if vacancy_catalog_required
+                else "compare_income" if compare_income_required_args is not None else None
+            ),
+            required_tool_args=(
+                _vacancy_required_args(user_text)
+                if vacancy_catalog_required
+                else compare_income_required_args
+            ),
             metrics=timings,
             retry_empty_generation=True,
             trace_sink=trace_sink,
@@ -301,6 +328,8 @@ async def _agent_turn(
     allowed_tools = route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
     if vacancy_catalog_required:
         allowed_tools = ("list_active_jobs",)
+    elif compare_income_required_args is not None:
+        allowed_tools = ("compare_income",)
     resolved_tool_registry = None
     if manifest_policy is not None:
         # Recruitment retains its proven prompt/routing path, but its bound
@@ -312,9 +341,9 @@ async def _agent_turn(
                 name for name in allowed_tools if name in resolved_tool_registry
             )
     if (
-        vacancy_authority_tool is not None
+        required_authority_tool is not None
         and resolved_tool_registry is not None
-        and vacancy_authority_tool not in resolved_tool_registry
+        and required_authority_tool not in resolved_tool_registry
     ):
         return await deps.agent.direct(
             user_text,
@@ -391,7 +420,9 @@ async def _agent_turn(
         )
 
     route_hint = (
-        routing_instruction(route_turn(_recent_vacancy_query(recent_messages) or ""))
+        _INCOME_COMPARE_HINT
+        if compare_income_required_args is not None
+        else routing_instruction(route_turn(_recent_vacancy_query(recent_messages) or ""))
         if vacancy_catalog_required and route.reason != "vacancy_listing"
         else routing_instruction(route)
     )
@@ -425,6 +456,9 @@ async def _agent_turn(
         agent_kwargs["required_tool"] = "list_active_jobs"
         required_args = _vacancy_required_args(user_text)
         agent_kwargs["required_tool_args"] = required_args
+    elif compare_income_required_args is not None:
+        agent_kwargs["required_tool"] = "compare_income"
+        agent_kwargs["required_tool_args"] = compare_income_required_args
     elif focused_rag:
         agent_kwargs["required_tool"] = "search_knowledge"
         agent_kwargs["required_tool_args"] = {
@@ -739,6 +773,27 @@ def _vacancy_required_args(user_text: str) -> dict:
     if sort_by is not None:
         args["sort_by"] = sort_by
     return args
+
+
+def _compare_income_required_args(
+    user_text: str,
+    *,
+    route_intent: str,
+    project_context: Any | None,
+) -> dict[str, int] | None:
+    if route_intent not in {"faq_detail", "general"}:
+        return None
+    if project_context is not None and getattr(project_context, "state", None) == "FOCUSED":
+        return None
+    normalized = normalize_vietnamese_text(user_text or "")
+    if "luong" not in normalized and "thu nhap" not in normalized:
+        return None
+    if is_salary_profile_statement(normalized):
+        return None
+    _minimum, target = parse_salary_band(normalized)
+    if target is None:
+        return None
+    return {"target_monthly_vnd": int(target)}
 
 
 def _vacancy_evidence_query(

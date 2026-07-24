@@ -104,7 +104,9 @@ async def active_projects_index(retrieval: GraphRetrievalPort) -> str:
         + "\n".join(lines)
         + "\nKhi ứng viên quan tâm một dự án cụ thể: với câu hỏi về thu nhập/lương, ca làm, tăng ca, "
         "phụ cấp, KTX, xe đưa đón, thưởng, hồ sơ... hãy gọi get_product_features(project_slug) để lấy "
-        "các đặc điểm sản phẩm; với câu hỏi mở/tìm thêm chi tiết, gọi search_knowledge(project_slug). "
+        "các đặc điểm sản phẩm; nếu ứng viên chưa nêu rõ dự án mà hỏi mốc thu nhập/lương chung, hãy gọi "
+        "compare_income(target_monthly_vnd) để so sánh dữ liệu thu nhập giữa các dự án đang hoạt động; "
+        "với câu hỏi mở/tìm thêm chi tiết, gọi search_knowledge(project_slug). "
         "Riêng câu hỏi về tuyến xe, điểm đón hoặc giờ đón phải dùng search_bus_timetable trước, "
         "không dùng get_product_features thay cho lịch xe chi tiết. "
         "TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về; dữ liệu chưa có thì nói 'chưa ghi rõ', không bịa."

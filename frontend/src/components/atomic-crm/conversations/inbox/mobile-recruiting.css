@@ -1,4 +1,4 @@
-/* Ting Ting console surface ------------------------------------------------------
+/* TingHire console surface ------------------------------------------------------
    This late-loaded file also styles recruiting pages, so its shared inbox tokens
    must stay aligned with the authenticated blue console. */
 .inbox-bg-container,
@@ -14,7 +14,11 @@
   --paper-yellow: #fff3cf;
   --paper-line: #cbd5e1;
   --paper-line-soft: #e4e7ec;
-  --paper-teal-border: color-mix(in srgb, var(--workspace-action) 32%, var(--workspace-border));
+  --paper-teal-border: color-mix(
+    in srgb,
+    var(--workspace-action) 32%,
+    var(--workspace-border)
+  );
   --priority: #b54708;
   --priority-bg: #fff4ed;
   --surface: var(--paper-desk);
@@ -99,7 +103,7 @@
 
 .inbox-bg-container .kb-scope {
   /* Knowledge is a console workspace — keep its semantic utilities aligned
-     with the shared indigo shell on every breakpoint, including the mobile
+     with the shared coral/ink shell on every breakpoint, including the mobile
      wrapper. */
   --background: var(--workspace-canvas);
   --foreground: var(--workspace-ink);

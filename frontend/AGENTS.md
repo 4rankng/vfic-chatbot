@@ -1,8 +1,8 @@
-# AGENTS.md — VFIC Chatbot (Ting Ting) frontend
+# AGENTS.md — TingHire frontend
 
 ## Project Overview
 
-**VFIC Chatbot** (brand *Ting Ting*) is the recruiter/admin console for the
+**TingHire** (formerly *Ting Ting*) is the recruiter/admin console for the
 VFIC recruitment platform. It is a React + react-admin single-page app that
 talks to the **VFIC FastAPI backend** (`/api/v1` REST + Socket.IO).
 The UI is **Vietnamese-only**. It is derived from the open-source

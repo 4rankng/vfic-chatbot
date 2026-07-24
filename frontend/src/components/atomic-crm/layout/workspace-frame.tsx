@@ -15,7 +15,7 @@ import { useRoleActions } from "../hooks/useRoleActions";
 import { useCompiledRuntime } from "../capabilities/runtime-context";
 import { useNotifications } from "./topbar/useNotifications";
 import "./mobile-workspace.css";
-import Header from "./Header";
+import Header, { WorkspaceSidebarBrand } from "./Header";
 import {
   getWorkspaceDestinations,
   getWorkspaceDestination,
@@ -70,6 +70,7 @@ const WorkspaceNavigation = ({
           : "workspace-navigation-rail",
       )}
     >
+      {surface === "rail" ? <WorkspaceSidebarBrand /> : null}
       <div
         className={cn(
           "workspace-navigation-items",

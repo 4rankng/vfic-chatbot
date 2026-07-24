@@ -36,6 +36,7 @@ def test_normal_project_followup_keeps_focus():
 @pytest.mark.parametrize(
     "message",
     [
+        "luong 20 trieu",
         # The reported inconsistent-salary message: a factory-agnostic threshold
         # hypothetical that was wrongly answered from LG Display's KB alone.
         "minh lam luong 20 trieu mot thang, neu luong nam cong thuong chia deu 12 thang co dc 20tr ko",
@@ -57,6 +58,18 @@ def test_general_or_comparative_question_is_detected(message):
 )
 def test_focused_project_followup_is_not_general(message):
     # Ordinary project-scoped follow-ups must keep the established focus.
+    assert _is_general_or_comparative(message) is False
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "luong mong muon cua em la 20 trieu",
+        "em dang nhan luong 20 trieu",
+        "thu nhap hien tai cua em la 15 trieu",
+    ],
+)
+def test_salary_profile_statement_is_not_general_comparison(message):
     assert _is_general_or_comparative(message) is False
 
 
@@ -94,8 +107,7 @@ async def test_general_salary_question_not_locked_to_focused_project():
     )
     ctx = await _DirectContextAdapter(_FakeDB(rows)).resolve(
         conversation,
-        "minh lam luong 20 trieu mot thang, neu luong nam cong thuong "
-        "chia deu 12 thang co dc 20tr ko",
+        "luong 20 trieu",
     )
     assert ctx.state == "EXPLORE"
     assert ctx.project_id is None

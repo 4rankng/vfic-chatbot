@@ -291,6 +291,18 @@ button.dashboard-candidate-row:focus-visible {
   outline-offset: 2px;
 }
 
+.dashboard-candidate-action-menu {
+  width: min(240px, calc(100vw - 24px));
+  padding: 6px;
+}
+
+.dashboard-candidate-action-item {
+  min-height: 48px;
+  gap: 12px;
+  padding: 10px 12px;
+  font-weight: 600;
+}
+
 .dashboard-candidate-avatar {
   width: 36px;
   height: 36px;

@@ -50,6 +50,7 @@ def test_job_advisory_capability_owns_active_job_listing_tool():
 
     assert policy is not None
     assert policy.tool_registry.allows("list_active_jobs")
+    assert policy.tool_registry.allows("compare_income")
 
 
 async def test_manifest_composed_agent_makes_zero_llm_calls_without_active_policy():

@@ -1,14 +1,14 @@
 # Project Overview & Product Development Requirements (PDR)
 
-**Product:** Ting Ting / VFIC miniCRM
-**Last updated:** 2026-07-22
+**Product:** TingHire (formerly Ting Ting / VFIC miniCRM)
+**Last updated:** 2026-07-24
 **Status:** Production at `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM)
 
 ---
 
 ## 1. Product overview
 
-Ting Ting is a **Vietnamese recruiting chatbot + recruiter console** that uses
+TingHire is a **Vietnamese recruiting chatbot + recruiter console** that uses
 **Zalo** (the dominant Vietnamese messaging app) as its sole candidate channel.
 A FastAPI service hosts an always-on chatbot that answers candidate questions,
 screens them for open roles, books them into a lead pipeline, and nudges cold
