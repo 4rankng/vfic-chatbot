@@ -6,6 +6,7 @@ import {
   Phone,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { GroupedVirtuoso } from "react-virtuoso";
 import { useNavigate } from "react-router";
 
@@ -33,6 +34,7 @@ import {
   fetchDashboardCandidates,
   groupCandidatesByDay,
 } from "./candidateDashboard";
+import { CandidateDataDialog } from "./CandidateDataDialog";
 import {
   deriveCacheDiscriminators,
   filterHumanInterventions,
@@ -153,41 +155,100 @@ export const RecruitingCommandCenter = ({
               title: "",
               detail: "",
             };
+  const countsAreLoading =
+    showSkeleton || (candidatesQuery.isPending && !candidatesQuery.data);
+  const intakeSummary = queueHealth.title
+    ? queueHealth
+    : interventionRows.length > 0
+      ? {
+          tone: "attention",
+          title: `${interventionRows.length} hội thoại cần xử lý`,
+          detail:
+            candidateCount > 0
+              ? `Ưu tiên phản hồi trước, sau đó xem ${candidateCount} ứng viên mới.`
+              : "Ưu tiên phản hồi để giữ nhịp tuyển dụng.",
+        }
+      : candidateCount > 0
+        ? {
+            tone: "success",
+            title: "Hàng đợi đang thông thoáng",
+            detail: `${candidateCount} ứng viên mới đang chờ bạn xem thông tin.`,
+          }
+        : {
+            tone: "success",
+            title: "Hàng đợi đang thông thoáng",
+            detail: "Chưa có hội thoại hoặc ứng viên mới cần xử lý.",
+          };
+  const latestUpdate = dataUpdatedAt
+    ? formatClock(
+        new Date(
+          Math.max(dataUpdatedAt, candidatesQuery.dataUpdatedAt),
+        ).toISOString(),
+      )
+    : null;
 
   return (
     <div className={shellClass}>
       <header className="recruiting-hero recruiting-hero-minimal">
         <div className="recruiting-hero-copy">
+          <span className="recruiting-eyebrow">Bàn điều phối tuyển dụng</span>
           <h1>Tổng quan tuyển dụng</h1>
-          <p>
-            {dataUpdatedAt
-              ? `Cập nhật lúc ${formatClock(new Date(Math.max(dataUpdatedAt, candidatesQuery.dataUpdatedAt)).toISOString())}`
-              : "Đang tải hàng đợi tuyển dụng"}
+          <p className="recruiting-hero-description">
+            Ưu tiên hội thoại cần phản hồi, sau đó xem người vừa để lại thông
+            tin liên hệ.
           </p>
-          {showRefetchIndicator ||
-          (candidatesQuery.isFetching && candidatesQuery.data) ? (
+          <div className="recruiting-hero-meta">
             <span
-              className="attention-refetch-indicator"
-              aria-live="polite"
-              role="status"
-            >
-              Đang làm mới…
+              className="dashboard-live-dot is-success"
+              aria-hidden="true"
+            />
+            <span>
+              {latestUpdate
+                ? `Cập nhật lúc ${latestUpdate}`
+                : "Đang tải hàng đợi tuyển dụng"}
             </span>
-          ) : null}
-        </div>
-        {queueHealth.title || queueHealth.detail ? (
-          <div
-            className={`dashboard-live-status is-${queueHealth.tone}`}
-            role="status"
-          >
-            <span className="dashboard-live-dot" aria-hidden="true" />
-            <div>
-              {queueHealth.title ? <strong>{queueHealth.title}</strong> : null}
-              {queueHealth.detail ? <span>{queueHealth.detail}</span> : null}
-            </div>
+            {showRefetchIndicator ||
+            (candidatesQuery.isFetching && candidatesQuery.data) ? (
+              <span
+                className="attention-refetch-indicator"
+                aria-live="polite"
+                role="status"
+              >
+                Đang làm mới…
+              </span>
+            ) : null}
           </div>
-        ) : null}
+        </div>
       </header>
+
+      <section
+        className={`dashboard-intake-summary is-${intakeSummary.tone}`}
+        aria-label="Trạng thái hàng đợi tuyển dụng"
+      >
+        <span className="dashboard-intake-marker" aria-hidden="true">
+          {intakeSummary.tone === "attention" ||
+          intakeSummary.tone === "warning" ? (
+            <MessageCircle />
+          ) : (
+            <CheckCircle2 />
+          )}
+        </span>
+        <div className="dashboard-intake-copy" aria-live="polite">
+          <span>Trạng thái hàng đợi</span>
+          <strong>{intakeSummary.title}</strong>
+          <p>{intakeSummary.detail}</p>
+        </div>
+        <dl className="dashboard-intake-counts">
+          <div>
+            <dt>Cần xử lý</dt>
+            <dd>{countsAreLoading ? "—" : interventionRows.length}</dd>
+          </div>
+          <div>
+            <dt>Ứng viên mới</dt>
+            <dd>{countsAreLoading ? "—" : candidateCount}</dd>
+          </div>
+        </dl>
+      </section>
 
       {showPartialError || (candidatesQuery.isError && candidatesQuery.data) ? (
         <div
@@ -210,7 +271,10 @@ export const RecruitingCommandCenter = ({
         </div>
       ) : null}
 
-      <section className="recruiting-two-column">
+      <section
+        className="recruiting-two-column"
+        aria-label="Các hàng đợi tuyển dụng"
+      >
         <AttentionPanel
           eyebrow="Cần can thiệp"
           rows={interventionRows}
@@ -263,12 +327,17 @@ const AttentionPanel = ({
   return (
     <article className="recruiting-panel">
       <div className="recruiting-panel-header">
-        <h2>{eyebrow}</h2>
+        <div className="recruiting-panel-heading">
+          <span>Ưu tiên phản hồi</span>
+          <h2>{eyebrow}</h2>
+          <p>Hội thoại đang chờ người tuyển dụng xử lý.</p>
+        </div>
         <span
           className="dashboard-panel-count"
           aria-label={`${rows.length} mục đang hiển thị`}
         >
-          {rows.length}
+          <strong>{rows.length}</strong>
+          <small>hội thoại</small>
         </span>
       </div>
       <div className="dashboard-candidate-list">
@@ -287,7 +356,8 @@ const AttentionPanel = ({
           <EmptyDashboardList
             content={{
               title: "Không có hội thoại cần can thiệp",
-              description: "Mọi cuộc trò chuyện hiện đã được xử lý.",
+              description:
+                "Mọi cuộc trò chuyện hiện đã được xử lý. Bạn có thể chuyển sang xem ứng viên mới.",
             }}
           />
         )}
@@ -311,12 +381,17 @@ const CandidatePanel = ({
 }) => (
   <article className="recruiting-panel recruiting-candidate-panel">
     <div className="recruiting-panel-header">
-      <h2>Ứng viên mới</h2>
+      <div className="recruiting-panel-heading">
+        <span>Luồng ứng viên</span>
+        <h2>Ứng viên mới</h2>
+        <p>Người vừa để lại số liên hệ trong các hội thoại.</p>
+      </div>
       <span
         className="dashboard-panel-count"
         aria-label={`${count} ứng viên có số điện thoại`}
       >
-        {count}
+        <strong>{count}</strong>
+        <small>ứng viên</small>
       </span>
     </div>
     <div className="dashboard-candidate-list">
@@ -335,6 +410,7 @@ const CandidatePanel = ({
         />
       ) : (
         <EmptyDashboardList
+          tone="neutral"
           content={{
             title: "Chưa có ứng viên có số điện thoại",
             description:
@@ -368,7 +444,7 @@ const CandidateGroupedList = ({
       <div className="dashboard-candidate-static-list">
         {groups.map((group) => (
           <div key={group.key}>
-            <h2 className="dashboard-candidate-day-header">{group.label}</h2>
+            <h3 className="dashboard-candidate-day-header">{group.label}</h3>
             {group.candidates.map((candidate) => (
               <CandidateRow
                 key={`candidate-${candidate.id}`}
@@ -393,9 +469,9 @@ const CandidateGroupedList = ({
         candidate ? `candidate-${candidate.id}` : `group-${index}`
       }
       groupContent={(index) => (
-        <h2 className="dashboard-candidate-day-header">
+        <h3 className="dashboard-candidate-day-header">
           {groups[index]?.label}
-        </h2>
+        </h3>
       )}
       itemContent={(_index, _groupIndex, candidate) => (
         <CandidateRow candidate={candidate} navigate={navigate} />
@@ -502,6 +578,8 @@ const CandidateRow = ({
   candidate: DashboardCandidate;
   navigate: Navigate;
 }) => {
+  const [isCandidateDataOpen, setIsCandidateDataOpen] = useState(false);
+  const actionTriggerRef = useRef<HTMLButtonElement>(null);
   const name = normalizeText(candidate.name) || "Ứng viên mới";
   const phone = normalizeText(candidate.phone);
   const conversationId = candidate.conversation_id;
@@ -522,44 +600,56 @@ const CandidateRow = ({
           </span>
         </span>
       </span>
+      {conversationId ? (
+        <span className="dashboard-candidate-meta" aria-hidden="true">
+          <small className="dashboard-row-action">Xem</small>
+        </span>
+      ) : null}
     </>
   );
 
   if (conversationId) {
     return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="dashboard-candidate-row"
-            aria-label={`Chọn thao tác cho ${name}, số điện thoại ${phone}`}
+      <>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              ref={actionTriggerRef}
+              type="button"
+              className="dashboard-candidate-row"
+              aria-label={`Chọn thao tác cho ${name}, số điện thoại ${phone}`}
+            >
+              {content}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            sideOffset={8}
+            className="dashboard-candidate-action-menu"
           >
-            {content}
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          sideOffset={8}
-          className="dashboard-candidate-action-menu"
-        >
-          <DropdownMenuItem
-            className="dashboard-candidate-action-item"
-            onSelect={() => navigate(`/conversations?id=${conversationId}`)}
-          >
-            <MessageCircle aria-hidden="true" />
-            Xem hội thoại
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="dashboard-candidate-action-item"
-            onSelect={() =>
-              navigate(`/conversations?id=${conversationId}&panel=candidate`)
-            }
-          >
-            <PanelRight aria-hidden="true" />
-            Dữ liệu ứng viên
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <DropdownMenuItem
+              className="dashboard-candidate-action-item"
+              onSelect={() => navigate(`/conversations?id=${conversationId}`)}
+            >
+              <MessageCircle aria-hidden="true" />
+              Xem hội thoại
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="dashboard-candidate-action-item"
+              onSelect={() => setIsCandidateDataOpen(true)}
+            >
+              <PanelRight aria-hidden="true" />
+              Dữ liệu ứng viên
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <CandidateDataDialog
+          lead={candidate.lead}
+          open={isCandidateDataOpen}
+          onOpenChange={setIsCandidateDataOpen}
+          returnFocusRef={actionTriggerRef}
+        />
+      </>
     );
   }
 
@@ -575,15 +665,17 @@ const CandidateRow = ({
 
 const EmptyDashboardList = ({
   content,
+  tone = "success",
 }: {
   content: {
     title: string;
     description: string;
   };
+  tone?: "success" | "neutral";
 }) => (
-  <div className="dashboard-empty-list">
+  <div className={`dashboard-empty-list is-${tone}`}>
     <span className="dashboard-empty-icon" aria-hidden="true">
-      <CheckCircle2 />
+      {tone === "success" ? <CheckCircle2 /> : <MessageCircle />}
     </span>
     <div className="dashboard-empty-copy">
       <p>{content.title}</p>

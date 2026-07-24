@@ -72,15 +72,24 @@ describe("desktop workspace rail", () => {
     const topbarBrand = screen.container.querySelector<HTMLElement>(
       ".workspace-topbar-brand",
     )!;
+    const frame = screen.container.querySelector<HTMLElement>(
+      ".workspace-frame",
+    )!;
+    const topbar = screen.container.querySelector<HTMLElement>(
+      ".workspace-topbar",
+    )!;
 
-    expect(getComputedStyle(rail).width).toBe("76px");
+    expect(getComputedStyle(rail).width).toBe("72px");
+    expect(getComputedStyle(frame).gridTemplateRows.split(" ")[0]).toBe("52px");
+    expect(topbar.getBoundingClientRect().height).toBeCloseTo(52, 0);
     expect(getComputedStyle(compactMark).display).toBe("block");
-    expect(getComputedStyle(compactMark).width).toBe("32px");
+    expect(getComputedStyle(compactMark).width).toBe("44px");
     expect(getComputedStyle(topbarBrand).display).toBe("none");
 
     await page.viewport(900, 720);
 
-    expect(getComputedStyle(rail).width).toBe("76px");
+    expect(getComputedStyle(rail).width).toBe("72px");
+    expect(topbar.getBoundingClientRect().height).toBeCloseTo(52, 0);
     expect(getComputedStyle(compactMark).display).toBe("block");
     expect(getComputedStyle(topbarBrand).display).not.toBe("none");
   });

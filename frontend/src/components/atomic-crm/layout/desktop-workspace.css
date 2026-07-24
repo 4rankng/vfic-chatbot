@@ -7,15 +7,28 @@
  */
 @media (min-width: 768px) {
   .workspace-frame {
-    grid-template-columns: 4.75rem minmax(0, 1fr);
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    grid-template-rows: 3.25rem minmax(0, 1fr);
   }
 
   .workspace-topbar-actions {
+    justify-self: end;
     margin-left: auto;
   }
 
+  .workspace-topbar-notifications,
+  .workspace-user-menu-trigger {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .workspace-user-menu-trigger--labeled {
+    width: auto;
+    padding-inline: 0.65rem;
+  }
+
   .workspace-navigation-rail {
-    width: 4.75rem;
+    width: 4.5rem;
     align-items: center;
     padding: 0.7rem 0.5rem;
   }
@@ -25,8 +38,6 @@
     min-height: 2.75rem;
     justify-content: center;
     margin: 0 0 1rem;
-    border-radius: 0.75rem;
-    padding: 0.35rem;
   }
 
   .workspace-sidebar-brand-full {
@@ -35,8 +46,8 @@
 
   .workspace-sidebar-brand-mark {
     display: block;
-    width: 2rem;
-    height: 2rem;
+    width: 2.75rem;
+    height: 2.75rem;
     object-fit: contain;
   }
 
@@ -46,11 +57,11 @@
   }
 
   .workspace-navigation-rail .workspace-navigation-link {
-    width: 3rem;
-    min-height: 3rem;
+    width: 2.75rem;
+    min-height: 2.75rem;
     justify-content: center;
     gap: 0;
-    padding: 0.75rem;
+    padding: 0.7rem;
   }
 
   .workspace-navigation-rail .workspace-navigation-label {
@@ -65,8 +76,11 @@
   .workspace-navigation-rail .workspace-navigation-tooltip {
     display: block;
   }
+}
 
-  .workspace-navigation-rail .workspace-navigation-link.is-active::before {
-    left: -0.5rem;
+@media (min-width: 768px) and (max-width: 1020px) {
+  .workspace-user-menu-trigger--labeled {
+    width: 2.25rem;
+    padding: 0;
   }
 }

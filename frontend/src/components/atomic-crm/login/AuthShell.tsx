@@ -47,23 +47,17 @@ export const AuthShell = ({ children, productName }: AuthShellProps) => (
 
       <div className="relative flex items-center justify-center bg-base-200/45 px-5 py-7 sm:px-10 sm:py-10 lg:px-8 xl:px-10">
         <div className="w-full max-w-sm" aria-label={productName}>
-          <div className="mb-5 flex items-center gap-3 px-1">
+          <div className="mb-6 px-1">
             <img
-              src="/brand/tinghire-icon-192.png"
-              alt=""
-              aria-hidden="true"
-              className="size-11 rounded-xl border border-base-300 object-cover shadow-sm"
+              src="/brand/tinghire-logo.png"
+              alt="TingHire"
+              className="h-auto w-[clamp(13rem,58vw,15.5rem)] max-w-full"
             />
-            <div className="min-w-0">
-              <strong className="block text-subsection font-semibold tracking-tight text-base-content">
-                TingHire
-              </strong>
-              {productName !== "TingHire" ? (
-                <span className="block truncate text-body-sm text-muted-foreground">
-                  {productName}
-                </span>
-              ) : null}
-            </div>
+            {productName !== "TingHire" ? (
+              <span className="mt-2 block truncate text-body-sm text-muted-foreground">
+                {productName}
+              </span>
+            ) : null}
           </div>
           {children}
         </div>

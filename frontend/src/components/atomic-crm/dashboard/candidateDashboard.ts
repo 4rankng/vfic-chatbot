@@ -1,4 +1,4 @@
-import type { Conversation } from "../types";
+import type { Conversation, Lead } from "../types";
 import { buildRecruitmentContextIdentity } from "../leads/domain/recruitmentPresentation";
 import {
   getDashboardCandidates,
@@ -13,13 +13,28 @@ export interface DashboardCandidate {
   avatar_url: string | null;
   conversation_id: string | null;
   created_at: string;
+  lead: Lead;
 }
 
 type DashboardCandidateSource = Omit<
-  DashboardCandidate,
-  "conversation_id"
+  Lead,
+  | "zalo_id"
+  | "name"
+  | "phone"
+  | "desired_job"
+  | "expected_salary"
+  | "lead_score"
+  | "lead_stage"
+  | "updated_at"
 > & {
+  zalo_id: string | null;
+  name: string | null;
+  phone: string | null;
   desired_job?: string | null;
+  expected_salary?: string | null;
+  lead_score?: Lead["lead_score"];
+  lead_stage?: string | null;
+  updated_at?: string | null;
 };
 
 interface CandidateListEnvelope {
@@ -136,36 +151,46 @@ export const fetchDashboardCandidates = async (): Promise<
     conversationsByZaloId.set(conversation.zalo_chat_id, rows);
   }
 
-  return candidates
-    .map((candidate) => {
-      const conversations = candidate.zalo_id
-        ? conversationsByZaloId.get(candidate.zalo_id) ?? []
-        : [];
-      const conversation = conversations[0];
-      const profileConversation =
-        conversations.find(
-          (row) =>
-            row.zalo_channel === "oa" &&
-            Boolean(row.contact?.display_name || row.contact?.avatar_url),
-        );
-      const profile = profileConversation
-        ? buildRecruitmentContextIdentity(profileConversation, {
-            name: candidate.name ?? "",
-            avatar_url: candidate.avatar_url,
-            phone: candidate.phone ?? "",
-          })
-        : {
-            displayName: candidate.name || "Ứng viên mới",
-            avatarUrl: candidate.avatar_url,
-          };
-      return {
-        id: candidate.id,
-        zalo_id: candidate.zalo_id,
+  return candidates.map((candidate) => {
+    const conversations = candidate.zalo_id
+      ? (conversationsByZaloId.get(candidate.zalo_id) ?? [])
+      : [];
+    const conversation = conversations[0];
+    const profileConversation = conversations.find(
+      (row) =>
+        row.zalo_channel === "oa" &&
+        Boolean(row.contact?.display_name || row.contact?.avatar_url),
+    );
+    const profile = profileConversation
+      ? buildRecruitmentContextIdentity(profileConversation, {
+          name: candidate.name ?? "",
+          avatar_url: candidate.avatar_url,
+          phone: candidate.phone ?? "",
+        })
+      : {
+          displayName: candidate.name || "Ứng viên mới",
+          avatarUrl: candidate.avatar_url,
+        };
+    return {
+      id: candidate.id,
+      zalo_id: candidate.zalo_id,
+      name: profile.displayName,
+      phone: candidate.phone,
+      avatar_url: profile.avatarUrl ?? null,
+      conversation_id: conversation?.id ?? null,
+      created_at: candidate.created_at,
+      lead: {
+        ...candidate,
+        zalo_id: candidate.zalo_id ?? "",
         name: profile.displayName,
-        phone: candidate.phone,
+        phone: candidate.phone ?? "",
+        desired_job: candidate.desired_job ?? "",
+        expected_salary: candidate.expected_salary ?? "",
+        lead_score: candidate.lead_score ?? null,
+        lead_stage: candidate.lead_stage ?? "",
+        updated_at: candidate.updated_at ?? candidate.created_at,
         avatar_url: profile.avatarUrl ?? null,
-        conversation_id: conversation?.id ?? null,
-        created_at: candidate.created_at,
-      };
-    });
+      },
+    };
+  });
 };

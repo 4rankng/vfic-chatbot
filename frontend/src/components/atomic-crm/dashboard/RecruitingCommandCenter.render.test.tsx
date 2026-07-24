@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { render } from "vitest-browser-react";
 import { describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 
 const { mockApiJson } = vi.hoisted(() => ({
   mockApiJson: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock("react-virtuoso", () => ({
 }));
 
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
+import "./dashboard.css";
 
 const LocationProbe = () => {
   const location = useLocation();
@@ -104,6 +106,9 @@ describe("RecruitingCommandCenter candidate rows", () => {
         screen.getByRole("button", { name: /Mở hội thoại với Ứng viên mẫu/ }),
       )
       .toBeVisible();
+    await expect
+      .element(screen.getByText("1 hội thoại cần xử lý"))
+      .toBeVisible();
     await expect.element(screen.getByText("Quá hạn phản hồi")).toBeVisible();
     await expect.element(screen.getByText("Mở", { exact: true })).toBeVisible();
     expect(
@@ -136,6 +141,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
                   phone: "0900000042",
                   avatar_url: null,
                   desired_job: "Công nhân sản xuất",
+                  years_experience: "2 năm",
                   created_at: "2026-07-14T08:30:00Z",
                 },
               ],
@@ -156,7 +162,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
                 ],
                 total: 1,
               }
-          : attention,
+            : attention,
       ),
     );
     const queryClient = new QueryClient({
@@ -174,25 +180,54 @@ describe("RecruitingCommandCenter candidate rows", () => {
     await expect.element(screen.getByText("Phạm Hùng")).toBeVisible();
     await expect.element(screen.getByText("0900000042")).toBeVisible();
     await expect
+      .element(screen.getByText("Hàng đợi đang thông thoáng"))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("heading", {
+          name: "THỨ BA, 14/07/2026",
+          level: 3,
+        }),
+      )
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Xem", { exact: true }))
+      .toBeVisible();
+    await page.locator(".recruiting-command").screenshot({
+      path: "/tmp/dashboard-uui-desktop.png",
+    });
+    await expect
       .element(screen.getByAltText("Ảnh đại diện của Phạm Hùng"))
       .toHaveAttribute("src", "https://example.com/pham-hung.jpg");
     expect(screen.container.textContent).not.toContain("Công nhân sản xuất");
     expect(screen.container.textContent).not.toContain("15:30");
 
-    await screen
-      .getByRole("button", { name: /Chọn thao tác cho Phạm Hùng/ })
-      .click();
+    const candidateActionTrigger = screen.getByRole("button", {
+      name: /Chọn thao tác cho Phạm Hùng/,
+    });
+    await candidateActionTrigger.click();
     await expect
       .element(screen.getByRole("menuitem", { name: "Xem hội thoại" }))
       .toBeVisible();
-    await screen
-      .getByRole("menuitem", { name: "Dữ liệu ứng viên" })
-      .click();
+    await screen.getByRole("menuitem", { name: "Dữ liệu ứng viên" }).click();
+    await expect
+      .element(screen.getByRole("dialog", { name: "Thông tin ứng viên" }))
+      .toBeVisible();
+    await expect.element(screen.getByText("Mức độ hoàn thiện")).toBeVisible();
+    await expect.element(screen.getByText("Dữ liệu đã thu thập")).toBeVisible();
+    await expect.element(screen.getByText("Công nhân sản xuất")).toBeVisible();
+    await expect.element(screen.getByText("2 năm")).toBeVisible();
     await expect
       .element(screen.getByTestId("dashboard-location"))
-      .toHaveTextContent(
-        "/conversations?id=conversation-42&panel=candidate",
-      );
+      .toHaveTextContent("/");
+    await screen.getByRole("button", { name: "Đóng" }).click();
+    await expect
+      .element(screen.getByRole("dialog", { name: "Thông tin ứng viên" }))
+      .not.toBeInTheDocument();
+    await expect.element(candidateActionTrigger).toHaveFocus();
+    await expect
+      .element(screen.getByTestId("dashboard-location"))
+      .toHaveTextContent("/");
   });
 
   it("does not report an active queue while initial requests are failing", async () => {

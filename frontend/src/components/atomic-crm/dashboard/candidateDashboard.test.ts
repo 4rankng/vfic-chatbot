@@ -25,6 +25,18 @@ const candidate = (
   avatar_url: null,
   conversation_id: null,
   created_at: createdAt,
+  lead: {
+    id,
+    zalo_id: `oa:user-${id}`,
+    name: `Ứng viên ${id}`,
+    phone: phone ?? "",
+    desired_job: "",
+    expected_salary: "",
+    lead_score: null,
+    lead_stage: "",
+    created_at: createdAt,
+    updated_at: createdAt,
+  },
 });
 
 describe("groupCandidatesByDay", () => {
@@ -99,6 +111,10 @@ describe("fetchDashboardCandidates", () => {
         name: "Nguyễn Văn Một",
         avatar_url: "https://example.com/avatar-1.jpg",
         conversation_id: "conversation-1",
+        lead: expect.objectContaining({
+          name: "Nguyễn Văn Một",
+          avatar_url: "https://example.com/avatar-1.jpg",
+        }),
       }),
     ]);
   });

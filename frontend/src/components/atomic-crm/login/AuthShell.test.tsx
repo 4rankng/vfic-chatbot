@@ -16,14 +16,14 @@ describe("AuthShell", () => {
     );
 
     await expect
-      .element(screen.getByText("TingHire", { exact: true }))
+      .element(screen.getByRole("img", { name: "TingHire" }))
       .toBeVisible();
     await expect
       .element(screen.getByRole("heading", { name: "Đăng nhập" }))
       .toBeVisible();
     expect(screen.container.querySelector("main.tt-hero")).not.toBeNull();
     expect(
-      screen.container.querySelector('img[src="/brand/tinghire-icon-192.png"]'),
+      screen.container.querySelector('img[src="/brand/tinghire-logo.png"]'),
     ).not.toBeNull();
     expect(
       screen.container.querySelector(

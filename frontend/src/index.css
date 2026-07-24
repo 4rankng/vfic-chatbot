@@ -1057,9 +1057,6 @@ input:-webkit-autofill:focus {
   flex: 0 0 auto;
   align-items: center;
   margin: 0 0 1rem;
-  border-radius: 0.85rem;
-  background: #fff6ed;
-  padding: 0.65rem 0.8rem;
   text-decoration: none;
 }
 
@@ -1228,8 +1225,6 @@ input:-webkit-autofill:focus {
   .workspace-sidebar-brand {
     min-height: auto;
     margin: 0.2rem 0 0.85rem;
-    border-radius: 0.75rem;
-    padding: 0.42rem;
   }
 
   .workspace-sidebar-brand-full {
