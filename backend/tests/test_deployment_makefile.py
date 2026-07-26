@@ -16,8 +16,10 @@ The deploy invariants that used to live inline in the Makefile now live in
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
+import textwrap
 
 import yaml
 
@@ -98,6 +100,43 @@ def test_bg_deploy_smoke_failure_aborts_before_flip() -> None:
     script = _read("bg_deploy.sh")
     assert "if !" in script and "scripts.smoke_turn" in script
     assert "ABORTING" in script
+
+
+def test_bg_deploy_verifies_public_edge_frontend_and_queue_after_flip() -> None:
+    """After Caddy flips, the new route must prove public health, frontend, and queue readiness."""
+    script = _read("bg_deploy.sh")
+    flip = script.index("flip_caddy.sh")
+    caddy_route = script.index('assert_caddy_routes_color "$color"')
+    public_health = script.index('public_health_body="$(curl -fsS --max-time 15 "$PUBLIC_BASE_URL/health")"')
+    post_flip_verify = script.index('if ! verify_post_flip_readiness "$NEXT"; then')
+    stop_old = script.index('docker compose stop "web-$ACTIVE"')
+    assert flip < post_flip_verify < stop_old
+    assert caddy_route < public_health
+    assert "https://bot.tingting.vip/health" in script
+    assert 'curl -fsS --max-time 15 "https://bot.tingting.vip/"' in script
+    assert "http://127.0.0.1:8000/health/queue" in script
+    assert 'require_running_service_count "worker-chatbot" 2' in script
+    assert 'require_running_service_count "scheduler" 1' in script
+
+
+def test_bg_deploy_rolls_back_when_post_flip_verification_fails() -> None:
+    """A bad post-flip verification must trigger rollback before the old color is stopped."""
+    script = _read("bg_deploy.sh")
+    active_write = script.index('echo "$NEXT" > "$ACTIVE_FILE"')
+    rollback = script.index(
+        'rollback_post_flip_failure "new route failed health/frontend/queue verification"'
+    )
+    stop_old = script.index('docker compose stop "web-$ACTIVE"')
+    assert active_write < rollback < stop_old
+    assert "bash scripts/bg_rollback.sh" in script
+    assert "POST-FLIP VERIFICATION FAILED" in script
+
+
+def test_bg_deploy_inaugural_failure_keeps_the_new_color_running_for_operator_intervention() -> None:
+    script = _read("bg_deploy.sh")
+    assert 'NEXT="blue"' in script
+    assert "web-$NEXT stays running and Caddy remains routed there" in script
+    assert 'docker compose stop "web-$NEXT"' not in script
 
 
 def test_bg_deploy_queues_profile_backfill_after_the_cutover() -> None:
@@ -217,6 +256,43 @@ def test_bg_rollback_gates_flip_on_health() -> None:
     assert "exit 1" in script
 
 
+def test_bg_rollback_verifies_routed_service_before_state_swap() -> None:
+    """Rollback must prove the routed previous color before swapping ACTIVE/PREV."""
+    script = _read("bg_rollback.sh")
+    flip = script.index("flip_caddy.sh")
+    verify = script.index('if ! verify_post_flip_readiness "$PREV" "$PREV_TAG"; then')
+    swap = script.index('echo "$PREV" > "$ACTIVE_FILE"')
+    assert flip < verify < swap
+    assert "assert_caddy_routes_color" in script
+    assert 'curl -fsS --max-time 15 "$PUBLIC_BASE_URL/health"' in script
+    assert 'require_running_service_count "worker-chatbot" 2' in script
+
+
+def test_bg_rollback_failed_verification_keeps_state_unswapped_and_both_colors_running() -> None:
+    """A failed rollback verification must exit without swapping files or stopping the demoted color."""
+    script = _read("bg_rollback.sh")
+    verify = script.index('if ! verify_post_flip_readiness "$PREV" "$PREV_TAG"; then')
+    abort = script.index("rollback verification failed; web-$PREV stays running")
+    swap = script.index('echo "$ACTIVE" > "$PREV_COLOR_FILE"')
+    stop = script.index('docker compose stop "web-$ACTIVE"')
+    assert verify < abort < swap < stop
+    assert "exit 1" in script
+
+
+def test_bg_rollback_requires_exactly_one_demoted_container_and_non_empty_tag_before_swap() -> None:
+    """Rollback reversibility depends on a unique demoted container and inspected tag."""
+    script = _read("bg_rollback.sh")
+    demoted = script.index('demoted_cids="$(IMAGE_TAG="$PREV_TAG" docker compose ps -q "web-$ACTIVE"')
+    demoted_count = script.index('demoted_count="$(printf \'%s\\n\' "$demoted_cids" | _count_lines)"')
+    demoted_img = script.index('demoted_img="$(docker inspect --format \'{{.Config.Image}}\' "$demoted_cid"')
+    demoted_tag = script.index('demoted_tag="${demoted_img##*:}"')
+    abort = script.index("rollback reversibility check failed;", demoted_tag)
+    swap = script.index('echo "$ACTIVE" > "$PREV_COLOR_FILE"')
+    assert demoted < demoted_count < demoted_img < demoted_tag < abort < swap
+    assert 'if [ "$demoted_count" != "1" ]; then' in script
+    assert 'if [ -z "$demoted_img" ] || [ -z "$demoted_tag" ]; then' in script
+
+
 def test_bg_rollback_records_demoted_tag_before_swapping_active() -> None:
     """Demoted tag is recorded BEFORE ACTIVE is overwritten, so a mid-swap
     crash leaves rollback still reversible (mirrors bg_deploy's ordering)."""
@@ -241,3 +317,425 @@ def test_full_deploy_recreates_the_pushed_frontend() -> None:
     backend_cutover = out.index("make -C backend deploy")
     frontend_recreate = out.index("make -C backend deploy-restart-frontend")
     assert backend_cutover < frontend_recreate
+
+
+def _write_executable(path: Path, body: str) -> None:
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def _prepare_bg_deploy_sandbox(tmp_path: Path, *, active_color: str | None, fail_public_health: bool):
+    root = tmp_path / "opt" / "vfic"
+    scripts_dir = root / "scripts"
+    bin_dir = tmp_path / "bin"
+    scripts_dir.mkdir(parents=True)
+    bin_dir.mkdir(parents=True)
+
+    for name in ("bg_deploy.sh", "bg_rollback.sh", "flip_caddy.sh"):
+        patched = _read(name).replace("/opt/vfic", str(root))
+        _write_executable(scripts_dir / name, patched)
+
+    (root / "Caddyfile.template").write_text(
+        textwrap.dedent(
+            """\
+            bot.tingting.vip {
+              reverse_proxy __WEB_UPSTREAM__:8000
+            }
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    if active_color is not None:
+        (root / "ACTIVE_COLOR").write_text(active_color, encoding="utf-8")
+
+    command_log = tmp_path / "commands.log"
+    _write_executable(
+        bin_dir / "sleep",
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+    _write_executable(
+        bin_dir / "bash",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import os
+            import sys
+            from pathlib import Path
+
+            log = Path(os.environ["VFIC_TEST_LOG"])
+            with log.open("a", encoding="utf-8") as handle:
+                handle.write("bash " + " ".join(sys.argv[1:]) + "\\n")
+
+            if len(sys.argv) > 1 and sys.argv[1].endswith("bg_rollback.sh"):
+                raise SystemExit(0)
+
+            os.execv("/bin/bash", ["/bin/bash", *sys.argv[1:]])
+            """
+        ),
+    )
+    _write_executable(
+        bin_dir / "curl",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import os
+            import sys
+            from pathlib import Path
+
+            url = sys.argv[-1]
+            log = Path(os.environ["VFIC_TEST_LOG"])
+            with log.open("a", encoding="utf-8") as handle:
+                handle.write(f"curl {url}\\n")
+
+            if url.endswith("/health"):
+                if os.environ.get("VFIC_TEST_FAIL_PUBLIC_HEALTH") == "1":
+                    raise SystemExit(22)
+                print('{"status":"ok"}')
+                raise SystemExit(0)
+            if url == "https://bot.tingting.vip/":
+                print("<html>frontend ok</html>")
+                raise SystemExit(0)
+            raise SystemExit(0)
+            """
+        ),
+    )
+    _write_executable(
+        bin_dir / "docker",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import json
+            import os
+            import sys
+            from pathlib import Path
+
+            args = sys.argv[1:]
+            log = Path(os.environ["VFIC_TEST_LOG"])
+            with log.open("a", encoding="utf-8") as handle:
+                handle.write("docker " + " ".join(args) + "\\n")
+
+            service_ps = {
+                "web-blue": "cid-web-blue\\n",
+                "web-green": "cid-web-green\\n",
+                "frontend": "cid-frontend\\n",
+                "worker-chatbot": "cid-worker-chatbot-1\\ncid-worker-chatbot-2\\n",
+                "worker-persistence": "cid-worker-persistence\\n",
+                "worker-ingest": "cid-worker-ingest\\n",
+                "worker-followup": "cid-worker-followup\\n",
+                "scheduler": "cid-scheduler\\n",
+                "caddy": "cid-caddy\\n",
+            }
+            images = {
+                "cid-web-blue": "franknguyenvd/vfic-backend:test-image",
+                "cid-web-green": "franknguyenvd/vfic-backend:previous-tag",
+                "cid-frontend": "franknguyenvd/vfic-frontend:test-image",
+            }
+
+            if args[:2] == ["compose", "pull"]:
+                raise SystemExit(0)
+            if args[:2] == ["compose", "up"]:
+                raise SystemExit(0)
+            if args[:4] == ["compose", "exec", "-T", "postgres"]:
+                raise SystemExit(0)
+            if len(args) >= 4 and args[:3] == ["compose", "ps", "-q"]:
+                sys.stdout.write(service_ps.get(args[3], ""))
+                raise SystemExit(0)
+            if len(args) >= 6 and args[:4] == ["compose", "--profile", "maintenance", "ps"]:
+                raise SystemExit(0)
+            if len(args) >= 5 and args[:4] == ["compose", "--profile", "maintenance", "logs"]:
+                raise SystemExit(0)
+            if len(args) >= 5 and args[:4] == ["compose", "--profile", "maintenance", "up"]:
+                raise SystemExit(0)
+            if len(args) >= 2 and args[0] == "inspect":
+                fmt = args[2]
+                cid = args[3]
+                if "Health.Status" in fmt:
+                    print("healthy")
+                elif "RestartCount" in fmt:
+                    print("0")
+                elif ".State.Status" in fmt:
+                    print("running")
+                elif ".Config.Image" in fmt:
+                    print(images.get(cid, "franknguyenvd/vfic-backend:test-image"))
+                else:
+                    print("")
+                raise SystemExit(0)
+            if args[:3] == ["compose", "exec", "-T"] and len(args) >= 6:
+                service = args[3]
+                command = args[4]
+                if service.startswith("web-") and command == "python" and args[5] == "-m":
+                    raise SystemExit(0)
+                if service.startswith("web-") and command == "python" and args[5] == "-":
+                    sys.stdin.read()
+                    print(json.dumps({"queue_depth": 0, "busy_workers": 0, "total_workers": 5}))
+                    raise SystemExit(0)
+                if service == "caddy":
+                    raise SystemExit(0)
+            if args[:2] == ["compose", "stop"]:
+                raise SystemExit(0)
+            if args[:2] == ["logs", "--tail=40"]:
+                raise SystemExit(0)
+            if args[:2] == ["rm", "-f"]:
+                raise SystemExit(0)
+
+            raise SystemExit(0)
+            """
+        ),
+    )
+    env = os.environ.copy()
+    env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]
+    env["VFIC_TEST_LOG"] = str(command_log)
+    env["IMAGE_TAG"] = "test-image"
+    if fail_public_health:
+        env["VFIC_TEST_FAIL_PUBLIC_HEALTH"] = "1"
+
+    proc = subprocess.run(
+        ["/bin/bash", str(scripts_dir / "bg_deploy.sh")],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc, root, command_log.read_text(encoding="utf-8")
+
+
+def _prepare_bg_rollback_sandbox(
+    tmp_path: Path,
+    *,
+    fail_public_health: bool,
+    demoted_active_ps: str = "cid-web-green\n",
+    demoted_active_image: str = "franknguyenvd/vfic-backend:current-tag",
+):
+    root = tmp_path / "opt" / "vfic"
+    scripts_dir = root / "scripts"
+    bin_dir = tmp_path / "bin"
+    scripts_dir.mkdir(parents=True)
+    bin_dir.mkdir(parents=True)
+
+    for name in ("bg_deploy.sh", "bg_rollback.sh", "flip_caddy.sh"):
+        patched = _read(name).replace("/opt/vfic", str(root))
+        _write_executable(scripts_dir / name, patched)
+
+    (root / "Caddyfile.template").write_text(
+        textwrap.dedent(
+            """\
+            bot.tingting.vip {
+              reverse_proxy __WEB_UPSTREAM__:8000
+            }
+            """
+        ),
+        encoding="utf-8",
+    )
+    (root / "ACTIVE_COLOR").write_text("green\n", encoding="utf-8")
+    (root / "PREV_COLOR").write_text("blue\n", encoding="utf-8")
+    (root / "PREV_TAG").write_text("previous-tag\n", encoding="utf-8")
+    (root / "Caddyfile").write_text("bot.tingting.vip {\n  reverse_proxy web-green:8000\n}\n", encoding="utf-8")
+
+    command_log = tmp_path / "commands.log"
+    _write_executable(bin_dir / "sleep", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(
+        bin_dir / "curl",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import os
+            import sys
+            from pathlib import Path
+
+            url = sys.argv[-1]
+            log = Path(os.environ["VFIC_TEST_LOG"])
+            with log.open("a", encoding="utf-8") as handle:
+                handle.write(f"curl {url}\\n")
+
+            if url.endswith("/health"):
+                if os.environ.get("VFIC_TEST_FAIL_PUBLIC_HEALTH") == "1":
+                    raise SystemExit(22)
+                print('{"status":"ok"}')
+                raise SystemExit(0)
+            if url == "https://bot.tingting.vip/":
+                print("<html>frontend ok</html>")
+                raise SystemExit(0)
+            raise SystemExit(0)
+            """
+        ),
+    )
+    _write_executable(
+        bin_dir / "docker",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import json
+            import os
+            import sys
+            from pathlib import Path
+
+            args = sys.argv[1:]
+            log = Path(os.environ["VFIC_TEST_LOG"])
+            with log.open("a", encoding="utf-8") as handle:
+                handle.write("docker " + " ".join(args) + "\\n")
+
+            service_ps = {
+                "web-blue": "cid-web-blue\\n",
+                "web-green": os.environ.get("VFIC_TEST_DEMOTED_ACTIVE_PS", "cid-web-green\\n"),
+                "frontend": "cid-frontend\\n",
+                "worker-chatbot": "cid-worker-chatbot-1\\ncid-worker-chatbot-2\\n",
+                "worker-persistence": "cid-worker-persistence\\n",
+                "worker-ingest": "cid-worker-ingest\\n",
+                "worker-followup": "cid-worker-followup\\n",
+                "scheduler": "cid-scheduler\\n",
+                "caddy": "cid-caddy\\n",
+                "oa-profile-backfill": "cid-backfill\\n",
+            }
+            images = {
+                "cid-web-blue": "franknguyenvd/vfic-backend:previous-tag",
+                "cid-web-green": os.environ.get("VFIC_TEST_DEMOTED_ACTIVE_IMAGE", "franknguyenvd/vfic-backend:current-tag"),
+                "cid-frontend": "franknguyenvd/vfic-frontend:test-image",
+            }
+
+            if args[:2] == ["compose", "up"]:
+                raise SystemExit(0)
+            if len(args) >= 4 and args[:3] == ["compose", "ps", "-q"]:
+                sys.stdout.write(service_ps.get(args[3], ""))
+                raise SystemExit(0)
+            if len(args) >= 5 and args[:4] == ["compose", "--profile", "maintenance", "stop"]:
+                raise SystemExit(0)
+            if len(args) >= 2 and args[0] == "inspect":
+                fmt = args[2]
+                cid = args[3]
+                if "Health.Status" in fmt:
+                    print("healthy")
+                elif "RestartCount" in fmt:
+                    print("0")
+                elif ".State.Status" in fmt:
+                    print("running")
+                elif ".Config.Image" in fmt:
+                    print(images.get(cid, "franknguyenvd/vfic-backend:previous-tag"))
+                else:
+                    print("")
+                raise SystemExit(0)
+            if args[:3] == ["compose", "exec", "-T"] and len(args) >= 6:
+                service = args[3]
+                command = args[4]
+                if service.startswith("web-") and command == "python" and args[5] == "-":
+                    sys.stdin.read()
+                    print(json.dumps({"queue_depth": 0, "busy_workers": 0, "total_workers": 5}))
+                    raise SystemExit(0)
+                if service == "caddy":
+                    raise SystemExit(0)
+            if args[:2] == ["compose", "stop"]:
+                raise SystemExit(0)
+
+            raise SystemExit(0)
+            """
+        ),
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]
+    env["VFIC_TEST_LOG"] = str(command_log)
+    env["VFIC_TEST_DEMOTED_ACTIVE_PS"] = demoted_active_ps
+    env["VFIC_TEST_DEMOTED_ACTIVE_IMAGE"] = demoted_active_image
+    if fail_public_health:
+        env["VFIC_TEST_FAIL_PUBLIC_HEALTH"] = "1"
+
+    proc = subprocess.run(
+        ["/bin/bash", str(scripts_dir / "bg_rollback.sh")],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc, root, command_log.read_text(encoding="utf-8")
+
+
+def test_bg_deploy_exec_inaugural_public_verify_failure_keeps_blue_running(tmp_path: Path) -> None:
+    proc, root, commands = _prepare_bg_deploy_sandbox(
+        tmp_path,
+        active_color=None,
+        fail_public_health=True,
+    )
+
+    assert proc.returncode == 1
+    assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "blue"
+    assert "web-blue:8000" in (root / "Caddyfile").read_text(encoding="utf-8")
+    assert "docker compose up -d --no-deps --force-recreate web-blue worker-chatbot worker-persistence worker-ingest worker-followup scheduler" in commands
+    assert "docker compose stop web-blue" not in commands
+    assert "bash scripts/bg_rollback.sh" not in commands
+
+
+def test_bg_deploy_exec_success_stops_old_color_only_after_public_checks(tmp_path: Path) -> None:
+    proc, root, commands = _prepare_bg_deploy_sandbox(
+        tmp_path,
+        active_color="green",
+        fail_public_health=False,
+    )
+
+    assert proc.returncode == 0
+    assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "blue"
+    assert (root / "PREV_COLOR").read_text(encoding="utf-8").strip() == "green"
+    assert "web-blue:8000" in (root / "Caddyfile").read_text(encoding="utf-8")
+    assert commands.index("curl https://bot.tingting.vip/health\n") < commands.index(
+        "docker compose stop web-green\n"
+    )
+    assert "docker compose stop web-green" in commands
+
+
+def test_bg_rollback_exec_failed_public_verify_keeps_state_unswapped(tmp_path: Path) -> None:
+    proc, root, commands = _prepare_bg_rollback_sandbox(
+        tmp_path,
+        fail_public_health=True,
+    )
+
+    assert proc.returncode == 1
+    assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "green"
+    assert (root / "PREV_COLOR").read_text(encoding="utf-8").strip() == "blue"
+    assert (root / "PREV_TAG").read_text(encoding="utf-8").strip() == "previous-tag"
+    assert "web-blue:8000" in (root / "Caddyfile").read_text(encoding="utf-8")
+    assert "docker compose stop web-green" not in commands
+
+
+def test_bg_rollback_exec_missing_demoted_container_keeps_state_unswapped(tmp_path: Path) -> None:
+    proc, root, commands = _prepare_bg_rollback_sandbox(
+        tmp_path,
+        fail_public_health=False,
+        demoted_active_ps="",
+    )
+
+    assert proc.returncode == 1
+    assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "green"
+    assert (root / "PREV_COLOR").read_text(encoding="utf-8").strip() == "blue"
+    assert (root / "PREV_TAG").read_text(encoding="utf-8").strip() == "previous-tag"
+    assert "docker compose stop web-green" not in commands
+
+
+def test_bg_rollback_exec_empty_demoted_tag_keeps_state_unswapped(tmp_path: Path) -> None:
+    proc, root, commands = _prepare_bg_rollback_sandbox(
+        tmp_path,
+        fail_public_health=False,
+        demoted_active_image="",
+    )
+
+    assert proc.returncode == 1
+    assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "green"
+    assert (root / "PREV_COLOR").read_text(encoding="utf-8").strip() == "blue"
+    assert (root / "PREV_TAG").read_text(encoding="utf-8").strip() == "previous-tag"
+    assert "docker compose stop web-green" not in commands
+
+
+def test_bg_rollback_exec_success_swaps_state_only_after_public_checks(tmp_path: Path) -> None:
+    proc, root, commands = _prepare_bg_rollback_sandbox(
+        tmp_path,
+        fail_public_health=False,
+    )
+
+    assert proc.returncode == 0
+    assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "blue"
+    assert (root / "PREV_COLOR").read_text(encoding="utf-8").strip() == "green"
+    assert (root / "PREV_TAG").read_text(encoding="utf-8").strip() == "current-tag"
+    assert "web-blue:8000" in (root / "Caddyfile").read_text(encoding="utf-8")
+    assert commands.index("curl https://bot.tingting.vip/health\n") < commands.index(
+        "docker compose stop web-green\n"
+    )

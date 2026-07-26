@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 
 from app.services.release_gate import (
+    GoldenResultsError,
     evaluate_release_gate,
+    extract_golden_pass_rate,
 )
 
 
@@ -36,6 +39,21 @@ async def test_release_gate_passes_when_all_green(monkeypatch):
     )
     assert result.verdict == "pass"
     assert result.failures == []
+
+
+async def test_release_gate_passes_at_exact_threshold(monkeypatch):
+    from app.services import release_gate
+
+    async def fake_slos(db, interval):
+        return []
+
+    monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    result = await evaluate_release_gate(
+        db=None,
+        settings=_settings(release_gate_latency_slo_enabled=False),
+        golden_pass_rate=95.0,
+    )
+    assert result.verdict == "pass"
 
 
 async def test_release_gate_blocks_on_correctness_regression(monkeypatch):
@@ -96,16 +114,18 @@ async def test_release_gate_skip_when_gates_disabled(monkeypatch):
     from app.services import release_gate
 
     async def fake_slos(db, interval):
-        return []
+        raise AssertionError("compute_slos should not run when latency gates are disabled")
 
     monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
     s = _settings(release_gate_correctness_enabled=False, release_gate_latency_slo_enabled=False)
     result = await evaluate_release_gate(db=None, settings=s, golden_pass_rate=10.0)
     assert result.verdict == "pass"
+    assert result.slos == []
+    assert set(result.not_evaluated) == {"correctness", "latency_slo"}
 
 
-async def test_release_gate_handles_missing_golden_pass_rate(monkeypatch):
-    """When golden_pass_rate is None, the correctness gate is skipped."""
+async def test_release_gate_blocks_when_golden_pass_rate_is_missing(monkeypatch):
+    """Correctness-enabled releases must fail closed without golden results."""
     from app.services import release_gate, slo_service
 
     async def fake_slos(db, interval):
@@ -115,4 +135,72 @@ async def test_release_gate_handles_missing_golden_pass_rate(monkeypatch):
 
     monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
     result = await evaluate_release_gate(db=None, settings=_settings(), golden_pass_rate=None)
-    assert result.verdict == "pass"
+    assert result.verdict == "block"
+    assert any(f.gate == "correctness" for f in result.failures)
+
+
+async def test_release_gate_blocks_when_latency_measurements_are_missing(monkeypatch):
+    from app.services import release_gate
+
+    async def fake_slos(db, interval):
+        return []
+
+    monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    result = await evaluate_release_gate(db=None, settings=_settings(), golden_pass_rate=100.0)
+    assert result.verdict == "block"
+    assert {failure.gate for failure in result.failures} == {"full_answer_p95", "error_rate"}
+
+
+async def test_release_gate_rejects_non_positive_window(monkeypatch):
+    from app.services import release_gate
+
+    async def fake_slos(db, interval):
+        raise AssertionError("compute_slos should not run for invalid windows")
+
+    monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    with pytest.raises(ValueError, match="window_hours must be greater than zero"):
+        await evaluate_release_gate(
+            db=None,
+            settings=_settings(release_gate_latency_slo_enabled=False),
+            golden_pass_rate=100.0,
+            window_hours=0,
+        )
+
+
+def test_extract_golden_pass_rate_accepts_ratio_payload():
+    assert extract_golden_pass_rate({"pass_rate": 0.98}) == 98.0
+
+
+def test_extract_golden_pass_rate_accepts_percentage_payload():
+    assert extract_golden_pass_rate({"golden_pass_rate_pct": 98.0}) == 98.0
+
+
+def test_extract_golden_pass_rate_derives_from_pass_counts():
+    assert extract_golden_pass_rate({"passed": 47, "case_count": 50}) == 94.0
+
+
+def test_extract_golden_pass_rate_rejects_missing_fields():
+    with pytest.raises(GoldenResultsError):
+        extract_golden_pass_rate({"results": []})
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"golden_pass_rate": 98.0}, "ambiguous"),
+        ({"pass_rate": True}, "boolean"),
+        ({"pass_rate": "0.98"}, "JSON number"),
+        ({"pass_rate": 98.0}, "ratio"),
+        ({"golden_pass_rate_pct": 1.2, "pass_rate": 0.012}, "multiple"),
+        ({"golden_pass_rate_pct": "98"}, "JSON number"),
+        ({"golden_pass_rate_pct": 120.0}, "between 0 and 100"),
+        ({"passed": 1.0, "case_count": 2}, "integer"),
+        ({"passed": -1, "case_count": 2}, "non-negative"),
+        ({"passed": 3, "case_count": 2}, "less than or equal"),
+        ({"passed": 1}, "provided together"),
+        ({"case_count": 2}, "provided together"),
+    ],
+)
+def test_extract_golden_pass_rate_rejects_invalid_payloads(payload, message):
+    with pytest.raises(GoldenResultsError, match=message):
+        extract_golden_pass_rate(payload)

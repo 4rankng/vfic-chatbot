@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
+import math
+from typing import Mapping
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.slo_service import SloResult, compute_slos
 
 GateVerdict = Literal["pass", "block"]
+GOLDEN_PASS_RATE_THRESHOLD_PCT = 95.0
+
+
+class GoldenResultsError(ValueError):
+    """Raised when a golden-results payload is missing or malformed."""
 
 
 @dataclass(frozen=True)
@@ -36,10 +43,89 @@ class ReleaseGateResult:
     failures: list[GateFailure]
     slos: list[SloResult]
     golden_pass_rate: float | None
+    not_evaluated: list[str]
 
     @property
     def passed(self) -> bool:
         return self.verdict == "pass"
+
+
+def extract_golden_pass_rate(payload: Mapping[str, object]) -> float:
+    """Read a golden pass-rate from an existing benchmark/result payload."""
+    if "golden_pass_rate" in payload:
+        raise GoldenResultsError(
+            "golden_pass_rate is ambiguous; use golden_pass_rate_pct, pass_rate, "
+            "or passed + case_count"
+        )
+
+    counts_keys = {"passed", "case_count"}
+    counts_present = counts_keys & payload.keys()
+    if counts_present and counts_present != counts_keys:
+        raise GoldenResultsError("passed and case_count must be provided together")
+
+    available_sources = [
+        name
+        for name, present in (
+            ("golden_pass_rate_pct", "golden_pass_rate_pct" in payload),
+            ("pass_rate", "pass_rate" in payload),
+            ("passed_case_count", counts_present == counts_keys),
+        )
+        if present
+    ]
+    if len(available_sources) > 1:
+        raise GoldenResultsError("golden results contain multiple pass-rate sources")
+    if available_sources == ["golden_pass_rate_pct"]:
+        return _coerce_percent(payload["golden_pass_rate_pct"], field_name="golden_pass_rate_pct")
+    if available_sources == ["pass_rate"]:
+        ratio = _coerce_ratio(payload["pass_rate"], field_name="pass_rate")
+        return ratio * 100.0
+    if available_sources == ["passed_case_count"]:
+        passed = _coerce_non_negative_int(payload["passed"], field_name="passed")
+        case_count = _coerce_non_negative_int(payload["case_count"], field_name="case_count")
+        if case_count == 0:
+            raise GoldenResultsError("case_count must be greater than zero")
+        if passed > case_count:
+            raise GoldenResultsError("passed must be less than or equal to case_count")
+        return passed / case_count * 100.0
+    raise GoldenResultsError(
+        "golden results must include golden_pass_rate_pct, pass_rate, or "
+        "passed + case_count"
+    )
+
+
+def _coerce_percent(value: object, *, field_name: str) -> float:
+    numeric = _coerce_number(value, field_name=field_name)
+    if numeric < 0.0 or numeric > 100.0:
+        raise GoldenResultsError(f"{field_name} must be between 0 and 100 percent")
+    return numeric
+
+
+def _coerce_ratio(value: object, *, field_name: str) -> float:
+    numeric = _coerce_number(value, field_name=field_name)
+    if numeric < 0.0 or numeric > 1.0:
+        raise GoldenResultsError(f"{field_name} must be a ratio between 0 and 1")
+    return numeric
+
+
+def _coerce_non_negative_int(value: object, *, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise GoldenResultsError(f"{field_name} must be an integer, not a boolean")
+    if not isinstance(value, int):
+        raise GoldenResultsError(f"{field_name} must be an integer")
+    if value < 0:
+        raise GoldenResultsError(f"{field_name} must be non-negative")
+    return value
+
+
+def _coerce_number(value: object, *, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise GoldenResultsError(f"{field_name} must be numeric, not a boolean")
+    if not isinstance(value, (int, float)):
+        raise GoldenResultsError(f"{field_name} must be a JSON number")
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        raise GoldenResultsError(f"{field_name} must be finite")
+    return numeric
 
 
 async def evaluate_release_gate(
@@ -54,14 +140,42 @@ async def evaluate_release_gate(
     ``golden_pass_rate`` is the % of golden-dataset turns (P3-1) that passed;
     None when the golden runner hasn't executed (e.g. CI skipped it).
     """
-    slos = await compute_slos(db, timedelta(hours=window_hours))
+    if window_hours <= 0:
+        raise ValueError("window_hours must be greater than zero")
+
+    slos: list[SloResult] = []
     failures: list[GateFailure] = []
+    not_evaluated: list[str] = []
+
+    if settings.release_gate_latency_slo_enabled:
+        slos = await compute_slos(db, timedelta(hours=window_hours))
+    else:
+        not_evaluated.append("latency_slo")
+
     slo_by_name = {s.name: s for s in slos}
 
     # Correctness gate: golden dataset pass-rate.
-    if settings.release_gate_correctness_enabled and golden_pass_rate is not None:
-        threshold = 95.0  # 95% of turns must pass
-        if golden_pass_rate < threshold:
+    if settings.release_gate_correctness_enabled:
+        threshold = GOLDEN_PASS_RATE_THRESHOLD_PCT
+        if golden_pass_rate is None:
+            failures.append(
+                GateFailure(
+                    "correctness",
+                    None,
+                    threshold,
+                    "golden pass rate missing; release correctness run did not produce results",
+                )
+            )
+        elif not math.isfinite(golden_pass_rate) or golden_pass_rate < 0.0 or golden_pass_rate > 100.0:
+            failures.append(
+                GateFailure(
+                    "correctness",
+                    None,
+                    threshold,
+                    "golden pass rate must be a finite percentage between 0 and 100",
+                )
+            )
+        elif golden_pass_rate < threshold:
             failures.append(
                 GateFailure(
                     "correctness",
@@ -70,15 +184,22 @@ async def evaluate_release_gate(
                     f"golden pass rate {golden_pass_rate:.1f}% < {threshold}%",
                 )
             )
+    else:
+        not_evaluated.append("correctness")
 
     # Latency SLO gates.
     if settings.release_gate_latency_slo_enabled:
         fa = slo_by_name.get("full_answer")
-        if (
-            fa
-            and fa.actual_p95 is not None
-            and fa.actual_p95 > settings.release_gate_full_answer_p95_ms
-        ):
+        if fa is None or fa.actual_p95 is None:
+            failures.append(
+                GateFailure(
+                    "full_answer_p95",
+                    None,
+                    float(settings.release_gate_full_answer_p95_ms),
+                    "full_answer p95 missing; no latency measurements available for the selected window",
+                )
+            )
+        elif fa.actual_p95 > settings.release_gate_full_answer_p95_ms:
             failures.append(
                 GateFailure(
                     "full_answer_p95",
@@ -88,11 +209,16 @@ async def evaluate_release_gate(
                 )
             )
         err = slo_by_name.get("error_or_timeout_rate")
-        if (
-            err
-            and err.actual_p95 is not None
-            and err.actual_p95 > settings.release_gate_error_rate_pct
-        ):
+        if err is None or err.actual_p95 is None:
+            failures.append(
+                GateFailure(
+                    "error_rate",
+                    None,
+                    settings.release_gate_error_rate_pct,
+                    "error rate missing; no error-rate measurements available for the selected window",
+                )
+            )
+        elif err.actual_p95 > settings.release_gate_error_rate_pct:
             failures.append(
                 GateFailure(
                     "error_rate",
@@ -104,5 +230,9 @@ async def evaluate_release_gate(
 
     verdict: GateVerdict = "block" if failures else "pass"
     return ReleaseGateResult(
-        verdict=verdict, failures=failures, slos=slos, golden_pass_rate=golden_pass_rate
+        verdict=verdict,
+        failures=failures,
+        slos=slos,
+        golden_pass_rate=golden_pass_rate,
+        not_evaluated=not_evaluated,
     )

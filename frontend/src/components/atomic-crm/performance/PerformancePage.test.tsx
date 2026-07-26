@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { render } from "vitest-browser-react";
 
+import { formatMetricDuration } from "../reporting/domain/performanceDiagnostics";
 import type { PerfMetrics, PerfSlowTurn } from "./usePerformanceStats";
 import { PerformanceMetrics } from "./PerformancePage";
+import { formatTrendBucket } from "./trendAxis";
 
 const emptyMetrics: PerfMetrics = {
   window: "24h",
@@ -205,5 +207,34 @@ describe("PerformanceMetrics", () => {
     await expect
       .element(screen.getByRole("button", { name: "Thu gọn", exact: true }))
       .toBeVisible();
+  });
+
+  it("publishes bucket-level trend data to assistive technology", async () => {
+    const screen = await render(<PerformanceMetrics data={populatedMetrics} />);
+
+    const trendTable = screen.getByRole("table", {
+      name: "Dữ liệu xu hướng độ trễ ứng viên chờ",
+    });
+    const formattedBucket = formatTrendBucket(
+      populatedMetrics.trend[0]?.bucket ?? null,
+      true,
+    );
+    const formattedP95 = formatMetricDuration(
+      populatedMetrics.trend[0]?.p95_ms ?? null,
+    );
+
+    await expect.element(trendTable).toBeInTheDocument();
+    await expect
+      .element(trendTable.getByText(formattedBucket, { exact: true }))
+      .toBeInTheDocument();
+    await expect
+      .element(trendTable.getByText(formattedP95, { exact: true }))
+      .toBeInTheDocument();
+    await expect
+      .element(trendTable.getByText("1 lượt", { exact: false }))
+      .toBeInTheDocument();
+    await expect
+      .element(trendTable.getByText("0 lỗi", { exact: false }))
+      .toBeInTheDocument();
   });
 });

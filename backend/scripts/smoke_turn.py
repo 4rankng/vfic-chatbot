@@ -47,13 +47,14 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.conversation_messaging.domain.statuses import DeliveryStatus, MessageSender
 from app.core.config import get_settings
 from app.graph.safety import DeterministicReplyPolicy
 from app.graph.runner import BotRunState, run_turn
 from app.graph.types import GraphDeps
 from app.models.contact import Contact, ContactChannelIdentity
 from app.models.conversation import Conversation, ConversationMode, Message
-from app.models.outbox import OutboundOutbox
+from app.models.outbox import OutboxStatus, OutboundOutbox
 
 # A non-empty reply that passes the deterministic keyword safety filter and is
 # not a banned phrase, so the turn reaches the real send/outcome path.
@@ -186,6 +187,101 @@ async def _cleanup(db, *, conv_id, identity_id, contact_id) -> None:
     await db.commit()
 
 
+def _resolved_provider_message_id(
+    *,
+    canonical_id: str | None,
+    compatibility_id: str | None,
+    label: str,
+) -> str:
+    """Resolve the durable provider id while enforcing canonical/alias consistency."""
+    if canonical_id and compatibility_id and canonical_id != compatibility_id:
+        raise AssertionError(
+            f"{label} provider_message_id {canonical_id!r} did not match "
+            f"zalo_message_id {compatibility_id!r}"
+        )
+    provider_id = canonical_id or compatibility_id
+    if not provider_id:
+        raise AssertionError(f"{label} missing provider message id")
+    return provider_id
+
+
+async def _assert_persisted_delivery_invariant(
+    db,
+    *,
+    conv_id,
+    message_id: int | None,
+    expected_reply: str = SMOKE_REPLY,
+) -> None:
+    """Require the exact BOT message/outbox terminal state the smoke gate exists to prove."""
+    if message_id is None:
+        raise AssertionError("run_turn did not persist a pending_message_id for the smoke turn")
+
+    bot_messages = (
+        await db.scalars(
+            select(Message)
+            .where(
+                Message.conversation_id == conv_id,
+                Message.sender == MessageSender.BOT,
+            )
+            .order_by(Message.id.asc())
+        )
+    ).all()
+    if len(bot_messages) != 1:
+        raise AssertionError(
+            f"expected exactly one BOT message for the smoke conversation, found {len(bot_messages)}"
+        )
+
+    msg = bot_messages[0]
+    if msg.id != message_id:
+        raise AssertionError(
+            f"smoke BOT message id {msg.id} did not match pending_message_id {message_id}"
+        )
+    if msg.body != expected_reply:
+        raise AssertionError("smoke BOT message body did not persist the expected reply")
+    if msg.delivery_status != DeliveryStatus.SENT:
+        raise AssertionError(
+            f"smoke BOT message delivery_status was {msg.delivery_status!s}, expected SENT"
+        )
+    message_provider_id = _resolved_provider_message_id(
+        canonical_id=msg.provider_message_id,
+        compatibility_id=msg.zalo_message_id,
+        label="smoke BOT message",
+    )
+    if msg.external_error is not None:
+        raise AssertionError("smoke BOT message should not retain external_error after SENT")
+
+    outboxes = (
+        await db.scalars(
+            select(OutboundOutbox)
+            .where(OutboundOutbox.message_id.in_([row.id for row in bot_messages]))
+            .order_by(OutboundOutbox.id.asc())
+        )
+    ).all()
+    if len(outboxes) != 1:
+        raise AssertionError(
+            f"expected exactly one outbound_outbox row for the smoke BOT message, found {len(outboxes)}"
+        )
+
+    outbox = outboxes[0]
+    if outbox.message_id != message_id:
+        raise AssertionError(
+            f"smoke outbound_outbox message_id {outbox.message_id} did not match pending_message_id {message_id}"
+        )
+    if outbox.status != OutboxStatus.SENT.value:
+        raise AssertionError(
+            f"smoke outbound_outbox status was {outbox.status!r}, expected {OutboxStatus.SENT.value!r}"
+        )
+    outbox_provider_id = _resolved_provider_message_id(
+        canonical_id=outbox.provider_message_id,
+        compatibility_id=outbox.zalo_message_id,
+        label="smoke outbound_outbox",
+    )
+    if outbox_provider_id != message_provider_id:
+        raise AssertionError(
+            "smoke outbound_outbox provider message id did not match the BOT message"
+        )
+
+
 async def _run_smoke(*, inject_failure: bool) -> int:
     settings = get_settings()
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
@@ -229,6 +325,9 @@ async def _run_smoke(*, inject_failure: bool) -> int:
         ConversationService.record_bot_outcome = _boom  # type: ignore[assignment,method-assign]
 
     conv_id = identity_id = contact_id = None
+    result_code = 1
+    success_message = None
+    cleanup_failed = False
     try:
         # Seed in its own session, then CLOSE it. The turn runs in a FRESH
         # session so run_turn's ``svc.get`` loads the conversation the same way
@@ -261,16 +360,23 @@ async def _run_smoke(*, inject_failure: bool) -> int:
 
             if task_errors:
                 _fail(f"background task error(s): {[type(e).__name__ for e in task_errors]}")
-                return 1
-
-            result = outcome.get("outcome") if isinstance(outcome, dict) else None
-            print(f"SMOKE OK: outcome={result!r}", file=sys.stderr)
-            return 0
+            else:
+                result = outcome.get("outcome") if isinstance(outcome, dict) else None
+                if result != "sent":
+                    _fail(f"unexpected outcome: {result!r}")
+                else:
+                    await _assert_persisted_delivery_invariant(
+                        db,
+                        conv_id=conv_id,
+                        message_id=state.pending_message_id,
+                        expected_reply=SMOKE_REPLY,
+                    )
+                    success_message = f"SMOKE OK: outcome={result!r}"
+                    result_code = 0
     except Exception as exc:  # noqa: BLE001 -- the whole point is to catch anything
         import traceback
 
         _fail(f"turn raised {type(exc).__name__}: {exc}\n{traceback.format_exc()}")
-        return 1
     finally:
         outbox_service.dispatch_message_outbox = real_dispatch_message_outbox  # type: ignore[assignment]
         # Best-effort cleanup of the throwaway rows (skipped only if seeding
@@ -284,9 +390,16 @@ async def _run_smoke(*, inject_failure: bool) -> int:
                         identity_id=identity_id,
                         contact_id=contact_id,
                     )
-            except Exception as cleanup_exc:  # noqa: BLE001 -- cleanup must not mask the real result
-                print(f"SMOKE WARN: cleanup incomplete: {cleanup_exc}", file=sys.stderr)
+            except Exception as cleanup_exc:  # noqa: BLE001 -- cleanup must fail closed
+                cleanup_failed = True
+                _fail(f"cleanup incomplete: {cleanup_exc}")
         await engine.dispose()
+
+    if cleanup_failed:
+        return 1
+    if success_message is not None:
+        print(success_message, file=sys.stderr)
+    return result_code
 
 
 def _fail(message: str) -> None:

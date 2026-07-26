@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-07-26
 **Production host:** `bot.tingting.vip` (DigitalOcean droplet, 2 vCPU / ~4 GB RAM)
 **Stack path:** `/opt/vfic` · **Git remote:** `git@github.com:4rankng/ChatBotN8N.git` (`main`)
 
@@ -71,8 +71,9 @@ build + push both images → blue/green cutover.
 
 ### Full deploy (`make deploy`)
 1. `release-check` — clean committed worktree, exactly one Alembic head, then
-   backend lint/tests and frontend lint/typecheck/unit tests/build. Stops before
-   any image is pushed if a check fails.
+   backend lint/tests + integration smoke, frontend lint/typecheck/scoped
+   coverage/build + desktop/mobile Playwright, and the offline golden correctness
+   check. Stops before any image is pushed if a check fails.
 2. `cd frontend && make push` — buildx AMD64, tag `:latest` + `:<git-sha>`, push.
 3. `cd backend && make push` — same for the backend image (now including
    `scripts/smoke_turn.py`, which ships in the image).
@@ -96,12 +97,27 @@ build + push both images → blue/green cutover.
 6. **Smoke gate**: run one real bot turn on the new color
    (`scripts/smoke_turn.py`) — exercises `claim_send` (outbox INSERT),
    `record_bot_outcome`, and the realtime emit against the live service layer
-   with the LLM + Zalo stubbed (free, no external calls). This catches a bad
-   image that boots and passes `/health` but crashes mid-turn — the 2026-07
-   outage class. **Failure aborts before the flip; the old color keeps serving.**
+   with the LLM + Zalo stubbed (free, no external calls). The smoke now proves
+   the exact persisted terminal state: one BOT message, one outbound outbox row,
+   `delivery_status=SENT`, matching provider message IDs, and no retained
+   external error. This catches a bad image that boots and passes `/health` but
+   crashes or drifts mid-turn. **Failure aborts before the flip; the old color
+   keeps serving.**
 7. `flip_caddy.sh <new>` renders the Caddyfile + `caddy reload` onto the new
    color (graceful live reconfig, <1s, no dropped connections).
-8. Record `PREV_COLOR`/`PREV_TAG`; write `ACTIVE_COLOR`.
+8. `bg_deploy.sh` records `ACTIVE_COLOR`, then runs post-flip verification
+   against the public edge and live containers before the old color is stopped:
+   - `https://bot.tingting.vip/health` returns `{"status":"ok"}`.
+   - `https://bot.tingting.vip/` returns the frontend root.
+   - `Caddyfile` routes the public edge to the new `web-<color>:8000` upstream.
+   - `docker compose ps` shows 1 `frontend`, 2 `worker-chatbot`, 1 each of
+     `worker-persistence`, `worker-ingest`, `worker-followup`, and `scheduler`
+     containers running, with health checks healthy when present.
+   - `web-<color>` `/health/queue` exposes queue depth, busy/total workers,
+     LLM latency, recent LLM invokes, and recent Minimax 429 counters.
+   Failure on a non-inaugural deploy rolls back to `PREV_COLOR`/`PREV_TAG`.
+   Inaugural failure has no prior color to restore, so `web-<color>` stays up
+   and operator intervention is required.
 9. Stop the old color (kept stopped, not removed → instant rollback).
 10. Start the dedicated `oa-profile-backfill` maintenance container. This is
     post-cutover and non-fatal to the serving deployment; its status and output
@@ -112,10 +128,14 @@ Inaugural deploy (no `ACTIVE_COLOR` yet): `blue` is brought up first, Caddy
 flipped to it, then the legacy single-`web` container is removed.
 
 ### Rollback (`make rollback`)
-Revives `PREV_COLOR` at `PREV_TAG`, recreates the workers to match, flips Caddy
-back (~1s, no rebuild), stops the demoted color. Swaps ACTIVE↔PREV so rollback
-is reversible. It first stops any running OA profile maintenance container so
-code from the rejected image cannot continue writing after the rollback.
+Revives `PREV_COLOR` at `PREV_TAG`, recreates the workers to match, and verifies
+the restored tag, Caddy route, public `/health`, frontend root, exact worker
+counts, and queue health before any state swap. Only after those checks pass does
+it flip Caddy back (~1s, no rebuild), stop the demoted color, and swap
+ACTIVE↔PREV so rollback is reversible. It first stops any running OA profile
+maintenance container so code from the rejected image cannot continue writing
+after the rollback. If verification fails, rollback aborts before the swap and
+leaves both colors and state files unchanged.
 
 ### Status (`make deploy-status`)
 Prints `ACTIVE_COLOR`, `PREV_COLOR`@`PREV_TAG`, and `docker compose ps`.
@@ -165,7 +185,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0048_project_owned_knowledge_modes` (18 Jul 2026).
+- **HEAD:** `0053_single_page_external_source_sync_state` (26 Jul 2026).
 - **Baseline `0001`** is ~58 KB of raw `op.execute` SQL; later revisions are
   normal Alembic. `app/models/` mirrors schema but does **not** generate
   migrations.

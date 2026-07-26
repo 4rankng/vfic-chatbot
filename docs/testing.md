@@ -97,7 +97,7 @@ docker compose -f docker-compose.dev.yml up -d postgres
 ### Setup
 - **Framework:** Vitest 4 + Playwright browser mode
 - **Config:** `frontend/vitest.config.ts` — two projects:
-  - **`app`** project: Headless Chromium environment. React/DOM unit tests. 80% coverage threshold (lines/functions/branches/statements) for `src/components/atomic-crm/**`.
+  - **`app`** project: Headless Chromium environment. React/DOM unit tests. The enforced 80% coverage threshold applies only to the changed/high-risk surface: `src/components/atomic-crm/capabilities/kernel/index.tsx`, `src/components/atomic-crm/integrations/CredentialSecretField.tsx`, and `src/components/atomic-crm/performance/PerformanceTrendChart.tsx`. The full `npm run test:unit:app` suite runs separately and currently contains 551 tests.
   - **`claude`** project: Node.js environment. Claude Code hook integration tests in `.claude/hooks/test/`.
 
 ### Test Organization (representative app-project files)
@@ -159,6 +159,18 @@ the E2E database during global teardown.
 | Frontend API | Unit tests use custom dataProvider/authProvider mocks; Playwright uses the test-only FastAPI server and real JWT login. |
 | Frontend realtime | Unit tests mock Socket.IO in `useConversationRealtime.test.ts`. |
 
+## Root CI Quality Gates
+
+The GitHub Actions `quality-gates.yml` workflow runs on pull requests and pushes to `main`. Its lanes are:
+
+| Job | What it runs |
+|---|---|
+| `backend-unit` | `ruff check .` and `pytest -m "not integration"` in `backend/`. |
+| `backend-integration` | `pytest -m integration tests/integration/test_harness_smoke.py` against local PostgreSQL 16 + pgvector and Redis. |
+| `frontend-quality` | `npm run lint`, `npm run typecheck`, `npm run test:unit:app:coverage -- --run`, and `npm run build` in `frontend/`. |
+| `functional-e2e` | Playwright on both `chromium` and `Mobile Chrome` projects. |
+| `release-gate` | Offline golden-result generation with `scripts/benchmark_rag.py --gold` and evaluation with `scripts/release_gate_check.py`. Fresh CI disables the latency SLO gate, so the release-gate job reports it as `not evaluated` rather than measuring it. |
+
 ## Regression Policy
 
 - **Never delete a test to make it pass.** If a test fails, fix the code or update the test with a documented reason.
@@ -167,7 +179,7 @@ the E2E database during global teardown.
   local PostgreSQL + pgvector must be available.
 - **If you touch a shared contract** (Pydantic schema, Protocol interface, API response shape), run tests in all modules that import it — not just the module you changed.
 - Messenger OAuth lifecycle changes are covered by `backend/tests/test_facebook_oauth.py` plus the frontend unit tests in `frontend/src/components/atomic-crm/integrations/FacebookMessengerIntegrationPage.test.tsx` and `frontend/src/components/atomic-crm/integrations/ZaloIntegrationPage.navigation.test.tsx`. Keep the backend and frontend assertions aligned when touching that flow.
-- **Coverage threshold:** Frontend app project requires 80% lines/functions/branches/statements on `src/components/atomic-crm/**` (excluding `types.ts`).
+- **Coverage threshold:** Frontend app project requires 80% lines/functions/branches/statements on the three-file enforced surface above; this is not a whole-atomic-crm or whole-frontend threshold.
 
 ## Phase 1 Characterization Boundary
 

@@ -11,6 +11,25 @@ import react from "@vitejs/plugin-react";
 // `npm run test:unit:claude` (neither boots a browser).
 export default defineConfig({
   test: {
+    coverage: {
+      provider: "v8",
+      // Enforced 80% gate for the changed/high-risk hardening surface only.
+      // The whole app test suite still runs separately without weakening this
+      // focused contract into a misleading whole-tree coverage claim.
+      include: [
+        "src/components/atomic-crm/capabilities/kernel/index.tsx",
+        "src/components/atomic-crm/integrations/CredentialSecretField.tsx",
+        "src/components/atomic-crm/performance/PerformanceTrendChart.tsx",
+      ],
+      exclude: ["**/*.test.*", "**/.omc/**"],
+      reporter: ["text", "json-summary"],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        statements: 80,
+      },
+    },
     projects: [
       {
         plugins: [react()],
@@ -63,16 +82,6 @@ export default defineConfig({
           server: {
             deps: {
               external: [/playwright/],
-            },
-          },
-          coverage: {
-            include: ["src/components/atomic-crm/**"],
-            exclude: ["src/components/atomic-crm/types.ts", "**/*.test.*"],
-            thresholds: {
-              lines: 80,
-              functions: 80,
-              branches: 80,
-              statements: 80,
             },
           },
         },

@@ -11,8 +11,6 @@ import {
   ChevronDown,
   Copy,
   Cpu,
-  Eye,
-  EyeOff,
   Menu,
   MessageCircle,
   MessagesSquare,
@@ -61,6 +59,11 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { PersonaList } from "../personas/PersonaList";
 import { UserList } from "../users/UserList";
 import { FacebookMessengerIntegrationPage } from "./FacebookMessengerIntegrationPage";
+import {
+  copyCredentialFieldValue,
+  CredentialSecretField,
+  type CredentialFieldNotify,
+} from "./CredentialSecretField";
 import {
   SettingsFieldStatus,
   SettingsGroupStatus,
@@ -249,72 +252,6 @@ const SETTINGS_VIEW_COPY: Record<
   },
 };
 
-const SecretField = ({
-  id,
-  label,
-  status,
-  statusState = "ready",
-  value,
-  placeholder,
-  onValueChange,
-}: {
-  id: string;
-  label: string;
-  status: SecretStatus;
-  statusState?: SettingsStatusState;
-  value: string;
-  placeholder: string;
-  onValueChange: (value: string) => void;
-}) => {
-  const [isVisible, setIsVisible] = useState(false);
-
-  return (
-    <div className="settings-field">
-      <div className="settings-field-label-row">
-        <Label htmlFor={id}>{label}</Label>
-        <SettingsFieldStatus
-          configured={status.configured}
-          state={statusState}
-        />
-      </div>
-      <div className="settings-sensitive-input">
-        <Input
-          id={id}
-          type={isVisible ? "text" : "password"}
-          autoComplete="off"
-          value={value}
-          placeholder={
-            status.preview ? `Hiện tại: ${status.preview}` : placeholder
-          }
-          className="settings-input"
-          onChange={(event) => onValueChange(event.target.value)}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="settings-input-action md:hidden"
-          aria-label={isVisible ? `Ẩn ${label}` : `Hiện ${label}`}
-          onClick={() => setIsVisible((visible) => !visible)}
-        >
-          {isVisible ? <EyeOff /> : <Eye />}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="settings-input-action md:hidden"
-          aria-label={`Sao chép ${label}`}
-          disabled={!value}
-          onClick={() => void navigator.clipboard.writeText(value)}
-        >
-          <Copy />
-        </Button>
-      </div>
-    </div>
-  );
-};
-
 const SecretInput = ({
   id,
   label,
@@ -322,6 +259,7 @@ const SecretInput = ({
   statusState,
   value,
   onChange,
+  notify,
 }: {
   id: keyof FormState;
   label: string;
@@ -329,8 +267,9 @@ const SecretInput = ({
   statusState?: SettingsStatusState;
   value: string;
   onChange: (key: keyof FormState, value: string) => void;
+  notify: CredentialFieldNotify;
 }) => (
-  <SecretField
+  <CredentialSecretField
     id={id}
     label={label}
     status={status}
@@ -338,6 +277,7 @@ const SecretInput = ({
     value={value}
     placeholder="Nhập giá trị"
     onValueChange={(nextValue) => onChange(id, nextValue)}
+    notify={notify}
   />
 );
 
@@ -348,6 +288,7 @@ const MinimaxSecretInput = ({
   statusState,
   value,
   onChange,
+  notify,
 }: {
   id: keyof MinimaxFormState;
   label: string;
@@ -355,8 +296,9 @@ const MinimaxSecretInput = ({
   statusState?: SettingsStatusState;
   value: string;
   onChange: (key: keyof MinimaxFormState, value: string) => void;
+  notify: CredentialFieldNotify;
 }) => (
-  <SecretField
+  <CredentialSecretField
     id={id}
     label={label}
     status={status}
@@ -364,6 +306,7 @@ const MinimaxSecretInput = ({
     value={value}
     placeholder="Dán token Minimax"
     onValueChange={(nextValue) => onChange(id, nextValue)}
+    notify={notify}
   />
 );
 
@@ -374,6 +317,7 @@ const OpenRouterSecretInput = ({
   statusState,
   value,
   onChange,
+  notify,
 }: {
   id: keyof OpenRouterFormState;
   label: string;
@@ -381,8 +325,9 @@ const OpenRouterSecretInput = ({
   statusState?: SettingsStatusState;
   value: string;
   onChange: (key: keyof OpenRouterFormState, value: string) => void;
+  notify: CredentialFieldNotify;
 }) => (
-  <SecretField
+  <CredentialSecretField
     id={id}
     label={label}
     status={status}
@@ -390,6 +335,7 @@ const OpenRouterSecretInput = ({
     value={value}
     placeholder="Dán token OpenRouter"
     onValueChange={(nextValue) => onChange(id, nextValue)}
+    notify={notify}
   />
 );
 
@@ -692,6 +638,11 @@ export const ZaloIntegrationPage = () => {
   const [testingOa, setTestingOa] = useState(false);
   const [testingMinimax, setTestingMinimax] = useState(false);
   const [testingOpenRouter, setTestingOpenRouter] = useState(false);
+  const handleCopy = useCallback(
+    (label: string, value: string) =>
+      copyCredentialFieldValue(label, value, notify as CredentialFieldNotify),
+    [notify],
+  );
 
   const load = useCallback(async () => {
     setSettingsStatusState("loading");
@@ -1093,6 +1044,7 @@ export const ZaloIntegrationPage = () => {
                 statusState={settingsStatusState}
                 value={form.zalo_bot_token}
                 onChange={setValue}
+                notify={notify as CredentialFieldNotify}
               />
               <SecretInput
                 id="zalo_bot_webhook_secret"
@@ -1105,6 +1057,7 @@ export const ZaloIntegrationPage = () => {
                 statusState={settingsStatusState}
                 value={form.zalo_bot_webhook_secret}
                 onChange={setValue}
+                notify={notify as CredentialFieldNotify}
               />
               <div className="settings-oa-actions">
                 <Button
@@ -1152,11 +1105,11 @@ export const ZaloIntegrationPage = () => {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="settings-copy-app-id md:hidden"
+                    className="settings-copy-app-id settings-input-action"
                     aria-label="Sao chép Zalo App ID"
                     disabled={!form.zalo_oa_app_id}
                     onClick={() =>
-                      void navigator.clipboard.writeText(form.zalo_oa_app_id)
+                      void handleCopy("Zalo App ID", form.zalo_oa_app_id)
                     }
                   >
                     <Copy />
@@ -1170,6 +1123,7 @@ export const ZaloIntegrationPage = () => {
                   statusState={settingsStatusState}
                   value={form.zalo_oa_secret_key}
                   onChange={setValue}
+                  notify={notify as CredentialFieldNotify}
                 />
                 <SecretInput
                   id="zalo_oa_access_token"
@@ -1182,6 +1136,7 @@ export const ZaloIntegrationPage = () => {
                   statusState={settingsStatusState}
                   value={form.zalo_oa_access_token}
                   onChange={setValue}
+                  notify={notify as CredentialFieldNotify}
                 />
                 <SecretInput
                   id="zalo_oa_refresh_token"
@@ -1194,6 +1149,7 @@ export const ZaloIntegrationPage = () => {
                   statusState={settingsStatusState}
                   value={form.zalo_oa_refresh_token}
                   onChange={setValue}
+                  notify={notify as CredentialFieldNotify}
                 />
                 <div className="settings-oa-actions">
                   <Button
@@ -1267,6 +1223,7 @@ export const ZaloIntegrationPage = () => {
                 statusState={settingsStatusState}
                 value={minimaxForm.minimax_api_key}
                 onChange={setMinimaxValue}
+                notify={notify as CredentialFieldNotify}
               />
               <div className="settings-oa-actions">
                 <Button
@@ -1346,6 +1303,7 @@ export const ZaloIntegrationPage = () => {
               statusState={settingsStatusState}
               value={openRouterForm.openrouter_api_key}
               onChange={setOpenRouterValue}
+              notify={notify as CredentialFieldNotify}
             />
             <div className="settings-oa-actions">
               <Button

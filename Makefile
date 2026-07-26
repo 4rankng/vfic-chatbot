@@ -17,8 +17,21 @@ release-check:
 	@test -z "$$(git status --porcelain)" || { echo "Release blocked: commit or stash all local changes first."; exit 1; }
 	@git diff --check
 	@cd backend && test "$$(.venv/bin/python -m alembic heads | wc -l | tr -d ' ')" = 1
-	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest
-	@cd frontend && npm run lint && npm run typecheck && npm run test:unit:app -- --run && npm run build
+	@docker compose -f backend/docker-compose.dev.yml up -d --wait postgres redis
+	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest -m "not integration" && .venv/bin/pytest -m integration tests/integration/test_harness_smoke.py
+	@cd frontend && npm run lint && npm run typecheck && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build && npm run test:e2e:desktop && npm run test:e2e:mobile
+	@tmp_raw="$$(mktemp -t release-gate-raw.XXXXXX.json)"; \
+		tmp_gold="$$(mktemp -t release-gate-golden.XXXXXX.json)"; \
+		(cd backend && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp_raw"); \
+		(cd backend && .venv/bin/python -c 'import json, sys; from pathlib import Path; raw = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")); passed = raw.get("passed"); case_count = raw.get("case_count"); \
+if isinstance(passed, bool) or not isinstance(passed, int): raise SystemExit("benchmark artifact missing integer passed"); \
+if isinstance(case_count, bool) or not isinstance(case_count, int) or case_count <= 0: raise SystemExit("benchmark artifact missing positive integer case_count"); \
+if passed < 0 or passed > case_count: raise SystemExit("benchmark artifact has invalid passed/case_count values"); \
+Path(sys.argv[2]).write_text(json.dumps({"golden_pass_rate_pct": passed / case_count * 100.0}), encoding="utf-8")' "$$tmp_raw" "$$tmp_gold"); \
+		(cd backend && .venv/bin/python scripts/release_gate_check.py --golden-results "$$tmp_gold"); \
+		rc=$$?; \
+		rm -f "$$tmp_raw" "$$tmp_gold"; \
+		exit "$$rc"
 
 # Build & push BOTH DockerHub images, then deploy to bot.tingting.vip.
 deploy: release-check

@@ -26,8 +26,149 @@ WORKERS="worker-chatbot worker-persistence worker-ingest worker-followup schedul
 ACTIVE_FILE="/opt/vfic/ACTIVE_COLOR"
 PREV_COLOR_FILE="/opt/vfic/PREV_COLOR"
 PREV_TAG_FILE="/opt/vfic/PREV_TAG"
+PUBLIC_BASE_URL="https://bot.tingting.vip"
 
 opposite() { [ "$1" = "blue" ] && echo green || echo blue; }
+
+_count_lines() {
+  awk 'NF { count += 1 } END { print count + 0 }'
+}
+
+require_running_service_count() {
+  local service="$1" expected="$2"
+  local cids cid state health restart found=0
+  cids="$(IMAGE_TAG="$IMAGE_TAG" docker compose ps -q "$service" 2>/dev/null || true)"
+  if [ -z "$cids" ]; then
+    echo "==> post-flip check: service $service has no running container" >&2
+    return 1
+  fi
+  actual_count="$(printf '%s\n' "$cids" | _count_lines)"
+  if [ "$actual_count" != "$expected" ]; then
+    echo "==> post-flip check: service $service expected $expected running container(s), found $actual_count" >&2
+    return 1
+  fi
+  while IFS= read -r cid; do
+    [ -n "$cid" ] || continue
+    found=1
+    state="$(docker inspect --format '{{.State.Status}}' "$cid" 2>/dev/null || echo unknown)"
+    health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo unknown)"
+    restart="$(docker inspect --format '{{.RestartCount}}' "$cid" 2>/dev/null || echo '?')"
+    echo "    service $service container=$cid state=$state health=$health restarts=$restart"
+    if [ "$state" != "running" ]; then
+      return 1
+    fi
+    if [ "$health" != "none" ] && [ "$health" != "healthy" ]; then
+      return 1
+    fi
+  done <<EOF
+$cids
+EOF
+  [ "$found" = "1" ]
+}
+
+assert_caddy_routes_color() {
+  local color="$1"
+  if ! grep -q "web-${color}:8000" Caddyfile; then
+    echo "==> post-flip check: Caddyfile does not route to web-$color:8000" >&2
+    return 1
+  fi
+  echo "    Caddyfile routes to web-$color:8000"
+}
+
+verify_post_flip_readiness() {
+  local color="$1"
+  local active_cid active_img active_tag public_health_body
+
+  echo "==> [8b/10] verify_post_flip_readiness: public edge, active tag, frontend, and queue health"
+
+  active_cid="$(IMAGE_TAG="$IMAGE_TAG" docker compose ps -q "web-$color" 2>/dev/null || true)"
+  if [ -z "$active_cid" ]; then
+    echo "==> post-flip check: web-$color container missing" >&2
+    return 1
+  fi
+  active_img="$(docker inspect --format '{{.Config.Image}}' "$active_cid" 2>/dev/null || echo "")"
+  active_tag="${active_img##*:}"
+  echo "    active web-$color image=$active_img"
+  if [ "$active_tag" != "$IMAGE_TAG" ]; then
+    echo "==> post-flip check: active web-$color tag $active_tag did not match expected $IMAGE_TAG" >&2
+    return 1
+  fi
+
+  assert_caddy_routes_color "$color" || return 1
+
+  public_health_body="$(curl -fsS --max-time 15 "$PUBLIC_BASE_URL/health")" || {
+    echo "==> post-flip check: public /health request failed" >&2
+    return 1
+  }
+  python3 - "$public_health_body" <<'PY'
+import json
+import sys
+
+body = json.loads(sys.argv[1])
+if body.get("status") != "ok":
+    raise SystemExit(f"public /health returned status={body.get('status')!r}")
+PY
+
+  curl -fsS --max-time 15 "https://bot.tingting.vip/" >/dev/null || {
+    echo "==> post-flip check: frontend root request failed" >&2
+    return 1
+  }
+
+  require_running_service_count "frontend" 1 || return 1
+  require_running_service_count "worker-chatbot" 2 || return 1
+  require_running_service_count "worker-persistence" 1 || return 1
+  require_running_service_count "worker-ingest" 1 || return 1
+  require_running_service_count "worker-followup" 1 || return 1
+  require_running_service_count "scheduler" 1 || return 1
+
+  IMAGE_TAG="$IMAGE_TAG" docker compose exec -T "web-$color" python - <<'PY'
+import json
+import urllib.request
+
+with urllib.request.urlopen("http://127.0.0.1:8000/health/queue", timeout=10) as response:
+    data = json.load(response)
+
+required = (
+    "queue_depth",
+    "busy_workers",
+    "total_workers",
+    "llm_avg_latency_ms",
+    "llm_invokes_last_2m",
+    "minimax_429s_last_1m",
+)
+missing = [key for key in required if key not in data]
+if missing:
+    raise SystemExit(f"/health/queue missing keys: {missing}")
+
+queue_depth = data["queue_depth"]
+busy_workers = data["busy_workers"]
+total_workers = data["total_workers"]
+if not isinstance(queue_depth, int) or queue_depth < 0:
+    raise SystemExit(f"queue_depth invalid: {queue_depth!r}")
+if not isinstance(total_workers, int) or total_workers < 5:
+    raise SystemExit(f"total_workers invalid: {total_workers!r}")
+if not isinstance(busy_workers, int) or busy_workers < 0 or busy_workers > total_workers:
+    raise SystemExit(
+        f"busy_workers invalid: {busy_workers!r} total_workers={total_workers!r}"
+    )
+print(json.dumps({"queue_depth": queue_depth, "busy_workers": busy_workers, "total_workers": total_workers}))
+PY
+}
+
+rollback_post_flip_failure() {
+  echo "==> POST-FLIP VERIFICATION FAILED: $1" >&2
+  if [ -n "$ACTIVE" ] && [ -s "$PREV_COLOR_FILE" ] && [ -s "$PREV_TAG_FILE" ]; then
+    echo "==> rolling back to previous color via bg_rollback.sh..." >&2
+    if bash scripts/bg_rollback.sh; then
+      echo "==> rollback complete; previous color restored." >&2
+    else
+      echo "==> rollback failed; manual intervention required." >&2
+    fi
+  else
+    echo "==> inaugural deploy has no previous color; web-$NEXT stays running and Caddy remains routed there. Operator intervention required." >&2
+  fi
+  exit 1
+}
 
 if [ -f "$ACTIVE_FILE" ] && [ -s "$ACTIVE_FILE" ]; then
   ACTIVE="$(cat "$ACTIVE_FILE" | tr -d '[:space:]')"
@@ -35,7 +176,11 @@ else
   ACTIVE=""
 fi
 # Inaugural deploy: ACTIVE is empty -> bring up blue first.
-NEXT="$(opposite "${ACTIVE:-blue}")"
+if [ -n "$ACTIVE" ]; then
+  NEXT="$(opposite "$ACTIVE")"
+else
+  NEXT="blue"
+fi
 echo "==> bg_deploy: active=${ACTIVE:-<inaugural>} next=$NEXT tag=$IMAGE_TAG"
 
 # 1. Pull the new image (web + workers share franknguyenvd/vfic-backend:$TAG).
@@ -107,6 +252,11 @@ if [ -n "$ACTIVE" ]; then
   fi
   echo "$ACTIVE" > "$PREV_COLOR_FILE"
 fi
+echo "$NEXT" > "$ACTIVE_FILE"
+
+if ! verify_post_flip_readiness "$NEXT"; then
+  rollback_post_flip_failure "new route failed health/frontend/queue verification"
+fi
 
 # 9. Stop the old color (kept for instant rollback via `make rollback`).
 if [ -n "$ACTIVE" ]; then
@@ -116,8 +266,6 @@ if [ -n "$ACTIVE" ]; then
 else
   echo "==> [9/10] inaugural deploy — no old color to stop."
 fi
-
-echo "$NEXT" > "$ACTIVE_FILE"
 
 # Start the resumable OA-only profile sweep only after traffic is on the healthy
 # new color. Its dedicated container has inspectable logs and exit status, while

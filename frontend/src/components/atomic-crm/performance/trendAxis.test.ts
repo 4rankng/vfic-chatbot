@@ -12,6 +12,11 @@ const trend = Array.from({ length: 12 }, (_, index): PerfTrendBucket => ({
 }));
 
 describe("trend axis", () => {
+  it("falls back for null and invalid buckets", () => {
+    expect(formatTrendBucket(null)).toBe("Chưa có");
+    expect(formatTrendBucket("not-a-date")).toBe("not-a-date");
+  });
+
   it("formats bucket timestamps as Vietnamese times", () => {
     expect(formatTrendBucket("2026-07-12T08:30:00+07:00")).toMatch(/08:30/);
   });
@@ -28,5 +33,15 @@ describe("trend axis", () => {
     expect(ticks).toHaveLength(5);
     expect(ticks[0]?.index).toBe(0);
     expect(ticks.at(-1)?.index).toBe(trend.length - 1);
+  });
+
+  it("returns no ticks for empty trends and one tick for a single bucket", () => {
+    expect(getTrendAxisTicks([])).toEqual([]);
+    expect(getTrendAxisTicks([trend[0]!])).toEqual([
+      {
+        index: 0,
+        label: formatTrendBucket(trend[0]!.bucket),
+      },
+    ]);
   });
 });

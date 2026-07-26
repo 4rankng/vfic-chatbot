@@ -18,7 +18,7 @@ together*. For deeper detail, follow the links in §5.
 | Framework | **FastAPI** `>=0.115` | async-first; mix of `async def` + thread-offloaded crypto |
 | ASGI server | **Uvicorn `[standard]`** `>=0.32` | 2 workers to use both vCPUs |
 | ORM | **SQLAlchemy 2.x async** (`asyncpg` `>=0.30`) + sync `psycopg` for Alembic/RQ | `AsyncSession(expire_on_commit=False)` |
-| Migrations | **Alembic** `>=1.14` | hand-written (0001–0029), ORM does **not** auto-generate |
+| Migrations | **Alembic** `>=1.14` | hand-written (0001–0053, current head `0053_single_page_external_source_sync_state`), ORM does **not** auto-generate |
 | Database | **PostgreSQL 16 + pgvector** (`>=0.3.6`) | HNSW ANN + exact re-rank; `halfvec` for 3072-d embeddings |
 | Cache / queue / pubsub | **Redis** `>=5.2,<8.0` | broker, cache, presence, cross-process Socket.IO fan-out |
 | Job queue | **RQ** `>=2.0` + **rq-scheduler** `>=0.14` | 4 queues; **offline only** — never on the answer path |

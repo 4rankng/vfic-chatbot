@@ -118,6 +118,118 @@ afterEach(async () => {
 });
 
 describe("ZaloIntegrationPage navigation", () => {
+  it("keeps desktop reveal controls available and reports clipboard copy success", async () => {
+    mocks.isMobile = false;
+    const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Bot Token" });
+    await input.fill("secret-token");
+
+    const revealButton = screen.getByRole("button", {
+      name: "Hiện Bot Token",
+    });
+    await expect.element(revealButton).toBeVisible();
+    await revealButton.click();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Bot Token" }))
+      .toHaveAttribute("type", "text");
+
+    await screen.getByRole("button", { name: "Sao chép Bot Token" }).click();
+
+    await expect.poll(() => clipboardWrite.mock.calls).toEqual([
+      ["secret-token"],
+    ]);
+    await expect.poll(() => mocks.notify.mock.calls).toEqual([
+      ["Đã sao chép Bot Token.", { type: "success" }],
+    ]);
+  });
+
+  it("reports clipboard copy failures without crashing the settings form", async () => {
+    mocks.isMobile = false;
+    const clipboardWrite = vi
+      .fn()
+      .mockRejectedValue(new Error("Clipboard unavailable"));
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    await screen
+      .getByRole("textbox", { name: "Bot Token" })
+      .fill("secret-token");
+    await screen.getByRole("button", { name: "Sao chép Bot Token" }).click();
+
+    await expect.poll(() => clipboardWrite.mock.calls).toEqual([
+      ["secret-token"],
+    ]);
+    await expect.poll(() => mocks.notify.mock.calls).toEqual([
+      ["Không thể sao chép Bot Token.", { type: "error" }],
+    ]);
+  });
+
+  it("keeps mobile reveal controls interactive and reports rejected clipboard writes", async () => {
+    mocks.isMobile = true;
+    const clipboardWrite = vi
+      .fn()
+      .mockRejectedValue(new Error("Clipboard unavailable"));
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Bot Token" });
+    await input.fill("mobile-secret");
+
+    const revealButton = screen.getByRole("button", {
+      name: "Hiện Bot Token",
+    });
+    await expect.element(revealButton).toBeVisible();
+    await revealButton.click();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Bot Token" }))
+      .toHaveAttribute("type", "text");
+
+    await screen.getByRole("button", { name: "Sao chép Bot Token" }).click();
+
+    await expect.poll(() => clipboardWrite.mock.calls).toEqual([
+      ["mobile-secret"],
+    ]);
+    await expect.poll(() => mocks.notify.mock.calls).toEqual([
+      ["Không thể sao chép Bot Token.", { type: "error" }],
+    ]);
+  });
+
   it("uses one flat desktop workspace without a second navigation rail", async () => {
     mocks.isMobile = false;
     const queryClient = new QueryClient({

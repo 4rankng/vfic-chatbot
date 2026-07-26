@@ -18,7 +18,6 @@ import knowledgeBases from "../../knowledge-base";
 import projects from "../../projects";
 import personas from "../../personas";
 import integrations from "../../integrations";
-import { PerformancePage } from "../../performance/PerformancePage";
 import type {
   CompiledDestination,
   CompiledRoute,
@@ -33,6 +32,16 @@ const ForgotPasswordPage = lazy(async () => {
   const module = await import("../../login/ForgotPasswordPage");
   return { default: module.ForgotPasswordPage as ComponentType };
 });
+const PerformancePage = lazy(async () => {
+  const module = await import("../../performance/PerformancePage");
+  return { default: module.PerformancePage as ComponentType };
+});
+
+const RouteLoadingState = () => (
+  <div role="status" aria-live="polite" className="p-6 text-sm text-muted-foreground">
+    Đang tải trang...
+  </div>
+);
 
 class RouteErrorBoundary extends Component<
   { children: ReactNode },
@@ -63,13 +72,13 @@ class RouteErrorBoundary extends Component<
 
 const RouteBoundary = ({ children }: { children: ReactNode }) => (
   <RouteErrorBoundary>
-    <Suspense fallback={null}>{children}</Suspense>
+    <Suspense fallback={<RouteLoadingState />}>{children}</Suspense>
   </RouteErrorBoundary>
 );
 
 const AdminPerformanceRoute = () => {
   const { permissions, isPending } = usePermissions();
-  if (isPending) return null;
+  if (isPending) return <RouteLoadingState />;
   return permissions === "admin" ? <PerformancePage /> : <Navigate to="/" replace />;
 };
 
