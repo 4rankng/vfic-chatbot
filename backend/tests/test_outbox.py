@@ -15,6 +15,7 @@ Covers:
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 
@@ -45,6 +46,41 @@ def test_dispatch_result_matches_graph_sender_result_contract():
 
 
 # ─── enqueue_outbox ──────────────────────────────────────────────────────────
+
+
+async def test_create_pending_messenger_outbox_stamps_active_page_generation():
+    """A Messenger command carries the Page authority active when it is created."""
+    from sqlalchemy.dialects import postgresql
+
+    from app.services import outbox_service
+
+    captured = {}
+    inserted = SimpleNamespace(channel_account_generation=7)
+
+    class _FakeResult:
+        def scalar_one_or_none(self):
+            return inserted
+
+    class _FakeDB:
+        async def scalar(self, stmt):
+            captured["generation_query"] = stmt
+            return 7
+
+        async def execute(self, stmt):
+            captured["insert"] = stmt
+            return _FakeResult()
+
+    row = await outbox_service.create_pending_outbox(
+        _FakeDB(),
+        message_id=42,
+        channel="facebook_messenger",
+        payload={"chat_id": "psid-1", "text": "Xin chào"},
+    )
+
+    params = captured["insert"].compile(dialect=postgresql.dialect()).params
+    assert captured.get("generation_query") is not None
+    assert params["channel_account_generation"] == 7
+    assert row is inserted
 
 
 async def test_enqueue_outbox_calls_insert_with_correct_fields(monkeypatch):

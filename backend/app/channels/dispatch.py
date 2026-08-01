@@ -19,6 +19,7 @@ migrate to this service as they're rewired.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from app.channels import types as ct
@@ -47,7 +48,12 @@ class ChannelDispatchService:
         self._registry = registry
         self._resolver = account_resolver
 
-    async def send(self, command: ct.OutboundTextCommand) -> ct.ChannelSendResult:
+    async def send(
+        self,
+        command: ct.OutboundTextCommand,
+        *,
+        before_provider_io: Callable[[], ct.ChannelSendResult | None] | None = None,
+    ) -> ct.ChannelSendResult:
         """Route ``command`` to its provider adapter.
 
         Authority fence: if ``account_resolver`` is wired and the command's
@@ -73,6 +79,10 @@ class ChannelDispatchService:
                 error_class="provider_error",
                 suppressed=True,
             )
+        if before_provider_io is not None:
+            blocked = before_provider_io()
+            if blocked is not None:
+                return blocked
         return await adapter.send_text(command)
 
     async def _suppress_if_stale(

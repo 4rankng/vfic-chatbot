@@ -10,7 +10,11 @@ Proves:
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+import pytest
 
 from app.channels import types as ct
 from app.channels.accounts import InMemoryAccountResolver
@@ -349,3 +353,204 @@ def test_provider_for_outbox_channel_includes_facebook_messenger():
     assert _provider_for_outbox_channel("zalo_oa") == "zalo_oa"
     assert _provider_for_outbox_channel("facebook_messenger") == "facebook_messenger"
     assert _provider_for_outbox_channel("unknown") is None
+
+
+@pytest.mark.parametrize(
+    ("last_inbound_at", "expected_error"),
+    [
+        (
+            datetime.now(timezone.utc) - timedelta(hours=24, seconds=1),
+            "messenger standard messaging window expired",
+        ),
+        (None, "messenger standard messaging window is not open"),
+    ],
+)
+async def test_facebook_dispatch_suppresses_closed_messaging_window(
+    monkeypatch,
+    last_inbound_at,
+    expected_error,
+):
+    """The real Messenger outbox path must enforce policy before provider I/O."""
+    from app.services.outbox_service import DispatchCandidate, _dispatch_facebook
+
+    class _FakeDB:
+        async def get(self, model, object_id):
+            return SimpleNamespace(conversation_id="conversation-1")
+
+        async def execute(self, stmt):
+            return SimpleNamespace(
+                first=lambda: SimpleNamespace(
+                    account_key="page-1",
+                    external_id="psid-1",
+                    last_inbound_at=last_inbound_at,
+                )
+            )
+
+    class _IntegrationSettings:
+        async def resolve_facebook(self, page_id):
+            return SimpleNamespace(page_id=page_id)
+
+    def _unexpected_registry_build(config):
+        raise AssertionError("expired Messenger send reached the provider adapter")
+
+    monkeypatch.setattr(
+        "app.channels.dispatch.build_facebook_registry",
+        _unexpected_registry_build,
+    )
+
+    result = await _dispatch_facebook(
+        _FakeDB(),
+        DispatchCandidate(
+            outbox_id=1,
+            message_id=10,
+            channel="facebook_messenger",
+            payload={"text": "Xin chào"},
+        ),
+        SimpleNamespace(channel_account_generation=1),
+        _IntegrationSettings(),
+    )
+
+    assert result is not None
+    assert not result.ok
+    assert result.suppressed
+    assert result.error == expected_error
+    assert result.error_class == "policy_suppressed"
+
+
+async def test_facebook_dispatch_allows_open_messaging_window(monkeypatch):
+    """A current inbound window reaches the adapter with the stored Page fence."""
+    from app.services.outbox_service import DispatchCandidate, _dispatch_facebook
+
+    last_inbound_at = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    class _FakeDB:
+        async def get(self, model, object_id):
+            return SimpleNamespace(conversation_id="conversation-1")
+
+        async def execute(self, stmt):
+            return SimpleNamespace(
+                first=lambda: SimpleNamespace(
+                    account_key="page-1",
+                    external_id="psid-1",
+                    last_inbound_at=last_inbound_at,
+                )
+            )
+
+    class _IntegrationSettings:
+        async def resolve_facebook(self, page_id):
+            return SimpleNamespace(page_id=page_id)
+
+    resolver = InMemoryAccountResolver()
+    resolver.upsert(
+        ct.ChannelAccountRef(
+            id="account-1",
+            provider=ct.PROVIDER_FACEBOOK_MESSENGER,
+            account_key="page-1",
+            label="Page 1",
+            status="ACTIVE",
+            generation=7,
+        )
+    )
+    adapter = _RecordingAdapter(ct.PROVIDER_FACEBOOK_MESSENGER)
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+
+    monkeypatch.setattr(
+        "app.channels.dispatch.build_facebook_registry",
+        lambda config: registry,
+    )
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_account.FacebookAccountResolver",
+        lambda db: resolver,
+    )
+
+    result = await _dispatch_facebook(
+        _FakeDB(),
+        DispatchCandidate(
+            outbox_id=1,
+            message_id=10,
+            channel="facebook_messenger",
+            payload={"text": "Xin chào"},
+        ),
+        SimpleNamespace(channel_account_generation=7),
+        _IntegrationSettings(),
+    )
+
+    assert result is not None
+    assert result.ok
+    assert len(adapter.sent) == 1
+    assert adapter.sent[0].channel_account_generation == 7
+
+
+async def test_facebook_dispatch_revalidates_window_immediately_before_send(monkeypatch):
+    """A window that closes during setup is suppressed before adapter I/O."""
+    from app.channels.providers.facebook_policy import PolicyDecision
+    from app.services.outbox_service import DispatchCandidate, _dispatch_facebook
+
+    class _FakeDB:
+        async def get(self, model, object_id):
+            return SimpleNamespace(conversation_id="conversation-1")
+
+        async def execute(self, stmt):
+            return SimpleNamespace(
+                first=lambda: SimpleNamespace(
+                    account_key="page-1",
+                    external_id="psid-1",
+                    last_inbound_at=datetime.now(timezone.utc) - timedelta(hours=1),
+                )
+            )
+
+    class _IntegrationSettings:
+        async def resolve_facebook(self, page_id):
+            return SimpleNamespace(page_id=page_id)
+
+    resolver = InMemoryAccountResolver()
+    resolver.upsert(
+        ct.ChannelAccountRef(
+            id="account-1",
+            provider=ct.PROVIDER_FACEBOOK_MESSENGER,
+            account_key="page-1",
+            label="Page 1",
+            status="ACTIVE",
+            generation=7,
+        )
+    )
+    adapter = _RecordingAdapter(ct.PROVIDER_FACEBOOK_MESSENGER)
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+    decisions = iter(
+        [
+            PolicyDecision(allowed=True, window_remaining_seconds=0.01),
+            PolicyDecision(allowed=False, reason="window_expired"),
+        ]
+    )
+
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_policy.evaluate_send_eligibility",
+        lambda **kwargs: next(decisions),
+    )
+    monkeypatch.setattr(
+        "app.channels.dispatch.build_facebook_registry",
+        lambda config: registry,
+    )
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_account.FacebookAccountResolver",
+        lambda db: resolver,
+    )
+
+    result = await _dispatch_facebook(
+        _FakeDB(),
+        DispatchCandidate(
+            outbox_id=1,
+            message_id=10,
+            channel="facebook_messenger",
+            payload={"text": "Xin chào"},
+        ),
+        SimpleNamespace(channel_account_generation=7),
+        _IntegrationSettings(),
+    )
+
+    assert result is not None
+    assert result.suppressed
+    assert result.error_class == "policy_suppressed"
+    assert adapter.sent == []

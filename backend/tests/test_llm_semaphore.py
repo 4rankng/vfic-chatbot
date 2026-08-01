@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import uuid
+from types import SimpleNamespace
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
@@ -421,3 +422,59 @@ class TestDegradationMessage:
         mock_sender.send_message.assert_not_called()
         mock_svc.record_bot_outcome.assert_awaited_once()
         assert mock_svc.record_bot_outcome.call_args.kwargs["sent"] is False
+
+    @pytest.mark.asyncio
+    async def test_worker_messenger_degradation_uses_canonical_outbox_route(self):
+        """The last-resort static reply must still use Messenger durable delivery."""
+        from app.graph.ports import SendOutcome
+        from app.workers.chatbot_worker import _run_job_async
+
+        job = {
+            "conversation_id": str(uuid.uuid4()),
+            "version_at_start": 1,
+            "user_text": "hello",
+            "user_name": "Test",
+        }
+        mock_db = AsyncMock()
+        mock_db.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_db.__aexit__ = AsyncMock(return_value=False)
+        mock_conv = SimpleNamespace(
+            zalo_chat_id=None,
+            zalo_channel="facebook_messenger",
+            channel_identity=SimpleNamespace(
+                provider="facebook_messenger",
+                account_key="page-1",
+                external_id="psid-1",
+            ),
+        )
+        mock_sender = MagicMock()
+        mock_sender.send_message = AsyncMock()
+        mock_deps = MagicMock()
+        mock_deps.zalo = MagicMock()
+        mock_deps.zalo.for_conversation = MagicMock(return_value=mock_sender)
+        mock_svc = MagicMock()
+        mock_svc.get = AsyncMock(return_value=mock_conv)
+        mock_svc.claim_send = AsyncMock(return_value=True)
+        mock_svc.dispatch_outbound_message = AsyncMock(
+            return_value=SendOutcome(ok=True, msg_id="mid-1")
+        )
+        mock_svc.record_bot_outcome = AsyncMock()
+
+        with patch("app.workers._db.worker_session", return_value=mock_db):
+            with patch(
+                "app.graph.factories.build_deps", new_callable=AsyncMock, return_value=mock_deps
+            ):
+                with patch("app.graph.runner.run_turn", new_callable=AsyncMock) as mock_run:
+                    mock_run.side_effect = LLMThrottled("rate limit")
+                    with patch("app.services.conversation.ConversationService") as MockSvc:
+                        MockSvc.return_value = mock_svc
+                        await _run_job_async(job)
+
+        claim = mock_svc.claim_send.await_args
+        assert claim.kwargs["outbox_channel"] == "facebook_messenger"
+        assert claim.kwargs["outbox_payload"]["chat_id"] == "psid-1"
+        mock_svc.dispatch_outbound_message.assert_awaited_once()
+        mock_sender.send_message.assert_not_awaited()
+        recorded = mock_svc.record_bot_outcome.await_args
+        assert recorded.kwargs["outbox_channel"] == "facebook_messenger"
+        assert recorded.kwargs["outbox_payload"]["chat_id"] == "psid-1"

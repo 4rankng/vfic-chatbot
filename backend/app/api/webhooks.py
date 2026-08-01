@@ -17,8 +17,8 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.composition.conversation_messaging import (
@@ -171,7 +171,7 @@ async def _resolve_active_facebook_page(db: AsyncSession):
 @router.get("/facebook")
 async def facebook_webhook_verify(
     request: Request, db: AsyncSession = Depends(get_request_db)
-) -> JSONResponse:
+) -> Response:
     """GET challenge — Meta subscribes a webhook URL by sending
     ``hub.mode=subscribe`` + ``hub.verify_token`` + ``hub.challenge``.
 
@@ -193,7 +193,7 @@ async def facebook_webhook_verify(
             {"detail": "webhook verification not configured"}, status_code=503
         )
     if mode == "subscribe" and constant_time_verify_token(sent=sent_token, expected=expected):
-        return JSONResponse({"hub.challenge": challenge}, status_code=200)
+        return PlainTextResponse(challenge, status_code=200)
     return JSONResponse({"detail": "verification failed"}, status_code=403)
 
 

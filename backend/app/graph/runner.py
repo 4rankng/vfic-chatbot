@@ -55,6 +55,10 @@ from app.recruitment.domain.recommendation import (
     is_salary_profile_statement,
     parse_salary_band,
 )
+from app.recruitment.domain.provider import (
+    provider_from_conversation,
+    recipient_from_conversation,
+)
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.shared.domain.text import normalize_vietnamese_text
@@ -112,13 +116,20 @@ def _zalo_for_conversation(deps: GraphDeps, conv):
 
 def _channel_for_conversation(conv) -> str:
     """Return the persisted delivery channel, never inferring it from a wrapper."""
-    return "zalo_oa" if getattr(conv, "zalo_channel", "bot") == "oa" else "zalo_bot"
+    return provider_from_conversation(conv)
 
 
-def _build_outbox_payload(chat_id: str, text: str, quote_message_id: str | None) -> dict:
-    """Build the Zalo send payload recorded in the outbox.
+def _recipient_for_conversation(conv) -> str | None:
+    """Return the immutable provider recipient used by the outbound command."""
+    return recipient_from_conversation(conv)
 
-    Captures the exact body sent to Zalo so a re-dispatch (from the sweep) can
+
+def _build_outbox_payload(
+    chat_id: str | None, text: str, quote_message_id: str | None
+) -> dict:
+    """Build the provider send payload recorded in the outbox.
+
+    Captures the exact body sent to the provider so a re-dispatch (from the sweep) can
     reconstruct the call without re-running the turn. ``quote_message_id`` is
     the OA CS-reply field (None on the Bot channel).
     """
@@ -147,9 +158,15 @@ async def _dispatch_claimed_message(
             ok=False,
             error="outbound command was not available for dispatch",
         )
+    if _channel_for_conversation(conv) == "facebook_messenger":
+        return SendOutcome(
+            ok=False,
+            error="messenger requires durable outbound dispatch",
+        )
+    recipient_id = _recipient_for_conversation(conv)
     if quote_message_id:
-        return await zalo.send_message(conv.zalo_chat_id, text, quote_message_id=quote_message_id)
-    return await zalo.send_message(conv.zalo_chat_id, text)
+        return await zalo.send_message(recipient_id, text, quote_message_id=quote_message_id)
+    return await zalo.send_message(recipient_id, text)
 
 
 def _stamp_end_to_end(state: BotRunState, timings: dict | None) -> None:
@@ -592,6 +609,8 @@ async def _status_heartbeat(zalo, chat_id: str, *, settings) -> None:
 
 async def _cancel_status_task(task) -> None:
     """Cancel the status heartbeat and drain it so no ack lands after the real send."""
+    if task is None:
+        return
     task.cancel()
     with suppress(asyncio.CancelledError):
         await task
@@ -632,7 +651,9 @@ async def _finish_terminal_reply(
         pending_message_id=state.pending_message_id,
         reply=text,
         outbox_channel=_channel_for_conversation(conv),
-        outbox_payload=_build_outbox_payload(conv.zalo_chat_id, text, state.reply_to_message_id),
+        outbox_payload=_build_outbox_payload(
+            _recipient_for_conversation(conv), text, state.reply_to_message_id
+        ),
     )
     if trace_sink is not None:
         trace_sink.record_decision("ownership_verdict", "claimed" if owned else "suppressed")
@@ -682,7 +703,9 @@ async def _finish_terminal_reply(
         delivery_status=_override,
         decision_trace=decision_trace,
         outbox_channel=_channel_for_conversation(conv),
-        outbox_payload=_build_outbox_payload(conv.zalo_chat_id, text, state.reply_to_message_id),
+        outbox_payload=_build_outbox_payload(
+            _recipient_for_conversation(conv), text, state.reply_to_message_id
+        ),
     )
     if _suppressed:
         outcome = "suppressed"
@@ -941,7 +964,12 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     # Started right after the sender is resolved (before last_messages / pending)
     # so the indicator appears as early as possible. Cancelled before every real
     # send so the indicator stops on the answer.
-    status_task = asyncio.create_task(_status_heartbeat(zalo, conv.zalo_chat_id, settings=settings))
+    recipient_id = _recipient_for_conversation(conv)
+    status_task = (
+        asyncio.create_task(_status_heartbeat(zalo, recipient_id, settings=settings))
+        if _channel_for_conversation(conv) in {"zalo_bot", "zalo_oa"} and recipient_id
+        else None
+    )
     db_t0 = time.monotonic()
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
     _stamp_db(timings, "last_messages", db_t0)
@@ -989,8 +1017,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         generated_reply = False
         outcome_label = "sent"
         faq_metadata: dict | None = None
-        from app.recruitment.domain.provider import provider_from_conversation
-
         provider = provider_from_conversation(conv)
 
         project_context = None
@@ -1172,7 +1198,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             try:
                 agent_kwargs = {
                     "provider": provider,
-                    "chat_id": conv.zalo_chat_id,
+                    "chat_id": recipient_id,
                     "recent_messages": recent_messages,
                     "timings": timings,
                 }
@@ -1273,7 +1299,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             reply=candidate,
             outbox_channel=_channel_for_conversation(conv),
             outbox_payload=_build_outbox_payload(
-                conv.zalo_chat_id, candidate, state.reply_to_message_id
+                recipient_id, candidate, state.reply_to_message_id
             ),
         )
         _stamp_db(timings, "claim_send", db_t0)
@@ -1323,7 +1349,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 decision_trace=decision_trace,
                 outbox_channel=_channel_for_conversation(conv),
                 outbox_payload=_build_outbox_payload(
-                    conv.zalo_chat_id, candidate, state.reply_to_message_id
+                    recipient_id, candidate, state.reply_to_message_id
                 ),
             )
             _stamp_db(timings, "record_bot_outcome", db_t0)
@@ -1351,7 +1377,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 and not pure_fast_pleasantry
             ):
                 persist_job = {
-                    "chat_id": conv.zalo_chat_id,
+                    "chat_id": recipient_id,
                     "user_text": state.user_text,
                     "bot_output": candidate,
                     "conversation_version": state.version_at_start,

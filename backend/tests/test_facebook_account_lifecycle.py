@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -22,6 +23,9 @@ class _LifecycleDb:
         if not self._scalar_results:
             return None
         return self._scalar_results.pop(0)
+
+    async def execute(self, _query):
+        return SimpleNamespace(rowcount=1)
 
     def add(self, row) -> None:
         self.added.append(row)
@@ -137,7 +141,7 @@ async def test_disconnect_commits_once_after_token_stage_delete_and_audit(monkey
     )
     monkeypatch.setattr(facebook_account_mod, "record_audit", fake_record_audit)
 
-    db = _LifecycleDb(account)
+    db = _LifecycleDb(account, account)
 
     disconnected = await facebook_account_mod.FacebookPageLifecycle(db).disconnect(
         page_id="page-123",

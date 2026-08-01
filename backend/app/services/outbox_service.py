@@ -113,6 +113,25 @@ def build_outbox_payload(
     return payload
 
 
+async def _active_messenger_generation(db: AsyncSession, channel: str) -> int | None:
+    """Capture the single active Messenger Page authority for a new command."""
+    from app.channels import types as ct
+
+    if channel != ct.PROVIDER_FACEBOOK_MESSENGER:
+        return None
+
+    from app.channels.accounts import ChannelAccountStatus
+    from app.models.channel_account import ChannelAccount
+
+    generation = await db.scalar(
+        select(ChannelAccount.generation).where(
+            ChannelAccount.provider == ct.PROVIDER_FACEBOOK_MESSENGER,
+            ChannelAccount.status == ChannelAccountStatus.ACTIVE,
+        )
+    )
+    return int(generation) if generation is not None else None
+
+
 async def create_pending_outbox(
     db: AsyncSession,
     *,
@@ -134,6 +153,7 @@ async def create_pending_outbox(
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     now = datetime.now(timezone.utc)
+    channel_account_generation = await _active_messenger_generation(db, channel)
     stmt = (
         pg_insert(OutboundOutbox)
         .values(
@@ -141,6 +161,7 @@ async def create_pending_outbox(
             channel=channel,
             payload=payload,
             status=OutboxStatus.PENDING.value,
+            channel_account_generation=channel_account_generation,
             runtime_revision_id=runtime_revision_id,
             authority_generation=authority_generation,
             runtime_fingerprint=runtime_fingerprint,
@@ -431,9 +452,13 @@ async def _dispatch_facebook(
     """
     from app.channels import types as ct
     from app.channels.dispatch import ChannelDispatchService, build_facebook_registry
-    from app.channels.providers.facebook_account import FacebookAccountResolver
+    from app.channels.providers.facebook_account import (
+        FacebookAccountResolver,
+        acquire_facebook_page_authority_lock,
+    )
 
-    # 1. Resolve the conversation → channel identity → account_key + external_id.
+    # 1. Resolve the conversation → channel identity → account key, recipient,
+    #    and authoritative last inbound timestamp for Messenger policy.
     from app.models.conversation import Conversation, Message
     from app.models.contact import ContactChannelIdentity
     from sqlalchemy import select
@@ -446,6 +471,7 @@ async def _dispatch_facebook(
             select(
                 ContactChannelIdentity.account_key,
                 ContactChannelIdentity.external_id,
+                Conversation.last_inbound_at,
             )
             .select_from(Conversation)
             .join(
@@ -459,7 +485,32 @@ async def _dispatch_facebook(
         return None  # no identity → legacy path cannot help either; suppress
     account_key, recipient_id = row.account_key, row.external_id
 
-    # 2. Resolve the active Page config. resolve_facebook decrypts the Page
+    # 2. Enforce Meta's standard messaging window before resolving credentials
+    #    or reaching provider I/O. V1 deliberately supports no message tags.
+    from app.channels.providers.facebook_policy import evaluate_send_eligibility
+
+    policy = evaluate_send_eligibility(last_inbound_at=row.last_inbound_at)
+    if not policy.allowed:
+        error = (
+            "messenger standard messaging window expired"
+            if policy.reason == "window_expired"
+            else "messenger standard messaging window is not open"
+        )
+        return DispatchResult(
+            outbox_id=candidate.outbox_id,
+            message_id=candidate.message_id,
+            ok=False,
+            error=error,
+            error_class="policy_suppressed",
+            suppressed=True,
+        )
+
+    # Hold shared Page authority from credential resolution through provider I/O.
+    # Connect/reconnect/disconnect take the matching exclusive lock, so no stale
+    # token or generation can cross the final validation-to-send boundary.
+    await acquire_facebook_page_authority_lock(db, shared=True)
+
+    # 3. Resolve the active Page config. resolve_facebook decrypts the Page
     #    token with the page_id-bound AEAD context (Phase 4).
     fb_cfg = await integration_settings.resolve_facebook(account_key)
     if fb_cfg is None:
@@ -493,7 +544,24 @@ async def _dispatch_facebook(
         reply_to_message_id=candidate.payload.get("quote_message_id") or None,
     )
     svc = ChannelDispatchService(registry, account_resolver=resolver)
-    result = await svc.send(command)
+
+    def final_policy_guard() -> ct.ChannelSendResult | None:
+        policy = evaluate_send_eligibility(last_inbound_at=row.last_inbound_at)
+        if policy.allowed:
+            return None
+        error = (
+            "messenger standard messaging window expired"
+            if policy.reason == "window_expired"
+            else "messenger standard messaging window is not open"
+        )
+        return ct.ChannelSendResult(
+            ok=False,
+            error=error,
+            error_class="policy_suppressed",
+            suppressed=True,
+        )
+
+    result = await svc.send(command, before_provider_io=final_policy_guard)
     return DispatchResult(
         outbox_id=candidate.outbox_id,
         message_id=candidate.message_id,
@@ -620,6 +688,7 @@ async def enqueue_outbox(
     payload: dict[str, Any],
     status: OutboxStatus,
     zalo_message_id: str | None = None,
+    provider_message_id: str | None = None,
     last_error: str | None = None,
     runtime_revision_id=None,
     authority_generation: int | None = None,
@@ -653,6 +722,7 @@ async def enqueue_outbox(
             payload=payload,
             status=status.value if isinstance(status, OutboxStatus) else status,
             zalo_message_id=zalo_message_id,
+            provider_message_id=provider_message_id or zalo_message_id,
             last_error=last_error,
             runtime_revision_id=runtime_revision_id,
             authority_generation=authority_generation,
@@ -667,6 +737,7 @@ async def enqueue_outbox(
             set_={
                 "status": insert_stmt.excluded.status,
                 "zalo_message_id": insert_stmt.excluded.zalo_message_id,
+                "provider_message_id": insert_stmt.excluded.provider_message_id,
                 "last_error": insert_stmt.excluded.last_error,
                 "sent_at": insert_stmt.excluded.sent_at,
                 "updated_at": insert_stmt.excluded.updated_at,

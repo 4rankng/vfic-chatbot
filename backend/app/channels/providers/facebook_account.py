@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.channels import types as ct
@@ -25,6 +25,20 @@ from app.models.channel_account import ChannelAccount
 from app.services.audit_service import record_audit
 
 logger = logging.getLogger(__name__)
+FACEBOOK_PAGE_AUTHORITY_LOCK = 7_423_811_610
+
+
+async def acquire_facebook_page_authority_lock(
+    db: AsyncSession, *, shared: bool
+) -> None:
+    """Fence Page lifecycle changes against in-flight provider dispatch."""
+
+    lock = (
+        func.pg_advisory_xact_lock_shared(FACEBOOK_PAGE_AUTHORITY_LOCK)
+        if shared
+        else func.pg_advisory_xact_lock(FACEBOOK_PAGE_AUTHORITY_LOCK)
+    )
+    await db.execute(select(lock))
 
 
 class FacebookAccountResolver(ChannelAccountResolver):
@@ -159,6 +173,7 @@ class FacebookPageLifecycle:
     ) -> ChannelAccount:
         from app.services.integration_settings import IntegrationSettingsService
 
+        await acquire_facebook_page_authority_lock(self.db, shared=False)
         # 1. Resolve existing account for this Page id (reactivation) or None.
         existing = await self.db.scalar(
             select(ChannelAccount).where(
@@ -232,6 +247,15 @@ class FacebookPageLifecycle:
         )
         if account is None:
             return None
+        await acquire_facebook_page_authority_lock(self.db, shared=False)
+        account = await self.db.scalar(
+            select(ChannelAccount).where(
+                ChannelAccount.provider == ct.PROVIDER_FACEBOOK_MESSENGER,
+                ChannelAccount.account_key == page_id,
+            )
+        )
+        if account is None:
+            return None
         account.status = ChannelAccountStatus.INACTIVE
         account.updated_at = datetime.now(timezone.utc)
         await self.db.flush()
@@ -251,4 +275,9 @@ class FacebookPageLifecycle:
         return account
 
 
-__all__ = ["FacebookAccountResolver", "FacebookPageLifecycle"]
+__all__ = [
+    "FACEBOOK_PAGE_AUTHORITY_LOCK",
+    "FacebookAccountResolver",
+    "FacebookPageLifecycle",
+    "acquire_facebook_page_authority_lock",
+]

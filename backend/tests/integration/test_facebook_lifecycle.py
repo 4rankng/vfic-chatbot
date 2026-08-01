@@ -78,6 +78,217 @@ async def test_lifecycle_activate_then_resolve_active(integration_database):
         assert active.generation == 1
 
 
+async def test_pending_messenger_outbox_persists_active_page_generation(
+    integration_database,
+):
+    """The durable command is fenced to the Page generation at creation time."""
+    from app.channels.providers.facebook_account import FacebookPageLifecycle
+    from app.core.db import async_session
+    from app.models.contact import Contact, ContactChannelIdentity
+    from app.models.conversation import (
+        Conversation,
+        ConversationMode,
+        DeliveryStatus,
+        Message,
+        MessageSender,
+    )
+    from app.services.outbox_service import create_pending_outbox
+
+    async with async_session() as db:
+        admin = User(
+            email="fb-outbox-generation@vfic.test",
+            password_hash="x",
+            full_name="FB Outbox Generation",
+            role="admin",
+        )
+        db.add(admin)
+        await db.flush()
+        account = await FacebookPageLifecycle(db).activate_or_reactivate(
+            page_id="page-outbox-generation",
+            page_name="Outbox Generation",
+            page_access_token="EAAB-page-outbox-generation",
+            admin_id=admin.id,
+        )
+
+        contact = Contact()
+        db.add(contact)
+        await db.flush()
+        identity = ContactChannelIdentity(
+            contact_id=contact.id,
+            provider="facebook_messenger",
+            account_key=account.account_key,
+            external_id="PSID-outbox-generation",
+        )
+        db.add(identity)
+        await db.flush()
+        conversation = Conversation(
+            zalo_channel="facebook_messenger",
+            contact_id=contact.id,
+            channel_identity_id=identity.id,
+            mode=ConversationMode.BOT,
+        )
+        db.add(conversation)
+        await db.flush()
+        message = Message(
+            conversation_id=conversation.id,
+            sender=MessageSender.BOT,
+            body="reply",
+            delivery_status=DeliveryStatus.PENDING,
+        )
+        db.add(message)
+        await db.flush()
+
+        outbox = await create_pending_outbox(
+            db,
+            message_id=message.id,
+            channel="facebook_messenger",
+            payload={"chat_id": identity.external_id, "text": message.body},
+        )
+
+        assert outbox.channel_account_generation == account.generation
+
+
+async def test_messenger_outbox_dispatches_and_finalizes_through_production_route(
+    integration_database,
+    monkeypatch,
+):
+    """Creation, Page fence, policy, adapter dispatch, and finalization stay connected."""
+    import asyncio
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock
+
+    from app.channels import types as ct
+    from app.channels.dispatch import ChannelAdapterRegistry
+    from app.channels.providers.facebook_account import FacebookPageLifecycle
+    from app.core.db import async_session
+    from app.models.contact import Contact, ContactChannelIdentity
+    from app.models.conversation import (
+        Conversation,
+        ConversationMode,
+        DeliveryStatus,
+        Message,
+        MessageSender,
+    )
+    from app.models.outbox import OutboxStatus
+    from app.services.conversation import ConversationService
+    from app.services.outbox_service import create_pending_outbox, dispatch_outbox
+
+    class _RecordingMessengerAdapter:
+        provider = ct.PROVIDER_FACEBOOK_MESSENGER
+
+        def __init__(self) -> None:
+            self.sent: list[ct.OutboundTextCommand] = []
+            self.entered = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def send_text(self, command: ct.OutboundTextCommand) -> ct.ChannelSendResult:
+            self.sent.append(command)
+            self.entered.set()
+            await self.release.wait()
+            return ct.ChannelSendResult(ok=True, provider_message_id="mid-production-route")
+
+    adapter = _RecordingMessengerAdapter()
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+    monkeypatch.setattr(
+        "app.channels.dispatch.build_facebook_registry",
+        lambda config: registry,
+    )
+
+    async with async_session() as db:
+        admin = User(
+            email="fb-production-route@vfic.test",
+            password_hash="x",
+            full_name="FB Production Route",
+            role="admin",
+        )
+        db.add(admin)
+        await db.flush()
+        account = await FacebookPageLifecycle(db).activate_or_reactivate(
+            page_id="page-production-route",
+            page_name="Production Route",
+            page_access_token="EAAB-page-production-route",
+            admin_id=admin.id,
+        )
+        contact = Contact()
+        db.add(contact)
+        await db.flush()
+        identity = ContactChannelIdentity(
+            contact_id=contact.id,
+            provider=ct.PROVIDER_FACEBOOK_MESSENGER,
+            account_key=account.account_key,
+            external_id="PSID-production-route",
+        )
+        db.add(identity)
+        await db.flush()
+        conversation = Conversation(
+            zalo_channel=ct.PROVIDER_FACEBOOK_MESSENGER,
+            contact_id=contact.id,
+            channel_identity_id=identity.id,
+            mode=ConversationMode.BOT,
+            last_inbound_at=datetime.now(timezone.utc),
+        )
+        db.add(conversation)
+        await db.flush()
+        message = Message(
+            conversation_id=conversation.id,
+            sender=MessageSender.BOT,
+            body="reply",
+            delivery_status=DeliveryStatus.PENDING,
+        )
+        db.add(message)
+        await db.flush()
+        outbox = await create_pending_outbox(
+            db,
+            message_id=message.id,
+            channel=ct.PROVIDER_FACEBOOK_MESSENGER,
+            payload={"chat_id": identity.external_id, "text": message.body},
+        )
+        await db.commit()
+
+        dispatch_task = asyncio.create_task(dispatch_outbox(db, outbox_id=outbox.id))
+        await asyncio.wait_for(adapter.entered.wait(), timeout=2)
+
+        async with async_session() as lifecycle_db:
+            disconnect_task = asyncio.create_task(
+                FacebookPageLifecycle(lifecycle_db).disconnect(
+                    page_id=account.account_key,
+                    admin_id=admin.id,
+                )
+            )
+            done, _pending = await asyncio.wait({disconnect_task}, timeout=0.1)
+            assert not done, "Page disconnect bypassed the in-flight dispatch authority lock"
+
+            adapter.release.set()
+            attempt = await dispatch_task
+
+            assert attempt is not None and attempt.ok
+            assert len(adapter.sent) == 1
+            assert adapter.sent[0].channel_account_generation == account.generation
+            conversation_service = ConversationService(db)
+            conversation_service.events.message_created = AsyncMock()
+            conversation_service.events.conversation_updated = AsyncMock()
+            finalized = await conversation_service.finalize_outbound_dispatch(
+                conversation,
+                message_id=attempt.message_id,
+                outbox_id=attempt.outbox_id,
+                delivered=attempt.ok,
+                zalo_message_id=attempt.zalo_message_id,
+                external_error=attempt.error,
+                error_class=attempt.error_class,
+                suppressed=attempt.suppressed,
+                telemetry=attempt.telemetry,
+            )
+            disconnected = await asyncio.wait_for(disconnect_task, timeout=2)
+            assert disconnected is not None
+        await db.refresh(outbox)
+
+        assert finalized.delivery_status == DeliveryStatus.SENT
+        assert finalized.provider_message_id == "mid-production-route"
+        assert outbox.status == OutboxStatus.SENT.value
+        assert outbox.provider_message_id == "mid-production-route"
+
+
 async def test_lifecycle_reactivate_same_page_reuses_account_and_advances_generation(
     integration_database,
 ):

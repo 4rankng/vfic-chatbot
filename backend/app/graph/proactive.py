@@ -182,7 +182,10 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         PROACTIVE_SILENCE_LIMIT,
     )
     from app.graph.context import build_system_prompt
-    from app.recruitment.domain.provider import provider_from_conversation
+    from app.recruitment.domain.provider import (
+        provider_from_conversation,
+        recipient_from_conversation,
+    )
 
     svc = deps.conversation
     injected_proactive_state = getattr(deps, "proactive_state", None)
@@ -195,6 +198,8 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     margin = timedelta(seconds=PROACTIVE_48H_WINDOW_SECONDS)
     cap = PROACTIVE_FOLLOWUP_CAP
     silence_limit = PROACTIVE_SILENCE_LIMIT
+    provider = provider_from_conversation(conv)
+    recipient_id = recipient_from_conversation(conv)
 
     if deps.runtime_policy is not None:
         policy = await deps.runtime_policy.resolve_active_policy()
@@ -260,7 +265,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         # 5. Build context
         system, _ = await build_system_prompt(
             deps.retrieval,
-            provider=provider_from_conversation(conv),
+            provider=provider,
         )
         project_context = (
             await deps.direct_context.resolve(conv, "")
@@ -278,12 +283,12 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         lead_profile = ""
         recent_messages = await svc.last_messages(conv, limit=16)
         try:
-            lead_profile = await deps.lead.profile_text(conv.zalo_chat_id)
+            lead_profile = await deps.lead.profile_text(recipient_id)
         except Exception:  # noqa: BLE001
             logger.warning("lead fetch failed for %s, skipping", conv.zalo_chat_id, exc_info=True)
 
         proactive_text = _build_proactive_user_text(
-            chat_id=conv.zalo_chat_id,
+            chat_id=recipient_id,
             recent_messages=recent_messages,
             lead_profile=lead_profile,
         )
@@ -389,7 +394,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         # 10. Persist the command, then dispatch it.  The production service
         # always takes this durable path; the direct branch retains pure graph
         # unit-test fakes that intentionally have no persistence facade.
-        outbox_channel = "zalo_oa" if getattr(conv, "zalo_channel", "bot") == "oa" else "zalo_bot"
+        outbox_channel = provider
         quote_message_id = next(
             (
                 item.zalo_message_id
@@ -401,7 +406,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         if outbox_channel == "zalo_oa" and not quote_message_id:
             result = SendOutcome(ok=False, error="zalo_oa_requires_inbound_message_id")
         else:
-            outbox_payload = {"chat_id": conv.zalo_chat_id, "text": candidate}
+            outbox_payload = {"chat_id": recipient_id, "text": candidate}
             if quote_message_id:
                 outbox_payload["quote_message_id"] = quote_message_id
             prepare = getattr(svc, "prepare_proactive_message", None)
@@ -430,7 +435,13 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
                     if hasattr(deps.zalo, "for_conversation")
                     else deps.zalo
                 )
-                result = await sender.send_message(conv.zalo_chat_id, candidate)
+                if provider == "facebook_messenger":
+                    result = SendOutcome(
+                        ok=False,
+                        error="messenger requires durable outbound dispatch",
+                    )
+                else:
+                    result = await sender.send_message(recipient_id, candidate)
 
     except Exception as exc:
         logger.warning("proactive turn error: conversation=%s error=%s", conv.zalo_chat_id, exc)

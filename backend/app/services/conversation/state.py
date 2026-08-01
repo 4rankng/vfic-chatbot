@@ -622,8 +622,9 @@ class ConversationState:
         ``outbox_channel`` + ``outbox_payload``: when both provided, an
         ``outbound_outbox`` row is written in THIS transaction (Tech-Lead
         Directive §14) so the outbox reflects the committed send outcome
-        atomically. The channel is ``zalo_bot`` / ``zalo_oa``; the payload is
-        the Zalo send body. Best-effort — outbox failures never block the turn.
+        atomically. The channel is the canonical provider id and the payload is
+        the immutable provider send body. Best-effort — outbox failures never
+        block the turn.
         """
         if delivery_status is None:
             delivery_status = (
@@ -706,6 +707,7 @@ class ConversationState:
             )
             if zalo_message_id:
                 pending_msg.zalo_message_id = zalo_message_id
+                pending_msg.provider_message_id = zalo_message_id
             msg = pending_msg
         if msg is None:
             msg = Message(
@@ -716,6 +718,7 @@ class ConversationState:
                 delivery_status=delivery_status,
                 external_error=external_error,
                 zalo_message_id=zalo_message_id,
+                provider_message_id=zalo_message_id,
             )
             self.db.add(msg)
         owner = _normalize_lock_owner(lock_owner)
@@ -773,6 +776,7 @@ class ConversationState:
                 payload=outbox_payload,
                 status=outbox_status,
                 zalo_message_id=msg.zalo_message_id,
+                provider_message_id=msg.provider_message_id,
                 last_error=msg.external_error,
                 runtime_revision_id=msg.runtime_revision_id,
                 authority_generation=msg.authority_generation,
@@ -898,7 +902,14 @@ class ConversationState:
         ``last_followup_attempt_at`` only (cadence budget is NOT consumed).
         Always clears the lock and fires realtime events.
         """
-        delivery_status = DeliveryStatus.SENT if result.ok else DeliveryStatus.FAILED
+        suppressed = bool(getattr(result, "suppressed", False))
+        delivery_status = (
+            DeliveryStatus.SUPPRESSED
+            if suppressed
+            else DeliveryStatus.SENT
+            if result.ok
+            else DeliveryStatus.FAILED
+        )
         msg = await self.db.get(Message, pending_message_id) if pending_message_id else None
         if (
             msg is None
@@ -912,6 +923,7 @@ class ConversationState:
                 body=message,
                 delivery_status=delivery_status,
                 zalo_message_id=result.msg_id,
+                provider_message_id=result.msg_id,
                 external_error=None if result.ok else result.error,
             )
             self.db.add(msg)
@@ -919,6 +931,7 @@ class ConversationState:
             msg.body = message
             msg.delivery_status = delivery_status
             msg.zalo_message_id = result.msg_id
+            msg.provider_message_id = result.msg_id
             msg.external_error = None if result.ok else result.error
         owner = _normalize_lock_owner(lock_owner)
         if owner is None:
@@ -957,8 +970,15 @@ class ConversationState:
                 message_id=msg.id,
                 channel=outbox_channel,
                 payload=outbox_payload,
-                status=OutboxStatus.SENT if result.ok else OutboxStatus.FAILED,
+                status=(
+                    OutboxStatus.SUPPRESSED
+                    if suppressed
+                    else OutboxStatus.SENT
+                    if result.ok
+                    else OutboxStatus.FAILED
+                ),
                 zalo_message_id=result.msg_id,
+                provider_message_id=result.msg_id,
                 last_error=None if result.ok else result.error,
             )
             if outbox is not None:
@@ -1371,6 +1391,7 @@ class ConversationState:
         zalo_message_id: str | None = None,
         external_error: str | None = None,
         error_class: str | None = None,
+        suppressed: bool = False,
     ) -> Message:
         """Finalize one persisted recruiter command without creating a bubble."""
         from app.models.outbox import OutboxStatus, OutboundOutbox
@@ -1379,20 +1400,28 @@ class ConversationState:
         outbox = await self.db.get(OutboundOutbox, outbox_id)
         if msg is None or msg.conversation_id != conv.id or outbox is None:
             raise RuntimeError("outbound message disappeared before delivery finalization")
-        delivery_status = _delivery_status_for_send_error(error_class, ok=delivered)
+        delivery_status = (
+            DeliveryStatus.SUPPRESSED
+            if suppressed
+            else _delivery_status_for_send_error(error_class, ok=delivered)
+        )
         if delivery_status is None:
             delivery_status = DeliveryStatus.SENT if delivered else DeliveryStatus.FAILED
         msg.delivery_status = delivery_status
         msg.zalo_message_id = zalo_message_id
+        msg.provider_message_id = zalo_message_id
         msg.external_error = None if delivered else external_error
         outbox.status = (
-            OutboxStatus.SENT.value
+            OutboxStatus.SUPPRESSED.value
+            if suppressed
+            else OutboxStatus.SENT.value
             if delivered
             else OutboxStatus.SEND_UNKNOWN.value
             if delivery_status == DeliveryStatus.SEND_UNKNOWN
             else OutboxStatus.FAILED.value
         )
         outbox.zalo_message_id = zalo_message_id
+        outbox.provider_message_id = zalo_message_id
         outbox.last_error = None if delivered else external_error
         outbox.updated_at = utcnow()
         if delivered:
@@ -1434,6 +1463,7 @@ class ConversationState:
             delivery_status = DeliveryStatus.SENT if delivered else DeliveryStatus.FAILED
         msg.delivery_status = delivery_status
         msg.zalo_message_id = zalo_message_id
+        msg.provider_message_id = zalo_message_id
         msg.external_error = None if delivered else external_error
         outbox.status = (
             OutboxStatus.SUPPRESSED.value
@@ -1445,6 +1475,7 @@ class ConversationState:
             else OutboxStatus.FAILED.value
         )
         outbox.zalo_message_id = zalo_message_id
+        outbox.provider_message_id = zalo_message_id
         outbox.last_error = None if delivered else external_error
         outbox.updated_at = utcnow()
         if delivered:

@@ -421,10 +421,16 @@ class ConversationService:
     ) -> tuple[Message, bool]:
         """Persist then immediately dispatch a recruiter reply via the shared outbox."""
         from app.shared.domain.errors import DeliveryEligibilityError
+        from app.recruitment.domain.provider import (
+            provider_from_conversation,
+            recipient_from_conversation,
+        )
         from app.services.outbox_service import build_outbox_payload, dispatch_outbox
 
         quote_message_id = None
-        is_oa = (getattr(conv, "zalo_channel", None) or "bot") == "oa"
+        channel = provider_from_conversation(conv)
+        recipient_id = recipient_from_conversation(conv)
+        is_oa = channel == "zalo_oa"
         if is_oa:
             latest_inbound = await self.latest_worker_message(conv)
             quote_message_id = latest_inbound.zalo_message_id if latest_inbound else None
@@ -436,8 +442,8 @@ class ConversationService:
             conv,
             recruiter,
             body=body,
-            channel="zalo_oa" if is_oa else "zalo_bot",
-            payload=build_outbox_payload(conv.zalo_chat_id, body, quote_message_id),
+            channel=channel,
+            payload=build_outbox_payload(recipient_id, body, quote_message_id),
         )
         attempt = await dispatch_outbox(self.db, outbox_id=outbox_id)
         if attempt is None:
@@ -450,6 +456,7 @@ class ConversationService:
             zalo_message_id=attempt.zalo_message_id,
             external_error=attempt.error,
             error_class=attempt.error_class,
+            suppressed=attempt.suppressed,
         )
         return msg, attempt.ok
 
@@ -474,6 +481,7 @@ class ConversationService:
             zalo_message_id=attempt.zalo_message_id,
             external_error=attempt.error,
             error_class=attempt.error_class,
+            suppressed=attempt.suppressed,
         )
         return msg, attempt.ok
 

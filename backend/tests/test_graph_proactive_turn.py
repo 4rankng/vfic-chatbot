@@ -65,11 +65,13 @@ class _SendResult:
         msg_id: str = "mid-1",
         error: str | None = None,
         error_class: str | None = None,
+        suppressed: bool = False,
     ) -> None:
         self.ok = ok
         self.msg_id = msg_id
         self.error = error
         self.error_class = error_class
+        self.suppressed = suppressed
 
 
 class _FakeZalo:
@@ -318,6 +320,99 @@ async def test_clean_decision_persists_then_dispatches_without_direct_send(monke
         }
     ]
     assert recorded[0]["pending_message_id"] == 99
+
+
+@pytest.mark.asyncio
+async def test_messenger_decision_persists_canonical_outbox_route(monkeypatch):
+    svc, recorded = _stub_svc()
+    _patch_lazy_helpers(monkeypatch)
+    agent = _FakeAgent('{"send": true, "message": "Mình hỗ trợ thêm nhé?", "reason": "warm"}')
+    zalo = _FakeZalo()
+    conv = _FakeConv(
+        zalo_chat_id=None,
+        zalo_channel="facebook_messenger",
+        channel_identity=SimpleNamespace(
+            provider="facebook_messenger",
+            account_key="page-1",
+            external_id="psid-1",
+        ),
+    )
+    prepared: list[dict] = []
+
+    async def prepare_proactive_message(conv, *, body, channel, payload):
+        prepared.append({"body": body, "channel": channel, "payload": payload})
+        return type("Pending", (), {"id": 99})()
+
+    async def dispatch_outbound_message(*, message_id):
+        assert message_id == 99
+        return _SendResult()
+
+    async def record_durable(conv, *, message, result, lock_owner=None, **kwargs):
+        recorded.append({"message": message, "ok": result.ok, **kwargs})
+
+    svc.prepare_proactive_message = prepare_proactive_message
+    svc.dispatch_outbound_message = dispatch_outbound_message
+    svc.state.record_proactive_outcome = record_durable
+
+    result = await run_proactive_turn(conv, _deps(agent, zalo, conversation=svc))
+
+    assert result["outcome"] == "sent"
+    assert prepared == [
+        {
+            "body": "Mình hỗ trợ thêm nhé?",
+            "channel": "facebook_messenger",
+            "payload": {"chat_id": "psid-1", "text": "Mình hỗ trợ thêm nhé?"},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_proactive_finalizer_persists_suppression_and_neutral_message_id(
+    monkeypatch,
+):
+    from unittest.mock import AsyncMock
+
+    from app.models.conversation import DeliveryStatus, MessageSender
+    from app.models.outbox import OutboxStatus
+    from app.services.conversation import ConversationService
+
+    conversation = _FakeConv(followup_count=0)
+    message = SimpleNamespace(
+        id=55,
+        conversation_id=conversation.id,
+        sender=MessageSender.BOT,
+        delivery_status=DeliveryStatus.SENDING,
+    )
+    outbox = SimpleNamespace(attempts=1)
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=message)
+    db.execute = AsyncMock(return_value=SimpleNamespace(rowcount=1))
+    service = ConversationService(db)
+    service.events.message_created = AsyncMock()
+    service.events.conversation_updated = AsyncMock()
+    enqueue = AsyncMock(return_value=outbox)
+    monkeypatch.setattr("app.services.outbox_service.enqueue_outbox", enqueue)
+    result = _SendResult(
+        ok=False,
+        msg_id="mid-suppressed",
+        error="messenger standard messaging window expired",
+        error_class="policy_suppressed",
+        suppressed=True,
+    )
+
+    finalized = await service.state.record_proactive_outcome(
+        conversation,
+        message="Mình hỗ trợ thêm nhé?",
+        result=result,
+        pending_message_id=message.id,
+        outbox_channel="facebook_messenger",
+        outbox_payload={"chat_id": "psid-1", "text": "Mình hỗ trợ thêm nhé?"},
+    )
+
+    assert finalized.delivery_status == DeliveryStatus.SUPPRESSED
+    assert finalized.provider_message_id == "mid-suppressed"
+    assert enqueue.await_args.kwargs["status"] == OutboxStatus.SUPPRESSED
+    assert enqueue.await_args.kwargs["provider_message_id"] == "mid-suppressed"
 
 
 @pytest.mark.asyncio

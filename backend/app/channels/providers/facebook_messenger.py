@@ -214,12 +214,10 @@ class FacebookMessengerAdapter(TextChannelAdapter, ReceiptCapability):
                 error_class="provider_error",
                 suppressed=True,
             )
-        # Messaging-window policy gate.
-        # The caller passes last_inbound_at via the command's reply_to_message_id
-        # is NOT the right channel; the dispatch service resolves it. For the V1
-        # adapter we rely on the dispatch service to enforce policy before calling
-        # send_text (see ChannelDispatchService). The check here is a defensive
-        # backstop for direct callers.
+        # The Messenger outbox dispatcher enforces the standard messaging window
+        # from the authoritative Conversation.last_inbound_at before constructing
+        # this adapter command. Direct adapter callers are transport-level tests or
+        # provider infrastructure and do not carry conversation state.
         try:
             data = await graph_send_message(
                 self._config,

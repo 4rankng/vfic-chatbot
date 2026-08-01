@@ -460,7 +460,8 @@ async def test_webhook_get_challenge_constant_time(monkeypatch):
         db=MagicMock(),
     )
     assert response.status_code == 200
-    assert json.loads(response.body)["hub.challenge"] == "CH-123"
+    assert response.body == b"CH-123"
+    assert response.media_type == "text/plain"
 
     # Wrong verify token → 403.
     response = await webhooks.facebook_webhook_verify(

@@ -388,6 +388,10 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                 )
                 try:
                     from app.graph.decision_trace import DecisionTraceBuilder
+                    from app.recruitment.domain.provider import (
+                        provider_from_conversation,
+                        recipient_from_conversation,
+                    )
                     from app.services.conversation import ConversationService
 
                     svc = ConversationService(db)
@@ -397,26 +401,25 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                         lock_owner = state.lock_owner or None
                         trace_sink = DecisionTraceBuilder()
                         trace_sink.record_decision("degradation_reason", "llm_throttled")
+                        outbox_channel = provider_from_conversation(conv)
+                        recipient_id = recipient_from_conversation(conv)
+                        outbox_payload = {
+                            "chat_id": recipient_id,
+                            "text": DEGRADATION_REPLY,
+                            **(
+                                {"quote_message_id": state.reply_to_message_id}
+                                if state.reply_to_message_id
+                                else {}
+                            ),
+                        }
                         owned = await svc.claim_send(
                             conv,
                             version_at_start=state.version_at_start,
                             lock_owner=lock_owner,
                             pending_message_id=state.pending_message_id,
                             reply=DEGRADATION_REPLY,
-                            outbox_channel=(
-                                "zalo_oa"
-                                if getattr(conv, "zalo_channel", "bot") == "oa"
-                                else "zalo_bot"
-                            ),
-                            outbox_payload={
-                                "chat_id": conv.zalo_chat_id,
-                                "text": DEGRADATION_REPLY,
-                                **(
-                                    {"quote_message_id": state.reply_to_message_id}
-                                    if state.reply_to_message_id
-                                    else {}
-                                ),
-                            },
+                            outbox_channel=outbox_channel,
+                            outbox_payload=outbox_payload,
                         )
                         sent = False
                         external_error: str | None = None
@@ -432,15 +435,22 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             send_t0 = time.monotonic()
                             if callable(dispatch) and iscoroutinefunction(dispatch):
                                 send_result = await dispatch(message_id=state.pending_message_id)
+                            elif outbox_channel == "facebook_messenger":
+                                from app.services.zalo_bot_service import SendResult
+
+                                send_result = SendResult(
+                                    ok=False,
+                                    error="messenger requires durable outbound dispatch",
+                                )
                             elif state.reply_to_message_id:
                                 send_result = await sender.send_message(
-                                    conv.zalo_chat_id,
+                                    recipient_id,
                                     DEGRADATION_REPLY,
                                     quote_message_id=state.reply_to_message_id,
                                 )
                             else:
                                 send_result = await sender.send_message(
-                                    conv.zalo_chat_id, DEGRADATION_REPLY
+                                    recipient_id, DEGRADATION_REPLY
                                 )
                             if send_result is None:
                                 from app.services.zalo_bot_service import SendResult
@@ -456,7 +466,9 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             # Mirror the runner's SEND_UNKNOWN classifier so a
                             # degradation reply that times out at Zalo is also
                             # non-retriable (at-most-once).
-                            if (
+                            if getattr(send_result, "suppressed", False):
+                                degradation_override = DeliveryStatus.SUPPRESSED
+                            elif (
                                 not send_result.ok
                                 and send_result.error_class in AMBIGUOUS_SEND_CLASSES
                             ):
@@ -489,6 +501,8 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             lock_owner=lock_owner,
                             delivery_status=degradation_override,
                             decision_trace=decision_trace,
+                            outbox_channel=outbox_channel,
+                            outbox_payload=outbox_payload,
                         )
                 except Exception:  # noqa: BLE001
                     logger.error("failed to send degradation reply", exc_info=True)

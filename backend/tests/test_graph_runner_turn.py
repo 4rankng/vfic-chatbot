@@ -82,12 +82,14 @@ def test_vacancy_evidence_query_prefers_durable_project_focus_over_free_text_his
 class _FakeConv:
     def __init__(
         self,
-        zalo_chat_id: str = "z1",
+        zalo_chat_id: str | None = "z1",
         version: int = 1,
         zalo_channel: str = "bot",
+        channel_identity=None,
     ) -> None:
         self.zalo_chat_id = zalo_chat_id
         self.zalo_channel = zalo_channel
+        self.channel_identity = channel_identity
         self.version = version
         self.bot_lock_owner = None
         self.bot_locked_until = None
@@ -241,6 +243,31 @@ def _state() -> BotRunState:
     return BotRunState(
         conversation_id=CONV_ID, version_at_start=1, user_text="tôi muốn tìm việc lái xe"
     )
+
+
+@pytest.mark.asyncio
+async def test_messenger_turn_persists_messenger_outbox_route(monkeypatch):
+    conv = _FakeConv(
+        zalo_chat_id=None,
+        zalo_channel="facebook_messenger",
+        channel_identity=SimpleNamespace(
+            provider="facebook_messenger",
+            account_key="page-1",
+            external_id="psid-1",
+        ),
+    )
+    svc, recorded = _stub_svc(conv=conv)
+    svc.dispatch_outbound_message = AsyncMock(return_value=_SendResult())
+    _stub_agent(monkeypatch, "Chào bạn!")
+
+    result = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc))
+
+    assert result["outcome"] == "sent"
+    assert recorded[-1]["outbox_channel"] == "facebook_messenger"
+    assert recorded[-1]["outbox_payload"] == {
+        "chat_id": "psid-1",
+        "text": "Chào bạn!",
+    }
 
 
 @pytest.mark.asyncio
