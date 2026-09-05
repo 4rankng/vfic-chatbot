@@ -211,7 +211,7 @@ stored with it.
 | `GET /api/v1/admin/integrations/facebook/oauth/callback` | Public redirect | Validates the one-time state server-side, exchanges the code, stores an encrypted opaque flow capsule in Redis, and redirects back to `/#/settings` with `facebook_oauth_status` plus either `facebook_oauth_flow_id` or `facebook_oauth_error`. |
 | `GET /api/v1/admin/integrations/facebook/oauth/pages?flow_id=...` | Admin | Returns the safe Page list for the current authenticated admin session. |
 | `POST /api/v1/admin/integrations/facebook/oauth/complete` | Admin | Consumes the flow once, activates the selected Page, and invalidates the pending session record. |
-| `POST /api/v1/admin/integrations/facebook/test` | Admin | Probes the active Page connection. |
+| `POST /api/v1/admin/integrations/facebook/test` | Admin | Probes the active Page connection: Page-token validity plus the app's webhook subscription on the Page (`app_subscribed`; `healthy=false` with an actionable error when the subscription is missing). |
 | `DELETE /api/v1/admin/integrations/facebook` | Admin | Disconnects the single active Page server-side; no `page_id` query parameter is required. |
 
 The callback redirect target is built from the first allowlisted

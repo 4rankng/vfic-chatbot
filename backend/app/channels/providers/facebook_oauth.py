@@ -255,6 +255,36 @@ async def subscribe_app_to_page(page_id: str, page_access_token: str) -> None:
         raise FacebookOAuthError("page subscription failed")
 
 
+async def page_is_app_subscribed(
+    page_id: str, page_access_token: str, app_id: str
+) -> bool:
+    """Report whether ``app_id`` receives this Page's webhook events.
+
+    Reads the Page's ``subscribed_apps`` edge with the Page token. Used by the
+    health probe to catch a silently-dropped webhook subscription (e.g. after
+    another platform changed the Page's integrations) before real traffic
+    depends on it. Raises :class:`FacebookOAuthError` on a definite failure or
+    when the caller's app id is unknown; returns ``False`` when the Page's
+    subscription list resolves without this app.
+    """
+    if not app_id:
+        raise FacebookOAuthError("app id not configured for subscription check")
+    data = await _bounded_get(
+        f"{_graph_base()}/{page_id}/subscribed_apps",
+        # Raise the page size above Graph's default so a Page with many
+        # subscribed apps does not paginate our app out of the first page.
+        params={"access_token": page_access_token, "limit": "100"},
+    )
+    if isinstance(data.get("error"), dict):
+        # Fail closed without echoing the provider envelope.
+        raise FacebookOAuthError("page subscription lookup failed")
+    apps = data.get("data") or []
+    return any(
+        isinstance(item, dict) and str(item.get("id") or "") == app_id
+        for item in apps
+    )
+
+
 async def unsubscribe_app_from_page(page_id: str, page_access_token: str) -> None:
     """Best-effort unsubscribe on disconnect. Failures are logged, not fatal."""
     s = get_settings()
@@ -301,6 +331,7 @@ __all__ = [
     "exchange_code_for_user_token",
     "list_pages",
     "get_page_access_token",
+    "page_is_app_subscribed",
     "probe_page_identity",
     "subscribe_app_to_page",
     "unsubscribe_app_from_page",

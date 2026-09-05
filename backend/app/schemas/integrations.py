@@ -227,6 +227,9 @@ class FacebookChannelTestOut(BaseModel):
 
     healthy: bool
     error: str | None = None  # generic Vietnamese message
+    # None = the webhook-subscription lookup could not run (no Page/token yet,
+    # or a provider failure); False = the app is not receiving Page events.
+    app_subscribed: bool | None = None
 
 
 class FacebookOAuthCompleteRequest(BaseModel):

@@ -747,9 +747,14 @@ async def test_facebook_connection(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> FacebookChannelTestOut:
-    """Health probe: resolve the active Page and probe its identity."""
+    """Health probe: resolve the active Page, probe its identity, and verify
+    the Meta app is subscribed to the Page for webhook events."""
     from app.channels.providers.facebook_account import FacebookAccountResolver
-    from app.channels.providers.facebook_oauth import FacebookOAuthError, probe_page_identity
+    from app.channels.providers.facebook_oauth import (
+        FacebookOAuthError,
+        page_is_app_subscribed,
+        probe_page_identity,
+    )
     from app.services.integration_settings import IntegrationSettingsService
 
     resolver = FacebookAccountResolver(db)
@@ -770,7 +775,29 @@ async def test_facebook_connection(
         return FacebookChannelTestOut(
             healthy=False, error="Token Trang không hợp lệ hoặc đã bị thu hồi."
         )
-    return FacebookChannelTestOut(healthy=True)
+    # A valid Page token alone does not prove webhook events arrive: the app
+    # must also be subscribed to the Page (Meta or a competing integration on
+    # the same Page can drop it). Fail the probe when it is not.
+    try:
+        subscribed = await page_is_app_subscribed(
+            active.account_key, cfg.page_access_token, str(cfg.app_id or "").strip()
+        )
+    except (FacebookOAuthError, httpx.HTTPError, ValueError):
+        return FacebookChannelTestOut(
+            healthy=False,
+            app_subscribed=None,
+            error="Không kiểm tra được đăng ký webhook của ứng dụng trên Trang.",
+        )
+    if not subscribed:
+        return FacebookChannelTestOut(
+            healthy=False,
+            app_subscribed=False,
+            error=(
+                "Ứng dụng chưa nhận sự kiện webhook từ Trang này. "
+                "Hãy ngắt kết nối rồi kết nối lại Trang."
+            ),
+        )
+    return FacebookChannelTestOut(healthy=True, app_subscribed=True)
 
 
 @router.get("/facebook/credentials", response_model=FacebookCredentialsOut)

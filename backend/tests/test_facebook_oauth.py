@@ -180,6 +180,60 @@ async def test_subscribe_app_rejects_missing_or_malformed_acknowledgement(
         await oauth.subscribe_app_to_page("full-page-id", "secret-page-token")
 
     assert str(exc_info.value) == "page subscription failed"
+
+
+@pytest.mark.asyncio
+async def test_page_is_app_subscribed_true_when_app_in_list(monkeypatch):
+    import app.channels.providers.facebook_oauth as oauth
+
+    monkeypatch.setattr(
+        oauth,
+        "_bounded_get",
+        AsyncMock(return_value={"data": [{"id": "other-app"}, {"id": "app-123"}]}),
+    )
+
+    assert await oauth.page_is_app_subscribed(
+        "full-page-id", "secret-page-token", "app-123"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        {"data": [{"id": "other-app"}]},
+        {"data": []},
+        {},
+    ],
+)
+async def test_page_is_app_subscribed_false_when_app_absent(monkeypatch, response):
+    import app.channels.providers.facebook_oauth as oauth
+
+    monkeypatch.setattr(oauth, "_bounded_get", AsyncMock(return_value=response))
+
+    assert not await oauth.page_is_app_subscribed(
+        "full-page-id", "secret-page-token", "app-123"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "app_id,response",
+    [
+        # Unknown app id: the lookup cannot prove anything; fail closed.
+        ("", {"data": [{"id": "app-123"}]}),
+        # Graph error envelope: raise without echoing the provider body.
+        ("app-123", {"error": {"message": "secret-page-token invalid"}}),
+    ],
+)
+async def test_page_is_app_subscribed_fails_closed(monkeypatch, app_id, response):
+    import app.channels.providers.facebook_oauth as oauth
+
+    monkeypatch.setattr(oauth, "_bounded_get", AsyncMock(return_value=response))
+
+    with pytest.raises(oauth.FacebookOAuthError) as exc_info:
+        await oauth.page_is_app_subscribed("full-page-id", "secret-page-token", app_id)
+
     assert "secret-page-token" not in str(exc_info.value)
 
 
@@ -973,6 +1027,124 @@ async def test_facebook_health_maps_expected_provider_failures_to_unhealthy(
 
     assert result.healthy is False
     assert result.error == "Token Trang không hợp lệ hoặc đã bị thu hồi."
+    assert "secret-page-token" not in result.error
+
+
+async def _health_probe_mocks(monkeypatch, *, subscribed) -> None:
+    """Shared wiring for test_facebook_connection happy-path variants.
+
+    Stubs the resolver, settings service, identity probe, and subscription
+    lookup so the endpoint runs without Postgres or external HTTP. The
+    settings service is patched on its source module because the endpoint
+    re-imports it inside the handler.
+    """
+    from app.channels.accounts import ChannelAccountStatus
+    from app.channels.types import ChannelAccountRef
+
+    active = ChannelAccountRef(
+        id="account-1",
+        provider="facebook_messenger",
+        account_key="full-page-id-9876",
+        label="Trang Một",
+        status=ChannelAccountStatus.ACTIVE,
+        generation=1,
+    )
+
+    class _SettingsService:
+        def __init__(self, db):
+            pass
+
+        async def resolve_facebook(self, page_id):
+            assert page_id == "full-page-id-9876"
+            return SimpleNamespace(
+                page_access_token="secret-page-token", app_id="app-123"
+            )
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.IntegrationSettingsService",
+        _SettingsService,
+    )
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_account.FacebookAccountResolver.active_facebook_page",
+        AsyncMock(return_value=active),
+    )
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_oauth.probe_page_identity",
+        AsyncMock(return_value="full-page-id-9876"),
+    )
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_oauth.page_is_app_subscribed",
+        AsyncMock(return_value=subscribed),
+    )
+
+
+@pytest.mark.asyncio
+async def test_facebook_health_healthy_when_app_subscribed(monkeypatch):
+    """A valid token AND a present webhook subscription report healthy with
+    the subscription confirmed, so the operator can trust the pre-cutover
+    probe."""
+    import app.api.integrations as api
+
+    await _health_probe_mocks(monkeypatch, subscribed=True)
+
+    result = await api.test_facebook_connection(
+        _admin=SimpleNamespace(id="admin-id"), db=MagicMock()
+    )
+
+    assert result.healthy is True
+    assert result.app_subscribed is True
+    assert result.error is None
+
+
+@pytest.mark.asyncio
+async def test_facebook_health_unhealthy_when_app_not_subscribed(monkeypatch):
+    """A valid Page token alone is not healthy: if the app is missing from the
+    Page's subscribed_apps edge the probe fails so the operator re-connects
+    before cutover (e.g. a competing platform altered the Page's integrations)."""
+    import app.api.integrations as api
+
+    await _health_probe_mocks(monkeypatch, subscribed=False)
+
+    result = await api.test_facebook_connection(
+        _admin=SimpleNamespace(id="admin-id"), db=MagicMock()
+    )
+
+    assert result.healthy is False
+    assert result.app_subscribed is False
+    assert "webhook" in (result.error or "")
+    assert "secret-page-token" not in (result.error or "")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "lookup_error",
+    [
+        httpx.ReadTimeout("provider transport exposed secret-page-token"),
+        ValueError("malformed subscription JSON exposed secret-page-token"),
+    ],
+)
+async def test_facebook_health_subscription_lookup_failure_is_unhealthy(
+    monkeypatch, lookup_error
+):
+    """A transport/parse failure of the subscription lookup is inconclusive:
+    report unhealthy with app_subscribed=None and a generic Vietnamese error."""
+    import app.api.integrations as api
+
+    await _health_probe_mocks(monkeypatch, subscribed=True)
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_oauth.page_is_app_subscribed",
+        AsyncMock(side_effect=lookup_error),
+    )
+
+    result = await api.test_facebook_connection(
+        _admin=SimpleNamespace(id="admin-id"), db=MagicMock()
+    )
+
+    assert result.healthy is False
+    assert result.app_subscribed is None
+    assert result.error == (
+        "Không kiểm tra được đăng ký webhook của ứng dụng trên Trang."
+    )
     assert "secret-page-token" not in result.error
 
 

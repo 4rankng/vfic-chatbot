@@ -403,9 +403,7 @@ export const FacebookMessengerIntegrationPage = () => {
             <MetaAppPlainField
               id="facebook_app_id"
               label="App ID"
-              configured={
-                credentials?.facebook_app_id.configured ?? false
-              }
+              configured={credentials?.facebook_app_id.configured ?? false}
               statusState={credentialsStatusState}
               value={credentialsForm.facebook_app_id}
               onChange={onCredentialChange}
@@ -503,7 +501,7 @@ export const FacebookMessengerIntegrationPage = () => {
                 }`}
               >
                 {testConnection.data.healthy
-                  ? "Kết nối Messenger hoạt động bình thường."
+                  ? "Kết nối Messenger hoạt động bình thường; webhook đang nhận sự kiện từ Trang."
                   : (testConnection.data.error ?? "Kết nối không khả dụng.")}
               </div>
             ) : null}

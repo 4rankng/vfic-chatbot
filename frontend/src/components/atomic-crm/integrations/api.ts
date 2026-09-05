@@ -92,6 +92,8 @@ export type FacebookOAuthCompleteRequest = {
 export type FacebookChannelTest = {
   healthy: boolean;
   error: string | null;
+  // null/undefined = subscription lookup not run; false = app not subscribed.
+  app_subscribed?: boolean | null;
 };
 
 export type FacebookCredentials = {
@@ -127,7 +129,9 @@ export const zaloIntegrationGateway = {
     return { zalo, minimax, openRouter };
   },
 
-  saveZaloSettings: async (body: Partial<ZaloFormState>): Promise<ZaloSettings> =>
+  saveZaloSettings: async (
+    body: Partial<ZaloFormState>,
+  ): Promise<ZaloSettings> =>
     apiJson<ZaloSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/zalo`, {
       method: "PUT",
       body,
@@ -187,7 +191,9 @@ export const zaloIntegrationGateway = {
 
 export const facebookIntegrationGateway = {
   loadStatus: async (): Promise<FacebookIntegrationStatus> =>
-    apiJson<FacebookIntegrationStatus>(`${ADMIN_INTEGRATIONS_BASE_PATH}/facebook`),
+    apiJson<FacebookIntegrationStatus>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook`,
+    ),
 
   loadCredentials: async (): Promise<FacebookCredentials> =>
     apiJson<FacebookCredentials>(
@@ -220,9 +226,12 @@ export const facebookIntegrationGateway = {
     ),
 
   testConnection: async (): Promise<FacebookChannelTest> =>
-    apiJson<FacebookChannelTest>(`${ADMIN_INTEGRATIONS_BASE_PATH}/facebook/test`, {
-      method: "POST",
-    }),
+    apiJson<FacebookChannelTest>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook/test`,
+      {
+        method: "POST",
+      },
+    ),
 
   disconnect: async (): Promise<FacebookAccountStatus> =>
     apiJson<FacebookAccountStatus>(`${ADMIN_INTEGRATIONS_BASE_PATH}/facebook`, {
