@@ -63,10 +63,10 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
     "outbox_boundary": 10,
-    "provider_boundary": 92,
+    "provider_boundary": 93,
     "queue_producer": 37,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "e3f71535990d2e34be2867f7e317582fec69bfa3a0f6943cef46222d7f7da3d7"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "7926f5485e81abdd9c5efe3c915c26213b97e1a528d5915232e9bec0fa28441e"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
