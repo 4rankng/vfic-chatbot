@@ -100,12 +100,23 @@ PY
     return 1
   }
 
-  require_running_service_count "frontend" 1 || return 1
-  require_running_service_count "worker-chatbot" 2 || return 1
-  require_running_service_count "worker-persistence" 1 || return 1
-  require_running_service_count "worker-ingest" 1 || return 1
-  require_running_service_count "worker-followup" 1 || return 1
-  require_running_service_count "scheduler" 1 || return 1
+  # Same rationale as bg_deploy.sh: freshly recreated workers need minutes
+  # (LLM warmup + healthcheck start_period/retries), so poll within a bounded
+  # budget instead of failing on the first health=starting sighting.
+  local _deadline=$(( $(date +%s) + ${POST_FLIP_WAIT_BUDGET:-300} ))
+  while :; do
+    require_running_service_count "frontend" 1 &&
+      require_running_service_count "worker-chatbot" 2 &&
+      require_running_service_count "worker-persistence" 1 &&
+      require_running_service_count "worker-ingest" 1 &&
+      require_running_service_count "worker-followup" 1 &&
+      require_running_service_count "scheduler" 1 && break
+    if [ "$(date +%s)" -ge "$_deadline" ]; then
+      echo "==> rollback check: services still not ready after ${POST_FLIP_WAIT_BUDGET:-300}s budget" >&2
+      return 1
+    fi
+    sleep 10
+  done
 
   IMAGE_TAG="$PREV_TAG" docker compose exec -T "web-$color" python - <<'PY'
 import json
