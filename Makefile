@@ -24,9 +24,9 @@ release-check:
 		tmp_gold="$$(mktemp -t release-gate-golden.XXXXXX.json)"; \
 		(cd backend && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp_raw"); \
 		(cd backend && .venv/bin/python -c 'import json, sys; from pathlib import Path; raw = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")); passed = raw.get("passed"); case_count = raw.get("case_count"); \
-if isinstance(passed, bool) or not isinstance(passed, int): raise SystemExit("benchmark artifact missing integer passed"); \
-if isinstance(case_count, bool) or not isinstance(case_count, int) or case_count <= 0: raise SystemExit("benchmark artifact missing positive integer case_count"); \
-if passed < 0 or passed > case_count: raise SystemExit("benchmark artifact has invalid passed/case_count values"); \
+assert isinstance(passed, int) and not isinstance(passed, bool), "benchmark artifact missing integer passed"; \
+assert isinstance(case_count, int) and not isinstance(case_count, bool) and case_count > 0, "benchmark artifact missing positive integer case_count"; \
+assert 0 <= passed <= case_count, "benchmark artifact has invalid passed/case_count values"; \
 Path(sys.argv[2]).write_text(json.dumps({"golden_pass_rate_pct": passed / case_count * 100.0}), encoding="utf-8")' "$$tmp_raw" "$$tmp_gold"); \
 		(cd backend && .venv/bin/python scripts/release_gate_check.py --golden-results "$$tmp_gold"); \
 		rc=$$?; \
