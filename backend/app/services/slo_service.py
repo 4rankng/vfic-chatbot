@@ -312,6 +312,24 @@ async def compute_slos(db: AsyncSession, interval: timedelta) -> list[SloResult]
     return out
 
 
+async def count_measured_runs(db: AsyncSession, interval: timedelta) -> int:
+    """Count the SLO population: bot runs with stage timings in the window.
+
+    Mirrors ``_latency_rollups``' WHERE clause so the release gate can tell
+    "insufficient evidence" (a tiny window, e.g. 2 overnight runs) apart from
+    a genuine SLO breach and refuse to block releases on sample-size noise.
+    """
+    row = await db.execute(
+        text(
+            "SELECT count(*) FROM bot_runs "
+            "WHERE started_at >= now() - (:interval)::interval "
+            "AND stage_timings IS NOT NULL"
+        ),
+        {"interval": interval},
+    )
+    return int(row.scalar_one())
+
+
 async def _latency_rollups(db: AsyncSession, interval: timedelta) -> dict:
     """One round-trip: p50/p95 for queue_wait, cached lanes, and full_answer.
 

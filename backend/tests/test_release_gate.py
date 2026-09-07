@@ -24,6 +24,16 @@ def _settings(**overrides) -> SimpleNamespace:
     return SimpleNamespace(**defaults)
 
 
+def _patch_window_count(monkeypatch, n: int = 10_000) -> None:
+    """Pretend the SLO window has ample measurements so SLO gates engage."""
+    from app.services import release_gate
+
+    async def fake_count(db, interval):
+        return n
+
+    monkeypatch.setattr(release_gate, "count_measured_runs", fake_count)
+
+
 async def test_release_gate_passes_when_all_green(monkeypatch):
     from app.services import release_gate, slo_service
 
@@ -34,6 +44,7 @@ async def test_release_gate_passes_when_all_green(monkeypatch):
         ]
 
     monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    _patch_window_count(monkeypatch)
     result = await evaluate_release_gate(
         db=None, settings=_settings(), golden_pass_rate=98.0
     )
@@ -67,6 +78,7 @@ async def test_release_gate_blocks_on_correctness_regression(monkeypatch):
         ]
 
     monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    _patch_window_count(monkeypatch)
     result = await evaluate_release_gate(
         db=None, settings=_settings(), golden_pass_rate=80.0  # below 95%
     )
@@ -85,6 +97,7 @@ async def test_release_gate_blocks_on_latency_regression(monkeypatch):
         ]
 
     monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    _patch_window_count(monkeypatch)
     result = await evaluate_release_gate(
         db=None, settings=_settings(), golden_pass_rate=98.0
     )
@@ -102,11 +115,62 @@ async def test_release_gate_blocks_on_error_rate_regression(monkeypatch):
         ]
 
     monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    _patch_window_count(monkeypatch)
     result = await evaluate_release_gate(
         db=None, settings=_settings(), golden_pass_rate=98.0
     )
     assert result.verdict == "block"
     assert any(f.gate == "error_rate" for f in result.failures)
+
+
+async def test_release_gate_skips_slo_gate_when_window_data_is_insufficient(monkeypatch):
+    """A tiny SLO window (e.g. 2 overnight runs, both errors) is sample-size noise.
+
+    Rate/latency SLOs over < MIN_WINDOW_RUNS measurements must not block the
+    release; they surface as not-evaluated instead. The golden correctness
+    gate still gates.
+    """
+    from app.services import release_gate, slo_service
+
+    async def fake_slos(db, interval):
+        return [
+            slo_service.SloResult("full_answer", "", 4000, "ms", 8000, 9157, "red"),
+            slo_service.SloResult("error_or_timeout_rate", "", 1.0, "%", 100.0, 100.0, "red"),
+        ]
+
+    async def fake_count(db, interval):
+        return 2
+
+    monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    monkeypatch.setattr(release_gate, "count_measured_runs", fake_count)
+    result = await evaluate_release_gate(
+        db=None, settings=_settings(), golden_pass_rate=98.0
+    )
+    assert result.verdict == "pass"
+    assert result.failures == []
+    assert any("insufficient window data" in note for note in result.not_evaluated)
+
+
+async def test_release_gate_blocks_on_slo_regression_with_sufficient_window(monkeypatch):
+    """With >= MIN_WINDOW_RUNS measurements, SLO breaches still block (fail-closed kept)."""
+    from app.services import release_gate, slo_service
+
+    async def fake_slos(db, interval):
+        return [
+            slo_service.SloResult("full_answer", "", 4000, "ms", 8000, 9157, "red"),
+            slo_service.SloResult("error_or_timeout_rate", "", 1.0, "%", 100.0, 100.0, "red"),
+        ]
+
+    async def fake_count(db, interval):
+        return 50
+
+    monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    monkeypatch.setattr(release_gate, "count_measured_runs", fake_count)
+    result = await evaluate_release_gate(
+        db=None, settings=_settings(), golden_pass_rate=98.0
+    )
+    assert result.verdict == "block"
+    assert {f.gate for f in result.failures} == {"full_answer_p95", "error_rate"}
 
 
 async def test_release_gate_skip_when_gates_disabled(monkeypatch):
@@ -134,6 +198,7 @@ async def test_release_gate_blocks_when_golden_pass_rate_is_missing(monkeypatch)
         ]
 
     monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    _patch_window_count(monkeypatch)
     result = await evaluate_release_gate(db=None, settings=_settings(), golden_pass_rate=None)
     assert result.verdict == "block"
     assert any(f.gate == "correctness" for f in result.failures)
@@ -146,6 +211,7 @@ async def test_release_gate_blocks_when_latency_measurements_are_missing(monkeyp
         return []
 
     monkeypatch.setattr(release_gate, "compute_slos", fake_slos)
+    _patch_window_count(monkeypatch)
     result = await evaluate_release_gate(db=None, settings=_settings(), golden_pass_rate=100.0)
     assert result.verdict == "block"
     assert {failure.gate for failure in result.failures} == {"full_answer_p95", "error_rate"}

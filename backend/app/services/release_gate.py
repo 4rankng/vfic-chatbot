@@ -15,10 +15,15 @@ from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.slo_service import SloResult, compute_slos
+from app.services.slo_service import SloResult, compute_slos, count_measured_runs
 
 GateVerdict = Literal["pass", "block"]
 GOLDEN_PASS_RATE_THRESHOLD_PCT = 95.0
+# Below this many stage-timing measurements in the SLO window, latency/error
+# rates are sample-size noise (e.g. 2 overnight runs → p95 of the two), not
+# release evidence. The gate treats the SLO segment as not-evaluated instead
+# of blocking; the golden correctness gate still gates.
+MIN_WINDOW_RUNS = 30
 
 
 class GoldenResultsError(ValueError):
@@ -146,8 +151,10 @@ async def evaluate_release_gate(
     slos: list[SloResult] = []
     failures: list[GateFailure] = []
     not_evaluated: list[str] = []
+    window_run_count: int | None = None
 
     if settings.release_gate_latency_slo_enabled:
+        window_run_count = await count_measured_runs(db, timedelta(hours=window_hours))
         slos = await compute_slos(db, timedelta(hours=window_hours))
     else:
         not_evaluated.append("latency_slo")
@@ -189,44 +196,50 @@ async def evaluate_release_gate(
 
     # Latency SLO gates.
     if settings.release_gate_latency_slo_enabled:
-        fa = slo_by_name.get("full_answer")
-        if fa is None or fa.actual_p95 is None:
-            failures.append(
-                GateFailure(
-                    "full_answer_p95",
-                    None,
-                    float(settings.release_gate_full_answer_p95_ms),
-                    "full_answer p95 missing; no latency measurements available for the selected window",
-                )
+        if window_run_count is None or window_run_count < MIN_WINDOW_RUNS:
+            not_evaluated.append(
+                "latency_slo (insufficient window data: "
+                f"{window_run_count} runs < {MIN_WINDOW_RUNS})"
             )
-        elif fa.actual_p95 > settings.release_gate_full_answer_p95_ms:
-            failures.append(
-                GateFailure(
-                    "full_answer_p95",
-                    fa.actual_p95,
-                    float(settings.release_gate_full_answer_p95_ms),
-                    f"full_answer p95 {fa.actual_p95:.0f}ms > {settings.release_gate_full_answer_p95_ms}ms",
+        else:
+            fa = slo_by_name.get("full_answer")
+            if fa is None or fa.actual_p95 is None:
+                failures.append(
+                    GateFailure(
+                        "full_answer_p95",
+                        None,
+                        float(settings.release_gate_full_answer_p95_ms),
+                        "full_answer p95 missing; no latency measurements available for the selected window",
+                    )
                 )
-            )
-        err = slo_by_name.get("error_or_timeout_rate")
-        if err is None or err.actual_p95 is None:
-            failures.append(
-                GateFailure(
-                    "error_rate",
-                    None,
-                    settings.release_gate_error_rate_pct,
-                    "error rate missing; no error-rate measurements available for the selected window",
+            elif fa.actual_p95 > settings.release_gate_full_answer_p95_ms:
+                failures.append(
+                    GateFailure(
+                        "full_answer_p95",
+                        fa.actual_p95,
+                        float(settings.release_gate_full_answer_p95_ms),
+                        f"full_answer p95 {fa.actual_p95:.0f}ms > {settings.release_gate_full_answer_p95_ms}ms",
+                    )
                 )
-            )
-        elif err.actual_p95 > settings.release_gate_error_rate_pct:
-            failures.append(
-                GateFailure(
-                    "error_rate",
-                    err.actual_p95,
-                    settings.release_gate_error_rate_pct,
-                    f"error rate {err.actual_p95:.1f}% > {settings.release_gate_error_rate_pct}%",
+            err = slo_by_name.get("error_or_timeout_rate")
+            if err is None or err.actual_p95 is None:
+                failures.append(
+                    GateFailure(
+                        "error_rate",
+                        None,
+                        settings.release_gate_error_rate_pct,
+                        "error rate missing; no error-rate measurements available for the selected window",
+                    )
                 )
-            )
+            elif err.actual_p95 > settings.release_gate_error_rate_pct:
+                failures.append(
+                    GateFailure(
+                        "error_rate",
+                        err.actual_p95,
+                        settings.release_gate_error_rate_pct,
+                        f"error rate {err.actual_p95:.1f}% > {settings.release_gate_error_rate_pct}%",
+                    )
+                )
 
     verdict: GateVerdict = "block" if failures else "pass"
     return ReleaseGateResult(
