@@ -1,0 +1,71 @@
+# OpenWiki ignore patterns — TingTing
+# Keep secrets, generated artifacts, and agent runtime state out of generated docs.
+# Negation rules use `!` and re-include a path that an earlier rule excluded.
+
+# --- Secrets / credentials / env ---
+.env
+.env.*
+!.env.example
+**/secrets/
+**/*.pem
+**/*.key
+
+# --- OS / editor junk ---
+.DS_Store
+._*
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.cursor/
+.codex/
+
+# --- AI agent runtime & orchestration state (not source of truth) ---
+.claude/
+!.claude/skills/
+!.claude/skills/**
+!.claude/hooks/
+!.claude/hooks/**
+.claude/settings.local.json
+.omc/
+CLAUDE.local.md
+AGENTS.local.md
+.agents/
+
+# --- Build output / caches / generated artifacts ---
+node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/dist/
+**/build/
+**/.next/
+**/.cache/
+**/coverage/
+**/.nyc_output/
+**/__screenshots__/
+**/.eslintcache
+.npm
+.eslintcache
+.repomix*
+repomix-output.xml
+.graphify-cache/
+graphify-out/
+
+# --- Production backups (DB dumps + secrets) ---
+backups/
+.zcode/
+
+# --- Logs / dumps ---
+*.log
+*.dump
+
+# --- shadcn/ui generated primitives (auto-generated, not project-specific) ---
+frontend/src/components/ui/
+
+# --- Claude outputs and superseded tooling artifacts ---
+Claude outputs/

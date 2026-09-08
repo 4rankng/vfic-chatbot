@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:daf38b3ebc96f8ca2d48569eb2eb3b402bcca6bc9ba2d203f12daa617141b6ae",
+  "claims": [
+    {
+      "id": "claim_528648de25aa4a289c81ed5c15319efe",
+      "statement": "The Bot Platform endpoint verifies X-Bot-Api-Secret-Token via hmac.compare_digest; outside development a missing configured secret returns 503 rather than accepting blind, and dev/test keeps the accept-unsigned behavior for ergonomics.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/api/webhooks.py",
+          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+        }
+      ]
+    },
+    {
+      "id": "claim_8182e9eecc0645598b3161ff4ac613c6",
+      "statement": "The OA endpoint accepts only the empty-body URL-verification probe (returns {\"status\": \"verified\"} with 200) and does not enforce X-Zevent-Signature on real events because the held oa_secret_key is the OA access-token secret, not Zalo's webhook signing key; POST /zalo/oa/verify-signature remains as a diagnostic for a future cutover.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/api/webhooks.py",
+          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+        }
+      ]
+    },
+    {
+      "id": "claim_22f72570278c4733981e4aebcf127f67",
+      "statement": "Both endpoints ack in <1s; webhook-ack latency is sampled into the SLO sliding window via record_webhook_ack_ms((time.time()-t0)*1000), but only successful 2xx acks are sampled; enqueue failure returns 503 so Zalo retries, success returns 200 with the result body.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/api/webhooks.py",
+          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+        }
+      ]
+    },
+    {
+      "id": "claim_c288294446b64586b1eb39c403e9a346",
+      "statement": "Only request size and safe event metadata (bytes=N) are logged; candidate content, provider signatures, timestamps, and identifiers never enter application logs and the body is never logged because it can carry candidate text.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/api/webhooks.py",
+          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+        }
+      ]
+    },
+    {
+      "id": "claim_c64fff20966e42ecac5caf8e98225d9e",
+      "statement": "ZaloBotChannelAdapter implements TextChannelAdapter + TypingCapability and wraps ZaloBotSender (token rides in the URL path); ZaloOAChannelAdapter implements TextChannelAdapter + ReceiptCapability, wraps ZaloOASender with lazy refresh, strips the oa: storage prefix when calling the OA Send API, and forwards quote_message_id so OA CS replies quote the inbound message.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/channels/providers/zalo_bot.py",
+          "version": "repo-file-v1:sha256:969ea1dd9bab05e16d85581aec9206d449c055448404ae4e68838b1d6923f980"
+        },
+        {
+          "resource": "repo://backend/app/channels/providers/zalo_oa.py",
+          "version": "repo-file-v1:sha256:1e318d3c0a0f1699ad10e65be7261fddd2e0b714e2321002cc30526fba1e98a0"
+        }
+      ]
+    },
+    {
+      "id": "claim_f7d14af059c3476fa2ac3859db5423c8",
+      "statement": "ChannelAdapterRegistry.register validates the provider id against is_known_provider (typo-proof); get returns the adapter or None (fail-closed), and get_typing/get_receipt return None for absent capabilities which means \"do nothing\", not \"failure\".",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/channels/registry.py",
+          "version": "repo-file-v1:sha256:a229e568a021084bec4885972bf8daf7367f0025c77b9d84a3689ba232fc5925"
+        }
+      ]
+    },
+    {
+      "id": "claim_806e9083f72949e1ac8f21e1f932962e",
+      "statement": "ChannelDispatchService is registry-driven and provider-neutral; it compares channel_account_generation on the command to the active generation immediately before provider I/O and suppresses stale work across disconnect/reconnect/replacement, while the runtime authority fence on the outbox row remains separate and both must be current for a send to proceed.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/channels/dispatch.py",
+          "version": "repo-file-v1:sha256:cb66dc7f00758e6ba5ec6cd267ab0b060cfc0c11948119eb19b1fe3b3fde5f73"
+        }
+      ]
+    },
+    {
+      "id": "claim_af62502ed4334951bae38767aa7a4971",
+      "statement": "After signature verification and before any business write the webhook resolves the runtime authority stamp via InstallationService.resolve_active; the bot token passed to run_zalo_ingress is the DB-resolved token so a token rotation takes effect on the very next request.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/api/webhooks.py",
+          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+        },
+        {
+          "resource": "repo://backend/app/services/integration_settings.py",
+          "version": "repo-file-v1:sha256:6c2ba9488d150b9f85ae0e5cf49b4fcedac6dd9d26be8898fd2e3f7a5778a5f2"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

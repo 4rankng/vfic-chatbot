@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:e51137bf86217b36cf073a4561f4a46b88c85efc3bd19491ba786684f47b4593",
+  "claims": [
+    {
+      "id": "claim_4a5f34651010427fb81d496a6ebd0b55",
+      "statement": "JWT tokens carry sub, type (access|refresh), ver (user version bumped on disable/delete), and runtime iat/exp; access expires in 60 minutes, refresh in 14 days, and decode runs on a worker thread via asyncio.to_thread so argon2 / jose do not block the event loop.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        },
+        {
+          "resource": "repo://backend/app/core/security.py",
+          "version": "repo-file-v1:sha256:f3276911464bd6ae15f6a31b0c46defa97a2e16b5737b5739c8601b2a29e3492"
+        }
+      ]
+    },
+    {
+      "id": "claim_d38775771ddf44338ecf415f2af9c6c8",
+      "statement": "Settings.model_post_init refuses to boot when app_env != \"development\" and jwt_secret equals the committed dev default, so production cannot sign admin JWTs with a publicly known key.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        }
+      ]
+    },
+    {
+      "id": "claim_e40151ead4f247c7a30f0dbffc5a12c8",
+      "statement": "Auth routes apply Redis-backed rate limits: login 10/60s per IP, forgot-password 5/300s per IP and 3/900s per email, reset-password 10/300s per IP and 10/900s per email, refresh 20/60s per IP, reflecting the cost of argon2 verify on the 2 vCPU droplet.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/api/auth.py",
+          "version": "repo-file-v1:sha256:af57bddc332ff4ab52ffcb74a62b638bed76d5c31684fb4d742536309141cd2f"
+        },
+        {
+          "resource": "repo://backend/app/identity/infrastructure/rate_limits.py",
+          "version": "repo-file-v1:sha256:9639fbcd3408702af7df2f1759669bddfd9a7af36797d7572f01878082e2da8d"
+        }
+      ]
+    },
+    {
+      "id": "claim_d29f8fc0a79b4db6a8d7c832b0c15887",
+      "statement": "Two roles (admin, recruiter) live in app/identity/domain/role.py; require_admin accepts only admin, require_recruiter accepts admin and recruiter so admins implicitly pass every recruiter gate, and the access policies are split framework-free across access/domain (policies.py) and access/application (roles.py) for testability.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/access/application/roles.py",
+          "version": "repo-file-v1:sha256:33fc4546c6a7575d0b3b84f11394fdb65e910a300f9cbe827273ee7564b5522c"
+        },
+        {
+          "resource": "repo://backend/app/access/domain/policies.py",
+          "version": "repo-file-v1:sha256:d762d58a5f4a6fb982b625dd23270b4be79f763208a08c147c575badf0099e74"
+        },
+        {
+          "resource": "repo://backend/app/api/auth_dependencies.py",
+          "version": "repo-file-v1:sha256:39d07da424bba274c23879d83ae03c2ea73a2bee0c215e648539ebf3f6366de7"
+        }
+      ]
+    },
+    {
+      "id": "claim_1f3708fac5e5425a85ba7e4e2dd0311b",
+      "statement": "installation_dependencies gates every non-auth route on installation state, so the first request after a fresh deploy must complete the admin bootstrap before any other route is reachable.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/api/installation_dependencies.py",
+          "version": "repo-file-v1:sha256:4ce6a1b380ec8b1b09496b645581a3278b14576679ea5f1ce58d7ee401b843af"
+        }
+      ]
+    },
+    {
+      "id": "claim_67ba5a3e091a4a9f8ccbd54469dbf862",
+      "statement": "CapabilityRegistry rejects duplicate capability ids and duplicate routes/resources/slots inside one capability, validates dependency closure, and resolve() rejects mismatched PACK_CONTRACT_SCHEMA_VERSION, SUPPORTED_KERNEL_ABI, pack version, and pack_contract_hash so stale callers cannot bind to a moved contract.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/capabilities/registry.py",
+          "version": "repo-file-v1:sha256:0a8237d90b5071e364823532b4c0683b9dc04e393a68f02a1f90a30766471807"
+        }
+      ]
+    },
+    {
+      "id": "claim_85773d18a4f6479b80558ba6b3417c9f",
+      "statement": "The recruitment pack declares conversation, knowledge, candidate_intake, job_advisory, and channel.zalo; the candidate_intake capability carries the source-owned DESCRIPTOR, while the shipped recruitment_v1_contract.json is the canonical non-executable parity artifact (schema_version=1, contract_hash 2a7c602a...).",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/capabilities/recruitment/definition.py",
+          "version": "repo-file-v1:sha256:c0da02dec9705b14e663920b33f85d6f8ce0e8673378ca9f332327068816a278"
+        },
+        {
+          "resource": "repo://backend/app/capabilities/recruitment_v1_contract.json",
+          "version": "repo-file-v1:sha256:a1d00935b774ef5a750853e2ff7c675039ebaab9a9f3c4f317e04e4be3d12ec0"
+        },
+        {
+          "resource": "repo://backend/tests/test_capability_registry.py",
+          "version": "repo-file-v1:sha256:b0151fb3d824226b37040ada74579047b3df9180e0b63eef07309c906920c80e"
+        }
+      ]
+    },
+    {
+      "id": "claim_9647c6c761244c19a0ca47c7f56a391c",
+      "statement": "Adapters are reachable through registry.resolve() but never appear in export_pack_contract(); the parity test asserts the shipped JSON equals the export and contains no \"import\" / \"factory\" strings, locking the contract surface.",
+      "evidence": [
+        {
+          "resource": "repo://backend/tests/test_capability_registry.py",
+          "version": "repo-file-v1:sha256:b0151fb3d824226b37040ada74579047b3df9180e0b63eef07309c906920c80e"
+        }
+      ]
+    },
+    {
+      "id": "claim_97e49feb9c564b588fc82e1b2d2c68aa",
+      "statement": "The frontend canAccess(role, params, availableResources) mirrors the backend as a UX layer only — recruiters see conversations and projects, every other resource is admin-only, and the file's own comment declares real enforcement is the FastAPI backend.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/src/components/atomic-crm/providers/commons/canAccess.ts",
+          "version": "repo-file-v1:sha256:39ababb10ab75a3da2279f89114a6f0c70f162cfe33b4675aa11394855e02953"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

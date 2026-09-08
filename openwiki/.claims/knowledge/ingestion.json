@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:e9b637038d6111aeedd5f6933c204aa9ca179d95e7ceba5d32f9278ff7824ed8",
+  "claims": [
+    {
+      "id": "claim_dfe7a7defab34ff692195bbeb8f094ba",
+      "statement": "The ingest pipeline runs on the ingest RQ queue (single worker-ingest replica) and exposes two entry points on KnowledgeIngestionUseCases — ingest_document (parse → canonicalize → digest (LLM) → embed → write) and ingest_version — built by app/composition/project_knowledge.build_knowledge_ingestion_use_cases(db) and sharing the cached LLM clients from graph.factories._build_cached_clients.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/project_knowledge/application/ingestion.py",
+          "version": "repo-file-v1:sha256:023c2e7508ba155cfea2b9c612fe56f5d7fa0c19eef1cec64b1f26fc146d5e51"
+        },
+        {
+          "resource": "repo://backend/app/workers/ingest_worker.py",
+          "version": "repo-file-v1:sha256:55333b8e9950d0cbd859c007460703f7ad41f61685d9acabaad5f80011a87f89"
+        }
+      ]
+    },
+    {
+      "id": "claim_813b656536874566a9352f265fd63b6d",
+      "statement": "Ingest tunables live as code constants in backend/app/core/config.py: DIGEST_SECTION_CHARS=6000, DIGEST_SECTION_OVERLAP=400, DIGEST_MAX_SECTIONS=20, INGEST_JOB_TIMEOUT_SECONDS=3600; INGEST_JOB_TIMEOUT_SECONDS is deliberately not env-tunable because it bounds the worst-case cost of a malicious or runaway doc.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        }
+      ]
+    },
+    {
+      "id": "claim_b2a154249d704a2f93f576a4341079d4",
+      "statement": "The version ingest path uses a deterministic job_id=f\"knowledge-version-{version_id}\" so re-enqueue is a no-op and an in-flight version can be introspected; enqueue_ingest_version raises RuntimeError(\"knowledge version enqueue failed\") when the enqueue returns None so the admin UI surfaces the failure.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/ingest_worker.py",
+          "version": "repo-file-v1:sha256:55333b8e9950d0cbd859c007460703f7ad41f61685d9acabaad5f80011a87f89"
+        }
+      ]
+    },
+    {
+      "id": "claim_aa6854cda25b440abee9193fdea7e504",
+      "statement": "The category worker shares the ingest queue (deterministic job_id=f\"category-revision-{revision_id}\"), uses build_category_use_cases + build_knowledge_provider_factory, and re-raises failures as CategoryActivationError(\"category_worker_failed\") so the admin UI gets a typed signal.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/category_worker.py",
+          "version": "repo-file-v1:sha256:e77cebee28bb06f9263dc95eea26cd6723514605c75969fb1f8479ec57a381b1"
+        }
+      ]
+    },
+    {
+      "id": "claim_f824c894f0d548edbd47d809ede6310e",
+      "statement": "RQ-level failures (notably JobTimeoutException from the death penalty) are caught in the sync wrapper and recorded via _mark_doc_failed_sync / _mark_version_failed_sync, which open a sync SQLAlchemy session and call mark_document_failed_sync / mark_version_failed_sync in the repository so the terminal state is durable even when the async path is dead.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/ingest_worker.py",
+          "version": "repo-file-v1:sha256:55333b8e9950d0cbd859c007460703f7ad41f61685d9acabaad5f80011a87f89"
+        }
+      ]
+    },
+    {
+      "id": "claim_06636a5e1f7545f8b4631e41db688efc",
+      "statement": "Migration 0050 (data_ingestion_recovery) introduced the recovery bookkeeping: kb_versions rows carry a processing token that the worker claims atomically; a stuck INGESTING row beyond INGEST_JOB_TIMEOUT_SECONDS is safe to retry because the same deterministic job_id makes re-enqueue a no-op and stale chunks can be cleaned before the retry runs.",
+      "evidence": [
+        {
+          "resource": "repo://backend/alembic/versions/0050_data_ingestion_recovery.py",
+          "version": "repo-file-v1:sha256:a5b86886696a699902a98331585b13a78268690c6dd8fa99c0bd7620d1d1f723"
+        }
+      ]
+    },
+    {
+      "id": "claim_22bcd868cba44a80aa20e03e0a28d091",
+      "statement": "The category worker generates a processing_token up-front and only writes results whose token matches the current claim, so a late-finishing previous attempt cannot overwrite the next attempt's activation.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/category_worker.py",
+          "version": "repo-file-v1:sha256:e77cebee28bb06f9263dc95eea26cd6723514605c75969fb1f8479ec57a381b1"
+        }
+      ]
+    },
+    {
+      "id": "claim_50a60f3ea4324a43a1576f8ad457ae08",
+      "statement": "The ingestion state machine (RECEIVED → STORED → PARSED → NORMALIZED → CLASSIFIED → EXTRACTED → VALIDATED → REVIEW_REQUIRED → APPROVED → PUBLISHED → INDEXED, plus FAILED_TRANSIENT/FAILED_PERMANENT/QUARANTINED/SUPERSEDED) is enforced by ALLOWED_STATE_TRANSITIONS in backend/app/project_knowledge/domain/ingestion.py.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/project_knowledge/domain/ingestion.py",
+          "version": "repo-file-v1:sha256:cae07bdb88aad1113857167967b9b22ba071f01df06c3d88a5ce4d26f56b9366"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

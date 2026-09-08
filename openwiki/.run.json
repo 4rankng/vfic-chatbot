@@ -1,0 +1,610 @@
+{
+  "schemaVersion": 1,
+  "runId": "71c8684d-4a34-4980-8131-63127a2b3c9e",
+  "mode": "init",
+  "phase": "generating",
+  "startedAt": "2026-09-08T09:17:45.993Z",
+  "language": "en",
+  "languageChanged": false,
+  "requiredRewritePages": [],
+  "initialPages": [],
+  "sourceFingerprint": "sha256:02fca6cc52585a07c48a705136c7c67bf5640b4aaf3a6d1accff2b307fa239e1",
+  "targetGitHead": "8fd8a7d34b82922fc38e145660dd2ebb2fbdeb0d",
+  "actor": {
+    "producerActor": "opencode",
+    "metadataModel": "host-agent/opencode"
+  },
+  "previousLastUpdate": null,
+  "wikiGoal": "# OpenWiki brief — TingTing\n\nThis brief steers OpenWiki when documenting TingTing. It is owned by the team;\nOpenWiki reads it but never rewrites it during normal runs.\n\n## What TingTing is\n\nTingTing (Ting Ting) is a Vietnamese trucking logistics platform for managing\ntrips, drivers, customers, fleet vehicles, and financials (ledger, P&L, debt\ntracking, profit distribution). The codebase is a TypeScript monorepo with three\npackages:\n\n- `backend/` — Express v5 + TypeScript API on port 3090; Drizzle ORM with\n  PostgreSQL; JWT auth + Casbin RBAC.\n- `frontend/` — React 18 + Vite + TypeScript on port 5173; TanStack Query,\n  React Router, Recharts. Vietnamese-first copy, mobile-optimized driver\n  pages.\n- `shared/` — Shared TypeScript types, Zod schemas, financial calculations\n  (`round2dp`, `computeTripTotals`), constants.\n\nThe currency is Vietnamese đồng (VND), displayed with no decimal places.\n\n## Roles\n\n| Role | Vietnamese | Scope |\n|------|-----------|-------|\n| ADMIN | Quản trị | Full access |\n| MANAGER | Giám đốc | Trips, financials, fleet, reports |\n| ACCOUNTANT | Kế toán | Financials, debt, P&L |\n| DRIVER | Lái xe | Own trips, earnings, mobile pages |\n\n## Where to look first\n\n- `AGENTS.md` (root) and `TECH.md` — system map, stack, monorepo overview.\n- `docs/codebase-summary.md` — repository map.\n- `docs/system-architecture.md` — architecture.\n- `docs/code-standards.md` and `standards/coding-style.md` — code conventions.\n- `docs/testing.md` — testing approach.\n- `standards/agent-completion-checklist.md` — completion record template.\n- `docs/flows/DELIVERY_TRIP_LIFECYCLE.md` — trip lifecycle QA + user manual.\n- `docs/company-files/` — original Vietnamese business documents (fuel norms,\n  allowances, vehicle data).\n\n## Key boundaries to preserve\n\n- API transport lives in `backend/src/routes/`; business logic lives in\n  `backend/src/services/`. Do not collapse them in the docs.\n- The trip lifecycle (`PENDING → IN_PROGRESS → COMPLETED → SETTLED`) is the\n  central domain flow. It deserves a dedicated workflow page.\n- Financial precision is mandatory: docs must reference `round2dp()` and\n  `computeTripTotals()` from `shared/src/calculations/` for any monetary math.\n- RBAC enforcement is layered (Casbin policies + middleware). Both layers\n  deserve a page.\n- Demo mode is permanently disabled — the frontend uses the real API only.\n\n## Conventions\n\n- TypeScript strict mode — no `any` types.\n- REST API with `/api/v1` prefix.\n- Drizzle ORM for all database queries — no raw SQL.\n- Vietnamese-first UI copy.\n- Avoid undocumented public-contract changes.\n\n## Task tracking\n\n`TASKS.md` in the project root describes two tracks:\n\n- Track 1 — E2E Trip Lifecycle Epic (Phases 1–4).\n- Track 2 — Feature backlog (fuel norms, receivables, dashboard, profit\n  distribution, tech debt).\n\nWhen documenting work-in-progress features, link to the corresponding `TASKS.md`\nitem and the relevant phase in `plans/`.\n\n## What to emphasize in pages\n\n- System responsibility and ownership, not just symbol inventories.\n- Runtime/build entrypoints (`backend/src/index.ts`, `frontend/src/App.tsx`).\n- Mechanisms and control/data flow across the backend/frontend/shared split.\n- Upstream/downstream relationships (DB, map providers, file uploads, RBAC).\n- State, persistence, ordering, and lifecycle for the trip and ledger.\n- Invariants and failure behavior (auth, RBAC denial, financial rounding).\n- Configuration, security, and operational consequences.\n- Extension seams for the planned Track 2 features.\n\n## What to omit\n\n- Pages that only mirror a directory or list symbols without explaining a\n  system.\n- Pages that repeat `docs/codebase-summary.md` verbatim — cross-link instead.\n- Speculative behavior not present in the current source.\n- Lockfiles, generated bundles, and any path matched by `.openwikiignore`.\n\n## Language\n\nGenerate factual pages in English. Keep Vietnamese domain terms (Quản trị,\nGiám đốc, Kế toán, Lái xe, đồng, etc.) in italics on first use and use them\nconsistently across pages.",
+  "beforeContentSnapshot": "32fbff8dcb73313f9bf4f614494db0debd2e34ae6051de27cd52523c05c63497",
+  "preparedWiki": {
+    "generatedProvenance": []
+  },
+  "plan": {
+    "pages": [
+      {
+        "id": "b71cc08b-543f-40bb-b0f9-43558f7e1c45",
+        "path": "/openwiki/access/integrations-credentials.md",
+        "title": "Admin-managed integration credentials (encryption at rest)",
+        "purpose": "Where Zalo/MiniMax/OpenRouter credentials are stored, how they are encrypted at rest, and how they are resolved at runtime for graph/clients.py.",
+        "seedPaths": [
+          "backend/app/api/integrations.py",
+          "backend/app/integrations/admin_runtime.py",
+          "backend/app/integrations/facebook_oauth/",
+          "backend/app/services/integration_settings.py"
+        ],
+        "relatedPages": [
+          "/openwiki/access/rbac-and-capabilities.md",
+          "/openwiki/bot/pipeline.md",
+          "/openwiki/operations/configuration.md"
+        ],
+        "instructions": [
+          "Document the encryption-at-rest story for the integration_secrets model.",
+          "Reference graph/clients.py resolution path from admin-managed creds."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "623a29ce-1317-46a1-ad74-a6e2597b558b",
+        "path": "/openwiki/access/rbac-and-capabilities.md",
+        "title": "JWT auth, RBAC, and capability registry",
+        "purpose": "JWT login/refresh/rotation, require_admin/require_recruiter dependencies, capability registry contracts, and parity between backend gates and frontend CanAccess.",
+        "seedPaths": [
+          "backend/app/access/",
+          "backend/app/api/auth.py",
+          "backend/app/api/auth_dependencies.py",
+          "backend/app/api/installation_dependencies.py",
+          "backend/app/capabilities/contracts.py",
+          "backend/app/capabilities/registry.py",
+          "backend/app/identity/"
+        ],
+        "relatedPages": [
+          "/openwiki/access/integrations-credentials.md",
+          "/openwiki/frontend/recruitment-console.md",
+          "/openwiki/operations/configuration.md"
+        ],
+        "instructions": [
+          "Document capability registry contracts and how parity artifacts are checked.",
+          "Document the admin/recruiter role split and that admin implicitly passes every recruiter gate.",
+          "Reference the rate-limit fixtures on auth/login and password-reset endpoints."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "c1088544-8d2c-4985-a807-0280a8700f67",
+        "path": "/openwiki/architecture/deployment.md",
+        "title": "Blue/green deployment topology and release gate",
+        "purpose": "Production stack, image tags, edge routes, blue/green cutover semantics, and the local release-check gate that must pass before any image is pushed.",
+        "seedPaths": [
+          "Makefile",
+          "backend/Caddyfile.template",
+          "backend/Dockerfile",
+          "backend/docker-compose.yml",
+          "docs/deployment-guide.md"
+        ],
+        "relatedPages": [
+          "/openwiki/architecture/system-overview.md",
+          "/openwiki/operations/configuration.md",
+          "/openwiki/workers/pipeline-and-recovery.md"
+        ],
+        "instructions": [
+          "Link release-check preconditions to the lint/typecheck/unit/e2e/RAG golden path.",
+          "Note that `latest` is a convenience tag and is never used by `make deploy`.",
+          "State zero-downtime invariants: inactive color is stopped, ACTIVE_COLOR file, Caddy points only at active color, smoke gate aborts without flipping."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "729b5382-f533-4048-a8f5-1e01c6f52b04",
+        "path": "/openwiki/architecture/system-overview.md",
+        "title": "System overview and component topology",
+        "purpose": "High-level shape of TingHire: web tier, workers, Postgres+pgvector, Redis, edge, channel adapters, and how they interact per message.",
+        "seedPaths": [
+          "backend/app/main.py",
+          "docs/HLD.md",
+          "docs/codebase-summary.md",
+          "docs/system-architecture.md"
+        ],
+        "relatedPages": [
+          "/openwiki/architecture/deployment.md",
+          "/openwiki/messaging/realtime-socketio.md",
+          "/openwiki/workers/pipeline-and-recovery.md"
+        ],
+        "instructions": [
+          "Diagram ingress → web → RQ → workers → DB/Redis → Socket.IO bridge → console.",
+          "Distinguish synchronous answer path (web → RQ → worker-chatbot → send) from background paths (persistence_low, ingest, followup, reconcile).",
+          "Reference the lifespan tick registrations in app/main.py as the operational source of truth."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "b5b22a70-7bab-4f27-b4b1-7cc537dcf0d0",
+        "path": "/openwiki/bot/decision-trace.md",
+        "title": "Decision trace, audit, and bot_runs resource",
+        "purpose": "How every bot execution is recorded: decision trace builder, audit/bot_run persistence, retention tick, and the bot_runs API surface used by recruiters.",
+        "seedPaths": [
+          "backend/app/api/bot_runs.py",
+          "backend/app/graph/decision_trace.py",
+          "backend/app/services/audit_service.py",
+          "backend/app/services/bot_run_service.py",
+          "backend/app/workers/decision_trace_retention_worker.py"
+        ],
+        "relatedPages": [
+          "/openwiki/bot/pipeline.md",
+          "/openwiki/operations/observability.md"
+        ],
+        "instructions": [
+          "DecisionTraceBuilder accumulates per-node entries and is finalized on send or suppression.",
+          "Retention tick interval is a Settings value; reference the actual env name and default.",
+          "bot_runs is recruiter-visible; explain how the API filters by conversation and lead."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "d7281bfb-7a8f-4010-b5e7-f8b654c2c7ad",
+        "path": "/openwiki/bot/pipeline.md",
+        "title": "Bot-turn pipeline (LangGraph runtime)",
+        "purpose": "Per-turn pipeline: load_conversation_state → typing → agent → safety filters → pre_send_guard → send. Ports, GraphDeps, factories, runner functions.",
+        "seedPaths": [
+          "backend/app/graph/clients.py",
+          "backend/app/graph/factories.py",
+          "backend/app/graph/ports.py",
+          "backend/app/graph/router.py",
+          "backend/app/graph/runner.py"
+        ],
+        "relatedPages": [
+          "/openwiki/bot/decision-trace.md",
+          "/openwiki/bot/safety-and-routing.md",
+          "/openwiki/knowledge/rag.md",
+          "/openwiki/messaging/conversation-lifecycle.md"
+        ],
+        "instructions": [
+          "Document that ports are Protocols; concrete wiring is in factories.build_deps.",
+          "Explain the at-most-one-in-flight turn model and the bot_lock_ttl_seconds TTL.",
+          "Mirror the runner docstring node order: load_conversation_state → typing → agent → fast_safety_filter → llm_safety_check → combine_for_presend → pre_send_guard → send_message/log_sent."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "8e234ac6-c107-4f13-96c7-6e5c81d92b0d",
+        "path": "/openwiki/bot/safety-and-routing.md",
+        "title": "Safety filter chain and turn routing",
+        "purpose": "Fast safety filter, LLM safety check, retry/rewrite, pre_send_guard ownership check, and routing intents (vacancy lookup, salary sort, recency sort, fast-model heuristic).",
+        "seedPaths": [
+          "backend/app/graph/fast_lane.py",
+          "backend/app/graph/grounding.py",
+          "backend/app/graph/prompts.py",
+          "backend/app/graph/router.py",
+          "backend/app/graph/runner.py"
+        ],
+        "relatedPages": [
+          "/openwiki/bot/decision-trace.md",
+          "/openwiki/bot/pipeline.md",
+          "/openwiki/messaging/ownership-and-delivery.md"
+        ],
+        "instructions": [
+          "Document each routing intent detector and the model-selection heuristic that drives fast lane vs full agent.",
+          "Order matters: fast filter → (only if needed) LLM safety → retry at most once → ownership check → send or log_suppressed.",
+          "Reference grounding rules and how pre_send_guard rejects stale runs."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "e06aaa02-b7a4-4303-a1cb-9279bcc10427",
+        "path": "/openwiki/channels/facebook-messenger.md",
+        "title": "Facebook Messenger adapter",
+        "purpose": "OAUTH-backed Facebook Messenger ingress, signature verification, and dispatch contract. Positioned as the secondary channel after Zalo.",
+        "seedPaths": [
+          "backend/app/channels/providers/facebook_account.py",
+          "backend/app/channels/providers/facebook_messenger.py",
+          "backend/app/channels/providers/facebook_signature.py",
+          "backend/app/integrations/facebook_oauth/"
+        ],
+        "relatedPages": [
+          "/openwiki/channels/zalo-adapters.md",
+          "/openwiki/integrations/credentials-and-secrets.md"
+        ],
+        "instructions": [
+          "Explain how facebook_policy.py gates features per page.",
+          "State the signature scheme and the OAUTH flow that issues the page-scoped token used for outbound dispatch."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "b3ce1c9e-fd34-453d-b6f2-0ab8229bf450",
+        "path": "/openwiki/channels/zalo-adapters.md",
+        "title": "Zalo Bot Platform and Official Account adapters",
+        "purpose": "Two webhook endpoints, their signature schemes, ingress normalization, dispatch path, and the rule that Zalo adapters are intentionally thin.",
+        "seedPaths": [
+          "backend/app/api/webhooks.py",
+          "backend/app/channels/dispatch.py",
+          "backend/app/channels/ingress.py",
+          "backend/app/channels/providers/zalo_bot.py",
+          "backend/app/channels/providers/zalo_oa.py",
+          "backend/app/channels/registry.py"
+        ],
+        "relatedPages": [
+          "/openwiki/architecture/system-overview.md",
+          "/openwiki/channels/facebook-messenger.md",
+          "/openwiki/messaging/conversation-lifecycle.md"
+        ],
+        "instructions": [
+          "Document the two signature schemes (Bot Platform HMAC vs OA sha256(appId+data+timestamp+secret)).",
+          "Explain how channels/registry and channels/dispatch isolate provider details from the rest of the app.",
+          "State the <1s ack invariant and the 503-on-enqueue-failure retry contract."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "22c5e938-2bc9-44eb-8ab6-def765bed4b3",
+        "path": "/openwiki/database/schema-and-migrations.md",
+        "title": "Schema, hand-written Alembic migrations, and seed data",
+        "purpose": "Schema ownership boundary (models mirror migrations, not the reverse), key tables (users, conversations, messages, leads, knowledge chunks, integration_secrets, external_source_sync_state, bot_run_decision_trace), and the seed_dev script.",
+        "seedPaths": [
+          "backend/alembic/",
+          "backend/app/models/",
+          "backend/scripts/create_admin.py",
+          "backend/scripts/seed_dev.py"
+        ],
+        "relatedPages": [
+          "/openwiki/access/rbac-and-capabilities.md",
+          "/openwiki/knowledge/rag.md",
+          "/openwiki/recruitment/lead-lifecycle.md"
+        ],
+        "instructions": [
+          "Migrations are hand-written and models mirror them; do not autogenerate.",
+          "Note that integration_secrets is encrypted at rest and external_source_sync_state owns single-page sync bookkeeping.",
+          "Reference the latest migration heads (around 0053) and any merge migrations."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "b2c6ece4-c482-4e7a-83a0-a4d6ef251791",
+        "path": "/openwiki/frontend/recruitment-console.md",
+        "title": "Frontend architecture and the atomic-crm recruitment console",
+        "purpose": "Three-layer frontend (atomic-crm → admin → ui), bootstrap, runtime generation reset, PWA service worker, and the recruitment-specific overrides on top of atomic-crm.",
+        "seedPaths": [
+          "frontend/src/App.tsx",
+          "frontend/src/components/atomic-crm/installation/",
+          "frontend/src/components/atomic-crm/root/CRM.tsx",
+          "frontend/src/components/atomic-crm/root/reset-runtime-state.ts",
+          "frontend/src/main.tsx",
+          "frontend/vite.config.ts"
+        ],
+        "relatedPages": [
+          "/openwiki/access/rbac-and-capabilities.md",
+          "/openwiki/architecture/system-overview.md",
+          "/openwiki/messaging/realtime-socketio.md"
+        ],
+        "instructions": [
+          "Document the runtime generation reset behavior after a new build.",
+          "Reference the vite-plugin-pwa auto-update reload behavior and the chunk-reload guard.",
+          "State the dependency direction atomic-crm → admin → ui and that product code lives in atomic-crm only."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "73c5585b-3aa1-45bf-ad94-3d7d66af001d",
+        "path": "/openwiki/knowledge/ingestion.md",
+        "title": "Knowledge ingestion pipeline and category worker",
+        "purpose": "Upload/parse/normalize/digest/embed flow, retry and recovery semantics, and the category worker that reconciles project taxonomy.",
+        "seedPaths": [
+          "backend/app/project_knowledge/application/categories.py",
+          "backend/app/project_knowledge/application/ingestion.py",
+          "backend/app/project_knowledge/domain/ingestion.py",
+          "backend/app/workers/category_worker.py",
+          "backend/app/workers/ingest_worker.py"
+        ],
+        "relatedPages": [
+          "/openwiki/knowledge/rag.md",
+          "/openwiki/knowledge/single-page-sync.md",
+          "/openwiki/workers/pipeline-and-recovery.md"
+        ],
+        "instructions": [
+          "Document flow: upload → parse → canonicalize → chunk → embed → write to pgvector.",
+          "Explain the category worker's relationship to project taxonomy.",
+          "Reference INGEST_JOB_TIMEOUT_SECONDS and the data ingestion recovery migration."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "80d98c54-3488-4a5a-b40e-8ace57796110",
+        "path": "/openwiki/knowledge/rag.md",
+        "title": "Knowledge base, RAG retrieval, and pgvector layout",
+        "purpose": "Per-project knowledge documents, embedding dimension, pgvector halfvec HNSW + exact rerank, retrieval flow, and capacity invariants.",
+        "seedPaths": [
+          "backend/app/core/embedding.py",
+          "backend/app/core/vector.py",
+          "backend/app/project_knowledge/application/cache.py",
+          "backend/app/project_knowledge/application/retrieval.py",
+          "backend/app/project_knowledge/domain/canonical.py",
+          "backend/app/services/knowledge_base_service.py"
+        ],
+        "relatedPages": [
+          "/openwiki/bot/pipeline.md",
+          "/openwiki/knowledge/ingestion.md",
+          "/openwiki/knowledge/single-page-sync.md"
+        ],
+        "instructions": [
+          "Document the halfvec HNSW + exact rerank ordering.",
+          "Pin EMBEDDING_DIM=3072 and explain the schema-side constraint.",
+          "State how knowledge_base_capacity.py enforces tenant size limits."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "c533fe35-8c58-46ce-a2ec-ea4956c49249",
+        "path": "/openwiki/knowledge/single-page-sync.md",
+        "title": "Single-page external source sync (Google Sheet)",
+        "purpose": "Direct-context sync contract: one exact gid, manual + cron triggers, deterministic Markdown rendering, prior-page preservation on failure.",
+        "seedPaths": [
+          "backend/alembic/versions/0053_single_page_external_source_sync_state.py",
+          "backend/app/models/external_source_sync_state.py",
+          "backend/app/workers/external_source_sync_worker.py",
+          "backend/app/workers/single_page_external_source_sync_worker.py"
+        ],
+        "relatedPages": [
+          "/openwiki/knowledge/ingestion.md",
+          "/openwiki/knowledge/rag.md"
+        ],
+        "instructions": [
+          "Document the single-gid constraint, the deterministic render function, and the failure-preserves-prior-state invariant.",
+          "Explain the cron entry (kb_sync_cron) and the manual Xử lý ngay trigger."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "5190efb0-c9c8-44ac-8478-e4fdeb7ac078",
+        "path": "/openwiki/messaging/conversation-lifecycle.md",
+        "title": "Conversation lifecycle, ownership, and delivery state",
+        "purpose": "Conversation persistence model, lock ownership, status transitions, message delivery state machine, and human take-over/release/semi-auto.",
+        "seedPaths": [
+          "backend/app/conversation_messaging/domain/delivery.py",
+          "backend/app/conversation_messaging/domain/ownership.py",
+          "backend/app/models/conversation.py",
+          "backend/app/services/conversation/repository.py",
+          "backend/app/services/conversation/scheduler.py",
+          "backend/app/services/conversation/state.py"
+        ],
+        "relatedPages": [
+          "/openwiki/bot/pipeline.md",
+          "/openwiki/messaging/ownership-and-delivery.md",
+          "/openwiki/messaging/realtime-socketio.md"
+        ],
+        "instructions": [
+          "Cover DeliveryState transitions and the role of the outbound dispatcher tick.",
+          "Document the per-conversation DB lock with owner token, TTL, and reconciliation on crash.",
+          "Explain human take-over vs release vs semi-auto vs close vs reopen semantics."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "0daed523-17c3-42f0-abb6-1e888e8503be",
+        "path": "/openwiki/messaging/realtime-socketio.md",
+        "title": "Realtime push (Socket.IO server, cross-process bridge, console)",
+        "purpose": "How the React console subscribes to per-conversation rooms, how the FastAPI process publishes via a cross-process emit bridge, and which events the recruiter UI reacts to.",
+        "seedPaths": [
+          "backend/app/main.py",
+          "backend/app/realtime/emitter.py",
+          "backend/app/realtime/socketio.py",
+          "docs/system-architecture.md"
+        ],
+        "relatedPages": [
+          "/openwiki/frontend/recruitment-console.md",
+          "/openwiki/messaging/conversation-lifecycle.md"
+        ],
+        "instructions": [
+          "Note the rationale: replacing the SSE firehose to keep chat push off the heavy request path.",
+          "Reference the SSE-fallback realtime path used when Socket.IO is unavailable.",
+          "State the room naming convention (conv:&lt;id&gt;) and the bridge contract."
+        ],
+        "status": "complete",
+        "completedBy": "opencode"
+      },
+      {
+        "id": "cb402b5e-3ec2-4454-9bf2-8a1eb8a24813",
+        "path": "/openwiki/operations/configuration.md",
+        "title": "Configuration, settings, and ownership of env keys",
+        "purpose": "Settings split between code constants (Zalo endpoints, EMBEDDING_DIM, DIGEST_*), Settings() env-loaded fields (DB pool, intervals, CORS, secrets), and admin-managed runtime credentials.",
+        "seedPaths": [
+          "backend/.env.example",
+          "backend/app/core/config.py",
+          "backend/app/services/integration_settings.py"
+        ],
+        "relatedPages": [
+          "/openwiki/access/integrations-credentials.md",
+          "/openwiki/architecture/deployment.md",
+          "/openwiki/workers/pipeline-and-recovery.md"
+        ],
+        "instructions": [
+          "Note the DB connection budget math (workers × pool_size + max_overflow vs max_connections).",
+          "Reference pool_recycle and pool_pre_ping rationales.",
+          "Three ownership classes: code constants, .env, admin-managed. Document the boundary for each."
+        ],
+        "status": "pending"
+      },
+      {
+        "id": "296096e2-0002-4739-8ff5-9281972c9743",
+        "path": "/openwiki/operations/observability.md",
+        "title": "Logging, structured context, and observability",
+        "purpose": "setup_logging + request_id_ctx middleware, what gets logged and what never does (secrets/PII/message content), and how the decision trace ties into recruiter-visible bot_runs.",
+        "seedPaths": [
+          "backend/app/api/performance.py",
+          "backend/app/core/logging.py",
+          "backend/app/core/ops_health.py",
+          "backend/app/graph/decision_trace.py"
+        ],
+        "relatedPages": [
+          "/openwiki/bot/decision-trace.md",
+          "/openwiki/workers/pipeline-and-recovery.md"
+        ],
+        "instructions": [
+          "Document the /health and /performance endpoints.",
+          "Reference request_id_ctx and how it propagates across worker boundaries.",
+          "State the no-secrets-no-PII-no-message-content logging invariant."
+        ],
+        "status": "pending"
+      },
+      {
+        "id": "ff7be1cd-5c22-4c34-a277-b8c3ffff4217",
+        "path": "/openwiki/operations/testing-strategy.md",
+        "title": "Testing pyramid, integration lane, and E2E harness",
+        "purpose": "Test layers (unit, integration, API, E2E Playwright, RAG benchmark), the disposable PostgreSQL integration lane, and the E2E harness that boots a real stack.",
+        "seedPaths": [
+          "backend/scripts/benchmark_rag.py",
+          "backend/tests/conftest.py",
+          "backend/tests/e2e_harness.py",
+          "backend/tests/integration/",
+          "docs/testing.md",
+          "frontend/e2e/"
+        ],
+        "relatedPages": [
+          "/openwiki/architecture/deployment.md",
+          "/openwiki/knowledge/rag.md"
+        ],
+        "instructions": [
+          "Document the integration lane fixture that creates, migrates, and drops a vfic_integration_* database.",
+          "Reference the Playwright desktop + mobile suites and the visual regression set.",
+          "Reference the RAG golden-set benchmark and its pass-rate gate."
+        ],
+        "status": "pending"
+      },
+      {
+        "id": "10ff24be-c4d0-4010-bb42-b59cfafab9cf",
+        "path": "/openwiki/recruitment/lead-lifecycle.md",
+        "title": "Lead pipeline: capture, enrichment, kanban, events",
+        "purpose": "Lead capture from inbound webhooks, persistence_low enrichment, kanban stages/tags/assignee, lead events, and chatops shortcuts.",
+        "seedPaths": [
+          "backend/app/services/candidate_extraction.py",
+          "backend/app/services/lead/chatops.py",
+          "backend/app/services/lead/events.py",
+          "backend/app/services/lead/normalizers.py",
+          "backend/app/services/lead/repository.py",
+          "backend/app/services/lead/service.py",
+          "backend/app/services/lead/tags.py",
+          "backend/app/services/profile_enrichment.py"
+        ],
+        "relatedPages": [
+          "/openwiki/frontend/recruitment-console.md",
+          "/openwiki/messaging/conversation-lifecycle.md",
+          "/openwiki/recruitment/candidate-extraction.md",
+          "/openwiki/recruitment/proactive-followup.md"
+        ],
+        "instructions": [
+          "Capture happens in the Zalo webhook path; enrichment runs on the persistence_low queue after each SENT reply.",
+          "Document kanban stages, tags, assignee model, follow-up tasks, and chatops shortcuts.",
+          "Reference the lead viewmodels used by the console."
+        ],
+        "status": "pending"
+      },
+      {
+        "id": "35ac1f7e-f948-4d1b-98b9-e27e64e9bda6",
+        "path": "/openwiki/recruitment/proactive-followup.md",
+        "title": "Proactive follow-up cadence and policy",
+        "purpose": "FollowupRulesPolicy by lead score, cadence hours (6h/24h/46h), 3-cap, 48h-Zalo-safe margin, Vietnamese opt-out phrase matching, scheduler tick.",
+        "seedPaths": [
+          "backend/app/api/auth.py",
+          "backend/app/recruitment/domain/proactive.py",
+          "backend/app/recruitment/domain/proactive_policy.py",
+          "backend/app/services/proactive/repository.py",
+          "backend/app/workers/followup_worker.py"
+        ],
+        "relatedPages": [
+          "/openwiki/recruitment/lead-lifecycle.md",
+          "/openwiki/workers/pipeline-and-recovery.md"
+        ],
+        "instructions": [
+          "Document hot/warm/not_interested rule variants and the eligibility stage default.",
+          "Explain the 47h safety margin for the 48h Zalo rule.",
+          "Reference the proactive tick interval setting."
+        ],
+        "status": "pending"
+      },
+      {
+        "id": "cd682ffa-7c3c-4a74-a7f9-00ca4228af41",
+        "path": "/openwiki/recruitment/recommendation.md",
+        "title": "Salary/profile recommendation logic",
+        "purpose": "Salary band parsing, profile statement detection, recency/salary sort intents, and the recommendation query port used by the bot.",
+        "seedPaths": [
+          "backend/app/recruitment/application/ports.py",
+          "backend/app/recruitment/domain/provider.py",
+          "backend/app/recruitment/domain/recommendation.py",
+          "backend/app/services/recommendation/"
+        ],
+        "relatedPages": [
+          "/openwiki/bot/safety-and-routing.md",
+          "/openwiki/recruitment/lead-lifecycle.md"
+        ],
+        "instructions": [
+          "Distinguish parse_salary_band from is_salary_profile_statement.",
+          "Explain how the recommendation port is consumed by the agent brain."
+        ],
+        "status": "pending"
+      },
+      {
+        "id": "1b096491-7046-4444-81ad-e016059fb680",
+        "path": "/openwiki/workers/pipeline-and-recovery.md",
+        "title": "RQ queues, scheduler ticks, and reconcile worker",
+        "purpose": "Queue ownership (webhook_high, persistence_low, ingest, followup), per-tick registration in lifespan, reconcile sweep, and crash recovery model.",
+        "seedPaths": [
+          "backend/app/main.py",
+          "backend/app/workers/async_runner.py",
+          "backend/app/workers/chatbot_worker.py",
+          "backend/app/workers/persistence_worker.py",
+          "backend/app/workers/reconcile_worker.py",
+          "backend/app/workers/scheduler_utils.py"
+        ],
+        "relatedPages": [
+          "/openwiki/architecture/deployment.md",
+          "/openwiki/architecture/system-overview.md",
+          "/openwiki/recruitment/proactive-followup.md"
+        ],
+        "instructions": [
+          "Document the register_unique_tick guarantee and the prior duplicate-tick bug it solved.",
+          "Each worker replica count is intentional: 2 worker-chatbot, 1 each for persistence/ingest/followup/scheduler. Document why.",
+          "Explain the reconcile sweep and how it recovers lost turns after worker crash."
+        ],
+        "status": "pending"
+      },
+      {
+        "id": "57327ab1-554c-449e-a7f6-5574c4e111a4",
+        "path": "/openwiki/quickstart.md",
+        "title": "TingHire quickstart",
+        "purpose": "Task-routing entry point that maps user intent to the right wiki page (deploy, debug bot turn, RAG, lead pipeline, RBAC, frontend).",
+        "seedPaths": [
+          "AGENTS.md",
+          "TECH.md",
+          "docs/codebase-summary.md",
+          "docs/project-overview-pdr.md"
+        ],
+        "relatedPages": [
+          "/openwiki/architecture/deployment.md",
+          "/openwiki/architecture/system-overview.md",
+          "/openwiki/operations/configuration.md"
+        ],
+        "instructions": [
+          "Keep Vietnamese domain terms in italics on first use.",
+          "Lead with task-routing intent; do not repeat source-of-truth docs verbatim.",
+          "Match on real source paths, not on the team brief's stale stack description."
+        ],
+        "status": "pending"
+      }
+    ],
+    "deletePages": []
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:1f121785e39888ab76a3040e5bec05d525817141bdc57ac7b323635870ca1453",
+  "claims": [
+    {
+      "id": "claim_21bd3120233447538d2d613d99fac18b",
+      "statement": "Production runs as Docker Compose on a single 2 vCPU / 4 GB DigitalOcean droplet; deploys are manual from a developer Mac over SSH with ControlMaster multiplexing, and there is no CI deploy to production.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile",
+          "version": "repo-file-v1:sha256:60eccc7b724982d924784e9e58bee8ef54d27ddec95e3b341a739e7ec68c6122"
+        },
+        {
+          "resource": "repo://docs/deployment-guide.md",
+          "version": "repo-file-v1:sha256:63cb0ad5314f84fb45e79c376bb95be0899debc0a782e6e56f245cee8e83d127"
+        }
+      ]
+    },
+    {
+      "id": "claim_1d79b4a626894552ace2fe24100aea48",
+      "statement": "Two web replicas (web-blue, web-green) share an identical image; the active color is tracked in /opt/vfic/ACTIVE_COLOR and Caddy routes only to web-<active>:8000 via a Caddyfile regenerated from backend/Caddyfile.template by scripts/flip_caddy.sh.",
+      "evidence": [
+        {
+          "resource": "repo://backend/Caddyfile.template",
+          "version": "repo-file-v1:sha256:67e80cd9a99146296e7e646d1e82e2dea6e652dc97ba8db5c738fd65060960cd"
+        },
+        {
+          "resource": "repo://backend/docker-compose.yml",
+          "version": "repo-file-v1:sha256:e628603873d748d5d3f86f74856febe4af04ad2a5dd310b9487efe4a55a5db9a"
+        }
+      ]
+    },
+    {
+      "id": "claim_b91872dc41f44de1a53102b19577b6af",
+      "statement": "Deploys pin to franknguyenvd/vfic-backend:<git-sha>; latest is a registry convenience tag and is never used by make deploy.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile",
+          "version": "repo-file-v1:sha256:60eccc7b724982d924784e9e58bee8ef54d27ddec95e3b341a739e7ec68c6122"
+        },
+        {
+          "resource": "repo://docs/deployment-guide.md",
+          "version": "repo-file-v1:sha256:63cb0ad5314f84fb45e79c376bb95be0899debc0a782e6e56f245cee8e83d127"
+        }
+      ]
+    },
+    {
+      "id": "claim_f81823606b72411283fcae9a474ddebb",
+      "statement": "The blue/green sequence (pull → alembic → start inactive color → healthcheck → smoke_turn → flip Caddy → record PREV_COLOR/PREV_TAG → stop old color) never flips Caddy until scripts/smoke_turn passes; a failed smoke gate aborts before the public cutover.",
+      "evidence": [
+        {
+          "resource": "repo://backend/scripts/bg_deploy.sh",
+          "version": "repo-file-v1:sha256:bf8ee4f31fc79c87d201fce26e54feb206e4666e2eb951da3b41d5911dbd4415"
+        }
+      ]
+    },
+    {
+      "id": "claim_c39fd1b80b5042c1af5c837ea2962420",
+      "statement": "The inactive color is stopped but kept on disk so make rollback revives it instantly without rebuilding; bg_rollback.sh reads PREV_COLOR and PREV_TAG and flips Caddy back in seconds.",
+      "evidence": [
+        {
+          "resource": "repo://backend/scripts/bg_rollback.sh",
+          "version": "repo-file-v1:sha256:618d459fb8003c35da2cae6710afbb5a15b0e49d6dad5083e19ae07489f7e706"
+        }
+      ]
+    },
+    {
+      "id": "claim_f079bb9747b44fc2a121aa8ee0278eff",
+      "statement": "Worker replica counts are intentional: worker-chatbot ×2 on the webhook_high queue, worker-persistence ×1 isolated on persistence_low, worker-ingest/worker-followup/scheduler ×1 each.",
+      "evidence": [
+        {
+          "resource": "repo://backend/docker-compose.yml",
+          "version": "repo-file-v1:sha256:e628603873d748d5d3f86f74856febe4af04ad2a5dd310b9487efe4a55a5db9a"
+        },
+        {
+          "resource": "repo://docs/deployment-guide.md",
+          "version": "repo-file-v1:sha256:63cb0ad5314f84fb45e79c376bb95be0899debc0a782e6e56f245cee8e83d127"
+        }
+      ]
+    },
+    {
+      "id": "claim_14840616579043dc962483fe4ddb5553",
+      "statement": "make release-check runs alembic heads == 1, backend ruff + pytest (unit + integration smoke), frontend lint + typecheck + unit + coverage + build + e2e desktop + e2e mobile, and a RAG golden-set benchmark via scripts/release_gate_check.py; any failure aborts make deploy.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile",
+          "version": "repo-file-v1:sha256:60eccc7b724982d924784e9e58bee8ef54d27ddec95e3b341a739e7ec68c6122"
+        }
+      ]
+    },
+    {
+      "id": "claim_efba2d381f0641d19c269cd8f13ab830",
+      "statement": "Caddy edge sets HSTS max-age=31536000, X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin, encodes with zstd gzip, and uses flush_interval -1 on /realtime/* so SSE events flush immediately.",
+      "evidence": [
+        {
+          "resource": "repo://backend/Caddyfile.template",
+          "version": "repo-file-v1:sha256:67e80cd9a99146296e7e646d1e82e2dea6e652dc97ba8db5c738fd65060960cd"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

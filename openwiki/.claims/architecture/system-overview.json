@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:c1a4209f821a8219fef423fd167bb80e390134f2132c447c00158f9a08a5ddce",
+  "claims": [
+    {
+      "id": "claim_a6f552751f6a40bcb24f534526597832",
+      "statement": "The Zalo Bot webhook path commits the inbound message, acquires the per-conversation DB lock with an owner token, enqueues a job onto the webhook_high RQ queue, and returns a sub-second ack; the LLM-bound work runs on worker-chatbot (×2) via graph.runner.run_turn.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/api/webhooks.py",
+          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+        },
+        {
+          "resource": "repo://backend/app/composition/conversation_messaging.py",
+          "version": "repo-file-v1:sha256:f03536bb86e59a3265426b92faa87da95fee6c54a652fb7b57d86e7f2d55483f"
+        },
+        {
+          "resource": "repo://backend/app/services/webhook.py",
+          "version": "repo-file-v1:sha256:58fce0e7771b5eb3be0e2bb00a6fbda0e01b5be0fea9674d10a79a30e4908653"
+        },
+        {
+          "resource": "repo://backend/app/workers/chatbot_worker.py",
+          "version": "repo-file-v1:sha256:94faa2d47e963a2df7684e3eea36572b239215726d03ca4af71987793bf9ffed"
+        }
+      ]
+    },
+    {
+      "id": "claim_aec912bbf1e8486995d200262c92af2a",
+      "statement": "The web process does not run the agent; the synchronous answer path returns the Zalo ack in <1 s and the agent executes on worker-chatbot so a slow LLM call cannot block a webhook.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/chatbot_worker.py",
+          "version": "repo-file-v1:sha256:94faa2d47e963a2df7684e3eea36572b239215726d03ca4af71987793bf9ffed"
+        },
+        {
+          "resource": "repo://docs/system-architecture.md",
+          "version": "repo-file-v1:sha256:5397f4c4e4cb05e0f0c5b00f4d6f35aa60456c2e082c4629726b85fb0e25407e"
+        }
+      ]
+    },
+    {
+      "id": "claim_e187503a5dcb45c781ab849ae270532e",
+      "statement": "Background queues isolate latency-sensitive and slow work: webhook_high (chatbot ×2), persistence_low (persistence ×1), ingest (ingest ×1), followup (followup ×1 + scheduler ×1); per-worker replica counts are intentional and match each queue's volume and isolation requirement.",
+      "evidence": [
+        {
+          "resource": "repo://backend/docker-compose.yml",
+          "version": "repo-file-v1:sha256:e628603873d748d5d3f86f74856febe4af04ad2a5dd310b9487efe4a55a5db9a"
+        },
+        {
+          "resource": "repo://docs/deployment-guide.md",
+          "version": "repo-file-v1:sha256:63cb0ad5314f84fb45e79c376bb95be0899debc0a782e6e56f245cee8e83d127"
+        }
+      ]
+    },
+    {
+      "id": "claim_4b749515510046e3bb6c9b284bace920",
+      "statement": "Lifespan tick registration uses register_unique_tick / register_unique_cron_tick so exactly one recurring job exists per tick, closing the prior ~12x duplicate-tick bug; a failure to register any tick is logged as non-fatal so it cannot block web startup.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/main.py",
+          "version": "repo-file-v1:sha256:90c965ad7fac28e452df642dd829905ef5dd4fbf501bb54e6a3106f8c4636c19"
+        },
+        {
+          "resource": "repo://backend/app/workers/scheduler_utils.py",
+          "version": "repo-file-v1:sha256:08380c84752938de903b6827a49a8d914d712af037485654cb40078ad4dd1fad"
+        }
+      ]
+    },
+    {
+      "id": "claim_90a90206b7ca4923a7f7928744632fca",
+      "statement": "Periodic ticks cover proactive follow-up (PROACTIVE_TICK_INTERVAL_SECONDS default 1800s), reconcile sweep (settings.reconcile_interval_seconds), outbound dispatcher, decision trace retention, and external-source / single-page external-source sync (cron settings.kb_sync_cron).",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/main.py",
+          "version": "repo-file-v1:sha256:90c965ad7fac28e452df642dd829905ef5dd4fbf501bb54e6a3106f8c4636c19"
+        }
+      ]
+    },
+    {
+      "id": "claim_4f0c62e6e10349499df8ad330a713f1d",
+      "statement": "Realtime push from worker-chatbot reaches the recruiter console via a cross-process Socket.IO bridge in app/realtime/emitter.py so a turn that finishes in a worker appears on the console without polling; the legacy /realtime/* SSE path is kept as a fallback with flush_interval -1.",
+      "evidence": [
+        {
+          "resource": "repo://backend/Caddyfile.template",
+          "version": "repo-file-v1:sha256:67e80cd9a99146296e7e646d1e82e2dea6e652dc97ba8db5c738fd65060960cd"
+        },
+        {
+          "resource": "repo://backend/app/realtime/emitter.py",
+          "version": "repo-file-v1:sha256:b5cb9958c06010cbaeb986fc59243bd692d22674838220288c33deac3d2db41a"
+        },
+        {
+          "resource": "repo://backend/app/realtime/socketio.py",
+          "version": "repo-file-v1:sha256:28f6709d41476d00139da7160b7fb70cf8affc5525d34bbdf138eaf526dd3bcb"
+        }
+      ]
+    },
+    {
+      "id": "claim_a604b1366e85467dbc17dd4a88c73736",
+      "statement": "Reliability invariants: sub-second Zalo ack, one in-flight turn per conversation via DB lock + owner token + bot_lock_ttl_seconds (180 s), pre_send_guard refuses to send on a lapsed lock, reconcile sweep every 60s recovers lost turns in ~3-4 minutes, and graceful shutdown drains direct turns (5 s) before disposing the DB engine and closing LLM clients.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/conversation_messaging/domain/ownership.py",
+          "version": "repo-file-v1:sha256:76fbedfe985dc9c9bb5835ff7f86f302c2b44ba987b0379e274d0a29eb14eb83"
+        },
+        {
+          "resource": "repo://backend/app/main.py",
+          "version": "repo-file-v1:sha256:90c965ad7fac28e452df642dd829905ef5dd4fbf501bb54e6a3106f8c4636c19"
+        },
+        {
+          "resource": "repo://docs/system-architecture.md",
+          "version": "repo-file-v1:sha256:5397f4c4e4cb05e0f0c5b00f4d6f35aa60456c2e082c4629726b85fb0e25407e"
+        }
+      ]
+    },
+    {
+      "id": "claim_1f57d56eccb348718f7fcd8e2738a26d",
+      "statement": "LLM call concurrency is capped by a Redis-backed semaphore and shed with the static Vietnamese DEGRADATION_REPLY when throttled, matching the 2 vCPU / 4 GB droplet's parallel-inference ceiling.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/graph/llm_semaphore.py",
+          "version": "repo-file-v1:sha256:06b56708d0bb24c54b817c63443a3485bacea90074656cf1987d42f63779421f"
+        },
+        {
+          "resource": "repo://backend/app/workers/chatbot_worker.py",
+          "version": "repo-file-v1:sha256:94faa2d47e963a2df7684e3eea36572b239215726d03ca4af71987793bf9ffed"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:8023ed5ebe4f92c022a1ca3a782d2813d4f43ef00aa9f79ec9dd614e32b57150",
+  "claims": [
+    {
+      "id": "claim_faabf42694874b8bac4c71b94f6cab3f",
+      "statement": "SinglePageExternalSourceSyncState (migration 0053) tracks one row per (project, source) with sheet_url + sheet_gid pinned to a single gid; auto_sync_enabled is per-row with no global kill switch, and the daily cadence is pinned to a wall-clock time via Settings.kb_sync_cron registered through register_unique_cron_tick in app/main.py lifespan.",
+      "evidence": [
+        {
+          "resource": "repo://backend/alembic/versions/0053_single_page_external_source_sync_state.py",
+          "version": "repo-file-v1:sha256:27e3bca976851de0329e5bf9431bd542ab9bdce5115566f881d4059d7a29c281"
+        },
+        {
+          "resource": "repo://backend/app/main.py",
+          "version": "repo-file-v1:sha256:90c965ad7fac28e452df642dd829905ef5dd4fbf501bb54e6a3106f8c4636c19"
+        },
+        {
+          "resource": "repo://backend/app/models/single_page_external_source_sync_state.py",
+          "version": "repo-file-v1:sha256:151ca7050c419b4321acea5cf6720a6c3fae047c874e31c071fa71e2df462e6d"
+        }
+      ]
+    },
+    {
+      "id": "claim_f95f78d36aaf40cf8263258f53876561",
+      "statement": "The tick enqueues one RQ job per auto-sync row with a deterministic job_id=f\"single-page-ext-src-sync-{state_id}-{today}\", making the daily re-enqueue idempotent and introspectable; the manual \"Xử lý ngay\" path calls sync_single_page_external_source directly with the same code path.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/single_page_external_source_sync_worker.py",
+          "version": "repo-file-v1:sha256:b18a7e39eb8c48e7da305ce0331de84111e4bf890b1436b565de13e0fa43e96e"
+        }
+      ]
+    },
+    {
+      "id": "claim_191257e3a59e4d06a4cb3181ea917d45",
+      "statement": "sync_single_page_external_source acquires a Redis lock (single_page_ext_sync:{state_id}) with a random owner token and Lua-guarded release so a crashed predecessor's lock is never torn down by the next attempt; LOCKED outcome re-raises so RQ retries after the lock TTL.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/services/project/single_page_external_sources.py",
+          "version": "repo-file-v1:sha256:f05ac21f85db325dd6d96076f84627adc4e02387310292f4a4ab1216ee58b62c"
+        }
+      ]
+    },
+    {
+      "id": "claim_95abf780ed1c42e083661aced1c71943",
+      "statement": "The sync flow validates the DIRECT_CONTEXT project, fetches the CSV via SheetClient with SINGLE_PAGE_SHEET_MAX_BYTES cap, runs render_sheet_markdown deterministically (same CSV → same Markdown), validates the body via DirectContextFileUpsert, then hash-gates against canonical_direct_file_stats.content_sha256 so an unchanged sheet returns NO_OP with one CSV fetch + one hash compare.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/services/project/single_page_external_sources.py",
+          "version": "repo-file-v1:sha256:f05ac21f85db325dd6d96076f84627adc4e02387310292f4a4ab1216ee58b62c"
+        }
+      ]
+    },
+    {
+      "id": "claim_3a0b8f6d24c14222a2ebf4e7e321f027",
+      "statement": "The upsert runs under db.begin_nested() so a caught exception only rolls back the diff; on any caught failure the prior Markdown stays in place and the row records last_status=FAILED + last_error=&lt;code&gt; (project_invalid, parse_failed:csv_field_too_large, sheet_parse_failed, direct_file_rejected:content_too_large, direct_file_update_failed, no_sync_actor).",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/services/project/single_page_external_sources.py",
+          "version": "repo-file-v1:sha256:f05ac21f85db325dd6d96076f84627adc4e02387310292f4a4ab1216ee58b62c"
+        }
+      ]
+    },
+    {
+      "id": "claim_d1966486229d4b09a857c6f31e2b357b",
+      "statement": "On OK, _enqueue_direct_context_index stages a direct_context chunk into knowledge_chunks so sheet-synced content participates in cross-project retrieval (mirroring the admin-UI publish path); the enqueue is best-effort and swallows Redis errors so a transient queue failure never rolls back the sync.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/services/project/single_page_external_sources.py",
+          "version": "repo-file-v1:sha256:f05ac21f85db325dd6d96076f84627adc4e02387310292f4a4ab1216ee58b62c"
+        }
+      ]
+    },
+    {
+      "id": "claim_760e9d5a321a46dba3ac9c277fddac8d",
+      "statement": "Two Redis counters track outcomes (single_page_external_source_sync_success_total and _failure_total, 7-day TTL); consecutive_failures is incremented on each FAILED outcome and the operator can silence a misbehaving source by setting auto_sync_enabled=false without deleting the row.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/models/single_page_external_source_sync_state.py",
+          "version": "repo-file-v1:sha256:151ca7050c419b4321acea5cf6720a6c3fae047c874e31c071fa71e2df462e6d"
+        },
+        {
+          "resource": "repo://backend/app/workers/single_page_external_source_sync_worker.py",
+          "version": "repo-file-v1:sha256:b18a7e39eb8c48e7da305ce0331de84111e4bf890b1436b565de13e0fa43e96e"
+        }
+      ]
+    },
+    {
+      "id": "claim_5cf638ad1e774085853d8124dfe3f062",
+      "statement": "Sheet URLs are validated against a host allow-list at API entry; the SSRF gate reconstructs the export URL from the parsed sheet id at fetch time so a stored URL is never trusted blindly.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/models/external_source_sync_state.py",
+          "version": "repo-file-v1:sha256:6dccb94f219220801a64e964057fa487a5e540bc4a37b94f6566d363655373f5"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

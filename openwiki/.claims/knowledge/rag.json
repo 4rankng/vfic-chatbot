@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:581a50430dd703d923bcfa70efded13806c495ce55474da6e98e64ceb4f2640d",
+  "claims": [
+    {
+      "id": "claim_f8f373701f1a4e7e9ba4d0109a97a33f",
+      "statement": "EMBEDDING_DIM = 3072 is a schema-pinned code constant: pgvector stores embeddings as vector(3072) (migration 0001) and the ANN candidate index is halfvec(3072) HNSW (migrations 0014/0016); a dimension mismatch disables ANN with a one-shot warning rather than failing the turn.",
+      "evidence": [
+        {
+          "resource": "repo://backend/alembic/versions/0016_query_perf_indexes.py",
+          "version": "repo-file-v1:sha256:5ad790ebd7d2c8dff819a539588e7c44b6ef01a686bc7e7d545124f76122594e"
+        },
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        }
+      ]
+    },
+    {
+      "id": "claim_c5b685509a03428bb43fdb0307ed4945",
+      "statement": "Retrieval is a two-step halfvec HNSW candidate selection followed by exact rerank over the candidate set: candidate_k = max(Settings.rag_ann_candidates, top_k), and the rerank keeps only chunks with 1 - (embedding &lt;=&gt; CAST(:emb AS vector)) >= rag_similarity_floor.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        },
+        {
+          "resource": "repo://backend/app/services/retrieval/repository.py",
+          "version": "repo-file-v1:sha256:d493d155cdb5e5d2863d4289d15f7e1a8e20c5871ac85e8f29f5339bb862cc11"
+        }
+      ]
+    },
+    {
+      "id": "claim_1bdb1580221744d58db93b24b36683da",
+      "statement": "CANONICAL_SCHEMA_VERSIONS = frozenset({\"vfic-knowledge-v1\", \"vfic-faq-v1\"}); documents with a missing or mismatching schema version are filtered out at retrieval time via _chunk_visibility.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/project_knowledge/domain/canonical.py",
+          "version": "repo-file-v1:sha256:3447effc567f1d593d30cde3b325790caddb13007904efb3ce8d420300bb7e6a"
+        },
+        {
+          "resource": "repo://backend/app/services/retrieval/repository.py",
+          "version": "repo-file-v1:sha256:d493d155cdb5e5d2863d4289d15f7e1a8e20c5871ac85e8f29f5339bb862cc11"
+        }
+      ]
+    },
+    {
+      "id": "claim_c9fd9530fbfd42baadd5676d5c284e7c",
+      "statement": "_chunk_visibility is the shared WHERE predicate for both ANN and exact paths and enforces status not ARCHIVED/FAILED, embedding not null, category authority or pre-authority fallback or direct-context KB membership, metadata filter, and effective_from/effective_to date bounds.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/services/retrieval/repository.py",
+          "version": "repo-file-v1:sha256:d493d155cdb5e5d2863d4289d15f7e1a8e20c5871ac85e8f29f5339bb862cc11"
+        }
+      ]
+    },
+    {
+      "id": "claim_334b28e8ad71408680e3eda714ed0446",
+      "statement": "ProjectKnowledgeQueryPort is the provider-neutral surface the graph brain depends on: active_project_ids, active_projects_with_card, project_id_by_slug, match_faq, match_documents, list_active_projects, search_bus_timetable, job_features_for_project, income_summary_for_active_projects.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/project_knowledge/application/retrieval.py",
+          "version": "repo-file-v1:sha256:dcb0814d6427a0d2d64ecf842ec271dfa77fe9097ba3e27122c83518211649b8"
+        }
+      ]
+    },
+    {
+      "id": "claim_1bc5a455e1234c44816be8e7af7d124e",
+      "statement": "ProjectKnowledgeCacheRepairPort.repair_knowledge_and_jobs is invoked after a KB authority bump to refresh the cached knowledge + job catalog in the running process without coupling the brain to a concrete adapter.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/project_knowledge/application/cache.py",
+          "version": "repo-file-v1:sha256:5502a7329b6809eacbf97dea92be566d23b16e73ae1ba1c53640c761e6469470"
+        }
+      ]
+    },
+    {
+      "id": "claim_916a87f1012140b4808f942310288747",
+      "statement": "knowledge_base_capacity.py enforces direct-context KB fit: registered MiniMax model context windows are explicit (current models: 204,800 tokens) and an unrecognised model raises ConflictError; total reserved tokens are 24,000 (system 6k + chat history 12k + current message 2k + output 4k); estimation uses _CHARS_PER_ESTIMATED_TOKEN=2 with the provider tokenizer authoritative at request time.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/services/knowledge_base_capacity.py",
+          "version": "repo-file-v1:sha256:c6a064da20f7fdce51fd75fc95e5690827f1324e3621ddf9cc8a0f200474df21"
+        }
+      ]
+    },
+    {
+      "id": "claim_d961a86077a2417e8c9e6248553bf9e4",
+      "statement": "require_direct_context_ready is the gate used by the upload path; it raises ConflictError before the file is ever stored when a direct-context KB would not fit the active model's context window.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/services/knowledge_base_capacity.py",
+          "version": "repo-file-v1:sha256:c6a064da20f7fdce51fd75fc95e5690827f1324e3621ddf9cc8a0f200474df21"
+        },
+        {
+          "resource": "repo://backend/app/services/knowledge_base_service.py",
+          "version": "repo-file-v1:sha256:9374bc35b59649be67ebff5369879fb871289ccb896edcacd90a1ec0ac4ed570"
+        }
+      ]
+    },
+    {
+      "id": "claim_98fab490c3f94bd09689f5fea2239626",
+      "statement": "vec_literal in backend/app/core/vector.py is the single pgvector literal formatter ([%.8f,...]) used by every service/tool that hands an embedding to a CAST(:emb AS vector) query, extracted after drift had already started across modules.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/vector.py",
+          "version": "repo-file-v1:sha256:34f2aa946ed15bf37b6e2fa99d5bff1b8c2e24e3267b4b4dc35704f36521f170"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}
