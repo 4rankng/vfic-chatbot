@@ -6,6 +6,20 @@ tags: [deployment, blue-green, caddy, release-check, smoke-gate, docker, zero-do
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-c1f81dc12181334bf105db16
+    resource: repo://backend/Caddyfile.template
+  - id: openwiki-source-3641e44aef067384d4965781
+    resource: repo://backend/docker-compose.yml
+  - id: openwiki-source-fa1d9591fcc1f4e1672f652e
+    resource: repo://backend/scripts/bg_deploy.sh
+  - id: openwiki-source-af0d70ef064f90ef3be7a8ab
+    resource: repo://backend/scripts/bg_rollback.sh
+  - id: openwiki-source-7865fb2b5570e6ebb2f50ca8
+    resource: repo://docs/deployment-guide.md
+  - id: openwiki-source-012f2c78e3b1446dfc35803f
+    resource: repo://Makefile
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 Production runs on a single DigitalOcean droplet (`bot.tingting.vip`, 2 vCPU

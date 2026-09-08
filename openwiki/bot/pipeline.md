@@ -6,6 +6,22 @@ tags: [graph, langgraph, ports, runner, factories, bot-run, lock-ttl]
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-6dcfc1451bcbf8009d0484a9
+    resource: repo://backend/app/core/config.py
+  - id: openwiki-source-c1d0d5024df77f0640b1eea9
+    resource: repo://backend/app/graph/decision_trace.py
+  - id: openwiki-source-7767c87e565ad5a9eda80990
+    resource: repo://backend/app/graph/factories.py
+  - id: openwiki-source-bab281489b892d6f444a6d21
+    resource: repo://backend/app/graph/ports.py
+  - id: openwiki-source-6201c1a523eb3beb2c1d8be9
+    resource: repo://backend/app/graph/runner.py
+  - id: openwiki-source-4226af23735c635b26f5609d
+    resource: repo://backend/app/graph/types.py
+  - id: openwiki-source-b47277678b763ccf81e44e6a
+    resource: repo://backend/app/shared/application/outbound.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 The bot turn is the hot edge of the system. The pipeline mirrors a

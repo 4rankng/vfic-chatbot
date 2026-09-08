@@ -6,6 +6,44 @@ tags: [alembic, sqlmodel, migrations, pgvector, seed, schema, encryption]
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-588dae121ebffa44febf9dcf
+    resource: repo://backend/alembic/versions/0001_baseline.py
+  - id: openwiki-source-e722310f35f2ba58948072b6
+    resource: repo://backend/alembic/versions/0004_worker_product_features.py
+  - id: openwiki-source-5a536de57792cef4de4e76e8
+    resource: repo://backend/alembic/versions/0016_query_perf_indexes.py
+  - id: openwiki-source-ae242b3cf740d511acc60e9d
+    resource: repo://backend/alembic/versions/0045_runtime_authority_stamps.py
+  - id: openwiki-source-01644bcf15ad03dc09c5d263
+    resource: repo://backend/alembic/versions/0047_canonical_channel_identity.py
+  - id: openwiki-source-aaa5718daacf1118f80f9644
+    resource: repo://backend/alembic/versions/0051_bot_run_decision_trace.py
+  - id: openwiki-source-6e13e0031151a1e1e58d1829
+    resource: repo://backend/alembic/versions/0053_single_page_external_source_sync_state.py
+  - id: openwiki-source-b153ba316f8f3b750a23da49
+    resource: repo://backend/alembic/versions/091e7edc9f76_merge_0013_password_reset_otps_0013_.py
+  - id: openwiki-source-b52886aad1fc413e4e030f22
+    resource: repo://backend/app/core/security.py
+  - id: openwiki-source-fd1d50d2a6f6710b3af3e2a7
+    resource: repo://backend/app/core/vector.py
+  - id: openwiki-source-934cfdb9a735f65ec3774f2a
+    resource: repo://backend/app/models/__init__.py
+  - id: openwiki-source-d8298ce2e49ec758107bef0b
+    resource: repo://backend/app/models/conversation.py
+  - id: openwiki-source-a48516f3855d6f7289617339
+    resource: repo://backend/app/models/integration.py
+  - id: openwiki-source-fc120c8d11676fc7f2a9214a
+    resource: repo://backend/app/services/audit_service.py
+  - id: openwiki-source-085098b884681cab422762c1
+    resource: repo://backend/app/services/integration_settings.py
+  - id: openwiki-source-9bd77f27fc3271fe2457ce48
+    resource: repo://backend/scripts/create_admin.py
+  - id: openwiki-source-d5e3a09f7d6b059bbc4cbc47
+    resource: repo://backend/scripts/seed_dev.py
+  - id: openwiki-source-012f2c78e3b1446dfc35803f
+    resource: repo://Makefile
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 Schema ownership is **explicit**: Alembic writes the DDL; SQLAlchemy 2.x

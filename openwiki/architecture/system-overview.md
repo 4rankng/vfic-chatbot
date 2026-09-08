@@ -6,6 +6,36 @@ tags: [architecture, fastapi, rq, redis, postgres, pgvector, socketio, lifespan]
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-770f01d7351c567fc93944dd
+    resource: repo://backend/app/api/webhooks.py
+  - id: openwiki-source-1790d29fe70a1caa7cf5a6f9
+    resource: repo://backend/app/composition/conversation_messaging.py
+  - id: openwiki-source-1cee70e5cc8978eb7ab34cf0
+    resource: repo://backend/app/conversation_messaging/domain/ownership.py
+  - id: openwiki-source-4d203c76f90ab449e5a299d7
+    resource: repo://backend/app/graph/llm_semaphore.py
+  - id: openwiki-source-55002f5b1d39cf35fd6d60e2
+    resource: repo://backend/app/main.py
+  - id: openwiki-source-188f0cac99c60508524ad56a
+    resource: repo://backend/app/realtime/emitter.py
+  - id: openwiki-source-3104ada72baa2b78ee046c11
+    resource: repo://backend/app/realtime/socketio.py
+  - id: openwiki-source-15bad8919340e7784b0aa289
+    resource: repo://backend/app/services/webhook.py
+  - id: openwiki-source-38139240d1704128edc7a57d
+    resource: repo://backend/app/workers/chatbot_worker.py
+  - id: openwiki-source-45c65eccdd84c772a83cb91a
+    resource: repo://backend/app/workers/scheduler_utils.py
+  - id: openwiki-source-c1f81dc12181334bf105db16
+    resource: repo://backend/Caddyfile.template
+  - id: openwiki-source-3641e44aef067384d4965781
+    resource: repo://backend/docker-compose.yml
+  - id: openwiki-source-7865fb2b5570e6ebb2f50ca8
+    resource: repo://docs/deployment-guide.md
+  - id: openwiki-source-62317b515c31ac5b3e190eb4
+    resource: repo://docs/system-architecture.md
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 TingHire (formerly Ting Ting / VFIC) is a Vietnamese recruiting chatbot and
@@ -17,6 +47,7 @@ buckets (webhooks, `/api`, `/realtime`, `/socket.io`) to the active blue or
 green web color.
 
 The full component diagram lives in
+<!-- openwiki: broken internal link [../docs/system-architecture.md] file "../docs/system-architecture.md" does not exist. Fix the href or restore the target, then delete this comment. -->
 [`docs/system-architecture.md`](../docs/system-architecture.md); this page
 focuses on **how the pieces interact per inbound message** and on the
 subsystem ownership that emerges.

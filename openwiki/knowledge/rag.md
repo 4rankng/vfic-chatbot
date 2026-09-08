@@ -6,6 +6,26 @@ tags: [rag, pgvector, hnsw, halfvec, embedding, retrieval, knowledge-base]
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-5a536de57792cef4de4e76e8
+    resource: repo://backend/alembic/versions/0016_query_perf_indexes.py
+  - id: openwiki-source-6dcfc1451bcbf8009d0484a9
+    resource: repo://backend/app/core/config.py
+  - id: openwiki-source-fd1d50d2a6f6710b3af3e2a7
+    resource: repo://backend/app/core/vector.py
+  - id: openwiki-source-c286d5f65b285f2aeb9ec199
+    resource: repo://backend/app/project_knowledge/application/cache.py
+  - id: openwiki-source-4789b6c3dfb6ee5ecb3bade4
+    resource: repo://backend/app/project_knowledge/application/retrieval.py
+  - id: openwiki-source-8d545e2fe4e4e44457d533ae
+    resource: repo://backend/app/project_knowledge/domain/canonical.py
+  - id: openwiki-source-0d7c742b152218e173ae7243
+    resource: repo://backend/app/services/knowledge_base_capacity.py
+  - id: openwiki-source-088c334b08efd152af8b021d
+    resource: repo://backend/app/services/knowledge_base_service.py
+  - id: openwiki-source-8f27a28439eaf3ce0c8244eb
+    resource: repo://backend/app/services/retrieval/repository.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 RAG (retrieval-augmented generation) is the spine of the bot's answers.

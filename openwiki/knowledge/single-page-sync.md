@@ -5,6 +5,20 @@ openwiki_generated: true
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-6e13e0031151a1e1e58d1829
+    resource: repo://backend/alembic/versions/0053_single_page_external_source_sync_state.py
+  - id: openwiki-source-55002f5b1d39cf35fd6d60e2
+    resource: repo://backend/app/main.py
+  - id: openwiki-source-7b6a0452d4876838a1bd15ea
+    resource: repo://backend/app/models/external_source_sync_state.py
+  - id: openwiki-source-170a6511b8b2075a837058d5
+    resource: repo://backend/app/models/single_page_external_source_sync_state.py
+  - id: openwiki-source-30a1e8776d1b0ab0f4f43855
+    resource: repo://backend/app/services/project/single_page_external_sources.py
+  - id: openwiki-source-a090354c6afae61e25073d27
+    resource: repo://backend/app/workers/single_page_external_source_sync_worker.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 

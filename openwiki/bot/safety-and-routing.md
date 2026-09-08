@@ -6,6 +6,18 @@ tags: [safety, fast-filter, llm-judge, grounding, retry, routing, fast-lane, mod
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-3b192284fa645018ff2cdd55
+    resource: repo://backend/app/graph/fast_lane.py
+  - id: openwiki-source-a89af3f6f98ea26a1605ee61
+    resource: repo://backend/app/graph/grounding.py
+  - id: openwiki-source-5ec1084a2c96be1f336d86a1
+    resource: repo://backend/app/graph/router.py
+  - id: openwiki-source-6201c1a523eb3beb2c1d8be9
+    resource: repo://backend/app/graph/runner.py
+  - id: openwiki-source-66bf7d038f006b04f232f780
+    resource: repo://backend/app/graph/safety.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 The pipeline's safety story is **fail-closed**: every reply must clear a

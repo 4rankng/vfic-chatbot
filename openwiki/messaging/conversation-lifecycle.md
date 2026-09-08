@@ -6,6 +6,28 @@ tags: [conversation, lifecycle, lock, ownership, delivery-state, takeover, relea
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-f1735c06f5f45e7db8851d34
+    resource: repo://backend/app/conversation_messaging/application/outbound_recovery.py
+  - id: openwiki-source-edadf350dada9b9cb9a8f996
+    resource: repo://backend/app/conversation_messaging/domain/delivery.py
+  - id: openwiki-source-1cee70e5cc8978eb7ab34cf0
+    resource: repo://backend/app/conversation_messaging/domain/ownership.py
+  - id: openwiki-source-6dcfc1451bcbf8009d0484a9
+    resource: repo://backend/app/core/config.py
+  - id: openwiki-source-6201c1a523eb3beb2c1d8be9
+    resource: repo://backend/app/graph/runner.py
+  - id: openwiki-source-55002f5b1d39cf35fd6d60e2
+    resource: repo://backend/app/main.py
+  - id: openwiki-source-d8298ce2e49ec758107bef0b
+    resource: repo://backend/app/models/conversation.py
+  - id: openwiki-source-fc120c8d11676fc7f2a9214a
+    resource: repo://backend/app/services/audit_service.py
+  - id: openwiki-source-a3df0ea2ca704c3ce1314e34
+    resource: repo://backend/app/services/conversation/state.py
+  - id: openwiki-source-2fdb3b18938bc915ec6158ea
+    resource: repo://backend/app/workers/outbound_dispatch_worker.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 A conversation is the unit of work between a candidate and a recruiter

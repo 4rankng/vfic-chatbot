@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:8fc7bbe066f2121248da533ef425be9c245197f5ceb6f44795682dd0c0bcdf07",
+  "claims": [
+    {
+      "id": "claim_4473dad49c1b4e7da387d5c0a04d2f31",
+      "statement": "Four named RQ queues: webhook_high (worker-chatbot ×2), persistence_low (worker-persistence ×1), ingest (worker-ingest ×1), followup (worker-followup ×1). Replica counts are intentional: 2 chatbot for burst handling, 1 each for throughput-bound work on the 2-vCPU droplet.",
+      "evidence": [
+        {
+          "resource": "repo://backend/docker-compose.yml",
+          "version": "repo-file-v1:sha256:e628603873d748d5d3f86f74856febe4af04ad2a5dd310b9487efe4a55a5db9a"
+        },
+        {
+          "resource": "repo://docs/deployment-guide.md",
+          "version": "repo-file-v1:sha256:63cb0ad5314f84fb45e79c376bb95be0899debc0a782e6e56f245cee8e83d127"
+        }
+      ]
+    },
+    {
+      "id": "claim_133ac5a9b503401db06acba626f6cfa0",
+      "statement": "register_unique_tick fixes a ~12× duplicate-tick bug: rq-scheduler's random-id scheduling stacked new jobs on every boot. The fix cancels all existing jobs targeting func, then registers with stable id 'vfic-tick-{func.__name__}'. register_unique_cron_tick does the same for wall-clock-pinned cron schedules.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/scheduler_utils.py",
+          "version": "repo-file-v1:sha256:08380c84752938de903b6827a49a8d914d712af037485654cb40078ad4dd1fad"
+        }
+      ]
+    },
+    {
+      "id": "claim_39525ab0e8b24942b3e4536e50a15811",
+      "statement": "Five registered ticks: proactive follow-up (1800s), reconcile sweep (60s), outbound dispatch (60s), decision trace retention (86400s), single-page external-source sync (cron '0 20 * * *' = 03:00 ICT). Each uses register_unique_tick or register_unique_cron_tick. Failure to register is non-fatal.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/main.py",
+          "version": "repo-file-v1:sha256:90c965ad7fac28e452df642dd829905ef5dd4fbf501bb54e6a3106f8c4636c19"
+        }
+      ]
+    },
+    {
+      "id": "claim_05c43da7067e4990a6119ac99e794093",
+      "statement": "Reconcile sweep is the primary reliability guarantee: ~60s scan + 120s grace ≈ 3-4 min total recovery. Non-reentrancy via Redis SETNX lock (300s TTL). Classifies candidates: stale_pending, unanswered_inbound, stale_lock_breakable, stale_send_unknown, skipped_locked.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/reconcile_worker.py",
+          "version": "repo-file-v1:sha256:150e8fe10de5bba86011fa23e8762787a22c57839bbc6c62f86745f4c6cde881"
+        }
+      ]
+    },
+    {
+      "id": "claim_cf9bdd38ee3b44ff87b07e79289a6cf5",
+      "statement": "reconcile_grace_seconds (120s) MUST exceed chat_turn_job_timeout (60s): a candidate only surfaces after RQ has killed the job, so a stale-heartbeat lock is always a dead worker, never a live turn. A completed turn (sent/suppressed) leaves BOT/SENT or BOT/SUPPRESSED as newest message → excluded.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        },
+        {
+          "resource": "repo://backend/app/workers/reconcile_worker.py",
+          "version": "repo-file-v1:sha256:150e8fe10de5bba86011fa23e8762787a22c57839bbc6c62f86745f4c6cde881"
+        }
+      ]
+    },
+    {
+      "id": "claim_35cdeefd6b614e97b937a5b08c919f80",
+      "statement": "async_runner.run_async runs awaitables on a process-local event loop reused across jobs. _shutdown_loop (atexit) drains pending tasks (5s deadline), disposes LLM client cache, database engines, and HTTP clients. Each resource cleanup is isolated — one failure does not block the next.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/async_runner.py",
+          "version": "repo-file-v1:sha256:62e9f17d8bd81437f53b1082c923b6cec1980faf0e894d89a596e0a4a5c8a854"
+        }
+      ]
+    },
+    {
+      "id": "claim_14c84b18c2794b5fae33dc039f15186a",
+      "statement": "Redis observability counters: reconcile_re_enqueues_total, reconcile_stale_pending_total, reconcile_unanswered_inbound_total, reconcile_skipped_locked_total, reconcile_enqueue_failed_total, reconcile_unknown_send_outcome, reconcile_stale_lock_broken, reconcile_unanswered_gauge. All read by GET /metrics.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/main.py",
+          "version": "repo-file-v1:sha256:90c965ad7fac28e452df642dd829905ef5dd4fbf501bb54e6a3106f8c4636c19"
+        },
+        {
+          "resource": "repo://backend/app/workers/reconcile_worker.py",
+          "version": "repo-file-v1:sha256:150e8fe10de5bba86011fa23e8762787a22c57839bbc6c62f86745f4c6cde881"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

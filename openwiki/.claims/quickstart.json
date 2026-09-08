@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:620e1df7348327b7f28169b00c5ae622ab5a5d5776380d10a19d9e3f47f29138",
+  "claims": [
+    {
+      "id": "claim_fd6902f99f4a42a1a72980276139baa6",
+      "statement": "The quickstart page is a task-routing entry point mapping user intent (understand, debug, change, test, deploy) to the right wiki page. Key source paths: API routes (backend/app/api/), business logic (backend/app/services/), bot graph (backend/app/graph/), workers (backend/app/workers/), frontend (frontend/src/components/atomic-crm/).",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md",
+          "version": "repo-file-v1:sha256:53cb5a87604d003c203fcbc4241fb69b3cec56cb893bffe746d145716e9f9b09"
+        },
+        {
+          "resource": "repo://docs/codebase-summary.md",
+          "version": "repo-file-v1:sha256:58fe65f60c0fbc3aff8c6821ab86d9c6bf2b95f9445dda1bfc3b1874a3e77270"
+        }
+      ]
+    },
+    {
+      "id": "claim_646870ae0a1042e897e45fe4261d8d48",
+      "statement": "Vietnamese domain terms glossary: Quản trị (Admin), Giám đốc (Manager), Kế toán (Accountant), Lái xe (Driver), đồng (VND), Mới/Đang liên hệ/Đã đăng ký/Bỏ qua (lead stages), Cần trả lời (needs reply kanban section).",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/models/user.py",
+          "version": "repo-file-v1:sha256:ddffa276151109962f2b00df11fe30b42ff5239ef25e98f635ec252eb9367224"
+        },
+        {
+          "resource": "repo://backend/app/recruitment/domain/statuses.py",
+          "version": "repo-file-v1:sha256:07ba4c09a3a03bcdd9bf8bbfe9293b5e9ddd8eb6faf5803bd9564d83ea3dee92"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

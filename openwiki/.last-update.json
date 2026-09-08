@@ -1,7 +1,8 @@
 {
-  "updatedAt": "2026-09-08T09:17:45.994Z",
+  "updatedAt": "2026-09-08T10:29:08.940Z",
   "command": "init",
-  "model": "host-agent/opencode",
-  "status": "interrupted",
+  "gitHead": "6dc7e8e2d7f80bda6b064e831ae4723944da0174",
+  "model": "host-agent/claude",
+  "status": "complete",
   "language": "en"
 }

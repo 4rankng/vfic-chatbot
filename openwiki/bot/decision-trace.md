@@ -6,6 +6,30 @@ tags: [observability, decision-trace, audit, bot-runs, retention, pii-redaction]
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-7e6a9dc23433aa6dfaa372aa
+    resource: repo://backend/app/api/bot_runs.py
+  - id: openwiki-source-6dcfc1451bcbf8009d0484a9
+    resource: repo://backend/app/core/config.py
+  - id: openwiki-source-c1d0d5024df77f0640b1eea9
+    resource: repo://backend/app/graph/decision_trace.py
+  - id: openwiki-source-6201c1a523eb3beb2c1d8be9
+    resource: repo://backend/app/graph/runner.py
+  - id: openwiki-source-55002f5b1d39cf35fd6d60e2
+    resource: repo://backend/app/main.py
+  - id: openwiki-source-d8298ce2e49ec758107bef0b
+    resource: repo://backend/app/models/conversation.py
+  - id: openwiki-source-b5f84735f6183381fdd77f5c
+    resource: repo://backend/app/schemas/bot_run.py
+  - id: openwiki-source-fc120c8d11676fc7f2a9214a
+    resource: repo://backend/app/services/audit_service.py
+  - id: openwiki-source-e0d0321c41e65326116153dc
+    resource: repo://backend/app/services/bot_run_service.py
+  - id: openwiki-source-085098b884681cab422762c1
+    resource: repo://backend/app/services/integration_settings.py
+  - id: openwiki-source-54372f2d9834a49eaebe0cb9
+    resource: repo://backend/app/workers/decision_trace_retention_worker.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 Every interactive bot turn records two parallel artifacts: an **append-only

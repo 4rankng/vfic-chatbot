@@ -6,6 +6,20 @@ tags: [credentials, encryption, aes-gcm, integrations, zalo, minimax, openrouter
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-b9104c053ff9989fbde4d8c7
+    resource: repo://backend/app/api/integrations.py
+  - id: openwiki-source-6dcfc1451bcbf8009d0484a9
+    resource: repo://backend/app/core/config.py
+  - id: openwiki-source-5fb38a533b77ac01c110f5ae
+    resource: repo://backend/app/core/preamble_cache.py
+  - id: openwiki-source-7767c87e565ad5a9eda80990
+    resource: repo://backend/app/graph/factories.py
+  - id: openwiki-source-a48516f3855d6f7289617339
+    resource: repo://backend/app/models/integration.py
+  - id: openwiki-source-085098b884681cab422762c1
+    resource: repo://backend/app/services/integration_settings.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 Admin-managed credentials are the runtime seam between the recruiter console

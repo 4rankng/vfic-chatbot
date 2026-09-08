@@ -6,6 +6,20 @@ tags: [zalo, bot-platform, official-account, signature, channels-port, registry,
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-770f01d7351c567fc93944dd
+    resource: repo://backend/app/api/webhooks.py
+  - id: openwiki-source-fde608ffaf5fd9f13157e802
+    resource: repo://backend/app/channels/dispatch.py
+  - id: openwiki-source-e2411e9e1ed726452d712fb9
+    resource: repo://backend/app/channels/providers/zalo_bot.py
+  - id: openwiki-source-8fa107b741fce900a484d431
+    resource: repo://backend/app/channels/providers/zalo_oa.py
+  - id: openwiki-source-777f8d47c822b7e613188d35
+    resource: repo://backend/app/channels/registry.py
+  - id: openwiki-source-085098b884681cab422762c1
+    resource: repo://backend/app/services/integration_settings.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 Zalo is the primary channel. The platform exposes two webhook surfaces —

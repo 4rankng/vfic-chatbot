@@ -6,6 +6,18 @@ tags: [socketio, realtime, bridge, redis-bus, conv-room, presence, typing, sse-f
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-55002f5b1d39cf35fd6d60e2
+    resource: repo://backend/app/main.py
+  - id: openwiki-source-188f0cac99c60508524ad56a
+    resource: repo://backend/app/realtime/emitter.py
+  - id: openwiki-source-3104ada72baa2b78ee046c11
+    resource: repo://backend/app/realtime/socketio.py
+  - id: openwiki-source-c1f81dc12181334bf105db16
+    resource: repo://backend/Caddyfile.template
+  - id: openwiki-source-33a12ac3cc98aa6b9ba5ca7d
+    resource: repo://frontend/src/components/atomic-crm/providers/realtime/realtime-socket.ts
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 Realtime push is what makes the recruiter console feel live: a candidate

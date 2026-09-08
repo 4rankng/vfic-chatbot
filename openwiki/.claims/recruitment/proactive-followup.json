@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:7edf51f32747d8dc21bafeca64a125b2c9b2e5b207341ce2bc51a99a65456d05",
+  "claims": [
+    {
+      "id": "claim_a8917d644d7e48a6aee386f9d34d5319",
+      "statement": "FollowupRulesPolicy defines per-score cadences: hot (10h, 22h, 46h), warm (22h, 46h), not_interested (46h). All eligible_stages default to NEW. PROACTIVE_FOLLOWUP_CAP=3, PROACTIVE_SILENCE_LIMIT=2, PROACTIVE_PER_TICK_CAP=5.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/recruitment/domain/proactive.py",
+          "version": "repo-file-v1:sha256:020b1ca361cbaa82efb9d1aa023be46a6893f5da1b5e090f23196d057f1fd85e"
+        },
+        {
+          "resource": "repo://backend/app/recruitment/domain/proactive_policy.py",
+          "version": "repo-file-v1:sha256:037803e9700c72a07ccac7731341ee992364c767bf2bcfcb54e350514b430c3f"
+        }
+      ]
+    },
+    {
+      "id": "claim_31b54e7497d245d69e8f7400c972042e",
+      "statement": "PROACTIVE_48H_WINDOW_SECONDS=169200 (47h) provides a 1-hour safety margin for Zalo's 48h messaging rule, accounting for clock drift, queue delays, and the time between eligibility check and actual send.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/recruitment/domain/proactive_policy.py",
+          "version": "repo-file-v1:sha256:037803e9700c72a07ccac7731341ee992364c767bf2bcfcb54e350514b430c3f"
+        }
+      ]
+    },
+    {
+      "id": "claim_82fa204ede284d42a411e9b76e6594db",
+      "statement": "12 Vietnamese opt-out phrases (dừng, đừng nhắn, ko quan tâm, không quan tâm, stop, unsubscribe, để yên, bận rồi, đừng làm phiền, không cần nữa, tôi không thích, không thích) are checked against the candidate's last message. A match sets followup_opted_out=True permanently.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/recruitment/domain/proactive_policy.py",
+          "version": "repo-file-v1:sha256:037803e9700c72a07ccac7731341ee992364c767bf2bcfcb54e350514b430c3f"
+        }
+      ]
+    },
+    {
+      "id": "claim_a5e0e511c0764639b630547fd18244dd",
+      "statement": "Scheduler tick runs at PROACTIVE_TICK_INTERVAL_SECONDS=1800s (30 min) via register_unique_tick. _run_tick_async scans eligible conversations via find_eligible_conversations and enqueues per-lead jobs onto the followup queue.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/main.py",
+          "version": "repo-file-v1:sha256:90c965ad7fac28e452df642dd829905ef5dd4fbf501bb54e6a3106f8c4636c19"
+        },
+        {
+          "resource": "repo://backend/app/workers/followup_worker.py",
+          "version": "repo-file-v1:sha256:d2f4ccc38d1055f98f492886b49470370124cd37a3faa6b5218c5ecbad1755b6"
+        }
+      ]
+    },
+    {
+      "id": "claim_4f145278d9f44af5af7d3b05931dcbc3",
+      "statement": "Per-lead job: stale guard drops jobs older than PROACTIVE_JOB_MAX_AGE_SECONDS=3300s (55 min). Installation gate skips non-recruitment installations. Calls run_proactive_turn(conv, deps) with GraphDeps.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/workers/followup_worker.py",
+          "version": "repo-file-v1:sha256:d2f4ccc38d1055f98f492886b49470370124cd37a3faa6b5218c5ecbad1755b6"
+        }
+      ]
+    },
+    {
+      "id": "claim_0274c32a0dc042cf9bb4942ebaea890a",
+      "statement": "Conversation interaction: followup_count incremented, last_followup_at updated, followup_opted_out set on opt-out, next_action_at scheduled for next eligible time. worker-followup × 1 replica isolated on the followup queue.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/models/conversation.py",
+          "version": "repo-file-v1:sha256:282901e5115902e77067efed74ad74ad72713c3a56741bbd4697f58a727de9b6"
+        },
+        {
+          "resource": "repo://backend/app/workers/followup_worker.py",
+          "version": "repo-file-v1:sha256:d2f4ccc38d1055f98f492886b49470370124cd37a3faa6b5218c5ecbad1755b6"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

@@ -6,6 +6,34 @@ tags: [auth, jwt, rbac, capabilities, argon2, parity, recruiter, admin]
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-31cf33c71e0ccd9bfb3ea9a3
+    resource: repo://backend/app/access/application/roles.py
+  - id: openwiki-source-7ce9425a1ecb649c8a6737fb
+    resource: repo://backend/app/access/domain/policies.py
+  - id: openwiki-source-ba54b0cb4ba0b82cd27cad45
+    resource: repo://backend/app/api/auth_dependencies.py
+  - id: openwiki-source-f297371301074b010aa8626c
+    resource: repo://backend/app/api/auth.py
+  - id: openwiki-source-73931837e2e63a3f50772254
+    resource: repo://backend/app/api/installation_dependencies.py
+  - id: openwiki-source-8268b1d34e38e52305b87740
+    resource: repo://backend/app/capabilities/recruitment_v1_contract.json
+  - id: openwiki-source-c4d4298bd2eb7f3070e3fc0e
+    resource: repo://backend/app/capabilities/recruitment/definition.py
+  - id: openwiki-source-35e6ae5616d94bcac290da0d
+    resource: repo://backend/app/capabilities/registry.py
+  - id: openwiki-source-6dcfc1451bcbf8009d0484a9
+    resource: repo://backend/app/core/config.py
+  - id: openwiki-source-b52886aad1fc413e4e030f22
+    resource: repo://backend/app/core/security.py
+  - id: openwiki-source-c9bc42f5d02131750255b324
+    resource: repo://backend/app/identity/infrastructure/rate_limits.py
+  - id: openwiki-source-ce7dc7e47de3c3d7faa5a645
+    resource: repo://backend/tests/test_capability_registry.py
+  - id: openwiki-source-472e308be87e0efe4fb4c277
+    resource: repo://frontend/src/components/atomic-crm/providers/commons/canAccess.ts
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 TingHire splits access control into three layers: **authentication**

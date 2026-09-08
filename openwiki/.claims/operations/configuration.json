@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d2f30eae3a9df014a9be46533774c8e1bac91c562e12c4ab2fcf987cf6f7e20e",
+  "claims": [
+    {
+      "id": "claim_086d0437c2504e8db4b26d0b7db0cd82",
+      "statement": "Code constants (ZALO_BOT_API_BASE, ZALO_OA_API_BASE, ZALO_BOT_WEBHOOK_URL, EMBEDDING_DIM=3072, DIGEST_SECTION_CHARS=6000, DIGEST_SECTION_OVERLAP=400, DIGEST_MAX_SECTIONS=20, INGEST_JOB_TIMEOUT_SECONDS=3600) are module-level Python names in backend/app/core/config.py; changing them requires a code change and deploy.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        }
+      ]
+    },
+    {
+      "id": "claim_a5ac935a900f46cf8fdc950fd124868d",
+      "statement": "Settings(BaseSettings) loads from .env (dev) or shell environment (prod) via pydantic_settings; get_settings() is @lru_cache'd. model_post_init guards: jwt_secret must not be the committed dev default when app_env != development, integration_settings_encryption_key must be set outside development, and cors_origins must not contain '*'.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        }
+      ]
+    },
+    {
+      "id": "claim_bf870abb95bb4106b0b20e20bfa0e2f0",
+      "statement": "DB connection budget: peak connections ≈ (# DB-touching processes) × (db_pool_size + db_max_overflow). With ~11 production processes at 10+10, peak is ~220; Postgres max_connections must be ≥250. db_pool_recycle (1800s) proactively refreshes connections; paired with pool_pre_ping it removes 'connection already closed' errors.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        }
+      ]
+    },
+    {
+      "id": "claim_21347b2b291f48238e06bd8499291acb",
+      "statement": "IntegrationSettingsService reads from the integration_settings DB table; secrets are AES-GCM encrypted with key = SHA-256(INTEGRATION_SETTINGS_ENCRYPTION_KEY), falling back to SHA-256(JWT_SECRET) only in development. Resolution order: admin-managed DB row → env/bootstrap fallback.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/services/integration_settings.py",
+          "version": "repo-file-v1:sha256:6c2ba9488d150b9f85ae0e5cf49b4fcedac6dd9d26be8898fd2e3f7a5778a5f2"
+        }
+      ]
+    },
+    {
+      "id": "claim_8a9d5a857dcf478d8ee7bd34645b3467",
+      "statement": "admin_view() returns only {configured, preview: '<first4>...<last4>'} for each secret. Admin updates encrypt, upsert, record audit (changed keys only), commit, evict local cache namespace, and bump namespace version.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/services/integration_settings.py",
+          "version": "repo-file-v1:sha256:6c2ba9488d150b9f85ae0e5cf49b4fcedac6dd9d26be8898fd2e3f7a5778a5f2"
+        }
+      ]
+    },
+    {
+      "id": "claim_34224a93a10046eab578c4981b1c91a3",
+      "statement": "Two Redis-backed semaphores throttle provider calls deployment-wide: llm_concurrency_limit (default 8) and embed_concurrency_limit (default 6). A turn that can't acquire within llm_acquire_timeout_seconds (1.5s) raises LLMThrottled → DEGRADATION_REPLY.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        }
+      ]
+    },
+    {
+      "id": "claim_422b402a7140437aa50adb57db4b4e47",
+      "statement": "http_max_connections (20) and http_max_keepalive_connections (10) size the process-scoped httpx.AsyncClient pool. Conservative defaults for the 2-vCPU droplet.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        }
+      ]
+    },
+    {
+      "id": "claim_cb6264c6227a401b94c34650ec0c92ac",
+      "statement": "kb_sync_cron (default '0 20 * * *' = 03:00 ICT) is the daily cron expression for external-source sync, validated at startup via python-crontab so a malformed env value fails fast.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/core/config.py",
+          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}

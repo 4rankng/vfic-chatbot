@@ -6,6 +6,24 @@ tags: [frontend, atomic-crm, shadcn-admin-kit, pwa, runtime-generation, vite]
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-454c9bcdde0b77b35e0fc994
+    resource: repo://frontend/src/App.tsx
+  - id: openwiki-source-f815c9b954867fc7c0e8385c
+    resource: repo://frontend/src/components/atomic-crm/capabilities/static-recruitment-runtime.ts
+  - id: openwiki-source-75c2181c4dd678aa0e72df18
+    resource: repo://frontend/src/components/atomic-crm/conversations/infrastructure/runtime-epoch-adapter.ts
+  - id: openwiki-source-2556b75c6810888c9da3e32b
+    resource: repo://frontend/src/components/atomic-crm/conversations/reset-runtime.ts
+  - id: openwiki-source-472e308be87e0efe4fb4c277
+    resource: repo://frontend/src/components/atomic-crm/providers/commons/canAccess.ts
+  - id: openwiki-source-b3d078ef416880590e4d2399
+    resource: repo://frontend/src/components/atomic-crm/root/reset-runtime-state.ts
+  - id: openwiki-source-4622f09188c7b2fdc738352b
+    resource: repo://frontend/src/main.tsx
+  - id: openwiki-source-378e3cf05ab0d05d335c68d5
+    resource: repo://frontend/vite.config.ts
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 The frontend is a **React Admin SPA** built on the `atomic-crm` template,

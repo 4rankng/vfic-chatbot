@@ -6,6 +6,20 @@ tags: [ingestion, embedding, pgvector, digest, category-worker, recovery, kb-ver
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-8de84e18d91ee444093db299
+    resource: repo://backend/alembic/versions/0050_data_ingestion_recovery.py
+  - id: openwiki-source-6dcfc1451bcbf8009d0484a9
+    resource: repo://backend/app/core/config.py
+  - id: openwiki-source-5574cf20a4a54da71db2064d
+    resource: repo://backend/app/project_knowledge/application/ingestion.py
+  - id: openwiki-source-8b3f344ba618d78945c34953
+    resource: repo://backend/app/project_knowledge/domain/ingestion.py
+  - id: openwiki-source-1b434f0e5428d339d9c27769
+    resource: repo://backend/app/workers/category_worker.py
+  - id: openwiki-source-fb4738e80917294d18cfb99e
+    resource: repo://backend/app/workers/ingest_worker.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 The ingestion pipeline runs on the `ingest` RQ queue (`worker-ingest`,

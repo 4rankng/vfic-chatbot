@@ -6,6 +6,24 @@ tags: [facebook-messenger, oauth, hmac, signature, standard-window, page-token, 
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-08T09:17:45.993Z
+sources:
+  - id: openwiki-source-9835cc890236326b828ea0b7
+    resource: repo://backend/app/channels/ports.py
+  - id: openwiki-source-eb6a812bcd8dd1373a92f04f
+    resource: repo://backend/app/channels/providers/facebook_account.py
+  - id: openwiki-source-8aaa4d5d3d2a3feccd6124ea
+    resource: repo://backend/app/channels/providers/facebook_messenger.py
+  - id: openwiki-source-2a63b9e35dfaa59da1e81749
+    resource: repo://backend/app/channels/providers/facebook_oauth.py
+  - id: openwiki-source-c3ee61f6d968bb9b4da9f21b
+    resource: repo://backend/app/channels/providers/facebook_policy.py
+  - id: openwiki-source-ff3183ea6ca1b180d2a3f0d9
+    resource: repo://backend/app/channels/providers/facebook_signature.py
+  - id: openwiki-source-ec5f0d0065badbc5beea55b1
+    resource: repo://backend/app/integrations/facebook_oauth/application.py
+  - id: openwiki-source-085098b884681cab422762c1
+    resource: repo://backend/app/services/integration_settings.py
+generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 ---
 
 Facebook Messenger is the secondary channel after Zalo. The adapter is

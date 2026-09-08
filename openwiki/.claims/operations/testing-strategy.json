@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:9c82c698f017787af2e833d0b3c583869ac62e30bd63301c1453f3a1fffbda15",
+  "claims": [
+    {
+      "id": "claim_417eea35325f47dbaf97e5fd9b1c54ac",
+      "statement": "Backend uses pytest 8.3 + pytest-asyncio 0.24 with asyncio_mode = 'auto'. The default unit lane uses no live DB, Redis, or external services. Two auto-use fixtures isolate every test: _isolate_redis (noop Redis double) and _reset_http_singleton_registry (clears httpx singleton registry).",
+      "evidence": [
+        {
+          "resource": "repo://backend/pyproject.toml",
+          "version": "repo-file-v1:sha256:cf0fb57cc7363ee0c3aa57f156827cdd12023ab78a7aa78507211d48fdb73e2b"
+        },
+        {
+          "resource": "repo://backend/tests/conftest.py",
+          "version": "repo-file-v1:sha256:5020cdd2cd532c98bcbf89ae19bff088df56757955e6ad9b93bdc962a33fb635"
+        }
+      ]
+    },
+    {
+      "id": "claim_a22c8816cf90481e86658a5417ce8a81",
+      "statement": "The selected integration lane (backend/tests/integration/) creates a unique vfic_integration_* database, migrates to Alembic head, rebinds FastAPI's real database dependency, supplies a rollback-scoped async session, and drops after the session. Missing PostgreSQL/pgvector fails setup with an actionable error — never silently skips.",
+      "evidence": [
+        {
+          "resource": "repo://docs/testing.md",
+          "version": "repo-file-v1:sha256:922048f745d8fa96bc38a3c401228c98091a48719ad0e33c61153bb5c51e83c8"
+        }
+      ]
+    },
+    {
+      "id": "claim_d39ca82506474b66bf63b8f616a90387",
+      "statement": "Frontend uses Vitest 4 + Playwright browser mode with two projects: 'app' (headless Chromium, React/DOM unit tests, 80% coverage threshold on three-file enforced surface) and 'claude' (Node.js, Claude Code hook integration tests). Full suite currently contains 551 tests.",
+      "evidence": [
+        {
+          "resource": "repo://docs/testing.md",
+          "version": "repo-file-v1:sha256:922048f745d8fa96bc38a3c401228c98091a48719ad0e33c61153bb5c51e83c8"
+        },
+        {
+          "resource": "repo://frontend/vitest.config.ts",
+          "version": "repo-file-v1:sha256:582dbe06f32b81dc2256a6b209ee0daba2fdffe7c42aceb3266319e415584730"
+        }
+      ]
+    },
+    {
+      "id": "claim_5666731777c748dabef6b2d1ce0fb162",
+      "statement": "Playwright E2E uses a run-specific loopback database ending in _e2e, local Redis database 15, E2E-only JWT secret and admin account. Safety: ownership markers, socket guard blocks backend egress, Playwright fixture blocks browser requests outside loopback.",
+      "evidence": [
+        {
+          "resource": "repo://backend/tests/e2e_harness.py",
+          "version": "repo-file-v1:sha256:4914beab00407e9a30e875934e3e4bea5a7fd99a3ab25cc382118824a72a6435"
+        },
+        {
+          "resource": "repo://frontend/playwright.config.ts",
+          "version": "repo-file-v1:sha256:212e501b8729d0d58ec736ed7913efcc4357bc22f88658df371a9bc9368443de"
+        }
+      ]
+    },
+    {
+      "id": "claim_56f670cfc0104a86a9fc2e402edd6715",
+      "statement": "RAG golden-set benchmark (scripts/benchmark_rag.py) measures recall@K, precision@K, MRR against a golden dataset. The release gate (scripts/release_gate_check.py) requires a minimum pass rate before any image is pushed.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile",
+          "version": "repo-file-v1:sha256:60eccc7b724982d924784e9e58bee8ef54d27ddec95e3b341a739e7ec68c6122"
+        },
+        {
+          "resource": "repo://backend/scripts/benchmark_rag.py",
+          "version": "repo-file-v1:sha256:837fafbf4922f3baec56018238e522fe079871d0f67eb40d01237b3c786013cf"
+        }
+      ]
+    },
+    {
+      "id": "claim_3140eac44f9d48cf94fdb558833186c9",
+      "statement": "CI quality gates (quality-gates.yml): backend-unit (ruff + pytest -m 'not integration'), backend-integration (pytest -m integration against local PostgreSQL), frontend-quality (lint + typecheck + test:unit:app:coverage + build), functional-e2e (Playwright chromium + Mobile Chrome), release-gate (benchmark + release_gate_check.py).",
+      "evidence": [
+        {
+          "resource": "repo://docs/testing.md",
+          "version": "repo-file-v1:sha256:922048f745d8fa96bc38a3c401228c98091a48719ad0e33c61153bb5c51e83c8"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T09:17:45.993Z"
+  }
+}
