@@ -51,6 +51,19 @@ class _JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+def silence_credential_bearing_transport_loggers() -> None:
+    """Stop HTTP transport loggers from printing full request URLs.
+
+    Their INFO records include the query string, and provider credentials ride
+    there: the Zalo Bot Platform bearer token, and the Meta Page access token on
+    every Send API call. Applied by every entrypoint, not just the API — the RQ
+    workers make those same calls, and a guard that covers one process is not a
+    guard.
+    """
+    for name in ("httpx", "httpx2"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def setup_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_JsonFormatter())
@@ -59,7 +72,4 @@ def setup_logging(level: str = "INFO") -> None:
     root.setLevel(level)
     # uvicorn.access is verbose and redundant with our request logging.
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    # httpx INFO records include full request URLs. Zalo Bot Platform embeds the
-    # bearer token in that URL, so application-owned logs must record outcomes
-    # without allowing the transport logger to disclose credentials.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    silence_credential_bearing_transport_loggers()

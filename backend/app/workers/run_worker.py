@@ -42,6 +42,11 @@ def main(queues: list[str]) -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
+    # basicConfig alone leaves the transport loggers at INFO, which printed the
+    # Meta Page access token into worker logs on every outbound send.
+    from app.core.logging import silence_credential_bearing_transport_loggers
+
+    silence_credential_bearing_transport_loggers()
 
     from rq import SimpleWorker
     from app.core.redis import get_redis_sync
