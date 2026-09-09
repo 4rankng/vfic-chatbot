@@ -174,3 +174,28 @@ async def test_sqlalchemy_adapter_propagates_other_integrity_failures(
         await SqlAlchemyInboundMessageAdapter(db).persist(_command())
 
     db.rollback.assert_awaited_once()
+
+
+def test_conversation_service_exposes_the_methods_the_adapter_calls():
+    """The adapter drives the real ConversationService, not just a stub.
+
+    Every test above substitutes a fake service, so a method the adapter calls
+    can go missing from the real class without a single failure. That happened:
+    ``ensure_by_identity`` lived only on ConversationState, so every Messenger
+    event died with AttributeError while the suite stayed green.
+    """
+    import inspect
+
+    from app.services.conversation import ConversationService
+
+    for name in ("ensure_by_identity", "record_inbound"):
+        method = getattr(ConversationService, name, None)
+        assert method is not None, f"ConversationService is missing {name}()"
+        assert inspect.iscoroutinefunction(method), f"{name}() must be awaitable"
+
+    signature = inspect.signature(ConversationService.ensure_by_identity)
+    assert {
+        "provider",
+        "account_key",
+        "external_id",
+    } <= set(signature.parameters)

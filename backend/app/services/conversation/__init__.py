@@ -140,6 +140,28 @@ class ConversationService:
     async def ensure(self, zalo_chat_id: str, *, zalo_channel: str = "bot") -> Conversation:
         return await self.state.ensure(zalo_chat_id, zalo_channel=zalo_channel)
 
+    async def ensure_by_identity(
+        self,
+        *,
+        provider: str,
+        account_key: str,
+        external_id: str,
+        zalo_chat_id_alias: str | None = None,
+        zalo_channel_alias: str | None = None,
+    ) -> Conversation:
+        """Provider-neutral create-or-fetch, used by the shared ingress adapter.
+
+        The Zalo webhook reaches state through ``ensure``; Messenger arrives
+        here with a real (provider, page id, PSID) triple.
+        """
+        return await self.state.ensure_by_identity(
+            provider=provider,
+            account_key=account_key,
+            external_id=external_id,
+            zalo_chat_id_alias=zalo_chat_id_alias,
+            zalo_channel_alias=zalo_channel_alias,
+        )
+
     def run_start_guard(self, conv: Conversation) -> bool:
         return self.state.run_start_guard(conv)
 

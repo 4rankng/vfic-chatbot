@@ -276,8 +276,15 @@ async def facebook_webhook(
             continue
         try:
             outcome = await ingress.ingest(msg)
-        except Exception:  # noqa: BLE001 — one event must not fail the batch
-            logger.info("facebook ingress ingest failed status=error")
+        except Exception as exc:  # noqa: BLE001 — one event must not fail the batch
+            # Log the cause, not just the fact: without it a broken ingress is
+            # indistinguishable from a quiet drop. The message body is still
+            # never logged (it can contain candidate text).
+            logger.warning(
+                "facebook ingress ingest failed: error=%s: %s",
+                type(exc).__name__,
+                exc,
+            )
             continue
         if outcome.status != "persisted":
             continue
