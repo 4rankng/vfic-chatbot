@@ -272,6 +272,39 @@ async def test_oauth_start_returns_400_when_app_id_not_configured(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_reveal_returns_plaintext_secrets_and_forbids_caching(monkeypatch):
+    """Reveal hands an admin the stored secrets verbatim, uncached.
+
+    The masked GET view cannot serve re-registering a webhook on Meta, which
+    needs the verify token exactly. The response must not be cached anywhere.
+    """
+    import app.api.integrations as api
+    from fastapi import Response
+
+    class _SettingsService:
+        def __init__(self, db):
+            pass
+
+        async def resolve_facebook_oauth(self):
+            return SimpleNamespace(
+                app_secret="super-secret-value",
+                verify_token="verify-token-value",
+            )
+
+    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+    response = Response()
+    result = await api.reveal_facebook_credentials(
+        response=response,
+        admin=SimpleNamespace(id="admin-id"),
+        db=MagicMock(),
+    )
+
+    assert result.facebook_app_secret == "super-secret-value"
+    assert result.facebook_webhook_verify_token == "verify-token-value"
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.asyncio
 async def test_facebook_endpoints_require_admin(monkeypatch):
     """Non-admin users cannot initiate, complete, inspect, test, or disconnect.
 
@@ -289,6 +322,7 @@ async def test_facebook_endpoints_require_admin(monkeypatch):
         "/admin/integrations/facebook/oauth/pages",
         "/admin/integrations/facebook/oauth/complete",
         "/admin/integrations/facebook/credentials",
+        "/admin/integrations/facebook/credentials/reveal",
         "/admin/integrations/facebook",
         "/admin/integrations/facebook/test",
         "/admin/integrations/facebook/pages/{page_id}/projects",

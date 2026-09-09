@@ -295,6 +295,18 @@ class FacebookCredentialsOut(BaseModel):
     facebook_webhook_verify_token: SecretStatus
 
 
+class FacebookCredentialsReveal(BaseModel):
+    """POST /facebook/credentials/reveal — plaintext secrets for an admin.
+
+    Deliberately separate from the masked GET view. Re-registering the webhook
+    on Meta requires the verify token verbatim, and rotating it just to read it
+    forces a needless re-registration everywhere it is already configured.
+    """
+
+    facebook_app_secret: str | None = None
+    facebook_webhook_verify_token: str | None = None
+
+
 class FacebookCredentialsUpdate(BaseModel):
     """PUT /facebook/credentials — partial update of Meta app credentials.
 

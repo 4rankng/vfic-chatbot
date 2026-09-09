@@ -116,12 +116,34 @@ const MetaAppSecretField = ({
   preview,
   value,
   onChange,
+  onReveal,
 }: MetaAppFieldProps & {
   configured: boolean;
   preview: string | null;
   statusState?: SettingsStatusState;
+  onReveal?: () => Promise<string | null>;
 }) => {
   const [isVisible, setIsVisible] = useState(false);
+  // Stored secrets are not part of the form state: they are fetched on demand
+  // so an unopened field never holds plaintext, and shown read-only so
+  // revealing cannot accidentally rewrite the saved value.
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const [isRevealing, setIsRevealing] = useState(false);
+  const canReveal = Boolean(onReveal) && configured && !value;
+
+  const toggleReveal = async () => {
+    if (revealed !== null) {
+      setRevealed(null);
+      return;
+    }
+    setIsRevealing(true);
+    try {
+      setRevealed((await onReveal?.()) ?? null);
+    } finally {
+      setIsRevealing(false);
+    }
+  };
+
   return (
     <div className="settings-field">
       <div className="settings-field-label-row">
@@ -131,28 +153,35 @@ const MetaAppSecretField = ({
       <div className="settings-sensitive-input">
         <Input
           id={id}
-          type={isVisible ? "text" : "password"}
+          type={isVisible || revealed !== null ? "text" : "password"}
           autoComplete="off"
           spellCheck={false}
-          value={value}
+          readOnly={revealed !== null}
+          value={revealed ?? value}
           placeholder={preview ? `Hiện tại: ${preview}` : "Nhập giá trị mới"}
           className="settings-input"
           onChange={(event) => onChange(id, event.target.value)}
         />
-        {/* Only offered while a new value is being typed. The stored secret is
-            never sent to the browser (the API returns a masked preview only),
-            so a reveal toggle over the empty field would promise something it
-            cannot show. */}
-        {value ? (
+        {/* Typing a new value toggles masking locally; an empty but configured
+            field fetches the stored secret instead, since the plaintext is not
+            part of the credentials payload. */}
+        {value || canReveal ? (
           <Button
             type="button"
             variant="ghost"
             size="icon"
             className="settings-input-action"
-            aria-label={isVisible ? `Ẩn ${label}` : `Hiện ${label}`}
-            onClick={() => setIsVisible((visible) => !visible)}
+            disabled={isRevealing}
+            aria-label={
+              (value ? isVisible : revealed !== null)
+                ? `Ẩn ${label}`
+                : `Hiện ${label}`
+            }
+            onClick={() =>
+              value ? setIsVisible((visible) => !visible) : void toggleReveal()
+            }
           >
-            {isVisible ? <EyeOff /> : <Eye />}
+            {(value ? isVisible : revealed !== null) ? <EyeOff /> : <Eye />}
           </Button>
         ) : null}
       </div>
@@ -249,6 +278,22 @@ export const FacebookMessengerIntegrationPage = () => {
   ) => {
     setCredentialsForm((form) => ({ ...form, [key]: value }));
   };
+
+  // Fetched per reveal rather than cached: the plaintext should not outlive the
+  // moment an admin actually asked to see it.
+  const revealCredential = async (
+    key: "facebook_app_secret" | "facebook_webhook_verify_token",
+  ): Promise<string | null> => {
+    try {
+      return (await facebookIntegrationGateway.revealCredentials())[key];
+    } catch {
+      notify("Không thể hiển thị giá trị đã lưu.", { type: "error" });
+      return null;
+    }
+  };
+  const revealAppSecret = () => revealCredential("facebook_app_secret");
+  const revealVerifyToken = () =>
+    revealCredential("facebook_webhook_verify_token");
 
   const submitCredentials = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -456,6 +501,7 @@ export const FacebookMessengerIntegrationPage = () => {
               preview={credentials?.facebook_app_secret.preview ?? null}
               value={credentialsForm.facebook_app_secret}
               onChange={onCredentialChange}
+              onReveal={revealAppSecret}
             />
             <MetaAppSecretField
               id="facebook_webhook_verify_token"
@@ -470,6 +516,7 @@ export const FacebookMessengerIntegrationPage = () => {
               }
               value={credentialsForm.facebook_webhook_verify_token}
               onChange={onCredentialChange}
+              onReveal={revealVerifyToken}
             />
           </div>
           <div className="settings-oa-actions settings-messenger-actions">

@@ -44,8 +44,9 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 2,
     "conversations": 19,
     "dashboard": 2,
-    "integrations": 24,  # Phase 4: +7 Facebook OAuth lifecycle endpoints
+    "integrations": 25,  # Phase 4: +7 Facebook OAuth lifecycle endpoints
     # +2 Meta App credentials UI; +4 multi-Page per-Page project CRUD
+    # +1 admin-only credentials reveal (audited, no-store)
     "installation": 8,
     "jobs": 7,
     "knowledge": 25,  # +4 external-source-sync endpoints (list / create / run-now / delete)
@@ -58,15 +59,15 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "4213ab491ed47abc15338eb76d7b32f602214bb19ccc7c999528493f212e71f5"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "891188abdecea272ad1ad9df6773ae415c8a64b90feb568b02009585f3d73d66"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
     "outbox_boundary": 10,
-    "provider_boundary": 97,
+    "provider_boundary": 98,
     "queue_producer": 37,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "a4b66979d7386181afb32999b4f5374f7e7cfdee8da549da9410e25046a7f5c5"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "959f917886a8883e34a791209342ba489e7defb6dd66791d2bf6f1b06bd439f1"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

@@ -6,7 +6,7 @@ import secrets
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from app.schemas.integrations import (
     FacebookAccountStatusOut,
     FacebookChannelTestOut,
     FacebookCredentialsOut,
+    FacebookCredentialsReveal,
     FacebookCredentialsUpdate,
     FacebookIntegrationOut,
     FacebookOAuthCompleteRequest,
@@ -879,6 +880,28 @@ async def get_facebook_credentials(
     """Safe status of the app-level Meta credentials (configured flag + preview)."""
     return FacebookCredentialsOut.model_validate(
         await IntegrationSettingsService(db).admin_facebook_oauth_view()
+    )
+
+
+@router.post("/facebook/credentials/reveal", response_model=FacebookCredentialsReveal)
+async def reveal_facebook_credentials(
+    response: Response,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookCredentialsReveal:
+    """Return the stored Meta secrets in plaintext to an admin.
+
+    Re-registering the webhook on Meta needs the verify token verbatim. POST
+    rather than GET so the response is never cached, prefetched, or replayed
+    from browser history; ``no-store`` closes the same gap at the proxy. The
+    reveal is audited by actor; the values themselves are never logged.
+    """
+    cfg = await IntegrationSettingsService(db).resolve_facebook_oauth()
+    logger.warning("facebook credentials revealed: admin=%s", admin.id)
+    response.headers["Cache-Control"] = "no-store"
+    return FacebookCredentialsReveal(
+        facebook_app_secret=cfg.app_secret or None,
+        facebook_webhook_verify_token=cfg.verify_token or None,
     )
 
 

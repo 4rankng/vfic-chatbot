@@ -117,6 +117,11 @@ export type FacebookCredentials = {
   facebook_webhook_verify_token: SecretStatus;
 };
 
+export type FacebookCredentialsReveal = {
+  facebook_app_secret: string | null;
+  facebook_webhook_verify_token: string | null;
+};
+
 export type FacebookCredentialsUpdate = {
   facebook_app_id?: string;
   facebook_app_secret?: string;
@@ -212,6 +217,15 @@ export const facebookIntegrationGateway = {
   loadCredentials: async (): Promise<FacebookCredentials> =>
     apiJson<FacebookCredentials>(
       `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook/credentials`,
+    ),
+
+  // Plaintext secrets for an admin re-registering the webhook on Meta. Kept
+  // out of the cached credentials query so the values are fetched only on an
+  // explicit reveal and never linger in the query cache.
+  revealCredentials: async (): Promise<FacebookCredentialsReveal> =>
+    apiJson<FacebookCredentialsReveal>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook/credentials/reveal`,
+      { method: "POST" },
     ),
 
   saveCredentials: async (
