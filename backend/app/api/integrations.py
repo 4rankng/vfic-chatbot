@@ -1,6 +1,7 @@
 """Admin integration settings routes."""
 
 import json
+import logging
 import secrets
 from urllib.parse import urlencode
 
@@ -55,6 +56,8 @@ from app.services.zalo_oa_signature import verify_signature
 from app.shared.infrastructure.db import get_request_db as get_db
 
 router = APIRouter(prefix="/admin/integrations", tags=["integrations"])
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_probe_error(prefix: str, result: SendResult, secrets: list[str]) -> str:
@@ -617,7 +620,13 @@ async def facebook_oauth_callback(
             code=code, redirect_uri=_fb_callback_url(), config=oauth_cfg
         )
         pages = await list_pages(user_token)
-    except (FacebookOAuthError, httpx.HTTPError, ValueError):
+    except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
+        logger.warning(
+            "facebook oauth code exchange failed: admin=%s error=%s: %s",
+            admin.id,
+            type(exc).__name__,
+            exc,
+        )
         return _fb_oauth_redirect_error("exchange_failed")
 
     if not pages:
@@ -715,9 +724,17 @@ async def complete_facebook_oauth(
         if probed_id != payload.page_id:
             raise FacebookOAuthError("page identity mismatch")
         await subscribe_app_to_page(payload.page_id, page_token)
-    except (FacebookOAuthError, httpx.HTTPError, ValueError):
-        # Generic Vietnamese error — never echo the Graph response body (it can
-        # contain the access token in some malformed-token error shapes).
+    except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
+        # Generic Vietnamese error to the client — never echo the Graph
+        # response body (it can contain the access token in some malformed-
+        # token error shapes). The real cause is logged server-side only.
+        logger.warning(
+            "facebook page activation failed: admin=%s page_id=%s error=%s: %s",
+            admin.id,
+            payload.page_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=502,
             detail="Kích hoạt Trang thất bại. Vui lòng kết nối lại.",
@@ -820,7 +837,13 @@ async def test_facebook_connection(
         )
     try:
         await probe_page_identity(cfg.page_access_token)
-    except (FacebookOAuthError, httpx.HTTPError, ValueError):
+    except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
+        logger.warning(
+            "facebook page token probe failed: page_id=%s error=%s: %s",
+            active.account_key,
+            type(exc).__name__,
+            exc,
+        )
         return FacebookChannelTestOut(
             healthy=False, error="Token Trang không hợp lệ hoặc đã bị thu hồi."
         )
@@ -831,7 +854,13 @@ async def test_facebook_connection(
         subscribed = await page_is_app_subscribed(
             active.account_key, cfg.page_access_token, str(cfg.app_id or "").strip()
         )
-    except (FacebookOAuthError, httpx.HTTPError, ValueError):
+    except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
+        logger.warning(
+            "facebook page subscription check failed: page_id=%s error=%s: %s",
+            active.account_key,
+            type(exc).__name__,
+            exc,
+        )
         return FacebookChannelTestOut(
             healthy=False,
             app_subscribed=None,
@@ -928,8 +957,15 @@ async def disconnect_facebook(
     if cfg is not None:
         try:
             await unsubscribe_app_from_page(target_key, cfg.page_access_token)
-        except (FacebookOAuthError, httpx.HTTPError, ValueError):
-            pass
+        except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
+            # Best-effort: local disconnect must proceed either way. Logged so
+            # a leftover Meta-side subscription is at least visible, not silent.
+            logger.info(
+                "facebook page unsubscribe failed on disconnect: page_id=%s error=%s: %s",
+                target_key,
+                type(exc).__name__,
+                exc,
+            )
 
     lifecycle = FacebookPageLifecycle(db)
     account = await lifecycle.disconnect(page_id=target_key, admin_id=admin.id)
