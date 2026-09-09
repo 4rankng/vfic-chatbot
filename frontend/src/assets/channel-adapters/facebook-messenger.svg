@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-hidden="true">
+  <radialGradient id="messenger-bubble" cx="0.19" cy="0.99" r="1.09">
+    <stop offset="0" stop-color="#09f"/>
+    <stop offset="0.6" stop-color="#a033ff"/>
+    <stop offset="0.9" stop-color="#ff5280"/>
+    <stop offset="1" stop-color="#ff7061"/>
+  </radialGradient>
+  <path fill="url(#messenger-bubble)" d="M256 32C119 32 12 132.3 12 267.7c0 70.9 29.4 132.3 77.2 174.6 4 3.6 6.4 8.6 6.6 13.9l1.3 43.7c.4 13.9 14.8 23 27.5 17.4l48.7-21.5c4.1-1.8 8.7-2.1 13-1 22.3 6.1 46 9.4 70.3 9.4 137 0 244-100.3 244-235.7S393 32 256 32z"/>
+  <path fill="#fff" d="M110.2 337.9l71.7-113.7c11.4-18.1 35.8-22.6 52.9-9.8l57 42.8c5.2 3.9 12.4 3.9 17.6-.1l77-58.4c10.3-7.8 23.7 4.5 16.8 15.5l-71.7 113.7c-11.4 18.1-35.8 22.6-52.9 9.8l-57-42.8c-5.2-3.9-12.4-3.9-17.6.1l-77 58.4c-10.3 7.8-23.7-4.5-16.8-15.5z"/>
+</svg>

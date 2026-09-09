@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
-import { MessageCircle } from "lucide-react";
 
+import messengerIcon from "@/assets/channel-adapters/facebook-messenger.svg";
 import zaloChatbotIcon from "@/assets/channel-adapters/zalo-chatbot.png";
 import zaloOaIcon from "@/assets/channel-adapters/zalo-oa.png";
 import {
@@ -17,13 +17,10 @@ import {
 
 type ChannelAdapterProvider = ConversationChannelProvider;
 
-// Zalo adapters ship brand artwork; Messenger falls back to a glyph until a
-// brand asset lands in assets/channel-adapters/.
 type AdapterDefinition = {
   provider: ChannelAdapterProvider;
   label: string;
-  icon?: string;
-  Glyph?: typeof MessageCircle;
+  icon: string;
 };
 
 const ADAPTERS: readonly AdapterDefinition[] = [
@@ -32,7 +29,7 @@ const ADAPTERS: readonly AdapterDefinition[] = [
   {
     provider: "facebook_messenger",
     label: "Messenger",
-    Glyph: MessageCircle,
+    icon: messengerIcon,
   },
 ];
 
@@ -99,11 +96,7 @@ export const ChannelAdapterSelectorView = ({
                     }
                   }}
                 >
-                  {adapter.icon ? (
-                    <img src={adapter.icon} alt="" aria-hidden="true" />
-                  ) : adapter.Glyph ? (
-                    <adapter.Glyph aria-hidden="true" />
-                  ) : null}
+                  <img src={adapter.icon} alt="" aria-hidden="true" />
                   {count > 0 ? (
                     <span
                       className="channel-adapter-badge"
