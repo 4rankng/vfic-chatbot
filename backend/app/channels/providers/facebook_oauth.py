@@ -5,9 +5,9 @@ probe, and webhook subscription. Uses the shared httpx client. Never logs raw
 response bodies (they can contain tokens). The Meta Graph API version is pinned
 centrally in config (``meta_graph_api_version``).
 
-Required permissions (revalidated 2026-07-17 against the official docs):
+Required permissions (revalidated 2026-09-09 against the official docs):
 ``pages_show_list``, ``pages_manage_metadata``, ``pages_messaging``,
-``public_profile`` (advanced access for go-live).
+``pages_read_engagement``, ``public_profile`` (advanced access for go-live).
 
 This module is imported only by the OAuth/account-lifecycle layer
 (``facebook_account.py``) and the admin endpoints. The shared ingress, graph,
@@ -37,6 +37,9 @@ MESSENGER_PERMISSIONS = (
     "pages_show_list",
     "pages_manage_metadata",
     "pages_messaging",
+    # Reading the Page's own identity with the Page token (the activation
+    # probe) is refused with Graph error 100 without this permission.
+    "pages_read_engagement",
     "public_profile",
 )
 
