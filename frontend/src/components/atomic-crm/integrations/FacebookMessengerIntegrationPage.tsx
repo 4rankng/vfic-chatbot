@@ -139,16 +139,22 @@ const MetaAppSecretField = ({
           className="settings-input"
           onChange={(event) => onChange(id, event.target.value)}
         />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="settings-input-action"
-          aria-label={isVisible ? `Ẩn ${label}` : `Hiện ${label}`}
-          onClick={() => setIsVisible((visible) => !visible)}
-        >
-          {isVisible ? <EyeOff /> : <Eye />}
-        </Button>
+        {/* Only offered while a new value is being typed. The stored secret is
+            never sent to the browser (the API returns a masked preview only),
+            so a reveal toggle over the empty field would promise something it
+            cannot show. */}
+        {value ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="settings-input-action"
+            aria-label={isVisible ? `Ẩn ${label}` : `Hiện ${label}`}
+            onClick={() => setIsVisible((visible) => !visible)}
+          >
+            {isVisible ? <EyeOff /> : <Eye />}
+          </Button>
+        ) : null}
       </div>
       {hint ? <span className="settings-field-hint">{hint}</span> : null}
     </div>

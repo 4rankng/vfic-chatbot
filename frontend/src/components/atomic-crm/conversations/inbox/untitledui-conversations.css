@@ -208,7 +208,10 @@
   transform: none;
 }
 
-.inbox-bg-container .channel-adapter-option[data-state="checked"] {
+/* Keyed on aria-checked, not data-state: the option is also a TooltipTrigger
+   (asChild), and the tooltip's own data-state ("closed"/"open") lands on the
+   same element and overwrites the radio's. aria-checked stays authoritative. */
+.inbox-bg-container .channel-adapter-option[aria-checked="true"] {
   background: var(--uu-inbox-surface);
   box-shadow:
     0 0 0 1px var(--uu-inbox-brand-line),

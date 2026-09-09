@@ -119,12 +119,6 @@
   height: 36px;
 }
 
-.inbox-bg-container .channel-adapter-option[data-state="checked"] {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-
 .inbox-bg-container .search input {
   width: 100%;
   min-height: 36px;

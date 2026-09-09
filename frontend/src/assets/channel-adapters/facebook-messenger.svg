@@ -1,4 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-hidden="true">
+<!-- viewBox is padded around the 488.6-unit artwork (centred on 256.3,275.5) so
+     the mark fills ~69% of the canvas, matching the transparent margin baked
+     into the sibling Zalo PNGs. Without it the bubble renders edge-to-edge and
+     reads noticeably larger than its neighbours. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-97.3 -78.1 707.2 707.2" role="img" aria-hidden="true">
   <radialGradient id="messenger-bubble" cx="0.19" cy="0.99" r="1.09">
     <stop offset="0" stop-color="#09f"/>
     <stop offset="0.6" stop-color="#a033ff"/>
