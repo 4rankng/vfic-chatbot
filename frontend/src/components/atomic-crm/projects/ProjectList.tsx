@@ -1,6 +1,21 @@
 import { useMemo } from "react";
-import { ListBase, useListContext, useRedirect, useRefresh } from "ra-core";
-import { Boxes, CheckCircle2, FileText, Pencil, Plus } from "lucide-react";
+import {
+  ListBase,
+  useListContext,
+  useNotify,
+  useRedirect,
+  useRefresh,
+  useUpdate,
+} from "ra-core";
+import {
+  Boxes,
+  CheckCircle2,
+  FileText,
+  Pencil,
+  Plus,
+  Power,
+  PowerOff,
+} from "lucide-react";
 import { ListPagination } from "@/components/admin/list-pagination";
 import { DeleteButton } from "@/components/admin";
 import {
@@ -28,6 +43,39 @@ const ProjectListContent = () => {
   const { isAdmin, canEdit } = useRoleActions();
   const refresh = useRefresh();
   const redirect = useRedirect();
+  const notify = useNotify();
+  const [updateProject, { isPending: isTogglingActive }] = useUpdate();
+
+  // Turning a project off keeps its documents and mappings intact; it only
+  // drops out of the catalog the bot answers from, which is why this is a
+  // toggle rather than a delete.
+  const toggleActive = (project: Project) => {
+    const nextActive = !project.is_active;
+    updateProject(
+      "projects",
+      {
+        id: project.id,
+        data: { is_active: nextActive },
+        previousData: project,
+      },
+      {
+        onSuccess: () => {
+          notify(nextActive ? "Đã bật dự án." : "Đã tắt dự án.", {
+            type: "success",
+          });
+          refresh();
+        },
+        onError: () => {
+          notify(
+            nextActive
+              ? "Không thể bật dự án."
+              : "Không thể tắt dự án.",
+            { type: "error" },
+          );
+        },
+      },
+    );
+  };
 
   const projects = useMemo(() => data ?? [], [data]);
   const activeCount = useMemo(
@@ -101,6 +149,8 @@ const ProjectListContent = () => {
               canEdit={canEdit}
               onEdit={(project) => redirect("edit", "projects", project.id)}
               onDeleted={() => refresh()}
+              onToggleActive={toggleActive}
+              isTogglingActive={isTogglingActive}
             />
           ) : (
             <EmptyState
@@ -129,12 +179,18 @@ export const ProjectAccordionList = ({
   canEdit,
   onEdit,
   onDeleted,
+  onToggleActive,
+  isTogglingActive = false,
 }: {
   projects: Project[];
   isAdmin: boolean;
   canEdit: boolean;
   onEdit: (project: Project) => void;
   onDeleted: () => void;
+  // Optional so callers that only render the list (tests, embeds) need not
+  // wire a mutation to show projects.
+  onToggleActive?: (project: Project) => void;
+  isTogglingActive?: boolean;
 }) => {
   return (
     <Accordion type="single" collapsible className="project-accordion-list">
@@ -215,6 +271,27 @@ export const ProjectAccordionList = ({
                     >
                       <Pencil className="size-4" aria-hidden="true" />
                       Sửa dự án
+                    </Button>
+                  )}
+                  {canEdit && onToggleActive && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isTogglingActive}
+                      aria-label={
+                        project.is_active
+                          ? `Tắt dự án ${project.name}`
+                          : `Bật dự án ${project.name}`
+                      }
+                      onClick={() => onToggleActive(project)}
+                    >
+                      {project.is_active ? (
+                        <PowerOff className="size-4" aria-hidden="true" />
+                      ) : (
+                        <Power className="size-4" aria-hidden="true" />
+                      )}
+                      {project.is_active ? "Tắt dự án" : "Bật dự án"}
                     </Button>
                   )}
                   {isAdmin && (
