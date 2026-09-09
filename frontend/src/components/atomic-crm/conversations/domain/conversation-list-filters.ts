@@ -13,6 +13,7 @@ const ATTENTION_REASON_KEYS = new Set([
 export const CONVERSATION_CHANNEL_PROVIDERS = [
   "zalo_bot",
   "zalo_oa",
+  "facebook_messenger",
 ] as const;
 
 export type ConversationChannelProvider =

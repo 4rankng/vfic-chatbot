@@ -36,7 +36,7 @@ describe("ChannelAdapterSelector", () => {
       <div className="inbox-bg-container">
         <ChannelAdapterSelectorView
           provider="zalo_bot"
-          counts={{ zalo_bot: 0, zalo_oa: 135 }}
+          counts={{ zalo_bot: 0, zalo_oa: 135, facebook_messenger: 0 }}
           onProviderChange={onProviderChange}
         />
       </div>,
@@ -49,13 +49,14 @@ describe("ChannelAdapterSelector", () => {
     await expect
       .element(screen.getByRole("radio", { name: "Zalo Chatbot" }))
       .toBeChecked();
-    expect(screen.getByRole("radio").all()).toHaveLength(2);
+    expect(screen.getByRole("radio").all()).toHaveLength(3);
     await expect
       .element(screen.getByRole("radio", { name: "Zalo Chatbot" }))
       .toBeVisible();
-    expect(
-      screen.container.querySelector('[aria-label^="Messenger"]'),
-    ).toBeNull();
+    // Messenger is a selectable scope alongside the Zalo adapters.
+    await expect
+      .element(screen.getByRole("radio", { name: "Messenger" }))
+      .toBeVisible();
     expect(screen.container.textContent).not.toContain("Kênh đang chọn:");
     await expect.element(screen.getByText("99+")).toBeVisible();
     expect(
@@ -113,7 +114,7 @@ describe("ChannelAdapterSelector", () => {
       </QueryClientProvider>,
     );
 
-    await expect.poll(() => mockApiJson.mock.calls.length).toBe(2);
+    await expect.poll(() => mockApiJson.mock.calls.length).toBe(3);
     expect(mockApiJson).toHaveBeenCalledWith(
       "/api/v1/conversations/needs-attention?channel_provider=zalo_bot",
     );

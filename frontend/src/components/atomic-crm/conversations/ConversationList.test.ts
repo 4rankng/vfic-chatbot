@@ -51,9 +51,17 @@ describe("getConversationListServerFilter", () => {
   it("treats API-unsupported channel scopes as unscoped", () => {
     expect(
       getConversationListServerFilter(
-        new URLSearchParams("channel_provider=facebook_messenger"),
+        new URLSearchParams("channel_provider=telegram"),
       ),
     ).toEqual({});
+  });
+
+  it("scopes the inbox to Messenger when that provider is selected", () => {
+    expect(
+      getConversationListServerFilter(
+        new URLSearchParams("channel_provider=facebook_messenger"),
+      ),
+    ).toEqual({ channel_provider: "facebook_messenger" });
   });
 
   it("always composes a valid provider into normal and reason filters", () => {

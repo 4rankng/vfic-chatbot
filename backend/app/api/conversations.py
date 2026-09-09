@@ -37,7 +37,7 @@ from app.services.conversation import ConversationConflict, ConversationService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
-ChannelProvider = Literal["zalo_bot", "zalo_oa"]
+ChannelProvider = Literal["zalo_bot", "zalo_oa", "facebook_messenger"]
 
 
 async def _load(

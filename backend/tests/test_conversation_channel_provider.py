@@ -49,6 +49,27 @@ async def test_unknown_channel_provider_returns_422(transport, path: str) -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path", ["/api/v1/conversations", "/api/v1/conversations/needs-attention"]
+)
+async def test_messenger_is_an_accepted_channel_scope(transport, path: str) -> None:
+    """The inbox can scope to Messenger, not just the two Zalo adapters."""
+    http_transport, _db = transport
+    with patch("app.api.conversations.ConversationService") as service_class:
+        service = service_class.return_value
+        service.list = AsyncMock(return_value=([], 0))
+        service.needs_attention_count = AsyncMock(return_value=0)
+        async with httpx.AsyncClient(
+            transport=http_transport, base_url="http://test"
+        ) as client:
+            response = await client.get(
+                path, params={"channel_provider": "facebook_messenger"}
+            )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_list_threads_provider_through_normal_and_reason_paths(transport) -> None:
     http_transport, _db = transport
     with (

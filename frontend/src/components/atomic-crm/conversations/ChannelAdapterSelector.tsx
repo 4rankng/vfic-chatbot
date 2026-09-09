@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
+import { MessageCircle } from "lucide-react";
 
 import zaloChatbotIcon from "@/assets/channel-adapters/zalo-chatbot.png";
 import zaloOaIcon from "@/assets/channel-adapters/zalo-oa.png";
@@ -14,20 +15,25 @@ import {
   getChannelProviderSearchParams,
 } from "./conversation-list-filters";
 
-type ChannelAdapterProvider = Exclude<
-  ConversationChannelProvider,
-  "facebook_messenger"
->;
+type ChannelAdapterProvider = ConversationChannelProvider;
 
+// Zalo adapters ship brand artwork; Messenger falls back to a glyph until a
+// brand asset lands in assets/channel-adapters/.
 type AdapterDefinition = {
   provider: ChannelAdapterProvider;
   label: string;
-  icon: string;
+  icon?: string;
+  Glyph?: typeof MessageCircle;
 };
 
 const ADAPTERS: readonly AdapterDefinition[] = [
   { provider: "zalo_bot", label: "Zalo Chatbot", icon: zaloChatbotIcon },
   { provider: "zalo_oa", label: "Zalo OA", icon: zaloOaIcon },
+  {
+    provider: "facebook_messenger",
+    label: "Messenger",
+    Glyph: MessageCircle,
+  },
 ];
 
 type NeedsAttentionResponse = { count: number };
@@ -93,7 +99,11 @@ export const ChannelAdapterSelectorView = ({
                     }
                   }}
                 >
-                  <img src={adapter.icon} alt="" aria-hidden="true" />
+                  {adapter.icon ? (
+                    <img src={adapter.icon} alt="" aria-hidden="true" />
+                  ) : adapter.Glyph ? (
+                    <adapter.Glyph aria-hidden="true" />
+                  ) : null}
                   {count > 0 ? (
                     <span
                       className="channel-adapter-badge"
@@ -122,10 +132,11 @@ export const ChannelAdapterSelector = ({
   searchParams: URLSearchParams;
   onSearchParamsChange: (next: URLSearchParams) => void;
 }) => {
-  // Keep both displayed adapter queries mounted regardless of selection so
+  // Keep every displayed adapter query mounted regardless of selection so
   // badges stay warm and switching never briefly shows a stale count.
   const zaloBotCount = useScopedAttentionCount("zalo_bot");
   const zaloOaCount = useScopedAttentionCount("zalo_oa");
+  const messengerCount = useScopedAttentionCount("facebook_messenger");
 
   return (
     <ChannelAdapterSelectorView
@@ -133,6 +144,7 @@ export const ChannelAdapterSelector = ({
       counts={{
         zalo_bot: zaloBotCount,
         zalo_oa: zaloOaCount,
+        facebook_messenger: messengerCount,
       }}
       onProviderChange={(nextProvider) => {
         if (nextProvider) {
