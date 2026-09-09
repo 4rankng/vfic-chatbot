@@ -11,13 +11,15 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
-import { useNotify } from "ra-core";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useGetList, useNotify } from "ra-core";
 import { Eye, EyeOff } from "lucide-react";
+import { ApiError } from "@/lib/apiClient";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { Project } from "../types";
 import "../conversations/inbox.css";
 import "./settings.css";
 import {
@@ -32,6 +34,10 @@ import {
   type FacebookPageList,
 } from "./api";
 import { consumeFacebookOAuthCallback } from "./facebook-oauth-callback";
+import {
+  FacebookPageCard,
+  FacebookProjectCheckboxList,
+} from "./FacebookMessengerPageCard";
 import {
   SettingsFieldStatus,
   SettingsGroupStatus,
@@ -157,6 +163,10 @@ export const FacebookMessengerIntegrationPage = () => {
   const [pendingFlowId, setPendingFlowId] = useState<string | null>(null);
   const [flowIdDraft, setFlowIdDraft] = useState("");
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  // Projects picked for the NEW Page during the connect flow; committed
+  // atomically with activation via complete (D1 gate — backend 409s when the
+  // result would leave the Page with zero ACTIVE-project mappings).
+  const [pickerProjectIds, setPickerProjectIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [credentialsForm, setCredentialsForm] = useState<CredentialsFormState>(
     EMPTY_CREDENTIALS_FORM,
@@ -180,6 +190,17 @@ export const FacebookMessengerIntegrationPage = () => {
     queryFn: () => facebookIntegrationGateway.loadStatus(),
     staleTime: 30_000,
   });
+
+  // Active Projects: options for the per-Page assignment editor (D3).
+  const { data: projects = [] } = useGetList<Project>("projects", {
+    pagination: { page: 1, perPage: 100 },
+    sort: { field: "name", order: "ASC" },
+    filter: {},
+  });
+  const activeProjects = useMemo(
+    () => projects.filter((project) => project.is_active),
+    [projects],
+  );
 
   // App-level Meta credentials (DB-first, env fallback on the backend).
   const {
@@ -299,7 +320,7 @@ export const FacebookMessengerIntegrationPage = () => {
       setError("Không thể bắt đầu kết nối Facebook. Vui lòng thử lại."),
   });
 
-  // Step 4: complete — select one Page, activate it.
+  // Step 4: complete — select one Page, assign Projects, activate it.
   const completeOAuth = useMutation<
     FacebookAccountStatus,
     Error,
@@ -309,15 +330,25 @@ export const FacebookMessengerIntegrationPage = () => {
     onSuccess: () => {
       setPendingFlowId(null);
       setSelectedPageId(null);
+      setPickerProjectIds([]);
       setError(null);
       queryClient.invalidateQueries({
         queryKey: ["facebook-integration-status"],
       });
     },
-    onError: () => {
+    onError: (err) => {
       setPendingFlowId(null);
       setSelectedPageId(null);
-      setError("Kích hoạt Trang thất bại. Vui lòng kết nối lại.");
+      setPickerProjectIds([]);
+      // Surface the backend's reason (e.g. D1: activation requires ≥1 assigned
+      // Project) when it provides a friendly detail; fall back to generic copy.
+      // Surface the backend's reason (e.g. D1: activation requires ≥1 assigned
+      // Project) when it provides a friendly detail; fall back to generic copy.
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Kích hoạt Trang thất bại. Vui lòng kết nối lại.",
+      );
     },
   });
 
@@ -326,27 +357,17 @@ export const FacebookMessengerIntegrationPage = () => {
     mutationFn: () => facebookIntegrationGateway.testConnection(),
   });
 
-  // Disconnect a Page (marks inactive; history preserved).
-  const disconnect = useMutation<FacebookAccountStatus, Error, void>({
-    mutationFn: () => facebookIntegrationGateway.disconnect(),
-    onSuccess: () => {
-      setError(null);
-      queryClient.invalidateQueries({
-        queryKey: ["facebook-integration-status"],
-      });
-    },
-    onError: () => setError("Ngắt kết nối Trang thất bại."),
-  });
-
-  const activeAccount = status?.accounts.find((a) => a.status === "ACTIVE");
+  const activeAccounts =
+    status?.accounts.filter((a) => a.status === "ACTIVE") ?? [];
   const archivedAccounts =
     status?.accounts.filter((a) => a.status !== "ACTIVE") ?? [];
 
-  const loadManualFlow = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const loadManualFlow = (formEvent: FormEvent<HTMLFormElement>) => {
+    formEvent.preventDefault();
     const flowId = flowIdDraft.trim();
     if (!flowId) return;
     setSelectedPageId(null);
+    setPickerProjectIds([]);
     setError(null);
     setPendingFlowId(flowId);
   };
@@ -354,6 +375,7 @@ export const FacebookMessengerIntegrationPage = () => {
   const resetPageSelection = () => {
     setPendingFlowId(null);
     setSelectedPageId(null);
+    setPickerProjectIds([]);
   };
 
   const needsPageListRecovery =
@@ -457,20 +479,21 @@ export const FacebookMessengerIntegrationPage = () => {
         </div>
       </form>
 
-      {/* Active connection */}
-      {activeAccount ? (
+      {/* Connected Pages (multi-Page). One card per ACTIVE Page: status,
+          per-Page Project assignment editor (D3), per-Page disconnect.
+          Channel test stays group-level — webhook subscription is app-level. */}
+      {activeAccounts.length > 0 ? (
         <div className="settings-group settings-messenger-group">
-          <div className="settings-group-content settings-messenger-group-content">
-            <div className="settings-field">
-              <span className="settings-field-label">Trang đang kết nối</span>
-              <span className="settings-field-value">
-                <strong>{activeAccount.label}</strong>{" "}
-                <span className="settings-field-hint">
-                  (…{activeAccount.page_id_suffix})
-                </span>
-              </span>
+          <div className="settings-messenger-group-heading">
+            <div>
+              <h3 className="settings-messenger-group-title">
+                Trang đã kết nối
+              </h3>
+              <p className="settings-field-hint">
+                Mỗi Trang chỉ đề xuất các dự án được gán cho Trang đó.
+              </p>
             </div>
-            <div className="settings-oa-actions settings-messenger-actions">
+            <div className="settings-messenger-heading-actions">
               <button
                 type="button"
                 className="settings-test-button tt-btn-touch"
@@ -478,20 +501,34 @@ export const FacebookMessengerIntegrationPage = () => {
                 disabled={testConnection.isPending}
                 aria-busy={testConnection.isPending}
               >
-                {testConnection.isPending
-                  ? "Đang kiểm tra…"
-                  : "Kiểm tra kết nối"}
+                {testConnection.isPending ? "Đang kiểm tra…" : "Kiểm tra kênh"}
               </button>
               <button
                 type="button"
-                className="settings-test-button settings-danger-action tt-btn-touch"
-                onClick={() => disconnect.mutate()}
-                disabled={disconnect.isPending}
-                aria-busy={disconnect.isPending}
+                className="settings-test-button settings-messenger-solid-action tt-btn-touch"
+                onClick={() => startOAuth.mutate()}
+                disabled={startOAuth.isPending || !appIdConfigured}
+                aria-busy={startOAuth.isPending}
+                title={
+                  appIdConfigured
+                    ? undefined
+                    : "Cấu hình App ID trước khi kết nối"
+                }
               >
-                {disconnect.isPending ? "Đang ngắt…" : "Ngắt kết nối"}
+                {startOAuth.isPending ? "Đang chuẩn bị…" : "Thêm Trang"}
               </button>
             </div>
+          </div>
+          <div className="settings-group-content settings-messenger-group-content">
+            <ul className="settings-facebook-page-list">
+              {activeAccounts.map((account) => (
+                <FacebookPageCard
+                  key={account.page_id}
+                  account={account}
+                  projects={activeProjects}
+                />
+              ))}
+            </ul>
             {testConnection.data ? (
               <div
                 className={`settings-test-result settings-messenger-result tt-alert tt-alert-soft ${
@@ -501,7 +538,7 @@ export const FacebookMessengerIntegrationPage = () => {
                 }`}
               >
                 {testConnection.data.healthy
-                  ? "Kết nối Messenger hoạt động bình thường; webhook đang nhận sự kiện từ Trang."
+                  ? "Kết nối Messenger hoạt động bình thường; webhook đang nhận sự kiện từ các Trang."
                   : (testConnection.data.error ?? "Kết nối không khả dụng.")}
               </div>
             ) : null}
@@ -560,16 +597,46 @@ export const FacebookMessengerIntegrationPage = () => {
                 </li>
               ))}
             </ul>
+            {/* D1: assign ≥1 Project BEFORE activation — the assignment set is
+                committed atomically with activation by complete. An empty
+                selection omits project_ids so the backend's 409 detail (not a
+                silent no-op) explains the requirement to the operator. */}
+            <div className="settings-facebook-page-projects">
+              <span className="settings-field-label">
+                Gán dự án cho Trang này
+              </span>
+              {activeProjects.length > 0 ? (
+                <FacebookProjectCheckboxList
+                  projects={activeProjects}
+                  selected={pickerProjectIds}
+                  onToggle={(id, checked) =>
+                    setPickerProjectIds((current) =>
+                      checked
+                        ? [...current, id]
+                        : current.filter((existing) => existing !== id),
+                    )
+                  }
+                />
+              ) : (
+                <span className="settings-field-hint">
+                  Chưa có dự án nào đang hoạt động — hãy tạo dự án trước khi
+                  kích hoạt Trang.
+                </span>
+              )}
+            </div>
             <button
               type="button"
               className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn-touch"
-              onClick={() =>
-                selectedPageId &&
+              onClick={() => {
+                if (!selectedPageId) return;
                 completeOAuth.mutate({
                   flow_id: pendingFlowId,
                   page_id: selectedPageId,
-                })
-              }
+                  ...(pickerProjectIds.length > 0
+                    ? { project_ids: pickerProjectIds }
+                    : {}),
+                });
+              }}
               disabled={!selectedPageId || completeOAuth.isPending}
               aria-busy={completeOAuth.isPending}
             >
@@ -600,8 +667,10 @@ export const FacebookMessengerIntegrationPage = () => {
         </div>
       ) : null}
 
-      {/* Manual flow-id entry (after OAuth redirect back to frontend) */}
-      {!activeAccount && !pendingFlowId ? (
+      {/* Manual flow-id entry (after OAuth redirect back to frontend).
+          Available even with Pages connected — a lost flow id must remain
+          recoverable in the multi-Page add-Page flow. */}
+      {!pendingFlowId ? (
         <details className="settings-group settings-messenger-recovery tt-collapse tt-collapse-arrow">
           <summary className="settings-messenger-recovery-summary tt-collapse-title">
             Nhập mã phiên OAuth

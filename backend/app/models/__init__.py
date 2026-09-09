@@ -28,7 +28,7 @@ from app.models.installation import (
     InstallationState,
 )
 from app.models.contact import Contact, ContactChannelIdentity
-from app.models.channel_account import ChannelAccount
+from app.models.channel_account import ChannelAccount, ChannelAccountProject
 from app.models.case_workflow import (
     CaseTagDefinition,
     CaseWorkflowStage,
@@ -123,6 +123,7 @@ __all__ = [
     "Contact",
     "ContactChannelIdentity",
     "ChannelAccount",
+    "ChannelAccountProject",
     "CaseWorkflowVersion",
     "CaseWorkflowStage",
     "CaseWorkflowTransition",

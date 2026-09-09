@@ -28,6 +28,10 @@ from app.schemas.integrations import (
     FacebookOAuthStartOut,
     FacebookPageListOut,
     FacebookPageOut,
+    FacebookPageProjectAdd,
+    FacebookPageProjectAssignmentOut,
+    FacebookPageProjectsOut,
+    FacebookPageProjectsUpdate,
     MinimaxIntegrationSettingsOut,
     MinimaxIntegrationSettingsUpdate,
     MinimaxIntegrationTestOut,
@@ -647,8 +651,13 @@ async def list_facebook_pages(
     )
     pages = [FacebookPageOut(id=page.id, name=page.name) for page in payload.pages]
     resolver = FacebookAccountResolver(db)
-    active = await resolver.active_facebook_page()
-    return FacebookPageListOut(pages=pages, active_page_id=active.account_key if active else None)
+    # Multi-Page: report every currently-active Page, not just one.
+    active_page_ids = [
+        ref.account_key
+        for ref in await resolver.list_facebook_accounts()
+        if ref.is_active
+    ]
+    return FacebookPageListOut(pages=pages, active_page_ids=active_page_ids)
 
 
 @router.post("/facebook/oauth/complete", response_model=FacebookAccountStatusOut)
@@ -657,14 +666,37 @@ async def complete_facebook_oauth(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> FacebookAccountStatusOut:
-    """Select one Page, obtain Page authority, probe identity, subscribe, persist."""
-    from app.channels.providers.facebook_account import FacebookPageLifecycle
+    """Select one Page, obtain Page authority, probe identity, subscribe, persist.
+
+    ``project_ids`` (optional replace-all) is validated BEFORE any Meta-side
+    call so an unknown Project fails fast with 422 instead of after the app has
+    already subscribed to the Page. The assignment then commits atomically with
+    activation (see ``FacebookPageLifecycle.activate_or_reactivate``).
+    """
+    from app.channels.providers.facebook_account import (
+        FacebookPageAssignments,
+        FacebookPageAssignmentInvalidError,
+        FacebookPageLifecycle,
+        FacebookPageUnassignedError,
+    )
     from app.channels.providers.facebook_oauth import (
         FacebookOAuthError,
         get_page_access_token,
         probe_page_identity,
         subscribe_app_to_page,
+        unsubscribe_app_from_page,
     )
+
+    project_ids: list[str] | None = None
+    if payload.project_ids is not None:
+        assignments_service = FacebookPageAssignments(db)
+        try:
+            validated = await assignments_service.validate_project_ids(
+                payload.project_ids
+            )
+        except FacebookPageAssignmentInvalidError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        project_ids = [str(pid) for pid in validated]
 
     flow = await _load_facebook_oauth_flow(
         flow_id=payload.flow_id,
@@ -698,16 +730,32 @@ async def complete_facebook_oauth(
             page_name=page_name,
             page_access_token=page_token,
             admin_id=admin.id,
+            project_ids=project_ids,
         )
+    except FacebookPageUnassignedError:
+        # D1 gate: activation refuses a Page with zero mappings to currently-
+        # ACTIVE Projects. The Meta-side subscription DID succeed, so compensate
+        # it (best-effort — the 409 must survive a flaky unsubscribe) before
+        # surfacing the gate to the operator.
+        try:
+            await unsubscribe_app_from_page(payload.page_id, page_token)
+        except Exception:  # noqa: BLE001 — compensation is best-effort
+            pass
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Trang chưa được gán dự án nào đang hoạt động. "
+                "Hãy chọn ít nhất một dự án rồi thử lại."
+            ),
+        ) from None
     except Exception:
         # The Meta-side subscription succeeded but the DB activation failed
         # (e.g. concurrent activation). Best-effort unsubscribe so we don't
         # leave a Meta-side subscription with no DB counterpart, then re-raise.
-        from app.channels.providers.facebook_oauth import unsubscribe_app_from_page
-
         await unsubscribe_app_from_page(payload.page_id, page_token)
         raise
     return FacebookAccountStatusOut(
+        page_id=payload.page_id,
         page_id_suffix=payload.page_id[-4:],
         label=page_name,
         status=account.status,
@@ -733,6 +781,7 @@ async def get_facebook_status(
         enabled=any(a.is_active for a in accounts),
         accounts=[
             FacebookAccountStatusOut(
+                page_id=a.account_key,
                 page_id_suffix=(a.account_key[-4:] if a.account_key else ""),
                 label=a.label,
                 status=a.status,
@@ -834,10 +883,18 @@ async def update_facebook_credentials(
 
 @router.delete("/facebook", response_model=FacebookAccountStatusOut)
 async def disconnect_facebook(
+    page_id: str | None = None,
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> FacebookAccountStatusOut:
-    """Mark a Page inactive. Never deletes contacts/conversations/history."""
+    """Mark a Page inactive. Never deletes contacts/conversations/history.
+
+    ``page_id`` (optional query param) disconnects one specific Page — the
+    multi-Page form. Omitted keeps the legacy single-Page behavior; with more
+    than one active Page the legacy form is ambiguous and refuses with 409 so
+    the caller must pick a Page explicitly. Assignment rows are kept either
+    way (decision D6): reconnecting restores the catalog as configured.
+    """
     from app.channels.providers.facebook_account import (
         FacebookAccountResolver,
         FacebookPageLifecycle,
@@ -847,26 +904,182 @@ async def disconnect_facebook(
         unsubscribe_app_from_page,
     )
 
-    active = await FacebookAccountResolver(db).active_facebook_page()
-    if active is None:
-        raise HTTPException(status_code=404, detail="Không tìm thấy Trang Facebook.")
+    resolver = FacebookAccountResolver(db)
+    if page_id:
+        target_key = page_id
+    else:
+        active_refs = [ref for ref in await resolver.list_facebook_accounts() if ref.is_active]
+        if not active_refs:
+            raise HTTPException(status_code=404, detail="Không tìm thấy Trang Facebook.")
+        if len(active_refs) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Nhiều Trang đang hoạt động — hãy chọn Trang cụ thể "
+                    "để ngắt kết nối."
+                ),
+            )
+        target_key = active_refs[0].account_key
 
     # Best-effort remote unsubscribe happens immediately before local
     # deactivation. Meta availability must never keep the local channel active.
     settings_service = IntegrationSettingsService(db)
-    cfg = await settings_service.resolve_facebook(active.account_key)
+    cfg = await settings_service.resolve_facebook(target_key)
     if cfg is not None:
         try:
-            await unsubscribe_app_from_page(active.account_key, cfg.page_access_token)
+            await unsubscribe_app_from_page(target_key, cfg.page_access_token)
         except (FacebookOAuthError, httpx.HTTPError, ValueError):
             pass
 
     lifecycle = FacebookPageLifecycle(db)
-    account = await lifecycle.disconnect(page_id=active.account_key, admin_id=admin.id)
+    account = await lifecycle.disconnect(page_id=target_key, admin_id=admin.id)
     if account is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy Trang Facebook.")
     return FacebookAccountStatusOut(
-        page_id_suffix=active.account_key[-4:],
+        page_id=target_key,
+        page_id_suffix=target_key[-4:],
         label=account.label,
         status=account.status,
     )
+
+
+# ─── Facebook Page↔Project assignment CRUD (multi-Page) ─────────────────────
+#
+# Admin-only editor surface over the ``channel_account_projects`` join table.
+# Business logic lives in FacebookPageAssignments (channels provider service);
+# this section is transport only. The 409 zero-ACTIVE-project gate applies
+# ONLY at activation (POST /facebook/oauth/complete): an INACTIVE Page may
+# legitimately hold zero active-project mappings, and removing the last
+# assignment of an ACTIVE Page is allowed (its runtime catalog empties until
+# an assignment returns — the same defense-in-depth empty-catalog behavior as
+# an unmapped Page). Disconnect keeps assignment rows; removal happens only
+# through the service surface.
+
+
+def _assignments_out(page_id: str, views) -> FacebookPageProjectsOut:
+    """Map service-layer assignment views onto the response schema."""
+    return FacebookPageProjectsOut(
+        page_id=page_id,
+        assignments=[
+            FacebookPageProjectAssignmentOut(
+                project_id=view.project_id,
+                project_slug=view.project_slug,
+                project_name=view.project_name,
+                project_active=view.project_active,
+            )
+            for view in views
+        ],
+    )
+
+
+@router.get("/facebook/pages/{page_id}/projects", response_model=FacebookPageProjectsOut)
+async def get_facebook_page_projects(
+    page_id: str,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookPageProjectsOut:
+    """List a Page's assigned Projects (any account lifecycle status)."""
+    from app.channels.providers.facebook_account import (
+        FacebookPageAssignments,
+        FacebookPageNotFoundError,
+    )
+
+    service = FacebookPageAssignments(db)
+    try:
+        account = await service.load_page(page_id)
+    except FacebookPageNotFoundError:
+        raise HTTPException(
+            status_code=404, detail="Không tìm thấy Trang Facebook."
+        ) from None
+    return _assignments_out(
+        account.account_key, await service.assignments(account.id)
+    )
+
+
+@router.put("/facebook/pages/{page_id}/projects", response_model=FacebookPageProjectsOut)
+async def replace_facebook_page_projects(
+    body: FacebookPageProjectsUpdate,
+    page_id: str,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookPageProjectsOut:
+    """Replace-all save from the multi-select editor (service-side atomic)."""
+    from app.channels.providers.facebook_account import (
+        FacebookPageAssignments,
+        FacebookPageAssignmentInvalidError,
+        FacebookPageNotFoundError,
+    )
+
+    service = FacebookPageAssignments(db)
+    try:
+        account, views = await service.replace(
+            page_id=page_id, project_ids=body.project_ids, actor_id=admin.id
+        )
+    except FacebookPageNotFoundError:
+        raise HTTPException(
+            status_code=404, detail="Không tìm thấy Trang Facebook."
+        ) from None
+    except FacebookPageAssignmentInvalidError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return _assignments_out(account.account_key, views)
+
+
+@router.post("/facebook/pages/{page_id}/projects", response_model=FacebookPageProjectsOut)
+async def add_facebook_page_project(
+    body: FacebookPageProjectAdd,
+    page_id: str,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookPageProjectsOut:
+    """Add one Project assignment. Idempotent when already assigned."""
+    from app.channels.providers.facebook_account import (
+        FacebookPageAssignments,
+        FacebookPageAssignmentInvalidError,
+        FacebookPageNotFoundError,
+    )
+
+    service = FacebookPageAssignments(db)
+    try:
+        account, views, _added = await service.add(
+            page_id=page_id, project_id=body.project_id, actor_id=admin.id
+        )
+    except FacebookPageNotFoundError:
+        raise HTTPException(
+            status_code=404, detail="Không tìm thấy Trang Facebook."
+        ) from None
+    except FacebookPageAssignmentInvalidError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return _assignments_out(account.account_key, views)
+
+
+@router.delete(
+    "/facebook/pages/{page_id}/projects/{project_id}",
+    response_model=FacebookPageProjectsOut,
+)
+async def remove_facebook_page_project(
+    page_id: str,
+    project_id: str,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookPageProjectsOut:
+    """Remove one Project assignment (404 when that assignment does not exist)."""
+    from app.channels.providers.facebook_account import (
+        FacebookPageAssignments,
+        FacebookPageNotFoundError,
+    )
+
+    service = FacebookPageAssignments(db)
+    try:
+        views = await service.remove(
+            page_id=page_id, project_id=project_id, actor_id=admin.id
+        )
+    except FacebookPageNotFoundError:
+        raise HTTPException(
+            status_code=404, detail="Không tìm thấy Trang Facebook."
+        ) from None
+    if views is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Không tìm thấy dự án được gán cho Trang này.",
+        )
+    return _assignments_out(page_id, views)

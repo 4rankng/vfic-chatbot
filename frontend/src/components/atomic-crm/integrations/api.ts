@@ -60,9 +60,20 @@ export type IntegrationConfigTestResult = {
 };
 
 export type FacebookAccountStatus = {
+  /** Full Page id (unmasked; contract: additive). Key for per-Page routes. */
+  page_id: string;
   page_id_suffix: string;
   label: string;
   status: "ACTIVE" | "INACTIVE";
+};
+
+/** Per-Page Project assignment list (GET /facebook/pages/{page_id}/projects). */
+export type FacebookPageProjects = {
+  page_id: string;
+  assignments: Array<{
+    project_id: string;
+    project_slug?: string;
+  }>;
 };
 
 export type FacebookIntegrationStatus = {
@@ -81,12 +92,15 @@ export type FacebookPage = {
 
 export type FacebookPageList = {
   pages: FacebookPage[];
-  active_page_id: string | null;
+  /** All currently-active Pages (contract: active_page_id is removed). */
+  active_page_ids: string[];
 };
 
 export type FacebookOAuthCompleteRequest = {
   flow_id: string;
   page_id: string;
+  /** Replace-all assignment set, applied atomically with activation (D1). */
+  project_ids?: string[];
 };
 
 export type FacebookChannelTest = {
@@ -233,8 +247,29 @@ export const facebookIntegrationGateway = {
       },
     ),
 
-  disconnect: async (): Promise<FacebookAccountStatus> =>
-    apiJson<FacebookAccountStatus>(`${ADMIN_INTEGRATIONS_BASE_PATH}/facebook`, {
-      method: "DELETE",
-    }),
+  /**
+   * Page↔Project assignment surface (multi-Page contract). Keyed by the full,
+   * unmasked `page_id` exposed by GET /facebook.
+   */
+  loadPageProjects: async (pageId: string): Promise<FacebookPageProjects> =>
+    apiJson<FacebookPageProjects>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook/pages/${encodeURIComponent(pageId)}/projects`,
+    ),
+
+  /** Replace-all save for the per-Page multi-select editor. */
+  setPageProjects: async (
+    pageId: string,
+    projectIds: string[],
+  ): Promise<FacebookPageProjects> =>
+    apiJson<FacebookPageProjects>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook/pages/${encodeURIComponent(pageId)}/projects`,
+      { method: "PUT", body: { project_ids: projectIds } },
+    ),
+
+  /** Disconnect one Page; the legacy single-Page behavior needs no param. */
+  disconnectPage: async (pageId: string): Promise<FacebookAccountStatus> =>
+    apiJson<FacebookAccountStatus>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook?page_id=${encodeURIComponent(pageId)}`,
+      { method: "DELETE" },
+    ),
 } as const;

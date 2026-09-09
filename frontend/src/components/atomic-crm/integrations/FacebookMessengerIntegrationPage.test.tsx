@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "vitest-browser-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/apiClient";
 
 type ApiOptions = {
   method?: string;
@@ -9,17 +10,20 @@ type ApiOptions = {
 
 const mocks = vi.hoisted(() => ({
   accounts: [] as Array<{
+    page_id: string;
     page_id_suffix: string;
     label: string;
     status: "ACTIVE" | "INACTIVE";
   }>,
+  projects: [] as Array<{ id: string; name: string; is_active: boolean }>,
+  notify: vi.fn(),
   pageListResult: {
     pages: [{ id: "page-123456789", name: "Ting Ting Tuyển dụng" }],
-    active_page_id: null,
+    active_page_ids: [] as string[],
   } as
     | {
         pages: Array<{ id: string; name: string }>;
-        active_page_id: string | null;
+        active_page_ids: string[];
       }
     | Error,
   completeResult: {
@@ -38,9 +42,12 @@ const mocks = vi.hoisted(() => ({
   ),
   loadCredentials: vi.fn(() =>
     Promise.resolve({
-      facebook_app_id: { configured: false, value: null },
+      facebook_app_id: { configured: false, value: null as string | null },
       facebook_app_secret: { configured: false, preview: null },
-      facebook_login_config_id: { configured: false, value: null },
+      facebook_login_config_id: {
+        configured: false,
+        value: null as string | null,
+      },
       facebook_webhook_verify_token: {
         configured: false,
         preview: null,
@@ -53,18 +60,40 @@ const mocks = vi.hoisted(() => ({
       ? Promise.reject(mocks.pageListResult)
       : Promise.resolve(mocks.pageListResult),
   ),
-  startOAuth: vi.fn(),
+  startOAuth: vi.fn(() =>
+    Promise.resolve({
+      authorization_url:
+        "https://www.facebook.com/v21.0/dialog/oauth?client_id=test",
+    }),
+  ),
   completeOAuth: vi.fn((_body: ApiOptions["body"]) =>
     mocks.completeResult instanceof Error
       ? Promise.reject(mocks.completeResult)
       : Promise.resolve(mocks.completeResult),
   ),
-  testConnection: vi.fn(),
-  disconnect: vi.fn(() =>
+  testConnection: vi.fn(() =>
+    Promise.resolve({ healthy: true, error: null, app_subscribed: true }),
+  ),
+  disconnectPage: vi.fn(() =>
     Promise.resolve({
-      page_id_suffix: "4321",
-      label: "Ting Ting Tuyển dụng",
-      status: "INACTIVE",
+      page_id_suffix: "1111",
+      label: "Tuyển dụng chính thức Việt Pháp",
+      status: "INACTIVE" as const,
+    }),
+  ),
+  setPageProjects: vi.fn((_pageId: string, projectIds: string[]) =>
+    Promise.resolve({
+      page_id: _pageId,
+      assignments: projectIds.map((project_id) => ({ project_id })),
+    }),
+  ),
+  loadPageProjects: vi.fn((pageId: string) =>
+    Promise.resolve({
+      page_id: pageId,
+      assignments:
+        pageId === "222222222222222"
+          ? [{ project_id: "3" }]
+          : [{ project_id: "1" }, { project_id: "2" }],
     }),
   ),
 }));
@@ -78,8 +107,17 @@ vi.mock("./api", () => ({
     startOAuth: mocks.startOAuth,
     completeOAuth: mocks.completeOAuth,
     testConnection: mocks.testConnection,
-    disconnect: mocks.disconnect,
+    disconnectPage: mocks.disconnectPage,
+    setPageProjects: mocks.setPageProjects,
+    loadPageProjects: mocks.loadPageProjects,
   },
+}));
+
+// The multi-Page editor lists active Projects via useGetList; this harness has
+// no DataProvider context, so the options are provided inline.
+vi.mock("ra-core", () => ({
+  useGetList: () => ({ data: mocks.projects }),
+  useNotify: () => mocks.notify,
 }));
 
 import { FacebookMessengerIntegrationPage } from "./FacebookMessengerIntegrationPage";
@@ -98,12 +136,35 @@ const renderPage = async () => {
   );
 };
 
+const CONNECTED_ACCOUNTS = [
+  {
+    page_id: "111111111111111",
+    page_id_suffix: "1111",
+    label: "Tuyển dụng chính thức Việt Pháp",
+    status: "ACTIVE" as const,
+  },
+  {
+    page_id: "222222222222222",
+    page_id_suffix: "2222",
+    label: "Tuyển dụng thực tập sinh",
+    status: "ACTIVE" as const,
+  },
+];
+
+const MOCK_PROJECTS = [
+  { id: "1", name: "LG Display — Tuyển dụng chính thức", is_active: true },
+  { id: "2", name: "LG Display — Thực tập sinh", is_active: true },
+  { id: "3", name: "VFIC Express", is_active: true },
+];
+
 afterEach(async () => {
   await cleanup();
   mocks.accounts = [];
+  mocks.projects = [];
+  mocks.notify.mockClear();
   mocks.pageListResult = {
     pages: [{ id: "page-123456789", name: "Ting Ting Tuyển dụng" }],
-    active_page_id: null,
+    active_page_ids: [],
   };
   mocks.completeResult = {
     page_id_suffix: "6789",
@@ -113,11 +174,13 @@ afterEach(async () => {
   mocks.loadStatus.mockClear();
   mocks.loadCredentials.mockClear();
   mocks.saveCredentials.mockClear();
+  mocks.setPageProjects.mockClear();
+  mocks.loadPageProjects.mockClear();
   mocks.loadOAuthPages.mockClear();
   mocks.startOAuth.mockClear();
   mocks.completeOAuth.mockClear();
   mocks.testConnection.mockClear();
-  mocks.disconnect.mockClear();
+  mocks.disconnectPage.mockClear();
   window.history.replaceState(null, "", "/#/settings");
 });
 
@@ -267,22 +330,170 @@ describe("FacebookMessengerIntegrationPage", () => {
     await expect.element(screen.getByText("Nhập mã phiên OAuth")).toBeVisible();
   });
 
-  it("disconnects the single active Page without sending its masked suffix", async () => {
-    mocks.accounts = [
-      {
-        page_id_suffix: "4321",
-        label: "Ting Ting Tuyển dụng",
-        status: "ACTIVE",
-      },
-    ];
+  it("surfaces the backend reason when activation fails with a friendly detail", async () => {
+    mocks.completeResult = new ApiError(
+      409,
+      "Trang cần ít nhất một dự án được gán trước khi kích hoạt.",
+    );
+    window.history.replaceState(
+      null,
+      "",
+      "/#/settings?facebook_oauth_status=pending_selection&facebook_oauth_flow_id=gated-flow",
+    );
+    const screen = await renderPage();
+    const pageRadio = screen.getByRole("radio", {
+      name: "Ting Ting Tuyển dụng",
+    });
+    await expect.element(pageRadio).toBeVisible();
+
+    await pageRadio.click();
+    await screen.getByRole("button", { name: "Kích hoạt Trang" }).click();
+
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent(
+        "Trang cần ít nhất một dự án được gán trước khi kích hoạt.",
+      );
+    expect(pageRadio.query()).toBeNull();
+  });
+
+  it("renders one card per active Page with status badge and Project editor", async () => {
+    mocks.accounts = CONNECTED_ACCOUNTS;
+    mocks.projects = MOCK_PROJECTS;
     const screen = await renderPage();
 
-    await screen.getByRole("button", { name: "Ngắt kết nối" }).click();
+    await expect.element(screen.getByText("Trang đã kết nối")).toBeVisible();
+    await expect
+      .element(screen.getByText("Tuyển dụng chính thức Việt Pháp"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Tuyển dụng thực tập sinh"))
+      .toBeVisible();
 
-    await expect.poll(() => mocks.disconnect.mock.calls.length).toBe(1);
-    expect(mocks.disconnect.mock.calls.every((call) => call.length === 0)).toBe(
-      true,
+    const activeBadges = screen.container.querySelectorAll(
+      ".settings-facebook-page-status.is-active",
     );
+    expect(activeBadges).toHaveLength(2);
+    activeBadges.forEach((badge) => {
+      expect(badge.textContent).toBe("Đang hoạt động");
+    });
+
+    const checkboxes = screen.container.querySelectorAll(
+      ".settings-facebook-project-list [role=checkbox]",
+    );
+    // 2 cards × 3 project options
+    expect(checkboxes).toHaveLength(6);
+  });
+
+  it("saves per-Page Project assignment from the card editor", async () => {
+    mocks.accounts = CONNECTED_ACCOUNTS;
+    mocks.projects = MOCK_PROJECTS;
+    const screen = await renderPage();
+
+    // Wait for the connected-Pages group to render before counting cards.
+    await expect.element(screen.getByText("Trang đã kết nối")).toBeVisible();
+
+    const cards = screen.container.querySelectorAll(
+      ".settings-facebook-page-item",
+    );
+    expect(cards).toHaveLength(2);
+
+    const saveButtons = screen.container.querySelectorAll(
+      ".settings-facebook-project-save",
+    );
+    expect(saveButtons).toHaveLength(2);
+    expect((saveButtons[0] as HTMLButtonElement).disabled).toBe(true);
+
+    // Toggle "VFIC Express" ON for card 1 (server had ["1","2"]).
+    await screen
+      .getByRole("checkbox", { name: "VFIC Express" })
+      .first()
+      .click();
+
+    expect((saveButtons[0] as HTMLButtonElement).disabled).toBe(false);
+    await expect
+      .element(screen.getByRole("button", { name: "Lưu dự án" }).first())
+      .toBeEnabled();
+
+    // Commit card 1's assignment.
+    await screen.getByRole("button", { name: "Lưu dự án" }).first().click();
+
+    await expect.poll(() => mocks.setPageProjects.mock.calls.length).toBe(1);
+    expect(mocks.setPageProjects.mock.calls[0]).toEqual([
+      "111111111111111",
+      ["1", "2", "3"],
+    ]);
+  });
+
+  it("offers Thêm Trang without disrupting existing Pages", async () => {
+    mocks.accounts = CONNECTED_ACCOUNTS;
+    mocks.projects = MOCK_PROJECTS;
+    // "Thêm Trang" requires a configured App ID, same as the empty-state
+    // "Kết nối Facebook" action.
+    mocks.loadCredentials.mockResolvedValueOnce({
+      facebook_app_id: { configured: true, value: "app-id" },
+      facebook_app_secret: { configured: false, preview: null },
+      facebook_login_config_id: { configured: false, value: null },
+      facebook_webhook_verify_token: { configured: false, preview: null },
+    });
+    const screen = await renderPage();
+
+    await expect
+      .element(screen.getByRole("button", { name: "Thêm Trang" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Tuyển dụng chính thức Việt Pháp"))
+      .toBeVisible();
+
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    await screen.getByRole("button", { name: "Thêm Trang" }).click();
+
+    await expect.poll(() => mocks.startOAuth.mock.calls.length).toBe(1);
+    await expect.poll(() => openSpy.mock.calls.length).toBe(1);
+    expect(openSpy.mock.calls[0]?.[0]).toBe(
+      "https://www.facebook.com/v21.0/dialog/oauth?client_id=test",
+    );
+    // Existing Pages remain listed while the add-Page flow is in flight.
+    await expect
+      .element(screen.getByText("Tuyển dụng chính thức Việt Pháp"))
+      .toBeVisible();
+    openSpy.mockRestore();
+  });
+
+  it("commits the picker's Project assignment atomically with activation", async () => {
+    mocks.projects = MOCK_PROJECTS;
+    window.history.replaceState(
+      null,
+      "",
+      "/#/settings?facebook_oauth_status=pending_selection&facebook_oauth_flow_id=picker-flow",
+    );
+    const screen = await renderPage();
+
+    const pageRadio = screen.getByRole("radio", {
+      name: "Ting Ting Tuyển dụng",
+    });
+    await expect.element(pageRadio).toBeVisible();
+    await pageRadio.click();
+
+    await screen
+      .getByRole("checkbox", { name: "LG Display — Tuyển dụng chính thức" })
+      .click();
+
+    await screen.getByRole("button", { name: "Kích hoạt Trang" }).click();
+
+    await expect
+      .poll(() =>
+        mocks.completeOAuth.mock.calls.some(
+          ([body]) =>
+            JSON.stringify(body) ===
+            JSON.stringify({
+              flow_id: "picker-flow",
+              page_id: "page-123456789",
+              project_ids: ["1"],
+            }),
+        ),
+      )
+      .toBe(true);
   });
 
   it("shows safe generic Vietnamese copy for an unknown OAuth callback error", async () => {
@@ -291,7 +502,6 @@ describe("FacebookMessengerIntegrationPage", () => {
       "",
       "/#/settings?facebook_oauth_status=error&facebook_oauth_error=provider_message_with_details",
     );
-
     const screen = await renderPage();
 
     await expect
@@ -312,7 +522,6 @@ describe("FacebookMessengerIntegrationPage", () => {
       "",
       "/#/settings?facebook_oauth_status=pending_selection&facebook_oauth_flow_id=expired-flow",
     );
-
     const screen = await renderPage();
 
     await expect
@@ -330,13 +539,12 @@ describe("FacebookMessengerIntegrationPage", () => {
   });
 
   it("offers the same recovery when an OAuth flow has no available Pages", async () => {
-    mocks.pageListResult = { pages: [], active_page_id: null };
+    mocks.pageListResult = { pages: [], active_page_ids: [] };
     window.history.replaceState(
       null,
       "",
       "/#/settings?facebook_oauth_status=pending_selection&facebook_oauth_flow_id=empty-flow",
     );
-
     const screen = await renderPage();
 
     await expect
@@ -348,5 +556,21 @@ describe("FacebookMessengerIntegrationPage", () => {
 
     await expect.element(screen.getByText("Nhập mã phiên OAuth")).toBeVisible();
     expect(screen.getByRole("alert").query()).toBeNull();
+  });
+
+  it("disconnects one Page by full id from its card without touching the others", async () => {
+    mocks.accounts = CONNECTED_ACCOUNTS;
+    mocks.projects = MOCK_PROJECTS;
+    const screen = await renderPage();
+
+    await expect.element(screen.getByText("Trang đã kết nối")).toBeVisible();
+
+    await screen.getByRole("button", { name: "Ngắt kết nối" }).last().click();
+
+    await expect.poll(() => mocks.disconnectPage.mock.calls.length).toBe(1);
+    expect(mocks.disconnectPage.mock.calls[0]).toEqual(["222222222222222"]);
+    await expect
+      .element(screen.getByText("Tuyển dụng chính thức Việt Pháp"))
+      .toBeVisible();
   });
 });

@@ -77,6 +77,8 @@ vi.mock("ra-core", () => ({
   usePermissions: () => ({ permissions: "admin", isPending: false }),
   useTranslate: () => (key: string, options?: { _: string }) =>
     options?._ ?? key,
+  // The Facebook section of the settings page pulls the Projects list.
+  useGetList: () => ({ data: [], total: 0 }),
 }));
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => mocks.isMobile }));
 vi.mock("./api", () => ({

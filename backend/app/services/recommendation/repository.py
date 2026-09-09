@@ -76,6 +76,8 @@ _MATCH_SQL = text(
       AND (CAST(:province AS text) IS NULL
            OR normalize_search_text(j.province) ILIKE normalize_search_text(CAST(:province AS text))
            OR normalize_search_text(j.district) ILIKE normalize_search_text(CAST(:province AS text)))
+      AND (CAST(:pids_active AS boolean) IS NOT TRUE
+           OR (p.is_active AND p.id = ANY(CAST(:pids AS uuid[]))))
     ORDER BY j.updated_at DESC
     LIMIT :limit
     """
@@ -229,15 +231,20 @@ class RecommendationRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def income_summary_for_active_projects(self) -> tuple[ActiveProjectIncomeSummary, ...]:
+    async def income_summary_for_active_projects(
+        self, project_ids: Sequence[str] | None = None
+    ) -> tuple[ActiveProjectIncomeSummary, ...]:
         """Return relevant verbatim income evidence for every active project.
 
         One bounded ORM query joins active projects to the worker-feature rows the
         chatbot may cite for cross-project salary/income comparisons. Grouping and
         formatting stay in Python so the graph can preserve verbatim evidence while
         keeping routing/tool selection deterministic.
+
+        ``project_ids`` optionally restricts the compared set (Page-scoped
+        multi-Page catalogs); ``None`` keeps the deployment-wide default.
         """
-        active_projects = (
+        active_projects_stmt = (
             select(
                 Project.id.label("project_id"),
                 Project.slug.label("project_slug"),
@@ -245,8 +252,12 @@ class RecommendationRepository:
             )
             .where(Project.is_active.is_(True))
             .order_by(Project.name.asc(), Project.id.asc())
-            .subquery()
         )
+        if project_ids is not None:
+            active_projects_stmt = active_projects_stmt.where(
+                Project.id.in_([uuid.UUID(str(pid)) for pid in project_ids])
+            )
+        active_projects = active_projects_stmt.subquery()
         rows = (
             await self.db.execute(
                 select(
@@ -331,11 +342,17 @@ class RecommendationRepository:
         *,
         top_k: int = 5,
         province: str | None = None,
+        project_ids: Sequence[str] | None = None,
     ) -> list[ScoredJob]:
         """Return up to ``top_k`` ACTIVE jobs ranked by fit against the lead.
 
         ``province`` forces a hard location gate (recommended when the lead states one);
         pass ``None`` to search nationwide (cold start with no location signal).
+
+        ``project_ids`` restricts the candidate set (Page-scoped multi-Page
+        catalogs); ``None`` searches deployment-wide (single-Page/Zalo default).
+        The scoped predicate also enforces ``p.is_active`` so a deactivated
+        Project never leaks through a stale mapping.
         """
         gate = province or lead.living_area or lead.region or None
         params: dict[str, Any] = {
@@ -343,6 +360,9 @@ class RecommendationRepository:
             "province": gate,
             "limit": self.CANDIDATE_LIMIT,
         }
+        if project_ids is not None:
+            params["pids_active"] = True
+            params["pids"] = [str(pid) for pid in project_ids]
         result = await self.db.execute(_MATCH_SQL, params)
         rows = [dict(r._mapping) for r in result.fetchall()]
 

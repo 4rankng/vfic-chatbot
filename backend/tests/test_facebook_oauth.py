@@ -291,6 +291,8 @@ async def test_facebook_endpoints_require_admin(monkeypatch):
         "/admin/integrations/facebook/credentials",
         "/admin/integrations/facebook",
         "/admin/integrations/facebook/test",
+        "/admin/integrations/facebook/pages/{page_id}/projects",
+        "/admin/integrations/facebook/pages/{page_id}/projects/{project_id}",
     }
     # The callback is authenticated by its single-use state because Meta's
     # browser redirect cannot carry the application's Authorization header.
@@ -630,8 +632,8 @@ async def test_oauth_pages_accepts_only_own_current_session(monkeypatch):
 
     monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
     monkeypatch.setattr(
-        "app.channels.providers.facebook_account.FacebookAccountResolver.active_facebook_page",
-        AsyncMock(return_value=None),
+        "app.channels.providers.facebook_account.FacebookAccountResolver.list_facebook_accounts",
+        AsyncMock(return_value=[]),
     )
     admin = SimpleNamespace(id=admin_id, token_version=3)
 
@@ -1186,8 +1188,8 @@ async def test_disconnect_resolves_active_page_server_side(monkeypatch):
 
     monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
     monkeypatch.setattr(
-        "app.channels.providers.facebook_account.FacebookAccountResolver.active_facebook_page",
-        AsyncMock(return_value=active),
+        "app.channels.providers.facebook_account.FacebookAccountResolver.list_facebook_accounts",
+        AsyncMock(return_value=[active]),
     )
     monkeypatch.setattr(
         "app.channels.providers.facebook_account.FacebookPageLifecycle.disconnect",
@@ -1240,8 +1242,8 @@ async def test_disconnect_deactivates_locally_when_meta_unsubscribe_fails(monkey
 
     monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
     monkeypatch.setattr(
-        "app.channels.providers.facebook_account.FacebookAccountResolver.active_facebook_page",
-        AsyncMock(return_value=active),
+        "app.channels.providers.facebook_account.FacebookAccountResolver.list_facebook_accounts",
+        AsyncMock(return_value=[active]),
     )
     monkeypatch.setattr(
         "app.channels.providers.facebook_account.FacebookPageLifecycle.disconnect",
@@ -1272,8 +1274,8 @@ async def test_disconnect_returns_404_when_no_active_page(monkeypatch):
     import app.api.integrations as api
 
     monkeypatch.setattr(
-        "app.channels.providers.facebook_account.FacebookAccountResolver.active_facebook_page",
-        AsyncMock(return_value=None),
+        "app.channels.providers.facebook_account.FacebookAccountResolver.list_facebook_accounts",
+        AsyncMock(return_value=[]),
     )
 
     with pytest.raises(api.HTTPException) as exc_info:
@@ -1317,11 +1319,13 @@ async def test_status_response_masks_page_id_and_carries_no_token(monkeypatch):
     # `enabled` is derived from whether an active Page account exists — NOT from
     # a deploy-time env toggle. Mirrors Zalo "configured" semantics.
     assert response.enabled is True
-    # The full page id never appears; only the 4-char suffix.
-    dumped = response.model_dump_json()
-    assert "1234567890" not in dumped
-    assert "7890" in dumped
-    assert "Công ty ABC" in dumped
-    # No token-like fields.
-    assert "token" not in dumped.lower()
-    assert "secret" not in dumped.lower()
+    # Multi-Page contract (additive): the full Page id is exposed in the
+    # dedicated `page_id` field (per-Page route key); the masked suffix and
+    # safe label stay. No token-like fields anywhere.
+    dumped = response.model_dump()
+    assert dumped["accounts"][0]["page_id"] == "page-1234567890"
+    assert dumped["accounts"][0]["page_id_suffix"] == "7890"
+    assert dumped["accounts"][0]["label"] == "Công ty ABC"
+    dumped_json = response.model_dump_json()
+    assert "token" not in dumped_json.lower()
+    assert "secret" not in dumped_json.lower()

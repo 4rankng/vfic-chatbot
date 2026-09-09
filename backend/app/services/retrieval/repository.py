@@ -17,7 +17,7 @@ import json
 import logging
 import uuid
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import EMBEDDING_DIM, get_settings
@@ -79,8 +79,21 @@ class RetrievalRepository:
         "ve",
     }
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        page_project_ids: tuple[str, ...] | None = None,
+    ) -> None:
         self.db = db
+        # Page-scoped catalog for multi-Page Facebook: when set, the Project
+        # catalog surfaces (active_project_ids, active_projects_with_card,
+        # list_active_projects, project_id_by_slug, income_summary_for_active_projects,
+        # recommend_jobs_for_lead/list_active_jobs) are restricted to the Facebook
+        # Page's assigned Project set. None → deployment-wide (Zalo + legacy).
+        self.page_project_ids: tuple[str, ...] | None = (
+            tuple(page_project_ids) if page_project_ids is not None else None
+        )
         # Per-call degradation flag (read by callers after match_documents to
         # stamp the reason into stage_timings). Reset at the start of every
         # match_documents call; None when no degradation occurred.
@@ -598,10 +611,26 @@ class RetrievalRepository:
         )
         if active_only:
             sql += " AND p.is_active"
-        return (await self.db.execute(text(sql), {"s": slug})).scalar_one_or_none()
+        pid = (await self.db.execute(text(sql), {"s": slug})).scalar_one_or_none()
+        if pid is None:
+            return None
+        if self.page_project_ids is not None and str(pid) not in self.page_project_ids:
+            return None
+        return pid
 
     async def list_active_projects(self) -> list:
         """name/slug/summary of active projects (catalog tool)."""
+        if self.page_project_ids is not None:
+            return (
+                await self.db.execute(
+                    text(
+                        "SELECT p.name, p.slug, p.summary FROM projects p "
+                        "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
+                        "AND p.id = ANY(CAST(:pids AS uuid[])) ORDER BY p.name"
+                    ),
+                    {"pids": list(self.page_project_ids)},
+                )
+            ).all()
         return (
             await self.db.execute(
                 text(
@@ -613,6 +642,18 @@ class RetrievalRepository:
 
     async def active_projects_with_card(self) -> list:
         """Active projects for the master-index prompt."""
+        if self.page_project_ids is not None:
+            return (
+                await self.db.execute(
+                    text(
+                        "SELECT p.name, p.slug, p.summary, p.index_card, p.aliases "
+                        "FROM projects p "
+                        "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
+                        "AND p.id = ANY(CAST(:pids AS uuid[])) ORDER BY p.name"
+                    ),
+                    {"pids": list(self.page_project_ids)},
+                )
+            ).all()
         return (
             await self.db.execute(
                 text(
@@ -662,6 +703,10 @@ class RetrievalRepository:
         ).scalar_one_or_none()
 
     async def active_project_ids(self) -> list[str]:
+        """Active KB-backed project ids: the Page's assigned set when scoped
+        for multi-Page Facebook, else the deployment-wide catalog."""
+        if self.page_project_ids is not None:
+            return list(self.page_project_ids)
         rows = await self.db.scalars(
             text(
                 "SELECT p.id::text FROM projects p "
@@ -669,6 +714,29 @@ class RetrievalRepository:
             )
         )
         return list(rows)
+
+    async def project_ids_for_page(self, account_key: str) -> list[str]:
+        """Assigned Project ids for one channel account (e.g. a Facebook Page).
+
+        Returns the raw assignment set (no ``is_active`` filter): catalog
+        queries apply their own active filters, and the activation gate counts
+        only ACTIVE-project mappings. Used by the graph layer to bind a
+        conversation's Page scope onto the retrieval port.
+        """
+        from app.models.channel_account import ChannelAccount, ChannelAccountProject
+
+        rows = (
+            await self.db.execute(
+                select(ChannelAccountProject.project_id)
+                .join(
+                    ChannelAccount,
+                    ChannelAccount.id == ChannelAccountProject.channel_account_id,
+                )
+                .where(ChannelAccount.account_key == account_key)
+                .order_by(ChannelAccountProject.created_at.asc())
+            )
+        ).scalars()
+        return [str(pid) for pid in rows]
 
     async def search_bus_timetable(self, company: str, question: str, limit: int) -> list:
         """Complete route rows matching a bus timetable question.
@@ -850,10 +918,11 @@ class RetrievalRepository:
         ).all()
 
     async def income_summary_for_active_projects(self):
-        """Return verbatim income/bonus/cashflow evidence for active projects."""
+        """Verbatim income evidence for active projects (Page-scoped when bound)."""
         from app.services.recommendation import RecommendationRepository
 
-        return await RecommendationRepository(self.db).income_summary_for_active_projects()
+        scope = list(self.page_project_ids) if self.page_project_ids is not None else None
+        return await RecommendationRepository(self.db).income_summary_for_active_projects(scope)
 
     async def recommend_jobs_for_lead(
         self, chat_id: str, *, top_k: int = 5, province: str | None = None
@@ -875,8 +944,11 @@ class RetrievalRepository:
         if not profile.has_any_signal:
             return LeadJobRecommendation("insufficient_profile")
         try:
+            page_project_ids = (
+                list(self.page_project_ids) if self.page_project_ids is not None else None
+            )
             jobs = await RecommendationRepository(self.db).match_jobs(
-                profile, top_k=top_k, province=province
+                profile, top_k=top_k, province=province, project_ids=page_project_ids
             )
         except Exception:
             logger.warning("recommendation lookup failed for chat_id=%s", chat_id, exc_info=True)

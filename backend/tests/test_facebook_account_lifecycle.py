@@ -92,7 +92,7 @@ async def test_activate_reactivate_commits_once_after_token_stage_and_audit(
     )
     monkeypatch.setattr(facebook_account_mod, "record_audit", fake_record_audit)
 
-    db = _LifecycleDb(None, None)
+    db = _LifecycleDb(None, 1)
 
     account = await facebook_account_mod.FacebookPageLifecycle(db).activate_or_reactivate(
         page_id="page-123",
@@ -178,7 +178,7 @@ async def test_activate_reactivate_does_not_commit_when_stage_write_fails(monkey
     )
     monkeypatch.setattr(facebook_account_mod, "record_audit", fake_record_audit)
 
-    db = _LifecycleDb(None, None)
+    db = _LifecycleDb(None, 1)
 
     with pytest.raises(RuntimeError, match="stage failed"):
         await facebook_account_mod.FacebookPageLifecycle(db).activate_or_reactivate(
@@ -218,7 +218,7 @@ async def test_activate_reactivate_does_not_commit_when_audit_fails(monkeypatch)
     )
     monkeypatch.setattr(facebook_account_mod, "record_audit", fake_record_audit)
 
-    db = _LifecycleDb(None, None)
+    db = _LifecycleDb(None, 1)
 
     with pytest.raises(RuntimeError, match="audit failed"):
         await facebook_account_mod.FacebookPageLifecycle(db).activate_or_reactivate(

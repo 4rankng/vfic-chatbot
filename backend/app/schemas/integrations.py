@@ -204,12 +204,16 @@ class FacebookPageOut(BaseModel):
 
 class FacebookPageListOut(BaseModel):
     pages: list[FacebookPageOut]
-    active_page_id: str | None = None  # masked if needed; Page id is not PII
+    # All currently-active Page ids (multi-Page rollout, plan 260908-1341).
+    # Replaces the V1 single ``active_page_id``; the Page id is a routing key,
+    # not PII, and is what per-Page endpoints address.
+    active_page_ids: list[str] = Field(default_factory=list)
 
 
 class FacebookAccountStatusOut(BaseModel):
     """One Page account in the safe status response."""
 
+    page_id: str  # the Page id key for per-Page endpoints; not PII
     page_id_suffix: str  # last 4 chars only
     label: str  # safe Page name
     status: str  # "ACTIVE" | "INACTIVE"
@@ -237,6 +241,43 @@ class FacebookOAuthCompleteRequest(BaseModel):
 
     flow_id: str
     page_id: str
+    # Optional replace-all Project assignment applied atomically with
+    # activation (multi-Page rollout). Absent → keep any existing assignment
+    # (same-Page reconnection resumes it); an explicit empty list means "no
+    # assignment", which the D1 activation gate rejects with 409.
+    project_ids: list[str] | None = None
+
+
+class FacebookPageProjectAssignmentOut(BaseModel):
+    """One Page↔Project assignment in the per-Page assignment editor payload."""
+
+    project_id: str
+    project_slug: str
+    project_name: str
+    project_active: bool  # current Project is_active flag (editor hint)
+
+
+class FacebookPageProjectsOut(BaseModel):
+    """GET/PUT/POST/DELETE /facebook/pages/{page_id}/projects responses."""
+
+    page_id: str
+    assignments: list[FacebookPageProjectAssignmentOut] = Field(default_factory=list)
+
+
+class FacebookPageProjectsUpdate(BaseModel):
+    """PUT /facebook/pages/{page_id}/projects — replace-all save (multi-select)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_ids: list[str]
+
+
+class FacebookPageProjectAdd(BaseModel):
+    """POST /facebook/pages/{page_id}/projects — add one Project."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
 
 
 class FacebookCredentialsOut(BaseModel):
