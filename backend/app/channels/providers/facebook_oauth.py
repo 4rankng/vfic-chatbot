@@ -182,7 +182,13 @@ async def list_pages(user_access_token: str) -> list[FacebookPageSummary]:
     """Return the Pages the user manages, with safe summaries only."""
     data = await _bounded_get(
         f"{_graph_base()}/me/accounts",
-        params={"access_token": user_access_token, "fields": "id,name,tasks"},
+        # Raise the page size above Graph's default so an admin who manages
+        # many Pages still sees every one of them in the selection list.
+        params={
+            "access_token": user_access_token,
+            "fields": "id,name,tasks",
+            "limit": "100",
+        },
     )
     pages = data.get("data") or []
     summaries: list[FacebookPageSummary] = []
@@ -206,20 +212,29 @@ async def get_page_access_token(user_access_token: str, page_id: str) -> str:
     The user token must have ``pages_show_list`` + ``pages_messaging``. The
     returned Page token is long-lived and is what we persist (encrypted).
     """
-    pages = await list_pages(user_access_token)
-    for page in pages:
-        if page.id == page_id:
-            data = await _bounded_get(
-                f"{_graph_base()}/{page_id}",
-                params={
-                    "access_token": user_access_token,
-                    "fields": "access_token",
-                },
-            )
-            token = data.get("access_token")
-            if token:
-                return str(token)
-    raise FacebookOAuthError(f"page {page_id} not found or no messaging permission")
+    # Read the token straight off the /me/accounts edge. Resolving it via a
+    # second GET /{page-id}?fields=access_token call omits the field for Pages
+    # whose access is held through Business Manager, which surfaced as a Page
+    # the admin could select but never activate.
+    data = await _bounded_get(
+        f"{_graph_base()}/me/accounts",
+        params={
+            "access_token": user_access_token,
+            "fields": "id,access_token",
+            "limit": "100",
+        },
+    )
+    for raw in data.get("data") or []:
+        if not isinstance(raw, dict) or str(raw.get("id") or "") != page_id:
+            continue
+        token = raw.get("access_token")
+        if token:
+            return str(token)
+        raise FacebookOAuthError(
+            f"page {page_id} granted no page access token "
+            "(missing pages_messaging or Business Manager page access)"
+        )
+    raise FacebookOAuthError(f"page {page_id} not found in the granted Page list")
 
 
 async def probe_page_identity(page_access_token: str) -> str:
