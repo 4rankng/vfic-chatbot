@@ -801,7 +801,6 @@ async def test_oauth_complete_atomically_consumes_before_side_effects(monkeypatc
             return store.pop(key, None)
 
     get_page_token = AsyncMock(return_value="secret-page-token")
-    probe = AsyncMock(return_value="page-1")
     subscribe = AsyncMock(return_value=None)
     activate = AsyncMock(
         return_value=SimpleNamespace(status=ChannelAccountStatus.ACTIVE)
@@ -809,9 +808,6 @@ async def test_oauth_complete_atomically_consumes_before_side_effects(monkeypatc
     monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
     monkeypatch.setattr(
         "app.channels.providers.facebook_oauth.get_page_access_token", get_page_token
-    )
-    monkeypatch.setattr(
-        "app.channels.providers.facebook_oauth.probe_page_identity", probe
     )
     monkeypatch.setattr(
         "app.channels.providers.facebook_oauth.subscribe_app_to_page", subscribe
@@ -835,7 +831,6 @@ async def test_oauth_complete_atomically_consumes_before_side_effects(monkeypatc
 
     assert exc_info.value.status_code == 410
     get_page_token.assert_awaited_once()
-    probe.assert_awaited_once()
     subscribe.assert_awaited_once()
     activate.assert_awaited_once()
 
@@ -1008,7 +1003,9 @@ async def test_facebook_health_maps_expected_provider_failures_to_unhealthy(
 
         async def resolve_facebook(self, page_id):
             assert page_id == "full-page-id-9876"
-            return SimpleNamespace(page_access_token="secret-page-token")
+            return SimpleNamespace(
+                page_access_token="secret-page-token", app_id="app-123"
+            )
 
     monkeypatch.setattr(
         "app.services.integration_settings.IntegrationSettingsService",
@@ -1018,8 +1015,10 @@ async def test_facebook_health_maps_expected_provider_failures_to_unhealthy(
         "app.channels.providers.facebook_account.FacebookAccountResolver.active_facebook_page",
         AsyncMock(return_value=active),
     )
+    # The subscription lookup is the call made with the Page token, so it is
+    # what surfaces a revoked token or a provider transport failure.
     monkeypatch.setattr(
-        "app.channels.providers.facebook_oauth.probe_page_identity",
+        "app.channels.providers.facebook_oauth.page_is_app_subscribed",
         AsyncMock(side_effect=provider_error),
     )
 
@@ -1028,7 +1027,9 @@ async def test_facebook_health_maps_expected_provider_failures_to_unhealthy(
     )
 
     assert result.healthy is False
-    assert result.error == "Token Trang không hợp lệ hoặc đã bị thu hồi."
+    assert result.error == (
+        "Không kiểm tra được đăng ký webhook của ứng dụng trên Trang."
+    )
     assert "secret-page-token" not in result.error
 
 

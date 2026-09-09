@@ -691,7 +691,6 @@ async def complete_facebook_oauth(
     from app.channels.providers.facebook_oauth import (
         FacebookOAuthError,
         get_page_access_token,
-        probe_page_identity,
         subscribe_app_to_page,
         unsubscribe_app_from_page,
     )
@@ -719,10 +718,12 @@ async def complete_facebook_oauth(
     )
 
     try:
+        # No separate identity probe: the token is read from the /me/accounts
+        # entry whose id equals page_id, so it is bound to this Page by
+        # construction. Probing it via GET /me would additionally require
+        # pages_read_engagement, which this integration does not request.
+        # subscribe_app_to_page below still fails closed on an unusable token.
         page_token = await get_page_access_token(user_token, payload.page_id)
-        probed_id = await probe_page_identity(page_token)
-        if probed_id != payload.page_id:
-            raise FacebookOAuthError("page identity mismatch")
         await subscribe_app_to_page(payload.page_id, page_token)
     except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
         # Generic Vietnamese error to the client — never echo the Graph
@@ -819,7 +820,6 @@ async def test_facebook_connection(
     from app.channels.providers.facebook_oauth import (
         FacebookOAuthError,
         page_is_app_subscribed,
-        probe_page_identity,
     )
     from app.services.integration_settings import IntegrationSettingsService
 
@@ -835,18 +835,11 @@ async def test_facebook_connection(
         return FacebookChannelTestOut(
             healthy=False, error="Không giải mã được token Trang. Vui lòng kết nối lại."
         )
-    try:
-        await probe_page_identity(cfg.page_access_token)
-    except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
-        logger.warning(
-            "facebook page token probe failed: page_id=%s error=%s: %s",
-            active.account_key,
-            type(exc).__name__,
-            exc,
-        )
-        return FacebookChannelTestOut(
-            healthy=False, error="Token Trang không hợp lệ hoặc đã bị thu hồi."
-        )
+    # The subscription lookup below doubles as the token check: it is made with
+    # the Page token and fails closed when that token is invalid or revoked.
+    # A dedicated GET /me identity probe would additionally require
+    # pages_read_engagement, which this integration does not request.
+    #
     # A valid Page token alone does not prove webhook events arrive: the app
     # must also be subscribed to the Page (Meta or a competing integration on
     # the same Page can drop it). Fail the probe when it is not.
