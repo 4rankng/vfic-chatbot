@@ -210,12 +210,16 @@
 
 /* Keyed on aria-checked, not data-state: the option is also a TooltipTrigger
    (asChild), and the tooltip's own data-state ("closed"/"open") lands on the
-   same element and overwrites the radio's. aria-checked stays authoritative. */
+   same element and overwrites the radio's. aria-checked stays authoritative.
+
+   Marked with a border and a tonal background rather than a ring shadow: the
+   flat console contract in flat-surfaces.css clears box-shadow under #root
+   with !important, so a shadow here would silently never render. The border
+   width is already 1px/transparent on every option, so colouring it shifts
+   nothing. */
 .inbox-bg-container .channel-adapter-option[aria-checked="true"] {
-  background: var(--uu-inbox-surface);
-  box-shadow:
-    0 0 0 1px var(--uu-inbox-brand-line),
-    var(--shadow-uu-sm, 0 1px 3px rgb(16 24 40 / 0.1));
+  border-color: var(--uu-inbox-brand);
+  background: var(--uu-inbox-brand-soft);
 }
 
 .inbox-bg-container .workspace-rail .search input {

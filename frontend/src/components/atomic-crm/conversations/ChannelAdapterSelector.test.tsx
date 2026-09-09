@@ -85,6 +85,21 @@ describe("ChannelAdapterSelector", () => {
       .element(screen.getByRole("tooltip"))
       .toHaveTextContent("Zalo OA — 135 hội thoại cần phản hồi");
 
+    // The selected scope must stay visually marked after the click, not just
+    // while focused: the option doubles as a TooltipTrigger, so styling keyed
+    // on data-state is silently overwritten by the tooltip's own state.
+    const checked = screen.container.querySelector(
+      '.channel-adapter-option[aria-checked="true"]',
+    );
+    const unchecked = screen.container.querySelector(
+      '.channel-adapter-option[aria-checked="false"]',
+    );
+    expect(checked).not.toBeNull();
+    expect(unchecked).not.toBeNull();
+    const checkedStyle = getComputedStyle(checked as Element);
+    const uncheckedStyle = getComputedStyle(unchecked as Element);
+    expect(checkedStyle.borderTopColor).not.toBe(uncheckedStyle.borderTopColor);
+
     await oaRadio.click();
     expect(onProviderChange).toHaveBeenCalledWith("zalo_oa");
 
