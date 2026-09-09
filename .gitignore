@@ -84,3 +84,6 @@ graphify-out/
 # Created by `make backup-full` (scripts/backup-droplet.sh).
 backups/
 .zcode
+.mcp.json
+.agentsroom/
+.agents/mcp_config.json
