@@ -47,6 +47,16 @@ export default defineConfig({
           "**/zalo_verifier*.html",
           "**/auth-callback.html",
         ],
+        // Backend-owned paths must bypass the service worker's navigation
+        // fallback. Without this denylist the SW serves the cached SPA shell
+        // for top-level navigations to /api/* (mode: "navigate"), so Facebook's
+        // OAuth redirect never reaches the backend callback endpoint.
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/webhooks\//,
+          /^\/realtime\//,
+          /^\/socket\.io\//,
+        ],
         cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB
       },
