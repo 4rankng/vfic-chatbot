@@ -372,7 +372,14 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
         # token would leak into the next job on this worker process.
         _trace_token = trace_id_ctx.set(trace_id or "-")
         async with worker_session() as db:
-            deps = await build_deps(db, session_factory=worker_session_factory())
+            # Passing the conversation binds retrieval to the Page's assigned
+            # Projects: a Page mapped to one Project must not answer from
+            # another's catalog. Zalo conversations stay deployment-wide.
+            deps = await build_deps(
+                db,
+                session_factory=worker_session_factory(),
+                conversation_id=state.conversation_id,
+            )
             deps.persist = _enqueue_persist  # wire candidate extraction on SENT
             # build_deps is done — run_turn's heartbeat will take over now.
             if bridge_task is not None:

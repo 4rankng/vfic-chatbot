@@ -185,9 +185,10 @@ def test_validate_grounding_flags_invented_entity_on_no_match_alternative():
     result = validate_grounding(reply, set(), surfaced)
     assert not result.is_grounded
     assert "lg display" in result.unsupported_entities
-    assert "chưa được xác minh" in result.sanitized_reply
-    # Reply body preserved; only a footer appended (no full rewrite).
-    assert "LG Display có mức lương" in result.sanitized_reply
+    # Detection-only: the entity is flagged for the trace, the candidate-facing
+    # reply is handed back untouched (no hedging footer).
+    assert "chưa được xác minh" not in result.sanitized_reply
+    assert result.sanitized_reply == reply
 
 
 def test_validate_grounding_accepts_alternative_entity_on_no_match():
@@ -235,9 +236,9 @@ def test_entity_grounding_flags_unsupported_entity():
     reply = "Theo dữ liệu, Rorze không có KTX."
     unsupported, sanitized = validate_entity_grounding(reply, {"lg-display"})
     assert unsupported == frozenset({"rorze"})
-    assert "chưa được xác minh" in sanitized
-    # Reply body preserved; only a footer appended.
-    assert "Rorze không có KTX" in sanitized
+    # Flagged for the trace, but the reply itself is never annotated.
+    assert "chưa được xác minh" not in sanitized
+    assert sanitized == reply
 
 
 def test_entity_grounding_slug_matches_display_name():
@@ -312,5 +313,6 @@ def test_validate_grounding_handles_both_job_id_and_entity_hallucination():
     assert result.unsupported_entities == frozenset({"rorze"})
     # Reason prefers the job-ID finding (first detected); both are sanitized.
     assert result.reason == "cited_job_id_not_in_retrieved_set"
+    # The invented job ID is still stripped; only the entity footer is gone.
     assert JOB_FAKE not in result.sanitized_reply
-    assert "chưa được xác minh" in result.sanitized_reply
+    assert "chưa được xác minh" not in result.sanitized_reply

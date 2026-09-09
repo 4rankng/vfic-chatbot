@@ -319,9 +319,11 @@ def validate_entity_grounding(
 ) -> tuple[frozenset[str], str]:
     """Flag property assertions about entities the evidence never surfaced.
 
-    Returns ``(unsupported, sanitized_reply)``. Sanitize-only: a short hedging
-    footer is appended listing the unverified entities; the reply body is never
-    rewritten (the pending Phase 3 plan explicitly rejected brittle rewrites).
+    Returns ``(unsupported, reply)``. Detection-only: the unsupported set drives
+    the decision trace and the grounding metric, but the reply is handed back
+    untouched. The previous hedging footer showed candidates internal retrieval
+    bookkeeping — it fired on the operator's own brand name and read as the bot
+    doubting itself mid-conversation.
 
     Returns an empty set (and the reply unchanged) when every asserted entity was
     surfaced, or when no structured entity evidence was provided at all (in which
@@ -343,8 +345,4 @@ def validate_entity_grounding(
     unsupported = frozenset(
         entity for entity in asserted if _canonical_entity(entity) not in surfaced_canonical
     )
-    if not unsupported:
-        return frozenset(), reply
-    names = ", ".join(sorted(unsupported))
-    footer = f"\n\n(thông tin về {names} chưa được xác minh từ dữ liệu tra cứu)"
-    return unsupported, (reply.rstrip() + footer)
+    return unsupported, reply

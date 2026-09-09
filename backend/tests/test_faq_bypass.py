@@ -197,7 +197,7 @@ async def test_adapter_returns_result_on_confident_hit(monkeypatch):
     lexical_rows = [_row(id="1", similarity=0.8), _row(id="2", similarity=0.5)]
     monkeypatch.setattr(
         "app.services.retrieval.RetrievalRepository",
-        lambda db: _FakeRepo(vector_rows, lexical_rows),
+        lambda db, page_project_ids=None: _FakeRepo(vector_rows, lexical_rows),
     )
 
     async def _fake_cached(embedder, query):
@@ -218,7 +218,7 @@ async def test_adapter_abstains_on_low_score(monkeypatch):
 
     vector_rows = [_row(id="1", similarity=0.4)]  # below SCORE_FLOOR
     monkeypatch.setattr(
-        "app.services.retrieval.RetrievalRepository", lambda db: _FakeRepo(vector_rows, [])
+        "app.services.retrieval.RetrievalRepository", lambda db, page_project_ids=None: _FakeRepo(vector_rows, [])
     )
     monkeypatch.setattr("app.graph.tools._cached_embed", lambda e, q: _async([0.1] * 8))
 
@@ -232,7 +232,7 @@ async def test_adapter_abstains_when_retrieval_raises(monkeypatch):
 
     monkeypatch.setattr(
         "app.services.retrieval.RetrievalRepository",
-        lambda db: _FakeRepo([], [], raise_on="vector"),
+        lambda db, page_project_ids=None: _FakeRepo([], [], raise_on="vector"),
     )
     monkeypatch.setattr("app.graph.tools._cached_embed", lambda e, q: _async([0.1] * 8))
 

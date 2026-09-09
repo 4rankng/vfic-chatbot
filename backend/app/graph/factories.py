@@ -234,9 +234,10 @@ class _FaqBypassAdapter:
     abstains so the turn falls through to the agent unchanged.
     """
 
-    def __init__(self, db, embedder) -> None:
+    def __init__(self, db, embedder, *, page_project_ids=None) -> None:
         self._db = db
         self._embedder = embedder
+        self._page_project_ids = page_project_ids
 
     async def try_answer(self, user_text: str):
         from app.core.vector import vec_literal
@@ -246,17 +247,17 @@ class _FaqBypassAdapter:
         from app.services.retrieval import faq_bypass as fb
 
         started = time.perf_counter()
-        repo = RetrievalRepository(self._db)
+        repo = RetrievalRepository(self._db, page_project_ids=self._page_project_ids)
         try:
             active_project_ids = getattr(repo, "active_project_ids", None)
             project_ids = await active_project_ids() if active_project_ids is not None else None
             if project_ids == []:
                 return None
             emb = vec_literal(await _cached_embed(self._embedder, user_text))
-            # Both arms are intentionally unscoped (no project_ids): the VFIC
-            # deployment is single-tenant, mirroring search_bus_timetable's
-            # deliberate NULL-slug choice. Re-scope only if the bot goes
-            # multi-project (pass the conversation's project id into both calls).
+            # Scope follows active_project_ids: the deployment-wide catalog for
+            # Zalo, or the Page's assigned Projects when the turn arrived on a
+            # scoped Facebook Page. Both arms must carry it — an unscoped FAQ
+            # arm answers from another Page's catalog before retrieval runs.
             faq_scope = {"project_ids": project_ids} if project_ids is not None else {}
             vector_rows = await repo.match_faq(
                 emb, top_k=fb.TOP_K, floor=fb.CANDIDATE_VECTOR_FLOOR, **faq_scope
@@ -601,7 +602,35 @@ async def aclose_client_cache() -> None:
     await _close_client_bundles(unique_bundles)
 
 
-async def build_deps(db, *, session_factory=None):
+async def resolve_page_project_scope(db, conversation_id) -> tuple[str, ...] | None:
+    """Projects assigned to the Page this conversation arrived on.
+
+    ``None`` means "do not scope": the conversation is not on a multi-Page
+    provider, or the Page has no assignments. Returning an empty tuple instead
+    would scope every catalog query to nothing and mute the bot, which is a
+    worse failure than the pre-scoping behaviour.
+    """
+    from sqlalchemy import select
+
+    from app.channels.types import PROVIDER_FACEBOOK_MESSENGER
+    from app.models.contact import ContactChannelIdentity
+    from app.models.conversation import Conversation
+    from app.services.retrieval import RetrievalRepository
+
+    row = (
+        await db.execute(
+            select(ContactChannelIdentity.provider, ContactChannelIdentity.account_key)
+            .join(Conversation, Conversation.channel_identity_id == ContactChannelIdentity.id)
+            .where(Conversation.id == conversation_id)
+        )
+    ).first()
+    if row is None or row.provider != PROVIDER_FACEBOOK_MESSENGER:
+        return None
+    project_ids = await RetrievalRepository(db).project_ids_for_page(row.account_key)
+    return tuple(project_ids) or None
+
+
+async def build_deps(db, *, session_factory=None, conversation_id=None, page_project_ids=None):
     """Wire the full GraphDeps for one chatbot turn (agent + safety + embedder + zalo).
 
     The expensive LLM clients + embedder are cached process-wide (see
@@ -612,6 +641,13 @@ async def build_deps(db, *, session_factory=None):
     ``session_factory`` (optional, an ``async_sessionmaker``) enables parallel tool
     dispatch: each concurrent tool call opens its own session via the factory
     instead of sharing ``db`` (which is NOT safe for concurrent use).
+
+    ``conversation_id`` (optional) binds every retrieval port for this turn to
+    the Projects assigned to the Facebook Page the conversation arrived on;
+    Zalo conversations resolve to the deployment-wide catalog. The scope must
+    reach every repository built here — a single unscoped one leaks another
+    Page's catalog back into the answer. ``page_project_ids`` overrides the
+    lookup directly, which keeps the wiring testable without a live Page.
     """
     from app.services.conversation import ConversationService
     from app.services.integration_settings import IntegrationSettingsService
@@ -622,6 +658,8 @@ async def build_deps(db, *, session_factory=None):
 
     clients = await _build_cached_clients(db)
     integration_settings = IntegrationSettingsService(db, settings=get_settings())
+    if page_project_ids is None and conversation_id is not None:
+        page_project_ids = await resolve_page_project_scope(db, conversation_id)
 
     # Zalo config is resolved per-turn (cheap — Redis-cached via cached_zalo_config)
     # so a rotated OA token takes effect on the very next turn without invalidating
@@ -659,7 +697,7 @@ async def build_deps(db, *, session_factory=None):
         @asynccontextmanager
         async def _make_retrieval():
             async with session_factory() as session:
-                yield RetrievalRepository(session)
+                yield RetrievalRepository(session, page_project_ids=page_project_ids)
 
         make_retrieval = _make_retrieval
 
@@ -669,11 +707,11 @@ async def build_deps(db, *, session_factory=None):
         embedder=clients.embedder,
         zalo=zalo_sender,
         conversation=ConversationService(db),
-        retrieval=RetrievalRepository(db),
+        retrieval=RetrievalRepository(db, page_project_ids=page_project_ids),
         reply_policy=DeterministicReplyPolicy(),
         make_retrieval=make_retrieval,
         lead=_build_lead_context(db),
-        faq_bypass=_FaqBypassAdapter(db, clients.embedder),
+        faq_bypass=_FaqBypassAdapter(db, clients.embedder, page_project_ids=page_project_ids),
         followup_allowed=_make_followup_allowed(db),
         enrich_oa_profile=_enrich_oa_profile,
         runtime_policy=_RuntimePolicyAdapter(db),

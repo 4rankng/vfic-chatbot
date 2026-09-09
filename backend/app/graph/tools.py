@@ -432,16 +432,42 @@ def _active_job_payload(job: object) -> dict[str, object]:
     return {key: value for key, value in values.items() if value not in (None, "")}
 
 
+def _millions(amount: int | None) -> str | None:
+    """Format đồng as millions, keeping one decimal and a Vietnamese comma.
+
+    Integer division discarded the fraction, so a real 7,430,000–7,930,000 band
+    rendered as "7-7 triệu": both bounds truncated to 7, losing the amount and
+    the range at once. One decimal preserves the figure candidates were quoted;
+    a whole number still prints bare ("14", not "14,0").
+    """
+    if not isinstance(amount, int):
+        return None
+    value = round(amount / 1_000_000, 1)
+    if value == int(value):
+        return str(int(value))
+    return f"{value:.1f}".replace(".", ",")
+
+
+def format_salary_range(minimum: int | None, maximum: int | None) -> str:
+    """Render a salary band in millions, collapsing a genuinely single value."""
+    low = _millions(minimum)
+    high = _millions(maximum)
+    if low is not None and high is not None:
+        return f"lương {low} triệu" if low == high else f"lương {low}-{high} triệu"
+    if low is not None:
+        return f"lương từ {low} triệu"
+    if high is not None:
+        return f"lương đến {high} triệu"
+    return ""
+
+
 def _salary_summary(job: dict[str, object]) -> str:
     minimum = job.get("salary_min")
     maximum = job.get("salary_max")
-    if isinstance(minimum, int) and isinstance(maximum, int):
-        return f"lương {minimum // 1_000_000}-{maximum // 1_000_000} triệu"
-    if isinstance(minimum, int):
-        return f"lương từ {minimum // 1_000_000} triệu"
-    if isinstance(maximum, int):
-        return f"lương đến {maximum // 1_000_000} triệu"
-    return ""
+    return format_salary_range(
+        minimum if isinstance(minimum, int) else None,
+        maximum if isinstance(maximum, int) else None,
+    )
 
 
 def _active_jobs_safe_reply(jobs: list[dict[str, object]]) -> str:
@@ -1053,7 +1079,7 @@ async def recommend_jobs(
         job = item.job
         sal = ""
         if job.salary_min and job.salary_max:
-            sal = f"; lương {job.salary_min // 1_000_000}-{job.salary_max // 1_000_000} triệu"
+            sal = f"; {format_salary_range(job.salary_min, job.salary_max)}"
         loc = f"; địa điểm: {job.province}" if job.province else ""
         lines.append(
             f"- {job.title} (id={job.id}){sal}{loc}; "
