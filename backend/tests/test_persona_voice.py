@@ -29,6 +29,7 @@ from app.graph.fast_lane import (
 )
 from app.graph.prompts import ERROR_REPLY, TIMEOUT_REPLY
 from app.graph.safety import FALLBACK_REPLY, GENERIC_FALLBACK, TECHNICAL_FALLBACK
+from app.services.lead.normalizers import address_form, lead_profile_text
 from app.workers.chatbot_worker import DEGRADATION_REPLY
 
 # Every bot-visible static reply string. A rename/removal here fails the build,
@@ -82,6 +83,40 @@ def test_static_reply_addresses_user_neutrally(name):
     assert "anh/chị" in reply.lower(), (
         f"{name} must address the user as anh/chị: {reply!r}"
     )
+
+
+@pytest.mark.parametrize(
+    ("gender", "expected"),
+    [
+        ("male", "anh"),
+        ("female", "chị"),
+        ("MALE", "anh"),
+        ("  female  ", "chị"),
+        (None, "anh/chị"),
+        ("", "anh/chị"),
+        ("unknown", "anh/chị"),
+        # Vietnamese spellings are NOT provider values — Facebook returns
+        # male/female. Anything else must stay neutral rather than guess.
+        ("nam", "anh/chị"),
+        ("nữ", "anh/chị"),
+    ],
+)
+def test_address_form_mapping(gender, expected):
+    """Gender resolves to an address form; anything unrecognised stays neutral."""
+    assert address_form(gender) == expected
+
+
+def test_lead_profile_text_always_carries_an_address_form():
+    """Every turn needs an address form, including brand-new leads.
+
+    The block sits outside the ``personalize`` flag on purpose: that flag is
+    Zalo-OA-only, so gating on it would leave Messenger turns with no address
+    guidance at all.
+    """
+    assert "XƯNG HÔ:" in lead_profile_text(None)
+    assert "anh/chị" in lead_profile_text(None)
+    assert "'anh'" in lead_profile_text({"gender": "male"})
+    assert "'chị'" in lead_profile_text({"gender": "female"})
 
 
 def test_no_static_reply_is_empty():

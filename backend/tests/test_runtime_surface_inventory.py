@@ -64,10 +64,16 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
     "outbox_boundary": 10,
-    "provider_boundary": 98,
-    "queue_producer": 37,
+    # +2 for the Messenger User Profile API lookup (the Graph GET in
+    # facebook_oauth.get_user_profile and the worker that calls it).
+    "provider_boundary": 100,
+    # +3 for the Messenger profile-enrichment chain, which fetches the sender's
+    # gender so replies can address them as anh / chị:
+    # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
+    # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
+    "queue_producer": 40,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "959f917886a8883e34a791209342ba489e7defb6dd66791d2bf6f1b06bd439f1"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "931eaba8ab74b01923f245bf1439580e4b856b77e4d9ae1e8b49c80f2eff50ea"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

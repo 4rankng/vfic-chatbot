@@ -296,6 +296,13 @@
   {
     "category": "queue_producer",
     "file": "app/workers/persistence_worker.py",
+    "scope": "enqueue_enrich_messenger_profile",
+    "call": "enqueue_job",
+    "count": 1
+  },
+  {
+    "category": "queue_producer",
+    "file": "app/workers/persistence_worker.py",
     "scope": "enqueue_enrich_oa_profile",
     "call": "enqueue_job",
     "count": 1

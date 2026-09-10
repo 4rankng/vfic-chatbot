@@ -320,7 +320,9 @@ class TestDegradationMessage:
     def test_degradation_reply_is_vietnamese(self):
         from app.workers.chatbot_worker import DEGRADATION_REPLY
 
-        assert "Xin lỗi" in DEGRADATION_REPLY
+        # Case-insensitive: the persona opens with "Em xin lỗi…", so the
+        # apology is mid-sentence. What matters is that it apologises.
+        assert "xin lỗi" in DEGRADATION_REPLY.lower()
         assert "truy cập" in DEGRADATION_REPLY
         # Must NOT contain emoji
         assert "\U0001f60a" not in DEGRADATION_REPLY  # 😊
@@ -372,7 +374,7 @@ class TestDegradationMessage:
 
         mock_sender.send_message.assert_called_once()
         sent_msg = mock_sender.send_message.call_args[0][1]
-        assert "Xin lỗi" in sent_msg
+        assert "xin lỗi" in sent_msg.lower()
 
     @pytest.mark.asyncio
     async def test_worker_degradation_suppressed_when_not_owned(self):
