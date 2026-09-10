@@ -64,6 +64,13 @@ class ConversationService:
     async def get_by_zalo(self, zalo_chat_id: str) -> Conversation | None:
         return await self.repo.get_by_zalo(zalo_chat_id)
 
+    async def get_by_identity(
+        self, *, provider: str, account_key: str, external_id: str
+    ) -> Conversation | None:
+        return await self.repo.get_by_identity(
+            provider=provider, account_key=account_key, external_id=external_id
+        )
+
     async def last_messages_batch(self, *, viewer: User, ids_str: str) -> dict[str, str]:
         return await self.repo.last_messages_batch(viewer=viewer, ids_str=ids_str)
 

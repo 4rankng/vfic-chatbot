@@ -115,6 +115,17 @@ async def run_zalo_ingress(
     )
 
 
+def enqueue_messenger_profile_enrichment(*, psid: str, page_id: str) -> None:
+    """Queue a Messenger profile lookup for one sender.
+
+    Kept at the composition boundary for the same reason as the Zalo
+    equivalent: the API layer stays free of direct worker imports.
+    """
+    from app.workers.persistence_worker import enqueue_enrich_messenger_profile
+
+    enqueue_enrich_messenger_profile({"psid": psid, "page_id": page_id})
+
+
 def _log_recovery_failure(candidate: OutboundRecoveryCandidate, error: Exception) -> None:
     logger.error(
         "outbound dispatcher failed for outbox id=%s",

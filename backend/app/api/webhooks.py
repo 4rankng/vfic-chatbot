@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.composition.conversation_messaging import (
     enqueue_chat_turn,
+    enqueue_messenger_profile_enrichment,
     run_zalo_ingress,
     webhook_app_env,
 )
@@ -288,6 +289,17 @@ async def facebook_webhook(
             continue
         if outcome.status != "persisted":
             continue
+        # Fetch the sender's profile out of band. Gender is what lets the reply
+        # say "anh"/"chị" rather than the neutral "anh/chị"; name and avatar
+        # also populate the CRM. Enqueued (never awaited) so a slow Graph call
+        # cannot delay the webhook acknowledgement, and swallowed because a
+        # missing profile must never cost the candidate their bot turn.
+        try:
+            enqueue_messenger_profile_enrichment(
+                psid=msg.identity.external_id, page_id=active.account_key
+            )
+        except Exception:  # noqa: BLE001 — enrichment is best-effort
+            logger.info("facebook profile enrichment enqueue failed")
         # Enqueue a bot turn for the persisted message, mirroring the Zalo
         # webhook flow. The v2 job payload carries only neutral ids.
         try:

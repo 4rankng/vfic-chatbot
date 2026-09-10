@@ -33,12 +33,25 @@ logger = logging.getLogger(__name__)
 _FACEBOOK_OAUTH_DIALOG_ORIGIN = "https://www.facebook.com"
 
 # Required permissions for Messenger Platform (revalidated 2026-07-17).
+#
+# ``pages_user_gender`` backs the Vietnamese address form (anh / chị). It is a
+# separate App Review permission on top of the Business Asset User Profile
+# Access feature that the User Profile API itself requires, and it must also be
+# granted per-Page under Page Settings > Advanced Messaging > "Info About
+# People". Until all three are in place the API omits the field and callers
+# fall back to the neutral "anh/chị".
 MESSENGER_PERMISSIONS = (
     "pages_show_list",
     "pages_manage_metadata",
     "pages_messaging",
+    "pages_user_gender",
     "public_profile",
 )
+
+# Meta returns this error code for Messenger accounts created from a phone
+# number, which have no retrievable profile. It is an expected, permanent
+# outcome for that user — not a transport failure worth logging as an error.
+_NO_PROFILE_AVAILABLE_ERROR_CODE = 2018218
 
 
 @dataclass(frozen=True)
@@ -53,6 +66,27 @@ class FacebookPageSummary:
     # `tasks` carries the Page-role permissions (e.g. MANAGE, MESSENGER) so the
     # complete step can verify the admin can actually message on this Page.
     tasks: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class MessengerUserProfile:
+    """One person's Messenger profile, as returned by the User Profile API.
+
+    Every field is optional: Meta omits any field the app lacks access to, so a
+    profile with only ``first_name`` is a normal result rather than an error.
+    ``gender`` is normalised to ``"male"`` / ``"female"`` or left empty — an
+    unrecognised provider value is discarded rather than passed through, so it
+    can never reach the prompt as an address form.
+    """
+
+    first_name: str = ""
+    last_name: str = ""
+    profile_pic: str = ""
+    gender: str = ""
+
+    @property
+    def display_name(self) -> str:
+        return " ".join(part for part in (self.first_name, self.last_name) if part)
 
 
 class FacebookOAuthError(RuntimeError):
@@ -338,10 +372,63 @@ async def send_message(
     return data
 
 
+_GENDER_VALUES = frozenset({"male", "female"})
+
+# Requested in one call so a single round trip covers both the CRM display data
+# and the address form. Meta silently omits fields the app cannot access.
+_USER_PROFILE_FIELDS = "first_name,last_name,profile_pic,gender"
+
+
+async def get_user_profile(
+    config: "FacebookRuntimeConfig", *, psid: str
+) -> MessengerUserProfile | None:
+    """Return one person's Messenger profile, or ``None`` when unavailable.
+
+    ``None`` covers every "we simply do not get to know this person" outcome:
+    an empty object (the app lacks Business Asset User Profile Access, or the
+    person made nothing public), a phone-number account (error 2018218), and a
+    blank payload. Callers treat all of them the same way — keep whatever is
+    already known and address the person neutrally.
+
+    A genuine provider rejection still raises :class:`FacebookOAuthError` so
+    token revocation stays distinguishable from missing profile data. As
+    everywhere in this module, neither the token nor the raw body is logged.
+    """
+    data = await _bounded_get(
+        f"{config.graph_api_base.rstrip('/')}/{config.graph_api_version}/{psid}",
+        params={
+            "access_token": config.page_access_token,
+            "fields": _USER_PROFILE_FIELDS,
+        },
+    )
+    if isinstance(data.get("error"), dict):
+        code = _error_code_from_envelope(data)
+        if code == _NO_PROFILE_AVAILABLE_ERROR_CODE:
+            return None
+        raise FacebookOAuthError("messenger user profile lookup rejected", code=code)
+
+    def _text(key: str) -> str:
+        value = data.get(key)
+        return str(value).strip() if isinstance(value, (str, int)) else ""
+
+    gender = _text("gender").lower()
+    profile = MessengerUserProfile(
+        first_name=_text("first_name"),
+        last_name=_text("last_name"),
+        profile_pic=_text("profile_pic"),
+        gender=gender if gender in _GENDER_VALUES else "",
+    )
+    if not (profile.display_name or profile.profile_pic or profile.gender):
+        return None
+    return profile
+
+
 __all__ = [
     "FacebookPageSummary",
     "FacebookOAuthError",
+    "MessengerUserProfile",
     "MESSENGER_PERMISSIONS",
+    "get_user_profile",
     "build_authorization_url",
     "exchange_code_for_user_token",
     "list_pages",

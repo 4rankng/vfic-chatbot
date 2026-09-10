@@ -308,6 +308,24 @@ def normalize_lead(raw, chat_id: str) -> dict | None:
     }
 
 
+# Vietnamese second-person address forms. ``gender`` is deliberately NOT in
+# ``_PROFILE_FIELDS`` below: it is never probed for ("giới tính của bạn?" is a
+# rude opener), only received — from the candidate stating it, or from the
+# Facebook profile field when the Page has been granted access to it.
+_ADDRESS_FORMS = {"male": "anh", "female": "chị"}
+NEUTRAL_ADDRESS_FORM = "anh/chị"
+
+
+def address_form(gender: str | None) -> str:
+    """Return how the bot should address a candidate of this gender.
+
+    Unknown, blank, and unrecognised values all resolve to the neutral
+    "anh/chị", which is ordinary polite Vietnamese rather than a visible
+    fallback — guessing wrong reads far worse than staying neutral.
+    """
+    return _ADDRESS_FORMS.get(str(gender or "").strip().lower(), NEUTRAL_ADDRESS_FORM)
+
+
 # Fields shown to the agent so it can see what's known and what's missing.
 # Order matters: top = highest collection priority.  ``notes`` is passive
 # capture (never probed directly — there is no natural "what are your notes?" question).
@@ -344,6 +362,24 @@ def lead_profile_text(
             lines.append(f"- {label}: {val or 'chưa có'}")
         heading = "THÔNG TIN ỨNG VIÊN:\n"
 
+    # Always emitted, on every channel: how to address the candidate is not a
+    # personalisation extra, it is basic Vietnamese politeness on every turn.
+    # ``personalize`` below is Zalo-OA-only, so this block must sit outside it
+    # or Messenger turns would never receive an address form at all.
+    resolved_address_form = address_form((lead or {}).get("gender"))
+    lines.extend(
+        [
+            "",
+            "XƯNG HÔ:",
+            f"- Gọi người dùng là '{resolved_address_form}', xưng mình là 'em'.",
+        ]
+    )
+    if resolved_address_form == NEUTRAL_ADDRESS_FORM:
+        lines.append(
+            "- Chưa biết giới tính: dùng 'anh/chị' và KHÔNG đoán, "
+            "KHÔNG hỏi thẳng giới tính."
+        )
+
     confirmed_name = _pick((lead or {}).get("name"))
     profile_display_name = _pick(oa_profile_display_name)
     if personalize and confirmed_name:
@@ -354,7 +390,6 @@ def lead_profile_text(
                 "- Đã biết tên ứng viên: không hỏi lại tên.",
                 "- Có thể gọi tên tự nhiên khi phù hợp để cuộc trò chuyện thân thiện hơn, "
                 "nhưng không lặp tên máy móc trong mọi câu.",
-                "- Vẫn xưng hô với người dùng là 'bạn'.",
             ]
         )
     elif personalize and profile_display_name:

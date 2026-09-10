@@ -1,8 +1,11 @@
 """Unit tests for app/graph/fast_lane — the deterministic non-factual router.
 
 Pins the route table (greeting / thanks / goodbye / help / fall-through) and the
-persona-voice invariant (tôi/bạn, never em/anh/chị) on every canned template.
-Feeds Slice F's broader persona-voice guard.
+persona-voice invariant (em / anh-chị, never bạn/tôi/mình) on every canned
+template. Feeds Slice F's broader persona-voice guard.
+
+Fast-lane templates fire before any lead lookup, so gender is never known here —
+the neutral "anh/chị" is required and a bare "anh"/"chị" is a bug.
 """
 
 from __future__ import annotations
@@ -19,9 +22,9 @@ from app.graph.fast_lane import (
     match,
 )
 
-# Address pronouns. Tokenized (Unicode-aware) so "xem"/"chính"/"gửi" never trip
-# the em/anh/chị check — only a standalone pronoun token does.
-_BANNED_ADDRESS = {"em", "anh", "chị", "chi"}
+# Retired pronouns. Tokenized (Unicode-aware) so "bạng"/"tôi" substrings never
+# trip the check — only a standalone pronoun token does.
+_BANNED_PRONOUNS = {"bạn", "tôi", "mình"}
 
 
 def _tokens(text: str) -> list[str]:
@@ -29,10 +32,16 @@ def _tokens(text: str) -> list[str]:
 
 
 def _assert_persona_voice(reply: str) -> None:
-    tokens = _tokens(reply)
-    assert "bạn" in tokens or "tôi" in tokens, f"missing tôi/bạn in: {reply!r}"
-    bad = _BANNED_ADDRESS & set(tokens)
-    assert not bad, f"banned address pronoun(s) {bad} in: {reply!r}"
+    lowered = {token.lower() for token in _tokens(reply)}
+    assert "em" in lowered, f"missing em in: {reply!r}"
+    bad = _BANNED_PRONOUNS & lowered
+    assert not bad, f"banned pronoun(s) {bad} in: {reply!r}"
+    assert "anh/chị" in reply.lower(), f"missing neutral anh/chị address in: {reply!r}"
+    stray = {"anh", "chị"} & {
+        token.lower()
+        for token in _tokens(reply.replace("anh/chị", "").replace("Anh/chị", ""))
+    }
+    assert not stray, f"gendered address {stray} outside 'anh/chị' in: {reply!r}"
 
 
 @pytest.mark.parametrize(

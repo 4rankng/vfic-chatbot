@@ -37,17 +37,26 @@ class FastLaneHit:
     intent: str
 
 
-# --- templates (tôi/bạn voice — persona.md:40) --------------------------------
+# --- templates (em / anh-chị voice — persona.md) ------------------------------
+# These fire before any lead lookup, so the candidate's gender is never known
+# here. They therefore always use the neutral "anh/chị" — never "anh" or "chị"
+# alone, which would be a coin-flip guess on a first greeting.
 GREETING_REPLY = (
-    "Chào bạn! Tôi là trợ lý tuyển dụng của VFIC. "
-    "Bạn đang muốn tìm hiểu việc làm, mức lương, xe đưa đón hay hồ sơ ứng tuyển?"
+    "Em chào anh/chị! Em là trợ lý tuyển dụng của VFIC. "
+    "Anh/chị đang muốn tìm hiểu việc làm, mức lương, xe đưa đón hay hồ sơ ứng tuyển ạ?"
 )
-THANKS_REPLY = "Rất vui được hỗ trợ bạn! Nếu bạn cần thêm thông tin việc làm, cứ nhắn cho tôi nhé."
-GOODBYE_REPLY = "Hẹn gặp lại bạn nhé! Khi cần hỗ trợ việc làm VFIC, bạn nhắn tôi bất cứ lúc nào."
+THANKS_REPLY = (
+    "Em rất vui được hỗ trợ anh/chị ạ! Nếu anh/chị cần thêm thông tin việc làm, "
+    "cứ nhắn cho em nhé."
+)
+GOODBYE_REPLY = (
+    "Hẹn gặp lại anh/chị nhé ạ! Khi cần hỗ trợ việc làm VFIC, anh/chị nhắn em "
+    "bất cứ lúc nào."
+)
 HELP_REPLY = (
-    "Tôi có thể hỗ trợ bạn tìm hiểu về tuyển dụng VFIC: việc làm đang tuyển, "
+    "Em có thể hỗ trợ anh/chị tìm hiểu về tuyển dụng VFIC: việc làm đang tuyển, "
     "mức lương và phụ cấp, xe đưa đón, địa điểm làm việc, hồ sơ ứng tuyển, "
-    "ca làm việc, lịch phỏng vấn và thông tin liên hệ. Bạn muốn biết thêm về điều gì?"
+    "ca làm việc, lịch phỏng vấn và thông tin liên hệ. Anh/chị muốn biết thêm về điều gì ạ?"
 )
 
 # --- exact-phrase sets (normalized: ASCII, lowercase, no accents) --------------

@@ -28,8 +28,8 @@ class FastSafetyResult(TypedDict):
 # Friendly fallback when the bot can't produce a good reply. Short, natural,
 # and redirects the user — not robotic filler.
 FALLBACK_REPLY = (
-    "Tôi chưa thể xác minh câu trả lời này. Bạn đang quan tâm vị trí tuyển dụng, "
-    "mức lương, xe đưa đón hay hồ sơ ứng tuyển để tôi kiểm tra đúng thông tin nhé?"
+    "Em chưa thể xác minh câu trả lời này ạ. Anh/chị đang quan tâm vị trí tuyển dụng, "
+    "mức lương, xe đưa đón hay hồ sơ ứng tuyển để em kiểm tra đúng thông tin nhé ạ?"
 )
 
 _RISK_RE = re.compile(
@@ -241,9 +241,9 @@ _TECH_USER_RE = re.compile(
     re.IGNORECASE,
 )
 TECHNICAL_FALLBACK = (
-    "Tôi là trợ lý VFIC nên chỉ hỗ trợ các vấn đề tuyển dụng và hỗ trợ nhân viên "
-    "(lương, phúc lợi, lịch xe, thủ tục…). Bạn cần tôi giúp việc tìm việc hay "
-    "thắc mắc khi đang làm tại dự án VFIC nhé?"
+    "Em là trợ lý VFIC nên chỉ hỗ trợ các vấn đề tuyển dụng và hỗ trợ nhân viên "
+    "(lương, phúc lợi, lịch xe, thủ tục…). Anh/chị cần em giúp việc tìm việc hay "
+    "thắc mắc khi đang làm tại dự án VFIC nhé ạ?"
 )
 # Friendly redirect when the bot can't produce a good reply.
 GENERIC_FALLBACK = FALLBACK_REPLY

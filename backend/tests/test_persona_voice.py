@@ -1,13 +1,18 @@
-"""Persona-voice invariant guard (plan test #14).
+"""Persona-voice invariant guard.
 
 Every bot-visible static reply string — error/timeout/slow-ack/fallback/degradation
-constants + the deterministic fast-lane templates — must address the user as
-**bạn** and self as **tôi**, NEVER em/anh/chị (persona.md:40). This is the net
-that catches hand-authored drift on the constants (LLM output is already bound
-via AGENT_SYSTEM_PROMPT).
+constants + the deterministic fast-lane templates — must refer to the bot as
+**em** and address the user as **anh/chị**, NEVER bạn/tôi/mình (persona.md).
+This is the net that catches hand-authored drift on the constants (LLM output is
+already bound via AGENT_SYSTEM_PROMPT).
+
+Every one of these strings is emitted before any lead lookup, so the candidate's
+gender is never known on these paths. They must therefore use the neutral
+"anh/chị" — a bare "anh" or "chị" here would be a coin-flip guess at the user's
+gender, which is exactly what the address-form plumbing exists to avoid.
 
 Tokenization is Unicode-aware so "xem"/"gửi"/"chính"/"nhanh" never trip the
-em/anh/chị check — only a standalone pronoun token does.
+pronoun check — only a standalone pronoun token does.
 """
 
 from __future__ import annotations
@@ -41,10 +46,10 @@ STATIC_REPLIES = {
     "HELP_REPLY": HELP_REPLY,
 }
 
-# The persona invariant bans em/anh/chị as address pronouns (persona.md:40).
-# Only standalone pronoun tokens are flagged — Vietnamese is isolating, so "em"
-# / "anh" / "chị" as tokens are the address forms (not substrings of "xem" etc.).
-_BANNED_ADDRESS_PRONOUNS = {"em", "anh", "chị"}
+# The persona invariant bans bạn/tôi/mình as pronouns (persona.md). Only
+# standalone tokens are flagged — Vietnamese is isolating, so these as tokens
+# are the pronoun forms (not substrings of "xem", "bạng", etc.).
+_BANNED_PRONOUNS = {"bạn", "tôi", "mình", "Bạn", "Tôi", "Mình"}
 
 
 def _tokens(text: str) -> set[str]:
@@ -54,12 +59,29 @@ def _tokens(text: str) -> set[str]:
 @pytest.mark.parametrize("name", sorted(STATIC_REPLIES))
 def test_static_reply_uses_persona_voice(name):
     reply = STATIC_REPLIES[name]
-    tokens = _tokens(reply)
-    assert "bạn" in tokens or "tôi" in tokens, (
-        f"{name} must address the user as bạn / self as tôi: {reply!r}"
+    lowered = {token.lower() for token in _tokens(reply)}
+    assert "em" in lowered, f"{name} must refer to the bot as em: {reply!r}"
+    leaked = {token.lower() for token in _BANNED_PRONOUNS} & lowered
+    assert not leaked, f"{name} uses banned pronoun(s) {leaked}: {reply!r}"
+
+
+@pytest.mark.parametrize("name", sorted(STATIC_REPLIES))
+def test_static_reply_addresses_user_neutrally(name):
+    """No static reply may guess the user's gender.
+
+    These strings all predate any lead lookup, so "anh" or "chị" on its own
+    would be an unfounded guess. Only the joined "anh/chị" form is allowed.
+    """
+    reply = STATIC_REPLIES[name]
+    neutral_stripped = reply.replace("anh/chị", "").replace("Anh/chị", "")
+    stray = {"anh", "chị"} & {token.lower() for token in _tokens(neutral_stripped)}
+    assert not stray, (
+        f"{name} uses a gendered address form {stray} outside 'anh/chị'; "
+        f"gender is unknown on this path: {reply!r}"
     )
-    leaked = _BANNED_ADDRESS_PRONOUNS & tokens
-    assert not leaked, f"{name} uses banned address pronoun(s) {leaked}: {reply!r}"
+    assert "anh/chị" in reply.lower(), (
+        f"{name} must address the user as anh/chị: {reply!r}"
+    )
 
 
 def test_no_static_reply_is_empty():

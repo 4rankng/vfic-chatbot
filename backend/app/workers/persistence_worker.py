@@ -34,6 +34,23 @@ def run_enrich_oa_profile_job(job: dict) -> None:
     run_async(_enrich_oa_profile_async(job))
 
 
+def enqueue_enrich_messenger_profile(job: dict) -> None:
+    """Enqueue a best-effort Messenger profile (name/avatar/gender) enrichment job.
+
+    Same low-priority queue as the OA equivalent so the Graph call never sits in
+    the webhook acknowledgement path. Failures are logged inside the job.
+    """
+    from app.workers.utils import enqueue_job
+
+    enqueue_job("persistence_low", run_enrich_messenger_profile_job, job)
+
+
+def run_enrich_messenger_profile_job(job: dict) -> None:
+    from app.workers.async_runner import run_async
+
+    run_async(_enrich_messenger_profile_async(job))
+
+
 def run_persist_candidate_job(job: dict) -> None:
     from app.workers.async_runner import run_async
 
@@ -128,5 +145,44 @@ async def _enrich_oa_profile_async(job: dict) -> None:
     except Exception as exc:  # noqa: BLE001 — enrichment is best-effort
         logger.warning(
             "oa profile enrichment failed error_type=%s",
+            type(exc).__name__,
+        )
+
+
+async def _enrich_messenger_profile_async(job: dict) -> None:
+    """Fetch name/avatar/gender from the Messenger User Profile API.
+
+    Gender is what lets the bot say "anh" or "chị" instead of the neutral
+    "anh/chị". It requires both the ``pages_user_gender`` permission and the
+    Business Asset User Profile Access feature, so an absent gender is an
+    expected outcome rather than a failure — the prompt layer stays neutral.
+    """
+    from app.channels.providers.facebook_oauth import get_user_profile
+    from app.services.integration_settings import IntegrationSettingsService
+    from app.services.profile_enrichment import ProfileEnrichmentService
+    from app.workers._db import worker_session
+
+    psid = job.get("psid") or ""
+    page_id = job.get("page_id") or ""
+    if not psid or not page_id:
+        return
+    try:
+        async with worker_session() as db:
+            cfg = await IntegrationSettingsService(db).resolve_facebook(page_id)
+            if cfg is None or not cfg.page_access_token:
+                return
+
+            async def _fetch(target_psid: str):
+                return await get_user_profile(cfg, psid=target_psid)
+
+            await ProfileEnrichmentService(db).enrich_messenger_user(
+                psid,
+                page_id=page_id,
+                fetch_profile=_fetch,
+                wait_for_inflight=True,
+            )
+    except Exception as exc:  # noqa: BLE001 — enrichment is best-effort
+        logger.warning(
+            "messenger profile enrichment failed error_type=%s",
             type(exc).__name__,
         )

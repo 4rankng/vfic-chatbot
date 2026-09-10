@@ -21,8 +21,8 @@ _DIRECT_TURN_SHUTDOWN_TIMEOUT_SECONDS = 5.0
 
 # Static Vietnamese degradation message — sent when LLM is throttled (no LLM call).
 DEGRADATION_REPLY = (
-    "Xin lỗi bạn, hiện tại hệ thống đang gặp nhiều truy cập đồng thời. "
-    "Vui lòng gửi lại tin nhắn sau ít phút nhé. Cảm ơn bạn!"
+    "Em xin lỗi anh/chị, hiện tại hệ thống đang gặp nhiều truy cập đồng thời. "
+    "Anh/chị vui lòng gửi lại tin nhắn sau ít phút nhé ạ. Em cảm ơn anh/chị!"
 )
 
 
