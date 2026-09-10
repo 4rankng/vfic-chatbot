@@ -355,14 +355,17 @@ class RecommendationRepository:
         Project never leaks through a stale mapping.
         """
         gate = province or lead.living_area or lead.region or None
+        # Both scope parameters are always bound: SQLAlchemy's text() requires a
+        # value for every placeholder in the statement, so omitting them on the
+        # unscoped path raised "A value is required for bind parameter
+        # 'pids_active'" instead of searching deployment-wide.
         params: dict[str, Any] = {
             "status": JobStatus.ACTIVE.value,
             "province": gate,
             "limit": self.CANDIDATE_LIMIT,
+            "pids_active": project_ids is not None,
+            "pids": [str(pid) for pid in project_ids] if project_ids is not None else [],
         }
-        if project_ids is not None:
-            params["pids_active"] = True
-            params["pids"] = [str(pid) for pid in project_ids]
         result = await self.db.execute(_MATCH_SQL, params)
         rows = [dict(r._mapping) for r in result.fetchall()]
 
