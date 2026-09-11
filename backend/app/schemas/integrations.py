@@ -117,6 +117,15 @@ class ZaloOaSignatureVerifyOut(BaseModel):
     detail: str
 
 
+class ProviderTestStatus(BaseModel):
+    """Last real-probe outcome for one provider (persisted across reloads)."""
+
+    ok: bool
+    latency_ms: int | None = None
+    tested_at: int
+    error: str | None = None
+
+
 class MinimaxIntegrationSettingsOut(BaseModel):
     minimax_api_key: SecretStatus
     minimax_base_url: str
@@ -124,6 +133,7 @@ class MinimaxIntegrationSettingsOut(BaseModel):
     minimax_safety_model: str
     minimax_enable: bool
     llm_default_provider: Literal["minimax", "openrouter", "custom"]
+    last_test: ProviderTestStatus | None = None
 
 
 class MinimaxIntegrationSettingsUpdate(BaseModel):
@@ -137,6 +147,11 @@ class MinimaxIntegrationSettingsUpdate(BaseModel):
 class MinimaxIntegrationTestOut(BaseModel):
     configured: bool
     missing: list[str]
+    # Real-probe result fields (the probe replaced the old key-presence check).
+    ok: bool = False
+    latency_ms: int | None = None
+    sample: str | None = None
+    error: str | None = None
 
 
 class OpenRouterIntegrationSettingsOut(BaseModel):
@@ -149,6 +164,7 @@ class OpenRouterIntegrationSettingsOut(BaseModel):
     openrouter_embedding_dim: int
     openrouter_enable: bool
     llm_default_provider: Literal["minimax", "openrouter", "custom"]
+    last_test: ProviderTestStatus | None = None
 
 
 class OpenRouterIntegrationSettingsUpdate(BaseModel):
@@ -165,6 +181,10 @@ class OpenRouterIntegrationSettingsUpdate(BaseModel):
 class OpenRouterIntegrationTestOut(BaseModel):
     configured: bool
     missing: list[str]
+    ok: bool = False
+    latency_ms: int | None = None
+    sample: str | None = None
+    error: str | None = None
 
 
 # ─── Custom OpenAI-compatible provider ──────────────────────────────────────
@@ -181,10 +201,11 @@ class CustomLlmIntegrationSettingsOut(BaseModel):
     custom_llm_fast_model: str
     custom_llm_label: str
     custom_llm_enable: bool
-    # True only when enabled AND key + base URL + agent model are all present,
+    # True only when enabled + key + base URL + agent model are all present,
     # so the UI can say "armed" rather than merely "saved".
     custom_llm_usable: bool
     llm_default_provider: Literal["minimax", "openrouter", "custom"]
+    last_test: ProviderTestStatus | None = None
 
 
 class CustomLlmIntegrationSettingsUpdate(BaseModel):

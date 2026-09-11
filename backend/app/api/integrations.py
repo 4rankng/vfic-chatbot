@@ -3,6 +3,7 @@
 import json
 import logging
 import secrets
+import time
 from urllib.parse import urlencode
 
 import httpx
@@ -391,18 +392,81 @@ async def update_minimax_integration_settings(
     )
 
 
+async def _probe_and_record(
+    db: AsyncSession,
+    *,
+    provider: str,
+    api_key: str,
+    base_url: str,
+    model: str,
+    missing: list[str],
+    persist: bool,
+) -> dict:
+    """Run ONE real chat completion against a provider and persist the outcome.
+
+    Replaces the old key-presence checks: "configured" and "actually works"
+    become distinct facts. Both pass and fail are persisted (a dead provider
+    must keep showing its error), so the settings page can render
+    "tested 2 minutes ago | 412 ms" across reloads. persist=False probes
+    operator-typed values that are not saved yet.
+    """
+    if missing:
+        return {
+            "ok": False,
+            "configured": False,
+            "missing": missing,
+            "latency_ms": None,
+            "sample": None,
+            "error": None,
+        }
+    from app.services.llm_probe import probe_openai_compatible_chat
+
+    probe = await probe_openai_compatible_chat(
+        api_key=api_key, base_url=base_url, model=model
+    )
+    if persist:
+        await IntegrationSettingsService(db).record_provider_test_result(
+            provider,
+            {
+                "ok": probe.ok,
+                "latency_ms": probe.latency_ms,
+                "tested_at": int(time.time()),
+                "error": probe.error,
+            },
+        )
+    return {
+        "ok": probe.ok,
+        "configured": True,
+        "missing": [],
+        "latency_ms": probe.latency_ms,
+        "sample": probe.sample,
+        "error": probe.error,
+    }
+
+
 @router.post("/minimax/test", response_model=MinimaxIntegrationTestOut)
 async def test_minimax_integration_settings(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MinimaxIntegrationTestOut:
     cfg = await IntegrationSettingsService(db).resolve_minimax()
-    missing = []
-    if not cfg.api_key:
-        missing.append("minimax_api_key")
-    return MinimaxIntegrationTestOut(
-        configured=bool(cfg.api_key),
+    missing = [] if cfg.api_key else ["minimax_api_key"]
+    result = await _probe_and_record(
+        db,
+        provider="minimax",
+        api_key=cfg.api_key,
+        base_url=cfg.base_url,
+        model=cfg.agent_model,
         missing=missing,
+        persist=True,
+    )
+    return MinimaxIntegrationTestOut(
+        configured=result["configured"],
+        missing=result["missing"],
+        ok=result["ok"],
+        latency_ms=result["latency_ms"],
+        sample=result["sample"],
+        error=result["error"],
     )
 
 
@@ -437,12 +501,23 @@ async def test_openrouter_integration_settings(
     db: AsyncSession = Depends(get_db),
 ) -> OpenRouterIntegrationTestOut:
     cfg = await IntegrationSettingsService(db).resolve_openrouter()
-    missing = []
-    if not cfg.api_key:
-        missing.append("openrouter_api_key")
-    return OpenRouterIntegrationTestOut(
-        configured=bool(cfg.api_key),
+    missing = [] if cfg.api_key else ["openrouter_api_key"]
+    result = await _probe_and_record(
+        db,
+        provider="openrouter",
+        api_key=cfg.api_key,
+        base_url=cfg.base_url,
+        model=cfg.agent_model,
         missing=missing,
+        persist=True,
+    )
+    return OpenRouterIntegrationTestOut(
+        configured=result["configured"],
+        missing=result["missing"],
+        ok=result["ok"],
+        latency_ms=result["latency_ms"],
+        sample=result["sample"],
+        error=result["error"],
     )
 
 
@@ -505,16 +580,34 @@ async def test_custom_llm_integration_settings(
     if missing:
         return CustomLlmIntegrationTestOut(ok=False, configured=False, missing=missing)
 
-    from app.services.llm_probe import probe_openai_compatible_chat
+    # Transparence: when the probe runs on the STORED token (nothing typed),
+    # a failure must say which token was used - a silent stored-junk key was
+    # exactly the confusion this endpoint could not explain before.
+    used_stored_key = not supplied.get("custom_llm_api_key")
+    persist = not supplied  # probing saved config records history; typed values are not config yet
+    result = await _probe_and_record(
+        db,
+        provider="custom",
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        missing=[],
+        persist=persist,
+    )
+    error = result["error"]
+    if used_stored_key and not result["ok"]:
+        error = (
+            f"{error or 'Kiểm tra thất bại'}"
+            " — Access Token đã lưu bị từ chối. Nhập lại Access Token rồi bấm Lưu thay đổi."
+        )
 
-    probe = await probe_openai_compatible_chat(api_key=api_key, base_url=base_url, model=model)
     return CustomLlmIntegrationTestOut(
-        ok=probe.ok,
+        ok=result["ok"],
         configured=True,
         missing=[],
-        latency_ms=probe.latency_ms,
-        sample=probe.sample,
-        error=probe.error,
+        latency_ms=result["latency_ms"],
+        sample=result["sample"],
+        error=error,
     )
 
 

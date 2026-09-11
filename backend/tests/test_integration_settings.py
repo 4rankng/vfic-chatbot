@@ -92,6 +92,9 @@ class _ReadDb:
     async def scalars(self, _query):
         return _ScalarResult(self.rows)
 
+    async def get(self, _model, key):
+        return None
+
 
 class _WriteDb:
     def __init__(self) -> None:
@@ -568,6 +571,7 @@ async def test_custom_llm_admin_view_is_unconfigured_without_env_or_db():
     assert view["custom_llm_usable"] is False
     assert view["custom_llm_enable"] is False
     assert view["llm_default_provider"] == "minimax"
+    assert view["last_test"] is None
 
 
 @pytest.mark.asyncio

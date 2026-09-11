@@ -25,6 +25,24 @@ export type ZaloSettings = {
 
 export type LlmProvider = "minimax" | "openrouter" | "custom";
 
+/** Last real-probe outcome for one provider (persisted server-side). */
+export type ProviderTestStatus = {
+  ok: boolean;
+  latency_ms: number | null;
+  tested_at: number;
+  error: string | null;
+};
+
+/** Uniform result of POST /{provider}/test for all three providers. */
+export type ProviderTestResult = {
+  configured: boolean;
+  missing: string[];
+  ok: boolean;
+  latency_ms: number | null;
+  sample: string | null;
+  error: string | null;
+};
+
 export type MinimaxSettings = {
   minimax_api_key: SecretStatus;
   minimax_base_url: string;
@@ -32,6 +50,7 @@ export type MinimaxSettings = {
   minimax_safety_model: string;
   minimax_enable: boolean;
   llm_default_provider: LlmProvider;
+  last_test: ProviderTestStatus | null;
 };
 
 export type OpenRouterSettings = {
@@ -42,6 +61,7 @@ export type OpenRouterSettings = {
   openrouter_digest_model: string;
   openrouter_enable: boolean;
   llm_default_provider: LlmProvider;
+  last_test: ProviderTestStatus | null;
 };
 
 export type CustomLlmSettings = {
@@ -55,17 +75,7 @@ export type CustomLlmSettings = {
   /** True only when enabled AND key + base URL + agent model are all present. */
   custom_llm_usable: boolean;
   llm_default_provider: LlmProvider;
-};
-
-export type CustomLlmTestResult = {
-  ok: boolean;
-  configured: boolean;
-  missing: string[];
-  /** Round-trip latency and a short reply echo — a green result is evidence
-   * the endpoint actually answered, not merely accepted TCP. */
-  latency_ms: number | null;
-  sample: string | null;
-  error: string | null;
+  last_test: ProviderTestStatus | null;
 };
 
 export type ZaloChannelTestResult = {
@@ -221,14 +231,14 @@ export const zaloIntegrationGateway = {
       { method: "POST" },
     ),
 
-  testMinimaxConnection: async (): Promise<IntegrationConfigTestResult> =>
-    apiJson<IntegrationConfigTestResult>(
+  testMinimaxConnection: async (): Promise<ProviderTestResult> =>
+    apiJson<ProviderTestResult>(
       `${ADMIN_INTEGRATIONS_BASE_PATH}/minimax/test`,
       { method: "POST" },
     ),
 
-  testOpenRouterConnection: async (): Promise<IntegrationConfigTestResult> =>
-    apiJson<IntegrationConfigTestResult>(
+  testOpenRouterConnection: async (): Promise<ProviderTestResult> =>
+    apiJson<ProviderTestResult>(
       `${ADMIN_INTEGRATIONS_BASE_PATH}/openrouter/test`,
       { method: "POST" },
     ),
@@ -238,9 +248,6 @@ export const zaloIntegrationGateway = {
       custom_llm_api_key: string;
       custom_llm_base_url: string;
       custom_llm_agent_model: string;
-      custom_llm_safety_model: string;
-      custom_llm_fast_model: string;
-      custom_llm_label: string;
       custom_llm_enable: boolean;
       llm_default_provider: LlmProvider;
     }>,
@@ -256,8 +263,8 @@ export const zaloIntegrationGateway = {
       custom_llm_base_url: string;
       custom_llm_agent_model: string;
     }>,
-  ): Promise<CustomLlmTestResult> =>
-    apiJson<CustomLlmTestResult>(
+  ): Promise<ProviderTestResult> =>
+    apiJson<ProviderTestResult>(
       `${ADMIN_INTEGRATIONS_BASE_PATH}/custom-llm/test`,
       { method: "POST", body: body ?? {} },
     ),

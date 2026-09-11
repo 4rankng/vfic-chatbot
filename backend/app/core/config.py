@@ -7,7 +7,7 @@ must NEVER reach the frontend — the CRM holds only the user JWT.
 from functools import lru_cache
 from typing import ClassVar
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
@@ -157,8 +157,17 @@ class Settings(BaseSettings):
     # reports rate-limit/quota exhaustion; see ``_llm_call_with_retry``.
     custom_llm_enable: bool = False
     custom_llm_label: str = "Dự phòng"
-    custom_llm_api_key: str = ""
-    custom_llm_base_url: str = ""
+    # The generic OpenAI-compatible slot honors the operator's natural export
+    # names (e.g. Xiaomi MiMo ships MIMO_API_KEY; OPENAI_BASE_URL is the
+    # OpenAI-sdk convention) as env bootstrap; the settings page overrides.
+    custom_llm_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("custom_llm_api_key", "MIMO_API_KEY"),
+    )
+    custom_llm_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("custom_llm_base_url", "OPENAI_BASE_URL"),
+    )
     custom_llm_agent_model: str = ""
     # Empty safety/fast models fall back to the agent model, so one model id is
     # enough to get a working provider.

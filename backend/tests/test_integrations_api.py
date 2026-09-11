@@ -398,6 +398,14 @@ class _CustomLlmService:
             enabled=True,
         )
 
+    last_tests: dict = {}
+
+    async def record_provider_test_result(self, provider: str, payload: dict) -> None:
+        _CustomLlmService.last_tests[provider] = payload
+
+    async def get_provider_test_result(self, provider: str) -> dict | None:
+        return _CustomLlmService.last_tests.get(provider)
+
     async def admin_custom_llm_view(self) -> dict:
         return {
             "custom_llm_api_key": {"configured": True, "preview": "sk-s...cret"},
@@ -534,4 +542,7 @@ async def test_custom_llm_test_error_is_never_raised_only_reported(monkeypatch):
     )
 
     assert result.ok is False
-    assert result.error == "HTTP 401: bad sk-stored-secret"
+    # The probe used the STORED token (body was empty) — the error must say so,
+    # otherwise the operator cannot tell which credential was rejected.
+    assert result.error and result.error.startswith("HTTP 401: bad sk-stored-secret")
+    assert "Access Token đã lưu" in result.error

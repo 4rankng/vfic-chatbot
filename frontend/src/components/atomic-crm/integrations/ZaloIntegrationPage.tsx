@@ -42,9 +42,9 @@ import {
 import {
   zaloIntegrationGateway,
   type CustomLlmSettings,
-  type CustomLlmTestResult,
-  type IntegrationConfigTestResult,
   type LlmProvider,
+  type ProviderTestResult,
+  type ProviderTestStatus,
   type MinimaxSettings,
   type OpenRouterSettings,
   type SecretStatus,
@@ -88,8 +88,6 @@ type CustomLlmFormState = {
   custom_llm_api_key: string;
   custom_llm_base_url: string;
   custom_llm_agent_model: string;
-  custom_llm_fast_model: string;
-  custom_llm_label: string;
 };
 
 type MinimaxUpdatePayload = {
@@ -102,9 +100,6 @@ type CustomLlmUpdatePayload = {
   custom_llm_api_key?: string;
   custom_llm_base_url?: string;
   custom_llm_agent_model?: string;
-  custom_llm_safety_model?: string;
-  custom_llm_fast_model?: string;
-  custom_llm_label?: string;
   custom_llm_enable?: boolean;
   llm_default_provider?: LlmProvider;
 };
@@ -155,8 +150,6 @@ const emptyCustomLlmForm: CustomLlmFormState = {
   custom_llm_api_key: "",
   custom_llm_base_url: "",
   custom_llm_agent_model: "",
-  custom_llm_fast_model: "",
-  custom_llm_label: "",
 };
 
 // Deterministic failover order (also the default-provider pick order when a
@@ -177,9 +170,7 @@ const OPENROUTER_MODEL_OPTIONS = [
 type SettingsItemId =
   | "settings-zalo-channel"
   | "settings-facebook-messenger"
-  | "settings-minimax"
-  | "settings-openrouter"
-  | "settings-custom-llm"
+  | "settings-llm-providers"
   | "settings-agents"
   | "settings-users";
 
@@ -229,24 +220,10 @@ const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     mode: "integrations",
   },
   {
-    itemId: "settings-minimax",
-    label: "Minimax",
-    description: "Model chính",
+    itemId: "settings-llm-providers",
+    label: "AI Providers",
+    description: "Mặc định & dự phòng",
     Icon: Bot,
-    mode: "integrations",
-  },
-  {
-    itemId: "settings-openrouter",
-    label: "OpenRouter",
-    description: "Fallback và embeddings",
-    Icon: Cpu,
-    mode: "integrations",
-  },
-  {
-    itemId: "settings-custom-llm",
-    label: "Xiaomi",
-    description: "Model dự phòng OpenAI-compatible",
-    Icon: Cpu,
     mode: "integrations",
   },
   {
@@ -279,20 +256,11 @@ const SETTINGS_VIEW_COPY: Record<
     title: "Messenger",
     description: "Kết nối Trang Facebook để nhắn tin với ứng viên.",
   },
-  "settings-minimax": {
-    kicker: "Model chính",
-    title: "Minimax",
-    description: "Khóa API cho model Agent chính.",
-  },
-  "settings-openrouter": {
-    kicker: "Model dự phòng",
-    title: "OpenRouter",
-    description: "Fallback và embeddings khi model chính gián đoạn.",
-  },
-  "settings-custom-llm": {
-    kicker: "Model dự phòng",
-    title: "Xiaomi",
-    description: "Endpoint OpenAI-compatible: dùng khi model chính hết quota.",
+  "settings-llm-providers": {
+    kicker: "Nhà cung cấp AI",
+    title: "AI Providers",
+    description:
+      "Chọn một nhà cung cấp mặc định. Khi hết quota, hệ thống tự chuyển sang nhà cung cấp còn lại theo thứ tự bên dưới.",
   },
   "settings-agents": {
     kicker: "Không gian cài đặt",
@@ -448,27 +416,6 @@ const ProviderSwitchField = ({
   </div>
 );
 
-const DefaultProviderSwitch = ({
-  provider,
-  enabled,
-  checked,
-  otherEnabled,
-  onCheckedChange,
-}: {
-  provider: LlmProvider;
-  enabled: boolean;
-  checked: boolean;
-  otherEnabled: boolean;
-  onCheckedChange: (provider: LlmProvider, checked: boolean) => void;
-}) => (
-  <ProviderSwitchField
-    id={`llm_default_provider_${provider}`}
-    label="Mặc định"
-    checked={checked}
-    disabled={!enabled || (checked && !otherEnabled)}
-    onCheckedChange={(next) => onCheckedChange(provider, next)}
-  />
-);
 
 const SettingsGroup = ({
   id,
@@ -724,9 +671,13 @@ export const ZaloIntegrationPage = () => {
   );
   const [testingBot, setTestingBot] = useState(false);
   const [testingOa, setTestingOa] = useState(false);
-  const [testingMinimax, setTestingMinimax] = useState(false);
-  const [testingOpenRouter, setTestingOpenRouter] = useState(false);
-  const [testingCustomLlm, setTestingCustomLlm] = useState(false);
+  const [savingProviders, setSavingProviders] = useState(false);
+  const [testingProvider, setTestingProvider] = useState<LlmProvider | null>(
+    null,
+  );
+  const [lastTests, setLastTests] = useState<
+    Partial<Record<LlmProvider, ProviderTestStatus>>
+  >({});
   const handleCopy = useCallback(
     (label: string, value: string) =>
       copyCredentialFieldValue(label, value, notify as CredentialFieldNotify),
@@ -753,6 +704,11 @@ export const ZaloIntegrationPage = () => {
       setMinimaxEnabled(minimaxData.minimax_enable);
       setOpenRouterEnabled(openRouterData.openrouter_enable);
       setCustomLlmEnabled(customLlmData.custom_llm_enable);
+      setLastTests({
+        minimax: minimaxData.last_test ?? undefined,
+        openrouter: openRouterData.last_test ?? undefined,
+        custom: customLlmData.last_test ?? undefined,
+      });
       setLlmDefaultProvider(customLlmData.llm_default_provider);
       setOpenRouterModel(openRouterData.openrouter_agent_model);
       setMinimaxForm(emptyMinimaxForm);
@@ -782,8 +738,9 @@ export const ZaloIntegrationPage = () => {
     if (minimaxSettings && minimaxEnabled !== minimaxSettings.minimax_enable) {
       payload.minimax_enable = minimaxEnabled;
     }
+    // The default-provider radio is panel-global; a change rides exactly one
+    // PUT (minimax) so three payloads never write the shared key twice.
     if (
-      activeItemId === "settings-minimax" &&
       minimaxSettings &&
       llmDefaultProvider !== minimaxSettings.llm_default_provider
     ) {
@@ -791,7 +748,6 @@ export const ZaloIntegrationPage = () => {
     }
     return payload;
   }, [
-    activeItemId,
     minimaxForm,
     minimaxEnabled,
     llmDefaultProvider,
@@ -818,7 +774,6 @@ export const ZaloIntegrationPage = () => {
       payload.openrouter_digest_model = openRouterModel.trim();
     }
     if (
-      activeItemId === "settings-openrouter" &&
       openRouterSettings &&
       llmDefaultProvider !== openRouterSettings.llm_default_provider
     ) {
@@ -826,7 +781,6 @@ export const ZaloIntegrationPage = () => {
     }
     return payload;
   }, [
-    activeItemId,
     openRouterForm,
     openRouterEnabled,
     openRouterModel,
@@ -843,8 +797,6 @@ export const ZaloIntegrationPage = () => {
     > = [
       ["custom_llm_base_url", "custom_llm_base_url"],
       ["custom_llm_agent_model", "custom_llm_agent_model"],
-      ["custom_llm_fast_model", "custom_llm_fast_model"],
-      ["custom_llm_label", "custom_llm_label"],
     ];
     for (const [key, formKey] of textFields) {
       const trimmed = customLlmForm[formKey].trim();
@@ -858,21 +810,8 @@ export const ZaloIntegrationPage = () => {
     ) {
       payload.custom_llm_enable = customLlmEnabled;
     }
-    if (
-      activeItemId === "settings-custom-llm" &&
-      customLlmSettings &&
-      llmDefaultProvider !== customLlmSettings.llm_default_provider
-    ) {
-      payload.llm_default_provider = llmDefaultProvider;
-    }
     return payload;
-  }, [
-    activeItemId,
-    customLlmForm,
-    customLlmEnabled,
-    llmDefaultProvider,
-    customLlmSettings,
-  ]);
+  }, [customLlmForm, customLlmEnabled, customLlmSettings]);
 
   const setValue = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -897,27 +836,6 @@ export const ZaloIntegrationPage = () => {
     if (provider === "minimax") return minimaxEnabled;
     if (provider === "openrouter") return openRouterEnabled;
     return customLlmEnabled;
-  };
-
-  const chooseDefaultProvider = (provider: LlmProvider) => {
-    if (providerEnabled(provider)) {
-      setLlmDefaultProvider(provider);
-    }
-  };
-
-  const toggleDefaultProvider = (provider: LlmProvider, checked: boolean) => {
-    if (checked) {
-      chooseDefaultProvider(provider);
-      return;
-    }
-    // Unchecking a default switch moves the default to the first OTHER enabled
-    // provider; the switch is disabled when no other provider is enabled.
-    const next = LLM_PROVIDER_ORDER.find(
-      (candidate) => candidate !== provider && providerEnabled(candidate),
-    );
-    if (next) {
-      setLlmDefaultProvider(next);
-    }
   };
 
   const handleProviderEnabledChange = (
@@ -957,33 +875,111 @@ export const ZaloIntegrationPage = () => {
     return nextZalo;
   };
 
-  const saveMinimaxChanges = async () => {
-    if (Object.keys(changedMinimaxPayload).length === 0) return minimaxSettings;
+  const hasProviderEdits = Boolean(
+    Object.keys(changedMinimaxPayload).length ||
+      Object.keys(changedOpenRouterPayload).length ||
+      Object.keys(changedCustomLlmPayload).length,
+  );
 
-    const nextMinimax = await zaloIntegrationGateway.saveMinimaxSettings(
-      changedMinimaxPayload,
-    );
-    setMinimaxSettings(nextMinimax);
+  const saveProviders = async () => {
+    // One save action, sequential PUTs: only the payloads that actually
+    // changed go out; the default-provider radio rides the minimax PUT.
+    setSavingProviders(true);
+    try {
+      if (Object.keys(changedMinimaxPayload).length > 0) {
+        const next = await zaloIntegrationGateway.saveMinimaxSettings(
+          changedMinimaxPayload,
+        );
+        setMinimaxSettings(next);
+        setMinimaxEnabled(next.minimax_enable);
+        setLlmDefaultProvider(next.llm_default_provider);
+      }
+      if (Object.keys(changedOpenRouterPayload).length > 0) {
+        const next = await zaloIntegrationGateway.saveOpenRouterSettings(
+          changedOpenRouterPayload,
+        );
+        setOpenRouterSettings(next);
+        setOpenRouterEnabled(next.openrouter_enable);
+        setOpenRouterModel(next.openrouter_agent_model);
+      }
+      if (Object.keys(changedCustomLlmPayload).length > 0) {
+        const next = await zaloIntegrationGateway.saveCustomLlmSettings(
+          changedCustomLlmPayload,
+        );
+        setCustomLlmSettings(next);
+        setCustomLlmEnabled(next.custom_llm_enable);
+      }
+      setMinimaxForm(emptyMinimaxForm);
+      setOpenRouterForm(emptyOpenRouterForm);
+      setCustomLlmForm(emptyCustomLlmForm);
+      notify("Đã lưu thay đổi", { type: "success" });
+    } catch {
+      notify("Không lưu được thay đổi.", { type: "error" });
+    } finally {
+      setSavingProviders(false);
+    }
+  };
+
+  const discardProviderChanges = () => {
+    if (minimaxSettings) setMinimaxEnabled(minimaxSettings.minimax_enable);
+    if (openRouterSettings) setOpenRouterEnabled(openRouterSettings.openrouter_enable);
+    if (customLlmSettings) setCustomLlmEnabled(customLlmSettings.custom_llm_enable);
+    if (openRouterSettings) setOpenRouterModel(openRouterSettings.openrouter_agent_model);
+    if (customLlmSettings) setLlmDefaultProvider(customLlmSettings.llm_default_provider);
     setMinimaxForm(emptyMinimaxForm);
-    setMinimaxEnabled(nextMinimax.minimax_enable);
-    setLlmDefaultProvider(nextMinimax.llm_default_provider);
-    return nextMinimax;
-  };
-
-  const saveOpenRouterChanges = async () => {
-    if (Object.keys(changedOpenRouterPayload).length === 0)
-      return openRouterSettings;
-
-    const nextOpenRouter = await zaloIntegrationGateway.saveOpenRouterSettings(
-      changedOpenRouterPayload,
-    );
-    setOpenRouterSettings(nextOpenRouter);
     setOpenRouterForm(emptyOpenRouterForm);
-    setOpenRouterEnabled(nextOpenRouter.openrouter_enable);
-    setOpenRouterModel(nextOpenRouter.openrouter_agent_model);
-    setLlmDefaultProvider(nextOpenRouter.llm_default_provider);
-    return nextOpenRouter;
+    setCustomLlmForm(emptyCustomLlmForm);
   };
+
+  const testProvider = async (provider: LlmProvider) => {
+    setTestingProvider(provider);
+    try {
+      // Probe, never write: testing must not persist an untested credential.
+      let result: ProviderTestResult;
+      if (provider === "minimax") {
+        result = await zaloIntegrationGateway.testMinimaxConnection();
+      } else if (provider === "openrouter") {
+        result = await zaloIntegrationGateway.testOpenRouterConnection();
+      } else {
+        const body = Object.fromEntries(
+          (
+            [
+              ["custom_llm_api_key", customLlmForm.custom_llm_api_key],
+              ["custom_llm_base_url", customLlmForm.custom_llm_base_url],
+              ["custom_llm_agent_model", customLlmForm.custom_llm_agent_model],
+            ] as const
+          )
+            .map(([key, raw]) => [key, raw.trim()] as const)
+            .filter(([, value]) => value !== ""),
+        );
+        result = await zaloIntegrationGateway.testCustomLlmConnection(body);
+      }
+      setLastTests((current) => ({
+        ...current,
+        [provider]: {
+          ok: result.ok,
+          latency_ms: result.latency_ms,
+          tested_at: Math.floor(Date.now() / 1000),
+          error: result.error,
+        },
+      }));
+      if (result.ok) {
+        notify(`Kết nối thành công (${result.latency_ms ?? "?"}ms)`, {
+          type: "success",
+        });
+      } else if (!result.configured && result.missing.length > 0) {
+        const missing = result.missing
+          .map((key) => INTEGRATION_TEST_FIELD_LABELS[key] ?? key)
+          .join(", ");
+        notify(`Thiếu cấu hình: ${missing}`, { type: "warning" });
+      } else {
+        notify(result.error || "Không kết nối được", { type: "error" });
+      }
+    } finally {
+      setTestingProvider(null);
+    }
+  };
+
 
   const testChannel = async (
     request: () => Promise<ZaloChannelTestResult>,
@@ -1059,99 +1055,6 @@ export const ZaloIntegrationPage = () => {
       "oa",
     );
 
-  const testConfiguredIntegration = async (
-    request: () => Promise<IntegrationConfigTestResult>,
-    label: string,
-    busySetter: (busy: boolean) => void,
-    saveChanges: () => Promise<MinimaxSettings | OpenRouterSettings | null>,
-  ) => {
-    busySetter(true);
-    try {
-      await saveChanges();
-      const result = await request();
-      if (result.configured) {
-        notify(`Cấu hình ${label} đã sẵn sàng`, { type: "success" });
-        return;
-      }
-      const missing = result.missing
-        .map((key) => INTEGRATION_TEST_FIELD_LABELS[key] ?? key)
-        .join(", ");
-      notify(`Thiếu cấu hình ${label}: ${missing}`, { type: "warning" });
-    } finally {
-      busySetter(false);
-    }
-  };
-
-  const testMinimaxConnection = () =>
-    testConfiguredIntegration(
-      zaloIntegrationGateway.testMinimaxConnection,
-      "Minimax",
-      setTestingMinimax,
-      saveMinimaxChanges,
-    );
-
-  const testOpenRouterConnection = () =>
-    testConfiguredIntegration(
-      zaloIntegrationGateway.testOpenRouterConnection,
-      "OpenRouter",
-      setTestingOpenRouter,
-      saveOpenRouterChanges,
-    );
-
-  const saveCustomLlmChanges = async () => {
-    if (Object.keys(changedCustomLlmPayload).length === 0)
-      return customLlmSettings;
-
-    const nextCustomLlm = await zaloIntegrationGateway.saveCustomLlmSettings(
-      changedCustomLlmPayload,
-    );
-    setCustomLlmSettings(nextCustomLlm);
-    setCustomLlmForm(emptyCustomLlmForm);
-    setCustomLlmEnabled(nextCustomLlm.custom_llm_enable);
-    setLlmDefaultProvider(nextCustomLlm.llm_default_provider);
-    return nextCustomLlm;
-  };
-
-  const testCustomLlmConnection = async () => {
-    setTestingCustomLlm(true);
-    try {
-      await saveCustomLlmChanges();
-      // The probe endpoint accepts unsaved credentials too — send whatever is
-      // typed so the operator can validate BEFORE saving. Anything blank falls
-      // back to the stored configuration server-side.
-      const body = Object.fromEntries(
-        (
-          [
-            ["custom_llm_api_key", customLlmForm.custom_llm_api_key],
-            ["custom_llm_base_url", customLlmForm.custom_llm_base_url],
-            ["custom_llm_agent_model", customLlmForm.custom_llm_agent_model],
-          ] as const
-        )
-          .map(([key, raw]) => [key, raw.trim()] as const)
-          .filter(([, value]) => value !== ""),
-      );
-      const result: CustomLlmTestResult =
-        await zaloIntegrationGateway.testCustomLlmConnection(body);
-      if (result.ok) {
-        notify(
-          `Kết nối Xiaomi thành công (${result.latency_ms ?? "?"}ms)`,
-          { type: "success" },
-        );
-        return;
-      }
-      if (!result.configured && result.missing.length > 0) {
-        const missing = result.missing
-          .map((key) => INTEGRATION_TEST_FIELD_LABELS[key] ?? key)
-          .join(", ");
-        notify(`Thiếu cấu hình Xiaomi: ${missing}`, { type: "warning" });
-        return;
-      }
-      notify(result.error || "Không kết nối được Xiaomi", { type: "error" });
-    } finally {
-      setTestingCustomLlm(false);
-    }
-  };
-
   const activeItem =
     SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
     SETTINGS_NAV_ITEMS[0];
@@ -1169,12 +1072,6 @@ export const ZaloIntegrationPage = () => {
     settings?.zalo_oa_access_token.configured,
     settings?.zalo_oa_refresh_token.configured,
   ].filter(Boolean).length;
-  const minimaxConfigured = minimaxSettings?.minimax_api_key.configured ? 1 : 0;
-  const openRouterConfigured = openRouterSettings?.openrouter_api_key.configured
-    ? 1
-    : 0;
-  const customLlmConfigured = customLlmSettings?.custom_llm_usable ? 1 : 0;
-
   const selectSettingsItem = (itemId: SettingsItemId) => {
     setActiveItemId(itemId);
   };
@@ -1383,22 +1280,80 @@ export const ZaloIntegrationPage = () => {
       );
     }
 
-    if (activeItemId === "settings-minimax") {
+    if (activeItemId === "settings-llm-providers") {
+      // Failover order: the default starts every turn, the other ENABLED
+      // providers follow in canonical order; disabled ones cannot serve.
+      const chain: LlmProvider[] = [
+        llmDefaultProvider,
+        ...LLM_PROVIDER_ORDER.filter((p) => p !== llmDefaultProvider),
+      ];
+      const providerLabel: Record<LlmProvider, string> = {
+        minimax: "MiniMax",
+        openrouter: "OpenRouter",
+        custom: "Xiaomi",
+      };
+      const enabledOf: Record<LlmProvider, boolean> = {
+        minimax: minimaxEnabled,
+        openrouter: openRouterEnabled,
+        custom: customLlmEnabled,
+      };
+      const chipOf = (provider: LlmProvider): { label: string; cls: string } => {
+        if (!enabledOf[provider]) return { label: "Tắt", cls: "is-muted" };
+        if (llmDefaultProvider === provider) return { label: "Đang dùng", cls: "is-accent" };
+        const t = lastTests[provider];
+        if (t?.ok) return { label: "Sẵn sàng", cls: "is-success" };
+        if (t && !t.ok) return { label: "Lỗi kiểm tra", cls: "is-danger" };
+        return { label: "Chưa kiểm tra", cls: "is-muted" };
+      };
+      const testLineOf = (provider: LlmProvider): string | null => {
+        const t = lastTests[provider];
+        if (!t) return null;
+        if (t.ok) {
+          return `Kiểm tra ${formatRelativeEpoch(t.tested_at)} · ${t.latency_ms ?? "?"}ms`;
+        }
+        return t.error || "Kiểm tra thất bại";
+      };
+      const radioOf = (provider: LlmProvider) => (
+        <label className="settings-llm-radio">
+          <input
+            type="radio"
+            name="llm_default_provider"
+            checked={llmDefaultProvider === provider}
+            disabled={!enabledOf[provider]}
+            onChange={() => setLlmDefaultProvider(provider)}
+          />
+          <span>Mặc định</span>
+        </label>
+      );
+
       return (
-        <SettingsSectionPanel id="settings-minimax">
+        <SettingsSectionPanel id="settings-llm-providers">
+          <div className="settings-llm-chain" data-slot="settings-llm-chain">
+            <span className="settings-llm-chain-label">Thứ tự dự phòng</span>
+            {chain.map((provider) => (
+              <span
+                key={provider}
+                className={`settings-llm-chain-item${enabledOf[provider] ? " is-on" : " is-off"}`}
+              >
+                {enabledOf[provider]
+                  ? `${providerLabel[provider]}`
+                  : `${providerLabel[provider]} · tắt`}
+              </span>
+            ))}
+          </div>
+
           <div className="settings-grid settings-grid-models">
+            {/* ── MiniMax card ── */}
             <SettingsGroup
-              title="Minimax"
+              title={providerLabel.minimax}
               icon={<Bot className="size-4" />}
               meta={
-                <SettingsGroupStatus
-                  configured={minimaxConfigured}
-                  total={1}
-                  disabled={!minimaxEnabled}
-                  state={settingsStatusState}
-                />
+                <span className={`settings-llm-chip ${chipOf("minimax").cls}`}>
+                  {chipOf("minimax").label}
+                </span>
               }
             >
+              {radioOf("minimax")}
               <ProviderSwitchField
                 id="minimax_enable"
                 label={minimaxEnabled ? "Bật" : "Tắt"}
@@ -1407,62 +1362,117 @@ export const ZaloIntegrationPage = () => {
                   handleProviderEnabledChange("minimax", checked)
                 }
               />
-              <DefaultProviderSwitch
-                provider="minimax"
-                enabled={minimaxEnabled}
-                checked={llmDefaultProvider === "minimax"}
-                otherEnabled={openRouterEnabled || customLlmEnabled}
-                onCheckedChange={toggleDefaultProvider}
-              />
               <div className="settings-readonly-field">
-                <span className="settings-readonly-label">Model chat</span>
+                <span className="settings-readonly-label">Model chatbot</span>
                 <strong>{minimaxSettings?.minimax_agent_model ?? "—"}</strong>
               </div>
               <MinimaxSecretInput
                 id="minimax_api_key"
                 label="Access Token"
-                status={
-                  minimaxSettings?.minimax_api_key ?? { configured: false }
-                }
+                status={minimaxSettings?.minimax_api_key ?? { configured: false }}
                 statusState={settingsStatusState}
                 value={minimaxForm.minimax_api_key}
                 onChange={setMinimaxValue}
                 notify={notify as CredentialFieldNotify}
               />
               <div className="settings-oa-actions">
+                <span className="settings-llm-testline">
+                  {testLineOf("minimax") ?? "Chưa kiểm tra"}
+                </span>
                 <Button
                   type="button"
-                  className="settings-test-button settings-primary-action tt-btn-touch"
-                  onClick={testMinimaxConnection}
-                  disabled={testingMinimax || !minimaxSettings}
-                  aria-busy={testingMinimax}
+                  variant="outline"
+                  className="tt-btn-touch"
+                  onClick={() => {
+                    void testProvider("minimax");
+                  }}
+                  disabled={testingProvider !== null || !minimaxSettings}
+                  aria-busy={testingProvider === "minimax"}
                 >
-                  <Wifi className="size-4" />
-                  {testingMinimax ? "Đang kiểm tra" : "Lưu & kiểm tra"}
+                  Kiểm tra
                 </Button>
               </div>
             </SettingsGroup>
-          </div>
-        </SettingsSectionPanel>
-      );
-    }
 
-    if (activeItemId === "settings-custom-llm") {
-      return (
-        <SettingsSectionPanel id="settings-custom-llm">
-          <div className="settings-grid settings-grid-models">
+            {/* ── OpenRouter card ── */}
             <SettingsGroup
-              title={customLlmSettings?.custom_llm_label?.trim() || "Xiaomi"}
+              title={providerLabel.openrouter}
               icon={<Cpu className="size-4" />}
               meta={
-                <SettingsGroupStatus
-                  configured={customLlmConfigured}
-                  total={1}
-                  disabled={!customLlmEnabled}
-                  state={settingsStatusState}
-                />
+                <span className={`settings-llm-chip ${chipOf("openrouter").cls}`}>
+                  {chipOf("openrouter").label}
+                </span>
               }
             >
+              {radioOf("openrouter")}
+              <ProviderSwitchField
+                id="openrouter_enable"
+                label={openRouterEnabled ? "Bật" : "Tắt"}
+                checked={openRouterEnabled}
+                onCheckedChange={(checked) =>
+                  handleProviderEnabledChange("openrouter", checked)
+                }
+              />
+              <div className="settings-field">
+                <Label htmlFor="openrouter_agent_model">Model chatbot</Label>
+                <Select
+                  value={openRouterModel}
+                  onValueChange={setOpenRouterModel}
+                >
+                  <SelectTrigger
+                    id="openrouter_agent_model"
+                    className="settings-input"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {OPENROUTER_MODEL_OPTIONS.map((model) => (
+                      <SelectItem key={model} value={model}>
+                        {model}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <OpenRouterSecretInput
+                id="openrouter_api_key"
+                label="Access Token"
+                status={openRouterSettings?.openrouter_api_key ?? { configured: false }}
+                statusState={settingsStatusState}
+                value={openRouterForm.openrouter_api_key}
+                onChange={setOpenRouterValue}
+                notify={notify as CredentialFieldNotify}
+              />
+              <div className="settings-oa-actions">
+                <span className="settings-llm-testline">
+                  {testLineOf("openrouter") ?? "Chưa kiểm tra"}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="tt-btn-touch"
+                  onClick={() => {
+                    void testProvider("openrouter");
+                  }}
+                  disabled={testingProvider !== null || !openRouterSettings}
+                  aria-busy={testingProvider === "openrouter"}
+                >
+                  Kiểm tra
+                </Button>
+              </div>
+            </SettingsGroup>
+
+            {/* ── Xiaomi (custom OpenAI-compatible) card ── */}
+            <SettingsGroup
+              title={providerLabel.custom}
+              icon={<Cpu className="size-4" />}
+              meta={
+                <span className={`settings-llm-chip ${chipOf("custom").cls}`}>
+                  {chipOf("custom").label}
+                </span>
+              }
+            >
+              {radioOf("custom")}
               <ProviderSwitchField
                 id="custom_llm_enable"
                 label={customLlmEnabled ? "Bật" : "Tắt"}
@@ -1471,39 +1481,14 @@ export const ZaloIntegrationPage = () => {
                   handleProviderEnabledChange("custom", checked)
                 }
               />
-              <DefaultProviderSwitch
-                provider="custom"
-                enabled={customLlmEnabled}
-                checked={llmDefaultProvider === "custom"}
-                otherEnabled={
-                  minimaxEnabled || openRouterEnabled
-                }
-                onCheckedChange={toggleDefaultProvider}
-              />
-              <div className="settings-field">
-                <Label htmlFor="custom_llm_label">Tên hiển thị</Label>
-                <Input
-                  id="custom_llm_label"
-                  className="settings-input"
-                  value={customLlmForm.custom_llm_label}
-                  placeholder={
-                    customLlmSettings?.custom_llm_label || "Dự phòng"
-                  }
-                  onChange={(event) =>
-                    setCustomLlmValue("custom_llm_label", event.target.value)
-                  }
-                />
-              </div>
               <div className="settings-field">
                 <Label htmlFor="custom_llm_base_url">Base URL</Label>
                 <Input
                   id="custom_llm_base_url"
                   className="settings-input"
+                  autoComplete="off"
                   value={customLlmForm.custom_llm_base_url}
-                  placeholder={
-                    customLlmSettings?.custom_llm_base_url ||
-                    "https://api.xiaomi.example/v1"
-                  }
+                  placeholder={customLlmSettings?.custom_llm_base_url || "https://…/v1"}
                   onChange={(event) =>
                     setCustomLlmValue("custom_llm_base_url", event.target.value)
                   }
@@ -1514,147 +1499,70 @@ export const ZaloIntegrationPage = () => {
                 <Input
                   id="custom_llm_agent_model"
                   className="settings-input"
+                  autoComplete="off"
                   value={customLlmForm.custom_llm_agent_model}
-                  placeholder={customLlmSettings?.custom_llm_agent_model || "mimo-7b"}
+                  placeholder={customLlmSettings?.custom_llm_agent_model || "mimo-v2.5"}
                   onChange={(event) =>
-                    setCustomLlmValue(
-                      "custom_llm_agent_model",
-                      event.target.value,
-                    )
-                  }
-                />
-              </div>
-              <div className="settings-field">
-                <Label htmlFor="custom_llm_fast_model">
-                  Model nhanh (tùy chọn)
-                </Label>
-                <Input
-                  id="custom_llm_fast_model"
-                  className="settings-input"
-                  value={customLlmForm.custom_llm_fast_model}
-                  placeholder={
-                    customLlmSettings?.custom_llm_fast_model ||
-                    "Bỏ trống = dùng model chatbot"
-                  }
-                  onChange={(event) =>
-                    setCustomLlmValue(
-                      "custom_llm_fast_model",
-                      event.target.value,
-                    )
+                    setCustomLlmValue("custom_llm_agent_model", event.target.value)
                   }
                 />
               </div>
               <CustomLlmSecretInput
                 id="custom_llm_api_key"
                 label="Access Token"
-                status={
-                  customLlmSettings?.custom_llm_api_key ?? { configured: false }
-                }
+                status={customLlmSettings?.custom_llm_api_key ?? { configured: false }}
                 statusState={settingsStatusState}
                 value={customLlmForm.custom_llm_api_key}
                 onChange={setCustomLlmValue}
                 notify={notify as CredentialFieldNotify}
               />
               <div className="settings-oa-actions">
+                <span className="settings-llm-testline">
+                  {testLineOf("custom") ?? "Chưa kiểm tra"}
+                </span>
                 <Button
                   type="button"
-                  className="settings-test-button settings-primary-action tt-btn-touch"
+                  variant="outline"
+                  className="tt-btn-touch"
                   onClick={() => {
-                    void testCustomLlmConnection();
+                    void testProvider("custom");
                   }}
-                  disabled={testingCustomLlm || !customLlmSettings}
-                  aria-busy={testingCustomLlm}
+                  disabled={testingProvider !== null || !customLlmSettings}
+                  aria-busy={testingProvider === "custom"}
                 >
-                  <Wifi className="size-4" />
-                  {testingCustomLlm ? "Đang kiểm tra" : "Lưu & kiểm tra"}
+                  Kiểm tra
                 </Button>
               </div>
             </SettingsGroup>
           </div>
+
+          <div className="settings-llm-footer">
+            <Button
+              type="button"
+              variant="ghost"
+              className="tt-btn-touch"
+              onClick={discardProviderChanges}
+              disabled={!hasProviderEdits || savingProviders}
+            >
+              Huỷ
+            </Button>
+            <Button
+              type="button"
+              className="settings-primary-action tt-btn-touch"
+              onClick={() => {
+                void saveProviders();
+              }}
+              disabled={!hasProviderEdits || savingProviders}
+            >
+              {savingProviders ? "Đang lưu" : "Lưu thay đổi"}
+            </Button>
+            <span className="settings-llm-footer-note">
+              Token được mã hoá, không hiển thị lại.
+            </span>
+          </div>
         </SettingsSectionPanel>
       );
     }
-
-    return (
-      <SettingsSectionPanel id="settings-openrouter">
-        <div className="settings-grid settings-grid-models">
-          <SettingsGroup
-            title="OpenRouter"
-            icon={<Cpu className="size-4" />}
-            meta={
-              <SettingsGroupStatus
-                configured={openRouterConfigured}
-                total={1}
-                disabled={!openRouterEnabled}
-                state={settingsStatusState}
-              />
-            }
-          >
-            <ProviderSwitchField
-              id="openrouter_enable"
-              label={openRouterEnabled ? "Bật" : "Tắt"}
-              checked={openRouterEnabled}
-              onCheckedChange={(checked) =>
-                handleProviderEnabledChange("openrouter", checked)
-              }
-            />
-            <DefaultProviderSwitch
-              provider="openrouter"
-              enabled={openRouterEnabled}
-              checked={llmDefaultProvider === "openrouter"}
-              otherEnabled={minimaxEnabled || customLlmEnabled}
-              onCheckedChange={toggleDefaultProvider}
-            />
-            <div className="settings-field">
-              <Label htmlFor="openrouter_agent_model">Model chatbot</Label>
-              <Select
-                value={openRouterModel}
-                onValueChange={setOpenRouterModel}
-              >
-                <SelectTrigger
-                  id="openrouter_agent_model"
-                  className="settings-input"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {OPENROUTER_MODEL_OPTIONS.map((model) => (
-                    <SelectItem key={model} value={model}>
-                      {model}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <OpenRouterSecretInput
-              id="openrouter_api_key"
-              label="Access Token"
-              status={
-                openRouterSettings?.openrouter_api_key ?? {
-                  configured: false,
-                }
-              }
-              statusState={settingsStatusState}
-              value={openRouterForm.openrouter_api_key}
-              onChange={setOpenRouterValue}
-              notify={notify as CredentialFieldNotify}
-            />
-            <div className="settings-oa-actions">
-              <Button
-                type="button"
-                className="settings-test-button settings-primary-action tt-btn-touch"
-                onClick={testOpenRouterConnection}
-                disabled={testingOpenRouter || !openRouterSettings}
-                aria-busy={testingOpenRouter}
-              >
-                <Wifi className="size-4" />
-                {testingOpenRouter ? "Đang kiểm tra" : "Lưu & kiểm tra"}
-              </Button>
-            </div>
-          </SettingsGroup>
-        </div>
-      </SettingsSectionPanel>
-    );
   };
 
   if (!permissionsPending && permissions !== "admin") {

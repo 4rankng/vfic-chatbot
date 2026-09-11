@@ -456,7 +456,7 @@ describe("ZaloIntegrationPage navigation", () => {
 });
 
 describe("ZaloIntegrationPage provider sections", () => {
-  it("opens the Xiaomi failover provider section from the side nav", async () => {
+  it("opens the AI Providers panel with the failover chain and all three cards", async () => {
     mocks.isMobile = false;
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -471,23 +471,34 @@ describe("ZaloIntegrationPage provider sections", () => {
       .element(screen.getByRole("button", { name: "Zalo", exact: true }))
       .toBeVisible();
 
-    const xiaomiButton = Array.from(
+    const providersButton = Array.from(
       screen.container.querySelectorAll<HTMLButtonElement>(
         ".settings-side-nav-link",
       ),
-    ).find((button) => button.textContent?.includes("Xiaomi"));
-    expect(xiaomiButton).toBeDefined();
-    xiaomiButton?.click();
+    ).find((button) => button.textContent?.includes("AI Providers"));
+    expect(providersButton).toBeDefined();
+    providersButton?.click();
 
-    // The section header + the three provider controls render.
+    // Panel header + failover chain strip + all three provider cards render.
     await expect
-      .element(screen.getByRole("heading", { name: "Xiaomi", exact: true }))
+      .element(screen.getByRole("heading", { name: "AI Providers", exact: true }))
       .toBeVisible();
     await expect
-      .element(screen.getByText("Model chatbot"))
+      .element(screen.getByText("Thứ tự dự phòng"))
+      .toBeVisible();
+    // Multiple elements legitimately contain each provider name (chain chip,
+    // card title) — assert the chain strip chips specifically.
+    await expect
+      .element(screen.container.querySelector<HTMLElement>(".settings-llm-chain"))
       .toBeVisible();
     await expect
-      .element(screen.getByText("Base URL"))
+      .element(screen.container.querySelector<HTMLElement>(".settings-llm-chain-item.is-on"))
+      .toBeVisible();
+    await expect
+      .element(screen.container.querySelector<HTMLElement>(".settings-llm-footer"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
       .toBeVisible();
   });
 });

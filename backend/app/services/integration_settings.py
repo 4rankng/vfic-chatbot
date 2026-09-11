@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import asyncio
 import hashlib
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -82,6 +83,15 @@ CUSTOM_LLM_SETTING_KEYS = (
     CUSTOM_LLM_FAST_MODEL,
     LLM_DEFAULT_PROVIDER,
 )
+
+# Real-probe outcomes per provider (persisted so the settings page can show
+# "tested 2 minutes ago · 412 ms" across reloads). Stored as plaintext JSON in
+# non-secret rows — a probe artifact, not configuration.
+PROVIDER_TEST_KEYS = {
+    "minimax": "minimax_last_test",
+    "openrouter": "openrouter_last_test",
+    "custom": "custom_llm_last_test",
+}
 
 ZALO_SETTING_KEYS = (
     ZALO_BOT_TOKEN,
@@ -415,6 +425,7 @@ class IntegrationSettingsService:
             "minimax_safety_model": cfg.safety_model,
             "minimax_enable": cfg.enabled,
             "llm_default_provider": cfg.default_provider,
+            "last_test": await self.get_provider_test_result("minimax"),
         }
 
     async def resolve_openrouter(self) -> OpenRouterRuntimeConfig:
@@ -458,6 +469,7 @@ class IntegrationSettingsService:
             "openrouter_embedding_dim": cfg.embedding_dim,
             "openrouter_enable": cfg.enabled,
             "llm_default_provider": cfg.default_provider,
+            "last_test": await self.get_provider_test_result("openrouter"),
         }
 
     async def resolve_custom_llm(self) -> CustomLlmRuntimeConfig:
@@ -475,16 +487,12 @@ class IntegrationSettingsService:
                 api_key=stored.get(CUSTOM_LLM_API_KEY) or _default("custom_llm_api_key"),
                 base_url=stored.get(CUSTOM_LLM_BASE_URL) or _default("custom_llm_base_url"),
                 agent_model=agent_model,
-                # One model id is enough: safety/fast reuse the agent model when
-                # the operator leaves them blank.
-                safety_model=(
-                    stored.get(CUSTOM_LLM_SAFETY_MODEL)
-                    or _default("custom_llm_safety_model")
-                    or agent_model
-                ),
-                fast_model=(
-                    stored.get(CUSTOM_LLM_FAST_MODEL) or _default("custom_llm_fast_model")
-                ),
+                # Mirror the agent model into safety/fast unconditionally: no
+                # lane consumes them today, so a stray stored/env value (a
+                # browser once autofilled an email into a model box) can never
+                # reach a request.
+                safety_model=agent_model,
+                fast_model=agent_model,
                 label=stored.get(CUSTOM_LLM_LABEL) or _default("custom_llm_label", "Dự phòng"),
                 enabled=_bool_value(
                     stored.get(CUSTOM_LLM_ENABLE),
@@ -514,6 +522,7 @@ class IntegrationSettingsService:
             "custom_llm_enable": cfg.enabled,
             "custom_llm_usable": cfg.usable,
             "llm_default_provider": cfg.default_provider,
+            "last_test": await self.get_provider_test_result("custom"),
         }
 
     async def update_custom_llm(
@@ -799,6 +808,35 @@ class IntegrationSettingsService:
         for ns in namespaces:
             evict_local_namespace(ns)
             await bump_cache_version(ns)
+
+    # ── Per-provider probe results ("tested 2 minutes ago · 412 ms") ────────
+
+    async def record_provider_test_result(self, provider: str, payload: dict) -> None:
+        """Persist one real-probe outcome so it survives a page reload.
+
+        Stored as plaintext JSON in a non-secret row — a probe artifact, not
+        configuration. Failures are persisted too, so a dead provider keeps
+        showing its error instead of looking silently healthy.
+        """
+        key = PROVIDER_TEST_KEYS[provider]
+        raw = json.dumps(payload)
+        row = await self.db.get(IntegrationSetting, key)
+        if row is None:
+            row = IntegrationSetting(key=key, encrypted_value=raw, is_secret=False)
+            self.db.add(row)
+        else:
+            row.encrypted_value = raw
+            row.is_secret = False
+        await self.db.commit()
+
+    async def get_provider_test_result(self, provider: str) -> dict | None:
+        row = await self.db.get(IntegrationSetting, PROVIDER_TEST_KEYS[provider])
+        if row is None or row.is_secret:
+            return None
+        try:
+            return json.loads(row.encrypted_value or "")
+        except ValueError:
+            return None
 
     # ── Facebook / Meta (Phase 4) ───────────────────────────────────────────
 
