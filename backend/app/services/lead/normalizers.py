@@ -371,7 +371,14 @@ def lead_profile_text(
         [
             "",
             "XƯNG HÔ:",
-            f"- Gọi người dùng là '{resolved_address_form}', xưng mình là 'em'.",
+            # "xưng mình là 'em'" used to phrase this rule, which planted the very
+            # word the rule forbids: replies came back with "để mình đăng ký…"
+            # instead of "để em đăng ký…". The instruction must not contain a
+            # banned pronoun.
+            f"- Gọi người dùng là '{resolved_address_form}', bot tự xưng là 'em'.",
+            "- TUYỆT ĐỐI không dùng 'mình' hay 'tôi' thay cho 'em' (sai: 'để mình "
+            "đăng ký', 'anh/chị cần mình hỗ trợ'; đúng: 'để em đăng ký', 'anh/chị "
+            "cần em hỗ trợ'). Không gọi người dùng là 'bạn'.",
         ]
     )
     if resolved_address_form == NEUTRAL_ADDRESS_FORM:
