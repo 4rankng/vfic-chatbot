@@ -1,6 +1,6 @@
 # VFIC production stack — image-based. Shipped to /opt/vfic on the droplet.
-# Images: franknguyenvd/vfic-backend (web + workers + scheduler),
-#         franknguyenvd/vfic-frontend (nginx static). Caddy = edge (auto-TLS).
+# Images: franknguyenvd/tinghire-be (web + workers + scheduler),
+#         franknguyenvd/tinghire-fe (nginx static). Caddy = edge (auto-TLS).
 # All app config comes from .env (compose auto-loads /opt/vfic/.env).
 services:
   postgres:
@@ -39,7 +39,7 @@ services:
   # stopped`` auto-restarts the active color on host reboot; the inactive color
   # is left ``stop``ped (not removed) so ``make rollback`` can revive it instantly.
   web-blue:
-    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    image: franknguyenvd/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
@@ -58,7 +58,7 @@ services:
     restart: unless-stopped
 
   web-green:
-    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    image: franknguyenvd/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
@@ -76,7 +76,7 @@ services:
   # RQ worker: interactive/recovery turns only. It stays isolated from
   # post-send enrichment so a slow persistence job cannot delay a webhook.
   worker-chatbot:
-    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    image: franknguyenvd/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
@@ -108,7 +108,7 @@ services:
   # RQ worker: best-effort lead/memory enrichment after a reply is sent.
   # It deliberately does not warm the chatbot graph or consume webhook_high.
   worker-persistence:
-    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    image: franknguyenvd/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
@@ -130,7 +130,7 @@ services:
 
   # RQ worker: knowledge ingest / reindex / bus rebuild (slow, Drive-bound).
   worker-ingest:
-    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    image: franknguyenvd/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
@@ -149,7 +149,7 @@ services:
 
   # rq-scheduler: hourly Drive reconcile, 5-min outbound retry, 30-min proactive follow-up tick.
   scheduler:
-    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    image: franknguyenvd/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     depends_on:
       redis: { condition: service_healthy }
@@ -167,7 +167,7 @@ services:
   # RQ worker: proactive follow-up nudges (dedicated queue, isolated from reactive path).
   # Single replica — proactive volume is low (~5 candidates/tick, 30-min interval).
   worker-followup:
-    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    image: franknguyenvd/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
@@ -187,7 +187,7 @@ services:
   # after the new web color is active; DB eligibility is its resume checkpoint.
   oa-profile-backfill:
     profiles: ["maintenance"]
-    image: franknguyenvd/vfic-backend:${IMAGE_TAG:-latest}
+    image: franknguyenvd/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     command:
       ["python", "-m", "scripts.backfill_oa_profiles", "--apply", "--limit", "0"]
@@ -199,7 +199,7 @@ services:
 
   # SPA served by the frontend nginx image; Caddy reverse-proxies to it.
   frontend:
-    image: franknguyenvd/vfic-frontend:${IMAGE_TAG:-latest}
+    image: franknguyenvd/tinghire-fe:${IMAGE_TAG:-latest}
     expose: ["80"]
     restart: unless-stopped
 

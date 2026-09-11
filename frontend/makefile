@@ -93,7 +93,7 @@ sessions: ## list known agent sessions, newest first
 # Build & push the AMD64 frontend image. Tags immutable SHA + :latest; uses
 # registry cache. Mirrors payroll/backend/Makefile `push`. The DockerHub account
 # is already authed locally via the Docker Desktop keychain (no password here).
-IMAGE_NAME := franknguyenvd/vfic-frontend
+IMAGE_NAME := franknguyenvd/tinghire-fe
 GIT_SHA    := $(shell git rev-parse --short HEAD)
 BUILDER    := bb
 

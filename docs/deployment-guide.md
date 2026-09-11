@@ -23,14 +23,14 @@ never used by `make deploy`.
 |---|---|---|---|
 | `postgres` | `pgvector/pgvector:pg16` | 1 | Source of truth. `max_connections=150`, healthcheck `pg_isready`, volume `vfic_pgdata`. |
 | `redis` | `redis:7-alpine` | 1 | RQ broker + pub/sub + LLM semaphore/cache. AOF on, 256 MB cap `allkeys-lru`, volume `vfic_redisdata`. |
-| `web-blue` / `web-green` | `franknguyenvd/vfic-backend:latest` | 1 each (only **active** receives traffic) | FastAPI (uvicorn, 1 worker). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. The **active** color is tracked in `/opt/vfic/ACTIVE_COLOR`; Caddy proxies only it. The inactive color is stopped between deploys (kept for instant rollback). |
-| `worker-chatbot` | `franknguyenvd/vfic-backend:latest` | **2** | RQ queue `webhook_high` only. Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit per container. |
-| `worker-persistence` | `franknguyenvd/vfic-backend:latest` | **1** | RQ queue `persistence_low` only. Best-effort lead/memory enrichment; isolated so it cannot delay candidate replies. 512 MB limit. |
-| `worker-ingest` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
-| `worker-followup` | `franknguyenvd/vfic-backend:latest` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
-| `scheduler` | `franknguyenvd/vfic-backend:latest` | 1 | `rqscheduler`. |
-| `oa-profile-backfill` | active `franknguyenvd/vfic-backend:<git-sha>` | on demand | Profile-gated maintenance job that fills only missing Zalo OA profile names and avatars. It is not started by ordinary `docker compose up`; deploy starts it after a successful cutover. |
-| `frontend` | `franknguyenvd/vfic-frontend:latest` | 1 | nginx static SPA. Expose 80. |
+| `web-blue` / `web-green` | `franknguyenvd/tinghire-be:latest` | 1 each (only **active** receives traffic) | FastAPI (uvicorn, 1 worker). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. The **active** color is tracked in `/opt/vfic/ACTIVE_COLOR`; Caddy proxies only it. The inactive color is stopped between deploys (kept for instant rollback). |
+| `worker-chatbot` | `franknguyenvd/tinghire-be:latest` | **2** | RQ queue `webhook_high` only. Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit per container. |
+| `worker-persistence` | `franknguyenvd/tinghire-be:latest` | **1** | RQ queue `persistence_low` only. Best-effort lead/memory enrichment; isolated so it cannot delay candidate replies. 512 MB limit. |
+| `worker-ingest` | `franknguyenvd/tinghire-be:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
+| `worker-followup` | `franknguyenvd/tinghire-be:latest` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
+| `scheduler` | `franknguyenvd/tinghire-be:latest` | 1 | `rqscheduler`. |
+| `oa-profile-backfill` | active `franknguyenvd/tinghire-be:<git-sha>` | on demand | Profile-gated maintenance job that fills only missing Zalo OA profile names and avatars. It is not started by ordinary `docker compose up`; deploy starts it after a successful cutover. |
+| `frontend` | `franknguyenvd/tinghire-fe:latest` | 1 | nginx static SPA. Expose 80. |
 | `adminer` | `adminer:4` | 1 | DB UI, bound to `127.0.0.1:8081` (loopback only — reach via `make adminer` SSH tunnel). |
 | `caddy` | `caddy:2` | 1 | Edge. `80:80`, `443:443`. Caddyfile ro. Volumes `vfic_caddy_data`, `vfic_caddy_config`. |
 
