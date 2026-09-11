@@ -32,18 +32,17 @@ FALLBACK_REPLY = (
     "mức lương, xe đưa đón hay hồ sơ ứng tuyển để em kiểm tra đúng thông tin nhé ạ?"
 )
 
-_RISK_RE = re.compile(
-    # Structural markers are high-precision signals of leaked reasoning / tool
-    # output — a normal recruitment reply never contains these.
-    r"(```|<\/?minimax:|\$\(|\{\{|\}\}|"
-    # JSON-shape leakage from the safety judge protocol itself.
-    r"\"safe_to_send\"|\"final_answer\"|tool_call|"
-    # Tagged leakage phrases (Vietnamese) — matched as phrases, not bare words,
-    # so natural prose mentioning "code"/"api" in a job description does not
-    # falsely escalate to the 10s+ LLM safety judge.
-    r"logic nội bộ|tên node|biến hệ thống|hướng dẫn hệ thống|lời nhắc hệ thống)",
-    re.IGNORECASE,
-)
+# Lexical content filtering was removed deliberately. Keyword and phrase regexes
+# cannot tell an injection echo from ordinary Vietnamese: "đóng vai trò" (plays a
+# role), "lồng ghép" (contains the profanity substring "lồn"), "bỏ qua yêu cầu
+# bằng cấp" (waives the qualification requirement) and "hướng dẫn mới" are all
+# everyday recruitment prose. Every match discarded a complete, tool-grounded
+# answer and sent a content-free hedge instead, which is a worse outcome than the
+# text the filter was guarding against.
+#
+# What remains here is structural, not lexical: strip provider reasoning, strip
+# markup, bound the length. Those operate on the shape of the output and cannot
+# false-positive on the meaning of a sentence.
 
 
 def strip_think_reasoning(raw: str) -> str:
@@ -63,8 +62,7 @@ def strip_think_reasoning(raw: str) -> str:
 
 def fast_safety_filter(raw: str) -> FastSafetyResult:
     """Return whether an LLM safety check is needed plus a cleaned reply."""
-    original_raw = (raw or "").strip()
-    raw = strip_think_reasoning(original_raw)
+    raw = strip_think_reasoning((raw or "").strip())
     cleaned = re.sub(r"```[\s\S]*?```", "", raw)
     cleaned = re.sub(r"<\/?minimax:[^>]+>", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"(\*\*|__|###?|---)", "", cleaned)
@@ -74,26 +72,18 @@ def fast_safety_filter(raw: str) -> FastSafetyResult:
     empty_after_clean = len(cleaned) == 0
     too_long_for_chat = len(cleaned) > 1800
     # Deterministic resolution for an over-long reply: truncate at a word
-    # boundary so the output is bounded even if the LLM safety judge is later
-    # disabled (Slice E.4). The flag still routes to the judge when enabled.
+    # boundary so the output is always bounded for chat transport.
     output = (
         truncate_for_chat(cleaned or FALLBACK_REPLY)
         if too_long_for_chat
         else (cleaned or FALLBACK_REPLY)
     )
-    # Risk scan runs against the CLEANED reply, not raw. Code fences / markdown
-    # are already stripped above, so a fence that the agent slipped in (but
-    # which never reaches the user) must not discard the whole reply. True
-    # leakage — JSON protocol keys, <minimax: tags, Vietnamese system-prompt
-    # phrases — survives cleaning and still trips the flag.
-    needs_llm_safety = (
-        empty_after_clean or too_long_for_chat or bool(_RISK_RE.search(cleaned))
-    )
-    retryable_empty = (
-        empty_after_clean
-        and not _RISK_RE.search(original_raw)
-        and not blocklist_hit(original_raw)
-    )
+    # Only structural conditions flag a reply now: nothing survived cleaning, or
+    # it exceeds the chat length bound. Content is never judged by keyword.
+    needs_llm_safety = empty_after_clean or too_long_for_chat
+    # An empty reply is always worth one regeneration attempt; there is no longer
+    # a lexical reason to treat some empties as non-retryable.
+    retryable_empty = empty_after_clean
 
     return {
         "output": output,
@@ -124,25 +114,12 @@ class DeterministicReplyPolicy:
 
         fs = fast_safety_filter(reasoning_free)
         output = fs["output"]
-        blocklisted = blocklist_hit(output)
 
-        if blocklisted:
-            return ReplyPolicyResult(
-                output=retry_exhausted_fallback(user_text),
-                verdict="blocklist_redirect",
-                trigger="blocklist",
-            )
         if fs["empty_after_clean"]:
             return ReplyPolicyResult(
                 output=retry_exhausted_fallback(user_text),
                 verdict="empty_after_clean",
                 trigger="empty_after_clean",
-            )
-        if fs["needs_llm_safety"] and not fs["too_long"]:
-            return ReplyPolicyResult(
-                output=retry_exhausted_fallback(user_text),
-                verdict="risk_redirect",
-                trigger="risk_pattern",
             )
         if fs["too_long"]:
             return ReplyPolicyResult(
@@ -168,90 +145,18 @@ def truncate_for_chat(text: str, limit: int = 1800) -> str:
     return text[:cut].rstrip() + " …"
 
 
-# --- Lexical blocklist (fast, deterministic hard-redirect) --------------------
-# A coarse, high-PRECISION deny-list for content the bot must never emit, checked
-# on the LLM output BEFORE the (slower) LLM safety judge. A hit redirects to a
-# fallback and skips the judge entirely (Slice E.1). The list is deliberately
-# narrow — clear prompt-injection / instruction-override / system-leakage, plus
-# unmistakable vulgarity and self-harm/violence — so legitimate recruitment
-# replies are not bounced. Nuanced / off-topic content (politics, borderline
-# cases) is left to the LLM safety judge (Slice E.4). Tune by editing here.
-_BLOCKLIST_PATTERNS = (
-    # Prompt-injection / instruction-override / system-leakage (English).
-    re.compile(
-        r"ignore\s+(all\s+|the\s+|all\s+the\s+)?(previous|prior|above|earlier)\s+"
-        r"(instructions?|prompts?|rules?|directives?)",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"disregard\s+(the\s+|all\s+|any\s+|previous\s+)?(instructions?|prompts?|rules?|guidance)",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(you are now\b|act as if\b|act as a\b|act as an\b|pretend (you are|to be)|"
-        r"new (instructions?|role)|override (your|the|all) (instructions?|rules?))",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(system prompt|reveal (your|the) (instructions?|prompt|rules?|guidelines?)|"
-        r"jailbreak|\bDAN\b)\b",
-        re.IGNORECASE,
-    ),
-    re.compile(r"</?(system|prompt|instructions?|minimax)\b", re.IGNORECASE),
-    # Vietnamese prompt-injection / leakage equivalents.
-    re.compile(
-        r"bỏ\s+qua\s+(các\s+|những\s+|mọi\s+)?(lệnh|hướng\s+dẫn|quy\s+tắc|yêu\s+cầu|chỉ\s+thị)",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"(lệnh\s+mới|hướng\s+dẫn\s+mới|quy\s+tắc\s+mới|bỏ\s+qua\s+hướng\s+dẫn|"
-        r"vượt\s+qua\s+(lệnh|hướng\s+dẫn|quy\s+tắc))",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"(bạn (đang|sẽ|giờ) là|đóng\s+vai|giả\s+vờ|lời\s+nhắc\s+(của\s+)?(hệ\s+thống|bạn)|"
-        r"tiết\s+lộ\s+(lệnh|hướng\s+dẫn|prompt|quy\s+tắc))",
-        re.IGNORECASE,
-    ),
-    # Self-harm / violence.
-    re.compile(
-        r"(tự\s+sát|tự\s+tử|tự\s+làm\s+khổ|giết\s+(người|mình|cả\s+nhà))",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(kill\s+(myself|yourself|himself|herself|others|him|her|them)|"
-        r"harm\s+(myself|yourself|others)|suicide|self[\s-]?harm)\b",
-        re.IGNORECASE,
-    ),
-    # Unmistakable vulgarity / profanity (Vietnamese + English), narrow set.
-    re.compile(r"(địt|lồn|cặc|buồi|dâm)", re.IGNORECASE),
-    re.compile(r"\b(fuck|shit|bitch|cunt|dick|asshole|motherfucker)\b", re.IGNORECASE),
-)
-
-
-def blocklist_hit(raw: str) -> bool:
-    """True if the LLM output matches a hard-redirect blocklist term."""
-    raw = raw or ""
-    return any(pattern.search(raw) for pattern in _BLOCKLIST_PATTERNS)
-
-
-# --- Fallbacks (deterministic redirects for flagged replies) -----------------
-_TECH_USER_RE = re.compile(
-    r"\b(code|javascript|python|json|api|workflow|node|prompt|regex|sql|database|debug|script|function)\b",
-    re.IGNORECASE,
-)
-TECHNICAL_FALLBACK = (
-    "Em là trợ lý VFIC nên chỉ hỗ trợ các vấn đề tuyển dụng và hỗ trợ nhân viên "
-    "(lương, phúc lợi, lịch xe, thủ tục…). Anh/chị cần em giúp việc tìm việc hay "
-    "thắc mắc khi đang làm tại dự án VFIC nhé ạ?"
-)
+# --- Fallback (used only when nothing survived cleaning) ---------------------
 # Friendly redirect when the bot can't produce a good reply.
 GENERIC_FALLBACK = FALLBACK_REPLY
 
 
-def retry_exhausted_fallback(original_user_text: str) -> str:
-    # Off-topic technical questions (code/debug) get a redirect to VFIC's scope
-    # (recruitment + employee support). Everything else gets the generic fallback.
-    return (
-        TECHNICAL_FALLBACK if _TECH_USER_RE.search(original_user_text or "") else GENERIC_FALLBACK
-    )
+def retry_exhausted_fallback(original_user_text: str) -> str:  # noqa: ARG001
+    """Copy for a reply that produced no sendable text.
+
+    A keyword regex on the user's message used to choose between a "technical
+    question" redirect and this generic one. It misread ordinary Vietnamese —
+    "bao nhiêu node sản xuất" and "api tuyển dụng" both scored as off-topic
+    engineering questions — so scope-policing is left to the model, which reads
+    the whole conversation instead of one word.
+    """
+    return GENERIC_FALLBACK

@@ -533,6 +533,11 @@ def _finalize_user_visible_reply(
     )
     if result.trigger is not None:
         timings["safety_trigger"] = result.trigger
+        logger.warning(
+            "reply altered by output policy: verdict=%s trigger=%s",
+            result.verdict,
+            result.trigger,
+        )
     trace_sink.record_decision("safety_verdict", result.verdict)
     return result.output
 
@@ -1250,16 +1255,16 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             candidate = raw
             generated_reply = True
 
-            # --- deterministic safety gate (no LLM judge) ---
+            # --- structural output gate (no LLM judge, no lexical filtering) ---
             # The fast filter strips <think>/markdown/code-fences from the raw
-            # reply and flags three triggers, each resolved deterministically:
-            #   - blocklist hit     → retry_exhausted_fallback (hard redirect)
-            #   - empty/risk-regex  → retry_exhausted_fallback (redirect)
-            #   - over-long (>1800) → truncate_for_chat, then SEND (already
+            # reply and flags only shape-based conditions:
+            #   - empty after cleaning → retry_exhausted_fallback (nothing to send)
+            #   - over-long (>1800)    → truncate_for_chat, then SEND (already
             #     applied by fast_safety_filter — a detailed job-presentation
             #     reply is legitimate content, not a safety issue)
             # This replaces the former LLM safety judge (a ~10s second model call
-            # that p50'd at 10.3s). The judge added latency without adding safety.
+            # that p50'd at 10.3s) and the lexical blocklist that discarded
+            # grounded answers over ordinary Vietnamese wording.
         # All routing lanes converge on one content boundary before persistence
         # and transport. Generated replies receive the full safety policy;
         # curated replies preserve authored formatting while still enforcing the

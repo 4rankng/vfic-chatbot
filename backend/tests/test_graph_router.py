@@ -117,6 +117,32 @@ def test_route_working_hours_question_uses_grounded_faq_detail_path(query):
     assert route.tools == ("get_product_features", "search_knowledge")
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "làm ở LG là làm những gì",
+        "làm ở LG làm gì",
+        "công việc ở LG Display là gì",
+        "mô tả công việc của công nhân thời vụ",
+        "nội dung công việc như thế nào ạ",
+    ],
+)
+def test_route_job_content_question_uses_grounded_faq_detail_path(query):
+    """Job-content questions must carry a retrieval hint, not fall to the catch-all."""
+    route = route_turn(query)
+
+    assert route.intent == "faq_detail"
+    assert route.strategy == "knowledge_lookup"
+    assert route.tools == ("get_product_features", "search_knowledge")
+
+
+def test_route_vacancy_listing_still_beats_job_content_phrasing():
+    route = route_turn("công ty đang tuyển những gì vậy?")
+
+    assert route.intent == "recommend"
+    assert route.tools == ("list_active_jobs",)
+
+
 def test_route_housing_question_uses_grounded_faq_detail_path():
     route = route_turn("làm chỗ bạn có nhà trọ không?")
 
@@ -146,11 +172,16 @@ def test_route_rich_first_contact_prefers_recommendation_over_profile_only():
     assert route.strategy == "recommendation"
 
 
-def test_route_out_of_scope_beats_fast_lane_help_keyword():
-    route = route_turn("viết code giúp tôi")
+def test_route_no_longer_refuses_on_keywords():
+    """Scope is the model's call.
 
-    assert route.intent == "out_of_scope"
-    assert route.strategy == "safe_redirect"
+    The keyword gate could not survive diacritic stripping: "làm thợ" (work as a
+    tradesman) normalizes to the same "lam tho" as "làm thơ" (write poetry), so
+    a candidate naming the job they wanted was refused as off-topic.
+    """
+    assert route_turn("tôi muốn làm thợ hàn").intent != "out_of_scope"
+    assert route_turn("có tuyển làm thợ điện không").intent != "out_of_scope"
+    assert route_turn("viết code giúp tôi").intent != "out_of_scope"
 
 
 @pytest.mark.parametrize(

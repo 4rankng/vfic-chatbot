@@ -21,7 +21,6 @@ from typing import Any, TypedDict
 from app.graph.message_values import delivery_is, sender_is
 from app.graph.ports import SendOutcome
 from app.graph.safety import (
-    blocklist_hit,
     fast_safety_filter,
     retry_exhausted_fallback,
 )
@@ -345,22 +344,18 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             )
             return _outcome("suppressed", reason="empty_message")
 
-        # 8. Deterministic safety gate (fast filter only, no LLM judge).
+        # 8. Structural output gate (no LLM judge, no lexical filtering).
         # The LLM safety judge was removed (p50 10.3s, as expensive as the agent
-        # call). The fast filter handles every trigger deterministically:
-        #   - blocklist/empty/risk-regex → suppress (proactive messages are
-        #     optional — skip rather than send something flagged)
+        # call). Lexical blocklists were removed too: they could not separate an
+        # injection echo from ordinary Vietnamese and silently suppressed valid
+        # nudges. What is left is shape, not meaning:
+        #   - nothing survived cleaning → suppress (there is no message to send)
         #   - over-long → truncate and send (legitimate detailed nudge)
         fs = fast_safety_filter(message)
         candidate = fs["output"]
 
-        # Scan the user-visible reply (cleaned, reasoning stripped), not the raw
-        # output — see runner.py for the same gate. Scanning the raw, which still
-        # carries <think> deliberation that references "system prompt", suppressed
-        # legitimate proactive nudges whenever the model's reasoning happened to
-        # mention the system prompt.
-        if blocklist_hit(candidate) or (fs["needs_llm_safety"] and not fs["too_long"]):
-            logger.info("proactive safety flagged: conversation=%s", conv.zalo_chat_id)
+        if fs["empty_after_clean"]:
+            logger.info("proactive message empty after cleaning: conversation=%s", conv.zalo_chat_id)
             await svc.state.record_proactive_outcome(
                 conv,
                 message=candidate,

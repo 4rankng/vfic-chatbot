@@ -12,10 +12,8 @@ as lạc đề (off-topic) because the persona was hard-scoped to job-finding on
 from __future__ import annotations
 
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
-from app.graph.safety import TECHNICAL_FALLBACK
 
 _PERSONA = AGENT_SYSTEM_PROMPT.lower()
-_FALLBACK = TECHNICAL_FALLBACK.lower()
 
 
 def test_persona_names_existing_employees_as_audience():
@@ -36,11 +34,7 @@ def test_persona_does_not_reject_resignation_as_off_topic():
         "persona must treat resignation as an in-scope employee concern"
     )
 
-
-def test_technical_fallback_covers_employees_not_recruitment_only():
-    # TECHNICAL_FALLBACK is emitted for genuine tech/code off-topic. It must not
-    # narrow the bot to recruitment only — it must also name employee support so
-    # an employee reading the fallback sees HR concerns as in scope.
-    assert "nhân viên" in _FALLBACK, (
-        f"TECHNICAL_FALLBACK must mention employee support: {TECHNICAL_FALLBACK!r}"
-    )
+# The former third guard pinned TECHNICAL_FALLBACK, the off-topic redirect that a
+# keyword regex on the user's message used to select. Both the regex and that
+# string are gone — scope is decided by the persona above, which these two guards
+# cover directly.

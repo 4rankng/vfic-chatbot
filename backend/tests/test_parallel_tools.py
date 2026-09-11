@@ -703,7 +703,7 @@ async def test_faq_detail_retries_one_empty_final_generation_with_same_evidence(
     assert metrics["generation_retry_reason"] == "empty_after_clean"
 
 
-async def test_empty_generation_retry_is_bounded_and_unsafe_empty_is_not_retried():
+async def test_empty_generation_retry_is_bounded_and_reasoning_only_output_retries():
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
@@ -722,8 +722,11 @@ async def test_empty_generation_retry_is_bounded_and_unsafe_empty_is_not_retried
         retry_empty_generation=True,
     )
 
-    unsafe_llm = _ScriptedLLM(['<think>tool_call: {"safe_to_send": false}</think>', "wrong"])
-    unsafe_reply = await MiniMaxAgent(unsafe_llm, embedder=None, max_iters=1).agent(
+    # Reasoning-only output cleans to empty, so it earns the same single retry.
+    # It used to be excluded because its text tripped a lexical filter; that
+    # filter is gone, and "nothing to send" is reason enough to try once more.
+    reasoning_only_llm = _ScriptedLLM(['<think>only deliberation</think>', "câu trả lời thật"])
+    reasoning_only_reply = await MiniMaxAgent(reasoning_only_llm, embedder=None, max_iters=1).agent(
         "context",
         system="sys",
         retrieval=_FakeRetrieval(handler),
@@ -736,8 +739,8 @@ async def test_empty_generation_retry_is_bounded_and_unsafe_empty_is_not_retried
     assert empty_reply == ""
     assert empty_llm.calls == 2
     assert empty_metrics["generation_retry_count"] == 1
-    assert unsafe_reply == '<think>tool_call: {"safe_to_send": false}</think>'
-    assert unsafe_llm.calls == 1
+    assert reasoning_only_reply == "câu trả lời thật"
+    assert reasoning_only_llm.calls == 2
 
 
 async def test_empty_generation_retry_failure_returns_empty_for_runner_fallback():

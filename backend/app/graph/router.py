@@ -142,6 +142,19 @@ _DETAIL_TERMS = (
     "gioi tinh",
 )
 
+# "What does the job actually involve?" — the single most common candidate
+# question after salary. It shares no keyword with _DETAIL_TERMS, so without this
+# it lands on the 0.45-confidence catch-all route with no retrieval hint at all.
+# Applied only in ``route_turn``: ``is_vacancy_lookup`` keeps its own narrower
+# detail set so "công ty có tuyển làm những gì" still lists open roles.
+_JOB_CONTENT_RE = re.compile(
+    r"\blam\s+(?:nhung\s+)?gi\b"
+    r"|\blam\s+(?:cong\s+)?viec\s+gi\b"
+    # Allows a qualifier between subject and question ("công việc ở LG là gì").
+    r"|\bcong\s+viec\b[^.?!]{0,40}?\b(?:la\s+)?(?:gi|nhu\s+the\s+nao|ra\s+sao)\b"
+    r"|\b(?:mo\s+ta|noi\s+dung|tinh\s+chat)\s+cong\s+viec\b"
+)
+
 _CURRENT_OPENING_PHRASES = (
     "dang tuyen",
     "con tuyen",
@@ -171,18 +184,11 @@ _NON_ROLE_ACCEPTANCE_PREFIXES = (
 
 _INTERNAL_RETRY_PREFIX = "ban can viet lai cau tra loi"
 
-_OUT_OF_SCOPE_TERMS = (
-    "viet code",
-    "debug code",
-    "lam bai tap",
-    "ke chuyen cuoi",
-    "ke chuyen",
-    "lam tho",
-    "choi game",
-    "hack",
-    "jailbreak",
-    "system prompt",
-)
+# Off-topic refusal used to be a keyword gate here. It could not survive
+# diacritic-stripped Vietnamese: "làm thợ" (work as a tradesman) normalizes to
+# the same "lam tho" as "làm thơ" (write poetry), so "tôi muốn làm thợ hàn" —
+# a candidate naming the exact job they want — was refused as out of scope.
+# Scope is now the model's call; it reads the whole message, not one token.
 
 
 def _has_any(text: str, terms: tuple[str, ...]) -> bool:
@@ -308,16 +314,11 @@ def route_turn(user_text: str) -> TurnRoute:
     if text.startswith(_INTERNAL_RETRY_PREFIX):
         return TurnRoute("general", "agent", reason="internal_retry_prompt", confidence=0.1)
 
-    if _has_any(text, _OUT_OF_SCOPE_TERMS):
-        return TurnRoute(
-            "out_of_scope", "safe_redirect", reason="off_domain_terms", confidence=0.85
-        )
-
     if fast_lane_match(raw) is not None:
         return TurnRoute("small_talk", "template", reason="fast_lane_match", confidence=0.95)
 
     has_recommendation = _has_any(text, _RECOMMEND_TERMS)
-    has_detail = _has_any(text, _DETAIL_TERMS)
+    has_detail = _has_any(text, _DETAIL_TERMS) or bool(_JOB_CONTENT_RE.search(text))
     vacancy_lookup = is_vacancy_lookup(raw)
     has_phone = bool(_PHONE_RE.search(raw))
 
