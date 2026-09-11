@@ -22,12 +22,17 @@ def test_small_talk_is_eligible_for_fast_model():
     assert should_use_fast_model(route_turn("cảm ơn bạn nhiều"))
 
 
-def test_contact_lookup_is_eligible_for_fast_model():
-    assert should_use_fast_model(route_turn("liên hệ admin số mấy?"))
+def test_knowledge_lookup_uses_reasoning_model():
+    """Detail questions are the conversion path, so they get the better model.
 
-
-def test_out_of_scope_safe_redirect_is_eligible_for_fast_model():
-    assert should_use_fast_model(route_turn("viết code giúp tôi"))
+    Pay / shift / dorm / bus questions come from genuinely interested
+    candidates. The reply has to stay accurate AND work a phone-number ask in
+    naturally; on the fast model that closing ask appeared on only about half
+    of these turns.
+    """
+    assert not should_use_fast_model(route_turn("liên hệ admin số mấy?"))
+    assert not should_use_fast_model(route_turn("lương một tháng bao nhiêu?"))
+    assert not should_use_fast_model(route_turn("ký túc xá có tốn phí không?"))
 
 
 def test_recommendation_uses_reasoning_model():

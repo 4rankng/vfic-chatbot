@@ -27,7 +27,7 @@ from app.graph.fast_lane import (
     HELP_REPLY,
     THANKS_REPLY,
 )
-from app.graph.prompts import ERROR_REPLY, TIMEOUT_REPLY
+from app.graph.prompts import AGENT_SYSTEM_PROMPT, ERROR_REPLY, TIMEOUT_REPLY
 from app.graph.safety import FALLBACK_REPLY, GENERIC_FALLBACK
 from app.services.lead.normalizers import address_form, lead_profile_text
 from app.workers.chatbot_worker import DEGRADATION_REPLY
@@ -122,3 +122,36 @@ def test_no_static_reply_is_empty():
     """An empty constant would silently send nothing — guard against it too."""
     for name, reply in STATIC_REPLIES.items():
         assert reply and reply.strip(), f"{name} is empty"
+
+
+def test_persona_states_pronoun_contract_before_everything_else():
+    """The voice rule must lead the persona, not sit buried in a bullet list.
+
+    Live replies drifted to "Bạn có muốn…" while the ban existed as item 3 of a
+    ten-item list. Position is the fix: the contract is checked first.
+    """
+    persona = AGENT_SYSTEM_PROMPT
+    head = persona[: persona.index("### Đối tượng")]
+
+    assert "LUẬT GIỌNG NÓI" in head, "voice contract must appear before the audience section"
+    for banned in ('"bạn"', '"mình"', '"tôi"'):
+        assert banned in head, f"voice contract must name {banned} as forbidden"
+    assert "anh/chị" in head
+
+
+def test_persona_makes_phone_capture_the_objective():
+    """Collecting the phone number is the mission, not a side effect."""
+    persona = AGENT_SYSTEM_PROMPT
+
+    assert "Nhiệm vụ chính" in persona
+    assert "SĐT" in persona
+    # The retired line told the model the system handled phone capture on its own
+    # and that it should not push — the reason the bot rarely asked.
+    assert "được hệ thống tự động" not in persona, (
+        "persona must not tell the model that lead/phone capture is automatic"
+    )
+
+
+def test_persona_requires_denying_what_is_not_available():
+    """Listing alternatives without denying the premise is an incomplete answer."""
+    assert "TRẢ LỜI THẲNG PHẦN KHÔNG CÓ" in AGENT_SYSTEM_PROMPT

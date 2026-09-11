@@ -35,11 +35,16 @@ TurnStrategy = Literal[
     "agent",
 ]
 
-# Strategies eligible for the fast-tier model (Phase 5 model tiering). These are
-# low-complexity paths where a non-reasoning model suffices: social chitchat
-# (template), contact-info lookups, and simple single-fact FAQ detail questions.
-# Recommendation / profile / general-agent paths always use the reasoning model.
-FAST_MODEL_STRATEGIES: frozenset[str] = frozenset({"template", "knowledge_lookup", "safe_redirect"})
+# Strategies eligible for the fast-tier model (Phase 5 model tiering). Only
+# social chitchat qualifies: it carries no evidence and no conversion step.
+#
+# ``knowledge_lookup`` was moved off the fast tier deliberately. It serves the
+# detail questions — pay, shifts, dorm, bus — that a genuinely interested
+# candidate asks, which is exactly where the turn has to both stay accurate and
+# work a phone number into the reply naturally. On the fast model that closing
+# ask landed on roughly half of those turns; the reasoning model is worth the
+# extra seconds on the route most likely to produce a lead.
+FAST_MODEL_STRATEGIES: frozenset[str] = frozenset({"template", "safe_redirect"})
 
 
 def should_use_fast_model(route: "TurnRoute") -> bool:
