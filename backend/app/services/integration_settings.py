@@ -544,8 +544,7 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
-            evict_local_namespace(NS_INTEGRATION_CUSTOM_LLM)
-            await bump_cache_version(NS_INTEGRATION_CUSTOM_LLM)
+            await self._bump_provider_namespaces(NS_INTEGRATION_CUSTOM_LLM, changed)
         return changed
 
     async def _write_setting(
@@ -747,8 +746,7 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
-            evict_local_namespace(NS_INTEGRATION_MINIMAX)
-            await bump_cache_version(NS_INTEGRATION_MINIMAX)
+            await self._bump_provider_namespaces(NS_INTEGRATION_MINIMAX, changed)
         return changed
 
     async def update_openrouter(
@@ -779,9 +777,28 @@ class IntegrationSettingsService:
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
-            evict_local_namespace(NS_INTEGRATION_OPENROUTER)
-            await bump_cache_version(NS_INTEGRATION_OPENROUTER)
+            await self._bump_provider_namespaces(NS_INTEGRATION_OPENROUTER, changed)
         return changed
+
+    async def _bump_provider_namespaces(self, primary: str, changed: list[str]) -> None:
+        """Invalidate the provider snapshots affected by an integration save.
+
+        ``llm_default_provider`` is a shared routing key cached inside EVERY
+        provider's snapshot: saving "default = custom" from the Xiaomi or
+        OpenRouter panel must also invalidate the MiniMax copy (and vice
+        versa), otherwise the routing flip stays stale until the snapshot TTL
+        expires — exactly during the quota emergency the flip is for.
+        """
+        namespaces: list[str] = [primary]
+        if LLM_DEFAULT_PROVIDER in changed:
+            namespaces = [
+                NS_INTEGRATION_MINIMAX,
+                NS_INTEGRATION_OPENROUTER,
+                NS_INTEGRATION_CUSTOM_LLM,
+            ]
+        for ns in namespaces:
+            evict_local_namespace(ns)
+            await bump_cache_version(ns)
 
     # ── Facebook / Meta (Phase 4) ───────────────────────────────────────────
 

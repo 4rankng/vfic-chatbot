@@ -385,7 +385,7 @@ def make_minimax_llm_json(
     return _call
 
 
-def _build_fast_llm(*, minimax_config, openrouter_config):
+def _build_fast_llm(*, minimax_config, openrouter_config, custom_config=None):
     """Build the optional fast-tier LLM for low-complexity intents (Phase 5).
 
     Returns ``None`` when no fast model is configured on the active provider —
@@ -394,7 +394,8 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
 
     The fast model is built directly (not via ``_chat_for_role``) because the
     role factory hard-codes the agent/safety model names. Here we explicitly use
-    ``minimax_fast_model`` / ``openrouter_fast_model`` so the tier is genuine.
+    ``minimax_fast_model`` / ``openrouter_fast_model`` / ``custom_llm_fast_model``
+    so the tier is genuine.
 
     Only the single active provider's fast model is built. Cross-provider
     failover applies to the reasoning path (see ``_build_failover_chain``); a
@@ -415,6 +416,23 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
                 timeout=s.openrouter_request_timeout,
                 api_key=openrouter_config.api_key,
                 capture_reasoning=True,
+            )
+        # The custom provider's fast model is admin-configured (env fallback),
+        # so read it off the resolved config instead of settings alone. Blank
+        # fast model inherits the agent model — one model id is enough.
+        if (
+            custom_config is not None
+            and custom_config.enabled
+            and (custom_config.fast_model or custom_config.agent_model)
+            and custom_config.api_key
+            and custom_config.base_url
+            and custom_config.default_provider == "custom"
+        ):
+            return _custom_chat(
+                custom_config.fast_model or custom_config.agent_model,
+                temperature=0.3,
+                api_key=custom_config.api_key,
+                base_url=custom_config.base_url,
             )
         return None
     except Exception:  # noqa: BLE001
@@ -632,6 +650,7 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
         fast_llm = _build_fast_llm(
             minimax_config=minimax_config,
             openrouter_config=openrouter_config,
+            custom_config=custom_config,
         )
         failover_llms = _build_failover_chain(
             minimax_config=minimax_config,

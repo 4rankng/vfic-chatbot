@@ -75,14 +75,6 @@ def _safe_probe_error(prefix: str, result: SendResult, secrets: list[str]) -> st
     return f"{prefix}: {message}"
 
 
-def _redact_secrets(message: str, secrets_to_hide: list[str]) -> str:
-    """Strip credentials out of a provider error before it reaches the browser."""
-    for secret in secrets_to_hide:
-        if secret:
-            message = message.replace(secret, "[redacted]")
-    return message if len(message) <= 240 else f"{message[:237]}..."
-
-
 def _bot_admin_client(settings_service, cfg) -> ZaloBotAdminClient:
     """Build an admin client using the resolved (DB-precedence) bot token."""
     bot_settings = settings_service.settings.model_copy(update={"zalo_bot_token": cfg.bot_token})

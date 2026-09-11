@@ -425,6 +425,7 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             pending_message_id=state.pending_message_id,
                             stage_timings=throttle_timings,
                             lock_owner=lock_owner,
+                            trace_id=state.trace_id or None,
                             decision_trace=decision_trace,
                         )
                 except Exception:  # noqa: BLE001

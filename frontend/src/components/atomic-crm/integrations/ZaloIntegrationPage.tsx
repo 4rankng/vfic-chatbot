@@ -88,7 +88,6 @@ type CustomLlmFormState = {
   custom_llm_api_key: string;
   custom_llm_base_url: string;
   custom_llm_agent_model: string;
-  custom_llm_safety_model: string;
   custom_llm_fast_model: string;
   custom_llm_label: string;
 };
@@ -156,7 +155,6 @@ const emptyCustomLlmForm: CustomLlmFormState = {
   custom_llm_api_key: "",
   custom_llm_base_url: "",
   custom_llm_agent_model: "",
-  custom_llm_safety_model: "",
   custom_llm_fast_model: "",
   custom_llm_label: "",
 };
@@ -845,7 +843,6 @@ export const ZaloIntegrationPage = () => {
     > = [
       ["custom_llm_base_url", "custom_llm_base_url"],
       ["custom_llm_agent_model", "custom_llm_agent_model"],
-      ["custom_llm_safety_model", "custom_llm_safety_model"],
       ["custom_llm_fast_model", "custom_llm_fast_model"],
       ["custom_llm_label", "custom_llm_label"],
     ];
@@ -1522,26 +1519,6 @@ export const ZaloIntegrationPage = () => {
                   onChange={(event) =>
                     setCustomLlmValue(
                       "custom_llm_agent_model",
-                      event.target.value,
-                    )
-                  }
-                />
-              </div>
-              <div className="settings-field">
-                <Label htmlFor="custom_llm_safety_model">
-                  Model kiểm duyệt (tùy chọn)
-                </Label>
-                <Input
-                  id="custom_llm_safety_model"
-                  className="settings-input"
-                  value={customLlmForm.custom_llm_safety_model}
-                  placeholder={
-                    customLlmSettings?.custom_llm_safety_model ||
-                    "Bỏ trống = dùng model chatbot"
-                  }
-                  onChange={(event) =>
-                    setCustomLlmValue(
-                      "custom_llm_safety_model",
                       event.target.value,
                     )
                   }

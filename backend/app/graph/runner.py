@@ -620,108 +620,6 @@ async def _cancel_status_task(task) -> None:
         await task
 
 
-async def _finish_terminal_reply(
-    state: BotRunState,
-    deps: GraphDeps,
-    conv,
-    svc,
-    zalo,
-    text: str,
-    started,
-    base_outcome: str,
-    *,
-    status_task=None,
-    stage_timings: dict | None = None,
-    trace_sink=None,
-):
-    """Send a terminal fallback (timeout / error) then record the outcome.
-
-    Shared by the agent-deadline and agent-error paths: refresh to read committed
-    version/mode, re-check ownership (a concurrent takeover must not be clobbered),
-    send only if still owned, and record so the per-chat mutex clears. Returns the
-    TurnOutcome dict (``base_outcome`` unless the send itself failed → ``send_failed``).
-
-    The status heartbeat is cancelled first so its typing indicator stops before
-    this terminal reply lands.
-    """
-    if status_task is not None:
-        await _cancel_status_task(status_task)
-    await deps.db.refresh(conv)
-    lock_owner = state.lock_owner or None
-    owned = await svc.claim_send(
-        conv,
-        version_at_start=state.version_at_start,
-        lock_owner=lock_owner,
-        pending_message_id=state.pending_message_id,
-        reply=text,
-        outbox_channel=_channel_for_conversation(conv),
-        outbox_payload=_build_outbox_payload(
-            _recipient_for_conversation(conv), text, state.reply_to_message_id
-        ),
-    )
-    if trace_sink is not None:
-        trace_sink.record_decision("ownership_verdict", "claimed" if owned else "suppressed")
-    decision_trace = trace_sink.snapshot_payload() if trace_sink is not None else None
-    send_result = None
-    if owned:
-        send_t0 = time.monotonic()
-        send_result = await _dispatch_claimed_message(
-            svc,
-            zalo,
-            conv,
-            message_id=state.pending_message_id,
-            text=text,
-            quote_message_id=state.reply_to_message_id,
-        )
-        if stage_timings is not None:
-            stage_timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
-        _stamp_outbound_telemetry(stage_timings, send_result)
-    _stamp_end_to_end(state, stage_timings)
-    # Classify transport errors (same conservative logic as run_turn): a timeout
-    # after the request may have reached Zalo → SEND_UNKNOWN (non-retriable), so
-    # the error-reply path cannot produce a duplicate on reconcile recovery.
-    _suppressed = bool(send_result and getattr(send_result, "suppressed", False))
-    _error_class = send_result.error_class if (send_result and not send_result.ok) else None
-    statuses = _delivery_statuses(deps)
-    _override = (
-        statuses.suppressed
-        if _suppressed
-        else _delivery_status_for_send_error(
-            _error_class,
-            ok=bool(send_result and send_result.ok),
-            send_unknown=statuses.send_unknown,
-        )
-    )
-    await svc.record_bot_outcome(
-        conv,
-        version_at_start=state.version_at_start,
-        reply=text,
-        started_at=started,
-        sent=bool(send_result and send_result.ok),
-        pending_message_id=state.pending_message_id,
-        external_error=send_result.error if send_result and not send_result.ok else None,
-        zalo_message_id=send_result.msg_id if send_result else None,
-        stage_timings=stage_timings,
-        lock_owner=lock_owner,
-        trace_id=state.trace_id or None,
-        delivery_status=_override,
-        decision_trace=decision_trace,
-        outbox_channel=_channel_for_conversation(conv),
-        outbox_payload=_build_outbox_payload(
-            _recipient_for_conversation(conv), text, state.reply_to_message_id
-        ),
-    )
-    if _suppressed:
-        outcome = "suppressed"
-    elif send_result is None or send_result.ok:
-        outcome = base_outcome
-    elif _override is not None and _override.value == "SEND_UNKNOWN":
-        outcome = "send_unknown"
-    else:
-        outcome = "send_failed"
-    return {"outcome": outcome, "reply": text}
-
-
 async def _record_silent_terminal(
     state: BotRunState,
     deps: GraphDeps,
@@ -736,7 +634,7 @@ async def _record_silent_terminal(
 ):
     """Record a turn that produced no reply — and send nothing to the customer.
 
-    The silent twin of ``_finish_terminal_reply``: when the bot cannot produce
+    The silent terminal path: when the bot cannot produce
     an answer (agent crash, exhausted provider chain), an error text would read
     as a broken bot and leak internals, so the turn goes quiet. The outcome is
     SUPPRESSED so the per-chat mutex clears and the dashboard keeps the

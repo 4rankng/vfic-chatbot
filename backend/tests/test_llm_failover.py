@@ -114,3 +114,126 @@ async def test_healthy_primary_never_touches_the_spare():
     assert result == "primary"
     assert backoff_ms == 0
     assert spare.calls == 0
+
+
+# ── Failover-chain construction (factories) ─────────────────────────────────
+
+
+class _RecordingBuilders:
+    """Stub the three provider builders so no real client is constructed."""
+
+    def __init__(self, monkeypatch):
+        from app.graph import factories
+
+        self.built: list[str] = []
+        monkeypatch.setattr(
+            factories,
+            "_minimax_chat",
+            lambda model, *, temperature, api_key, **_: self.built.append(
+                f"minimax:{model}"
+            )
+            or object(),
+        )
+        monkeypatch.setattr(
+            factories,
+            "_openrouter_chat",
+            lambda model, *, temperature, **_: self.built.append(
+                f"openrouter:{model}"
+            )
+            or object(),
+        )
+        monkeypatch.setattr(
+            factories,
+            "_custom_chat",
+            lambda model, *, temperature, api_key, base_url, **_: self.built.append(
+                f"custom:{model}"
+            )
+            or object(),
+        )
+
+
+def _configs(default_provider: str):
+    from app.services.integration_settings import (
+        CustomLlmRuntimeConfig,
+        MinimaxRuntimeConfig,
+        OpenRouterRuntimeConfig,
+    )
+
+    minimax = MinimaxRuntimeConfig(
+        enabled=True, api_key="mm-key", agent_model="mm-agent", default_provider=default_provider
+    )
+    openrouter = OpenRouterRuntimeConfig(
+        enabled=True,
+        api_key="or-key",
+        agent_model="or-agent",
+        default_provider=default_provider,
+    )
+    custom = CustomLlmRuntimeConfig(
+        enabled=True,
+        api_key="cu-key",
+        base_url="https://custom.example/v1",
+        agent_model="cu-agent",
+        default_provider=default_provider,
+    )
+    return minimax, openrouter, custom
+
+
+def test_failover_chain_excludes_the_active_provider(monkeypatch):
+    """The active provider must never be its own spare: retrying a quota-dead
+    provider against itself burns the turn deadline for nothing."""
+    from app.graph.factories import _build_failover_chain
+
+    rec = _RecordingBuilders(monkeypatch)
+    minimax, openrouter, custom = _configs(default_provider="custom")
+
+    chain = _build_failover_chain(
+        minimax_config=minimax,
+        openrouter_config=openrouter,
+        custom_config=custom,
+    )
+
+    assert len(chain) == 2
+    assert rec.built == ["minimax:mm-agent", "openrouter:or-agent"]
+
+
+def test_failover_chain_walks_the_other_providers_in_deterministic_order(monkeypatch):
+    from app.graph.factories import _build_failover_chain
+
+    rec = _RecordingBuilders(monkeypatch)
+    minimax, openrouter, custom = _configs(default_provider="minimax")
+
+    chain = _build_failover_chain(
+        minimax_config=minimax,
+        openrouter_config=openrouter,
+        custom_config=custom,
+    )
+
+    assert rec.built == ["openrouter:or-agent", "custom:cu-agent"]
+def test_failover_chain_skips_a_disabled_spare(monkeypatch):
+    """A spare without enabled+credential must not join the chain."""
+    from app.graph.factories import _build_failover_chain
+    from app.services.integration_settings import (
+        CustomLlmRuntimeConfig,
+        MinimaxRuntimeConfig,
+        OpenRouterRuntimeConfig,
+    )
+
+    rec = _RecordingBuilders(monkeypatch)
+
+    chain = _build_failover_chain(
+        minimax_config=MinimaxRuntimeConfig(
+            enabled=True, api_key="mm-key", agent_model="mm-agent", default_provider="minimax"
+        ),
+        openrouter_config=OpenRouterRuntimeConfig(
+            enabled=False, api_key="", agent_model="or-agent", default_provider="minimax"
+        ),
+        custom_config=CustomLlmRuntimeConfig(
+            enabled=True,
+            api_key="cu-key",
+            base_url="https://custom.example/v1",
+            agent_model="cu-agent",
+            default_provider="minimax",
+        ),
+    )
+
+    assert rec.built == ["custom:cu-agent"]
