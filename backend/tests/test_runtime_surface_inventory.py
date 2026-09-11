@@ -44,7 +44,7 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 2,
     "conversations": 19,
     "dashboard": 2,
-    "integrations": 25,  # Phase 4: +7 Facebook OAuth lifecycle endpoints
+    "integrations": 28,  # +3 custom OpenAI-compatible provider endpoints (settings page)
     # +2 Meta App credentials UI; +4 multi-Page per-Page project CRUD
     # +1 admin-only credentials reveal (audited, no-store)
     "installation": 8,
@@ -59,21 +59,23 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "891188abdecea272ad1ad9df6773ae415c8a64b90feb568b02009585f3d73d66"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "a12058bb5af8988ac26dd7917668e5f89efa169ad07e790dec8e592435bfb225"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
     "outbox_boundary": 10,
     # +2 for the Messenger User Profile API lookup (the Graph GET in
     # facebook_oauth.get_user_profile and the worker that calls it).
-    "provider_boundary": 100,
+    # +7: the custom OpenAI-compatible probe + admin settings path; -2: the
+    # degradation send left chatbot_worker (a suppressed turn sends nothing).
+    "provider_boundary": 107,
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
     # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
     # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
     "queue_producer": 40,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "931eaba8ab74b01923f245bf1439580e4b856b77e4d9ae1e8b49c80f2eff50ea"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "825e401c5e37bc9144bae4b47637cf92103ce15bd92bc46febcb373acdf08371"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

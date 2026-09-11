@@ -558,6 +558,7 @@ async def test_build_deps_cache_invalidates_on_version_change(monkeypatch):
     versions = {
         "integration_minimax": "1",
         "integration_openrouter": "1",
+        "integration_custom_llm": "1",
         "integration_zalo": "1",
     }
 
@@ -568,12 +569,12 @@ async def test_build_deps_cache_invalidates_on_version_change(monkeypatch):
 
     await factories.build_deps(object())
     assert len(factories._client_cache) == 1
-    assert "mm:1|or:1" in factories._client_cache
+    assert "mm:1|or:1|fb:1" in factories._client_cache
 
     # A minimax bump (admin edited the agent model / key) invalidates.
     versions["integration_minimax"] = "2"
     await factories.build_deps(object())
-    assert "mm:2|or:1" in factories._client_cache
+    assert "mm:2|or:1|fb:1" in factories._client_cache
 
     reset_client_cache()
 
@@ -609,6 +610,7 @@ async def test_build_deps_cache_survives_zalo_version_change(monkeypatch):
     versions = {
         "integration_minimax": "1",
         "integration_openrouter": "1",
+        "integration_custom_llm": "1",
         "integration_zalo": "1",
     }
 
@@ -618,13 +620,13 @@ async def test_build_deps_cache_survives_zalo_version_change(monkeypatch):
     monkeypatch.setattr("app.core.cache.cache_version", _fake_cache_version)
 
     await factories.build_deps(object())
-    assert "mm:1|or:1" in factories._client_cache
+    assert "mm:1|or:1|fb:1" in factories._client_cache
     assert builds["n"] == 1  # agent built once
 
     # Only the zalo namespace bumps (OA token refresh). The cache MUST NOT rebuild.
     versions["integration_zalo"] = "2"
     await factories.build_deps(object())
-    assert "mm:1|or:1" in factories._client_cache  # same key, still cached
+    assert "mm:1|or:1|fb:1" in factories._client_cache  # same key, still cached
     assert builds["n"] == 1  # no additional LLM client construction
 
     reset_client_cache()

@@ -22,7 +22,6 @@ from app.graph.message_values import delivery_is, sender_is
 from app.graph.ports import SendOutcome
 from app.graph.safety import (
     fast_safety_filter,
-    retry_exhausted_fallback,
 )
 from app.graph.types import GraphDeps, TurnOutcome, _now, _speaker
 from app.recruitment.application.ports import ProactiveStatePort
@@ -441,7 +440,6 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     except Exception as exc:
         logger.warning("proactive turn error: conversation=%s error=%s", conv.zalo_chat_id, exc)
         result = SendOutcome(ok=False, error=str(exc))
-        candidate = candidate or retry_exhausted_fallback("")
 
     # 11. Persist (always — clears lock, records SENT/FAILED message,
     #     handles cadence count)

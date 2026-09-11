@@ -41,6 +41,8 @@ import {
 } from "@/components/ui/sheet";
 import {
   zaloIntegrationGateway,
+  type CustomLlmSettings,
+  type CustomLlmTestResult,
   type IntegrationConfigTestResult,
   type LlmProvider,
   type MinimaxSettings,
@@ -82,9 +84,29 @@ type OpenRouterFormState = {
   openrouter_api_key: string;
 };
 
+type CustomLlmFormState = {
+  custom_llm_api_key: string;
+  custom_llm_base_url: string;
+  custom_llm_agent_model: string;
+  custom_llm_safety_model: string;
+  custom_llm_fast_model: string;
+  custom_llm_label: string;
+};
+
 type MinimaxUpdatePayload = {
   minimax_api_key?: string;
   minimax_enable?: boolean;
+  llm_default_provider?: LlmProvider;
+};
+
+type CustomLlmUpdatePayload = {
+  custom_llm_api_key?: string;
+  custom_llm_base_url?: string;
+  custom_llm_agent_model?: string;
+  custom_llm_safety_model?: string;
+  custom_llm_fast_model?: string;
+  custom_llm_label?: string;
+  custom_llm_enable?: boolean;
   llm_default_provider?: LlmProvider;
 };
 
@@ -117,6 +139,9 @@ const ZALO_TEST_FIELD_LABELS: Record<string, string> = {
 const INTEGRATION_TEST_FIELD_LABELS: Record<string, string> = {
   minimax_api_key: "Access Token",
   openrouter_api_key: "Access Token",
+  custom_llm_api_key: "Access Token",
+  custom_llm_base_url: "Base URL",
+  custom_llm_agent_model: "Model chatbot",
 };
 
 const emptyMinimaxForm: MinimaxFormState = {
@@ -126,6 +151,24 @@ const emptyMinimaxForm: MinimaxFormState = {
 const emptyOpenRouterForm: OpenRouterFormState = {
   openrouter_api_key: "",
 };
+
+const emptyCustomLlmForm: CustomLlmFormState = {
+  custom_llm_api_key: "",
+  custom_llm_base_url: "",
+  custom_llm_agent_model: "",
+  custom_llm_safety_model: "",
+  custom_llm_fast_model: "",
+  custom_llm_label: "",
+};
+
+// Deterministic failover order (also the default-provider pick order when a
+// default is disabled): the operator chooses WHERE a turn starts; quota or
+// rate-limit exhaustion walks the rest of the enabled providers in this order.
+const LLM_PROVIDER_ORDER: readonly LlmProvider[] = [
+  "minimax",
+  "openrouter",
+  "custom",
+];
 
 const OPENROUTER_MODEL_OPTIONS = [
   "deepseek/deepseek-v4-flash",
@@ -138,6 +181,7 @@ type SettingsItemId =
   | "settings-facebook-messenger"
   | "settings-minimax"
   | "settings-openrouter"
+  | "settings-custom-llm"
   | "settings-agents"
   | "settings-users";
 
@@ -201,6 +245,13 @@ const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     mode: "integrations",
   },
   {
+    itemId: "settings-custom-llm",
+    label: "Xiaomi",
+    description: "Model dự phòng OpenAI-compatible",
+    Icon: Cpu,
+    mode: "integrations",
+  },
+  {
     itemId: "settings-agents",
     label: "Agents",
     description: "Giọng trả lời",
@@ -239,6 +290,11 @@ const SETTINGS_VIEW_COPY: Record<
     kicker: "Model dự phòng",
     title: "OpenRouter",
     description: "Fallback và embeddings khi model chính gián đoạn.",
+  },
+  "settings-custom-llm": {
+    kicker: "Model dự phòng",
+    title: "Xiaomi",
+    description: "Endpoint OpenAI-compatible: dùng khi model chính hết quota.",
   },
   "settings-agents": {
     kicker: "Không gian cài đặt",
@@ -334,6 +390,35 @@ const OpenRouterSecretInput = ({
     statusState={statusState}
     value={value}
     placeholder="Dán token OpenRouter"
+    onValueChange={(nextValue) => onChange(id, nextValue)}
+    notify={notify}
+  />
+);
+
+const CustomLlmSecretInput = ({
+  id,
+  label,
+  status,
+  statusState,
+  value,
+  onChange,
+  notify,
+}: {
+  id: keyof CustomLlmFormState;
+  label: string;
+  status: SecretStatus;
+  statusState?: SettingsStatusState;
+  value: string;
+  onChange: (key: keyof CustomLlmFormState, value: string) => void;
+  notify: CredentialFieldNotify;
+}) => (
+  <CredentialSecretField
+    id={id}
+    label={label}
+    status={status}
+    statusState={statusState}
+    value={value}
+    placeholder="Dán token Xiaomi"
     onValueChange={(nextValue) => onChange(id, nextValue)}
     notify={notify}
   />
@@ -617,6 +702,8 @@ export const ZaloIntegrationPage = () => {
     useState<MinimaxSettings | null>(null);
   const [openRouterSettings, setOpenRouterSettings] =
     useState<OpenRouterSettings | null>(null);
+  const [customLlmSettings, setCustomLlmSettings] =
+    useState<CustomLlmSettings | null>(null);
   const [settingsStatusState, setSettingsStatusState] =
     useState<SettingsStatusState>("loading");
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -624,8 +711,11 @@ export const ZaloIntegrationPage = () => {
     useState<MinimaxFormState>(emptyMinimaxForm);
   const [openRouterForm, setOpenRouterForm] =
     useState<OpenRouterFormState>(emptyOpenRouterForm);
+  const [customLlmForm, setCustomLlmForm] =
+    useState<CustomLlmFormState>(emptyCustomLlmForm);
   const [minimaxEnabled, setMinimaxEnabled] = useState(true);
   const [openRouterEnabled, setOpenRouterEnabled] = useState(false);
+  const [customLlmEnabled, setCustomLlmEnabled] = useState(false);
   const [llmDefaultProvider, setLlmDefaultProvider] =
     useState<LlmProvider>("minimax");
   const [openRouterModel, setOpenRouterModel] = useState(
@@ -638,6 +728,7 @@ export const ZaloIntegrationPage = () => {
   const [testingOa, setTestingOa] = useState(false);
   const [testingMinimax, setTestingMinimax] = useState(false);
   const [testingOpenRouter, setTestingOpenRouter] = useState(false);
+  const [testingCustomLlm, setTestingCustomLlm] = useState(false);
   const handleCopy = useCallback(
     (label: string, value: string) =>
       copyCredentialFieldValue(label, value, notify as CredentialFieldNotify),
@@ -651,20 +742,24 @@ export const ZaloIntegrationPage = () => {
         zalo: data,
         minimax: minimaxData,
         openRouter: openRouterData,
+        customLlm: customLlmData,
       } = await zaloIntegrationGateway.loadSettingsBundle();
       setSettings(data);
       setMinimaxSettings(minimaxData);
       setOpenRouterSettings(openRouterData);
+      setCustomLlmSettings(customLlmData);
       setForm((current) => ({
         ...current,
         zalo_oa_app_id: data.zalo_oa_app_id.value ?? "",
       }));
       setMinimaxEnabled(minimaxData.minimax_enable);
       setOpenRouterEnabled(openRouterData.openrouter_enable);
-      setLlmDefaultProvider(openRouterData.llm_default_provider);
+      setCustomLlmEnabled(customLlmData.custom_llm_enable);
+      setLlmDefaultProvider(customLlmData.llm_default_provider);
       setOpenRouterModel(openRouterData.openrouter_agent_model);
       setMinimaxForm(emptyMinimaxForm);
       setOpenRouterForm(emptyOpenRouterForm);
+      setCustomLlmForm(emptyCustomLlmForm);
       setSettingsStatusState("ready");
     } catch {
       setSettingsStatusState("error");
@@ -741,6 +836,47 @@ export const ZaloIntegrationPage = () => {
     openRouterSettings,
   ]);
 
+  const changedCustomLlmPayload = useMemo(() => {
+    const payload: CustomLlmUpdatePayload = {};
+    const apiKey = customLlmForm.custom_llm_api_key.trim();
+    if (apiKey) payload.custom_llm_api_key = apiKey;
+    const textFields: Array<
+      [key: keyof CustomLlmSettings, formKey: keyof CustomLlmFormState]
+    > = [
+      ["custom_llm_base_url", "custom_llm_base_url"],
+      ["custom_llm_agent_model", "custom_llm_agent_model"],
+      ["custom_llm_safety_model", "custom_llm_safety_model"],
+      ["custom_llm_fast_model", "custom_llm_fast_model"],
+      ["custom_llm_label", "custom_llm_label"],
+    ];
+    for (const [key, formKey] of textFields) {
+      const trimmed = customLlmForm[formKey].trim();
+      if (trimmed && customLlmSettings && trimmed !== customLlmSettings[key]) {
+        payload[formKey] = trimmed;
+      }
+    }
+    if (
+      customLlmSettings &&
+      customLlmEnabled !== customLlmSettings.custom_llm_enable
+    ) {
+      payload.custom_llm_enable = customLlmEnabled;
+    }
+    if (
+      activeItemId === "settings-custom-llm" &&
+      customLlmSettings &&
+      llmDefaultProvider !== customLlmSettings.llm_default_provider
+    ) {
+      payload.llm_default_provider = llmDefaultProvider;
+    }
+    return payload;
+  }, [
+    activeItemId,
+    customLlmForm,
+    customLlmEnabled,
+    llmDefaultProvider,
+    customLlmSettings,
+  ]);
+
   const setValue = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
@@ -756,13 +892,19 @@ export const ZaloIntegrationPage = () => {
     setOpenRouterForm((current) => ({ ...current, [key]: value }));
   };
 
+  const setCustomLlmValue = (key: keyof CustomLlmFormState, value: string) => {
+    setCustomLlmForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const providerEnabled = (provider: LlmProvider): boolean => {
+    if (provider === "minimax") return minimaxEnabled;
+    if (provider === "openrouter") return openRouterEnabled;
+    return customLlmEnabled;
+  };
+
   const chooseDefaultProvider = (provider: LlmProvider) => {
-    if (provider === "minimax" && minimaxEnabled) {
-      setLlmDefaultProvider("minimax");
-      return;
-    }
-    if (provider === "openrouter" && openRouterEnabled) {
-      setLlmDefaultProvider("openrouter");
+    if (providerEnabled(provider)) {
+      setLlmDefaultProvider(provider);
     }
   };
 
@@ -771,26 +913,34 @@ export const ZaloIntegrationPage = () => {
       chooseDefaultProvider(provider);
       return;
     }
-    chooseDefaultProvider(provider === "minimax" ? "openrouter" : "minimax");
-  };
-
-  const handleMinimaxEnabledChange = (checked: boolean) => {
-    setMinimaxEnabled(checked);
-    if (!checked && llmDefaultProvider === "minimax" && openRouterEnabled) {
-      setLlmDefaultProvider("openrouter");
-    }
-    if (checked && !openRouterEnabled) {
-      setLlmDefaultProvider("minimax");
+    // Unchecking a default switch moves the default to the first OTHER enabled
+    // provider; the switch is disabled when no other provider is enabled.
+    const next = LLM_PROVIDER_ORDER.find(
+      (candidate) => candidate !== provider && providerEnabled(candidate),
+    );
+    if (next) {
+      setLlmDefaultProvider(next);
     }
   };
 
-  const handleOpenRouterEnabledChange = (checked: boolean) => {
-    setOpenRouterEnabled(checked);
-    if (!checked && llmDefaultProvider === "openrouter" && minimaxEnabled) {
-      setLlmDefaultProvider("minimax");
+  const handleProviderEnabledChange = (
+    provider: LlmProvider,
+    checked: boolean,
+  ) => {
+    if (provider === "minimax") setMinimaxEnabled(checked);
+    else if (provider === "openrouter") setOpenRouterEnabled(checked);
+    else setCustomLlmEnabled(checked);
+
+    const otherEnabled = LLM_PROVIDER_ORDER.filter(
+      (candidate) => candidate !== provider && providerEnabled(candidate),
+    );
+    // Disabling the default hands it to the first other enabled provider;
+    // enabling the ONLY enabled provider makes it the default.
+    if (!checked && llmDefaultProvider === provider && otherEnabled.length > 0) {
+      setLlmDefaultProvider(otherEnabled[0]);
     }
-    if (checked && !minimaxEnabled) {
-      setLlmDefaultProvider("openrouter");
+    if (checked && otherEnabled.length === 0) {
+      setLlmDefaultProvider(provider);
     }
   };
 
@@ -951,6 +1101,60 @@ export const ZaloIntegrationPage = () => {
       saveOpenRouterChanges,
     );
 
+  const saveCustomLlmChanges = async () => {
+    if (Object.keys(changedCustomLlmPayload).length === 0)
+      return customLlmSettings;
+
+    const nextCustomLlm = await zaloIntegrationGateway.saveCustomLlmSettings(
+      changedCustomLlmPayload,
+    );
+    setCustomLlmSettings(nextCustomLlm);
+    setCustomLlmForm(emptyCustomLlmForm);
+    setCustomLlmEnabled(nextCustomLlm.custom_llm_enable);
+    setLlmDefaultProvider(nextCustomLlm.llm_default_provider);
+    return nextCustomLlm;
+  };
+
+  const testCustomLlmConnection = async () => {
+    setTestingCustomLlm(true);
+    try {
+      await saveCustomLlmChanges();
+      // The probe endpoint accepts unsaved credentials too — send whatever is
+      // typed so the operator can validate BEFORE saving. Anything blank falls
+      // back to the stored configuration server-side.
+      const body = Object.fromEntries(
+        (
+          [
+            ["custom_llm_api_key", customLlmForm.custom_llm_api_key],
+            ["custom_llm_base_url", customLlmForm.custom_llm_base_url],
+            ["custom_llm_agent_model", customLlmForm.custom_llm_agent_model],
+          ] as const
+        )
+          .map(([key, raw]) => [key, raw.trim()] as const)
+          .filter(([, value]) => value !== ""),
+      );
+      const result: CustomLlmTestResult =
+        await zaloIntegrationGateway.testCustomLlmConnection(body);
+      if (result.ok) {
+        notify(
+          `Kết nối Xiaomi thành công (${result.latency_ms ?? "?"}ms)`,
+          { type: "success" },
+        );
+        return;
+      }
+      if (!result.configured && result.missing.length > 0) {
+        const missing = result.missing
+          .map((key) => INTEGRATION_TEST_FIELD_LABELS[key] ?? key)
+          .join(", ");
+        notify(`Thiếu cấu hình Xiaomi: ${missing}`, { type: "warning" });
+        return;
+      }
+      notify(result.error || "Không kết nối được Xiaomi", { type: "error" });
+    } finally {
+      setTestingCustomLlm(false);
+    }
+  };
+
   const activeItem =
     SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
     SETTINGS_NAV_ITEMS[0];
@@ -972,6 +1176,7 @@ export const ZaloIntegrationPage = () => {
   const openRouterConfigured = openRouterSettings?.openrouter_api_key.configured
     ? 1
     : 0;
+  const customLlmConfigured = customLlmSettings?.custom_llm_usable ? 1 : 0;
 
   const selectSettingsItem = (itemId: SettingsItemId) => {
     setActiveItemId(itemId);
@@ -1201,13 +1406,15 @@ export const ZaloIntegrationPage = () => {
                 id="minimax_enable"
                 label={minimaxEnabled ? "Bật" : "Tắt"}
                 checked={minimaxEnabled}
-                onCheckedChange={handleMinimaxEnabledChange}
+                onCheckedChange={(checked) =>
+                  handleProviderEnabledChange("minimax", checked)
+                }
               />
               <DefaultProviderSwitch
                 provider="minimax"
                 enabled={minimaxEnabled}
                 checked={llmDefaultProvider === "minimax"}
-                otherEnabled={openRouterEnabled}
+                otherEnabled={openRouterEnabled || customLlmEnabled}
                 onCheckedChange={toggleDefaultProvider}
               />
               <div className="settings-readonly-field">
@@ -1243,6 +1450,154 @@ export const ZaloIntegrationPage = () => {
       );
     }
 
+    if (activeItemId === "settings-custom-llm") {
+      return (
+        <SettingsSectionPanel id="settings-custom-llm">
+          <div className="settings-grid settings-grid-models">
+            <SettingsGroup
+              title={customLlmSettings?.custom_llm_label?.trim() || "Xiaomi"}
+              icon={<Cpu className="size-4" />}
+              meta={
+                <SettingsGroupStatus
+                  configured={customLlmConfigured}
+                  total={1}
+                  disabled={!customLlmEnabled}
+                  state={settingsStatusState}
+                />
+              }
+            >
+              <ProviderSwitchField
+                id="custom_llm_enable"
+                label={customLlmEnabled ? "Bật" : "Tắt"}
+                checked={customLlmEnabled}
+                onCheckedChange={(checked) =>
+                  handleProviderEnabledChange("custom", checked)
+                }
+              />
+              <DefaultProviderSwitch
+                provider="custom"
+                enabled={customLlmEnabled}
+                checked={llmDefaultProvider === "custom"}
+                otherEnabled={
+                  minimaxEnabled || openRouterEnabled
+                }
+                onCheckedChange={toggleDefaultProvider}
+              />
+              <div className="settings-field">
+                <Label htmlFor="custom_llm_label">Tên hiển thị</Label>
+                <Input
+                  id="custom_llm_label"
+                  className="settings-input"
+                  value={customLlmForm.custom_llm_label}
+                  placeholder={
+                    customLlmSettings?.custom_llm_label || "Dự phòng"
+                  }
+                  onChange={(event) =>
+                    setCustomLlmValue("custom_llm_label", event.target.value)
+                  }
+                />
+              </div>
+              <div className="settings-field">
+                <Label htmlFor="custom_llm_base_url">Base URL</Label>
+                <Input
+                  id="custom_llm_base_url"
+                  className="settings-input"
+                  value={customLlmForm.custom_llm_base_url}
+                  placeholder={
+                    customLlmSettings?.custom_llm_base_url ||
+                    "https://api.xiaomi.example/v1"
+                  }
+                  onChange={(event) =>
+                    setCustomLlmValue("custom_llm_base_url", event.target.value)
+                  }
+                />
+              </div>
+              <div className="settings-field">
+                <Label htmlFor="custom_llm_agent_model">Model chatbot</Label>
+                <Input
+                  id="custom_llm_agent_model"
+                  className="settings-input"
+                  value={customLlmForm.custom_llm_agent_model}
+                  placeholder={customLlmSettings?.custom_llm_agent_model || "mimo-7b"}
+                  onChange={(event) =>
+                    setCustomLlmValue(
+                      "custom_llm_agent_model",
+                      event.target.value,
+                    )
+                  }
+                />
+              </div>
+              <div className="settings-field">
+                <Label htmlFor="custom_llm_safety_model">
+                  Model kiểm duyệt (tùy chọn)
+                </Label>
+                <Input
+                  id="custom_llm_safety_model"
+                  className="settings-input"
+                  value={customLlmForm.custom_llm_safety_model}
+                  placeholder={
+                    customLlmSettings?.custom_llm_safety_model ||
+                    "Bỏ trống = dùng model chatbot"
+                  }
+                  onChange={(event) =>
+                    setCustomLlmValue(
+                      "custom_llm_safety_model",
+                      event.target.value,
+                    )
+                  }
+                />
+              </div>
+              <div className="settings-field">
+                <Label htmlFor="custom_llm_fast_model">
+                  Model nhanh (tùy chọn)
+                </Label>
+                <Input
+                  id="custom_llm_fast_model"
+                  className="settings-input"
+                  value={customLlmForm.custom_llm_fast_model}
+                  placeholder={
+                    customLlmSettings?.custom_llm_fast_model ||
+                    "Bỏ trống = dùng model chatbot"
+                  }
+                  onChange={(event) =>
+                    setCustomLlmValue(
+                      "custom_llm_fast_model",
+                      event.target.value,
+                    )
+                  }
+                />
+              </div>
+              <CustomLlmSecretInput
+                id="custom_llm_api_key"
+                label="Access Token"
+                status={
+                  customLlmSettings?.custom_llm_api_key ?? { configured: false }
+                }
+                statusState={settingsStatusState}
+                value={customLlmForm.custom_llm_api_key}
+                onChange={setCustomLlmValue}
+                notify={notify as CredentialFieldNotify}
+              />
+              <div className="settings-oa-actions">
+                <Button
+                  type="button"
+                  className="settings-test-button settings-primary-action tt-btn-touch"
+                  onClick={() => {
+                    void testCustomLlmConnection();
+                  }}
+                  disabled={testingCustomLlm || !customLlmSettings}
+                  aria-busy={testingCustomLlm}
+                >
+                  <Wifi className="size-4" />
+                  {testingCustomLlm ? "Đang kiểm tra" : "Lưu & kiểm tra"}
+                </Button>
+              </div>
+            </SettingsGroup>
+          </div>
+        </SettingsSectionPanel>
+      );
+    }
+
     return (
       <SettingsSectionPanel id="settings-openrouter">
         <div className="settings-grid settings-grid-models">
@@ -1262,13 +1617,15 @@ export const ZaloIntegrationPage = () => {
               id="openrouter_enable"
               label={openRouterEnabled ? "Bật" : "Tắt"}
               checked={openRouterEnabled}
-              onCheckedChange={handleOpenRouterEnabledChange}
+              onCheckedChange={(checked) =>
+                handleProviderEnabledChange("openrouter", checked)
+              }
             />
             <DefaultProviderSwitch
               provider="openrouter"
               enabled={openRouterEnabled}
               checked={llmDefaultProvider === "openrouter"}
-              otherEnabled={minimaxEnabled}
+              otherEnabled={minimaxEnabled || customLlmEnabled}
               onCheckedChange={toggleDefaultProvider}
             />
             <div className="settings-field">

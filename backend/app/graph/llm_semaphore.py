@@ -94,7 +94,7 @@ class RedisLlmSemaphore:
             r = get_redis_sync()
             # BLPOP blocks up to the acquire timeout. On timeout we fail FAST
             # (raise LLMThrottled) rather than proceeding degraded: the worker
-            # already sends DEGRADATION_REPLY + clears the per-chat mutex on
+            # already suppresses the turn + clears the per-chat mutex on
             # LLMThrottled, and a degraded parallel call would only compound the
             # overload that caused the timeout.
             result = await asyncio.get_event_loop().run_in_executor(

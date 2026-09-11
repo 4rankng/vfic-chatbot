@@ -23,7 +23,7 @@ export type ZaloSettings = {
   zalo_oa_webhook_signature: ZaloOaSignatureHealth | null;
 };
 
-export type LlmProvider = "minimax" | "openrouter";
+export type LlmProvider = "minimax" | "openrouter" | "custom";
 
 export type MinimaxSettings = {
   minimax_api_key: SecretStatus;
@@ -42,6 +42,30 @@ export type OpenRouterSettings = {
   openrouter_digest_model: string;
   openrouter_enable: boolean;
   llm_default_provider: LlmProvider;
+};
+
+export type CustomLlmSettings = {
+  custom_llm_api_key: SecretStatus;
+  custom_llm_base_url: string;
+  custom_llm_agent_model: string;
+  custom_llm_safety_model: string;
+  custom_llm_fast_model: string;
+  custom_llm_label: string;
+  custom_llm_enable: boolean;
+  /** True only when enabled AND key + base URL + agent model are all present. */
+  custom_llm_usable: boolean;
+  llm_default_provider: LlmProvider;
+};
+
+export type CustomLlmTestResult = {
+  ok: boolean;
+  configured: boolean;
+  missing: string[];
+  /** Round-trip latency and a short reply echo — a green result is evidence
+   * the endpoint actually answered, not merely accepted TCP. */
+  latency_ms: number | null;
+  sample: string | null;
+  error: string | null;
 };
 
 export type ZaloChannelTestResult = {
@@ -139,13 +163,15 @@ export const zaloIntegrationGateway = {
     zalo: ZaloSettings;
     minimax: MinimaxSettings;
     openRouter: OpenRouterSettings;
+    customLlm: CustomLlmSettings;
   }> => {
-    const [zalo, minimax, openRouter] = await Promise.all([
+    const [zalo, minimax, openRouter, customLlm] = await Promise.all([
       apiJson<ZaloSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/zalo`),
       apiJson<MinimaxSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/minimax`),
       apiJson<OpenRouterSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/openrouter`),
+      apiJson<CustomLlmSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/custom-llm`),
     ]);
-    return { zalo, minimax, openRouter };
+    return { zalo, minimax, openRouter, customLlm };
   },
 
   saveZaloSettings: async (
@@ -205,6 +231,35 @@ export const zaloIntegrationGateway = {
     apiJson<IntegrationConfigTestResult>(
       `${ADMIN_INTEGRATIONS_BASE_PATH}/openrouter/test`,
       { method: "POST" },
+    ),
+
+  saveCustomLlmSettings: async (
+    body: Partial<{
+      custom_llm_api_key: string;
+      custom_llm_base_url: string;
+      custom_llm_agent_model: string;
+      custom_llm_safety_model: string;
+      custom_llm_fast_model: string;
+      custom_llm_label: string;
+      custom_llm_enable: boolean;
+      llm_default_provider: LlmProvider;
+    }>,
+  ): Promise<CustomLlmSettings> =>
+    apiJson<CustomLlmSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/custom-llm`, {
+      method: "PUT",
+      body,
+    }),
+
+  testCustomLlmConnection: async (
+    body?: Partial<{
+      custom_llm_api_key: string;
+      custom_llm_base_url: string;
+      custom_llm_agent_model: string;
+    }>,
+  ): Promise<CustomLlmTestResult> =>
+    apiJson<CustomLlmTestResult>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/custom-llm/test`,
+      { method: "POST", body: body ?? {} },
     ),
 } as const;
 

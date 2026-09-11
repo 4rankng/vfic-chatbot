@@ -28,13 +28,9 @@ from app.graph import runner
 from app.graph.direct_context import DirectContext, ProjectTurnContext
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.ports import ReplyPolicyResult
-from app.graph.prompts import ERROR_REPLY
+from app.models.conversation import DeliveryStatus
 from app.graph.runner import run_turn
-from app.graph.safety import (
-    DeterministicReplyPolicy,
-    FALLBACK_REPLY,
-    retry_exhausted_fallback,
-)
+from app.graph.safety import DeterministicReplyPolicy
 from app.graph.types import BotRunState, GraphDeps
 
 CONV_ID = "00000000-0000-0000-0000-000000000001"
@@ -383,10 +379,11 @@ async def test_direct_context_malformed_think_never_reaches_delivery():
         deps,
     )
 
-    visible_reply = retry_exhausted_fallback("Công việc ở Rorze làm gì?")
-    assert result == {"outcome": "direct_context", "reply": visible_reply}
-    assert zalo.sent == [("z1", visible_reply)]
-    assert recorded[-1]["reply"] == visible_reply
+    # The reply cleaned to nothing (reasoning-only output) → the turn stays
+    # silent: nothing sent, SUPPRESSED audit row.
+    assert result == {"outcome": "suppressed", "reply": ""}
+    assert zalo.sent == []
+    assert recorded[-1]["reply"] == ""
 
 
 @pytest.mark.asyncio
@@ -981,21 +978,27 @@ async def test_zalo_connect_error_stays_retryable_failed(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_agent_exception_falls_back_to_error_reply(monkeypatch):
+async def test_agent_exception_stays_silent(monkeypatch):
+    """An agent crash keeps quiet: nothing is sent, the turn is SUPPRESSED.
+
+    An "internal error" text is an engineer-facing detail — the candidate sees
+    nothing, the failure lives in the structured log, and the audit row records
+    the suppressed outcome so the per-chat mutex still clears.
+    """
     conv = _FakeConv()
-    svc, _ = _stub_svc(conv=conv, owned=True)
+    svc, recorded = _stub_svc(conv=conv, owned=True)
     _stub_agent(monkeypatch, ValueError("agent blew up"))
     zalo = _FakeZalo()
 
     res = await run_turn(_state(), _deps(zalo, conversation=svc))
 
-    # The graceful-fallback reply is always ERROR_REPLY...
-    assert res["reply"] == ERROR_REPLY
-    assert zalo.sent and zalo.sent[0][1] == ERROR_REPLY
-    # ...and current behavior labels a *successfully delivered* fallback as
-    # outcome "error" (the pipeline distinguishes only send_failed separately).
-    # Pinned here so a refactor does not silently change the mapping.
+    assert zalo.sent == []  # nothing goes to the customer
+    assert res["reply"] == ""
+    # Pinned here so a refactor does not silently change the mapping: the turn
+    # keeps the "error" outcome label even though nothing was sent.
     assert res["outcome"] == "error"
+    assert recorded and recorded[0]["reply"] == ""
+    assert recorded[0]["sent"] is False
 
 
 @pytest.mark.asyncio
@@ -1009,16 +1012,14 @@ async def test_llm_throttle_propagates_uncaught(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_flagged_reply_redirects_to_fallback_without_llm_judge(monkeypatch):
-    """A reply the fast filter flags (genuine protocol leakage) is redirected to
-    the deterministic fallback — no second LLM call.
+async def test_flagged_reply_stays_silent_without_llm_judge(monkeypatch):
+    """A reply the fast filter flags (nothing survives cleaning) keeps quiet —
+    no second LLM call, no canned redirect.
 
     The safety LLM judge was removed (it p50'd at 10.3s, as expensive as the
     agent itself), and so was the lexical blocklist. The only remaining redirect
     is structural: the reply cleaned to nothing, so there is no text to send.
     """
-    from app.graph.safety import GENERIC_FALLBACK, retry_exhausted_fallback
-
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
     # Reasoning-only output: nothing survives cleaning.
@@ -1034,11 +1035,9 @@ async def test_flagged_reply_redirects_to_fallback_without_llm_judge(monkeypatch
         _deps(zalo, conversation=svc, safety=_MustNotJudge()),
     )
 
-    assert res["outcome"] == "sent"
-    expected = retry_exhausted_fallback("tôi muốn tìm việc lái xe")
-    assert res["reply"] == expected
-    assert zalo.sent[0][1] == expected
-    assert expected == GENERIC_FALLBACK
+    assert res["outcome"] == "suppressed"
+    assert res["reply"] == ""
+    assert zalo.sent == []
 
 
 @pytest.mark.asyncio
@@ -1097,8 +1096,6 @@ async def test_cleanable_code_fence_is_sent_not_discarded(monkeypatch):
     runs against the cleaned reply; the fence is stripped first, and the
     remaining prose is sent.
     """
-    from app.graph.safety import GENERIC_FALLBACK
-
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
     # Stray fence around a fragment, but the reply is real recruitment content.
@@ -1115,8 +1112,8 @@ async def test_cleanable_code_fence_is_sent_not_discarded(monkeypatch):
     )
 
     assert res["outcome"] == "sent"
-    # The cleaned reply is sent — NOT the generic fallback.
-    assert res["reply"] != GENERIC_FALLBACK
+    # The cleaned reply is sent — the reply is real content, not a placeholder.
+    assert res["reply"] != ""
     assert "CCCD" in res["reply"]
     assert "```" not in res["reply"]
     assert zalo.sent[0][1] == res["reply"]
@@ -1419,7 +1416,7 @@ async def test_reasoning_referencing_system_prompt_keeps_grounded_answer(monkeyp
     res = await run_turn(_state(), _deps(zalo, conversation=svc, safety=_MustNotJudge()))
 
     assert res["outcome"] == "sent"
-    assert res["reply"] != FALLBACK_REPLY
+    assert res["reply"] != ""
     assert "Hải Phòng" in res["reply"]
     assert "system prompt" not in res["reply"]
 
@@ -1493,10 +1490,10 @@ async def test_disabled_faq_bypass_is_not_called(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_agent_error_rolls_back_session_before_error_reply(monkeypatch):
+async def test_agent_error_rolls_back_session_before_silent_record(monkeypatch):
     """When the agent path raises after touching the session, run_turn must roll
-    back before recording the ERROR_REPLY — otherwise the recovery write itself
-    raises a rollback error and the user gets nothing at all.
+    back before the silent outcome recording — otherwise the recovery write
+    itself raises a rollback error and the audit row is lost.
     """
     db = _FakeDB()
 
@@ -1514,7 +1511,7 @@ async def test_agent_error_rolls_back_session_before_error_reply(monkeypatch):
     res = await run_turn(_state(), deps)
 
     assert db.rollbacks >= 1, "agent error must roll back before the error reply"
-    assert res["outcome"] == "error", "ERROR_REPLY recovery must still complete"
+    assert res["outcome"] == "error", "silent recovery must still complete"
 
 
 # ---------------------------------------------------------------------------
@@ -2197,16 +2194,17 @@ async def test_empty_agent_candidate_uses_safety_fallback(monkeypatch):
 
     res = await run_turn(state, _deps(zalo, conversation=svc))
 
-    assert res["reply"] == FALLBACK_REPLY
-    # The fallback reply is what gets sent to Zalo and stamped on the row.
-    assert zalo.sent and zalo.sent[0][1] == FALLBACK_REPLY
-    assert recorded and recorded[0]["reply"] == FALLBACK_REPLY
+    # Empty agent output keeps quiet: nothing sent, SUPPRESSED audit row.
+    assert res["outcome"] == "suppressed"
+    assert res["reply"] == ""
+    assert zalo.sent == []
+    assert recorded and recorded[0]["reply"] == ""
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("blank", ["", "   ", "\n\t  "])
-async def test_whitespace_agent_candidate_uses_safety_fallback(monkeypatch, blank):
-    """Whitespace-only agent results follow the same safety fallback path."""
+async def test_whitespace_agent_candidate_stays_silent(monkeypatch, blank):
+    """Whitespace-only agent results follow the same keep-quiet path."""
 
     async def _blank_agent(*args, **kwargs):  # noqa: ARG001
         return blank
@@ -2222,5 +2220,6 @@ async def test_whitespace_agent_candidate_uses_safety_fallback(monkeypatch, blan
 
     res = await run_turn(state, _deps(zalo, conversation=svc))
 
-    assert res["reply"] == FALLBACK_REPLY
-    assert zalo.sent and zalo.sent[0][1] == FALLBACK_REPLY
+    assert res["outcome"] == "suppressed"
+    assert res["reply"] == ""
+    assert zalo.sent == []

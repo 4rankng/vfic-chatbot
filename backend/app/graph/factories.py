@@ -16,12 +16,13 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.core.config import get_settings
 from app.graph.clients import (
     MiniMaxAgent,
     _chat_for_role,
+    _custom_chat,
     _minimax_chat,
     _openrouter_chat,
     build_embedder,
@@ -395,9 +396,9 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
     role factory hard-codes the agent/safety model names. Here we explicitly use
     ``minimax_fast_model`` / ``openrouter_fast_model`` so the tier is genuine.
 
-    Only the single active provider's fast model is built — there is no runtime
-    failover between providers (a deploy-time ``LLM_DEFAULT_PROVIDER`` switch
-    changes the active provider for the whole process).
+    Only the single active provider's fast model is built. Cross-provider
+    failover applies to the reasoning path (see ``_build_failover_chain``); a
+    fast-tier turn that runs out of capacity escalates through the same chain.
     """
     s = get_settings()
     mm_fast = (getattr(s, "minimax_fast_model", "") or "").strip()
@@ -419,6 +420,66 @@ def _build_fast_llm(*, minimax_config, openrouter_config):
     except Exception:  # noqa: BLE001
         logger.warning("fast-tier LLM build failed; primary-only tier", exc_info=True)
         return None
+
+
+def _build_failover_chain(*, minimax_config, openrouter_config, custom_config):
+    """Clients for every configured provider EXCEPT the active one, in order.
+
+    The operator does not nominate a spare: any provider they have enabled with
+    a usable credential is eligible, so enabling OpenRouter alongside MiniMax is
+    enough to survive a spent MiniMax plan. Order is deterministic — the other
+    first-class provider, then the generic OpenAI-compatible slot — so failover
+    behaviour is predictable rather than dependent on dict ordering.
+
+    Build failures are swallowed per-provider: a misconfigured spare must not
+    take down the turn, it just does not join the chain.
+    """
+    s = get_settings()
+    active = minimax_config.default_provider
+    chain: list[object] = []
+
+    def _add(label: str, build):
+        try:
+            client = build()
+        except Exception:  # noqa: BLE001 — a broken spare simply does not join
+            logger.warning("failover provider %s unavailable; skipping", label, exc_info=True)
+            return
+        if client is not None:
+            chain.append(client)
+
+    if active != "minimax" and minimax_config.enabled and minimax_config.api_key:
+        _add(
+            "minimax",
+            # DB-managed model id wins over the env default, matching how the
+            # active provider resolves its model.
+            lambda: _minimax_chat(
+                minimax_config.agent_model or s.minimax_agent_model,
+                temperature=0.3,
+                api_key=minimax_config.api_key,
+            ),
+        )
+    if active != "openrouter" and openrouter_config.enabled and openrouter_config.api_key:
+        _add(
+            "openrouter",
+            lambda: _openrouter_chat(
+                openrouter_config.agent_model,
+                temperature=0.3,
+                timeout=s.openrouter_request_timeout,
+                api_key=openrouter_config.api_key,
+                capture_reasoning=True,
+            ),
+        )
+    if custom_config is not None and custom_config.usable:
+        _add(
+            "fallback",
+            lambda: _custom_chat(
+                custom_config.agent_model,
+                temperature=0.3,
+                api_key=custom_config.api_key,
+                base_url=custom_config.base_url,
+            ),
+        )
+    return chain
 
 
 # ── Process-wide LLM client cache ───────────────────────────────────────────
@@ -451,6 +512,9 @@ class _CachedClients:
     agent_llm: object
     fast_llm: object | None
     embedder: object
+    # Ordered clients for the other configured providers; empty when the
+    # operator has only one provider enabled.
+    failover_llms: list = field(default_factory=list)
 
 
 _client_cache: dict[str, _CachedClients] = {}
@@ -527,7 +591,8 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
 
     mm_version = await cache_version("integration_minimax")
     or_version = await cache_version("integration_openrouter")
-    cache_key = f"mm:{mm_version}|or:{or_version}"
+    fb_version = await cache_version("integration_custom_llm")
+    cache_key = f"mm:{mm_version}|or:{or_version}|fb:{fb_version}"
 
     cached = _client_cache.get(cache_key)
     if cached is not None:
@@ -548,9 +613,12 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
         # process lifetime.
         minimax_config = await integration_settings.resolve_minimax()
         openrouter_config = await integration_settings.resolve_openrouter()
+        custom_config = await integration_settings.resolve_custom_llm()
         agent_llm = _chat_for_role(
             "agent",
             temperature=0.3,
+            custom_enabled=custom_config.enabled,
+            custom_config=custom_config,
             minimax_api_key=minimax_config.api_key,
             openrouter_api_key=openrouter_config.api_key,
             minimax_enabled=minimax_config.enabled,
@@ -565,10 +633,16 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
             minimax_config=minimax_config,
             openrouter_config=openrouter_config,
         )
+        failover_llms = _build_failover_chain(
+            minimax_config=minimax_config,
+            openrouter_config=openrouter_config,
+            custom_config=custom_config,
+        )
         bundle = _CachedClients(
             agent_llm=agent_llm,
             fast_llm=fast_llm,
             embedder=embedder,
+            failover_llms=failover_llms,
         )
         displaced = list(_client_cache.values())
         _client_cache.clear()  # only one active version at a time
@@ -703,7 +777,12 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
 
     return GraphDeps(
         db=db,
-        agent=MiniMaxAgent(clients.agent_llm, clients.embedder, fast_llm=clients.fast_llm),
+        agent=MiniMaxAgent(
+            clients.agent_llm,
+            clients.embedder,
+            fast_llm=clients.fast_llm,
+            fallback_llms=clients.failover_llms,
+        ),
         embedder=clients.embedder,
         zalo=zalo_sender,
         conversation=ConversationService(db),

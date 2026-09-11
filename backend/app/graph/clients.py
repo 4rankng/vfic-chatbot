@@ -168,6 +168,9 @@ def _record_llm_429() -> None:
 
 
 ModelRole = Literal["agent", "safety", "digest"]
+# The three configurable providers. "custom" is any OpenAI-compatible endpoint
+# the operator supplies (base URL + model ids), e.g. Xiaomi MiMo.
+LlmProvider = Literal["minimax", "openrouter", "custom"]
 
 
 def _normalize_query_hint(text: str) -> str:
@@ -251,6 +254,30 @@ async def _prefetch_tool(
 def _is_429(exc: Exception) -> bool:
     """Check if an exception represents an HTTP 429 (rate limit)."""
     return "429" in str(exc) or "rate" in str(exc).lower()
+
+
+# Quota exhaustion is not a rate limit: a spent token plan does not recover by
+# waiting, so retrying the same provider only burns the turn deadline. Providers
+# signal it out-of-band from 429 (MiniMax returns "insufficient balance", others
+# use 402 / "quota"), hence a separate predicate that routes straight to the
+# failover provider instead of through the backoff path.
+_QUOTA_MARKERS = (
+    "insufficient balance",
+    "insufficient_quota",
+    "insufficient credit",
+    "quota exceeded",
+    "quota_exceeded",
+    "exceeded your current quota",
+    "out of credits",
+    "payment required",
+    "402",
+)
+
+
+def _is_quota_exhausted(exc: Exception) -> bool:
+    """True when the provider says the plan is spent, not merely throttled."""
+    text = str(exc).lower()
+    return any(marker in text for marker in _QUOTA_MARKERS)
 
 
 def _active_job_safe_reply(tool_result: object) -> str | None:
@@ -458,13 +485,54 @@ def _ground_active_job_reply(reply: str, tool_results: list[str]) -> str:
     return _negative_job_authority(tool_results) or reply
 
 
-async def _llm_call_with_retry(bound, messages, *, metrics: dict | None = None):
+def _bind_like(llm, schemas, *, bound_primary: bool):
+    """Mirror the primary's tool binding onto the failover client.
+
+    A failover mid-loop must expose the same tools, otherwise the model loses
+    the capability the conversation is already relying on. Returns ``None`` when
+    no failover provider is configured, which disables failover for that call.
+    """
+    if llm is None:
+        return None
+    if not bound_primary or not schemas:
+        return llm
+    bind_tools = getattr(llm, "bind_tools", None)
+    if bind_tools is None:
+        return llm
+    try:
+        return bind_tools(schemas)
+    except Exception:  # noqa: BLE001 — an unbindable failover is better than none
+        logger.warning("failover client could not bind tools; using it unbound", exc_info=True)
+        return llm
+
+
+async def _llm_call_with_retry(
+    bound,
+    messages,
+    *,
+    metrics: dict | None = None,
+    fallback_bounds: list | None = None,
+):
     """Call bound.ainvoke with 1 retry on 429 (settings.llm_429_retry_sleep_seconds backoff).
 
-    On second 429, raises LLMThrottled so the worker can send a static
-    degradation message without making another LLM call. When ``metrics`` is
-    provided, sets ``retried_429 = True`` on the retry path so the dashboard can
-    flag turns that survived a rate-limit backoff.
+    ``fallback_bounds`` (optional) is an ordered list of equivalently-bound
+    clients on the OTHER configured providers — every provider the operator has
+    enabled with a usable credential, not one designated spare. They are tried
+    in order when the primary is out of capacity:
+
+    * quota exhausted — the plan is spent and will not recover by waiting, so
+      the next provider runs immediately with no backoff sleep;
+    * rate limited twice — one backoff retry first, then the next provider.
+
+    A provider that is itself out of capacity is skipped and the walk continues,
+    so one spent plan does not strand the turn. Only when every provider is
+    exhausted does this raise LLMThrottled, and the worker then sends the static
+    degradation reply — a candidate never sees a provider error.
+
+    When ``metrics`` is provided, sets ``retried_429`` on the backoff path and
+    ``llm_failover`` / ``llm_failover_reason`` / ``llm_failover_index`` when the
+    reply came from a failover provider, so a turn that silently changed
+    provider is visible in the turn record.
 
     Returns ``(result, backoff_ms)`` where ``backoff_ms`` is the wall-clock time
     spent sleeping during a rate-limit backoff (0 on the happy path). The caller
@@ -474,9 +542,38 @@ async def _llm_call_with_retry(bound, messages, *, metrics: dict | None = None):
     from app.core.config import get_settings
     from app.graph.llm_semaphore import LLMThrottled
 
+    async def _failover(reason: str, backoff_ms: int):
+        """Walk the remaining providers in order until one answers."""
+        candidates = [client for client in (fallback_bounds or []) if client is not None]
+        if not candidates:
+            raise LLMThrottled(f"LLM unavailable ({reason}) and no failover provider configured")
+        for index, client in enumerate(candidates):
+            try:
+                result = await client.ainvoke(messages)
+            except Exception:  # noqa: BLE001 — try the next provider, whatever failed
+                logger.warning(
+                    "llm_failover provider %d/%d failed; trying next",
+                    index + 1,
+                    len(candidates),
+                    exc_info=True,
+                )
+                continue
+            logger.warning(
+                "llm_failover_engaged reason=%s provider_index=%d", reason, index + 1
+            )
+            if metrics is not None:
+                metrics["llm_failover"] = True
+                metrics["llm_failover_reason"] = reason
+                metrics["llm_failover_index"] = index + 1
+            return result, backoff_ms
+        raise LLMThrottled(f"LLM unavailable ({reason}); all failover providers exhausted")
+
     try:
         return await bound.ainvoke(messages), 0
     except Exception as exc:
+        # A spent plan does not recover by sleeping — skip the backoff entirely.
+        if _is_quota_exhausted(exc):
+            return await _failover("quota_exhausted", 0)
         if _is_429(exc):
             _record_llm_429()
             logger.warning("llm_429_retry", exc_info=True)
@@ -488,9 +585,11 @@ async def _llm_call_with_retry(bound, messages, *, metrics: dict | None = None):
             try:
                 return await bound.ainvoke(messages), backoff_ms
             except Exception as exc2:
+                if _is_quota_exhausted(exc2):
+                    return await _failover("quota_exhausted", backoff_ms)
                 if _is_429(exc2):
                     _record_llm_429()
-                    raise LLMThrottled("LLM rate limit exhausted after retry")
+                    return await _failover("rate_limited", backoff_ms)
                 raise
         raise
 
@@ -633,12 +732,24 @@ class MiniMaxAgent:
     ``fast_llm`` (optional, Phase 5 model tiering): when provided and the caller
     passes ``use_fast=True``, the lightweight model is used instead of the primary
     reasoning model. The runner decides eligibility via ``should_use_fast_model``.
+
+    ``fallback_llms`` (optional): ordered clients for the other configured
+    providers, used only when the primary reports rate-limit/quota exhaustion.
+    Empty keeps the previous behaviour of degrading to a static reply.
     """
 
-    def __init__(self, llm, embedder, max_iters: int | None = None, fast_llm=None) -> None:
+    def __init__(
+        self,
+        llm,
+        embedder,
+        max_iters: int | None = None,
+        fast_llm=None,
+        fallback_llms: list | None = None,
+    ) -> None:
         self.llm = llm
         self.embedder = embedder
         self.fast_llm = fast_llm
+        self.fallback_llms = list(fallback_llms or [])
         # max_iters reads from settings unless explicitly overridden (tests, etc.).
         if max_iters is not None:
             self.max_iters = max_iters
@@ -999,8 +1110,19 @@ class MiniMaxAgent:
                 async with sem:
                     sem_wait_ms = int((time.monotonic() - sem_t0) * 1000)
                     model_t0 = time.monotonic()
+                    # The failover client must carry the same tool bindings as
+                    # the primary, or a mid-loop switch would lose the tools the
+                    # conversation already depends on.
                     ai, backoff_ms = await _llm_call_with_retry(
-                        invocation_llm, messages, metrics=metrics
+                        invocation_llm,
+                        messages,
+                        metrics=metrics,
+                        fallback_bounds=[
+                            _bind_like(
+                                client, schemas, bound_primary=not was_empty_retry
+                            )
+                            for client in self.fallback_llms
+                        ],
                     )
                     model_ms = int((time.monotonic() - model_t0) * 1000)
             except LLMThrottled:
@@ -1293,6 +1415,7 @@ class MiniMaxAgent:
                 self.llm,
                 [SystemMessage(content=system), HumanMessage(content=user_text)],
                 metrics=metrics,
+                fallback_bounds=self.fallback_llms,
             )
             model_ms = int((time.monotonic() - model_t0) * 1000)
         total_ms = int((time.monotonic() - sem_t0) * 1000)
@@ -1368,6 +1491,41 @@ def _minimax_chat(
     )
 
 
+def _custom_chat(
+    model: str,
+    *,
+    temperature: float,
+    api_key: str,
+    base_url: str,
+    timeout: int | None = None,
+    max_retries: int = 0,
+):
+    """OpenAI-compatible client for the admin-configured failover provider.
+
+    Everything (endpoint, model id, credential) comes from the settings page
+    rather than from code, so pointing this at a different vendor is an operator
+    action. ``max_retries=0`` for the same reason as the other builders: the
+    agent loop owns retry/failover policy.
+    """
+    if not api_key:
+        raise RuntimeError("failover provider API key is required")
+    if not base_url:
+        raise RuntimeError("failover provider base URL is required")
+    if not model:
+        raise RuntimeError("failover provider model is required")
+    s = get_settings()
+    chat_class = _reasoning_chat_class()
+    return chat_class(
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        timeout=timeout or s.custom_llm_request_timeout,
+        temperature=temperature,
+        max_retries=max_retries,
+        trace_provider="fallback",
+    )
+
+
 def _openrouter_chat(
     model: str,
     *,
@@ -1406,30 +1564,33 @@ def _active_llm_provider(
     *,
     minimax_enabled: bool | None = None,
     openrouter_enabled: bool | None = None,
-    default_provider: Literal["minimax", "openrouter"] | None = None,
-) -> Literal["minimax", "openrouter"]:
-    """Return the single configured LLM provider name for this process.
+    custom_enabled: bool | None = None,
+    default_provider: LlmProvider | None = None,
+) -> LlmProvider:
+    """Return the provider that serves the first attempt of each turn.
 
-    Resolution order: explicit ``default_provider`` override, then settings'
-    ``llm_default_provider`` if its provider is enabled, then whichever provider
-    is enabled. There is no runtime failover — this is called once per client
-    build, and switching providers is a deploy-time config change.
+    Resolution order: the operator's chosen default when that provider is
+    enabled, then any other enabled provider. Quota failover is handled per-call
+    in ``_llm_call_with_retry``; this only picks where a turn starts.
     """
     s = settings or get_settings()
     mm_on = getattr(s, "minimax_enable", True) if minimax_enabled is None else minimax_enabled
     or_on = (
         getattr(s, "openrouter_enable", False) if openrouter_enabled is None else openrouter_enabled
     )
+    custom_on = (
+        getattr(s, "custom_llm_enable", False) if custom_enabled is None else custom_enabled
+    )
+    enabled = {"minimax": mm_on, "openrouter": or_on, "custom": custom_on}
     preferred = default_provider or getattr(s, "llm_default_provider", "minimax")
-    if preferred == "openrouter" and or_on:
-        return "openrouter"
-    if preferred == "minimax" and mm_on:
-        return "minimax"
-    if or_on:
-        return "openrouter"
-    if mm_on:
-        return "minimax"
-    raise RuntimeError("No LLM provider enabled: set MINIMAX_ENABLE=true or OPENROUTER_ENABLE=true")
+    if enabled.get(preferred):
+        return preferred
+    for name in ("minimax", "openrouter", "custom"):
+        if enabled[name]:
+            return name
+    raise RuntimeError(
+        "No LLM provider enabled: enable MiniMax, OpenRouter, or the custom provider"
+    )
 
 
 def _chat_for_role(
@@ -1441,7 +1602,9 @@ def _chat_for_role(
     openrouter_api_key: str | None = None,
     minimax_enabled: bool | None = None,
     openrouter_enabled: bool | None = None,
-    default_provider: Literal["minimax", "openrouter"] | None = None,
+    custom_enabled: bool | None = None,
+    custom_config=None,
+    default_provider: LlmProvider | None = None,
     openrouter_agent_model: str | None = None,
     openrouter_safety_model: str | None = None,
     openrouter_digest_model: str | None = None,
@@ -1461,8 +1624,22 @@ def _chat_for_role(
         s,
         minimax_enabled=minimax_enabled,
         openrouter_enabled=openrouter_enabled,
+        custom_enabled=custom_enabled,
         default_provider=default_provider,
     )
+
+    if provider == "custom":
+        if custom_config is None or not custom_config.usable:
+            raise RuntimeError("custom LLM provider selected but not fully configured")
+        model = (
+            custom_config.safety_model if role == "safety" else custom_config.agent_model
+        ) or custom_config.agent_model
+        return _custom_chat(
+            model,
+            temperature=temperature,
+            api_key=custom_config.api_key,
+            base_url=custom_config.base_url,
+        )
 
     if provider == "openrouter":
         resolved_openrouter_key = openrouter_api_key or s.openrouter_api_key

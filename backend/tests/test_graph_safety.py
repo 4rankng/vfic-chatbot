@@ -7,7 +7,6 @@ import pytest
 from app.graph.safety import (
     DeterministicReplyPolicy,
     fast_safety_filter,
-    retry_exhausted_fallback,
     truncate_for_chat,
 )
 
@@ -77,7 +76,9 @@ def test_fast_safety_exposes_reasoning_only_output_as_empty_after_clean():
     assert out["empty_after_clean"] is True
     assert out["retryable_empty"] is True
     assert out["needs_llm_safety"] is True
-    assert out["output"]
+    # Nothing sendable survived cleaning — the output stays empty and the turn
+    # keeps quiet (no canned redirect).
+    assert out["output"] == ""
 
 
 @pytest.mark.parametrize(
@@ -128,14 +129,6 @@ def test_fast_safety_retries_any_output_that_cleans_to_empty(raw):
 
     assert out["empty_after_clean"] is True
     assert out["retryable_empty"] is True
-
-
-def test_retry_exhausted_fallback_is_single_copy():
-    """One fallback for every case: the old keyword split misread Vietnamese."""
-    assert retry_exhausted_fallback("viết code python giúp tôi") == retry_exhausted_fallback(
-        "tôi muốn tìm việc"
-    )
-    assert "tuyển dụng" in retry_exhausted_fallback("bất kỳ câu hỏi nào")
 
 
 def test_truncate_for_chat_keeps_short_text_and_cuts_at_word_boundary():

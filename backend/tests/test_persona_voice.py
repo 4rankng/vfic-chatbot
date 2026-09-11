@@ -27,19 +27,16 @@ from app.graph.fast_lane import (
     HELP_REPLY,
     THANKS_REPLY,
 )
-from app.graph.prompts import AGENT_SYSTEM_PROMPT, ERROR_REPLY, TIMEOUT_REPLY
-from app.graph.safety import FALLBACK_REPLY, GENERIC_FALLBACK
+from app.graph.prompts import AGENT_SYSTEM_PROMPT, TIMEOUT_REPLY
 from app.services.lead.normalizers import address_form, lead_profile_text
-from app.workers.chatbot_worker import DEGRADATION_REPLY
 
 # Every bot-visible static reply string. A rename/removal here fails the build,
-# which is the intent: no constant escapes the invariant.
+# which is the intent: no constant escapes the invariant. (Error-class paths no
+# longer carry a static reply: a crashed agent, an exhausted provider chain, or
+# an empty/unverifiable reply keeps quiet — the failure goes to the structured
+# log, never to a candidate.)
 STATIC_REPLIES = {
-    "ERROR_REPLY": ERROR_REPLY,
     "TIMEOUT_REPLY": TIMEOUT_REPLY,
-    "FALLBACK_REPLY": FALLBACK_REPLY,
-    "GENERIC_FALLBACK": GENERIC_FALLBACK,
-    "DEGRADATION_REPLY": DEGRADATION_REPLY,
     "GREETING_REPLY": GREETING_REPLY,
     "THANKS_REPLY": THANKS_REPLY,
     "GOODBYE_REPLY": GOODBYE_REPLY,

@@ -25,12 +25,8 @@ class FastSafetyResult(TypedDict):
 
 
 # --- Fast Safety Filter -------------------------------------------------------
-# Friendly fallback when the bot can't produce a good reply. Short, natural,
-# and redirects the user — not robotic filler.
-FALLBACK_REPLY = (
-    "Em chưa thể xác minh câu trả lời này ạ. Anh/chị đang quan tâm vị trí tuyển dụng, "
-    "mức lương, xe đưa đón hay hồ sơ ứng tuyển để em kiểm tra đúng thông tin nhé ạ?"
-)
+# Structural cleaning and length bounding only. A reply with nothing sendable
+# stays empty; the caller keeps quiet rather than sending a canned deflection.
 
 # Lexical content filtering was removed deliberately. Keyword and phrase regexes
 # cannot tell an injection echo from ordinary Vietnamese: "đóng vai trò" (plays a
@@ -72,12 +68,9 @@ def fast_safety_filter(raw: str) -> FastSafetyResult:
     empty_after_clean = len(cleaned) == 0
     too_long_for_chat = len(cleaned) > 1800
     # Deterministic resolution for an over-long reply: truncate at a word
-    # boundary so the output is always bounded for chat transport.
-    output = (
-        truncate_for_chat(cleaned or FALLBACK_REPLY)
-        if too_long_for_chat
-        else (cleaned or FALLBACK_REPLY)
-    )
+    # boundary so the output is always bounded for chat transport. An empty
+    # reply stays empty — the caller decides to keep quiet.
+    output = truncate_for_chat(cleaned) if too_long_for_chat else cleaned
     # Only structural conditions flag a reply now: nothing survived cleaning, or
     # it exceeds the chat length bound. Content is never judged by keyword.
     needs_llm_safety = empty_after_clean or too_long_for_chat
@@ -116,8 +109,11 @@ class DeterministicReplyPolicy:
         output = fs["output"]
 
         if fs["empty_after_clean"]:
+            # Nothing sendable survived cleaning. The bot keeps quiet rather
+            # than inventing a redirect: output stays empty and the caller
+            # (runner/worker) suppresses the turn instead of sending.
             return ReplyPolicyResult(
-                output=retry_exhausted_fallback(user_text),
+                output="",
                 verdict="empty_after_clean",
                 trigger="empty_after_clean",
             )
@@ -145,18 +141,6 @@ def truncate_for_chat(text: str, limit: int = 1800) -> str:
     return text[:cut].rstrip() + " …"
 
 
-# --- Fallback (used only when nothing survived cleaning) ---------------------
-# Friendly redirect when the bot can't produce a good reply.
-GENERIC_FALLBACK = FALLBACK_REPLY
-
-
-def retry_exhausted_fallback(original_user_text: str) -> str:  # noqa: ARG001
-    """Copy for a reply that produced no sendable text.
-
-    A keyword regex on the user's message used to choose between a "technical
-    question" redirect and this generic one. It misread ordinary Vietnamese —
-    "bao nhiêu node sản xuất" and "api tuyển dụng" both scored as off-topic
-    engineering questions — so scope-policing is left to the model, which reads
-    the whole conversation instead of one word.
-    """
-    return GENERIC_FALLBACK
+# A reply that produced no sendable text sends NOTHING: the runner records the
+# turn as SUPPRESSED (see ``_record_silent_terminal``) instead of persisting a
+# placeholder bubble. Keep-quiet beats a canned deflection.

@@ -42,6 +42,7 @@ T = TypeVar("T")
 # on the matching write path flips these, so the next read misses and re-reads.
 NS_INTEGRATION_MINIMAX = "integration_minimax"
 NS_INTEGRATION_OPENROUTER = "integration_openrouter"
+NS_INTEGRATION_CUSTOM_LLM = "integration_custom_llm"
 NS_INTEGRATION_ZALO = "integration_zalo"
 NS_INTEGRATION_FACEBOOK = "integration_facebook"
 NS_PREAMBLE = "preamble"
@@ -196,6 +197,16 @@ async def cached_openrouter_config(loader: Callable[[], Awaitable[dict]]) -> dic
     return await cached_value(
         key_prefix="preamble:openrouter",
         namespace=NS_INTEGRATION_OPENROUTER,
+        ttl_seconds=_INTEGRATION_TTL_SECONDS,
+        loader=loader,
+    )
+
+
+async def cached_custom_llm_config(loader: Callable[[], Awaitable[dict]]) -> dict:
+    """Cache the quota-failover provider config (keyed by its own namespace)."""
+    return await cached_value(
+        key_prefix="preamble:fallback_llm",
+        namespace=NS_INTEGRATION_CUSTOM_LLM,
         ttl_seconds=_INTEGRATION_TTL_SECONDS,
         loader=loader,
     )

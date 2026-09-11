@@ -42,7 +42,7 @@ from app.graph.direct_context import (
     build_direct_system,
     build_direct_user_text,
 )
-from app.graph.prompts import ERROR_REPLY
+from app.graph.prompts import TIMEOUT_REPLY
 from app.graph.router import (
     detect_recency_sort_intent,
     detect_salary_sort_intent,
@@ -723,6 +723,44 @@ async def _finish_terminal_reply(
     return {"outcome": outcome, "reply": text}
 
 
+async def _record_silent_terminal(
+    state: BotRunState,
+    deps: GraphDeps,
+    conv,
+    svc,
+    started,
+    base_outcome: str,
+    *,
+    stage_timings: dict | None = None,
+    trace_sink=None,
+    lock_owner=None,
+):
+    """Record a turn that produced no reply — and send nothing to the customer.
+
+    The silent twin of ``_finish_terminal_reply``: when the bot cannot produce
+    an answer (agent crash, exhausted provider chain), an error text would read
+    as a broken bot and leak internals, so the turn goes quiet. The outcome is
+    SUPPRESSED so the per-chat mutex clears and the dashboard keeps the
+    degraded-turn audit row; the failure lives in the structured logs instead.
+    """
+    _stamp_end_to_end(state, stage_timings)
+    # No explicit delivery_status: sent=False with no external_error derives
+    # SUPPRESSED inside record_bot_outcome.
+    await svc.record_bot_outcome(
+        conv,
+        version_at_start=state.version_at_start,
+        reply="",  # nothing was sent — the audit row stays empty
+        started_at=started,
+        sent=False,
+        pending_message_id=state.pending_message_id,
+        stage_timings=stage_timings,
+        lock_owner=lock_owner,
+        trace_id=state.trace_id or None,
+        decision_trace=trace_sink.snapshot_payload() if trace_sink is not None else None,
+    )
+    return {"outcome": base_outcome, "reply": ""}
+
+
 def _stamp_db(timings: dict, key: str, t0: float) -> None:
     """Accumulate wall-clock of one DB call into timings['db_ms'].
 
@@ -1225,30 +1263,43 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 trace_sink.record_decision("degradation_reason", "llm_throttled")
                 exc.decision_trace = trace_sink.snapshot_payload()
                 raise  # let worker handle degradation msg (no LLM call)
-            except Exception as exc:  # noqa: BLE001 — agent blew up -> graceful fallback
-                logger.warning("agent error: %s", exc)
+            except Exception as exc:  # noqa: BLE001 — agent blew up -> stay silent
+                # The bot could not produce an answer. An "internal error" text
+                # is an engineer-facing detail, so the turn goes quiet: stop the
+                # typing indicator, record the SUPPRESSED outcome (clears the
+                # per-chat mutex), and let the structured log carry the failure.
+                logger.error(
+                    "agent error, reply suppressed conversation=%s trace=%s: %s",
+                    state.conversation_id,
+                    state.trace_id or "-",
+                    exc,
+                )
+                trace_sink.record_decision("degradation_reason", "agent_error")
                 # The agent path may have used deps.db (lead / system-prompt reads).
-                # Clear any aborted transaction before the error-reply path reuses
-                # the session (claim_send / record_bot_outcome), otherwise the
-                # recovery itself raises a rollback error. Safe: record_bot_pending
+                # Clear any aborted transaction before the recovery reuses the
+                # session for record_bot_outcome. Safe: record_bot_pending
                 # already committed.
                 try:
                     await deps.db.rollback()
                 except Exception:  # noqa: BLE001 — best-effort; worker_session also rolls back
                     logger.debug("agent-error recovery rollback failed", exc_info=True)
                 timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
-                return await _finish_terminal_reply(
+                if status_task is not None:
+                    await _cancel_status_task(status_task)
+                await deps.db.refresh(conv)
+                lock_owner = state.lock_owner or None
+                if trace_sink is not None:
+                    trace_sink.record_decision("ownership_verdict", "suppressed")
+                return await _record_silent_terminal(
                     state,
                     deps,
                     conv,
                     svc,
-                    zalo,
-                    ERROR_REPLY,
                     started,
                     "error",
-                    status_task=status_task,
                     stage_timings=timings,
                     trace_sink=trace_sink,
+                    lock_owner=lock_owner,
                 )
 
             state.reply = raw
@@ -1258,7 +1309,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             # --- structural output gate (no LLM judge, no lexical filtering) ---
             # The fast filter strips <think>/markdown/code-fences from the raw
             # reply and flags only shape-based conditions:
-            #   - empty after cleaning → retry_exhausted_fallback (nothing to send)
+            #   - empty after cleaning → suppress the turn (nothing to send)
             #   - over-long (>1800)    → truncate_for_chat, then SEND (already
             #     applied by fast_safety_filter — a detailed job-presentation
             #     reply is legitimate content, not a safety issue)
@@ -1278,15 +1329,33 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             trace_sink=trace_sink,
         )
 
-        # Defense-in-depth: every lane should already produce non-empty content
-        # (fast_safety_filter falls back to FALLBACK_REPLY; the safety gate above
-        # redirects to retry_exhausted_fallback), but an empty candidate reaching
-        # here would be persisted as body="" (via claim_send / record_bot_outcome)
-        # and render in the recruiter console as a blank "Gửi lỗi" bubble with no
-        # indication of what the bot tried to send. Fall back to the generic
-        # technical-issue reply so a failed send is always diagnosable.
+        # Defense-in-depth: every lane should already suppress empty output via
+        # DeterministicReplyPolicy. An empty candidate here means the bot has
+        # nothing to say: an "internal error" text would leak internals and read
+        # as a broken bot, so the turn is recorded SUPPRESSED with no customer
+        # message (the structured log carries the failure).
         if not (candidate or "").strip():
-            candidate = ERROR_REPLY
+            logger.error(
+                "empty reply candidate, turn suppressed conversation=%s trace=%s",
+                state.conversation_id,
+                state.trace_id or "-",
+            )
+            trace_sink.record_decision("degradation_reason", "agent_error")
+            if status_task is not None:
+                await _cancel_status_task(status_task)
+            await deps.db.refresh(conv)
+            trace_sink.record_decision("ownership_verdict", "suppressed")
+            return await _record_silent_terminal(
+                state,
+                deps,
+                conv,
+                svc,
+                started,
+                "suppressed",
+                stage_timings=timings,
+                trace_sink=trace_sink,
+                lock_owner=lock_owner,
+            )
 
         # --- pre_send_guard: atomically claim the send (PENDING→SENDING), gated
         # server-side on version + lock_owner + lock liveness. Closes both the

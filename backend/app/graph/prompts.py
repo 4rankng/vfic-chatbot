@@ -2,8 +2,7 @@
 
 The agent persona lives in ``persona.md`` (next to this file) and is loaded at
 import time — edit that Markdown file to tune the bot's 7-part role definition;
-no Python changes are required. ``SAFETY_PROMPT`` and ``ERROR_REPLY`` are
-hand-maintained constants.
+no Python changes are required. ``SAFETY_PROMPT`` is a hand-maintained constant.
 """
 
 from pathlib import Path
@@ -33,12 +32,9 @@ Quy tắc:
 - Nếu chỉ cần sửa rất nhẹ như xóa markdown hoặc làm câu chữ tự nhiên hơn, vẫn có thể trả safe_to_send=true và đặt final_answer là bản đã làm sạch.
 - Nếu câu trả lời cần viết lại đáng kể vì chứa nội dung kỹ thuật/code/lạc đề, trả safe_to_send=false."""
 
-ERROR_REPLY = (
-    """Em xin lỗi anh/chị, em đang gặp chút sự cố kỹ thuật. Anh/chị vui lòng nhắn lại sau ít phút nhé ạ 🙏"""
-)
-
 # Sent when the propagated ~10s deadline expires before the agent finished (em /
-# anh-chị voice per persona.md). Distinct from DEGRADATION_REPLY (LLM throttled /
-# high traffic): this means "I need a little more time", not "the system is
-# overloaded". Gender is unknown on this path, so the neutral form is used.
+# anh-chị voice per persona.md). Distinct from the LLMThrottled path (all
+# providers exhausted → turn suppressed, nothing sent): this means "I need a
+# little more time", not "the system is overloaded". Gender is unknown on this
+# path, so the neutral form is used.
 TIMEOUT_REPLY = """Em cần thêm một chút thời gian để kiểm tra thông tin chính xác cho anh/chị. Anh/chị nhắn lại giúp em sau ít phút nhé ạ 🙏"""

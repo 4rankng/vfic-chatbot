@@ -4,6 +4,10 @@ import pytest
 
 from app.core import preamble_cache
 from app.services.integration_settings import (
+    CUSTOM_LLM_API_KEY,
+    CUSTOM_LLM_BASE_URL,
+    CUSTOM_LLM_ENABLE,
+    CUSTOM_LLM_AGENT_MODEL,
     FB_APP_ID,
     FB_APP_SECRET,
     FB_LOGIN_CONFIG_ID,
@@ -43,6 +47,14 @@ class _Settings:
     openrouter_embedding_model = "openai/text-embedding-3-large"
     embedding_dim = 3072
     llm_default_provider = "minimax"
+    # Custom OpenAI-compatible failover provider (env defaults — DB overrides).
+    custom_llm_enable = False
+    custom_llm_label = "Dự phòng"
+    custom_llm_api_key = ""
+    custom_llm_base_url = ""
+    custom_llm_agent_model = ""
+    custom_llm_safety_model = ""
+    custom_llm_fast_model = ""
     # Meta / Facebook app credentials (env defaults — DB overrides per field).
     meta_app_id = ""
     meta_app_secret = ""
@@ -537,6 +549,128 @@ async def test_openrouter_admin_view_uses_stored_routing_and_model():
     assert view["openrouter_enable"] is True
     assert view["llm_default_provider"] == "openrouter"
     assert view["openrouter_agent_model"] == "deepseek/deepseek-v4-flash"
+
+
+# ─── Custom OpenAI-compatible failover provider ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_custom_llm_admin_view_is_unconfigured_without_env_or_db():
+    service = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+
+    view = await service.admin_custom_llm_view()
+
+    assert view["custom_llm_api_key"] == {"configured": False, "preview": None}
+    assert view["custom_llm_base_url"] == ""
+    assert view["custom_llm_agent_model"] == ""
+    assert view["custom_llm_safety_model"] == ""
+    assert view["custom_llm_fast_model"] == ""
+    assert view["custom_llm_usable"] is False
+    assert view["custom_llm_enable"] is False
+    assert view["llm_default_provider"] == "minimax"
+
+
+@pytest.mark.asyncio
+async def test_custom_llm_admin_view_env_fallback_and_usable():
+    class _CustomSettings(_Settings):
+        custom_llm_enable = True
+        custom_llm_api_key = "sk-mimo-secret-token"
+        custom_llm_base_url = "https://api.xiaomi.example/v1"
+        custom_llm_agent_model = "mimo-7b"
+        custom_llm_safety_model = ""
+        custom_llm_fast_model = ""
+
+    service = IntegrationSettingsService(_ReadDb([]), settings=_CustomSettings())
+
+    view = await service.admin_custom_llm_view()
+
+    assert view["custom_llm_api_key"] == {"configured": True, "preview": "sk-m...oken"}
+    assert view["custom_llm_base_url"] == "https://api.xiaomi.example/v1"
+    assert view["custom_llm_agent_model"] == "mimo-7b"
+    # Blank safety/fast models inherit the agent model: one model id is enough.
+    assert view["custom_llm_safety_model"] == "mimo-7b"
+    assert view["custom_llm_usable"] is True
+
+
+@pytest.mark.asyncio
+async def test_custom_llm_db_rows_override_env_and_fall_back_to_agent_model():
+    class _CustomSettings(_Settings):
+        custom_llm_enable = False
+        custom_llm_api_key = ""
+        custom_llm_base_url = "https://env.example/v1"
+
+    service = IntegrationSettingsService(
+        _ReadDb(
+            [
+                _Row(CUSTOM_LLM_ENABLE, "true"),
+                _Row(CUSTOM_LLM_API_KEY, IntegrationSettingsService(_ReadDb([]), settings=_Settings()).cipher.encrypt("sk-db-only-key")),
+                _Row(CUSTOM_LLM_BASE_URL, "https://api.xiaomi.example/v1"),
+                _Row(CUSTOM_LLM_AGENT_MODEL, "mimo-7b"),
+            ]
+        ),
+        settings=_CustomSettings(),
+    )
+
+    cfg = await service.resolve_custom_llm()
+
+    assert cfg.enabled is True
+    assert cfg.api_key == "sk-db-only-key"
+    # DB base_url wins over the env value.
+    assert cfg.base_url == "https://api.xiaomi.example/v1"
+    assert cfg.usable is True
+
+
+@pytest.mark.asyncio
+async def test_update_custom_llm_encrypts_key_and_audits(monkeypatch):
+    audits = []
+
+    async def fake_record_audit(*_args, **kwargs):
+        audits.append(kwargs)
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.record_audit",
+        fake_record_audit,
+    )
+
+    db = _WriteDb()
+    service = IntegrationSettingsService(db, settings=_Settings())
+    actor_id = uuid.uuid4()
+
+    changed = await service.update_custom_llm(
+        {
+            "custom_llm_api_key": " sk-mimo-secret-token ",
+            "custom_llm_base_url": "https://api.xiaomi.example/v1",
+            "custom_llm_enable": True,
+        },
+        actor_id=actor_id,
+    )
+
+    assert changed == [
+        "custom_llm_api_key",
+        "custom_llm_base_url",
+        "custom_llm_enable",
+    ]
+    assert db.committed
+    stored = db.rows[CUSTOM_LLM_API_KEY]
+    assert stored.encrypted_value.startswith("v1:")
+    assert "sk-mimo-secret-token" not in stored.encrypted_value
+    assert service.cipher.decrypt(stored.encrypted_value) == "sk-mimo-secret-token"
+    # Non-secret fields are stored as plaintext values.
+    assert db.rows[CUSTOM_LLM_BASE_URL].encrypted_value == "https://api.xiaomi.example/v1"
+    assert db.rows[CUSTOM_LLM_ENABLE].is_secret is False
+    assert audits == [
+        {
+            "action": "update_custom_llm_integration_settings",
+            "actor_id": actor_id,
+            "target_type": "integration_settings",
+            "target_id": "fallback_llm",
+            "payload": {"changed_keys": [
+                "custom_llm_api_key",
+                "custom_llm_base_url",
+                "custom_llm_enable",
+            ]},
+        }
+    ]
 
 
 # ─── Facebook OAuth credentials (DB-first, env fallback) ────────────────────

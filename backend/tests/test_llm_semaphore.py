@@ -184,7 +184,7 @@ class TestSemaphoreTimeout:
     @pytest.mark.asyncio
     async def test_timeout_raises_llm_throttled(self, fake_redis):
         """When BLPOP returns None (timeout), __aenter__ raises LLMThrottled so the
-        worker sends DEGRADATION_REPLY and clears the per-chat mutex."""
+        worker suppresses the turn and clears the per-chat mutex."""
         sem = RedisLlmSemaphore(limit=1, key="test_timeout", acquire_timeout=0)
         sem._initialized = True  # skip token population → BLPOP returns None
         with patch(_REDIS_PATCH, return_value=fake_redis):
@@ -311,25 +311,20 @@ class TestRetry429:
         assert sleep_args[0] == get_settings().llm_429_retry_sleep_seconds
 
 
-# ── Degradation message in worker ───────────────────────────────────────────
+# ── Degradation path in worker ──────────────────────────────────────────────
 
 
 class TestDegradationMessage:
-    """chatbot_worker sends static Vietnamese msg on LLMThrottled."""
-
-    def test_degradation_reply_is_vietnamese(self):
-        from app.workers.chatbot_worker import DEGRADATION_REPLY
-
-        # Case-insensitive: the persona opens with "Em xin lỗi…", so the
-        # apology is mid-sentence. What matters is that it apologises.
-        assert "xin lỗi" in DEGRADATION_REPLY.lower()
-        assert "truy cập" in DEGRADATION_REPLY
-        # Must NOT contain emoji
-        assert "\U0001f60a" not in DEGRADATION_REPLY  # 😊
+    """chatbot_worker suppresses the turn on LLMThrottled — nothing is sent."""
 
     @pytest.mark.asyncio
     async def test_worker_catches_llm_throttled(self):
-        """When run_turn raises LLMThrottled, worker sends degradation msg."""
+        """run_turn raising LLMThrottled sends NOTHING to the customer.
+
+        All providers exhausted is an engineer problem, not a candidate-facing
+        message: the turn is recorded as SUPPRESSED (lock cleared, dashboard
+        keeps the degraded-turn audit row) and the sender is never touched.
+        """
         from app.workers.chatbot_worker import _run_job_async
 
         job = {
@@ -346,9 +341,6 @@ class TestDegradationMessage:
         mock_conv = MagicMock()
         mock_conv.zalo_chat_id = "test_zalo_id"
 
-        # The worker binds the outbound sender via deps.zalo.for_conversation(conv),
-        # then awaits sender.send_message(chat_id, text). The awaitable must live on
-        # the BOUND sender, not on deps.zalo directly.
         mock_sender = MagicMock()
         mock_sender.send_message = AsyncMock()
         mock_deps = MagicMock()
@@ -372,9 +364,54 @@ class TestDegradationMessage:
                         # Should NOT raise — LLMThrottled is caught
                         await _run_job_async(job)
 
-        mock_sender.send_message.assert_called_once()
-        sent_msg = mock_sender.send_message.call_args[0][1]
-        assert "xin lỗi" in sent_msg.lower()
+        mock_sender.send_message.assert_not_called()
+        mock_svc.claim_send.assert_not_called()
+        mock_svc.record_bot_outcome.assert_called_once()
+        kwargs = mock_svc.record_bot_outcome.call_args.kwargs
+        assert kwargs["sent"] is False
+        assert kwargs["reply"] == ""  # no customer text on the audit row either
+        assert kwargs["stage_timings"]["throttle"] is True
+        # The request-local decision trace is preserved for the dashboard.
+        assert kwargs["decision_trace"] is not None
+
+    @pytest.mark.asyncio
+    async def test_worker_throttle_still_records_when_conversation_missing(self):
+        """A vanished conversation must not crash the worker mid-recovery."""
+        from app.workers.chatbot_worker import _run_job_async
+
+        job = {
+            "conversation_id": str(uuid.uuid4()),
+            "version_at_start": 1,
+            "user_text": "hello",
+            "user_name": "Test",
+        }
+
+        mock_db = AsyncMock()
+        mock_db.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_db.__aexit__ = AsyncMock(return_value=False)
+
+        mock_sender = MagicMock()
+        mock_sender.send_message = AsyncMock()
+        mock_deps = MagicMock()
+        mock_deps.zalo = MagicMock()
+        mock_deps.zalo.for_conversation = MagicMock(return_value=mock_sender)
+
+        mock_svc = MagicMock()
+        mock_svc.get = AsyncMock(return_value=None)  # conversation gone
+        mock_svc.record_bot_outcome = AsyncMock()
+
+        with patch("app.workers._db.worker_session", return_value=mock_db):
+            with patch(
+                "app.graph.factories.build_deps", new_callable=AsyncMock, return_value=mock_deps
+            ):
+                with patch("app.graph.runner.run_turn", new_callable=AsyncMock) as mock_run:
+                    mock_run.side_effect = LLMThrottled("rate limit")
+                    with patch("app.services.conversation.ConversationService") as MockSvc:
+                        MockSvc.return_value = mock_svc
+                        await _run_job_async(job)
+
+        mock_svc.record_bot_outcome.assert_not_called()
+        mock_sender.send_message.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_worker_degradation_suppressed_when_not_owned(self):
@@ -424,59 +461,3 @@ class TestDegradationMessage:
         mock_sender.send_message.assert_not_called()
         mock_svc.record_bot_outcome.assert_awaited_once()
         assert mock_svc.record_bot_outcome.call_args.kwargs["sent"] is False
-
-    @pytest.mark.asyncio
-    async def test_worker_messenger_degradation_uses_canonical_outbox_route(self):
-        """The last-resort static reply must still use Messenger durable delivery."""
-        from app.graph.ports import SendOutcome
-        from app.workers.chatbot_worker import _run_job_async
-
-        job = {
-            "conversation_id": str(uuid.uuid4()),
-            "version_at_start": 1,
-            "user_text": "hello",
-            "user_name": "Test",
-        }
-        mock_db = AsyncMock()
-        mock_db.__aenter__ = AsyncMock(return_value=mock_db)
-        mock_db.__aexit__ = AsyncMock(return_value=False)
-        mock_conv = SimpleNamespace(
-            zalo_chat_id=None,
-            zalo_channel="facebook_messenger",
-            channel_identity=SimpleNamespace(
-                provider="facebook_messenger",
-                account_key="page-1",
-                external_id="psid-1",
-            ),
-        )
-        mock_sender = MagicMock()
-        mock_sender.send_message = AsyncMock()
-        mock_deps = MagicMock()
-        mock_deps.zalo = MagicMock()
-        mock_deps.zalo.for_conversation = MagicMock(return_value=mock_sender)
-        mock_svc = MagicMock()
-        mock_svc.get = AsyncMock(return_value=mock_conv)
-        mock_svc.claim_send = AsyncMock(return_value=True)
-        mock_svc.dispatch_outbound_message = AsyncMock(
-            return_value=SendOutcome(ok=True, msg_id="mid-1")
-        )
-        mock_svc.record_bot_outcome = AsyncMock()
-
-        with patch("app.workers._db.worker_session", return_value=mock_db):
-            with patch(
-                "app.graph.factories.build_deps", new_callable=AsyncMock, return_value=mock_deps
-            ):
-                with patch("app.graph.runner.run_turn", new_callable=AsyncMock) as mock_run:
-                    mock_run.side_effect = LLMThrottled("rate limit")
-                    with patch("app.services.conversation.ConversationService") as MockSvc:
-                        MockSvc.return_value = mock_svc
-                        await _run_job_async(job)
-
-        claim = mock_svc.claim_send.await_args
-        assert claim.kwargs["outbox_channel"] == "facebook_messenger"
-        assert claim.kwargs["outbox_payload"]["chat_id"] == "psid-1"
-        mock_svc.dispatch_outbound_message.assert_awaited_once()
-        mock_sender.send_message.assert_not_awaited()
-        recorded = mock_svc.record_bot_outcome.await_args
-        assert recorded.kwargs["outbox_channel"] == "facebook_messenger"
-        assert recorded.kwargs["outbox_payload"]["chat_id"] == "psid-1"

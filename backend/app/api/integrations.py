@@ -34,6 +34,10 @@ from app.schemas.integrations import (
     FacebookPageProjectAssignmentOut,
     FacebookPageProjectsOut,
     FacebookPageProjectsUpdate,
+    CustomLlmIntegrationSettingsOut,
+    CustomLlmIntegrationSettingsUpdate,
+    CustomLlmIntegrationTestOut,
+    CustomLlmProbeIn,
     MinimaxIntegrationSettingsOut,
     MinimaxIntegrationSettingsUpdate,
     MinimaxIntegrationTestOut,
@@ -69,6 +73,14 @@ def _safe_probe_error(prefix: str, result: SendResult, secrets: list[str]) -> st
     if len(message) > 240:
         message = f"{message[:237]}..."
     return f"{prefix}: {message}"
+
+
+def _redact_secrets(message: str, secrets_to_hide: list[str]) -> str:
+    """Strip credentials out of a provider error before it reaches the browser."""
+    for secret in secrets_to_hide:
+        if secret:
+            message = message.replace(secret, "[redacted]")
+    return message if len(message) <= 240 else f"{message[:237]}..."
 
 
 def _bot_admin_client(settings_service, cfg) -> ZaloBotAdminClient:
@@ -439,6 +451,78 @@ async def test_openrouter_integration_settings(
     return OpenRouterIntegrationTestOut(
         configured=bool(cfg.api_key),
         missing=missing,
+    )
+
+
+@router.get("/custom-llm", response_model=CustomLlmIntegrationSettingsOut)
+async def get_custom_llm_integration_settings(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CustomLlmIntegrationSettingsOut:
+    return CustomLlmIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_custom_llm_view()
+    )
+
+
+@router.put("/custom-llm", response_model=CustomLlmIntegrationSettingsOut)
+async def update_custom_llm_integration_settings(
+    body: CustomLlmIntegrationSettingsUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CustomLlmIntegrationSettingsOut:
+    await IntegrationSettingsService(db).update_custom_llm(
+        body.model_dump(exclude_unset=True),
+        actor_id=admin.id,
+    )
+    return CustomLlmIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_custom_llm_view()
+    )
+
+
+@router.post("/custom-llm/test", response_model=CustomLlmIntegrationTestOut)
+async def test_custom_llm_integration_settings(
+    body: CustomLlmProbeIn | None = None,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CustomLlmIntegrationTestOut:
+    """Make a real chat call against the failover provider.
+
+    Unlike the minimax/openrouter probes, which only assert a key is present,
+    this sends an actual minimal completion. A provider that is unreachable,
+    rejects the credential, or does not know the model id must fail here rather
+    than during a live candidate conversation.
+
+    Credentials may be supplied in the body so they can be validated BEFORE
+    being saved; anything omitted falls back to the stored configuration.
+    """
+    stored = await IntegrationSettingsService(db).resolve_custom_llm()
+    supplied = body.model_dump(exclude_unset=True) if body is not None else {}
+    api_key = supplied.get("custom_llm_api_key") or stored.api_key
+    base_url = supplied.get("custom_llm_base_url") or stored.base_url
+    model = supplied.get("custom_llm_agent_model") or stored.agent_model
+
+    missing = [
+        name
+        for name, value in (
+            ("custom_llm_api_key", api_key),
+            ("custom_llm_base_url", base_url),
+            ("custom_llm_agent_model", model),
+        )
+        if not value
+    ]
+    if missing:
+        return CustomLlmIntegrationTestOut(ok=False, configured=False, missing=missing)
+
+    from app.services.llm_probe import probe_openai_compatible_chat
+
+    probe = await probe_openai_compatible_chat(api_key=api_key, base_url=base_url, model=model)
+    return CustomLlmIntegrationTestOut(
+        ok=probe.ok,
+        configured=True,
+        missing=[],
+        latency_ms=probe.latency_ms,
+        sample=probe.sample,
+        error=probe.error,
     )
 
 

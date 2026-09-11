@@ -375,3 +375,163 @@ async def test_sync_bot_webhook_surfaces_failure_without_raising(monkeypatch):
     assert status["synced"] is False
     assert status["url"] == ZALO_BOT_WEBHOOK_URL
     assert status["error"] == "setWebhook: rejected [redacted]"
+
+
+# ---------------------------------------------------------------------------
+# Custom OpenAI-compatible provider (quota failover): /custom-llm
+# ---------------------------------------------------------------------------
+
+
+class _CustomLlmService:
+    settings = Settings(app_env="development")
+
+    def __init__(self, db) -> None:  # noqa: ARG002
+        pass
+
+    async def resolve_custom_llm(self):
+        from app.services.integration_settings import CustomLlmRuntimeConfig
+
+        return CustomLlmRuntimeConfig(
+            api_key="sk-stored-secret",
+            base_url="https://api.xiaomi.example/v1",
+            agent_model="mimo-7b",
+            enabled=True,
+        )
+
+    async def admin_custom_llm_view(self) -> dict:
+        return {
+            "custom_llm_api_key": {"configured": True, "preview": "sk-s...cret"},
+            "custom_llm_base_url": "https://api.xiaomi.example/v1",
+            "custom_llm_agent_model": "mimo-7b",
+            "custom_llm_safety_model": "mimo-7b",
+            "custom_llm_fast_model": "",
+            "custom_llm_label": "Dự phòng",
+            "custom_llm_enable": True,
+            "custom_llm_usable": True,
+            "llm_default_provider": "minimax",
+        }
+
+    async def update_custom_llm(self, values: dict, *, actor_id) -> list[str]:  # noqa: ARG002
+        self.saved = values
+        return list(values.keys())
+
+
+class _PutTrackingService(_CustomLlmService):
+    saved_calls: list = []
+
+    async def update_custom_llm(self, values: dict, *, actor_id) -> list[str]:  # noqa: ARG002
+        _PutTrackingService.saved_calls.append(dict(values))
+        return list(values.keys())
+
+
+async def test_custom_llm_get_returns_masked_admin_view(monkeypatch):
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _CustomLlmService)
+
+    view = await integrations.get_custom_llm_integration_settings(
+        _admin=object(), db=object()
+    )
+
+    assert view.custom_llm_api_key.configured is True
+    assert view.custom_llm_api_key.preview == "sk-s...cret"
+    assert view.custom_llm_usable is True
+    assert view.custom_llm_enable is True
+
+
+async def test_custom_llm_put_writes_through_service(monkeypatch):
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _PutTrackingService)
+    _PutTrackingService.saved_calls = []
+
+    from app.schemas.integrations import CustomLlmIntegrationSettingsUpdate
+
+    body = CustomLlmIntegrationSettingsUpdate(custom_llm_enable=False)
+    await integrations.update_custom_llm_integration_settings(
+        body, admin=types.SimpleNamespace(id=uuid.uuid4()), db=object()
+    )
+
+    assert _PutTrackingService.saved_calls == [{"custom_llm_enable": False}]
+
+
+async def test_custom_llm_test_reports_missing_fields_without_probe(monkeypatch):
+    class _EmptyService(_CustomLlmService):
+        async def resolve_custom_llm(self):
+            from app.services.integration_settings import CustomLlmRuntimeConfig
+
+            return CustomLlmRuntimeConfig()  # nothing stored, nothing supplied
+
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _EmptyService)
+
+    called = False
+
+    async def _must_not_probe(**_kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(
+        "app.services.llm_probe.probe_openai_compatible_chat", _must_not_probe
+    )
+
+    result = await integrations.test_custom_llm_integration_settings(
+        body=None, _admin=object(), db=object()
+    )
+
+    assert result.ok is False
+    assert result.configured is False
+    assert result.missing == [
+        "custom_llm_api_key",
+        "custom_llm_base_url",
+        "custom_llm_agent_model",
+    ]
+    assert called is False
+
+
+async def test_custom_llm_test_probes_supplied_credentials_before_save(monkeypatch):
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _CustomLlmService)
+    seen: dict = {}
+
+    async def _probe(**kwargs):
+        seen.update(kwargs)
+        from app.services.llm_probe import LlmProbeResult
+
+        return LlmProbeResult(ok=True, latency_ms=123, sample="xin chào")
+
+    monkeypatch.setattr("app.services.llm_probe.probe_openai_compatible_chat", _probe)
+
+    from app.schemas.integrations import CustomLlmProbeIn
+
+    body = CustomLlmProbeIn(
+        custom_llm_api_key=" sk-brand-new-key ",
+        custom_llm_base_url="https://staging.example/v1/",
+    )
+
+    result = await integrations.test_custom_llm_integration_settings(
+        body=body, _admin=object(), db=object()
+    )
+
+    # Supplied values win so the operator can validate BEFORE saving; the
+    # stored agent model fills the remaining gap. Trailing slash tolerated.
+    assert seen == {
+        "api_key": " sk-brand-new-key ",
+        "base_url": "https://staging.example/v1/",
+        "model": "mimo-7b",
+    }
+    assert result.ok is True
+    assert result.latency_ms == 123
+    assert result.sample == "xin chào"
+
+
+async def test_custom_llm_test_error_is_never_raised_only_reported(monkeypatch):
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _CustomLlmService)
+
+    async def _probe(**_kwargs):
+        from app.services.llm_probe import LlmProbeResult
+
+        return LlmProbeResult(ok=False, latency_ms=45, error="HTTP 401: bad sk-stored-secret")
+
+    monkeypatch.setattr("app.services.llm_probe.probe_openai_compatible_chat", _probe)
+
+    result = await integrations.test_custom_llm_integration_settings(
+        body=None, _admin=object(), db=object()
+    )
+
+    assert result.ok is False
+    assert result.error == "HTTP 401: bad sk-stored-secret"

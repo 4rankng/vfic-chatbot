@@ -150,6 +150,22 @@ class Settings(BaseSettings):
     openrouter_request_timeout: int = 60
     openrouter_digest_timeout: int = 180
 
+    # Quota-failover provider. Any OpenAI-compatible chat endpoint (Xiao MiMo,
+    # a self-hosted gateway, another vendor) configured entirely from the admin
+    # settings page — base URL and model ids are operator-supplied so adding a
+    # provider never needs a code change. Used ONLY when the primary provider
+    # reports rate-limit/quota exhaustion; see ``_llm_call_with_retry``.
+    custom_llm_enable: bool = False
+    custom_llm_label: str = "Dự phòng"
+    custom_llm_api_key: str = ""
+    custom_llm_base_url: str = ""
+    custom_llm_agent_model: str = ""
+    # Empty safety/fast models fall back to the agent model, so one model id is
+    # enough to get a working provider.
+    custom_llm_safety_model: str = ""
+    custom_llm_fast_model: str = ""
+    custom_llm_request_timeout: int = 60
+
     # Embeddings: OpenRouter by default (3072-dim) so knowledge indexing and
     # retrieval can use the same admin-managed OpenRouter credential path as
     # the digest/chat models. Gemini remains available as an explicit fallback
@@ -290,7 +306,7 @@ class Settings(BaseSettings):
     # a Redis token list throttles concurrent provider calls across ALL worker
     # processes so a burst doesn't trip MiniMax/Gemini 429s. A turn that can't
     # acquire a token within llm_acquire_timeout_seconds fail-fasts (raises
-    # LLMThrottled → DEGRADATION_REPLY + mutex clear) rather than queueing
+    # LLMThrottled → suppressed turn + mutex clear) rather than queueing
     # silently — no ~30s stall, no deadlock risk.
     # Tune from 429/latency metrics; raise concurrency if normal-load latency suffers.
     llm_concurrency_limit: int = 8  # max concurrent LLM calls, deployment-wide

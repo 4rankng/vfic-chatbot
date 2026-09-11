@@ -123,7 +123,7 @@ class MinimaxIntegrationSettingsOut(BaseModel):
     minimax_agent_model: str
     minimax_safety_model: str
     minimax_enable: bool
-    llm_default_provider: Literal["minimax", "openrouter"]
+    llm_default_provider: Literal["minimax", "openrouter", "custom"]
 
 
 class MinimaxIntegrationSettingsUpdate(BaseModel):
@@ -131,7 +131,7 @@ class MinimaxIntegrationSettingsUpdate(BaseModel):
 
     minimax_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
     minimax_enable: bool | None = None
-    llm_default_provider: Literal["minimax", "openrouter"] | None = None
+    llm_default_provider: Literal["minimax", "openrouter", "custom"] | None = None
 
 
 class MinimaxIntegrationTestOut(BaseModel):
@@ -148,7 +148,7 @@ class OpenRouterIntegrationSettingsOut(BaseModel):
     openrouter_embedding_model: str
     openrouter_embedding_dim: int
     openrouter_enable: bool
-    llm_default_provider: Literal["minimax", "openrouter"]
+    llm_default_provider: Literal["minimax", "openrouter", "custom"]
 
 
 class OpenRouterIntegrationSettingsUpdate(BaseModel):
@@ -159,12 +159,72 @@ class OpenRouterIntegrationSettingsUpdate(BaseModel):
     openrouter_agent_model: str | None = Field(default=None, min_length=1, max_length=256)
     openrouter_safety_model: str | None = Field(default=None, min_length=1, max_length=256)
     openrouter_digest_model: str | None = Field(default=None, min_length=1, max_length=256)
-    llm_default_provider: Literal["minimax", "openrouter"] | None = None
+    llm_default_provider: Literal["minimax", "openrouter", "custom"] | None = None
 
 
 class OpenRouterIntegrationTestOut(BaseModel):
     configured: bool
     missing: list[str]
+
+
+# ─── Custom OpenAI-compatible provider ──────────────────────────────────────
+# A third first-class provider (e.g. Xiaomi MiMo) supplied entirely by the
+# operator: base URL + model ids + credential. It can be selected as the default
+# like MiniMax or OpenRouter, and participates in quota failover either way.
+
+
+class CustomLlmIntegrationSettingsOut(BaseModel):
+    custom_llm_api_key: SecretStatus
+    custom_llm_base_url: str
+    custom_llm_agent_model: str
+    custom_llm_safety_model: str
+    custom_llm_fast_model: str
+    custom_llm_label: str
+    custom_llm_enable: bool
+    # True only when enabled AND key + base URL + agent model are all present,
+    # so the UI can say "armed" rather than merely "saved".
+    custom_llm_usable: bool
+    llm_default_provider: Literal["minimax", "openrouter", "custom"]
+
+
+class CustomLlmIntegrationSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    custom_llm_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    custom_llm_base_url: str | None = Field(default=None, min_length=1, max_length=512)
+    custom_llm_agent_model: str | None = Field(default=None, min_length=1, max_length=256)
+    custom_llm_safety_model: str | None = Field(default=None, min_length=1, max_length=256)
+    custom_llm_fast_model: str | None = Field(default=None, min_length=1, max_length=256)
+    custom_llm_label: str | None = Field(default=None, min_length=1, max_length=64)
+    custom_llm_enable: bool | None = None
+    llm_default_provider: Literal["minimax", "openrouter", "custom"] | None = None
+
+
+class CustomLlmProbeIn(BaseModel):
+    """Credentials to probe before they are saved.
+
+    Any field left unset falls back to the stored value, so an operator can
+    re-probe a saved provider without re-entering the key.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    custom_llm_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    custom_llm_base_url: str | None = Field(default=None, min_length=1, max_length=512)
+    custom_llm_agent_model: str | None = Field(default=None, min_length=1, max_length=256)
+
+
+class CustomLlmIntegrationTestOut(BaseModel):
+    """Result of a real chat call against the provider."""
+
+    ok: bool
+    configured: bool
+    missing: list[str]
+    # Round-trip latency and a short echo of the reply, so a green result is
+    # evidence the endpoint actually answered rather than merely accepted TCP.
+    latency_ms: int | None = None
+    sample: str | None = None
+    error: str | None = None
 
 
 # ─── Facebook / Messenger (Phase 4) ─────────────────────────────────────────

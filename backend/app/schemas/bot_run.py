@@ -75,6 +75,7 @@ DecisionTraceSummaryCode = Literal[
     "claimed",
     "suppressed",
     "llm_throttled",
+    "agent_error",
     "outbox_recovery",
 ]
 
@@ -90,7 +91,9 @@ DecisionTraceToolName = Literal[
 ]
 
 DecisionTraceToolSelectedBy = Literal["model", "policy", "prefetch"]
-DecisionTraceProvider = Literal["minimax", "openrouter", "unknown"]
+# "fallback" is the admin-configured quota-failover provider; a turn that
+# switched providers mid-flight must still produce a valid decision trace.
+DecisionTraceProvider = Literal["minimax", "openrouter", "fallback", "unknown"]
 DecisionTraceModelPhase = Literal["tool_request", "final", "retry", "direct"]
 DecisionTraceReasoningStatus = Literal["returned", "not_returned", "truncated"]
 
@@ -134,7 +137,7 @@ _DECISION_CODE_SUMMARIES: dict[str, frozenset[str]] = {
     ),
     "grounding_verdict": frozenset({"grounded", "sanitized", "skipped"}),
     "ownership_verdict": frozenset({"claimed", "suppressed"}),
-    "degradation_reason": frozenset({"llm_throttled"}),
+    "degradation_reason": frozenset({"llm_throttled", "agent_error"}),
     "recovery_reason": frozenset({"outbox_recovery"}),
 }
 

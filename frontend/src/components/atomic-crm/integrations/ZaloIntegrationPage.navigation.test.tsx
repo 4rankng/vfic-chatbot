@@ -39,6 +39,17 @@ const mocks = vi.hoisted(() => ({
         openrouter_enable: false,
         llm_default_provider: "minimax" as const,
       },
+      customLlm: {
+        custom_llm_api_key: { configured: false },
+        custom_llm_base_url: "",
+        custom_llm_agent_model: "",
+        custom_llm_safety_model: "",
+        custom_llm_fast_model: "",
+        custom_llm_label: "Dự phòng",
+        custom_llm_enable: false,
+        custom_llm_usable: false,
+        llm_default_provider: "minimax" as const,
+      },
     }),
   ),
   testOaConnection: vi.fn(() =>
@@ -87,10 +98,12 @@ vi.mock("./api", () => ({
     saveZaloSettings: vi.fn(),
     saveMinimaxSettings: vi.fn(),
     saveOpenRouterSettings: vi.fn(),
+    saveCustomLlmSettings: vi.fn(),
     testBotConnection: vi.fn(),
     testOaConnection: mocks.testOaConnection,
     testMinimaxConnection: vi.fn(),
     testOpenRouterConnection: vi.fn(),
+    testCustomLlmConnection: vi.fn(),
   },
   facebookIntegrationGateway: {
     loadStatus: mocks.loadFacebookStatus,
@@ -438,6 +451,43 @@ describe("ZaloIntegrationPage navigation", () => {
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Kết nối Facebook" }))
+      .toBeVisible();
+  });
+});
+
+describe("ZaloIntegrationPage provider sections", () => {
+  it("opens the Xiaomi failover provider section from the side nav", async () => {
+    mocks.isMobile = false;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    await expect
+      .element(screen.getByRole("button", { name: "Zalo", exact: true }))
+      .toBeVisible();
+
+    const xiaomiButton = Array.from(
+      screen.container.querySelectorAll<HTMLButtonElement>(
+        ".settings-side-nav-link",
+      ),
+    ).find((button) => button.textContent?.includes("Xiaomi"));
+    expect(xiaomiButton).toBeDefined();
+    xiaomiButton?.click();
+
+    // The section header + the three provider controls render.
+    await expect
+      .element(screen.getByRole("heading", { name: "Xiaomi", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Model chatbot"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Base URL"))
       .toBeVisible();
   });
 });

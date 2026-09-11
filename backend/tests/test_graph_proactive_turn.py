@@ -426,5 +426,7 @@ async def test_send_exception_is_reported_as_send_failed(monkeypatch):
     res = await run_proactive_turn(conv, _deps(agent, zalo, conversation=svc))
 
     assert res["outcome"] == "send_failed"
-    assert res["reply"]  # retry_exhausted_fallback or the candidate
+    # The generated nudge stays recorded even though transport failed — the
+    # candidate is no longer replaced with a fallback redirect.
+    assert res["reply"] == "Theo dõi lại nhé?"
     assert recorded == [{"message": res["reply"], "ok": False}]

@@ -26,10 +26,12 @@ from app.core.cache import bump_cache_version
 from app.core.preamble_cache import (
     NS_INTEGRATION_FACEBOOK,
     NS_INTEGRATION_MINIMAX,
+    NS_INTEGRATION_CUSTOM_LLM,
     NS_INTEGRATION_OPENROUTER,
     NS_INTEGRATION_ZALO,
     cached_facebook_oauth_config,
     cached_minimax_config,
+    cached_custom_llm_config,
     cached_openrouter_config,
     cached_zalo_config,
     evict_local_namespace,
@@ -59,6 +61,27 @@ OPENROUTER_AGENT_MODEL = "openrouter_agent_model"
 OPENROUTER_SAFETY_MODEL = "openrouter_safety_model"
 OPENROUTER_DIGEST_MODEL = "openrouter_digest_model"
 LLM_DEFAULT_PROVIDER = "llm_default_provider"
+
+# Quota-failover provider: any OpenAI-compatible endpoint, fully operator-supplied
+# so a new vendor needs no code change.
+CUSTOM_LLM_ENABLE = "custom_llm_enable"
+CUSTOM_LLM_LABEL = "custom_llm_label"
+CUSTOM_LLM_API_KEY = "custom_llm_api_key"
+CUSTOM_LLM_BASE_URL = "custom_llm_base_url"
+CUSTOM_LLM_AGENT_MODEL = "custom_llm_agent_model"
+CUSTOM_LLM_SAFETY_MODEL = "custom_llm_safety_model"
+CUSTOM_LLM_FAST_MODEL = "custom_llm_fast_model"
+
+CUSTOM_LLM_SETTING_KEYS = (
+    CUSTOM_LLM_ENABLE,
+    CUSTOM_LLM_LABEL,
+    CUSTOM_LLM_API_KEY,
+    CUSTOM_LLM_BASE_URL,
+    CUSTOM_LLM_AGENT_MODEL,
+    CUSTOM_LLM_SAFETY_MODEL,
+    CUSTOM_LLM_FAST_MODEL,
+    LLM_DEFAULT_PROVIDER,
+)
 
 ZALO_SETTING_KEYS = (
     ZALO_BOT_TOKEN,
@@ -165,6 +188,25 @@ class OpenRouterRuntimeConfig:
     default_provider: str = "minimax"
 
 
+@dataclass(frozen=True)
+class CustomLlmRuntimeConfig:
+    """Admin-configured OpenAI-compatible provider used on quota exhaustion."""
+
+    api_key: str = ""
+    base_url: str = ""
+    agent_model: str = ""
+    safety_model: str = ""
+    fast_model: str = ""
+    label: str = ""
+    enabled: bool = False
+    default_provider: str = "minimax"
+
+    @property
+    def usable(self) -> bool:
+        """Whether this config can actually serve a turn."""
+        return bool(self.enabled and self.api_key and self.base_url and self.agent_model)
+
+
 class IntegrationSettingsCipher:
     """Small AES-GCM wrapper for settings secrets.
 
@@ -241,9 +283,15 @@ def _bool_value(value: str | None, fallback: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+# The selectable providers. "custom" is the operator-supplied OpenAI-compatible
+# endpoint; an unrecognised stored value falls back to minimax rather than
+# leaving the process with no provider.
+_SELECTABLE_PROVIDERS = frozenset({"minimax", "openrouter", "custom"})
+
+
 def _provider_value(value: str | None, fallback: str) -> str:
     candidate = (value or fallback or "minimax").strip().lower()
-    return candidate if candidate in {"minimax", "openrouter"} else "minimax"
+    return candidate if candidate in _SELECTABLE_PROVIDERS else "minimax"
 
 
 class IntegrationSettingsService:
@@ -411,6 +459,94 @@ class IntegrationSettingsService:
             "openrouter_enable": cfg.enabled,
             "llm_default_provider": cfg.default_provider,
         }
+
+    async def resolve_custom_llm(self) -> CustomLlmRuntimeConfig:
+        async def _load() -> dict:
+            stored = await self._stored_values(CUSTOM_LLM_SETTING_KEYS)
+            # getattr with a default: this provider is optional, and callers
+            # (including tests) may pass a settings object that predates it.
+            def _default(name: str, fallback: str = "") -> str:
+                return getattr(self.settings, name, fallback) or fallback
+
+            agent_model = (
+                stored.get(CUSTOM_LLM_AGENT_MODEL) or _default("custom_llm_agent_model")
+            )
+            return CustomLlmRuntimeConfig(
+                api_key=stored.get(CUSTOM_LLM_API_KEY) or _default("custom_llm_api_key"),
+                base_url=stored.get(CUSTOM_LLM_BASE_URL) or _default("custom_llm_base_url"),
+                agent_model=agent_model,
+                # One model id is enough: safety/fast reuse the agent model when
+                # the operator leaves them blank.
+                safety_model=(
+                    stored.get(CUSTOM_LLM_SAFETY_MODEL)
+                    or _default("custom_llm_safety_model")
+                    or agent_model
+                ),
+                fast_model=(
+                    stored.get(CUSTOM_LLM_FAST_MODEL) or _default("custom_llm_fast_model")
+                ),
+                label=stored.get(CUSTOM_LLM_LABEL) or _default("custom_llm_label", "Dự phòng"),
+                enabled=_bool_value(
+                    stored.get(CUSTOM_LLM_ENABLE),
+                    bool(getattr(self.settings, "custom_llm_enable", False)),
+                ),
+                default_provider=_provider_value(
+                    stored.get(LLM_DEFAULT_PROVIDER),
+                    getattr(self.settings, "llm_default_provider", "minimax"),
+                ),
+            ).__dict__
+
+        cached = await cached_custom_llm_config(_load)
+        return CustomLlmRuntimeConfig(**cached)
+
+    async def admin_custom_llm_view(self) -> dict:
+        cfg = await self.resolve_custom_llm()
+        return {
+            "custom_llm_api_key": {
+                "configured": bool(cfg.api_key),
+                "preview": _preview(cfg.api_key),
+            },
+            "custom_llm_base_url": cfg.base_url,
+            "custom_llm_agent_model": cfg.agent_model,
+            "custom_llm_safety_model": cfg.safety_model,
+            "custom_llm_fast_model": cfg.fast_model,
+            "custom_llm_label": cfg.label,
+            "custom_llm_enable": cfg.enabled,
+            "custom_llm_usable": cfg.usable,
+            "llm_default_provider": cfg.default_provider,
+        }
+
+    async def update_custom_llm(
+        self,
+        values: dict[str, str | bool | None],
+        *,
+        actor_id,
+    ) -> list[str]:
+        changed: list[str] = []
+        for key, value in values.items():
+            if key not in CUSTOM_LLM_SETTING_KEYS or value is None:
+                continue
+            if await self._write_setting(
+                key,
+                str(value),
+                actor_id=actor_id,
+                is_secret=key == CUSTOM_LLM_API_KEY,
+            ):
+                changed.append(key)
+
+        if changed:
+            await record_audit(
+                self.db,
+                action="update_custom_llm_integration_settings",
+                actor_id=actor_id,
+                target_type="integration_settings",
+                target_id="fallback_llm",
+                payload={"changed_keys": changed},
+            )
+            await self.db.commit()
+            evict_local_namespace(NS_INTEGRATION_CUSTOM_LLM)
+            await bump_cache_version(NS_INTEGRATION_CUSTOM_LLM)
+        return changed
 
     async def _write_setting(
         self,

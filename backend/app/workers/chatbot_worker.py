@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from inspect import iscoroutinefunction
 import contextlib
 import logging
 import time
@@ -11,19 +10,17 @@ import uuid
 
 from app.core.logging import trace_id_ctx
 from app.graph.llm_semaphore import LLMThrottled
-from app.shared.application.outbound import AMBIGUOUS_SEND_CLASSES, OutboundTelemetry
 from app.graph.types import _now
-from app.models.conversation import DeliveryStatus
 
 logger = logging.getLogger(__name__)
 _direct_turn_tasks: set[asyncio.Task[None]] = set()
 _DIRECT_TURN_SHUTDOWN_TIMEOUT_SECONDS = 5.0
 
-# Static Vietnamese degradation message — sent when LLM is throttled (no LLM call).
-DEGRADATION_REPLY = (
-    "Em xin lỗi anh/chị, hiện tại hệ thống đang gặp nhiều truy cập đồng thời. "
-    "Anh/chị vui lòng gửi lại tin nhắn sau ít phút nhé ạ. Em cảm ơn anh/chị!"
-)
+# When every LLM provider is exhausted, NOTHING is sent to the customer: an
+# internal-capacity apology reads as a broken bot (and was never true — the
+# failure is quota/rate-limit, not traffic). The failure belongs to engineers,
+# so the worker logs full diagnostics and records the turn as SUPPRESSED.
+# See the LLMThrottled handler in _run_job_async_inner.
 
 
 def start_direct_chat_turn(job: dict) -> bool:
@@ -388,17 +385,22 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
             try:
                 await run_turn(state, deps)
             except LLMThrottled as exc:
-                # LLM is throttled — send a static reply without another model call.
-                logger.warning(
-                    "llm_throttled: sending degradation reply for %s",
+                # Every provider failed (quota/rate-limit/concurrency gate). The
+                # failure is for engineers, not customers: an internal-capacity
+                # apology reads as a broken bot and was never true (the cause is
+                # quota, not traffic). Nothing is SENT — log the full diagnostics
+                # and record the turn as SUPPRESSED so the lock clears, the
+                # dashboard shows the degraded turn, and the conversation stays
+                # available for the next inbound message.
+                logger.error(
+                    "llm_throttled: all LLM providers exhausted, no reply sent "
+                    "conversation=%s trace=%s reason=%s",
                     job.get("conversation_id", "?"),
+                    trace_id or "-",
+                    exc,
                 )
                 try:
                     from app.graph.decision_trace import DecisionTraceBuilder
-                    from app.recruitment.domain.provider import (
-                        provider_from_conversation,
-                        recipient_from_conversation,
-                    )
                     from app.services.conversation import ConversationService
 
                     svc = ConversationService(db)
@@ -408,111 +410,25 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                         lock_owner = state.lock_owner or None
                         trace_sink = DecisionTraceBuilder()
                         trace_sink.record_decision("degradation_reason", "llm_throttled")
-                        outbox_channel = provider_from_conversation(conv)
-                        recipient_id = recipient_from_conversation(conv)
-                        outbox_payload = {
-                            "chat_id": recipient_id,
-                            "text": DEGRADATION_REPLY,
-                            **(
-                                {"quote_message_id": state.reply_to_message_id}
-                                if state.reply_to_message_id
-                                else {}
-                            ),
-                        }
-                        owned = await svc.claim_send(
-                            conv,
-                            version_at_start=state.version_at_start,
-                            lock_owner=lock_owner,
-                            pending_message_id=state.pending_message_id,
-                            reply=DEGRADATION_REPLY,
-                            outbox_channel=outbox_channel,
-                            outbox_payload=outbox_payload,
+                        decision_trace = (
+                            getattr(exc, "decision_trace", None) or trace_sink.snapshot_payload()
                         )
-                        sent = False
-                        external_error: str | None = None
-                        zalo_message_id: str | None = None
-                        degradation_override: DeliveryStatus | None = None
-                        if owned:
-                            sender = (
-                                deps.zalo.for_conversation(conv)
-                                if hasattr(deps.zalo, "for_conversation")
-                                else deps.zalo
-                            )
-                            dispatch = getattr(svc, "dispatch_outbound_message", None)
-                            send_t0 = time.monotonic()
-                            if callable(dispatch) and iscoroutinefunction(dispatch):
-                                send_result = await dispatch(message_id=state.pending_message_id)
-                            elif outbox_channel == "facebook_messenger":
-                                from app.services.zalo_bot_service import SendResult
-
-                                send_result = SendResult(
-                                    ok=False,
-                                    error="messenger requires durable outbound dispatch",
-                                )
-                            elif state.reply_to_message_id:
-                                send_result = await sender.send_message(
-                                    recipient_id,
-                                    DEGRADATION_REPLY,
-                                    quote_message_id=state.reply_to_message_id,
-                                )
-                            else:
-                                send_result = await sender.send_message(
-                                    recipient_id, DEGRADATION_REPLY
-                                )
-                            if send_result is None:
-                                from app.services.zalo_bot_service import SendResult
-
-                                send_result = SendResult(
-                                    ok=False,
-                                    error="outbound command was not available for dispatch",
-                                )
-                            send_elapsed_ms = int(round((time.monotonic() - send_t0) * 1000))
-                            sent = send_result.ok
-                            external_error = None if send_result.ok else send_result.error
-                            zalo_message_id = send_result.msg_id
-                            # Mirror the runner's SEND_UNKNOWN classifier so a
-                            # degradation reply that times out at Zalo is also
-                            # non-retriable (at-most-once).
-                            if getattr(send_result, "suppressed", False):
-                                degradation_override = DeliveryStatus.SUPPRESSED
-                            elif (
-                                not send_result.ok
-                                and send_result.error_class in AMBIGUOUS_SEND_CLASSES
-                            ):
-                                degradation_override = DeliveryStatus.SEND_UNKNOWN
-                        trace_sink.record_decision(
-                            "ownership_verdict",
-                            "claimed" if owned else "suppressed",
-                        )
-                        decision_trace = getattr(exc, "decision_trace", None)
-                        if decision_trace is None:
-                            decision_trace = trace_sink.snapshot_payload()
                         throttle_timings = _preamble_timings(
                             state, started_at, lane="agent", throttle=True
                         )
-                        if owned:
-                            throttle_timings["send_ms"] = max(0, send_elapsed_ms)
-                            telemetry = getattr(send_result, "telemetry", None)
-                            if isinstance(telemetry, OutboundTelemetry):
-                                throttle_timings.update(telemetry.to_stage_timings())
                         await svc.record_bot_outcome(
                             conv,
                             version_at_start=state.version_at_start,
-                            reply=DEGRADATION_REPLY,
+                            reply="",  # nothing was sent — the audit row stays empty
                             started_at=started_at,
-                            sent=sent,
+                            sent=False,
                             pending_message_id=state.pending_message_id,
-                            external_error=external_error,
-                            zalo_message_id=zalo_message_id,
                             stage_timings=throttle_timings,
                             lock_owner=lock_owner,
-                            delivery_status=degradation_override,
                             decision_trace=decision_trace,
-                            outbox_channel=outbox_channel,
-                            outbox_payload=outbox_payload,
                         )
                 except Exception:  # noqa: BLE001
-                    logger.error("failed to send degradation reply", exc_info=True)
+                    logger.error("failed to record degraded turn outcome", exc_info=True)
     finally:
         if heartbeat_task is not None:
             heartbeat_task.cancel()
