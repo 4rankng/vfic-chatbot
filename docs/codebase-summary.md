@@ -162,9 +162,9 @@ ChatBot/
 | `backend/app/graph/runner.py` | Bot-turn pipeline node chain (`run_turn`). Topology documented in module docstring lines 1-18. |
 | `backend/app/graph/types.py` | `BotRunState` (line 21), `GraphDeps` (line 32). |
 | `backend/app/graph/factories.py` | `build_deps(db)` (line 65) — resolves admin-managed MiniMax/OpenRouter/Zalo creds. |
-| `backend/app/graph/clients.py` | MiniMax / OpenRouter LLM clients; `_chat_for_role` selects one configured provider per client; `_llm_call_with_retry` retries one 429 (line 102); `GeminiEmbedder` (line 127). |
+| `backend/app/graph/clients.py` | MiniMax / OpenRouter LLM clients; `_chat_for_role` selects one configured provider per client; `_llm_call_with_retry` retries one 429 then fails over across enabled providers; `GeminiEmbedder` (line 127). |
 | `backend/app/graph/tools.py` | `TOOL_SCHEMAS` + `_dispatch_tool`. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
-| `backend/app/graph/safety.py` | `fast_safety_filter`, `parse_verdict`, `build_retry_prompt`, `retry_exhausted_fallback`. |
+| `backend/app/graph/safety.py` | `fast_safety_filter`, `parse_verdict`, `build_retry_prompt` — structural cleaning only; an empty result suppresses the turn. |
 | `backend/app/graph/llm_semaphore.py` | Redis-backed cross-process LLM concurrency semaphore; `LLMThrottled`. |
 | `backend/app/api/projects.py` | Project CRUD plus single-page knowledge, 12-category replacement, clear, cutover, and rollback endpoints. |
 | `backend/app/services/zalo_sender.py` | `ZaloChannelSender` facade (line 19) — dispatches per `conv.zalo_channel`. |

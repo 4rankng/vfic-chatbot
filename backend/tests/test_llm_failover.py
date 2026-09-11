@@ -1,8 +1,8 @@
 """Cross-provider failover when a provider runs out of capacity.
 
 A spent token plan must not reach the candidate as an error: the turn walks the
-other configured providers, and only a fully exhausted chain degrades to the
-static reply.
+other configured providers, and only a fully exhausted chain suppresses the
+turn (nothing is sent to the candidate — the failure goes to the logs).
 """
 
 from __future__ import annotations
@@ -202,7 +202,7 @@ def test_failover_chain_walks_the_other_providers_in_deterministic_order(monkeyp
     rec = _RecordingBuilders(monkeypatch)
     minimax, openrouter, custom = _configs(default_provider="minimax")
 
-    chain = _build_failover_chain(
+    _build_failover_chain(
         minimax_config=minimax,
         openrouter_config=openrouter,
         custom_config=custom,
@@ -220,7 +220,7 @@ def test_failover_chain_skips_a_disabled_spare(monkeypatch):
 
     rec = _RecordingBuilders(monkeypatch)
 
-    chain = _build_failover_chain(
+    _build_failover_chain(
         minimax_config=MinimaxRuntimeConfig(
             enabled=True, api_key="mm-key", agent_model="mm-agent", default_provider="minimax"
         ),

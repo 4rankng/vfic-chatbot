@@ -1613,11 +1613,10 @@ def _chat_for_role(
 
     Returns a plain ``ChatOpenAI`` for the single configured provider. The
     active provider is resolved once by ``_active_llm_provider`` (default first,
-    falling back to whichever is enabled) — switching providers is a deploy-time
-    ``LLM_DEFAULT_PROVIDER`` change, not a runtime failover. There is no
-    per-call fallback: a failed provider call surfaces directly so the caller
-    (worker / safety judge) handles it. Removing the runtime failover wrapper
-    keeps the client stateless and safe to cache across turns.
+    falling back to whichever is enabled). Cross-provider failover is NOT wired
+    here: the agent loop owns it per-call via ``_llm_call_with_retry`` with a
+    failover chain from ``factories._build_failover_chain``, which keeps these
+    clients stateless and safe to cache across turns.
     """
     s = get_settings()
     provider = _active_llm_provider(
