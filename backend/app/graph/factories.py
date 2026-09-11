@@ -469,7 +469,7 @@ def _build_failover_chain(*, minimax_config, openrouter_config, custom_config):
                 capture_reasoning=True,
             ),
         )
-    if custom_config is not None and custom_config.usable:
+    if active != "custom" and custom_config is not None and custom_config.usable:
         _add(
             "fallback",
             lambda: _custom_chat(

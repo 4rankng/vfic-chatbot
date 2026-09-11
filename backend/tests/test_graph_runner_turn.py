@@ -28,7 +28,6 @@ from app.graph import runner
 from app.graph.direct_context import DirectContext, ProjectTurnContext
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.ports import ReplyPolicyResult
-from app.models.conversation import DeliveryStatus
 from app.graph.runner import run_turn
 from app.graph.safety import DeterministicReplyPolicy
 from app.graph.types import BotRunState, GraphDeps

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import threading
 import uuid
-from types import SimpleNamespace
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest

@@ -42,7 +42,6 @@ from app.graph.direct_context import (
     build_direct_system,
     build_direct_user_text,
 )
-from app.graph.prompts import TIMEOUT_REPLY
 from app.graph.router import (
     detect_recency_sort_intent,
     detect_salary_sort_intent,
