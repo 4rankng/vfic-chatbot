@@ -208,13 +208,15 @@ async def test_inline_oa_profile_lookup_has_no_refresh_and_uses_isolated_session
     class _FakeLLM:
         pass
 
-    profile_sender_kwargs = []
     profile_sessions = []
     enrichment_calls = []
 
     class _ProfileSender:
         def __init__(self, **kwargs):
-            profile_sender_kwargs.append(kwargs)
+            # Kept on the instance so assertions target the sender actually
+            # handed to enrichment — ZaloChannelSender legitimately constructs
+            # its own refresh-bearing ZaloOASender when imported lazily.
+            self.kwargs = kwargs
 
         async def get_user_detail(self, _user_id):
             return None
@@ -242,9 +244,9 @@ async def test_inline_oa_profile_lookup_has_no_refresh_and_uses_isolated_session
     deps = await build_deps(object(), session_factory=session_factory)
     await deps.enrich_oa_profile("oa:user-1", "user-1")
 
-    assert len(profile_sender_kwargs) == 1
-    assert set(profile_sender_kwargs[0]) == {"access_token"}
-    assert profile_sender_kwargs[0]["access_token"] is not None
+    profile_sender = enrichment_calls[0][1]
+    assert set(profile_sender.kwargs) == {"access_token"}
+    assert profile_sender.kwargs["access_token"] is not None
     assert profile_sessions == [profile_db]
     assert enrichment_calls[0][0] is profile_db
     assert enrichment_calls[0][2:] == ("oa:user-1", "user-1")

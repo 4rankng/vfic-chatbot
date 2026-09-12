@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from app.core.config import Settings
-from app.services.zalo_oa_service import ZaloOASender
+from app.services.zalo_oa_service import ZaloOASender, ZaloOaUserUnreachable
 from app.shared.application.outbound import OutboundPolicySuppressedError
 
 from tests.helpers.http_fake import register_fake_client
@@ -526,6 +526,29 @@ async def test_get_user_detail_returns_none_on_permission_denied(
     profile = await sender.get_user_detail("user-c")
 
     assert profile is None
+
+
+async def test_get_user_detail_raises_for_invalid_user_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """-201 naming the user_id is a dead follower: terminal, so callers can stop."""
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {"error": -201, "message": "user_id is not valid"}
+
+    class _FakeClient:
+        async def get(self, url: str, *, params=None, headers=None, **kw):
+            return _FakeResp()
+
+    register_fake_client("zalo_oa", _FakeClient())
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+
+    with pytest.raises(ZaloOaUserUnreachable):
+        await sender.get_user_detail("user-gone")
 
 
 async def test_get_user_detail_returns_none_on_transport_error(

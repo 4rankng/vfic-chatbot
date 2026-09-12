@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Resumable, observable backfill for missing Zalo OA profile fields."""
+"""Resumable, observable backfill for missing Zalo OA profile fields.
+
+Identities Zalo states can never be enriched (invalid user id, or a payload
+with no name and avatar) carry a terminal marker so the sweep converges
+instead of re-attempting them on every deploy; the marker expires with the
+lookup-done TTL so a re-follow or profile edit is picked up later.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +25,7 @@ from app.core.db import async_session, engine
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.lead import Lead
+from app.services.profile_enrichment import is_profile_lookup_terminated
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +102,25 @@ async def _profile_still_missing(zalo_id: str) -> bool:
         return (await db.scalar(statement)) is not None
 
 
+async def _eligible_remaining(db: AsyncSession, *, batch_size: int) -> int:
+    """Count eligible profiles not terminally marked unreachable.
+
+    Database eligibility stays the resume checkpoint; the terminal marker
+    (invalid Zalo user id, or a payload with no name and no avatar) removes
+    identities no retry can ever enrich, so the sweep converges.
+    """
+    remaining = 0
+    cursor: str | None = None
+    while True:
+        page = await _eligible_profiles_page(db, after=cursor, batch_size=batch_size)
+        if not page:
+            return remaining
+        for candidate in page:
+            if not await is_profile_lookup_terminated(candidate.zalo_id):
+                remaining += 1
+        cursor = page[-1].zalo_id
+
+
 async def _enrich_one(zalo_id: str) -> bool:
     from app.services.integration_settings import IntegrationSettingsService
     from app.services.profile_enrichment import ProfileEnrichmentService
@@ -140,24 +166,31 @@ async def _process_profile(
     *,
     max_attempts: int,
     retry_delay_seconds: float,
-) -> tuple[bool, bool]:
-    """Return ``(complete, changed)`` after bounded retries."""
+) -> tuple[str, bool]:
+    """Return ``(status, changed)`` after bounded retries.
+
+    ``status`` is ``complete`` when the profile left the eligible set,
+    ``unreachable`` when the terminal marker says no lookup can produce data,
+    and ``failed`` otherwise.
+    """
     changed = False
     for attempt in range(1, max_attempts + 1):
         try:
             changed = await _enrich_one(zalo_id) or changed
         except Exception as exc:  # noqa: BLE001 -- one profile must not stop the run
             logger.warning("oa profile backfill attempt failed error_type=%s", type(exc).__name__)
+        if await is_profile_lookup_terminated(zalo_id):
+            return "unreachable", changed
         try:
             if not await _profile_still_missing(zalo_id):
-                return True, changed
+                return "complete", changed
         except Exception as exc:  # noqa: BLE001 -- retry transient checkpoint failures
             logger.warning(
                 "oa profile backfill checkpoint failed error_type=%s", type(exc).__name__
             )
         if attempt < max_attempts and retry_delay_seconds:
             await asyncio.sleep(retry_delay_seconds * (2 ** (attempt - 1)))
-    return False, changed
+    return "failed", changed
 
 
 async def _run(args: argparse.Namespace) -> dict[str, int | bool | str]:
@@ -171,6 +204,7 @@ async def _run(args: argparse.Namespace) -> dict[str, int | bool | str]:
         "eligible_at_start": eligible_at_start,
         "attempted": 0,
         "completed": 0,
+        "unreachable": 0,
         "changed": 0,
         "failed": 0,
         "remaining": eligible_at_start,
@@ -204,15 +238,19 @@ async def _run(args: argparse.Namespace) -> dict[str, int | bool | str]:
                 break
             batch_number += 1
             for candidate in page:
-                complete, changed = await _process_profile(
+                if await is_profile_lookup_terminated(candidate.zalo_id):
+                    # Terminal from an earlier sweep — skip without calling Zalo.
+                    report["attempted"] = int(report["attempted"]) + 1
+                    report["unreachable"] = int(report["unreachable"]) + 1
+                    continue
+                status, changed = await _process_profile(
                     candidate.zalo_id,
                     max_attempts=args.max_attempts,
                     retry_delay_seconds=args.retry_delay_seconds,
                 )
                 report["attempted"] = int(report["attempted"]) + 1
-                report["completed" if complete else "failed"] = (
-                    int(report["completed" if complete else "failed"]) + 1
-                )
+                bucket = {"complete": "completed", "unreachable": "unreachable", "failed": "failed"}
+                report[bucket[status]] = int(report[bucket[status]]) + 1
                 if changed:
                     report["changed"] = int(report["changed"]) + 1
                 if args.delay_seconds:
@@ -224,11 +262,12 @@ async def _run(args: argparse.Namespace) -> dict[str, int | bool | str]:
                 batch=batch_number,
                 attempted=report["attempted"],
                 completed=report["completed"],
+                unreachable=report["unreachable"],
                 failed=report["failed"],
             )
 
         async with async_session() as db:
-            report["remaining"] = await _eligible_count(db)
+            report["remaining"] = await _eligible_remaining(db, batch_size=args.batch_size)
         report["limit_reached"] = bool(
             args.limit and int(report["attempted"]) >= args.limit and int(report["remaining"]) > 0
         )

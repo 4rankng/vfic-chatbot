@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.contact import Contact
 from app.services.conversation import ConversationService
 from app.services.lead.events import LeadEventBus
-from app.services.zalo_oa_service import OAUserProfile
+from app.services.zalo_oa_service import OAUserProfile, ZaloOaUserUnreachable
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,54 @@ def _profile_lookup_keys(external_id: str, *, namespace: str = "oa-profile") -> 
     """
     digest = hashlib.sha256(external_id.encode("utf-8")).hexdigest()[:32]
     return f"{namespace}:done:{digest}", f"{namespace}:lock:{digest}"
+
+
+def _profile_unreachable_key(external_id: str, *, namespace: str = "oa-profile") -> str:
+    """Redis key recording that no lookup can produce data for this identity."""
+    digest = hashlib.sha256(external_id.encode("utf-8")).hexdigest()[:32]
+    return f"{namespace}:unreachable:{digest}"
+
+
+async def _mark_profile_lookup_unreachable(
+    external_id: str, *, namespace: str = "oa-profile"
+) -> None:
+    """Record that the provider can return no data for this identity.
+
+    Set for an invalid user id (Zalo ``-201 user_id is not valid``) or a valid
+    response whose name and avatar are both empty — either way every retry is
+    a wasted call. The done-marker TTL applies so an identity whose owner
+    later re-follows or adds profile data is retried after expiry.
+    """
+    try:
+        from app.core.redis import get_redis
+
+        await get_redis().set(
+            _profile_unreachable_key(external_id, namespace=namespace),
+            "1",
+            ex=_PROFILE_LOOKUP_DONE_TTL_SECONDS,
+        )
+    except Exception:  # noqa: BLE001 -- cache is best-effort
+        return
+
+
+async def is_profile_lookup_terminated(
+    external_id: str, *, namespace: str = "oa-profile"
+) -> bool:
+    """True when the unreachable marker says no lookup can produce data.
+
+    Redis failures report False so maintenance callers fall back to one real
+    lookup attempt instead of silently skipping work.
+    """
+    try:
+        from app.core.redis import get_redis
+
+        return bool(
+            await get_redis().exists(
+                _profile_unreachable_key(external_id, namespace=namespace)
+            )
+        )
+    except Exception:  # noqa: BLE001 -- Redis must never block enrichment
+        return False
 
 
 def _is_blank(value: str | None) -> bool:
@@ -295,6 +343,12 @@ class ProfileEnrichmentService:
         try:
             try:
                 profile = await self.sender.get_user_detail(user_id)
+            except ZaloOaUserUnreachable:
+                # Zalo states this user id is permanently invalid. Remember it
+                # so maintenance sweeps stop spending calls on this identity.
+                await _mark_profile_lookup_unreachable(zalo_id)
+                logger.info("oa profile enrichment user unreachable")
+                return False
             except Exception:  # noqa: BLE001 -- enrichment is best-effort
                 logger.info("oa profile enrichment transport error")
                 return False
@@ -304,6 +358,10 @@ class ProfileEnrichmentService:
             display_name = normalize_oa_profile_display_name(profile.display_name)
             avatar_url = (profile.avatar_url or "").strip()
             if not (display_name or avatar_url):
+                # Valid response with nothing usable — as terminal as an
+                # invalid user until the identity's owner adds profile data.
+                await _mark_profile_lookup_unreachable(zalo_id)
+                logger.info("oa profile enrichment payload empty")
                 return False
 
             contact_display_name_updated = False

@@ -73,6 +73,9 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Same call site, second call: a version-less 404 base is retried once
     # with /v1 inserted (same host, same payload) — bumps the site's count
     # 1→2 without adding a distinct site.
+    # Same site again: the OA user-detail error branch reads envelope.message
+    # to tell a dead follower (-201 naming user_id) from a request bug —
+    # bumps get_user_detail's get count 3→4, no new site.
     "provider_boundary": 112,
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
@@ -80,7 +83,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
     "queue_producer": 40,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "2a63c91e2afc9138ba8f3fb99e4717c07f391eafff962f35d70ae06415011129"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "962aaf5709687acbfdcbd5390f08ec461bcf841958de563aed4e4df2e523e8c5"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

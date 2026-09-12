@@ -37,6 +37,17 @@ class OAUserProfile:
     avatar_url: str = ""
 
 
+class ZaloOaUserUnreachable(Exception):
+    """Zalo states the user id no longer maps to a follower of this OA.
+
+    Raised for ``-201`` with a ``user_id is not valid`` message — the user
+    unfollowed or the id is otherwise permanently invalid, so no future lookup
+    can succeed. Callers may terminally record this to stop retrying. Other
+    ``-201`` variants (e.g. malformed data) keep returning ``None`` because
+    they indicate a request bug, not a dead user.
+    """
+
+
 @dataclass(frozen=True)
 class _OaPostTiming:
     """Timing for one refresh-aware OA POST without retaining request data."""
@@ -443,9 +454,13 @@ class ZaloOASender:
         data_param = json.dumps({"user_id": user_id}, separators=(",", ":"))
         envelope = await self._get_with_refresh("/v3.0/oa/user/detail", params={"data": data_param})
         if not isinstance(envelope, dict) or envelope.get("error") not in (0, "0", None):
+            error_code = envelope.get("error") if isinstance(envelope, dict) else None
+            message = str(envelope.get("message") or "") if isinstance(envelope, dict) else ""
+            if error_code in (-201, "-201") and "user_id" in message.lower():
+                raise ZaloOaUserUnreachable(message or "user_id is not valid")
             logger.info(
                 "zalo OA user-detail lookup failed error=%s",
-                envelope.get("error") if isinstance(envelope, dict) else "non-dict",
+                error_code if error_code is not None else "non-dict",
             )
             return None
         data = envelope.get("data")

@@ -15,9 +15,9 @@ onto it, and a failed smoke gate aborts with the old color still serving.
 ## 1. Production stack — Docker Compose with a blue/green web tier
 
 `backend/docker-compose.yml` is shipped to `/opt/vfic` and auto-loads
-`/opt/vfic/.env`. Images are pulled from DockerHub:
-immutable `:<git-sha>` tags. `latest` remains a registry convenience tag but is
-never used by `make deploy`.
+`/opt/vfic/.env`. Images are pulled from GitHub Container Registry
+(`ghcr.io/4rankng/tinghire-{be,fe}`): immutable `:<git-sha>` tags. `latest`
+remains a registry convenience tag but is never used by `make deploy`.
 
 | Service | Image / base | Replicas | Role |
 |---|---|---|---|
@@ -152,6 +152,14 @@ run naturally skips completed profiles. Maintenance lookups run with
 `force_lookup`, so the Redis `done` marker cannot suppress a DB-eligible rerun;
 Redis still enforces the per-profile lock while the PostgreSQL advisory lock
 keeps sweeps from overlapping.
+
+Identities that Zalo states can never be enriched — `-201 user_id is not
+valid` (the user unfollowed or the id is dead) or a valid response whose name
+and avatar are both empty — get a Redis terminal marker (same TTL as the done
+marker). Sweeps skip terminally marked identities without calling Zalo and
+exclude them from `remaining`, so the sweep converges and the maintenance exit
+code stops failing on permanently unreachable contacts. The marker expires, so
+a user who re-follows or adds profile data is retried after the TTL.
 
 ```bash
 make -C backend profile-backfill-status  # container state, exit code, timestamps

@@ -11,7 +11,7 @@ from app.services.profile_enrichment import (
     _claim_profile_lookup,
     normalize_oa_profile_display_name,
 )
-from app.services.zalo_oa_service import OAUserProfile
+from app.services.zalo_oa_service import OAUserProfile, ZaloOaUserUnreachable
 
 pytestmark = pytest.mark.asyncio
 
@@ -104,15 +104,24 @@ class _FakeDB:
 
 
 class _FakeSender:
-    def __init__(self, profile: OAUserProfile | None, *, raises: bool = False) -> None:
+    def __init__(
+        self,
+        profile: OAUserProfile | None,
+        *,
+        raises: bool = False,
+        raises_exc: Exception | None = None,
+    ) -> None:
         self._profile = profile
         self._raises = raises
+        self._raises_exc = raises_exc
         self.called_with: str | None = None
         self.call_count = 0
 
     async def get_user_detail(self, user_id: str) -> OAUserProfile | None:
         self.called_with = user_id
         self.call_count += 1
+        if self._raises_exc is not None:
+            raise self._raises_exc
         if self._raises:
             raise ConnectionError("network down")
         return self._profile
@@ -248,6 +257,58 @@ async def test_missing_lead_or_contact_skips_provider() -> None:
 
     assert await service.enrich_oa_user("oa:missing", user_id="missing") is False
     assert sender.call_count == 0
+
+
+async def test_unreachable_user_is_marked_terminal(monkeypatch) -> None:
+    """Zalo -201 (dead follower) records a terminal marker, not a retry loop."""
+    marked: list[str] = []
+
+    async def mark_unreachable(zalo_id, *, namespace="oa-profile"):
+        marked.append(zalo_id)
+
+    monkeypatch.setattr(
+        "app.services.profile_enrichment._mark_profile_lookup_unreachable",
+        mark_unreachable,
+    )
+    contact = SimpleNamespace(id="contact-id", display_name=None, avatar_url=None)
+    db = _FakeDB(
+        current_contact=contact,
+        initial_leads=[SimpleNamespace(id=1, avatar_url=None)],
+    )
+    sender = _FakeSender(None, raises_exc=ZaloOaUserUnreachable("user_id is not valid"))
+    service = _make_service(db=db, sender=sender, conversation_contact=contact)
+
+    result = await service.enrich_oa_user("oa:gone", user_id="gone")
+
+    assert result is False
+    assert marked == ["oa:gone"]
+    assert db.commits == 0
+
+
+async def test_empty_payload_is_marked_terminal(monkeypatch) -> None:
+    """A valid response with no name and no avatar cannot enrich anything."""
+    marked: list[str] = []
+
+    async def mark_unreachable(zalo_id, *, namespace="oa-profile"):
+        marked.append(zalo_id)
+
+    monkeypatch.setattr(
+        "app.services.profile_enrichment._mark_profile_lookup_unreachable",
+        mark_unreachable,
+    )
+    contact = SimpleNamespace(id="contact-id", display_name=None, avatar_url=None)
+    db = _FakeDB(
+        current_contact=contact,
+        initial_leads=[SimpleNamespace(id=1, avatar_url=None)],
+    )
+    sender = _FakeSender(OAUserProfile(avatar_url="", display_name=""))
+    service = _make_service(db=db, sender=sender, conversation_contact=contact)
+
+    result = await service.enrich_oa_user("oa:empty", user_id="empty")
+
+    assert result is False
+    assert marked == ["oa:empty"]
+    assert db.commits == 0
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,16 @@ import pytest
 from scripts import backfill_oa_profiles as backfill
 
 
+@pytest.fixture(autouse=True)
+def _lookup_not_terminated(monkeypatch) -> None:
+    """Default: no identity carries the terminal unreachable marker."""
+
+    async def not_terminated(_external_id, **_kwargs):
+        return False
+
+    monkeypatch.setattr(backfill, "is_profile_lookup_terminated", not_terminated)
+
+
 @pytest.mark.asyncio
 async def test_enrich_one_forces_db_eligible_profile_lookup(monkeypatch) -> None:
     @asynccontextmanager
@@ -103,7 +113,7 @@ async def test_process_profile_retries_until_db_checkpoint_is_complete(monkeypat
     monkeypatch.setattr(backfill.asyncio, "sleep", sleep)
     assert await backfill._process_profile(
         "oa:private-user", max_attempts=3, retry_delay_seconds=1
-    ) == (True, True)
+    ) == ("complete", True)
     assert attempts == 2
     assert sleeps == [1]
 
@@ -128,7 +138,7 @@ async def test_process_profile_reports_incomplete_after_bounded_attempts(monkeyp
     monkeypatch.setattr(backfill.asyncio, "sleep", no_sleep)
     assert await backfill._process_profile(
         "oa:private-user", max_attempts=3, retry_delay_seconds=1
-    ) == (False, False)
+    ) == ("failed", False)
     assert attempts == 3
 
 
@@ -155,8 +165,37 @@ async def test_process_profile_retries_transient_checkpoint_failures(monkeypatch
 
     assert await backfill._process_profile(
         "oa:private-user", max_attempts=3, retry_delay_seconds=1
-    ) == (True, True)
+    ) == ("complete", True)
     assert checks == 2
+
+
+@pytest.mark.asyncio
+async def test_process_profile_stops_when_lookup_is_terminated(monkeypatch) -> None:
+    attempts = 0
+
+    async def enrich(_zalo_id):
+        nonlocal attempts
+        attempts += 1
+        return False
+
+    async def still_missing(_zalo_id):
+        return True
+
+    async def no_sleep(_value):
+        return None
+
+    async def terminated(_external_id, **_kwargs):
+        return True
+
+    monkeypatch.setattr(backfill, "_enrich_one", enrich)
+    monkeypatch.setattr(backfill, "_profile_still_missing", still_missing)
+    monkeypatch.setattr(backfill.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(backfill, "is_profile_lookup_terminated", terminated)
+
+    assert await backfill._process_profile(
+        "oa:private-user", max_attempts=3, retry_delay_seconds=1
+    ) == ("unreachable", False)
+    assert attempts == 1
 
 
 @pytest.mark.asyncio
@@ -184,13 +223,17 @@ async def test_run_pages_all_rows_and_emits_no_profile_identifiers(monkeypatch, 
         return []
 
     async def process(_zalo_id, **_kwargs):
-        return True, True
+        return "complete", True
+
+    async def eligible_remaining(_db, *, batch_size):
+        return 0
 
     monkeypatch.setattr(backfill, "async_session", fake_session)
     monkeypatch.setattr(backfill, "_exclusive_backfill", fake_lock)
     monkeypatch.setattr(backfill, "_eligible_count", eligible_count)
     monkeypatch.setattr(backfill, "_eligible_profiles_page", page)
     monkeypatch.setattr(backfill, "_process_profile", process)
+    monkeypatch.setattr(backfill, "_eligible_remaining", eligible_remaining)
 
     args = backfill._parse_args(["--apply", "--batch-size", "2", "--delay-seconds", "0"])
     report = await backfill._run(args)
@@ -227,3 +270,82 @@ async def test_run_reports_lock_contention_without_processing(monkeypatch, capsy
     output = capsys.readouterr().out
     assert '"event": "locked"' in output
     assert '"event": "final"' in output
+
+
+@pytest.mark.asyncio
+async def test_run_skips_terminated_candidates_without_processing(
+    monkeypatch, capsys
+) -> None:
+    @asynccontextmanager
+    async def fake_session():
+        yield object()
+
+    @asynccontextmanager
+    async def fake_lock():
+        yield True
+
+    async def eligible_count(_db):
+        return 2
+
+    async def page(_db, *, after, batch_size):
+        if after is None:
+            return [
+                backfill.EligibleProfile("oa:secret-one"),
+                backfill.EligibleProfile("oa:secret-two"),
+            ]
+        return []
+
+    processed: list[str] = []
+
+    async def process(zalo_id, **_kwargs):
+        processed.append(zalo_id)
+        return "complete", True
+
+    terminated_ids = {"oa:secret-one"}
+
+    async def terminated(external_id, **_kwargs):
+        return external_id in terminated_ids
+
+    async def eligible_remaining(_db, *, batch_size):
+        return 0
+
+    monkeypatch.setattr(backfill, "async_session", fake_session)
+    monkeypatch.setattr(backfill, "_exclusive_backfill", fake_lock)
+    monkeypatch.setattr(backfill, "_eligible_count", eligible_count)
+    monkeypatch.setattr(backfill, "_eligible_profiles_page", page)
+    monkeypatch.setattr(backfill, "_process_profile", process)
+    monkeypatch.setattr(backfill, "is_profile_lookup_terminated", terminated)
+    monkeypatch.setattr(backfill, "_eligible_remaining", eligible_remaining)
+
+    report = await backfill._run(backfill._parse_args(["--apply", "--delay-seconds", "0"]))
+
+    assert processed == ["oa:secret-two"]
+    assert report["attempted"] == 2
+    assert report["completed"] == 1
+    assert report["unreachable"] == 1
+    output = capsys.readouterr().out
+    assert '"unreachable": 1' in output
+    assert "secret-one" not in output
+
+
+@pytest.mark.asyncio
+async def test_eligible_remaining_excludes_terminated_identities(monkeypatch) -> None:
+    async def page(_db, *, after, batch_size):
+        if after is None:
+            return [
+                backfill.EligibleProfile("oa:secret-one"),
+                backfill.EligibleProfile("oa:secret-two"),
+            ]
+        if after == "oa:secret-two":
+            return [backfill.EligibleProfile("oa:secret-three")]
+        return []
+
+    terminated_ids = {"oa:secret-one", "oa:secret-three"}
+
+    async def terminated(external_id, **_kwargs):
+        return external_id in terminated_ids
+
+    monkeypatch.setattr(backfill, "_eligible_profiles_page", page)
+    monkeypatch.setattr(backfill, "is_profile_lookup_terminated", terminated)
+
+    assert await backfill._eligible_remaining(object(), batch_size=2) == 1
