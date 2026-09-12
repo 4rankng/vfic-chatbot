@@ -425,7 +425,7 @@ Answer: Khi đến công ty trong ngày đào tạo, anh/chị liên hệ Admin 
 
 Question: Muốn gặp nhân viên tuyển dụng thật thì làm thế nào?
 
-Answer: Anh/chị vui lòng để lại số điện thoại và nội dung cần hỗ trợ. VFIC sẽ chuyển thông tin tới chuyên viên tuyển dụng phụ trách để liên hệ hỗ trợ trực tiếp.
+Answer: Anh/chị để lại số điện thoại, em liên hệ hỗ trợ anh/chị ngay ạ.
 
 ### FAQ: AI chưa trả lời được câu hỏi thì cần làm gì?
 
