@@ -89,11 +89,11 @@ monitor: ## one-shot summary of the most recent agent session (pass SESSION=<id>
 sessions: ## list known agent sessions, newest first
 	@node scripts/harness-monitor.mjs --list
 
-# ---- VFIC production image (DockerHub) ----
+# ---- VFIC production image (GHCR) ----
 # Build & push the AMD64 frontend image. Tags immutable SHA + :latest; uses
-# registry cache. Mirrors payroll/backend/Makefile `push`. The DockerHub account
-# is already authed locally via the Docker Desktop keychain (no password here).
-IMAGE_NAME := franknguyenvd/tinghire-fe
+# registry cache. Mirrors backend/Makefile `push`. Auth comes from
+# `gh auth token | docker login ghcr.io` (no password stored here).
+IMAGE_NAME := ghcr.io/4rankng/tinghire-fe
 GIT_SHA    := $(shell git rev-parse --short HEAD)
 BUILDER    := bb
 
