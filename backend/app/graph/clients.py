@@ -1177,7 +1177,10 @@ class MiniMaxAgent:
             record_model_turn = getattr(trace_sink, "record_model_turn", None)
             if callable(record_model_turn):
                 provider = getattr(active_llm, "trace_provider", "unknown")
-                if provider not in {"minimax", "openrouter"}:
+                # "fallback" is the admin-configured custom provider
+                # (schema literal DecisionTraceProvider); without it here a
+                # custom-provider turn is recorded as "unknown".
+                if provider not in {"minimax", "openrouter", "fallback"}:
                     provider = "unknown"
                 model = str(
                     getattr(active_llm, "model_name", None)
@@ -1428,7 +1431,10 @@ class MiniMaxAgent:
             record_model_turn = getattr(trace_sink, "record_model_turn", None)
             if callable(record_model_turn):
                 provider = getattr(self.llm, "trace_provider", "unknown")
-                if provider not in {"minimax", "openrouter"}:
+                # "fallback" is the admin-configured custom provider
+                # (schema literal DecisionTraceProvider); without it here a
+                # custom-provider turn is recorded as "unknown".
+                if provider not in {"minimax", "openrouter", "fallback"}:
                     provider = "unknown"
                 record_model_turn(
                     phase="direct",

@@ -52,6 +52,14 @@ class _Response:
 
 
 def _patch_post(monkeypatch, response):
+    """Patch the probe's HTTP client; returns the recorded (url, payload) calls.
+
+    ``response`` may be one response or a list consumed in order, so a test can
+    script a retry sequence (e.g. 404 then success on the /v1 spelling).
+    """
+    responses = iter(response if isinstance(response, list) else [response])
+    calls: list[tuple[str, dict]] = []
+
     class _Client:
         def __init__(self, *a, **k):
             pass
@@ -62,10 +70,12 @@ def _patch_post(monkeypatch, response):
         async def __aexit__(self, *a):
             return False
 
-        async def post(self, *a, **k):
-            return response
+        async def post(self, url, *a, **k):
+            calls.append((url, k.get("json")))
+            return next(responses)
 
     monkeypatch.setattr("app.services.llm_probe.httpx.AsyncClient", _Client)
+    return calls
 
 
 async def test_reasoning_truncated_by_token_cap_is_reported_as_working(monkeypatch):
@@ -120,3 +130,91 @@ async def test_api_key_never_appears_in_an_error(monkeypatch):
     assert result.ok is False
     assert secret not in (result.error or "")
     assert "[redacted]" in result.error
+
+
+async def test_missing_v1_is_retried_and_succeeds(monkeypatch):
+    """A 404 on a version-less base is retried once with /v1 inserted.
+
+    This is the Xiaomi MiMo Token Plan setup: the host is right, but the chat
+    contract lives under /v1 and the gateway 404s every other path with an
+    opaque proxy page.
+    """
+    calls = _patch_post(
+        monkeypatch,
+        [
+            _Response("<html>404 Not Found</html>", status_code=404),
+            _Response({"choices": [{"message": {"content": "pong"}}]}),
+        ],
+    )
+
+    result = await probe_openai_compatible_chat(
+        api_key="tp-key", base_url="https://token-plan-sgp.xiaomimimo.com", model="mimo-v2.5-pro"
+    )
+
+    assert result.ok is True
+    assert result.sample == "pong"
+    assert calls[0][0] == "https://token-plan-sgp.xiaomimimo.com/chat/completions"
+    assert calls[1][0] == "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions"
+
+
+async def test_probe_sends_no_token_cap(monkeypatch):
+    """Providers split on max_tokens vs max_completion_tokens; send neither."""
+    calls = _patch_post(
+        monkeypatch, _Response({"choices": [{"message": {"content": "pong"}}]})
+    )
+
+    await probe_openai_compatible_chat(api_key="k", base_url="https://x/v1", model="m")
+
+    assert "max_tokens" not in calls[0][1]
+    assert "max_completion_tokens" not in calls[0][1]
+
+
+async def test_persistent_404_names_the_base_url_fix(monkeypatch):
+    """Both spellings 404 → say what to check instead of dumping proxy HTML."""
+    _patch_post(
+        monkeypatch,
+        [
+            _Response("<html>404</html>", status_code=404),
+            _Response("<html>404</html>", status_code=404),
+        ],
+    )
+
+    result = await probe_openai_compatible_chat(
+        api_key="k", base_url="https://token-plan-sgp.xiaomimimo.com", model="m"
+    )
+
+    assert result.ok is False
+    assert "Base URL" in result.error
+    assert "/v1" in result.error
+    assert "<html>" not in result.error
+
+
+async def test_versioned_base_404_is_not_retried(monkeypatch):
+    """The operator already included a version; retrying /v1/v1 cannot help."""
+    calls = _patch_post(
+        monkeypatch,
+        [
+            _Response("<html>404</html>", status_code=404),
+            _Response({"unexpected": "second call should not happen"}, status_code=500),
+        ],
+    )
+
+    result = await probe_openai_compatible_chat(
+        api_key="k", base_url="https://token-plan-sgp.xiaomimimo.com/v1", model="m"
+    )
+
+    assert result.ok is False
+    assert len(calls) == 1
+    assert "Base URL" in result.error
+
+
+async def test_html_error_body_is_compressed(monkeypatch):
+    """A gateway HTML page carries no diagnostic value; keep it out of the line."""
+    _patch_post(monkeypatch, _Response("<html>502 Bad Gateway</html>", status_code=502))
+
+    result = await probe_openai_compatible_chat(api_key="k", base_url="https://x/v1", model="m")
+
+    assert result.ok is False
+    assert "trang HTML lỗi" in result.error
+    assert "<html>" not in result.error
+    assert "502" in result.error

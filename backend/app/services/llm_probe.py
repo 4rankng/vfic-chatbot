@@ -14,6 +14,7 @@ contract is exactly what "will this endpoint work as a provider?" means.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 
@@ -23,8 +24,9 @@ logger = logging.getLogger(__name__)
 
 # Bounded so a hung endpoint cannot hold an admin request open indefinitely.
 _PROBE_TIMEOUT_SECONDS = 20
-# Room for a reasoning model to finish thinking and still emit a visible reply.
-_PROBE_MAX_TOKENS = 256
+# A base URL whose path ends in a version segment ("/v1", "/v2", ...). Only a
+# version-less base gets the automatic /v1 retry on 404.
+_VERSIONED_BASE_RE = re.compile(r"/v\d+$")
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,29 @@ def _completions_url(base_url: str) -> str:
     if base.endswith("/chat/completions"):
         return base
     return f"{base}/chat/completions"
+
+
+def _v1_completions_url(base_url: str) -> str:
+    """The same endpoint with ``/v1`` inserted before the chat-completions path."""
+    base = (base_url or "").strip().rstrip("/")
+    return f"{base}/v1/chat/completions"
+
+
+def _has_version_segment(base_url: str) -> bool:
+    return bool(_VERSIONED_BASE_RE.search((base_url or "").strip().rstrip("/")))
+
+
+def _error_body(response: httpx.Response) -> str:
+    """The provider's own error text, with gateway HTML pages compressed.
+
+    A reverse proxy's "404 Not Found" HTML page (openresty, nginx, Cloudflare)
+    carries no diagnostic value for an admin and crowds out everything else in
+    the truncated error line, so replace it with a short note.
+    """
+    body = (response.text or "").strip()
+    if body.startswith("<"):
+        return "(máy chủ trả về trang HTML lỗi, không có thông tin JSON)"
+    return body
 
 
 def _first_choice(payload: dict) -> dict | None:
@@ -95,21 +120,26 @@ async def probe_openai_compatible_chat(
 ) -> LlmProbeResult:
     """Send one tiny completion and report whether the provider answered."""
     started = time.monotonic()
+    headers = {"Authorization": f"Bearer {api_key}"}
+    # No token cap on purpose. The runtime clients (langchain ChatOpenAI) send
+    # no cap either, and providers split on the parameter name: newer
+    # OpenAI-style servers renamed max_tokens → max_completion_tokens and
+    # reject the legacy name with 400. Sending neither is the only spelling
+    # every OpenAI-compatible endpoint accepts, and one "ping" completion
+    # unbounded is still an admin-triggered, single-digit-cent call.
+    payload = {"model": model, "messages": [{"role": "user", "content": "ping"}]}
     try:
         async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                _completions_url(base_url),
-                headers={"Authorization": f"Bearer {api_key}"},
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": "ping"}],
-                    # Generous on purpose. A reasoning model spends tokens
-                    # thinking before it emits any content, so a tight cap
-                    # returns finish_reason="length" with an empty content
-                    # field — a working provider reported as broken.
-                    "max_tokens": _PROBE_MAX_TOKENS,
-                },
-            )
+            response = await client.post(_completions_url(base_url), headers=headers, json=payload)
+            # The most common base-URL typo is a missing "/v1": the host is
+            # right, but OpenAI-compatible gateways (Xiaomi MiMo's included)
+            # serve the chat contract under /v1 and 404 every other path with
+            # an opaque proxy page. Retry once with /v1 inserted before
+            # reporting failure.
+            if response.status_code == 404 and not _has_version_segment(base_url):
+                response = await client.post(
+                    _v1_completions_url(base_url), headers=headers, json=payload
+                )
     except Exception as exc:  # noqa: BLE001 — a probe reports failure, never raises
         logger.warning("custom LLM probe transport failure for model=%s", model, exc_info=True)
         return LlmProbeResult(
@@ -119,13 +149,30 @@ async def probe_openai_compatible_chat(
         )
 
     latency_ms = int((time.monotonic() - started) * 1000)
+    if response.status_code == 404:
+        # Both spellings (with and without /v1) were tried, or the operator's
+        # base already carried a version: the host never exposed the chat
+        # contract where we looked. Say what to check instead of dumping the
+        # gateway's HTML error page.
+        return LlmProbeResult(
+            ok=False,
+            latency_ms=latency_ms,
+            error=(
+                "HTTP 404: không tìm thấy /chat/completions trên máy chủ. "
+                "Kiểm tra lại Base URL — endpoint OpenAI-compatible thường cần /v1 "
+                "ở cuối (ví dụ: https://token-plan-sgp.xiaomimimo.com/v1 với "
+                "Token Plan Singapore của Xiaomi)."
+            ),
+        )
     if response.status_code >= 400:
         # The provider's own message is the useful part (wrong key, unknown
         # model, no quota) — surfaced to the admin, never to a candidate.
         return LlmProbeResult(
             ok=False,
             latency_ms=latency_ms,
-            error=_redact(f"HTTP {response.status_code}: {response.text}", [api_key]),
+            error=_redact(
+                f"HTTP {response.status_code}: {_error_body(response)}", [api_key]
+            ),
         )
 
     try:

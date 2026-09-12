@@ -1488,7 +1488,10 @@ export const ZaloIntegrationPage = () => {
                   className="settings-input"
                   autoComplete="off"
                   value={customLlmForm.custom_llm_base_url}
-                  placeholder={customLlmSettings?.custom_llm_base_url || "https://…/v1"}
+                  placeholder={
+                    customLlmSettings?.custom_llm_base_url ||
+                    "https://token-plan-sgp.xiaomimimo.com/v1"
+                  }
                   onChange={(event) =>
                     setCustomLlmValue("custom_llm_base_url", event.target.value)
                   }
@@ -1501,7 +1504,9 @@ export const ZaloIntegrationPage = () => {
                   className="settings-input"
                   autoComplete="off"
                   value={customLlmForm.custom_llm_agent_model}
-                  placeholder={customLlmSettings?.custom_llm_agent_model || "mimo-v2.5"}
+                  placeholder={
+                    customLlmSettings?.custom_llm_agent_model || "mimo-v2.5-pro"
+                  }
                   onChange={(event) =>
                     setCustomLlmValue("custom_llm_agent_model", event.target.value)
                   }
