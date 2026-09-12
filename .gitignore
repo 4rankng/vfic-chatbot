@@ -8,7 +8,7 @@
 #       dirs like frontend/src/lib at depth. Build output is scoped per-project.
 # =============================================================================
 plans/
-
+.agentkit/
 # --- Secrets / env (NEVER commit) ---
 .env
 .env.*
