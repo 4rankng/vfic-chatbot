@@ -30,12 +30,12 @@ from app.services.personas import PersonaService, persona_out_from_model
 # behavior the agent must follow — losing any of these changes the bot's
 # product behavior in a way the dashboard/conversion metrics depend on.
 CRITICAL_RULES = [
-    "MỘT TIN NHẮN - MỘT CÂU HỎI",  # one-question-per-message cadence
-    "Tra cứu lịch xe structured",  # bus-timetable structured-tool-first rule
+    "Một tin nhắn — một câu hỏi chính",  # one-question-per-message cadence
+    "PHẢI dùng tool lịch xe trước",  # bus-timetable structured-tool-first rule
     "CHỐNG ẢO GIÁC",  # anti-hallucination / no fabrication beyond data
-    "tiếng Việt",  # Vietnamese-only
-    "KHÔNG dùng Markdown",  # plain-text output format
-    "Ngữ cảnh riêng tư",  # memory/history must never be recited to the user
+    "Tiếng Việt",  # Vietnamese-only
+    "Không dùng Markdown",  # plain-text output format
+    "Không trích dẫn, liệt kê",  # memory/history must never be recited to the user
 ]
 
 
@@ -54,7 +54,7 @@ def test_persona_has_core_sections():
     """
     topics = [
         "Vai trò",  # who the bot is
-        "Nguyên tắc giao tiếp",  # communication rules
+        "Giao tiếp",  # communication rules
         "Dùng tool",  # tool-usage rules
         "Tránh",  # what to avoid (hallucination, off-topic)
     ]

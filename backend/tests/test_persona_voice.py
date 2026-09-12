@@ -128,9 +128,10 @@ def test_persona_states_pronoun_contract_before_everything_else():
     ten-item list. Position is the fix: the contract is checked first.
     """
     persona = AGENT_SYSTEM_PROMPT
-    head = persona[: persona.index("### Đối tượng")]
+    head = persona[: persona.index("### Giao tiếp")]
 
-    assert "LUẬT GIỌNG NÓI" in head, "voice contract must appear before the audience section"
+    assert "Giọng nói" in head, "voice contract must appear before the communication section"
+    assert "BẮT BUỘC" in head, "the voice contract must be marked mandatory"
     for banned in ('"bạn"', '"mình"', '"tôi"'):
         assert banned in head, f"voice contract must name {banned} as forbidden"
     assert "anh/chị" in head
@@ -151,4 +152,4 @@ def test_persona_makes_phone_capture_the_objective():
 
 def test_persona_requires_denying_what_is_not_available():
     """Listing alternatives without denying the premise is an incomplete answer."""
-    assert "TRẢ LỜI THẲNG PHẦN KHÔNG CÓ" in AGENT_SYSTEM_PROMPT
+    assert "TRẢ LỜI THẲNG khi không có" in AGENT_SYSTEM_PROMPT
