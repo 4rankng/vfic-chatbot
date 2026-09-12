@@ -28,7 +28,7 @@ npm run build               # tsc && vite build (production bundle)
 npm run test:unit:app       # vitest unit tests
 npm run lint                # eslint
 npm run prettier            # prettier --check
-make push                   # build + push franknguyenvd/vfic-frontend image (deploy)
+make push                   # build + push ghcr.io/4rankng/tinghire-fe image (deploy)
 ```
 
 Point the app at a backend by setting `VITE_API_BASE` (defaults to the same

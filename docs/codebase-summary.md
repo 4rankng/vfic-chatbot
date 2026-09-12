@@ -4,8 +4,8 @@
 **Last updated:** 2026-07-23
 
 A monorepo with two deployable subprojects (`backend/`, `frontend/`) plus
-root-level ops scripts. DockerHub images: `franknguyenvd/vfic-backend:latest`
-and `franknguyenvd/vfic-frontend:latest` (also tagged `:<git-sha>`).
+root-level ops scripts. GHCR images: `ghcr.io/4rankng/tinghire-be:latest`
+and `ghcr.io/4rankng/tinghire-fe:latest` (also tagged `:<git-sha>`).
 
 ## Repository layout
 

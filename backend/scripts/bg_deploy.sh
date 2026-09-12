@@ -195,7 +195,7 @@ else
 fi
 echo "==> bg_deploy: active=${ACTIVE:-<inaugural>} next=$NEXT tag=$IMAGE_TAG"
 
-# 1. Pull the new image (web + workers share franknguyenvd/vfic-backend:$TAG).
+# 1. Pull the new image (web + workers share ghcr.io/4rankng/tinghire-be:$TAG).
 echo "==> [1/10] pulling images..."
 IMAGE_TAG="$IMAGE_TAG" docker compose pull "web-$NEXT" $WORKERS
 

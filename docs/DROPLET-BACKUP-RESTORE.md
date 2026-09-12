@@ -4,7 +4,7 @@ Backup/restore for the production droplet **`bot.tingting.vip`** — for the
 "delete the droplet now, spin it up again later" scenario.
 
 The app code is in git (`git@github.com:4rankng/ChatBotN8N.git`, `main`) and the
-Docker images (`franknguyenvd/vfic-{backend,frontend}`) are on DockerHub, so
+Docker images (`ghcr.io/4rankng/tinghire-{be,fe}`) are on GHCR, so
 **only stateful data + secrets** need to be bundled.
 
 ## What the bundle contains
