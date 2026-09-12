@@ -11,6 +11,12 @@
   --settings-space-4: 16px;
   --settings-space-5: 20px;
   --settings-space-6: 24px;
+  --settings-card-radius: 12px;
+  --settings-accent-border: color-mix(
+    in srgb,
+    var(--settings-accent) 34%,
+    transparent
+  );
 }
 
 .settings-header-actions {
@@ -65,6 +71,19 @@
 .settings-workspace-content .settings-group-icon svg {
   width: 16px;
   height: 16px;
+}
+
+/* Card contract (Tailkit a-c-form-layouts-04 adapted to the warm console
+   tokens): each configuration group is an elevated card whose header is a
+   tinted identity band. Shadows stay off per the flat-surfaces contract. */
+.settings-group {
+  border: 1px solid var(--settings-border);
+  border-radius: var(--settings-card-radius);
+  background: var(--settings-elevated);
+}
+
+.settings-group:hover {
+  border-color: var(--border-strong);
 }
 
 .settings-field-label-row {
@@ -414,14 +433,6 @@
 
   .settings-grid {
     gap: 10px;
-  }
-
-  /* Mobile keeps the collapsible list pattern; each group is a light card. */
-  .settings-group {
-    border: 1px solid var(--settings-border);
-    border-radius: 12px;
-    background: var(--settings-elevated);
-    box-shadow: none;
   }
 
   .settings-mobile-group-summary {
@@ -881,10 +892,6 @@
 }
 
 @media (max-width: 767px) {
-  .settings-messenger-group-content {
-    padding: 14px 0 18px;
-  }
-
   .settings-messenger-empty {
     align-items: stretch;
     flex-direction: column;
@@ -935,9 +942,9 @@
   }
 }
 
-/* UntitledUI-inspired flat settings console.
+/* UntitledUI-inspired warm settings console.
    The navigation and configuration groups share one continuous workspace;
-   borders are reserved for inputs, disclosure controls, and true state. */
+   groups carry elevated card frames, borders mark inputs and state. */
 @media (min-width: 768px) {
   .inbox-bg-container.settings-workspace .settings-center-panel {
     width: 100%;
@@ -984,10 +991,9 @@
     border: 1px solid transparent;
   }
 
+  /* Tint comes from the shared base; only the pill border is new here. */
   .settings-workspace-content .settings-side-nav-link.is-active {
-    border-color: color-mix(in srgb, var(--settings-accent) 28%, transparent);
-    background: var(--settings-accent-soft);
-    color: var(--settings-accent-strong);
+    border-color: var(--settings-accent-border);
   }
 
   .settings-workspace-content .settings-side-nav-link.is-active::before {
@@ -1010,33 +1016,12 @@
   }
 
   .settings-section-panel {
-    gap: 16px;
-  }
-
-  .settings-grid {
-    gap: 16px;
-  }
-
-  /* Card contract (Tailkit a-c-form-layouts-04 adapted to the warm console
-     tokens): each configuration group is an elevated card whose header is a
-     tinted identity band. */
-  .settings-group {
-    border: 1px solid var(--settings-border);
-    border-radius: 12px;
-    background: var(--settings-elevated);
-    box-shadow:
-      0 1px 2px rgba(17, 24, 39, 0.04),
-      0 8px 24px -18px rgba(17, 24, 39, 0.12);
-    transition: border-color 0.18s var(--ease);
-  }
-
-  .settings-group:hover {
-    border-color: var(--border-strong);
+    gap: var(--settings-space-4);
   }
 
   .settings-group-header {
     min-height: var(--settings-action-height);
-    padding: 11px 16px;
+    padding: 11px var(--settings-space-4);
     border-bottom: 1px solid
       color-mix(in srgb, var(--settings-border) 72%, transparent);
     background: color-mix(
@@ -1049,7 +1034,7 @@
   .settings-group-content,
   .settings-messenger-group-content {
     gap: 12px 14px;
-    padding: 14px 16px 16px;
+    padding: 14px var(--settings-space-4) var(--settings-space-4);
   }
 
   .settings-group .settings-input,
@@ -1108,7 +1093,6 @@
   /* Peer providers read as one comparable set side by side. */
   .settings-grid-models {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-items: start;
   }
 }
 
@@ -1270,13 +1254,10 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--settings-border);
-  border-radius: 12px;
+  border-radius: var(--settings-card-radius);
   background: var(--settings-elevated);
   padding: 10px 14px;
-  margin-bottom: 16px;
-  box-shadow:
-    0 1px 2px rgba(17, 24, 39, 0.04),
-    0 8px 24px -18px rgba(17, 24, 39, 0.12);
+  margin-bottom: var(--settings-space-4);
 }
 
 .settings-llm-chain-label {
@@ -1294,7 +1275,6 @@
   padding: 4px 11px;
   border: 1px solid var(--settings-border);
   border-radius: 999px;
-  background: var(--settings-elevated);
   color: var(--ink);
   font-size: 12px;
   font-weight: 600;
@@ -1309,21 +1289,21 @@
   background: var(--success);
 }
 
-/* The first pill is the default provider — brand accent, not just "on". */
-.settings-llm-chain-label + .settings-llm-chain-item.is-on {
-  border-color: color-mix(in srgb, var(--settings-accent) 34%, transparent);
+/* The default provider pill and matching status chips carry brand accent. */
+.settings-llm-chain-item.is-default,
+.settings-llm-chip.is-accent {
+  border-color: var(--settings-accent-border);
   background: var(--settings-accent-soft);
   color: var(--settings-accent-strong);
 }
 
-.settings-llm-chain-label + .settings-llm-chain-item.is-on::before {
+.settings-llm-chain-item.is-default::before {
   background: var(--settings-accent);
 }
 
 .settings-llm-chain-item.is-off {
   border-style: dashed;
   color: var(--ink-muted);
-  background: transparent;
 }
 
 .settings-llm-chain-item.is-off::before {
@@ -1382,12 +1362,6 @@
   line-height: 1.2;
 }
 
-.settings-llm-chip.is-accent {
-  border-color: color-mix(in srgb, var(--settings-accent) 34%, transparent);
-  background: var(--settings-accent-soft);
-  color: var(--settings-accent-strong);
-}
-
 .settings-llm-chip.is-success {
   border-color: color-mix(in srgb, var(--success) 32%, transparent);
   background: color-mix(in srgb, var(--success) 12%, var(--settings-elevated));
@@ -1435,5 +1409,16 @@
 
 /* Messenger credentials heading rides inside its card as an inset header. */
 .settings-messenger-credentials > .settings-messenger-group-heading {
-  padding: 14px 16px 10px;
+  padding: 14px var(--settings-space-4) 10px;
+}
+
+@media (max-width: 767px) {
+  /* The card frame gives Messenger groups the same 12px gutters as Zalo's. */
+  .settings-messenger-group-content {
+    padding: var(--settings-space-2) 12px 14px;
+  }
+
+  .settings-messenger-credentials > .settings-messenger-group-heading {
+    padding-inline: 12px;
+  }
 }

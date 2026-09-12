@@ -1337,7 +1337,15 @@ export const ZaloIntegrationPage = () => {
             {chain.map((provider) => (
               <span
                 key={provider}
-                className={`settings-llm-chain-item${enabledOf[provider] ? " is-on" : " is-off"}`}
+                className={[
+                  "settings-llm-chain-item",
+                  enabledOf[provider] ? "is-on" : "is-off",
+                  provider === chain[0] && enabledOf[provider]
+                    ? "is-default"
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
               >
                 {enabledOf[provider]
                   ? `${providerLabel[provider]}`

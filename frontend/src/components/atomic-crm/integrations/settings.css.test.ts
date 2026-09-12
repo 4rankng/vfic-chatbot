@@ -64,14 +64,18 @@ describe("flat settings workspace", () => {
   it("renders configuration groups as elevated cards with tinted header bands", () => {
     expect(settingsSource).not.toContain("tt-card");
     expect(messengerSource).not.toContain("tt-card");
+    expect(stylesheet).toMatch(/--settings-card-radius:\s*12px;/);
     expect(stylesheet).toMatch(
-      /@media \(min-width: 768px\)[\s\S]*?\.settings-group\s*\{[\s\S]*?border-radius:\s*12px;[\s\S]*?background:\s*var\(--settings-elevated\);/,
+      /\.settings-group\s*\{[^}]*border:\s*1px solid var\(--settings-border\);[^}]*border-radius:\s*var\(--settings-card-radius\);[^}]*background:\s*var\(--settings-elevated\);/,
     );
     expect(stylesheet).toMatch(
-      /@media \(min-width: 768px\)[\s\S]*?\.settings-group-header\s*\{[\s\S]*?background:\s*color-mix\(/,
+      /\.settings-group:hover\s*\{[^}]*border-color:\s*var\(--border-strong\);/,
     );
     expect(stylesheet).toMatch(
-      /@media \(min-width: 768px\)[\s\S]*?\.settings-section-panel\s*\{[\s\S]*?gap:\s*16px;/,
+      /@media \(min-width: 768px\)[\s\S]*?\.settings-group-header\s*\{[^}]*background:\s*color-mix\(/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(min-width: 768px\)[\s\S]*?\.settings-section-panel\s*\{[^}]*gap:\s*var\(--settings-space-4\);/,
     );
     expect(stylesheet).not.toMatch(
       /\.settings-section-panel\s*\{[^}]*border-block/,
@@ -84,7 +88,7 @@ describe("flat settings workspace", () => {
 
   it("compares provider cards side by side on wide screens", () => {
     expect(stylesheet).toMatch(
-      /@media \(min-width: 1121px\)[\s\S]*\.settings-grid-models\s*\{[\s\S]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,
+      /@media \(min-width: 1121px\)[\s\S]*?\.settings-grid-models\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,
     );
     expect(stylesheet).toMatch(
       /\.settings-field-status\s*\{[^}]*width:\s*20px[^}]*height:\s*20px/,
