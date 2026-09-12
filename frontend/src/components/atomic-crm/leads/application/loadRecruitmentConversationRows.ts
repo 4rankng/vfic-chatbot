@@ -39,13 +39,10 @@ export const loadRecruitmentConversationRows = async (
   for (const conversation of conversations) {
     const chatKey = conversation.zalo_chat_id ?? conversation.id;
     const lead = leadByZalo.get(chatKey);
-    presentations.set(
-      conversation.id,
-      {
-        lead,
-        presentation: buildRecruitmentRowPresentation(conversation, lead),
-      },
-    );
+    presentations.set(conversation.id, {
+      lead,
+      presentation: buildRecruitmentRowPresentation(conversation, lead),
+    });
   }
 
   return presentations;

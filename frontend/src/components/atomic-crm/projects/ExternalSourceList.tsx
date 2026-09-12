@@ -448,10 +448,7 @@ export const ExternalSourceList = ({
         const autoDisabled =
           row.last_status === "FAILED" && !row.auto_sync_enabled;
         return (
-          <div
-            key={row.id}
-            className="project-external-source-row"
-          >
+          <div key={row.id} className="project-external-source-row">
             <div className="project-external-source-identity">
               <div className="project-external-source-heading">
                 <p className="project-external-source-name">
@@ -460,10 +457,7 @@ export const ExternalSourceList = ({
                     : `gid=${row.sheet_gid}`}
                 </p>
               </div>
-              <p
-                className="project-external-source-url"
-                title={row.sheet_url}
-              >
+              <p className="project-external-source-url" title={row.sheet_url}>
                 {truncate(row.sheet_url)}
               </p>
             </div>

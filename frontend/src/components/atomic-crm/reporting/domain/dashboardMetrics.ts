@@ -163,7 +163,9 @@ export const buildDashboardStats = (
     data.hired_rate == null && totalLeads > 0
       ? (hiredCount / totalLeads) * 100
       : numberOrZero(data.hired_rate);
-  const byValue = new Map((data.stage_breakdown ?? []).map((item) => [item.value, item]));
+  const byValue = new Map(
+    (data.stage_breakdown ?? []).map((item) => [item.value, item]),
+  );
 
   return {
     openConversations: numberOrZero(data.open_conversations),

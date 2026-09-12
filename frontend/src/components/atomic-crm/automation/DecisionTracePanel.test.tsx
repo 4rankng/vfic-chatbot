@@ -282,9 +282,7 @@ describe("DecisionTraceRenderer", () => {
       .element(screen.getByText("Tra cứu cơ sở kiến thức"))
       .toBeVisible();
     await screen
-      .getByLabelText(
-        /^Chi tiết lượt suy luận 2: .*minimax.*MiniMax-M2\.7$/,
-      )
+      .getByLabelText(/^Chi tiết lượt suy luận 2: .*minimax.*MiniMax-M2\.7$/)
       .click();
     await expect
       .element(

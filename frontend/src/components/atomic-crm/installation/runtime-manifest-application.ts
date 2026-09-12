@@ -37,7 +37,9 @@ export const loadRuntimeManifest = async (
   }
   const cacheControl = response.cacheControl?.toLowerCase() ?? "";
   if (!cacheControl.includes("no-store")) {
-    throw new RuntimeManifestError("Installation runtime response is cacheable");
+    throw new RuntimeManifestError(
+      "Installation runtime response is cacheable",
+    );
   }
   return parseRuntimeManifest(await response.json());
 };

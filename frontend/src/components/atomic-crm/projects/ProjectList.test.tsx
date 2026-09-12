@@ -176,7 +176,9 @@ describe("ProjectAccordionList", () => {
       })
       .click();
     await expect
-      .element(screen.getByRole("button", { name: "Bật dự án Dự án một trang" }))
+      .element(
+        screen.getByRole("button", { name: "Bật dự án Dự án một trang" }),
+      )
       .toBeVisible();
   });
 

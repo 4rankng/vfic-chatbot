@@ -140,11 +140,7 @@ describe("project knowledge policy", () => {
   it("orders and pads feature slots using the API catalog total", () => {
     const low = feature(2);
     const high = feature(9);
-    expect(orderProductFeatureSlots([high, low], 3)).toEqual([
-      low,
-      high,
-      null,
-    ]);
+    expect(orderProductFeatureSlots([high, low], 3)).toEqual([low, high, null]);
     expect(isProductFeatureReady(feature(1))).toBe(true);
     expect(isProductFeatureReady(feature(1, { value_text: "  " }))).toBe(false);
     expect(isProductFeatureReady(feature(1, { is_missing: true }))).toBe(false);

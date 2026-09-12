@@ -24,9 +24,7 @@ const fallbackCandidateName = (zaloChatId: string | null | undefined) =>
   `Ứng viên · ${(zaloChatId || "").slice(-4)}`;
 
 const normalizeSearchText = (parts: Array<string | null | undefined>) =>
-  parts
-    .filter((part): part is string => Boolean(part?.trim()))
-    .join(" ");
+  parts.filter((part): part is string => Boolean(part?.trim())).join(" ");
 
 export const resolveRecruitmentProfile = (
   conversation: RecruitmentProfileSource,
@@ -43,7 +41,9 @@ export const resolveRecruitmentProfile = (
 
   return {
     displayName:
-      lead?.name || oaProfileName || fallbackCandidateName(conversation.zalo_chat_id),
+      lead?.name ||
+      oaProfileName ||
+      fallbackCandidateName(conversation.zalo_chat_id),
     avatarUrl: lead?.avatar_url || oaProfileAvatar,
     oaProfileName,
   };
@@ -88,8 +88,7 @@ export const buildRecruitmentContextIdentity = (
   return {
     displayName,
     avatarUrl,
-    secondaryName:
-      leadName && leadName !== displayName ? leadName : undefined,
+    secondaryName: leadName && leadName !== displayName ? leadName : undefined,
     phone: lead?.phone?.trim() || undefined,
   };
 };
@@ -108,6 +107,7 @@ export const shouldRefreshLeadIdentity = (
     payloadLeadId != null &&
     currentLeadId != null &&
     String(payloadLeadId) === String(currentLeadId);
-  const sameZalo = Boolean(payload.zalo_id) && payload.zalo_id === currentZaloId;
+  const sameZalo =
+    Boolean(payload.zalo_id) && payload.zalo_id === currentZaloId;
   return sameLead || sameZalo;
 };

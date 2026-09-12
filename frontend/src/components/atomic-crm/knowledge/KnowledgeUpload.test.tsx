@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./knowledge-service", () => ({
-  createAndIngestKnowledgeBaseVersion: mocks.createAndIngestKnowledgeBaseVersion,
+  createAndIngestKnowledgeBaseVersion:
+    mocks.createAndIngestKnowledgeBaseVersion,
   saveKnowledgeTemplate: vi.fn(),
 }));
 
@@ -46,12 +47,12 @@ describe("KnowledgeUpload", () => {
     await screen.getByRole("button", { name: "Tải lên" }).click();
 
     await vi.waitFor(() => {
-      expect(mocks.createAndIngestKnowledgeBaseVersion).toHaveBeenCalledTimes(1);
+      expect(mocks.createAndIngestKnowledgeBaseVersion).toHaveBeenCalledTimes(
+        1,
+      );
     });
-    const [projectId, file] = mocks.createAndIngestKnowledgeBaseVersion.mock.calls[0] as [
-      string,
-      File,
-    ];
+    const [projectId, file] = mocks.createAndIngestKnowledgeBaseVersion.mock
+      .calls[0] as [string, File];
     expect(projectId).toBe("project-1");
     expect(file.name).toBe("kien-thuc.txt");
     expect(await file.text()).toBe("Thông tin tuyển dụng");

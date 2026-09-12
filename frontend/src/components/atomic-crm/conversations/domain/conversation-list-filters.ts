@@ -33,9 +33,7 @@ export const getEffectiveConversationChannelProvider = (
   searchParams: SearchParameterReader,
 ): ConversationChannelProvider | undefined => {
   const provider = searchParams.get("channel_provider");
-  return isConversationChannelProvider(provider)
-    ? provider
-    : undefined;
+  return isConversationChannelProvider(provider) ? provider : undefined;
 };
 
 export const isAttentionReason = (value: string | null): value is string =>

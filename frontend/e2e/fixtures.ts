@@ -10,7 +10,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_PYTHON =
   process.env.VFIC_BACKEND_PYTHON ??
   path.resolve(__dirname, "../../backend/.venv/bin/python");
-const E2E_HARNESS = path.resolve(__dirname, "../../backend/tests/e2e_harness.py");
+const E2E_HARNESS = path.resolve(
+  __dirname,
+  "../../backend/tests/e2e_harness.py",
+);
 
 export const ADMIN_EMAIL = "admin@example.org";
 export const ADMIN_PASSWORD = "Universal-E2E-Only-42!";
@@ -36,13 +39,14 @@ async function loginAsAdmin(page: Page): Promise<void> {
   await page.locator('input[type="password"]').fill(ADMIN_PASSWORD);
   const loginResponse = page.waitForResponse(
     (response) =>
-      response.url().endsWith("/api/v1/auth/login") && response.status() === 200,
+      response.url().endsWith("/api/v1/auth/login") &&
+      response.status() === 200,
   );
   await page.getByRole("button", { name: "Đăng nhập" }).click();
   await loginResponse;
-  await expect(
-    page.getByRole("heading", { name: "Tổng quan" }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Tổng quan" })).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 export const test = base.extend<{

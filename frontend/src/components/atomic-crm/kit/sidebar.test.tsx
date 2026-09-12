@@ -6,9 +6,8 @@ import { Briefcase, Home, MessageCircle, Settings } from "lucide-react";
 
 import { KitSidebar, type KitSidebarDestination } from "./sidebar";
 
-const startsWith =
-  (prefix: string) => (path: string) =>
-    path === prefix || path.startsWith(`${prefix}/`);
+const startsWith = (prefix: string) => (path: string) =>
+  path === prefix || path.startsWith(`${prefix}/`);
 
 const destinations: KitSidebarDestination[] = [
   {
@@ -77,8 +76,8 @@ describe("KitSidebar", () => {
     // (which carries the visible label) to disambiguate from the rail shortcut.
     const panel = screen.container.querySelector(".tt-sidebar-panel");
     const panelLinks = panel?.querySelectorAll("a");
-    const messagesLink = Array.from(panelLinks ?? []).find(
-      (a) => a.textContent?.includes("Tin nhắn"),
+    const messagesLink = Array.from(panelLinks ?? []).find((a) =>
+      a.textContent?.includes("Tin nhắn"),
     );
     const projectsLink = Array.from(panelLinks ?? []).find((a) =>
       a.textContent?.includes("Dự án"),

@@ -18,8 +18,9 @@ const getConversationModePriority = (mode: ConversationRowState["mode"]) => {
   return 3;
 };
 
-export const isHumanManagedConversation = (conversation: ConversationRowState) =>
-  conversation.mode === "human" || conversation.mode === "semi_auto";
+export const isHumanManagedConversation = (
+  conversation: ConversationRowState,
+) => conversation.mode === "human" || conversation.mode === "semi_auto";
 
 export const getConversationUnreadCount = (
   conversation: ConversationRowState,
@@ -39,7 +40,8 @@ const hasUnansweredInbound = (conversation: ConversationRowState) => {
 };
 
 export const needsHumanReply = (conversation: ConversationRowState) =>
-  isHumanManagedConversation(conversation) && hasUnansweredInbound(conversation);
+  isHumanManagedConversation(conversation) &&
+  hasUnansweredInbound(conversation);
 
 export const botHasNotReplied = (conversation: ConversationRowState) =>
   conversation.mode === "bot" && hasUnansweredInbound(conversation);
@@ -67,8 +69,7 @@ export const compareConversationRows = (
   if (firstUnread !== secondUnread) return secondUnread - firstUnread;
 
   return (
-    new Date(second.updated_at).getTime() -
-    new Date(first.updated_at).getTime()
+    new Date(second.updated_at).getTime() - new Date(first.updated_at).getTime()
   );
 };
 

@@ -33,7 +33,9 @@ const valuesFor = (raw: string): string[] =>
     .getAll("gid")
     .map((value) => value.trim());
 
-export const resolveGoogleSheetGid = (url: string): GoogleSheetGidResolution => {
+export const resolveGoogleSheetGid = (
+  url: string,
+): GoogleSheetGidResolution => {
   let parsed: URL;
   try {
     parsed = new URL(url.trim());
@@ -43,7 +45,8 @@ export const resolveGoogleSheetGid = (url: string): GoogleSheetGidResolution => 
 
   const fragmentValues = valuesFor(parsed.hash);
   const source = fragmentValues.length > 0 ? "fragment" : "query";
-  const selected = source === "fragment" ? fragmentValues : valuesFor(parsed.search);
+  const selected =
+    source === "fragment" ? fragmentValues : valuesFor(parsed.search);
   const unique = [...new Set(selected)];
   if (unique.length > 1) {
     return {
@@ -71,7 +74,8 @@ export const resolveGoogleSheetGid = (url: string): GoogleSheetGidResolution => 
   }
   try {
     const parsedValue = BigInt(value);
-    if (parsedValue > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("unsafe");
+    if (parsedValue > BigInt(Number.MAX_SAFE_INTEGER))
+      throw new Error("unsafe");
     return { ok: true, gid: Number(value), source };
   } catch {
     return {

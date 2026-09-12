@@ -24,8 +24,7 @@ const route = (id: string) => {
 
 const renderRouteElement = <TProps extends object>(
   Component: unknown,
-): ReactElement<TProps> =>
-  (Component as () => ReactElement<TProps>)();
+): ReactElement<TProps> => (Component as () => ReactElement<TProps>)();
 
 describe("kernel navigation contract", () => {
   it("keeps each dock destination active only on its intended paths", () => {
@@ -66,7 +65,9 @@ describe("kernel navigation contract", () => {
 
   it("preserves legacy redirects and route layouts", () => {
     const profileRedirect = route("kernel.route.settings-profile-redirect");
-    const settingsRedirect = route("channel.zalo.route.legacy-settings-redirect");
+    const settingsRedirect = route(
+      "channel.zalo.route.legacy-settings-redirect",
+    );
     const performance = route("kernel.route.performance");
     const profile = route("kernel.route.profile");
     const forgotPassword = route("kernel.route.forgot-password");
@@ -84,9 +85,10 @@ describe("kernel navigation contract", () => {
     const profileElement = renderRouteElement<{ to: string; replace: boolean }>(
       profileRedirect.Component,
     );
-    const settingsElement = renderRouteElement<{ to: string; replace: boolean }>(
-      settingsRedirect.Component,
-    );
+    const settingsElement = renderRouteElement<{
+      to: string;
+      replace: boolean;
+    }>(settingsRedirect.Component);
     const profileRouteElement = renderRouteElement<{
       children: ReactElement;
     }>(profile.Component);

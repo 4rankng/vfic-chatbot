@@ -20,8 +20,6 @@ export const findSelectedConversation = <Conversation extends { id: string }>(
   if (!selectedId) return null;
   return (
     conversations?.find((conversation) => conversation.id === selectedId) ??
-    (deepLinkedConversation?.id === selectedId
-      ? deepLinkedConversation
-      : null)
+    (deepLinkedConversation?.id === selectedId ? deepLinkedConversation : null)
   );
 };

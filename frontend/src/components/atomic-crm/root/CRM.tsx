@@ -39,7 +39,8 @@ export const CRM = ({
 }: CRMProps) => {
   const { runtime } = bundle;
   const resolvedAuthProvider = useMemo(
-    () => authProvider ?? defaultAuthProviderBuilder(runtime.availableResources),
+    () =>
+      authProvider ?? defaultAuthProviderBuilder(runtime.availableResources),
     [authProvider, runtime.availableResources],
   );
   const [authGateReady, setAuthGateReady] = useState(() => {
@@ -56,7 +57,9 @@ export const CRM = ({
 
   if (!authGateReady) return null;
 
-  const layoutRoutes = runtime.routes.filter((route) => route.layout === "layout");
+  const layoutRoutes = runtime.routes.filter(
+    (route) => route.layout === "layout",
+  );
   const noLayoutRoutes = runtime.routes.filter(
     (route) => route.layout === "no-layout",
   );

@@ -371,9 +371,7 @@ describe("useConversationRealtime", () => {
     }));
     const finalMissedMessage = {
       ...msg(202, "active-conversation"),
-      created_at: new Date(
-        Date.UTC(2026, 5, 29, 0, 0, 1, 202),
-      ).toISOString(),
+      created_at: new Date(Date.UTC(2026, 5, 29, 0, 0, 1, 202)).toISOString(),
     };
     mockChatRepository.getMessagesSince
       .mockResolvedValueOnce({

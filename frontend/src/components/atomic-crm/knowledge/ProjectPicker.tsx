@@ -52,13 +52,19 @@ export const ProjectPicker = ({
     sort: { field: "name", order: "ASC" },
     filter: trimmedSearch ? { q: trimmedSearch } : {},
   });
-  const { data: knowledgeBases = [] } = useGetList<KnowledgeBase>("knowledge_bases", {
-    pagination: { page: 1, perPage: 100 },
-    sort: { field: "name", order: "ASC" },
-    filter: {},
-  });
-  const ragKnowledgeBases = knowledgeBases.filter((knowledgeBase) => knowledgeBase.mode === "RAG");
-  const creationKnowledgeBaseId = ragKnowledgeBases.length === 1 ? ragKnowledgeBases[0].id : null;
+  const { data: knowledgeBases = [] } = useGetList<KnowledgeBase>(
+    "knowledge_bases",
+    {
+      pagination: { page: 1, perPage: 100 },
+      sort: { field: "name", order: "ASC" },
+      filter: {},
+    },
+  );
+  const ragKnowledgeBases = knowledgeBases.filter(
+    (knowledgeBase) => knowledgeBase.mode === "RAG",
+  );
+  const creationKnowledgeBaseId =
+    ragKnowledgeBases.length === 1 ? ragKnowledgeBases[0].id : null;
 
   const availableProjects = useMemo(() => {
     const map = new Map<string, Project>();

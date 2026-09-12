@@ -62,7 +62,9 @@ export const LoginPage = (props: { redirectTo?: string }) => {
         <div className="flex flex-col justify-center w-full p-4 lg:p-8">
           <div className="w-full space-y-6 lg:mx-auto lg:w-[350px]">
             <div className="text-center">
-              <h1 className="text-page-title font-semibold tracking-tight">Đăng nhập</h1>
+              <h1 className="text-page-title font-semibold tracking-tight">
+                Đăng nhập
+              </h1>
             </div>
             <Form className="space-y-8" onSubmit={handleSubmit}>
               <TextInput

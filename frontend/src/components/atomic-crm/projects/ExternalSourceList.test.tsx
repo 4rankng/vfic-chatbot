@@ -114,12 +114,10 @@ describe("ExternalSourceList", () => {
       ),
     );
 
-    const row = screen.container.querySelector(
-      ".project-external-source-row",
-    )!;
-    const identity = row.querySelector(
-      ".project-external-source-identity",
-    )!.getBoundingClientRect();
+    const row = screen.container.querySelector(".project-external-source-row")!;
+    const identity = row
+      .querySelector(".project-external-source-identity")!
+      .getBoundingClientRect();
     const sync = row
       .querySelector(".project-external-source-sync")!
       .getBoundingClientRect();
@@ -142,9 +140,7 @@ describe("ExternalSourceList", () => {
       ),
     );
 
-    const row = screen.container.querySelector(
-      ".project-external-source-row",
-    )!;
+    const row = screen.container.querySelector(".project-external-source-row")!;
     const identity = row
       .querySelector(".project-external-source-identity")!
       .getBoundingClientRect();
@@ -336,9 +332,9 @@ describe("ExternalSourceList", () => {
       .element()
       .closest<HTMLElement>(".project-external-source-row")!;
     const actions = runButton.element().parentElement!;
-    const identity = row.querySelector(
-      ".project-external-source-identity",
-    )!.getBoundingClientRect();
+    const identity = row
+      .querySelector(".project-external-source-identity")!
+      .getBoundingClientRect();
     const sync = row
       .querySelector(".project-external-source-sync")!
       .getBoundingClientRect();

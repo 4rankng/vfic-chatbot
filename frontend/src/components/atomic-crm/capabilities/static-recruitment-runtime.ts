@@ -9,10 +9,11 @@ import type {
   ExecutableContribution,
 } from "./types";
 
-const contributions: Readonly<Record<string, ExecutableContribution>> = Object.freeze({
-  ...kernelContributions,
-  ...recruitmentContributions,
-});
+const contributions: Readonly<Record<string, ExecutableContribution>> =
+  Object.freeze({
+    ...kernelContributions,
+    ...recruitmentContributions,
+  });
 
 const RESOURCE_IDS = [
   "kernel.resource.conversations",
@@ -57,19 +58,22 @@ const contribution = (id: string): ExecutableContribution => {
 
 const resource = (id: string): CompiledResource => {
   const value = contribution(id);
-  if (value.kind !== "resource") throw new Error(`Expected resource contribution: ${id}`);
+  if (value.kind !== "resource")
+    throw new Error(`Expected resource contribution: ${id}`);
   return value.resource;
 };
 
 const route = (id: string): CompiledRoute => {
   const value = contribution(id);
-  if (value.kind !== "route") throw new Error(`Expected route contribution: ${id}`);
+  if (value.kind !== "route")
+    throw new Error(`Expected route contribution: ${id}`);
   return value.route;
 };
 
 const navigation = (id: string): CompiledDestination => {
   const value = contribution(id);
-  if (value.kind !== "navigation") throw new Error(`Expected navigation contribution: ${id}`);
+  if (value.kind !== "navigation")
+    throw new Error(`Expected navigation contribution: ${id}`);
   return value.destination;
 };
 
@@ -116,8 +120,9 @@ const conversationSlots = (): ConversationSlots => {
   });
 };
 
-export const getStaticRecruitmentRuntimeKey = (authorityGeneration: number): string =>
-  `recruitment:${authorityGeneration}`;
+export const getStaticRecruitmentRuntimeKey = (
+  authorityGeneration: number,
+): string => `recruitment:${authorityGeneration}`;
 
 export const buildStaticRecruitmentRuntime = (
   authorityGeneration: number,

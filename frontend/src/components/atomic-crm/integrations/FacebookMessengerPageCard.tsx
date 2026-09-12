@@ -15,10 +15,7 @@ import { useNotify } from "ra-core";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Project } from "../types";
-import {
-  facebookIntegrationGateway,
-  type FacebookAccountStatus,
-} from "./api";
+import { facebookIntegrationGateway, type FacebookAccountStatus } from "./api";
 
 const PAGE_STATUS_LABELS: Readonly<
   Record<FacebookAccountStatus["status"], string>
@@ -171,7 +168,8 @@ const FacebookPageCard = ({ account, projects }: FacebookPageCardProps) => {
 
   // Disconnect THIS Page (marks inactive; history + assignments preserved — D6).
   const disconnect = useMutation({
-    mutationFn: () => facebookIntegrationGateway.disconnectPage(account.page_id),
+    mutationFn: () =>
+      facebookIntegrationGateway.disconnectPage(account.page_id),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["facebook-integration-status"],

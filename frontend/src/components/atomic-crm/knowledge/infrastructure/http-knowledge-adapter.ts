@@ -34,8 +34,7 @@ export const httpKnowledgeAdapter = Object.freeze<KnowledgePort>({
       { method: "POST" },
     ),
 
-  listVersions: (projectId) =>
-    apiJson(`${projectPath(projectId)}/kb/versions`),
+  listVersions: (projectId) => apiJson(`${projectPath(projectId)}/kb/versions`),
 
   publishVersion: (projectId, versionId) =>
     apiJson(
@@ -69,8 +68,7 @@ export const httpKnowledgeAdapter = Object.freeze<KnowledgePort>({
     apiJson(`${documentPath(documentId)}/archive`, { method: "POST" }),
   reindex: (documentId) =>
     apiJson(`${documentPath(documentId)}/reindex`, { method: "POST" }),
-  reindexAll: () =>
-    apiJson(`${BASE}/reindex-all`, { method: "POST" }),
+  reindexAll: () => apiJson(`${BASE}/reindex-all`, { method: "POST" }),
   getUnits: (documentId, limit) =>
     apiJson(`${documentPath(documentId)}/chunks?limit=${limit}`),
 });

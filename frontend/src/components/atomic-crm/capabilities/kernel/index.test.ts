@@ -1,13 +1,7 @@
 import { createElement } from "react";
 import { MemoryRouter, Routes, Route } from "react-router";
 import { cleanup, render } from "vitest-browser-react";
-import {
-  afterEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const kernelTestState = vi.hoisted(() => {
   let settled = false;
@@ -68,9 +62,7 @@ afterEach(async () => {
 
 describe("kernel capability routes", () => {
   it("keeps Performance out of the primary mobile dock while leaving it rail-eligible", () => {
-    const performance = contributions[
-      "kernel.navigation.performance"
-    ];
+    const performance = contributions["kernel.navigation.performance"];
 
     expect(performance.kind).toBe("navigation");
     if (performance.kind !== "navigation") {

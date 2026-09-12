@@ -21,12 +21,12 @@ import {
   isValidGoogleSheetUrl,
   resolveGoogleSheetGid,
 } from "./domain/google-sheet-policy";
-import type {
-  ProjectKnowledgeCategory,
-} from "./domain/project-knowledge-policy";
+import type { ProjectKnowledgeCategory } from "./domain/project-knowledge-policy";
 import { httpProjectKnowledgeAdapter } from "./infrastructure/http-project-knowledge-adapter";
 
-const operations = createProjectKnowledgeOperations(httpProjectKnowledgeAdapter);
+const operations = createProjectKnowledgeOperations(
+  httpProjectKnowledgeAdapter,
+);
 
 const cancellationSignal = (signal: AbortSignal): CancellationSignal => ({
   get aborted() {
@@ -78,10 +78,7 @@ export const getProjectBusTimetable = (
   { page = 1, perPage = 6 }: { page?: number; perPage?: number } = {},
 ) => operations.getBusTimetable(projectId, page, perPage);
 
-export const listExternalSources = (
-  projectId: string,
-  signal?: AbortSignal,
-) =>
+export const listExternalSources = (projectId: string, signal?: AbortSignal) =>
   operations.listExternalSources(
     projectId,
     signal ? cancellationSignal(signal) : undefined,

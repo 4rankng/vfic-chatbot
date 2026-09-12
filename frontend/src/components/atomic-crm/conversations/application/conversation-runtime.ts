@@ -61,7 +61,8 @@ export const bindConversationApplication = ({
 
 export const getConversationMessageRepository =
   (): ConversationMessageRepository => {
-    if (!repository) throw new Error("Conversation message repository is not bound");
+    if (!repository)
+      throw new Error("Conversation message repository is not bound");
     return repository;
   };
 

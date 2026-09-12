@@ -65,8 +65,9 @@ const clearIdentity = (): void => {
 };
 
 const clearSensitiveQueryState = async (): Promise<void> => {
-  const { clearActiveDecisionTraceQueries } =
-    await import("../../root/reset-runtime-state");
+  const { clearActiveDecisionTraceQueries } = await import(
+    "../../root/reset-runtime-state"
+  );
   clearActiveDecisionTraceQueries();
 };
 

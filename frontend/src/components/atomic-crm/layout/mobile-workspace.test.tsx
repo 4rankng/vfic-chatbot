@@ -78,12 +78,10 @@ describe("desktop workspace rail", () => {
       ".workspace-topbar-brand",
     )!;
     const topbarBrandMark = topbarBrand.querySelector<HTMLElement>("img")!;
-    const frame = screen.container.querySelector<HTMLElement>(
-      ".workspace-frame",
-    )!;
-    const topbar = screen.container.querySelector<HTMLElement>(
-      ".workspace-topbar",
-    )!;
+    const frame =
+      screen.container.querySelector<HTMLElement>(".workspace-frame")!;
+    const topbar =
+      screen.container.querySelector<HTMLElement>(".workspace-topbar")!;
 
     expect(getComputedStyle(rail).width).toBe("72px");
     expect(getComputedStyle(frame).gridTemplateRows.split(" ")[0]).toBe("44px");
@@ -122,9 +120,8 @@ describe("desktop workspace rail", () => {
       </div>,
     );
 
-    const header = screen.container.querySelector<HTMLElement>(
-      ".workspace-topbar",
-    )!;
+    const header =
+      screen.container.querySelector<HTMLElement>(".workspace-topbar")!;
     const actions = screen.container.querySelector<HTMLElement>(
       ".workspace-topbar-actions",
     )!;

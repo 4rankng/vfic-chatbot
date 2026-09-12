@@ -35,7 +35,10 @@ export const Error = (props: InternalErrorProps & {}) => {
 
   return (
     <div className="flex flex-col items-center md:p-16 gap-5" {...rest}>
-      <h1 className="flex items-center text-page-title mt-5 mb-5 gap-3" role="alert">
+      <h1
+        className="flex items-center text-page-title mt-5 mb-5 gap-3"
+        role="alert"
+      >
         <CircleAlert className="w-2em h-2em" />
         <Translate i18nKey="ra.page.error" />
       </h1>

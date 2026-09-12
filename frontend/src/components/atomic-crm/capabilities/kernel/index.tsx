@@ -1,4 +1,10 @@
-import { Component, lazy, Suspense, type ComponentType, type ReactNode } from "react";
+import {
+  Component,
+  lazy,
+  Suspense,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import { Navigate } from "react-router";
 import { usePermissions } from "ra-core";
 import {
@@ -38,7 +44,11 @@ const PerformancePage = lazy(async () => {
 });
 
 const RouteLoadingState = () => (
-  <div role="status" aria-live="polite" className="p-6 text-sm text-muted-foreground">
+  <div
+    role="status"
+    aria-live="polite"
+    className="p-6 text-sm text-muted-foreground"
+  >
     Đang tải trang...
   </div>
 );
@@ -79,7 +89,11 @@ const RouteBoundary = ({ children }: { children: ReactNode }) => (
 const AdminPerformanceRoute = () => {
   const { permissions, isPending } = usePermissions();
   if (isPending) return <RouteLoadingState />;
-  return permissions === "admin" ? <PerformancePage /> : <Navigate to="/" replace />;
+  return permissions === "admin" ? (
+    <PerformancePage />
+  ) : (
+    <Navigate to="/" replace />
+  );
 };
 
 const pathStartsWith = (prefix: string) => (path: string) =>
@@ -198,11 +212,19 @@ const routes: readonly CompiledRoute[] = [
 const resourceContributions = {
   "kernel.resource.conversations": {
     kind: "resource" as const,
-    resource: { id: "kernel.resource.conversations", name: "conversations", props: conversations },
+    resource: {
+      id: "kernel.resource.conversations",
+      name: "conversations",
+      props: conversations,
+    },
   },
   "kernel.resource.bot-runs": {
     kind: "resource" as const,
-    resource: { id: "kernel.resource.bot-runs", name: "bot_runs", props: automation },
+    resource: {
+      id: "kernel.resource.bot-runs",
+      name: "bot_runs",
+      props: automation,
+    },
   },
   "kernel.resource.knowledge-sources": {
     kind: "resource" as const,
@@ -214,19 +236,35 @@ const resourceContributions = {
   },
   "kernel.resource.knowledge-bases": {
     kind: "resource" as const,
-    resource: { id: "kernel.resource.knowledge-bases", name: "knowledge_bases", props: knowledgeBases },
+    resource: {
+      id: "kernel.resource.knowledge-bases",
+      name: "knowledge_bases",
+      props: knowledgeBases,
+    },
   },
   "kernel.resource.projects": {
     kind: "resource" as const,
-    resource: { id: "kernel.resource.projects", name: "projects", props: projects },
+    resource: {
+      id: "kernel.resource.projects",
+      name: "projects",
+      props: projects,
+    },
   },
   "kernel.resource.personas": {
     kind: "resource" as const,
-    resource: { id: "kernel.resource.personas", name: "personas", props: personas },
+    resource: {
+      id: "kernel.resource.personas",
+      name: "personas",
+      props: personas,
+    },
   },
   "kernel.resource.settings": {
     kind: "resource" as const,
-    resource: { id: "kernel.resource.settings", name: "settings", props: integrations },
+    resource: {
+      id: "kernel.resource.settings",
+      name: "settings",
+      props: integrations,
+    },
   },
   "kernel.resource.users": {
     kind: "resource" as const,

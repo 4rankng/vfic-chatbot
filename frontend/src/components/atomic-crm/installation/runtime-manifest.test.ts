@@ -58,7 +58,10 @@ const activeManifest = () => ({
 const jsonResponse = (body: unknown, headers?: HeadersInit) => {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Content-Type", "application/json");
-  return new Response(JSON.stringify(body), { status: 200, headers: responseHeaders });
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: responseHeaders,
+  });
 };
 
 const originalFetch = globalThis.fetch;
@@ -80,8 +83,17 @@ describe("parseRuntimeManifest", () => {
   it("recognizes only a pre-setup manifest explicitly marked as a legacy workspace", async () => {
     const { isLegacyWorkspaceRuntime } = await import("./runtime-manifest");
 
-    expect(isLegacyWorkspaceRuntime(parseRuntimeManifest({ ...unconfiguredManifest(), legacy_workspace: true }))).toBe(true);
-    expect(isLegacyWorkspaceRuntime(parseRuntimeManifest(unconfiguredManifest()))).toBe(false);
+    expect(
+      isLegacyWorkspaceRuntime(
+        parseRuntimeManifest({
+          ...unconfiguredManifest(),
+          legacy_workspace: true,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isLegacyWorkspaceRuntime(parseRuntimeManifest(unconfiguredManifest())),
+    ).toBe(false);
   });
 
   it("accepts an ACTIVE projection with complete authority evidence", () => {
@@ -105,7 +117,9 @@ describe("parseRuntimeManifest", () => {
       branding: { app_name: null, primary_color: null, secondary_color: null },
     });
 
-    expect(manifest.customer_identity?.display_name).toBe("Configured customer");
+    expect(manifest.customer_identity?.display_name).toBe(
+      "Configured customer",
+    );
     expect(manifest.customer_identity?.legal_name).toBeUndefined();
     expect(manifest.customer_identity?.support_email).toBeUndefined();
     expect(manifest.branding?.app_name).toBeUndefined();
@@ -116,22 +130,27 @@ describe("parseRuntimeManifest", () => {
   it.each([
     ["SUSPENDED", "SUSPENDED"],
     ["UPGRADE_REQUIRED", "UPGRADE_REQUIRED"],
-  ])("accepts %s only with complete authority evidence", (lifecycle, readiness) => {
-    const payload = {
-      ...activeManifest(),
-      lifecycle,
-      readiness_code: readiness,
-    };
+  ])(
+    "accepts %s only with complete authority evidence",
+    (lifecycle, readiness) => {
+      const payload = {
+        ...activeManifest(),
+        lifecycle,
+        readiness_code: readiness,
+      };
 
-    expect(parseRuntimeManifest(payload)).toEqual(payload);
-  });
+      expect(parseRuntimeManifest(payload)).toEqual(payload);
+    },
+  );
 
   it.each([
     ["provider_policy", { chat_model: "private-model" }],
     ["persona_body", "private persona instructions"],
     ["integration_requirements", [{ key: "private-integration" }]],
   ])("rejects an extra or unsafe %s field", (field, value) => {
-    expect(() => parseRuntimeManifest({ ...activeManifest(), [field]: value })).toThrow();
+    expect(() =>
+      parseRuntimeManifest({ ...activeManifest(), [field]: value }),
+    ).toThrow();
   });
 
   it.each(["logo_url", "favicon_url"])(
@@ -202,25 +221,33 @@ describe("parseRuntimeManifest", () => {
     ["SUSPENDED", "READY"],
     ["SUSPENDED", "UPGRADE_REQUIRED"],
     ["UPGRADE_REQUIRED", "SUSPENDED"],
-  ])("rejects inconsistent %s/%s lifecycle readiness", (lifecycle, readiness) => {
-    const authority = ["ACTIVE", "SUSPENDED", "UPGRADE_REQUIRED"].includes(lifecycle)
-      ? activeManifest()
-      : unconfiguredManifest();
-
-    expect(() =>
-      parseRuntimeManifest({
-        ...authority,
+  ])(
+    "rejects inconsistent %s/%s lifecycle readiness",
+    (lifecycle, readiness) => {
+      const authority = ["ACTIVE", "SUSPENDED", "UPGRADE_REQUIRED"].includes(
         lifecycle,
-        readiness_code: readiness,
-      }),
-    ).toThrow();
-  });
+      )
+        ? activeManifest()
+        : unconfiguredManifest();
+
+      expect(() =>
+        parseRuntimeManifest({
+          ...authority,
+          lifecycle,
+          readiness_code: readiness,
+        }),
+      ).toThrow();
+    },
+  );
 });
 
 describe("fetchRuntimeManifest", () => {
   it("uses the exact unauthenticated no-store endpoint and accepts a no-store response", async () => {
     const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
+      async (
+        _input: RequestInfo | URL,
+        _init?: RequestInit,
+      ): Promise<Response> =>
         jsonResponse(activeManifest(), { "Cache-Control": "no-store" }),
     );
     globalThis.fetch = fetchMock as typeof globalThis.fetch;

@@ -376,7 +376,10 @@ describe("chatRepository.subscribeToMessages", () => {
       "disconnect",
       expect.any(Function),
     );
-    expect(mockSocket.off).toHaveBeenCalledWith("connect", expect.any(Function));
+    expect(mockSocket.off).toHaveBeenCalledWith(
+      "connect",
+      expect.any(Function),
+    );
   });
 
   it("uses a full realtime message payload without refetching latest history", () => {

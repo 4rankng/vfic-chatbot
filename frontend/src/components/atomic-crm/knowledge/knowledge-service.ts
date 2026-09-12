@@ -32,10 +32,8 @@ export const processKnowledge = operations.process;
 export const archiveKnowledge = operations.archive;
 export const reindexKnowledge = operations.reindex;
 export const reindexAllKnowledge = operations.reindexAll;
-export const getKnowledgeUnits = (
-  documentId: string,
-  limit = 50,
-) => operations.getUnits(documentId, limit);
+export const getKnowledgeUnits = (documentId: string, limit = 50) =>
+  operations.getUnits(documentId, limit);
 
 export type {
   KnowledgeBaseVersion,

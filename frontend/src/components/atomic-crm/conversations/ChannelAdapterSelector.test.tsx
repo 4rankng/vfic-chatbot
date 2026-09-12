@@ -152,8 +152,11 @@ describe("ChannelAdapterSelector", () => {
     expect(next.get("reason")).toBe("UNREAD");
     expect(next.has("id")).toBe(false);
 
-    await screen.getByRole("radio", { name: "Zalo Chatbot — 2 hội thoại cần phản hồi" }).click();
-    const aggregate = onSearchParamsChange.mock.calls[1]?.[0] as URLSearchParams;
+    await screen
+      .getByRole("radio", { name: "Zalo Chatbot — 2 hội thoại cần phản hồi" })
+      .click();
+    const aggregate = onSearchParamsChange.mock
+      .calls[1]?.[0] as URLSearchParams;
     expect(aggregate.has("channel_provider")).toBe(false);
     expect(aggregate.get("reason")).toBe("UNREAD");
     expect(aggregate.has("id")).toBe(false);

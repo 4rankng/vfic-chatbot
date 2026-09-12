@@ -66,12 +66,9 @@ const ProjectListContent = () => {
           refresh();
         },
         onError: () => {
-          notify(
-            nextActive
-              ? "Không thể bật dự án."
-              : "Không thể tắt dự án.",
-            { type: "error" },
-          );
+          notify(nextActive ? "Không thể bật dự án." : "Không thể tắt dự án.", {
+            type: "error",
+          });
         },
       },
     );
@@ -105,9 +102,7 @@ const ProjectListContent = () => {
             <div className="ops-command-title">
               <div className="min-w-0">
                 <h1>Dự án tuyển dụng</h1>
-                <p>
-                  Theo dõi trạng thái, tài liệu và độ sẵn sàng kiến thức.
-                </p>
+                <p>Theo dõi trạng thái, tài liệu và độ sẵn sàng kiến thức.</p>
               </div>
             </div>
             <div className="project-command-actions">

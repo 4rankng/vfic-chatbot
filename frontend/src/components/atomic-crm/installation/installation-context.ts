@@ -20,4 +20,5 @@ export const useInstallationContext = (): InstallationContextValue => {
 
 export const hasReadyActiveRuntime = (
   manifest: PublicRuntimeManifest,
-): boolean => manifest.lifecycle === "ACTIVE" && manifest.readiness_code === "READY";
+): boolean =>
+  manifest.lifecycle === "ACTIVE" && manifest.readiness_code === "READY";

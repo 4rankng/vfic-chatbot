@@ -40,9 +40,7 @@ beforeEach(() => {
 
 describe("useResendCooldown", () => {
   it("starts enabled with no cooldown", async () => {
-    const hook = await renderHook(() =>
-      useResendCooldown(vi.fn()),
-    );
+    const hook = await renderHook(() => useResendCooldown(vi.fn()));
     await hook.act(async () => {
       /* let effects settle */
     });
@@ -95,7 +93,10 @@ describe("useResendCooldown", () => {
   it("re-arms the cooldown on a 429 so the user cannot hammer the endpoint", async () => {
     const notify = vi.fn();
     mockRequestPasswordResetOtp.mockRejectedValueOnce(
-      new ApiError(429, "Bạn đã thử quá nhiều lần. Vui lòng thử lại sau vài phút."),
+      new ApiError(
+        429,
+        "Bạn đã thử quá nhiều lần. Vui lòng thử lại sau vài phút.",
+      ),
     );
 
     const hook = await renderHook(() => useResendCooldown(notify));

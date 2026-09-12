@@ -121,14 +121,10 @@ describe("Knowledge Base pages", () => {
       .element(screen.getByRole("heading", { name: "Thông tin kho" }))
       .toBeVisible();
     expect(
-      screen
-        .getByRole("option", { name: "RAG — nhiều dự án" })
-        .element(),
+      screen.getByRole("option", { name: "RAG — nhiều dự án" }).element(),
     ).toBeInstanceOf(HTMLOptionElement);
     expect(
-      screen
-        .getByRole("option", { name: "Trực tiếp — một tệp" })
-        .element(),
+      screen.getByRole("option", { name: "Trực tiếp — một tệp" }).element(),
     ).toBeInstanceOf(HTMLOptionElement);
     expect(screen.container.querySelector("[data-slot='card']")).toBeNull();
     expect(screen.container.querySelector(".tt-alternate-card")).toBeNull();

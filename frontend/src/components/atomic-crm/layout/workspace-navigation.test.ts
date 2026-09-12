@@ -52,33 +52,45 @@ describe("workspace navigation", () => {
 
   it("keeps account out of the desktop icon rail", () => {
     expect(
-      getWorkspaceDestinations("admin", "rail", destinations).map(({ label }) => label),
+      getWorkspaceDestinations("admin", "rail", destinations).map(
+        ({ label }) => label,
+      ),
     ).toEqual(["Tổng quan", "Tin nhắn", "Dự án", "Cài đặt", "Hiệu suất"]);
   });
 
   it("keeps settings hidden from recruiters and account available on mobile", () => {
     expect(
-      getWorkspaceDestinations("recruiter", "mobile", destinations).map(({ label }) => label),
+      getWorkspaceDestinations("recruiter", "mobile", destinations).map(
+        ({ label }) => label,
+      ),
     ).toEqual(["Tổng quan", "Tin nhắn", "Dự án", "Tài khoản"]);
   });
 
   it("keeps the approved four-item mobile set for administrators", () => {
     expect(
-      getWorkspaceDestinations("admin", "mobile", destinations).map(({ label }) => label),
+      getWorkspaceDestinations("admin", "mobile", destinations).map(
+        ({ label }) => label,
+      ),
     ).toEqual(["Tổng quan", "Tin nhắn", "Dự án", "Cài đặt"]);
   });
 
   it("keeps desktop-only admin destinations reachable through mobile overflow", () => {
     expect(
-      getWorkspaceOverflowDestinations("admin", destinations).map(({ label }) => label),
+      getWorkspaceOverflowDestinations("admin", destinations).map(
+        ({ label }) => label,
+      ),
     ).toEqual(["Hiệu suất", "Tài khoản"]);
-    expect(getWorkspaceOverflowDestinations("recruiter", destinations)).toEqual([]);
+    expect(getWorkspaceOverflowDestinations("recruiter", destinations)).toEqual(
+      [],
+    );
   });
 
   it("matches nested workspace routes", () => {
-    const settings = getWorkspaceDestinations("admin", "rail", destinations).find(
-      ({ id }) => id === "settings",
-    );
+    const settings = getWorkspaceDestinations(
+      "admin",
+      "rail",
+      destinations,
+    ).find(({ id }) => id === "settings");
     expect(settings?.isActive("/knowledge_sources/documents")).toBe(true);
   });
 

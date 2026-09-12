@@ -28,7 +28,8 @@ const readRuntimeManifestResponse = async (
   }
 };
 
-export const createBrowserRuntimeManifestGateway = (): RuntimeManifestGateway => ({
-  readRuntimeManifest: async ({ timeoutMs }) =>
-    readRuntimeManifestResponse(timeoutMs),
-});
+export const createBrowserRuntimeManifestGateway =
+  (): RuntimeManifestGateway => ({
+    readRuntimeManifest: async ({ timeoutMs }) =>
+      readRuntimeManifestResponse(timeoutMs),
+  });

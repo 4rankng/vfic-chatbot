@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./knowledge-service", () => ({
-  createAndIngestKnowledgeBaseVersion: mocks.createAndIngestKnowledgeBaseVersion,
+  createAndIngestKnowledgeBaseVersion:
+    mocks.createAndIngestKnowledgeBaseVersion,
   saveKnowledgeTemplate: vi.fn(),
 }));
 
@@ -56,14 +57,20 @@ describe("InlineKnowledgeUploader", () => {
 
     await screen.getByRole("button", { name: "Chọn dự án mẫu" }).click();
     mocks.onDrop?.(
-      [new File(["Thông tin tuyển dụng"], "tuyen-dung.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })],
+      [
+        new File(["Thông tin tuyển dụng"], "tuyen-dung.docx", {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }),
+      ],
       [],
     );
     await expect.element(screen.getByText("tuyen-dung.docx")).toBeVisible();
     await screen.getByRole("button", { name: "Tải lên" }).click();
 
     await vi.waitFor(() => {
-      expect(mocks.createAndIngestKnowledgeBaseVersion).toHaveBeenCalledTimes(1);
+      expect(mocks.createAndIngestKnowledgeBaseVersion).toHaveBeenCalledTimes(
+        1,
+      );
     });
     expect(mocks.createAndIngestKnowledgeBaseVersion).toHaveBeenCalledWith(
       "project-1",

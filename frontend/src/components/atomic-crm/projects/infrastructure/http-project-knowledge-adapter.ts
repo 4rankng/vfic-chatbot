@@ -27,8 +27,7 @@ const deleteRequest = async (path: string, message: string): Promise<void> => {
 };
 
 export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
-  getCategories: (projectId) =>
-    apiJson(`${projectPath(projectId)}/categories`),
+  getCategories: (projectId) => apiJson(`${projectPath(projectId)}/categories`),
 
   getCategoryTemplate: (projectId, key) =>
     apiJson(
@@ -39,13 +38,10 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
     apiJson(`${projectPath(projectId)}/categories/${encodeURIComponent(key)}`),
 
   replaceCategory: (projectId, key, filename, content) =>
-    apiJson(
-      `${projectPath(projectId)}/categories/${encodeURIComponent(key)}`,
-      {
-        method: "PUT",
-        body: { filename, content },
-      },
-    ),
+    apiJson(`${projectPath(projectId)}/categories/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: { filename, content },
+    }),
 
   uploadCategory: (projectId, key, file) => {
     const form = new FormData();
@@ -65,8 +61,7 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       body: { filename, text },
     }),
 
-  getFeatures: (projectId) =>
-    apiJson(`${projectPath(projectId)}/features`),
+  getFeatures: (projectId) => apiJson(`${projectPath(projectId)}/features`),
 
   extractFeatures: (projectId) =>
     apiJson(`${projectPath(projectId)}/features/extract`, { method: "POST" }),

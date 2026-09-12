@@ -164,12 +164,12 @@ describe("ZaloIntegrationPage navigation", () => {
 
     await screen.getByRole("button", { name: "Sao chép Bot Token" }).click();
 
-    await expect.poll(() => clipboardWrite.mock.calls).toEqual([
-      ["secret-token"],
-    ]);
-    await expect.poll(() => mocks.notify.mock.calls).toEqual([
-      ["Đã sao chép Bot Token.", { type: "success" }],
-    ]);
+    await expect
+      .poll(() => clipboardWrite.mock.calls)
+      .toEqual([["secret-token"]]);
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toEqual([["Đã sao chép Bot Token.", { type: "success" }]]);
   });
 
   it("reports clipboard copy failures without crashing the settings form", async () => {
@@ -196,12 +196,12 @@ describe("ZaloIntegrationPage navigation", () => {
       .fill("secret-token");
     await screen.getByRole("button", { name: "Sao chép Bot Token" }).click();
 
-    await expect.poll(() => clipboardWrite.mock.calls).toEqual([
-      ["secret-token"],
-    ]);
-    await expect.poll(() => mocks.notify.mock.calls).toEqual([
-      ["Không thể sao chép Bot Token.", { type: "error" }],
-    ]);
+    await expect
+      .poll(() => clipboardWrite.mock.calls)
+      .toEqual([["secret-token"]]);
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toEqual([["Không thể sao chép Bot Token.", { type: "error" }]]);
   });
 
   it("keeps mobile reveal controls interactive and reports rejected clipboard writes", async () => {
@@ -237,12 +237,12 @@ describe("ZaloIntegrationPage navigation", () => {
 
     await screen.getByRole("button", { name: "Sao chép Bot Token" }).click();
 
-    await expect.poll(() => clipboardWrite.mock.calls).toEqual([
-      ["mobile-secret"],
-    ]);
-    await expect.poll(() => mocks.notify.mock.calls).toEqual([
-      ["Không thể sao chép Bot Token.", { type: "error" }],
-    ]);
+    await expect
+      .poll(() => clipboardWrite.mock.calls)
+      .toEqual([["mobile-secret"]]);
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toEqual([["Không thể sao chép Bot Token.", { type: "error" }]]);
   });
 
   it("uses one flat desktop workspace without a second navigation rail", async () => {
@@ -274,9 +274,7 @@ describe("ZaloIntegrationPage navigation", () => {
     expect(getComputedStyle(app).gridTemplateColumns).not.toContain("58px");
     expect(getComputedStyle(app).borderRadius).toBe("0px");
     expect(getComputedStyle(navIcon).borderTopWidth).toBe("0px");
-    expect(getComputedStyle(navIcon).backgroundColor).toBe(
-      "rgba(0, 0, 0, 0)",
-    );
+    expect(getComputedStyle(navIcon).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(center.getBoundingClientRect().width).toBeCloseTo(
       workspace.getBoundingClientRect().width,
       0,
@@ -481,21 +479,29 @@ describe("ZaloIntegrationPage provider sections", () => {
 
     // Panel header + failover chain strip + all three provider cards render.
     await expect
-      .element(screen.getByRole("heading", { name: "AI Providers", exact: true }))
+      .element(
+        screen.getByRole("heading", { name: "AI Providers", exact: true }),
+      )
       .toBeVisible();
-    await expect
-      .element(screen.getByText("Thứ tự dự phòng"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Thứ tự dự phòng")).toBeVisible();
     // Multiple elements legitimately contain each provider name (chain chip,
     // card title) — assert the chain strip chips specifically.
     await expect
-      .element(screen.container.querySelector<HTMLElement>(".settings-llm-chain"))
+      .element(
+        screen.container.querySelector<HTMLElement>(".settings-llm-chain"),
+      )
       .toBeVisible();
     await expect
-      .element(screen.container.querySelector<HTMLElement>(".settings-llm-chain-item.is-on"))
+      .element(
+        screen.container.querySelector<HTMLElement>(
+          ".settings-llm-chain-item.is-on",
+        ),
+      )
       .toBeVisible();
     await expect
-      .element(screen.container.querySelector<HTMLElement>(".settings-llm-footer"))
+      .element(
+        screen.container.querySelector<HTMLElement>(".settings-llm-footer"),
+      )
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Lưu thay đổi" }))

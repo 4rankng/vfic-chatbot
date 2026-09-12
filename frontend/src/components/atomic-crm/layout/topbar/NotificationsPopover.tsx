@@ -44,9 +44,7 @@ export const NotificationsPopover = ({ count }: NotificationsPopoverProps) => {
   const { rows, total, isLoading, isError, refetch } = useNeedsAttention(open);
 
   const triggerLabel =
-    count > 0
-      ? `${count} cuộc trò chuyện cần chú ý`
-      : "Không có thông báo mới";
+    count > 0 ? `${count} cuộc trò chuyện cần chú ý` : "Không có thông báo mới";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -143,7 +141,9 @@ export const NotificationsPopover = ({ count }: NotificationsPopoverProps) => {
                           {rowTitle(row)}
                         </span>
                         <span className="workspace-notifications-item-meta">
-                          <span>{channelLabel(row.channel_identity?.provider)}</span>
+                          <span>
+                            {channelLabel(row.channel_identity?.provider)}
+                          </span>
                           {elapsed ? (
                             <>
                               <span aria-hidden="true">·</span>
@@ -185,8 +185,14 @@ const NotificationRowSkeleton = () => (
             className="!rounded-full tt-skeleton workspace-notifications-skeleton-icon"
           />
           <div className="workspace-notifications-skeleton-body">
-            <Skeleton shimmer className="workspace-notifications-skeleton-line-1" />
-            <Skeleton shimmer className="workspace-notifications-skeleton-line-2" />
+            <Skeleton
+              shimmer
+              className="workspace-notifications-skeleton-line-1"
+            />
+            <Skeleton
+              shimmer
+              className="workspace-notifications-skeleton-line-2"
+            />
           </div>
         </div>
       </li>

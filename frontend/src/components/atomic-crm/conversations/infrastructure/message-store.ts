@@ -201,7 +201,9 @@ export const conversationMessageStatePort: ConversationMessageStatePort = {
 
 /** Sorted messages for a conversation (oldest→newest). Identity-stable across
  * reads when the underlying set is unchanged. */
-export const useConversationMessages = (convId: string | undefined): Message[] => {
+export const useConversationMessages = (
+  convId: string | undefined,
+): Message[] => {
   return useMessageStore((s) => {
     if (!convId) return EMPTY_MESSAGES;
     return s.conversations.get(convId)?.sortedCache ?? EMPTY_MESSAGES;

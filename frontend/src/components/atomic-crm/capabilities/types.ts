@@ -1,19 +1,11 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type {
-  DashboardComponent,
-  ResourceProps,
-  Store,
-} from "ra-core";
-import type {
-  ComponentType,
-  ReactNode,
-} from "react";
+import type { DashboardComponent, ResourceProps, Store } from "ra-core";
+import type { ComponentType, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import type { Conversation } from "../types";
 
 export type ConversationSlotName = "row" | "filters" | "context" | "actions";
-
 
 export type ConversationRowPresentation = Readonly<{
   displayName: string;
@@ -64,7 +56,8 @@ export type ConversationContextAdapterProps = Readonly<{
   children: (value: ConversationContextValue) => ReactNode;
 }>;
 
-export type ConversationContextSlot = ComponentType<ConversationContextAdapterProps>;
+export type ConversationContextSlot =
+  ComponentType<ConversationContextAdapterProps>;
 
 export type ConversationActionsSlot = ComponentType<{
   conversation: Conversation | undefined;

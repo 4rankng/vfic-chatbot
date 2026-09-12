@@ -29,10 +29,7 @@ export const createKnowledgeOperations = (
         "text/markdown;charset=utf-8",
       );
     },
-    saveRaw: async (
-      documentId: string,
-      filename = "knowledge-source.md",
-    ) => {
+    saveRaw: async (documentId: string, filename = "knowledge-source.md") => {
       const content = await knowledge.downloadRaw(documentId);
       downloads.saveBinary(
         filename || "knowledge-source.md",

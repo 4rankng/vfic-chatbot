@@ -59,9 +59,9 @@ describe("Bot run pages", () => {
 
     await expect.element(row).toBeVisible();
     await expect.element(screen.getByText("#42")).toBeVisible();
-    const outcome = row.element().querySelector<HTMLElement>(
-      "[data-slot='bot-run-outcome']",
-    );
+    const outcome = row
+      .element()
+      .querySelector<HTMLElement>("[data-slot='bot-run-outcome']");
     const rowText = row.element().textContent ?? "";
 
     expect(outcome).not.toBeNull();
@@ -125,9 +125,7 @@ describe("Bot run pages", () => {
       .element(screen.getByText("Đã kiểm tra dữ liệu trước khi trả lời."))
       .not.toBeVisible();
     await screen
-      .getByLabelText(
-        /^Chi tiết lượt suy luận 1: .*minimax.*MiniMax-M2\.7$/,
-      )
+      .getByLabelText(/^Chi tiết lượt suy luận 1: .*minimax.*MiniMax-M2\.7$/)
       .click();
     await expect
       .element(screen.getByText("Đã kiểm tra dữ liệu trước khi trả lời."))

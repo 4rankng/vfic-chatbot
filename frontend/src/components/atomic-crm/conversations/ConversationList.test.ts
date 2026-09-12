@@ -39,7 +39,9 @@ describe("getConversationListServerFilter", () => {
   });
 
   it("keeps an unscoped inbox query cross-channel", () => {
-    expect(getEffectiveConversationChannelProvider(new URLSearchParams())).toBeUndefined();
+    expect(
+      getEffectiveConversationChannelProvider(new URLSearchParams()),
+    ).toBeUndefined();
     expect(getConversationListServerFilter(new URLSearchParams())).toEqual({});
     expect(
       getEffectiveConversationChannelProvider(

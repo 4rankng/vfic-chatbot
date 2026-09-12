@@ -11,10 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  getKnowledgeUnits,
-  type KnowledgeUnit,
-} from "./knowledge-service";
+import { getKnowledgeUnits, type KnowledgeUnit } from "./knowledge-service";
 import { Markdown } from "../misc/Markdown";
 import type { KnowledgeSource } from "../types";
 import { isPublished, needsReview } from "./knowledgePipelineUtils";

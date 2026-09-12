@@ -84,7 +84,11 @@ describe("conversation thread domain rules", () => {
     ).toBe(true);
     expect(
       isUnseenWorthyArrival(
-        message({ id: "server-4", type: "inbound", data: { recruiter_id: null } }),
+        message({
+          id: "server-4",
+          type: "inbound",
+          data: { recruiter_id: null },
+        }),
         "recruiter-1",
       ),
     ).toBe(true);

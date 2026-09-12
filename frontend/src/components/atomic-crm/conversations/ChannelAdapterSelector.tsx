@@ -51,10 +51,8 @@ const useScopedAttentionCount = (provider: ConversationChannelProvider) => {
 const formatAdapterAttentionCount = (count: number): string =>
   count > 99 ? "99+" : String(count);
 
-const getAdapterAccessibleLabel = (
-  label: string,
-  count: number,
-): string => (count > 0 ? `${label} — ${count} hội thoại cần phản hồi` : label);
+const getAdapterAccessibleLabel = (label: string, count: number): string =>
+  count > 0 ? `${label} — ${count} hội thoại cần phản hồi` : label;
 
 export const ChannelAdapterSelectorView = ({
   provider,

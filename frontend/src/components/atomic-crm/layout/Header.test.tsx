@@ -45,7 +45,9 @@ describe("Header", () => {
 
     const images = brand.element().querySelectorAll("img");
     expect(images).toHaveLength(1);
-    expect(images[0]?.getAttribute("src")).toBe("/brand/tinghire-icon-rail.png");
+    expect(images[0]?.getAttribute("src")).toBe(
+      "/brand/tinghire-icon-rail.png",
+    );
     expect(images[0]?.getAttribute("width")).toBe("131");
     expect(images[0]?.getAttribute("height")).toBe("106");
   });

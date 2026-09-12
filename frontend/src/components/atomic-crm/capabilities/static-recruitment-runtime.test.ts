@@ -21,7 +21,9 @@ describe("static recruitment runtime", () => {
       "settings",
       "users",
     ]);
-    expect(runtime.routes.map(({ id, path, layout }) => ({ id, path, layout }))).toEqual([
+    expect(
+      runtime.routes.map(({ id, path, layout }) => ({ id, path, layout })),
+    ).toEqual([
       { id: "kernel.route.performance", path: "/hieu-suat", layout: "layout" },
       { id: "kernel.route.profile", path: "/profile", layout: "layout" },
       {
@@ -57,7 +59,13 @@ describe("static recruitment runtime", () => {
         rail: true,
         mobile: true,
       },
-      { id: "projects", to: "/projects", roles: undefined, rail: true, mobile: true },
+      {
+        id: "projects",
+        to: "/projects",
+        roles: undefined,
+        rail: true,
+        mobile: true,
+      },
       {
         id: "settings",
         to: "/settings",
@@ -72,15 +80,29 @@ describe("static recruitment runtime", () => {
         rail: true,
         mobile: false,
       },
-      { id: "account", to: "/profile", roles: undefined, rail: false, mobile: true },
+      {
+        id: "account",
+        to: "/profile",
+        roles: undefined,
+        rail: false,
+        mobile: true,
+      },
     ]);
-    const navigationById = new Map(runtime.navigation.map((destination) => [destination.id, destination]));
+    const navigationById = new Map(
+      runtime.navigation.map((destination) => [destination.id, destination]),
+    );
     expect(navigationById.get("overview")?.isActive("/")).toBe(true);
     expect(navigationById.get("overview")?.isActive("/projects")).toBe(false);
-    expect(navigationById.get("messages")?.isActive("/conversations/1")).toBe(true);
+    expect(navigationById.get("messages")?.isActive("/conversations/1")).toBe(
+      true,
+    );
     expect(navigationById.get("projects")?.isActive("/projects/1")).toBe(true);
-    expect(navigationById.get("settings")?.isActive("/knowledge_sources")).toBe(true);
-    expect(navigationById.get("performance")?.isActive("/hieu-suat/weekly")).toBe(true);
+    expect(navigationById.get("settings")?.isActive("/knowledge_sources")).toBe(
+      true,
+    );
+    expect(
+      navigationById.get("performance")?.isActive("/hieu-suat/weekly"),
+    ).toBe(true);
     expect(navigationById.get("account")?.isActive("/users/1")).toBe(true);
     expect(runtime.dashboard).toBeTypeOf("function");
     expect(runtime.conversationSlots).toMatchObject({
@@ -89,7 +111,9 @@ describe("static recruitment runtime", () => {
       context: expect.any(Function),
       actions: expect.any(Function),
     });
-    expect(runtime.availableResources).toEqual(new Set(runtime.resources.map(({ name }) => name)));
+    expect(runtime.availableResources).toEqual(
+      new Set(runtime.resources.map(({ name }) => name)),
+    );
   });
 
   it("changes only when server authority generation changes", () => {

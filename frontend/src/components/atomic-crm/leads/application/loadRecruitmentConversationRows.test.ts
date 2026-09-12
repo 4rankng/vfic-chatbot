@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { Conversation, Lead } from "../../types";
-import { loadRecruitmentConversationRows, mapLeadsByZaloId } from "./loadRecruitmentConversationRows";
+import {
+  loadRecruitmentConversationRows,
+  mapLeadsByZaloId,
+} from "./loadRecruitmentConversationRows";
 
 const conversation = (overrides: Partial<Conversation> = {}): Conversation => ({
   id: "conv-1",
@@ -49,10 +52,9 @@ describe("loadRecruitmentConversationRows", () => {
   it("loads one lead batch and builds row presentation with search text", async () => {
     const listByZaloIds = async () => [lead()];
 
-    const rows = await loadRecruitmentConversationRows(
-      [conversation()],
-      { listByZaloIds },
-    );
+    const rows = await loadRecruitmentConversationRows([conversation()], {
+      listByZaloIds,
+    });
 
     expect(rows.get("conv-1")).toEqual({
       lead: lead(),

@@ -92,10 +92,7 @@ export type ProjectKnowledgePort = Readonly<{
     projectId: string,
     sourceId: string,
   ) => Promise<{ job_id: string }>;
-  deleteExternalSource: (
-    projectId: string,
-    sourceId: string,
-  ) => Promise<void>;
+  deleteExternalSource: (projectId: string, sourceId: string) => Promise<void>;
   listSinglePageExternalSources: (
     projectId: string,
     signal?: CancellationSignal,

@@ -83,15 +83,13 @@ describe("copyCredentialFieldValue", () => {
     Object.defineProperty(window.navigator, "clipboard", {
       configurable: true,
       value: {
-        writeText: vi.fn().mockRejectedValue(new Error("Clipboard unavailable")),
+        writeText: vi
+          .fn()
+          .mockRejectedValue(new Error("Clipboard unavailable")),
       },
     });
 
-    await copyCredentialFieldValue(
-      "Bot Token",
-      "secret-value",
-      rejectedNotify,
-    );
+    await copyCredentialFieldValue("Bot Token", "secret-value", rejectedNotify);
 
     expect(rejectedNotify).toHaveBeenCalledWith(
       "Không thể sao chép Bot Token.",

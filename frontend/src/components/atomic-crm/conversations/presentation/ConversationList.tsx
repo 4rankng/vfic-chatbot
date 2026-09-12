@@ -470,16 +470,8 @@ const ConversationListPanel = ({
         }
         return true;
       })
-      .sort((first, second) =>
-        compareConversationRows(first, second, readIds),
-      );
-  }, [
-    adapterPresentations,
-    conversations,
-    snippets,
-    deferredQuery,
-    readIds,
-  ]);
+      .sort((first, second) => compareConversationRows(first, second, readIds));
+  }, [adapterPresentations, conversations, snippets, deferredQuery, readIds]);
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -547,9 +539,7 @@ const ConversationListPanel = ({
           <ListEmptyState kind="error" onAction={() => void refetch()} />
         ) : rows.length === 0 ? (
           <ListEmptyState
-            kind={
-              query || hasServerFilter ? "filtered" : "empty"
-            }
+            kind={query || hasServerFilter ? "filtered" : "empty"}
             onAction={
               query || hasServerFilter ? clearSearchAndFilters : undefined
             }
@@ -654,14 +644,13 @@ const ConversationListContent = () => {
     if (!conversations) return;
     const hasUrlConversation = Boolean(
       urlId &&
-      (conversationFromCurrentPage || deepLinkedConversation?.id === urlId),
+        (conversationFromCurrentPage || deepLinkedConversation?.id === urlId),
     );
-    const hasSelectedConversation =
-      !!findSelectedConversation(
-        conversations,
-        selectedId,
-        deepLinkedConversation,
-      );
+    const hasSelectedConversation = !!findSelectedConversation(
+      conversations,
+      selectedId,
+      deepLinkedConversation,
+    );
 
     if (urlId && shouldLoadDeepLink && isDeepLinkPending) return;
 
@@ -751,10 +740,9 @@ const ConversationListContent = () => {
   );
 
   const backToList = () => {
-    setSearchParams(
-      (prev) => conversationSelectionParams(prev, null),
-      { replace: true },
-    );
+    setSearchParams((prev) => conversationSelectionParams(prev, null), {
+      replace: true,
+    });
   };
 
   return (

@@ -26,7 +26,11 @@ const activeManifest = {
   legacy_workspace: false,
 };
 
-const gateway = (overrides?: Partial<Awaited<ReturnType<RuntimeManifestGateway["readRuntimeManifest"]>>>): RuntimeManifestGateway => ({
+const gateway = (
+  overrides?: Partial<
+    Awaited<ReturnType<RuntimeManifestGateway["readRuntimeManifest"]>>
+  >,
+): RuntimeManifestGateway => ({
   readRuntimeManifest: async () => ({
     ok: true,
     status: 200,
@@ -38,7 +42,9 @@ const gateway = (overrides?: Partial<Awaited<ReturnType<RuntimeManifestGateway["
 
 describe("loadRuntimeManifest", () => {
   it("accepts a gateway response with a no-store cache policy", async () => {
-    await expect(loadRuntimeManifest(gateway())).resolves.toEqual(activeManifest);
+    await expect(loadRuntimeManifest(gateway())).resolves.toEqual(
+      activeManifest,
+    );
   });
 
   it("rejects a cacheable runtime response before publishing it", async () => {

@@ -20,10 +20,8 @@ const E2E_RUN_ID =
   process.env.VFIC_E2E_RUN_ID ?? randomUUID().replaceAll("-", "").slice(0, 12);
 process.env.VFIC_E2E_RUN_ID = E2E_RUN_ID;
 process.env.VFIC_BACKEND_PYTHON = BACKEND_PYTHON;
-process.env.VFIC_E2E_DATABASE_URL ??=
-  `postgresql+asyncpg://vfic:vfic@127.0.0.1:5432/vfic_${E2E_RUN_ID}_e2e`;
-process.env.VFIC_E2E_DATABASE_URL_SYNC ??=
-  `postgresql+psycopg://vfic:vfic@127.0.0.1:5432/vfic_${E2E_RUN_ID}_e2e`;
+process.env.VFIC_E2E_DATABASE_URL ??= `postgresql+asyncpg://vfic:vfic@127.0.0.1:5432/vfic_${E2E_RUN_ID}_e2e`;
+process.env.VFIC_E2E_DATABASE_URL_SYNC ??= `postgresql+psycopg://vfic:vfic@127.0.0.1:5432/vfic_${E2E_RUN_ID}_e2e`;
 
 /**
  * See https://playwright.dev/docs/test-configuration.

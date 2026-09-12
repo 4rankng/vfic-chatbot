@@ -15,7 +15,8 @@ const page = await ctx.newPage();
 // always renders the latest styles. Leave POST untouched (login).
 await ctx.route("**/*", (route) => {
   const req = route.request();
-  if (/\/(dev-)?sw\.js|workbox|registerSW/i.test(req.url())) return route.abort();
+  if (/\/(dev-)?sw\.js|workbox|registerSW/i.test(req.url()))
+    return route.abort();
   if (req.method() === "GET") {
     const h = req.headers();
     return route.continue({
@@ -64,8 +65,14 @@ try {
     }
     return {
       elevationLoaded,
-      bubble: pick(".inbox-bg-container .bubble", ["boxShadow", "borderRadius"]),
-      composer: pick(".inbox-bg-container .composer", ["boxShadow", "borderRadius"]),
+      bubble: pick(".inbox-bg-container .bubble", [
+        "boxShadow",
+        "borderRadius",
+      ]),
+      composer: pick(".inbox-bg-container .composer", [
+        "boxShadow",
+        "borderRadius",
+      ]),
       send: pick(".inbox-bg-container .composer-action.send", [
         "backgroundImage",
         "backgroundColor",
@@ -76,6 +83,8 @@ try {
   console.log(`[${TAG}] PROBE ${JSON.stringify(probe)}`);
 } catch (e) {
   console.log(`[${TAG}] error: ${e.message}`);
-  await page.screenshot({ path: `/tmp/vfic-thread-${TAG}.png` }).catch(() => {});
+  await page
+    .screenshot({ path: `/tmp/vfic-thread-${TAG}.png` })
+    .catch(() => {});
 }
 await browser.close();

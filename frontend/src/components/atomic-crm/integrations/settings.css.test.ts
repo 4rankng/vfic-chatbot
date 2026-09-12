@@ -61,14 +61,20 @@ describe("flat settings workspace", () => {
     );
   });
 
-  it("uses divider-based groups instead of nested cards or gradients", () => {
+  it("renders configuration groups as elevated cards with tinted header bands", () => {
     expect(settingsSource).not.toContain("tt-card");
     expect(messengerSource).not.toContain("tt-card");
     expect(stylesheet).toMatch(
-      /\.settings-section-panel\s*\{[\s\S]*border-block:\s*1px solid var\(--settings-border\)/,
+      /@media \(min-width: 768px\)[\s\S]*?\.settings-group\s*\{[\s\S]*?border-radius:\s*12px;[\s\S]*?background:\s*var\(--settings-elevated\);/,
     );
     expect(stylesheet).toMatch(
-      /\.settings-group\s*\{[\s\S]*border-radius:\s*0[\s\S]*background:\s*transparent/,
+      /@media \(min-width: 768px\)[\s\S]*?\.settings-group-header\s*\{[\s\S]*?background:\s*color-mix\(/,
+    );
+    expect(stylesheet).toMatch(
+      /@media \(min-width: 768px\)[\s\S]*?\.settings-section-panel\s*\{[\s\S]*?gap:\s*16px;/,
+    );
+    expect(stylesheet).not.toMatch(
+      /\.settings-section-panel\s*\{[^}]*border-block/,
     );
     expect(featureStyles).toMatch(
       /\.settings-group\s*\{[\s\S]*background:\s*transparent/,
@@ -76,12 +82,9 @@ describe("flat settings workspace", () => {
     expect(settingsSource).toContain("SettingsGroupStatus");
   });
 
-  it("uses a wide configuration-row layout with quiet field status icons", () => {
+  it("compares provider cards side by side on wide screens", () => {
     expect(stylesheet).toMatch(
-      /@media \(min-width: 1121px\)[\s\S]*\.settings-grid-zalo > \.settings-group,[\s\S]*grid-template-columns:\s*minmax\(176px, 208px\) minmax\(0, 1fr\)/,
-    );
-    expect(stylesheet).toMatch(
-      /\.settings-grid-models > \.settings-group,[\s\S]*\.settings-messenger-credentials\s*\{[\s\S]*grid-template-columns:\s*minmax\(176px, 208px\) minmax\(0, 1fr\)/,
+      /@media \(min-width: 1121px\)[\s\S]*\.settings-grid-models\s*\{[\s\S]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,
     );
     expect(stylesheet).toMatch(
       /\.settings-field-status\s*\{[^}]*width:\s*20px[^}]*height:\s*20px/,

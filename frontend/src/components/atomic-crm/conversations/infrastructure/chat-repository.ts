@@ -84,8 +84,9 @@ const toMessage = (row: ApiRecord): ConversationMessage => {
     conversation_id: String(row.conversation_id ?? ""),
     type,
     content: String(row.body ?? ""),
-    delivery_status: String(row.delivery_status ?? "sent").toLowerCase() as
-      ConversationMessage["delivery_status"],
+    delivery_status: String(
+      row.delivery_status ?? "sent",
+    ).toLowerCase() as ConversationMessage["delivery_status"],
     external_error: row.external_error ? String(row.external_error) : null,
     delivery_attempts: asPositiveInteger(row.delivery_attempts),
     data: { recruiter_id: recruiterId },
@@ -109,9 +110,7 @@ export const chatRepository = {
     // conversation id (Messenger rows carry no zalo_chat_id).
     const valid = conversations.filter((c) => c?.id);
     if (valid.length === 0) return out;
-    const keyById = new Map(
-      valid.map((c) => [c.id, c.zalo_chat_id ?? c.id]),
-    );
+    const keyById = new Map(valid.map((c) => [c.id, c.zalo_chat_id ?? c.id]));
     for (let i = 0; i < valid.length; i += 200) {
       const chunk = valid.slice(i, i + 200).map((c) => c.id);
       let snippets: Record<string, string> = {};

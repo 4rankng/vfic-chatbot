@@ -68,7 +68,9 @@ describe("performance diagnostics", () => {
 
   it("describes the largest bottleneck stage", () => {
     expect(
-      likelyBottleneck(turn({ llm_model_ms: 8000, db_ms: 2000, faq_bypass_ms: 300 })),
+      likelyBottleneck(
+        turn({ llm_model_ms: 8000, db_ms: 2000, faq_bypass_ms: 300 }),
+      ),
     ).toBe("LLM xử lý (8.0s)");
   });
 });

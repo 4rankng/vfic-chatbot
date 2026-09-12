@@ -3,13 +3,16 @@ import { describe, expect, it } from "vitest";
 import { formatTrendBucket, getTrendAxisTicks } from "./trendAxis";
 import type { PerfTrendBucket } from "./usePerformanceStats";
 
-const trend = Array.from({ length: 12 }, (_, index): PerfTrendBucket => ({
-  bucket: `2026-07-12T${String(8 + Math.floor(index / 2)).padStart(2, "0")}:${index % 2 === 0 ? "00" : "30"}:00+07:00`,
-  p95_ms: 100,
-  p50_ms: 50,
-  turns: 1,
-  errors: 0,
-}));
+const trend = Array.from(
+  { length: 12 },
+  (_, index): PerfTrendBucket => ({
+    bucket: `2026-07-12T${String(8 + Math.floor(index / 2)).padStart(2, "0")}:${index % 2 === 0 ? "00" : "30"}:00+07:00`,
+    p95_ms: 100,
+    p50_ms: 50,
+    turns: 1,
+    errors: 0,
+  }),
+);
 
 describe("trend axis", () => {
   it("falls back for null and invalid buckets", () => {

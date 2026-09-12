@@ -61,7 +61,9 @@ describe("InstallationBootstrap", () => {
 
   it("keeps the recruitment console available when runtime metadata is unavailable", async () => {
     mocks.fetchRuntimeManifest.mockRejectedValueOnce(new Error("network"));
-    mocks.fetchRuntimeManifest.mockRejectedValueOnce(new Error("invalid schema"));
+    mocks.fetchRuntimeManifest.mockRejectedValueOnce(
+      new Error("invalid schema"),
+    );
 
     const screen = await render(
       <InstallationBootstrap>
@@ -69,7 +71,9 @@ describe("InstallationBootstrap", () => {
       </InstallationBootstrap>,
     );
 
-    await expect.element(screen.getByText("customer application")).toBeVisible();
+    await expect
+      .element(screen.getByText("customer application"))
+      .toBeVisible();
     expect(mocks.fetchRuntimeManifest).toHaveBeenCalledTimes(2);
     expect(mocks.applyRuntimeMetadata).not.toHaveBeenCalled();
   });

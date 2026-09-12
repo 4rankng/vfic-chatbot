@@ -168,7 +168,8 @@ export const mergeUniqueTerms = (
   for (const value of parseCommaList(input)) {
     if (
       !merged.some(
-        (existing) => existing.toLocaleLowerCase() === value.toLocaleLowerCase(),
+        (existing) =>
+          existing.toLocaleLowerCase() === value.toLocaleLowerCase(),
       )
     ) {
       merged.push(value);

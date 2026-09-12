@@ -105,10 +105,7 @@ vi.mock("ra-core", () => ({
   useTranslate: () => (key: string) => key,
 }));
 
-import {
-  ChatThread,
-  isUnseenWorthyArrival,
-} from "./presentation/ChatThread";
+import { ChatThread, isUnseenWorthyArrival } from "./presentation/ChatThread";
 
 // --- Helpers -----------------------------------------------------------
 
@@ -433,9 +430,7 @@ describe("ChatThread — failed-send bubble diagnosability", () => {
         screen.container.querySelector(".delivery-error-detail"),
       ).not.toBeNull();
     });
-    await expect
-      .element(screen.getByText("Lỗi kết nối mạng"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Lỗi kết nối mạng")).toBeVisible();
     // The "Gửi lỗi" status label is still present.
     await expect.element(screen.getByText("Gửi lỗi")).toBeVisible();
   });
@@ -452,7 +447,9 @@ describe("ChatThread — failed-send bubble diagnosability", () => {
     ];
     const screen = await mountThread({ canHumanReplyOverride: true });
 
-    await expect.element(screen.getByText("Zalo từ chối tin nhắn")).toBeVisible();
+    await expect
+      .element(screen.getByText("Zalo từ chối tin nhắn"))
+      .toBeVisible();
   });
 
   it("does not render the failure reason when the failed bubble has content", async () => {
@@ -469,13 +466,13 @@ describe("ChatThread — failed-send bubble diagnosability", () => {
 
     await vi.waitFor(() => {
       expect(
-        screen.container.querySelector('[data-message-id="2"] .message-text-block'),
+        screen.container.querySelector(
+          '[data-message-id="2"] .message-text-block',
+        ),
       ).not.toBeNull();
     });
     // Content is shown; the reason detail is not (content takes priority).
-    expect(
-      screen.container.querySelector(".delivery-error-detail"),
-    ).toBeNull();
+    expect(screen.container.querySelector(".delivery-error-detail")).toBeNull();
     await expect
       .element(screen.getByText("Cảm ơn bạn đã liên hệ."))
       .toBeVisible();

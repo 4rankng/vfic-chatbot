@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type {
-  FileDownloadPort,
-  KnowledgePort,
-} from "./knowledge-port";
+import type { FileDownloadPort, KnowledgePort } from "./knowledge-port";
 import { createKnowledgeOperations } from "./knowledge-operations";
 
 const port = (): KnowledgePort => ({

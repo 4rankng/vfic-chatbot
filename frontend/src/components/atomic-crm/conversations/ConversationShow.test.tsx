@@ -149,13 +149,9 @@ describe("ConversationShowContent — delete conversation", () => {
       </MemoryRouter>,
     );
 
-    await screen
-      .getByRole("button", { name: "Thao tác hội thoại" })
-      .click();
+    await screen.getByRole("button", { name: "Thao tác hội thoại" }).click();
     await screen.getByRole("menuitem", { name: "Xoá hội thoại" }).click();
-    await screen
-      .getByRole("button", { name: "Xóa vĩnh viễn" })
-      .click();
+    await screen.getByRole("button", { name: "Xóa vĩnh viễn" }).click();
 
     // Flush the async deleteConversation handler.
     await vi.waitFor(() => expect(dataProviderMock.delete).toHaveBeenCalled());
@@ -165,10 +161,9 @@ describe("ConversationShowContent — delete conversation", () => {
       id: "conv-1",
       previousData: recordState.record,
     });
-    expect(notifyMock).toHaveBeenCalledWith(
-      "Đã xóa vĩnh viễn hội thoại.",
-      { type: "success" },
-    );
+    expect(notifyMock).toHaveBeenCalledWith("Đã xóa vĩnh viễn hội thoại.", {
+      type: "success",
+    });
     expect(refreshMock).toHaveBeenCalled();
   });
 
@@ -185,13 +180,9 @@ describe("ConversationShowContent — delete conversation", () => {
       </MemoryRouter>,
     );
 
-    await screen
-      .getByRole("button", { name: "Thao tác hội thoại" })
-      .click();
+    await screen.getByRole("button", { name: "Thao tác hội thoại" }).click();
     await screen.getByRole("menuitem", { name: "Xoá hội thoại" }).click();
-    await screen
-      .getByRole("button", { name: "Xóa vĩnh viễn" })
-      .click();
+    await screen.getByRole("button", { name: "Xóa vĩnh viễn" }).click();
 
     await vi.waitFor(() => expect(dataProviderMock.delete).toHaveBeenCalled());
     // Give the rejection a tick to settle before asserting the negative.
@@ -207,10 +198,7 @@ describe("ConversationShowContent — candidate profile deep link", () => {
   it("opens Dữ liệu ứng viên from the accessible profile avatar button", async () => {
     const screen = await render(
       <MemoryRouter>
-        <ConversationShowContent
-          onOpenList={vi.fn()}
-          showWorkspacePanel
-        />
+        <ConversationShowContent onOpenList={vi.fn()} showWorkspacePanel />
       </MemoryRouter>,
     );
 
@@ -226,11 +214,11 @@ describe("ConversationShowContent — candidate profile deep link", () => {
     await expect
       .element(screen.getByTestId("candidate-panel-state"))
       .toHaveTextContent("candidate-panel-open");
-    await expect.element(avatarTrigger).toHaveAttribute("aria-expanded", "true");
+    await expect
+      .element(avatarTrigger)
+      .toHaveAttribute("aria-expanded", "true");
 
-    await screen
-      .getByRole("button", { name: "Đóng hồ sơ thử nghiệm" })
-      .click();
+    await screen.getByRole("button", { name: "Đóng hồ sơ thử nghiệm" }).click();
     await expect.element(avatarTrigger).toHaveFocus();
   });
 
@@ -239,10 +227,7 @@ describe("ConversationShowContent — candidate profile deep link", () => {
       <MemoryRouter
         initialEntries={["/conversations?id=conv-1&panel=candidate"]}
       >
-        <ConversationShowContent
-          onOpenList={vi.fn()}
-          showWorkspacePanel
-        />
+        <ConversationShowContent onOpenList={vi.fn()} showWorkspacePanel />
       </MemoryRouter>,
     );
 

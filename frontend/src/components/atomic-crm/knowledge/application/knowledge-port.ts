@@ -44,9 +44,5 @@ export type KnowledgePort = Readonly<{
 
 export type FileDownloadPort = Readonly<{
   saveText: (filename: string, content: string, mediaType: string) => void;
-  saveBinary: (
-    filename: string,
-    bytes: ArrayBuffer,
-    mediaType: string,
-  ) => void;
+  saveBinary: (filename: string, bytes: ArrayBuffer, mediaType: string) => void;
 }>;

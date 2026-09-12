@@ -70,6 +70,9 @@ export const ConversationContextAdapter = ({
   conversation: Conversation | undefined;
 }) => {
   const ContextAdapter =
-    useConversationCapabilitySlots().context ?? GenericConversationContextAdapter;
-  return <ContextAdapter conversation={conversation}>{children}</ContextAdapter>;
+    useConversationCapabilitySlots().context ??
+    GenericConversationContextAdapter;
+  return (
+    <ContextAdapter conversation={conversation}>{children}</ContextAdapter>
+  );
 };

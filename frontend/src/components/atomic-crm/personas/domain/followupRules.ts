@@ -1,7 +1,4 @@
-import type {
-  LeadScoreValue,
-  PersonaFollowupRules,
-} from "../../types";
+import type { LeadScoreValue, PersonaFollowupRules } from "../../types";
 
 export const defaultPersonaFollowupRules = (): PersonaFollowupRules => ({
   hot: {

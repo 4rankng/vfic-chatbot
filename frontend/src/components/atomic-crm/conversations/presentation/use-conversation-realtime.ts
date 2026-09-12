@@ -112,8 +112,8 @@ export const useConversationRealtime = (conversationId?: string) => {
           await getConversationMessageRepository().getConversationMessages(
             activeConversationId,
             {
-            limit: CHAT_MESSAGES_PAGE_SIZE,
-            signal: initialFetchAbort.signal,
+              limit: CHAT_MESSAGES_PAGE_SIZE,
+              signal: initialFetchAbort.signal,
             },
           );
         if (
@@ -292,9 +292,9 @@ export const useConversationRealtime = (conversationId?: string) => {
 
     const unsubscribe =
       getConversationMessageRepository().subscribeToConnection(
-      onConnect,
-      onDisconnect,
-    );
+        onConnect,
+        onDisconnect,
+      );
     return () => {
       cancelled = true;
       unsubscribe();

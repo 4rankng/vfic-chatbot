@@ -888,7 +888,10 @@ export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
       ) : (
         <>
           <section className="performance-primary-grid">
-            <PerformanceTrendChart trend={data.trend ?? []} window={data.window} />
+            <PerformanceTrendChart
+              trend={data.trend ?? []}
+              window={data.window}
+            />
             <AttentionQueue data={data} />
           </section>
           {data.slow_turns.length > 0 ? (

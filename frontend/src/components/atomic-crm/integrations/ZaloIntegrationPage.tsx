@@ -416,7 +416,6 @@ const ProviderSwitchField = ({
   </div>
 );
 
-
 const SettingsGroup = ({
   id,
   title,
@@ -747,12 +746,7 @@ export const ZaloIntegrationPage = () => {
       payload.llm_default_provider = llmDefaultProvider;
     }
     return payload;
-  }, [
-    minimaxForm,
-    minimaxEnabled,
-    llmDefaultProvider,
-    minimaxSettings,
-  ]);
+  }, [minimaxForm, minimaxEnabled, llmDefaultProvider, minimaxSettings]);
 
   const changedOpenRouterPayload = useMemo(() => {
     const payload: OpenRouterUpdatePayload = {};
@@ -851,7 +845,11 @@ export const ZaloIntegrationPage = () => {
     );
     // Disabling the default hands it to the first other enabled provider;
     // enabling the ONLY enabled provider makes it the default.
-    if (!checked && llmDefaultProvider === provider && otherEnabled.length > 0) {
+    if (
+      !checked &&
+      llmDefaultProvider === provider &&
+      otherEnabled.length > 0
+    ) {
       setLlmDefaultProvider(otherEnabled[0]);
     }
     if (checked && otherEnabled.length === 0) {
@@ -922,10 +920,14 @@ export const ZaloIntegrationPage = () => {
 
   const discardProviderChanges = () => {
     if (minimaxSettings) setMinimaxEnabled(minimaxSettings.minimax_enable);
-    if (openRouterSettings) setOpenRouterEnabled(openRouterSettings.openrouter_enable);
-    if (customLlmSettings) setCustomLlmEnabled(customLlmSettings.custom_llm_enable);
-    if (openRouterSettings) setOpenRouterModel(openRouterSettings.openrouter_agent_model);
-    if (customLlmSettings) setLlmDefaultProvider(customLlmSettings.llm_default_provider);
+    if (openRouterSettings)
+      setOpenRouterEnabled(openRouterSettings.openrouter_enable);
+    if (customLlmSettings)
+      setCustomLlmEnabled(customLlmSettings.custom_llm_enable);
+    if (openRouterSettings)
+      setOpenRouterModel(openRouterSettings.openrouter_agent_model);
+    if (customLlmSettings)
+      setLlmDefaultProvider(customLlmSettings.llm_default_provider);
     setMinimaxForm(emptyMinimaxForm);
     setOpenRouterForm(emptyOpenRouterForm);
     setCustomLlmForm(emptyCustomLlmForm);
@@ -979,7 +981,6 @@ export const ZaloIntegrationPage = () => {
       setTestingProvider(null);
     }
   };
-
 
   const testChannel = async (
     request: () => Promise<ZaloChannelTestResult>,
@@ -1297,9 +1298,12 @@ export const ZaloIntegrationPage = () => {
         openrouter: openRouterEnabled,
         custom: customLlmEnabled,
       };
-      const chipOf = (provider: LlmProvider): { label: string; cls: string } => {
+      const chipOf = (
+        provider: LlmProvider,
+      ): { label: string; cls: string } => {
         if (!enabledOf[provider]) return { label: "Tắt", cls: "is-muted" };
-        if (llmDefaultProvider === provider) return { label: "Đang dùng", cls: "is-accent" };
+        if (llmDefaultProvider === provider)
+          return { label: "Đang dùng", cls: "is-accent" };
         const t = lastTests[provider];
         if (t?.ok) return { label: "Sẵn sàng", cls: "is-success" };
         if (t && !t.ok) return { label: "Lỗi kiểm tra", cls: "is-danger" };
@@ -1371,7 +1375,9 @@ export const ZaloIntegrationPage = () => {
               <MinimaxSecretInput
                 id="minimax_api_key"
                 label="Access Token"
-                status={minimaxSettings?.minimax_api_key ?? { configured: false }}
+                status={
+                  minimaxSettings?.minimax_api_key ?? { configured: false }
+                }
                 statusState={settingsStatusState}
                 value={minimaxForm.minimax_api_key}
                 onChange={setMinimaxValue}
@@ -1401,7 +1407,9 @@ export const ZaloIntegrationPage = () => {
               title={providerLabel.openrouter}
               icon={<Cpu className="size-4" />}
               meta={
-                <span className={`settings-llm-chip ${chipOf("openrouter").cls}`}>
+                <span
+                  className={`settings-llm-chip ${chipOf("openrouter").cls}`}
+                >
                   {chipOf("openrouter").label}
                 </span>
               }
@@ -1441,7 +1449,11 @@ export const ZaloIntegrationPage = () => {
               <OpenRouterSecretInput
                 id="openrouter_api_key"
                 label="Access Token"
-                status={openRouterSettings?.openrouter_api_key ?? { configured: false }}
+                status={
+                  openRouterSettings?.openrouter_api_key ?? {
+                    configured: false,
+                  }
+                }
                 statusState={settingsStatusState}
                 value={openRouterForm.openrouter_api_key}
                 onChange={setOpenRouterValue}
@@ -1514,14 +1526,19 @@ export const ZaloIntegrationPage = () => {
                     customLlmSettings?.custom_llm_agent_model || "mimo-v2.5-pro"
                   }
                   onChange={(event) =>
-                    setCustomLlmValue("custom_llm_agent_model", event.target.value)
+                    setCustomLlmValue(
+                      "custom_llm_agent_model",
+                      event.target.value,
+                    )
                   }
                 />
               </div>
               <CustomLlmSecretInput
                 id="custom_llm_api_key"
                 label="Access Token"
-                status={customLlmSettings?.custom_llm_api_key ?? { configured: false }}
+                status={
+                  customLlmSettings?.custom_llm_api_key ?? { configured: false }
+                }
                 statusState={settingsStatusState}
                 value={customLlmForm.custom_llm_api_key}
                 onChange={setCustomLlmValue}

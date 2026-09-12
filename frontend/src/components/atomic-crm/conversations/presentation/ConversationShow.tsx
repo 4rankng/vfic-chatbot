@@ -135,16 +135,12 @@ export const ConversationShowContent = ({
   }, [isWideDesktop, record?.id, shouldOpenCandidatePanel]);
 
   const openContextPanel = (trigger?: HTMLButtonElement) => {
-    lastContextTriggerRef.current =
-      trigger ?? contextNameTriggerRef.current;
+    lastContextTriggerRef.current = trigger ?? contextNameTriggerRef.current;
     setIsContextOpen(true);
   };
 
   const focusContextTrigger = () => {
-    (
-      lastContextTriggerRef.current ??
-      contextNameTriggerRef.current
-    )?.focus();
+    (lastContextTriggerRef.current ?? contextNameTriggerRef.current)?.focus();
   };
 
   const closeContextPanel = () => {
@@ -366,9 +362,7 @@ export const ConversationShowContent = ({
                         </DropdownMenuItem>
                       ) : null}
                       {!isWideDesktop && context.renderPanel ? (
-                        <DropdownMenuItem
-                          onSelect={() => openContextPanel()}
-                        >
+                        <DropdownMenuItem onSelect={() => openContextPanel()}>
                           <PanelRight className="size-4" aria-hidden="true" />
                           {context.panelLabel}
                         </DropdownMenuItem>

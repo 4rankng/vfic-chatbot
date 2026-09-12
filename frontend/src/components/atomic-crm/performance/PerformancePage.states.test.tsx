@@ -56,16 +56,14 @@ describe("PerformancePage wrapper states", () => {
     const screen = await render(<PerformancePage />);
 
     await expect
-      .element(
-        screen.getByRole("heading", { name: "Hiệu suất chatbot" }),
-      )
+      .element(screen.getByRole("heading", { name: "Hiệu suất chatbot" }))
       .toBeVisible();
     await expect
-      .element(
-        screen.getByLabelText("Đang tải số liệu hiệu suất"),
-      )
+      .element(screen.getByLabelText("Đang tải số liệu hiệu suất"))
       .toBeVisible();
-    expect(screen.container.querySelector(".performance-skeletons")).not.toBeNull();
+    expect(
+      screen.container.querySelector(".performance-skeletons"),
+    ).not.toBeNull();
     expect(
       screen.container
         .querySelector(".performance-page")
@@ -113,9 +111,7 @@ describe("PerformancePage wrapper states", () => {
     const screen = await render(<PerformancePage />);
 
     await expect
-      .element(
-        screen.getByRole("button", { name: /Cập nhật lúc/ }),
-      )
+      .element(screen.getByRole("button", { name: /Cập nhật lúc/ }))
       .toBeVisible();
     await expect
       .element(

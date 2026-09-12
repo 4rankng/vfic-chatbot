@@ -2,7 +2,8 @@ import polyglotI18nProvider from "ra-i18n-polyglot";
 import type { TranslationMessages } from "ra-core";
 import { vietnameseCrmMessages } from "./vietnameseCrmMessages";
 
-const vietnameseCatalog = vietnameseCrmMessages as unknown as TranslationMessages;
+const vietnameseCatalog =
+  vietnameseCrmMessages as unknown as TranslationMessages;
 
 export const SUPPORTED_RUNTIME_LOCALES = ["vi-VN"] as const;
 export type SupportedRuntimeLocale = (typeof SUPPORTED_RUNTIME_LOCALES)[number];

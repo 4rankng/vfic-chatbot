@@ -7,7 +7,10 @@ import {
   type ReactNode,
 } from "react";
 
-import { applyRuntimeMetadata, resetRuntimeMetadata } from "../root/runtime-metadata";
+import {
+  applyRuntimeMetadata,
+  resetRuntimeMetadata,
+} from "../root/runtime-metadata";
 import { InstallationProvider } from "./InstallationContext";
 import type { InstallationContextValue } from "./installation-context";
 import {
@@ -40,7 +43,11 @@ const DEFAULT_RECRUITMENT_MANIFEST: PublicRuntimeManifest = {
   readiness_code: "SETUP_REQUIRED",
 };
 
-export const InstallationBootstrap = ({ children }: { children: ReactNode }) => {
+export const InstallationBootstrap = ({
+  children,
+}: {
+  children: ReactNode;
+}) => {
   const [manifest, setManifest] = useState<PublicRuntimeManifest>(
     DEFAULT_RECRUITMENT_MANIFEST,
   );
@@ -110,5 +117,7 @@ export const InstallationBootstrap = ({ children }: { children: ReactNode }) => 
     [load, manifest],
   );
 
-  return <InstallationProvider value={contextValue}>{children}</InstallationProvider>;
+  return (
+    <InstallationProvider value={contextValue}>{children}</InstallationProvider>
+  );
 };

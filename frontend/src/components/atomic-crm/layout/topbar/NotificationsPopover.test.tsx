@@ -50,7 +50,9 @@ describe("NotificationsPopover", () => {
     });
     const screen = await renderPopover();
 
-    await screen.getByRole("button", { name: "2 cuộc trò chuyện cần chú ý" }).click();
+    await screen
+      .getByRole("button", { name: "2 cuộc trò chuyện cần chú ý" })
+      .click();
 
     const an = screen.getByRole("link", { name: /Nguyễn Văn An/ });
     await expect.element(an).toBeVisible();
@@ -58,14 +60,18 @@ describe("NotificationsPopover", () => {
 
     // Fallback name for a contact with no display_name.
     const anonymous = screen.getByRole("link", { name: /Ứng viên ẩn danh/ });
-    expect(anonymous.element().getAttribute("href")).toBe("/conversations?id=conv-2");
+    expect(anonymous.element().getAttribute("href")).toBe(
+      "/conversations?id=conv-2",
+    );
 
     // Channel labels are surfaced.
     await expect.element(screen.getByText("Zalo Chatbot")).toBeVisible();
     await expect.element(screen.getByText("Messenger")).toBeVisible();
 
     // "See all" footer hands off to the inbox.
-    const seeAll = screen.getByRole("link", { name: "Xem tất cả trong Hộp thư" });
+    const seeAll = screen.getByRole("link", {
+      name: "Xem tất cả trong Hộp thư",
+    });
     expect(seeAll.element().getAttribute("href")).toBe(
       "/conversations?needs_attention=true",
     );
@@ -105,10 +111,10 @@ describe("NotificationsPopover", () => {
     // Three shimmering placeholder rows. Popover content is portalled to
     // document.body, so query the document rather than the test container.
     await expect
-      .poll(() =>
-        document.querySelectorAll(
-          ".workspace-notifications-item--skeleton",
-        ).length,
+      .poll(
+        () =>
+          document.querySelectorAll(".workspace-notifications-item--skeleton")
+            .length,
       )
       .toBe(3);
   });

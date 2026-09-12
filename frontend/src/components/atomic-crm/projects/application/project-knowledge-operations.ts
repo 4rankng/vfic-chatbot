@@ -11,19 +11,13 @@ import type {
   UploadFile,
 } from "./project-knowledge-port";
 
-export const createProjectKnowledgeOperations = (
-  port: ProjectKnowledgePort,
-) =>
+export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
   Object.freeze({
     getCategories: (projectId: string) => port.getCategories(projectId),
-    getCategoryTemplate: (
-      projectId: string,
-      key: ProjectKnowledgeCategory,
-    ) => port.getCategoryTemplate(projectId, key),
-    getCategorySource: (
-      projectId: string,
-      key: ProjectKnowledgeCategory,
-    ) => port.getCategorySource(projectId, key),
+    getCategoryTemplate: (projectId: string, key: ProjectKnowledgeCategory) =>
+      port.getCategoryTemplate(projectId, key),
+    getCategorySource: (projectId: string, key: ProjectKnowledgeCategory) =>
+      port.getCategorySource(projectId, key),
     replaceCategory: (
       projectId: string,
       key: ProjectKnowledgeCategory,
@@ -57,10 +51,8 @@ export const createProjectKnowledgeOperations = (
     ) => port.updateFaq(projectId, faqId, payload),
     deleteFaq: (projectId: string, faqId: string) =>
       port.deleteFaq(projectId, faqId),
-    listExternalSources: (
-      projectId: string,
-      signal?: CancellationSignal,
-    ) => port.listExternalSources(projectId, signal),
+    listExternalSources: (projectId: string, signal?: CancellationSignal) =>
+      port.listExternalSources(projectId, signal),
     createExternalSource: (
       projectId: string,
       payload: ExternalSourceCreatePayload,

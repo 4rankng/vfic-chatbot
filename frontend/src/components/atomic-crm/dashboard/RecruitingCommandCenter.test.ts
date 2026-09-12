@@ -54,7 +54,9 @@ const row = (
   ...partial,
 });
 
-const dashboard = (overrides: Partial<AttentionDashboard> = {}): AttentionDashboard => ({
+const dashboard = (
+  overrides: Partial<AttentionDashboard> = {},
+): AttentionDashboard => ({
   updated_at: "2026-07-12T10:00:00Z",
   counters: {
     needs_reply: 0,
@@ -89,10 +91,9 @@ describe("representativeReasonForCounter", () => {
   it("maps each counter to ONE valid backend reason enum", () => {
     for (const counter of COUNTER_ORDER) {
       const reason = representativeReasonForCounter(counter);
-      expect(
-        ATTENTION_REASONS,
-        `representative for ${counter}`,
-      ).toContain(reason);
+      expect(ATTENTION_REASONS, `representative for ${counter}`).toContain(
+        reason,
+      );
     }
   });
 
@@ -157,9 +158,7 @@ describe("filterByCounter", () => {
     // its continuation link still targets the representative REPLY_OVERDUE
     // reason — see `representativeReasonForCounter`.
     expect(filterByCounter(rows, "overdue").map((r) => r.key)).toEqual(["b"]);
-    expect(filterByCounter(rows, "due_today").map((r) => r.key)).toEqual([
-      "c",
-    ]);
+    expect(filterByCounter(rows, "due_today").map((r) => r.key)).toEqual(["c"]);
     expect(filterByCounter(rows, "unread").map((r) => r.key)).toEqual(["d"]);
     expect(filterByCounter(rows, "priority").map((r) => r.key)).toEqual(["e"]);
     expect(filterByCounter(rows, "needs_reply").map((r) => r.key)).toEqual([

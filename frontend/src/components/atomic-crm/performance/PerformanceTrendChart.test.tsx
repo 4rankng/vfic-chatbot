@@ -82,9 +82,7 @@ describe("PerformanceTrendChart", () => {
       .toBeInTheDocument();
     await expect
       .element(
-        screen.getByText(
-          "2 lượt lỗi cần đối chiếu với các phiên vượt ngưỡng.",
-        ),
+        screen.getByText("2 lượt lỗi cần đối chiếu với các phiên vượt ngưỡng."),
       )
       .toBeVisible();
 

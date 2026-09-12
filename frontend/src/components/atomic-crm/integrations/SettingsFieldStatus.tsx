@@ -34,11 +34,7 @@ export const SettingsFieldStatus = ({
   return (
     <span
       className={`settings-field-status${
-        state !== "ready"
-          ? ` is-${state}`
-          : configured
-            ? " is-configured"
-            : ""
+        state !== "ready" ? ` is-${state}` : configured ? " is-configured" : ""
       }`}
       role="img"
       aria-label={label}

@@ -67,11 +67,14 @@ describe("ConversationContextPanel notes", () => {
     await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
 
     await expect.poll(() => onSave.mock.calls.length).toBe(1);
-    expect(onSave).toHaveBeenCalledWith({
-      name: "Nguyễn Hùng",
-      age: 32,
-      notes: null,
-    }, 4);
+    expect(onSave).toHaveBeenCalledWith(
+      {
+        name: "Nguyễn Hùng",
+        age: 32,
+        notes: null,
+      },
+      4,
+    );
   });
 
   it("cancels edits without saving", async () => {
@@ -117,7 +120,9 @@ describe("ConversationContextPanel notes", () => {
 
     await expect
       .element(
-        screen.getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" }).query(),
+        screen
+          .getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" })
+          .query(),
       )
       .not.toBeInTheDocument();
   });

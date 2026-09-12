@@ -27,14 +27,8 @@ describe("httpHumanReplyAdapter", () => {
   });
 
   it("maps send and retry operations to the conversation API", async () => {
-    await httpHumanReplyAdapter.sendHumanReply(
-      "conversation/1",
-      "Xin chào",
-    );
-    await httpHumanReplyAdapter.retryHumanReply(
-      "conversation/1",
-      "message/1",
-    );
+    await httpHumanReplyAdapter.sendHumanReply("conversation/1", "Xin chào");
+    await httpHumanReplyAdapter.retryHumanReply("conversation/1", "message/1");
 
     expect(apiJson).toHaveBeenNthCalledWith(
       1,

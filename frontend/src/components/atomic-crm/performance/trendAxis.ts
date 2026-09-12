@@ -39,9 +39,8 @@ export const getTrendAxisTicks = (
   if (trend.length === 0) return [];
 
   const tickCount = Math.min(maxTicks, trend.length);
-  const indices = Array.from(
-    { length: tickCount },
-    (_, tick) => Math.round((tick * (trend.length - 1)) / (tickCount - 1 || 1)),
+  const indices = Array.from({ length: tickCount }, (_, tick) =>
+    Math.round((tick * (trend.length - 1)) / (tickCount - 1 || 1)),
   );
 
   return indices.map((index) => ({

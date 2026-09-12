@@ -1,15 +1,14 @@
 // FIXME: This should be exported from the ra-core package
-type CanAccessParams<RecordType extends Record<string, unknown> = Record<string, unknown>> = {
+type CanAccessParams<
+  RecordType extends Record<string, unknown> = Record<string, unknown>,
+> = {
   action: string;
   resource: string;
   record?: RecordType;
 };
 
 // Resources visible to recruiters. Admin sees everything.
-const RECRUITER_RESOURCES = new Set([
-  "conversations",
-  "projects",
-]);
+const RECRUITER_RESOURCES = new Set(["conversations", "projects"]);
 const KNOWN_ACTIONS = new Set([
   "list",
   "show",

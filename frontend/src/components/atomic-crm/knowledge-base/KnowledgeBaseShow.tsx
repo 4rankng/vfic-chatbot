@@ -295,9 +295,7 @@ export const KnowledgeBaseShowContent = () => {
           <KnowledgeSection
             id="knowledge-base-projects-title"
             title="Dự án"
-            count={
-              knowledgeLoading || loadFailed ? undefined : projects.length
-            }
+            count={knowledgeLoading || loadFailed ? undefined : projects.length}
           >
             {knowledgeLoading ? (
               <p role="status" className="text-body text-muted-foreground">

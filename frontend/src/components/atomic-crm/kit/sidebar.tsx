@@ -151,8 +151,9 @@ export function KitSidebar({
           aria-label="Lối tắt"
           className="flex grow flex-col items-stretch gap-1 px-2 py-3"
         >
-          {sections.flatMap((section) => section.destinations).map(
-            (destination) =>
+          {sections
+            .flatMap((section) => section.destinations)
+            .map((destination) =>
               destination.showInRail === false ? null : (
                 <MiniRailLink
                   key={`rail-${destination.id}`}
@@ -160,15 +161,16 @@ export function KitSidebar({
                   path={path}
                 />
               ),
-          )}
+            )}
         </nav>
         {footerSections && footerSections.length > 0 ? (
           <nav
             aria-label="Lối tắt tài khoản"
             className="flex flex-none flex-col items-stretch gap-1 px-2 py-3"
           >
-            {footerSections.flatMap((section) => section.destinations).map(
-              (destination) =>
+            {footerSections
+              .flatMap((section) => section.destinations)
+              .map((destination) =>
                 destination.showInRail === false ? null : (
                   <MiniRailLink
                     key={`rail-${destination.id}`}
@@ -176,7 +178,7 @@ export function KitSidebar({
                     path={path}
                   />
                 ),
-            )}
+              )}
           </nav>
         ) : null}
       </div>

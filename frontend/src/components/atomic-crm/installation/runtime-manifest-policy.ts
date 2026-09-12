@@ -45,7 +45,10 @@ const runtimeManifestSchema = z
     ]),
     authority_generation: z.number().int().nonnegative(),
     revision_id: nullableUuidSchema,
-    pack_key: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/).nullable(),
+    pack_key: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9._-]*$/)
+      .nullable(),
     pack_version: z.string().min(1).max(32).nullable(),
     pack_contract_hash: nullableSha256Schema,
     manifest_checksum: nullableSha256Schema,
@@ -53,7 +56,10 @@ const runtimeManifestSchema = z
     branding: brandingSchema.nullable(),
     locale: z.string().min(2).max(35).nullable(),
     timezone: z.string().min(1).max(64).nullable(),
-    currency: z.string().regex(/^[A-Z]{3}$/).nullable(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable(),
     terminology: z.record(z.string(), z.string()).nullable(),
     capability_ids: z.array(z.string().regex(/^[a-z0-9][a-z0-9._-]*$/)),
     legacy_workspace: z.boolean().default(false),
@@ -81,11 +87,15 @@ const runtimeManifestSchema = z
       manifest.currency,
       manifest.terminology,
     ];
-    const hasCompleteAuthority = authorityFields.every((value) => value !== null);
+    const hasCompleteAuthority = authorityFields.every(
+      (value) => value !== null,
+    );
     const hasNoAuthority = authorityFields.every((value) => value === null);
 
     if (
-      ["ACTIVE", "SUSPENDED", "UPGRADE_REQUIRED"].includes(manifest.lifecycle) &&
+      ["ACTIVE", "SUSPENDED", "UPGRADE_REQUIRED"].includes(
+        manifest.lifecycle,
+      ) &&
       !hasCompleteAuthority
     ) {
       context.addIssue({
@@ -102,13 +112,19 @@ const runtimeManifestSchema = z
         message: "Pre-active runtime manifest must not expose draft authority",
       });
     }
-    if (manifest.readiness_code === "READY" && manifest.lifecycle !== "ACTIVE") {
+    if (
+      manifest.readiness_code === "READY" &&
+      manifest.lifecycle !== "ACTIVE"
+    ) {
       context.addIssue({
         code: "custom",
         message: "Only an ACTIVE installation may report READY",
       });
     }
-    const allowedReadiness: Record<PublicRuntimeManifest["lifecycle"], readonly string[]> = {
+    const allowedReadiness: Record<
+      PublicRuntimeManifest["lifecycle"],
+      readonly string[]
+    > = {
       UNCONFIGURED: ["SETUP_REQUIRED"],
       DRAFT: ["SETUP_REQUIRED"],
       VALIDATED: ["SETUP_REQUIRED", "RUNTIME_NOT_READY"],
@@ -116,7 +132,9 @@ const runtimeManifestSchema = z
       SUSPENDED: ["SUSPENDED", "RUNTIME_NOT_READY"],
       UPGRADE_REQUIRED: ["UPGRADE_REQUIRED"],
     };
-    if (!allowedReadiness[manifest.lifecycle].includes(manifest.readiness_code)) {
+    if (
+      !allowedReadiness[manifest.lifecycle].includes(manifest.readiness_code)
+    ) {
       context.addIssue({
         code: "custom",
         message: "Runtime lifecycle and readiness are inconsistent",
@@ -124,11 +142,13 @@ const runtimeManifestSchema = z
     }
     if (
       manifest.legacy_workspace &&
-      (manifest.lifecycle !== "UNCONFIGURED" || manifest.readiness_code !== "SETUP_REQUIRED")
+      (manifest.lifecycle !== "UNCONFIGURED" ||
+        manifest.readiness_code !== "SETUP_REQUIRED")
     ) {
       context.addIssue({
         code: "custom",
-        message: "Legacy workspace compatibility applies only before installation setup",
+        message:
+          "Legacy workspace compatibility applies only before installation setup",
       });
     }
   });
@@ -148,12 +168,17 @@ export class RuntimeManifestError extends Error {
 export const parseRuntimeManifest = (value: unknown): PublicRuntimeManifest => {
   const result = runtimeManifestSchema.safeParse(value);
   if (!result.success) {
-    throw new RuntimeManifestError("Invalid installation runtime manifest", result.error);
+    throw new RuntimeManifestError(
+      "Invalid installation runtime manifest",
+      result.error,
+    );
   }
   return result.data;
 };
 
-export const isLegacyWorkspaceRuntime = (manifest: PublicRuntimeManifest): boolean =>
+export const isLegacyWorkspaceRuntime = (
+  manifest: PublicRuntimeManifest,
+): boolean =>
   manifest.lifecycle === "UNCONFIGURED" &&
   manifest.readiness_code === "SETUP_REQUIRED" &&
   manifest.legacy_workspace;

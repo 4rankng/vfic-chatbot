@@ -48,8 +48,9 @@ describe("buildDashboardStats", () => {
       "REGISTERED",
       "SKIPPED",
     ]);
-    expect(stats.stageBreakdown.find((item) => item.value === "REGISTERED"))
-      .toMatchObject({ count: 2, percentage: 50 });
+    expect(
+      stats.stageBreakdown.find((item) => item.value === "REGISTERED"),
+    ).toMatchObject({ count: 2, percentage: 50 });
     expect(stats.knowledgeIngest?.queue_depth).toBe(3);
   });
 });

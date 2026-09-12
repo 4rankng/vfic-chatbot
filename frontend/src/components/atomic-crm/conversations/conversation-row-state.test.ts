@@ -23,9 +23,15 @@ const conversation = (overrides: Partial<Conversation>): Conversation => ({
 
 describe("conversation row state", () => {
   it("keeps unread counters on human-managed conversations", () => {
-    expect(isHumanManagedConversation(conversation({ mode: "human" }))).toBe(true);
-    expect(isHumanManagedConversation(conversation({ mode: "semi_auto" }))).toBe(true);
-    expect(isHumanManagedConversation(conversation({ mode: "bot" }))).toBe(false);
+    expect(isHumanManagedConversation(conversation({ mode: "human" }))).toBe(
+      true,
+    );
+    expect(
+      isHumanManagedConversation(conversation({ mode: "semi_auto" })),
+    ).toBe(true);
+    expect(isHumanManagedConversation(conversation({ mode: "bot" }))).toBe(
+      false,
+    );
     expect(
       getConversationUnreadCount(
         conversation({ mode: "human", unread_count: 2 }),

@@ -16,7 +16,11 @@ const persona: Persona = {
   followup_rules: {
     hot: { enabled: true, cadence_hours: [4], eligible_stages: ["NEW"] },
     warm: { enabled: true, cadence_hours: [8], eligible_stages: ["NEW"] },
-    not_interested: { enabled: false, cadence_hours: [], eligible_stages: ["SKIPPED"] },
+    not_interested: {
+      enabled: false,
+      cadence_hours: [],
+      eligible_stages: ["SKIPPED"],
+    },
   },
   is_active: false,
   created_at: "2026-07-23T00:00:00Z",
