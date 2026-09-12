@@ -40,6 +40,8 @@ ehthumbs.db
 !/.claude/hooks/**
 !/.claude/skills/
 !/.claude/skills/**
+# Hook runtime logs mutate on every hook fire; never track them.
+/.claude/hooks/.logs/
 /.claude/settings.local.json
 .omc/
 CLAUDE.local.md
