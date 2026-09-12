@@ -70,6 +70,9 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # degradation send left chatbot_worker (a suppressed turn sends nothing).
     # +3: the probe now reads finish_reason/usage and the reasoning-content
     # field so a reasoning model is not reported as a broken endpoint.
+    # Same call site, second call: a version-less 404 base is retried once
+    # with /v1 inserted (same host, same payload) — bumps the site's count
+    # 1→2 without adding a distinct site.
     "provider_boundary": 112,
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
@@ -77,7 +80,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
     "queue_producer": 40,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "b8782d86149a8f002757112bc1de0da770fbfc8d04184e918ecd4da00aeb6eba"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "2a63c91e2afc9138ba8f3fb99e4717c07f391eafff962f35d70ae06415011129"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
