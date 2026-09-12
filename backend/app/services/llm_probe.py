@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 # Bounded so a hung endpoint cannot hold an admin request open indefinitely.
 _PROBE_TIMEOUT_SECONDS = 20
+# Room for a reasoning model to finish thinking and still emit a visible reply.
+_PROBE_MAX_TOKENS = 256
 
 
 @dataclass(frozen=True)
@@ -53,14 +55,36 @@ def _completions_url(base_url: str) -> str:
     return f"{base}/chat/completions"
 
 
-def _extract_reply(payload: dict) -> str:
+def _first_choice(payload: dict) -> dict | None:
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices:
+        return None
+    return choices[0] if isinstance(choices[0], dict) else None
+
+
+def _extract_reply(payload: dict) -> str:
+    """Pull the assistant text out of an OpenAI-compatible response.
+
+    Reasoning models (Xiaomi MiMo, DeepSeek-R1 and friends) leave ``content``
+    empty and put the deliberation in ``reasoning_content``; some servers answer
+    in the legacy top-level ``text`` field. Reading only ``content`` reports a
+    perfectly healthy endpoint as broken.
+    """
+    choice = _first_choice(payload)
+    if choice is None:
         return ""
-    message = choices[0].get("message") if isinstance(choices[0], dict) else None
-    if not isinstance(message, dict):
-        return ""
-    return str(message.get("content") or "").strip()
+    message = choice.get("message")
+    if isinstance(message, dict):
+        for key in ("content", "reasoning_content"):
+            value = str(message.get(key) or "").strip()
+            if value:
+                return value
+    return str(choice.get("text") or "").strip()
+
+
+def _finish_reason(payload: dict) -> str:
+    choice = _first_choice(payload)
+    return str((choice or {}).get("finish_reason") or "").strip()
 
 
 async def probe_openai_compatible_chat(
@@ -79,7 +103,11 @@ async def probe_openai_compatible_chat(
                 json={
                     "model": model,
                     "messages": [{"role": "user", "content": "ping"}],
-                    "max_tokens": 16,
+                    # Generous on purpose. A reasoning model spends tokens
+                    # thinking before it emits any content, so a tight cap
+                    # returns finish_reason="length" with an empty content
+                    # field — a working provider reported as broken.
+                    "max_tokens": _PROBE_MAX_TOKENS,
                 },
             )
     except Exception as exc:  # noqa: BLE001 — a probe reports failure, never raises
@@ -110,10 +138,41 @@ async def probe_openai_compatible_chat(
         )
 
     reply = _extract_reply(payload)
-    if not reply:
+    if reply:
+        return LlmProbeResult(ok=True, latency_ms=latency_ms, sample=reply[:160])
+
+    # No text, but the request itself succeeded: the URL resolved, the key was
+    # accepted and the model id was recognised. Whether that counts as a pass
+    # depends on WHY the text is missing, so report the provider's own reason
+    # instead of blaming the model name.
+    finish = _finish_reason(payload)
+    usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
+    logger.warning(
+        "custom LLM probe returned no text: model=%s finish_reason=%s usage=%s keys=%s",
+        model,
+        finish or "(none)",
+        usage,
+        sorted(payload.keys()),
+    )
+
+    if finish == "length":
+        # The token cap cut it off before any content — the provider works.
+        return LlmProbeResult(
+            ok=True,
+            latency_ms=latency_ms,
+            sample="(model suy luận hết token thử nghiệm — endpoint hoạt động bình thường)",
+        )
+    if _first_choice(payload) is None:
         return LlmProbeResult(
             ok=False,
             latency_ms=latency_ms,
-            error="Endpoint trả lời nhưng không có nội dung — kiểm tra lại tên model.",
+            error="Phản hồi thiếu trường 'choices' — endpoint có thể không tương thích OpenAI.",
         )
-    return LlmProbeResult(ok=True, latency_ms=latency_ms, sample=reply[:160])
+    return LlmProbeResult(
+        ok=False,
+        latency_ms=latency_ms,
+        error=(
+            "Endpoint nhận yêu cầu nhưng không trả nội dung "
+            f"(finish_reason={finish or 'không rõ'}, usage={usage or 'không có'})."
+        ),
+    )

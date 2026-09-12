@@ -68,14 +68,16 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # facebook_oauth.get_user_profile and the worker that calls it).
     # +7: the custom OpenAI-compatible probe + admin settings path; -2: the
     # degradation send left chatbot_worker (a suppressed turn sends nothing).
-    "provider_boundary": 109,
+    # +3: the probe now reads finish_reason/usage and the reasoning-content
+    # field so a reasoning model is not reported as a broken endpoint.
+    "provider_boundary": 112,
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
     # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
     # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
     "queue_producer": 40,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "6032a21873fa603740247e1178b4b246cbb19c59c49a3538eddf7fb58e72ea08"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "b8782d86149a8f002757112bc1de0da770fbfc8d04184e918ecd4da00aeb6eba"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
