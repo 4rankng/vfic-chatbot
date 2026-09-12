@@ -1353,15 +1353,17 @@ export const ZaloIntegrationPage = () => {
                 </span>
               }
             >
-              {radioOf("minimax")}
-              <ProviderSwitchField
-                id="minimax_enable"
-                label={minimaxEnabled ? "Bật" : "Tắt"}
-                checked={minimaxEnabled}
-                onCheckedChange={(checked) =>
-                  handleProviderEnabledChange("minimax", checked)
-                }
-              />
+              <div className="settings-llm-state-row">
+                {radioOf("minimax")}
+                <ProviderSwitchField
+                  id="minimax_enable"
+                  label={minimaxEnabled ? "Bật" : "Tắt"}
+                  checked={minimaxEnabled}
+                  onCheckedChange={(checked) =>
+                    handleProviderEnabledChange("minimax", checked)
+                  }
+                />
+              </div>
               <div className="settings-readonly-field">
                 <span className="settings-readonly-label">Model chatbot</span>
                 <strong>{minimaxSettings?.minimax_agent_model ?? "—"}</strong>
@@ -1404,15 +1406,17 @@ export const ZaloIntegrationPage = () => {
                 </span>
               }
             >
-              {radioOf("openrouter")}
-              <ProviderSwitchField
-                id="openrouter_enable"
-                label={openRouterEnabled ? "Bật" : "Tắt"}
-                checked={openRouterEnabled}
-                onCheckedChange={(checked) =>
-                  handleProviderEnabledChange("openrouter", checked)
-                }
-              />
+              <div className="settings-llm-state-row">
+                {radioOf("openrouter")}
+                <ProviderSwitchField
+                  id="openrouter_enable"
+                  label={openRouterEnabled ? "Bật" : "Tắt"}
+                  checked={openRouterEnabled}
+                  onCheckedChange={(checked) =>
+                    handleProviderEnabledChange("openrouter", checked)
+                  }
+                />
+              </div>
               <div className="settings-field">
                 <Label htmlFor="openrouter_agent_model">Model chatbot</Label>
                 <Select
@@ -1472,15 +1476,17 @@ export const ZaloIntegrationPage = () => {
                 </span>
               }
             >
-              {radioOf("custom")}
-              <ProviderSwitchField
-                id="custom_llm_enable"
-                label={customLlmEnabled ? "Bật" : "Tắt"}
-                checked={customLlmEnabled}
-                onCheckedChange={(checked) =>
-                  handleProviderEnabledChange("custom", checked)
-                }
-              />
+              <div className="settings-llm-state-row">
+                {radioOf("custom")}
+                <ProviderSwitchField
+                  id="custom_llm_enable"
+                  label={customLlmEnabled ? "Bật" : "Tắt"}
+                  checked={customLlmEnabled}
+                  onCheckedChange={(checked) =>
+                    handleProviderEnabledChange("custom", checked)
+                  }
+                />
+              </div>
               <div className="settings-field">
                 <Label htmlFor="custom_llm_base_url">Base URL</Label>
                 <Input

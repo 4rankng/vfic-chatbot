@@ -1076,6 +1076,11 @@
     max-width: 720px;
   }
 
+  .settings-llm-chain,
+  .settings-llm-footer {
+    max-width: 720px;
+  }
+
   .settings-embedded-resource {
     overflow: visible;
     border: 0;
@@ -1117,7 +1122,8 @@
     grid-template-columns: minmax(176px, 208px) minmax(0, 1fr);
   }
 
-  .settings-grid-zalo > .settings-group + .settings-group {
+  .settings-grid-zalo > .settings-group + .settings-group,
+  .settings-grid-models > .settings-group + .settings-group {
     margin-top: 20px;
     padding-top: 20px;
     border-top: 1px solid var(--settings-border);
@@ -1138,8 +1144,20 @@
     padding-left: 20px;
   }
 
-  .settings-grid-models {
-    max-width: none;
+  /* Keep the provider cards on a readable measure instead of stretching
+     fields across the full wide main column. */
+  .settings-grid-models,
+  .settings-llm-chain,
+  .settings-llm-footer {
+    max-width: 928px;
+  }
+
+  /* Cards reserve their left column for identity (icon, title, status chip);
+     the panel-level chain and footer align with the card content column so
+     every control shares one left edge. 208px column + 20px padding. */
+  .settings-llm-chain,
+  .settings-llm-footer {
+    padding-left: 228px;
   }
 }
 
@@ -1305,6 +1323,13 @@
 }
 
 /* ── AI Providers panel (default + failover chain) ── */
+/* Provider cards hold heterogeneous fields, so the shared auto-fit field grid
+   scatters them into different columns per card. Pin every card to a single
+   control column so rows align across all providers. */
+.settings-grid-models .settings-group-content {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .settings-llm-chain {
   display: flex;
   flex-wrap: wrap;
@@ -1357,6 +1382,23 @@
   opacity: 0.5;
 }
 
+/* First row of every provider card: default radio on the left, enable switch
+   on the right, on one baseline. */
+.settings-llm-state-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.settings-llm-state-row .settings-switch-row {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .settings-llm-chip {
   display: inline-flex;
   align-items: center;
@@ -1380,6 +1422,11 @@
 .settings-llm-chip.is-danger {
   border-color: var(--destructive);
   color: var(--destructive);
+}
+
+/* Test status text and its button share one optical baseline. */
+.settings-oa-actions {
+  align-items: center;
 }
 
 .settings-llm-testline {
