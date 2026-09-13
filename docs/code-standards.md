@@ -279,14 +279,18 @@ directly, but treat changes with the weight of an upstream fork:
 
 ---
 
-## CI notes (template residue — do not trust)
-- **No backend CI.** Backend deploys are manual `make push` (docker buildx
-  AMD64) + `make deploy` over SSH.
-- Frontend `.github/workflows/check.yml` runs ESLint + Prettier + typecheck +
-  Vitest unit + Playwright e2e + build (Node 22). Applicable.
-- Frontend `.github/workflows/deploy.yml` has a `deploy-supabase` job —
-  **Supabase was decommissioned 2026-06-26, so that job is dead.** Inherited
-  Atomic CRM template residue. See roadmap.
+## CI notes
+- CI lives in the repo-root `.github/workflows/quality-gates.yml`: backend
+  unit (ruff + pytest), backend integration smoke, frontend quality
+  (lint/typecheck/unit/coverage/build, Node 22), functional Playwright E2E
+  (chromium + Mobile Chrome), and the offline golden release gate — on every
+  PR and push to `main`.
+- `openwiki-update.yml` refreshes the generated OpenWiki evidence index.
+- Deploys are still manual: `make push` (docker buildx AMD64 → GHCR) +
+  `make deploy` (blue/green, smoke-gated Caddy flip) over SSH.
+- The inherited Atomic CRM workflows under `frontend/.github/` were removed
+  (2026-09-13): GitHub only reads root-level workflows, so they never ran for
+  this repository, and root quality-gates.yml covers the same gates.
 
 ---
 

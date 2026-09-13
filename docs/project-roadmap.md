@@ -99,19 +99,11 @@ as candidate work items; confirm with the owner before scheduling.
 
 1. **Complete the protected Phase 5–7 activation gates** above without
    weakening the dormant fail-closed boundary.
-2. **Resolve the Makefile conflict markers** so `make dev` is reliable for
-   new contributors (see Known Issues K-1).
-3. **Fix over-length Alembic revision IDs** so migrations can't fail the
-   `VARCHAR(32)` constraint under future tooling (K-2).
-4. **Clarify the test Redis expectation** — either stand up a dedicated test
-   Redis on 6380 or align the test command with the dev compose port 6382
-   (K-3).
-5. **Decide logout-on-browser-close behavior** — product call (K-4).
-6. **Remove dead Supabase CI** from the frontend workflow (K-5).
-7. **Investigate the open `lead_stage` PATCH issue** (K-6).
-8. **Tighten domain exception coverage** — some routers still raise raw
+2. **Decide logout-on-browser-close behavior** — product call (K-4).
+3. **Investigate the open `lead_stage` PATCH issue** (K-6).
+4. **Tighten domain exception coverage** — some routers still raise raw
    `HTTPException`; convert when touched (code-standards notes this).
-9. **Zalo OA path hardening** — the OA integration is newer than the Bot
+5. **Zalo OA path hardening** — the OA integration is newer than the Bot
    Platform path; load-test + golden-case before promoting to primary.
 
 ---
@@ -122,36 +114,20 @@ as candidate work items; confirm with the owner before scheduling.
 > change — they are listed so contributors and operators know what they're
 > walking into. Each item includes the file/identifier to grep for.
 
-### K-1. `backend/Makefile` has unmerged git conflict markers
-- **Symptom:** two `dev` target variants in `backend/Makefile`, separated by
-  conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`). Blocks `make dev`
-  reliability for fresh checkouts.
-- **Repro:** `grep -nE '^(<<<<<<<|=======|>>>>>>>)' backend/Makefile`.
-- **Workaround:** resolve manually by keeping the `dev` variant that matches
-  the host-uvicorn + workers + mock pattern documented in README.
-- **Owner action:** commit a clean resolution.
+### K-1. `backend/Makefile` has unmerged git conflict markers — RESOLVED
+- **Status:** resolved — the repro grep over `backend/Makefile` returns no
+  conflict markers at current HEAD.
 
-### K-2. Two Alembic revision IDs exceed the `VARCHAR(32)` limit
-- **Revisions affected:**
-  - `091e7edc9f76_merge_0013_password_reset_otps_0013_` — **49 chars** (the
-    merge head).
-  - `0005_remove_knowledge_approval_gate` — **35 chars**.
-- **Risk:** Alembic's `revision` column is `VARCHAR(32)`; some tooling paths
-  can truncate or reject these IDs. A prior fix (migration `0021`) truncated
-  a too-long revision ID to ≤32 chars; the same pattern needs applying here.
-- **Owner action:** rename revisions + update `down_revision` chains; or
-  document an accepted exception if the limit is no longer enforced.
+### K-2. Two Alembic revision IDs exceed the `VARCHAR(32)` limit — RESOLVED
+- **Status:** resolved — the baseline migration widens
+  `alembic_version.version_num` to `VARCHAR(128)`
+  (`backend/alembic/versions/0001_baseline.py`), `0005` was renamed to a
+  short revision, and current descriptive IDs (up to 43 chars) are within
+  the widened column and deploy cleanly.
 
-### K-3. Test Redis port mismatch (6380 vs 6382)
-- **Symptom:** local test command pins `REDIS_URL=redis://localhost:6380/0`
-  but `backend/docker-compose.dev.yml` exposes Redis on **6382** (6379
-  belongs to a sibling payroll project).
-- **Implication:** either a dedicated test Redis on 6380 is expected (and
-  undocumented), or the test command is stale. Backend tests are pure unit
-  (no live Redis per `conftest.py`), so the env var is currently load-bearing
-  only for the `Settings()` instantiation path.
-- **Owner action:** either stand up a test Redis on 6380 and document it, or
-  align the test command with 6382.
+### K-3. Test Redis port mismatch (6380 vs 6382) — RESOLVED
+- **Status:** resolved — no `6380` reference remains in the backend Makefile,
+  dev compose, docs, or READMEs at current HEAD.
 
 ### K-4. Logout-on-browser-close is undecided (product call)
 - **Current behavior:** JWT access (60 min) + refresh (14 day) tokens are
@@ -165,14 +141,12 @@ as candidate work items; confirm with the owner before scheduling.
   trade-off that refresh-on-reload no longer works) — a **product decision**,
   not a bug.
 
-### K-5. Dead Supabase CI in `frontend/.github/workflows/deploy.yml`
-- **Symptom:** `deploy.yml` still defines a `deploy-supabase` job.
-- **Context:** Supabase was decommissioned on **2026-06-26**. The job is dead
-  template residue inherited from the Atomic CRM template (per
-  `frontend/AGENTS.md`).
-- **Owner action:** remove the `deploy-supabase` job (and any
-  `scripts/supabase-*.mjs` leftovers + stale `Makefile` `supabase-*` targets,
-  if still present).
+### K-5. Dead Supabase CI in `frontend/.github/workflows/deploy.yml` — RESOLVED
+- **Status:** resolved — the inherited Atomic CRM workflow tree
+  (`frontend/.github/`, both `check.yml` and `deploy.yml`) was removed.
+  GitHub only reads repo-root `.github/workflows/`, so these files never ran
+  for this repository; root `quality-gates.yml` covers every gate they
+  provided.
 
 ### K-6. Open `lead_stage` PATCH issue
 - **Status:** per project memory, an open issue exists with `lead_stage`
@@ -181,15 +155,14 @@ as candidate work items; confirm with the owner before scheduling.
   request/response, and scope a fix. (Documented to prevent it being
   forgotten — do not assume it is still reproducible without verifying.)
 
-### K-7. Legacy / dead code in frontend
-- An orphaned `@radix-ui/react-navigation-menu` sub-package was left after a
-  wrapper component was deleted. Low-priority cleanup.
+### K-7. Legacy / dead code in frontend — RESOLVED
+- **Status:** resolved — `@radix-ui/react-navigation-menu` is no longer in
+  `frontend/package.json`.
 
-### K-8. No backend CI
-- Backend has no `.github/workflows`; deploys are manual `make push` +
-  `make deploy` over SSH with ControlMaster multiplexing (~9 sequential SSH
-  calls). A backend CI workflow (lint + unit tests on PR) would catch
-  regressions like K-1 and K-2 before they land on `main`.
+### K-8. No backend CI — RESOLVED
+- **Status:** resolved — repo-root `.github/workflows/quality-gates.yml` runs
+  backend unit (ruff + pytest), backend integration smoke, frontend quality,
+  functional E2E, and the release gate on every PR and push to `main`.
 
 ### K-9. Domain exception coverage partial
 - `register_domain_exception_handlers` is the canonical error path, but ~8
