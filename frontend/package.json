@@ -22,9 +22,7 @@
     "registry:check": "node ./scripts/check-registry-paths.mjs",
     "registry:build": "npm run registry:check && npx shadcn build",
     "registry:gen": "node ./scripts/generate-registry.mjs",
-    "ghpages:deploy": "node ./scripts/ghpages-deploy.mjs",
-    "prepare": "husky",
-    "update-changelog": "gh api 'repos/{owner}/{repo}/releases' --paginate -q '.[] | \"## \\(.tag_name) - \\(.published_at[:10])\\n\\n\\(.body)\\n\"' > CHANGELOG.md"
+    "prepare": "husky"
   },
   "dependencies": {
     "@fontsource/be-vietnam-pro": "^5.2.8",
@@ -104,7 +102,6 @@
     "eslint": "^9.22.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
-    "gh-pages": "^6.3.0",
     "glob": "^11.1.0",
     "globals": "^16.3.0",
     "husky": "^9.1.7",

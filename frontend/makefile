@@ -12,16 +12,10 @@ install-playwright-browsers: install ## install the playwright browsers (chromiu
 start-app: ## start the app locally
 	npm run dev
 
-start-demo: ## start the app locally in demo mode
-	npm run dev:demo
-
 start: start-app ## start the app locally
 
 build: ## build the app
 	npm run build
-
-build-demo: ## build the app in demo mode
-	npm run build:demo
 
 test-app:
 	npm run test:unit:app
@@ -34,45 +28,15 @@ lint:
 	npm run lint
 	npm run prettier
 
-publish:
-	npm publish
-
 typecheck:
 	npm run typecheck
-
-doc-install:
-	@(cd doc && npm install)
-
-doc: doc-dev
-
-doc-dev:
-	@(cd doc && npm run dev)
-
-doc-build:
-	@(cd doc && npm run build)
-
-doc-preview: doc-build
-	@(cd doc && npm run preview)
-
-doc-deploy:
-	@(cd doc && npx gh-pages -b gh-pages -d dist -e doc -m "Deploy docs" --remove doc)
 
 registry-build: ## build the shadcn registry
 	npm run registry:build
 
-registry-deploy: registry-build ## Deploy the shadcn registry (Automatically done by CI/CD pipeline)
-	@(cd public/r && npx gh-pages -b gh-pages -d ./ -s atomic-crm.json -e r -m "Deploy registry" --remove r)
-
 registry-gen: ## Generate the shadcn registry (ran automatically by a pre-commit hook)
 	npm run registry:gen
 	npx prettier --config ./.prettierrc.json --write "registry.json"
-
-update-changelog: ## Update the changelog with the unreleased changes (ran automatically by a pre-commit hook)
-	npm run update-changelog
-	npx prettier --config ./.prettierrc.json --write "CHANGELOG.md"
-
-storybook: ## start storybook
-	npm run storybook
 
 harness: ## run the agent harness interactively (pass REQUEST="..." to pre-fill)
 	scripts/launch-harness.sh "$(REQUEST)"
