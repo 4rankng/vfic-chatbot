@@ -29,11 +29,14 @@ export const loadRecruitmentConversationRows = async (
         .filter((value): value is string => Boolean(value)),
     ),
   );
-  if (zaloIds.length === 0) return new Map();
-
-  const leadByZalo = mapLeadsByZaloId(
-    await port.listByZaloIds(zaloIds, signal),
-  );
+  // A Messenger conversation carries no zalo_chat_id and therefore no lead to
+  // batch-fetch, but it still has a channel profile to present. Skip the fetch,
+  // never the presentation — otherwise the row renders nameless and with a
+  // placeholder avatar.
+  const leadByZalo =
+    zaloIds.length === 0
+      ? new Map<string, Lead>()
+      : mapLeadsByZaloId(await port.listByZaloIds(zaloIds, signal));
   const presentations = new Map<string, RecruitmentConversationRow>();
 
   for (const conversation of conversations) {

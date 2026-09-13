@@ -2,7 +2,7 @@ import type { Conversation, Lead } from "../../types";
 
 type RecruitmentProfileSource = Pick<
   Conversation,
-  "zalo_channel" | "zalo_chat_id" | "contact"
+  "zalo_channel" | "zalo_chat_id" | "contact" | "channel_identity"
 >;
 
 export type RecruitmentRowPresentation = {
@@ -10,7 +10,7 @@ export type RecruitmentRowPresentation = {
   subtitle: string;
   avatarUrl?: string | null;
   searchText: string;
-  oaProfileName?: string;
+  channelProfileName?: string;
 };
 
 export type RecruitmentContextIdentity = {
@@ -20,8 +20,30 @@ export type RecruitmentContextIdentity = {
   phone?: string;
 };
 
-const fallbackCandidateName = (zaloChatId: string | null | undefined) =>
-  `Ứng viên · ${(zaloChatId || "").slice(-4)}`;
+// Zalo Bot Platform exposes no real profile, so an unconfirmed candidate stays
+// anonymous there. Every other channel — Zalo OA, Messenger — carries a genuine
+// profile name worth showing. `zalo_channel` only discriminates Zalo rows: a
+// Messenger conversation keeps the "bot" default, so the neutral provider
+// decides whenever the channel identity is known.
+const usesChannelProfile = (
+  conversation: RecruitmentProfileSource,
+): boolean => {
+  const provider = conversation.channel_identity?.provider;
+  if (provider) return provider !== "zalo_bot";
+  return conversation.zalo_channel === "oa";
+};
+
+const resolveChannelProfileName = (
+  conversation: RecruitmentProfileSource,
+): string | undefined =>
+  usesChannelProfile(conversation)
+    ? conversation.contact?.display_name?.trim() || undefined
+    : undefined;
+
+// Messenger rows carry no zalo_chat_id, so the neutral external id is what is
+// left to identify an unnamed candidate by.
+const fallbackCandidateName = (conversation: RecruitmentProfileSource) =>
+  `Ứng viên · ${(conversation.zalo_chat_id || conversation.channel_identity?.external_id || "").slice(-4)}`;
 
 const normalizeSearchText = (parts: Array<string | null | undefined>) =>
   parts.filter((part): part is string => Boolean(part?.trim())).join(" ");
@@ -30,21 +52,16 @@ export const resolveRecruitmentProfile = (
   conversation: RecruitmentProfileSource,
   lead: Pick<Lead, "name" | "avatar_url"> | undefined,
 ) => {
-  const oaProfileName =
-    conversation.zalo_channel === "oa"
-      ? conversation.contact?.display_name?.trim()
-      : undefined;
+  const channelProfileName = resolveChannelProfileName(conversation);
 
   return {
     displayName:
-      lead?.name ||
-      oaProfileName ||
-      fallbackCandidateName(conversation.zalo_chat_id),
+      lead?.name || channelProfileName || fallbackCandidateName(conversation),
     // Same fallback chain as the thread header: the channel profile photo
     // serves every channel, the lead record's avatar is only the first pick.
     avatarUrl:
       lead?.avatar_url || conversation.contact?.avatar_url || undefined,
-    oaProfileName,
+    channelProfileName,
   };
 };
 
@@ -57,11 +74,11 @@ export const buildRecruitmentRowPresentation = (
     displayName: profile.displayName,
     subtitle: lead?.phone || "",
     avatarUrl: profile.avatarUrl,
-    oaProfileName: profile.oaProfileName,
+    channelProfileName: profile.channelProfileName,
     searchText: normalizeSearchText([
       conversation.zalo_chat_id,
       lead?.name,
-      profile.oaProfileName,
+      profile.channelProfileName,
       lead?.phone,
       lead?.desired_job,
       lead?.region,
@@ -74,13 +91,10 @@ export const buildRecruitmentContextIdentity = (
   conversation: RecruitmentProfileSource,
   lead: Pick<Lead, "name" | "avatar_url" | "phone"> | undefined,
 ): RecruitmentContextIdentity => {
-  const profileName =
-    conversation.zalo_channel === "oa"
-      ? conversation.contact?.display_name?.trim()
-      : undefined;
+  const profileName = resolveChannelProfileName(conversation);
   const leadName = lead?.name?.trim();
   const displayName =
-    profileName || leadName || fallbackCandidateName(conversation.zalo_chat_id);
+    profileName || leadName || fallbackCandidateName(conversation);
   const avatarUrl = profileName
     ? (conversation.contact?.avatar_url ?? lead?.avatar_url ?? undefined)
     : (lead?.avatar_url ?? conversation.contact?.avatar_url ?? undefined);

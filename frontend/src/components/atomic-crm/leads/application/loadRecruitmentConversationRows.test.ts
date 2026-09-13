@@ -62,15 +62,34 @@ describe("loadRecruitmentConversationRows", () => {
         displayName: "Nguyễn Văn An",
         subtitle: "0900000001",
         avatarUrl: "https://example.test/avatar.jpg",
-        oaProfileName: "Bé Gấu",
+        channelProfileName: "Bé Gấu",
         searchText: "oa:user-1 Nguyễn Văn An Bé Gấu 0900000001 Tài xế",
       },
     });
   });
 
-  it("returns an empty map when there are no zalo ids to fetch", async () => {
+  it("presents Messenger rows without fetching leads by zalo id", async () => {
+    // Messenger conversations carry no zalo_chat_id, so there is no lead batch
+    // to fetch — but the row must still show the channel profile rather than a
+    // nameless placeholder.
     const rows = await loadRecruitmentConversationRows(
-      [conversation({ id: "conv-2", zalo_chat_id: null })],
+      [
+        conversation({
+          id: "conv-2",
+          zalo_chat_id: null,
+          contact: {
+            id: "contact-2",
+            display_name: "Frank Ng",
+            avatar_url: "https://example.test/messenger.jpg",
+          },
+          channel_identity: {
+            id: "identity-2",
+            provider: "facebook_messenger",
+            account_key: "page-1",
+            external_id: "psid-987654",
+          },
+        }),
+      ],
       {
         listByZaloIds: async () => {
           throw new Error("should not fetch");
@@ -78,6 +97,9 @@ describe("loadRecruitmentConversationRows", () => {
       },
     );
 
-    expect(rows.size).toBe(0);
+    expect(rows.get("conv-2")?.presentation).toMatchObject({
+      displayName: "Frank Ng",
+      avatarUrl: "https://example.test/messenger.jpg",
+    });
   });
 });

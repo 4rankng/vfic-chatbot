@@ -17,7 +17,7 @@ describe("OA recruitment profile presentation", () => {
     expect(resolveRecruitmentProfile(oaConversation, undefined)).toEqual({
       displayName: "Bé Gấu",
       avatarUrl: "https://example.test/oa-avatar.jpg",
-      oaProfileName: "Bé Gấu",
+      channelProfileName: "Bé Gấu",
     });
   });
 
@@ -41,12 +41,59 @@ describe("OA recruitment profile presentation", () => {
     ).toBe("https://example.test/oa-avatar.jpg");
   });
 
-  it("does not apply OA profile fallback to another channel", () => {
+  it("stays anonymous on Zalo Bot, which exposes no real profile", () => {
     expect(
       resolveRecruitmentProfile(
         { ...oaConversation, zalo_channel: "bot" },
         undefined,
       ).displayName,
     ).toBe("Ứng viên · 1234");
+  });
+
+  it("uses the Messenger profile even though zalo_channel defaults to bot", () => {
+    // A Messenger row carries no zalo_chat_id and keeps the "bot" default, so
+    // only the neutral provider can tell it apart from a Zalo Bot chat.
+    const messengerConversation = {
+      zalo_channel: "bot" as const,
+      zalo_chat_id: null,
+      contact: {
+        id: "contact-2",
+        display_name: "Frank Ng",
+        avatar_url: "https://example.test/messenger.jpg",
+      },
+      channel_identity: {
+        id: "identity-2",
+        provider: "facebook_messenger",
+        account_key: "page-1",
+        external_id: "psid-987654",
+      },
+    };
+
+    expect(resolveRecruitmentProfile(messengerConversation, undefined)).toEqual(
+      {
+        displayName: "Frank Ng",
+        avatarUrl: "https://example.test/messenger.jpg",
+        channelProfileName: "Frank Ng",
+      },
+    );
+  });
+
+  it("identifies an unnamed Messenger candidate by the neutral external id", () => {
+    expect(
+      resolveRecruitmentProfile(
+        {
+          zalo_channel: "bot" as const,
+          zalo_chat_id: null,
+          contact: null,
+          channel_identity: {
+            id: "identity-3",
+            provider: "facebook_messenger",
+            account_key: "page-1",
+            external_id: "psid-987654",
+          },
+        },
+        undefined,
+      ).displayName,
+    ).toBe("Ứng viên · 7654");
   });
 });
