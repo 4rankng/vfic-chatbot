@@ -54,9 +54,14 @@ describe("daisyUI shared adapters", () => {
     await expect
       .element(screen.getByRole("button", { name: "Tiếp tục" }))
       .toHaveClass("tt-btn-primary")
+    // No important flag on the label colour: a layered !important would beat
+    // the unlayered disabled treatment and leave white-on-pastel buttons.
     await expect
       .element(screen.getByRole("button", { name: "Tiếp tục" }))
-      .toHaveClass("text-[var(--color-primary-content)]!")
+      .toHaveClass("text-[var(--color-primary-content)]")
+    await expect
+      .element(screen.getByRole("button", { name: "Tiếp tục" }))
+      .not.toHaveClass("text-[var(--color-primary-content)]!")
     await expect
       .element(screen.getByRole("button", { name: "Tiếp tục" }))
       .not.toHaveClass("text-primary-foreground")

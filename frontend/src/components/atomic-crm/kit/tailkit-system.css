@@ -55,6 +55,18 @@
 /* Tailkit a-c-buttons-01/03/04: one compact desktop action hierarchy.
    Small/normal/large text actions are 28/32/36px, labels are 13px, and
    icon-only controls are 32/36px. Mobile targets remain 44px. */
+
+/* Disabled solid actions neutralize the fill instead of fading it: white
+   labels over a half-transparent brand fill turned pastel and illegible, so
+   the kit swaps to a muted surface + muted ink at full opacity. */
+.tailkit-workspace-content .tt-btn-primary:disabled,
+.tailkit-workspace-content .tt-btn-error:disabled {
+  border-color: var(--tt-border);
+  background: var(--tt-surface-muted);
+  color: var(--tt-ink-muted);
+  opacity: 1;
+}
+
 @media (min-width: 768px) {
   .tailkit-workspace-content
     .tt-btn:not(.conversation):not(.tt-btn-square):not(.tt-btn-circle):not(
