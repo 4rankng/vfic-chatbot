@@ -538,8 +538,12 @@ describe("ZaloIntegrationPage provider sections", () => {
       .toBeVisible();
 
     // Two spare providers must be enabled before they can join the chain.
-    screen.container.querySelector<HTMLButtonElement>("#openrouter_enable")?.click();
-    screen.container.querySelector<HTMLButtonElement>("#custom_llm_enable")?.click();
+    screen.container
+      .querySelector<HTMLButtonElement>("#openrouter_enable")
+      ?.click();
+    screen.container
+      .querySelector<HTMLButtonElement>("#custom_llm_enable")
+      ?.click();
 
     const chainItems = () =>
       Array.from(

@@ -9,8 +9,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default:
-          "tt-btn-primary text-[var(--color-primary-content)] shadow-xs",
+        default: "tt-btn-primary text-[var(--color-primary-content)] shadow-xs",
         destructive:
           "tt-btn-error shadow-xs focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
         outline:

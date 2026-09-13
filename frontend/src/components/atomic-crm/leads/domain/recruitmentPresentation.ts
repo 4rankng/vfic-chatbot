@@ -42,7 +42,8 @@ export const resolveRecruitmentProfile = (
       fallbackCandidateName(conversation.zalo_chat_id),
     // Same fallback chain as the thread header: the channel profile photo
     // serves every channel, the lead record's avatar is only the first pick.
-    avatarUrl: lead?.avatar_url || conversation.contact?.avatar_url || undefined,
+    avatarUrl:
+      lead?.avatar_url || conversation.contact?.avatar_url || undefined,
     oaProfileName,
   };
 };

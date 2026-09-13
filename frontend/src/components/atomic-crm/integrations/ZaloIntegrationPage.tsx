@@ -678,9 +678,9 @@ export const ZaloIntegrationPage = () => {
   const [customLlmEnabled, setCustomLlmEnabled] = useState(false);
   const [llmDefaultProvider, setLlmDefaultProvider] =
     useState<LlmProvider>("minimax");
-  const [llmFailoverOrder, setLlmFailoverOrder] = useState<LlmProvider[]>(
-    [...LLM_PROVIDER_ORDER],
-  );
+  const [llmFailoverOrder, setLlmFailoverOrder] = useState<LlmProvider[]>([
+    ...LLM_PROVIDER_ORDER,
+  ]);
   const [openRouterModel, setOpenRouterModel] = useState(
     "deepseek/deepseek-v4-flash",
   );
@@ -728,7 +728,9 @@ export const ZaloIntegrationPage = () => {
         custom: customLlmData.last_test ?? undefined,
       });
       setLlmDefaultProvider(customLlmData.llm_default_provider);
-      setLlmFailoverOrder(normalizeFailoverOrder(customLlmData.llm_failover_order));
+      setLlmFailoverOrder(
+        normalizeFailoverOrder(customLlmData.llm_failover_order),
+      );
       setOpenRouterModel(openRouterData.openrouter_agent_model);
       setMinimaxForm(emptyMinimaxForm);
       setOpenRouterForm(emptyOpenRouterForm);
@@ -1428,8 +1430,8 @@ export const ZaloIntegrationPage = () => {
               );
             })}
             <span className="settings-llm-chain-hint">
-              Mặc định luôn chạy trước; hết hạn mức sẽ thử nhà cung cấp kế
-              tiếp theo thứ tự này.
+              Mặc định luôn chạy trước; hết hạn mức sẽ thử nhà cung cấp kế tiếp
+              theo thứ tự này.
             </span>
           </div>
 
