@@ -17,8 +17,7 @@ stripped to eight recruitment-console resources.
 
 ## Development Commands
 
-Real commands are **npm scripts** (the `Makefile`'s `supabase-*` targets are
-stale template leftovers and do not apply to VFIC).
+Real commands are **npm scripts** (`make help` lists the common ones).
 
 ```bash
 npm install                 # install dependencies
@@ -128,8 +127,7 @@ embedded in the registry payload.
 ### i18n
 
 Vietnamese-only. `providers/commons/i18nProvider.ts` pins the locale to `vi`
-and uses `vietnameseCrmMessages.ts` (with `englishCrmMessages.ts` as the
-fallback catalog). Do not wire other locales into the app.
+and uses `vietnameseCrmMessages.ts`. Do not wire other locales into the app.
 
 ### Path Aliases
 
@@ -141,5 +139,3 @@ fallback catalog). Do not wire other locales into the app.
   comments are English.
 - Auth tokens live in `localStorage` under `RaStore.auth.*` (access + refresh);
   a 401 triggers one transparent refresh.
-- The `Makefile` `supabase-*` targets and `scripts/supabase-*.mjs` helpers are
-  stale Atomic-CRM template leftovers and are not used by VFIC.

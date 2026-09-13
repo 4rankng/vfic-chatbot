@@ -127,7 +127,7 @@ const deliveryRetryLabel = (attempts?: number) => {
  * Map a failed/unknown send's backend `external_error` to a short Vietnamese
  * reason, so a "Gửi lỗi" bubble is diagnosable instead of blank when the
  * attempted reply content is empty/unavailable. Mirrors the provider/network
- * taxonomy used elsewhere in the CRM (englishCrmMessages.reply.*), in Vietnamese.
+ * taxonomy used elsewhere in the CRM (vietnameseCrmMessages.reply.*), in Vietnamese.
  */
 const failureReasonLabel = (m: Message): string => {
   if (m.delivery_status !== "failed" && m.delivery_status !== "send_unknown") {
