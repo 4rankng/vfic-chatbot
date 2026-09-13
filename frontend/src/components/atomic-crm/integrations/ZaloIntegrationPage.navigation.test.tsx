@@ -487,8 +487,8 @@ describe("ZaloIntegrationPage provider sections", () => {
       )
       .toBeVisible();
     await expect.element(screen.getByText("Thứ tự dự phòng")).toBeVisible();
-    // Multiple elements legitimately contain each provider name (chain chip,
-    // card title) — assert the chain strip chips specifically.
+    // Multiple elements legitimately contain each provider name (order line,
+    // card title) — assert the read-only order line specifically.
     await expect
       .element(
         screen.container.querySelector<HTMLElement>(".settings-llm-chain"),
@@ -497,10 +497,14 @@ describe("ZaloIntegrationPage provider sections", () => {
     await expect
       .element(
         screen.container.querySelector<HTMLElement>(
-          ".settings-llm-chain-item.is-on",
+          ".settings-llm-chain-item.is-default",
         ),
       )
       .toBeVisible();
+    // Every provider gets a card, laid out in failover order.
+    expect(screen.container.querySelectorAll(".settings-llm-card").length).toBe(
+      3,
+    );
     await expect
       .element(
         screen.container.querySelector<HTMLElement>(".settings-llm-footer"),
@@ -545,7 +549,15 @@ describe("ZaloIntegrationPage provider sections", () => {
       .querySelector<HTMLButtonElement>("#custom_llm_enable")
       ?.click();
 
-    const chainItems = () =>
+    // The cards are the ranking: their board order must track the chain, and
+    // the read-only order line must restate it.
+    const cardOrder = () =>
+      Array.from(
+        screen.container.querySelectorAll<HTMLElement>(
+          '.settings-llm-card [data-slot="settings-group-title"]',
+        ),
+      ).map((item) => item.textContent ?? "");
+    const chainOrder = () =>
       Array.from(
         screen.container.querySelectorAll<HTMLElement>(
           ".settings-llm-chain-item",
@@ -553,14 +565,18 @@ describe("ZaloIntegrationPage provider sections", () => {
       ).map((item) => item.textContent ?? "");
 
     await expect
-      .element(screen.getByRole("button", { name: "Đưa Xiaomi lên" }))
+      .element(screen.getByRole("button", { name: "Tăng ưu tiên cho Xiaomi" }))
       .toBeVisible();
-    expect(chainItems().join("|")).toBe("MiniMax|OpenRouter|Xiaomi");
+    expect(cardOrder().join("|")).toBe("MiniMax|OpenRouter|Xiaomi");
+    expect(chainOrder().join("|")).toBe("1MiniMax|2OpenRouter|3Xiaomi");
 
-    await screen.getByRole("button", { name: "Đưa Xiaomi lên" }).click();
+    await screen
+      .getByRole("button", { name: "Tăng ưu tiên cho Xiaomi" })
+      .click();
 
     await vi.waitFor(() => {
-      expect(chainItems().join("|")).toBe("MiniMax|Xiaomi|OpenRouter");
+      expect(cardOrder().join("|")).toBe("MiniMax|Xiaomi|OpenRouter");
+      expect(chainOrder().join("|")).toBe("1MiniMax|2Xiaomi|3OpenRouter");
     });
     // A reordered chain is a pending edit: save becomes available.
     await expect

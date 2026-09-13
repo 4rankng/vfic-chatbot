@@ -1248,35 +1248,6 @@
   line-height: var(--crm-lh-body);
 }
 
-.settings-readonly-field {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface-hover) 34%, transparent);
-  padding: 10px 11px;
-}
-
-.settings-readonly-label {
-  color: var(--ink-muted);
-  font-size: var(--crm-fs-badge);
-  font-weight: var(--chat-fw-semibold);
-  line-height: var(--crm-lh-title);
-}
-
-.settings-readonly-field strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink);
-  font-family: var(--crm-font-family);
-  font-size: var(--crm-fs-body-sm);
-  font-weight: var(--chat-fw-semibold);
-  line-height: var(--crm-lh-title);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .settings-advanced {
   grid-column: 1 / -1;
 }

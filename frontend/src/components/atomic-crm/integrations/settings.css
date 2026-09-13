@@ -151,8 +151,7 @@
   color: var(--destructive);
 }
 
-.settings-switch-row,
-.settings-readonly-field {
+.settings-switch-row {
   border: 0;
   border-bottom: 1px solid var(--settings-border);
   border-radius: 0;
@@ -1044,8 +1043,7 @@
     font-size: var(--fs-body);
   }
 
-  .settings-switch-row,
-  .settings-readonly-field {
+  .settings-switch-row {
     min-height: var(--settings-control-height);
     padding-block: 8px;
   }
@@ -1238,7 +1236,12 @@
   }
 }
 
-/* ── AI Providers panel (default + failover chain) ── */
+/* ── AI Providers panel ── */
+/* One object, not two: the cards are laid out in failover order, each carrying
+   its own rank badge and reorder control, so board position, badge number, and
+   stored ranking always agree. The line above is a read-only restatement of
+   what the runtime will do. */
+
 /* Provider cards hold heterogeneous fields, so the shared auto-fit field grid
    scatters them into different columns per card. Pin every card to a single
    control column so rows align across all providers. */
@@ -1246,113 +1249,200 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* Failover order strip: a quiet card holding one pill per provider, read left
-   to right in failover order. */
+/* Cards stretch to the tallest sibling and their verify rows pin to the
+   bottom edge, so a card with one extra field cannot ragged the row. */
+.settings-grid-models {
+  align-items: stretch;
+}
+
+.settings-llm-card {
+  height: 100%;
+  align-items: stretch;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* A column flow (not the shared field grid) is what lets the verify row claim
+   the leftover height with `margin-top: auto`. */
+.settings-llm-card .settings-group-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A disabled provider stays in place but recedes: it cannot serve a turn. */
+.settings-llm-card.is-off .settings-group-header,
+.settings-llm-card.is-off .settings-field,
+.settings-llm-card.is-off .settings-llm-verify {
+  opacity: 0.62;
+}
+
+.settings-llm-card.is-off .settings-llm-role-row,
+.settings-llm-card.is-off .settings-group-meta {
+  opacity: 1;
+}
+
+/* Runtime order line: quiet, borderless, and read-only. */
 .settings-llm-chain {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  border: 1px solid var(--settings-border);
-  border-radius: var(--settings-card-radius);
-  background: var(--settings-elevated);
-  padding: 10px 14px;
-  margin-bottom: var(--settings-space-4);
+  gap: 6px 8px;
+  margin: 0;
+  padding: 0 2px;
 }
 
 .settings-llm-chain-label {
-  font-size: 12px;
+  font-size: var(--fs-caption);
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ink-muted);
-  margin-right: 4px;
+  margin-right: 2px;
 }
 
 .settings-llm-chain-item {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 4px 11px;
+  gap: 6px;
+  padding: 3px 10px 3px 4px;
   border: 1px solid var(--settings-border);
   border-radius: 999px;
+  background: var(--settings-elevated);
   color: var(--ink);
   font-size: 12px;
   font-weight: 600;
 }
 
-.settings-llm-chain-item::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
+/* The rank rides inside the pill as a filled counter. */
+.settings-llm-chain-item > em {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
   border-radius: 999px;
-  background: var(--success);
+  background: var(--workspace-surface-muted);
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
 }
 
-/* The default provider pill and matching status chips carry brand accent. */
-.settings-llm-chain-item.is-default,
-.settings-llm-chip.is-accent {
+.settings-llm-chain-item.is-default {
   border-color: var(--settings-accent-border);
   background: var(--settings-accent-soft);
   color: var(--settings-accent-strong);
 }
 
-.settings-llm-chain-item.is-default::before {
+.settings-llm-chain-item.is-default > em {
   background: var(--settings-accent);
+  color: var(--primary-foreground);
 }
 
-.settings-llm-chain-item.is-off {
-  border-style: dashed;
+.settings-llm-chain-arrow {
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.settings-llm-chain-off,
+.settings-llm-chain-empty {
+  font-size: 12px;
   color: var(--ink-muted);
 }
 
-.settings-llm-chain-item.is-off::before {
-  background: var(--ink-faint);
-  opacity: 0.45;
+.settings-llm-chain-off {
+  margin-left: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--settings-border);
 }
 
-/* Reorder controls: quiet squares inside the pill, accenting on hover. */
-.settings-llm-chain-moves {
+/* Rank badge in the card header, filling the group's icon slot: position in
+   the failover chain is more useful there than a decorative glyph. */
+.settings-workspace-content .settings-group-icon:has(.settings-llm-rank) {
+  border-color: transparent;
+  background: transparent;
+}
+
+.settings-llm-rank {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--settings-border);
+  border-radius: 9px;
+  background: var(--workspace-surface-muted);
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-llm-rank.is-default {
+  border-color: var(--settings-accent-strong);
+  background: var(--settings-accent-strong);
+  color: var(--primary-foreground);
+}
+
+.settings-llm-rank.is-off {
+  border-style: dashed;
+  color: var(--ink-faint);
+}
+
+/* Reorder controls: quiet squares in the header meta, accenting on hover. */
+.settings-llm-moves {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  margin-left: 1px;
 }
 
-.settings-llm-chain-move {
+.settings-llm-move {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--ink-muted);
   cursor: pointer;
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease);
 }
 
-.settings-llm-chain-move:hover:not(:disabled) {
-  border-color: var(--settings-border);
+.settings-llm-move:hover:not(:disabled) {
+  border-color: var(--settings-accent-border);
   background: var(--settings-accent-soft);
   color: var(--settings-accent-strong);
 }
 
-.settings-llm-chain-move:focus-visible {
+.settings-llm-move:focus-visible {
   outline: 2px solid var(--settings-accent);
   outline-offset: 1px;
 }
 
-.settings-llm-chain-move:disabled {
-  opacity: 0.35;
+.settings-llm-move:disabled {
+  opacity: 0.3;
   cursor: default;
 }
 
-.settings-llm-chain-hint {
-  flex-basis: 100%;
-  font-size: 12px;
-  color: var(--ink-muted);
+/* Role row: which provider opens the turn, and whether it may serve at all. */
+.settings-llm-role-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border-bottom: 1px solid var(--settings-border);
+  padding-bottom: 12px;
+}
+
+.settings-llm-role-row .settings-switch-row {
+  min-height: 0;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .settings-llm-radio {
@@ -1375,23 +1465,6 @@
   opacity: 0.5;
 }
 
-/* First row of every provider card: default radio on the left, enable switch
-   on the right, on one baseline. */
-.settings-llm-state-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-}
-
-.settings-llm-state-row .settings-switch-row {
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
 /* Status chip in the card header band: soft fill + strong text per state. */
 .settings-llm-chip {
   display: inline-flex;
@@ -1404,6 +1477,7 @@
   font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .settings-llm-chip.is-success {
@@ -1422,9 +1496,46 @@
   color: var(--destructive);
 }
 
-/* Test status text and its button share one optical baseline. */
-.settings-oa-actions {
+/* Read-only model line: same rhythm as an input row, without the affordance. */
+.settings-llm-field-label {
+  color: var(--ink);
+  font-size: var(--crm-fs-eyebrow);
+  font-weight: var(--chat-fw-semibold);
+  line-height: var(--crm-lh-title);
+}
+
+.settings-llm-field-note {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+
+.settings-llm-readonly-value {
+  display: flex;
   align-items: center;
+  min-height: var(--settings-control-height);
+  margin: 0;
+  border: 1px dashed var(--settings-border);
+  border-radius: 8px;
+  background: var(--workspace-surface-muted);
+  padding: 0 12px;
+  color: var(--ink);
+  font-size: var(--crm-fs-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Verify row: pinned to the card's bottom edge so every card's action button
+   sits on the same line regardless of how many fields sit above it. */
+.settings-llm-verify {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  border-top: 1px solid var(--settings-border);
+  padding-top: 12px;
 }
 
 .settings-llm-testline {
@@ -1437,19 +1548,103 @@
   flex: 1;
 }
 
-/* Footer: quiet note on the left, actions on the right. */
+.settings-llm-testline.is-error {
+  color: var(--destructive);
+}
+
+/* Test status text and its button share one optical baseline. */
+.settings-oa-actions {
+  align-items: center;
+}
+
+/* Footer bar: state on the left, actions on the right. */
 .settings-llm-footer {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 4px;
+  border-top: 1px solid var(--settings-border);
+  padding-top: 14px;
 }
 
 .settings-llm-footer-note {
   order: -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   margin-right: auto;
   font-size: 12px;
   color: var(--ink-muted);
+}
+
+.settings-llm-footer.is-dirty .settings-llm-footer-note {
+  color: var(--settings-accent-strong);
+  font-weight: 600;
+}
+
+.settings-llm-footer.is-dirty .settings-llm-footer-note::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--settings-accent);
+}
+
+/* Desktop: the credential input and its reveal/copy actions share one row.
+   Without this the grid is only declared for narrow viewports and the icon
+   buttons drop below the field. */
+@media (min-width: 768px) {
+  .settings-workspace-content .settings-sensitive-input {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--settings-control-height) var(
+        --settings-control-height
+      );
+    gap: 6px;
+  }
+
+  .settings-workspace-content .settings-sensitive-input .settings-input {
+    min-width: 0;
+  }
+
+  .settings-workspace-content .settings-sensitive-input .settings-input-action {
+    width: var(--settings-control-height);
+    min-width: var(--settings-control-height);
+    height: var(--settings-control-height);
+    min-height: var(--settings-control-height) !important;
+    border: 1px solid var(--settings-border);
+    border-radius: 8px;
+    background: var(--settings-elevated);
+    color: var(--ink-muted);
+  }
+
+  .settings-workspace-content
+    .settings-sensitive-input
+    .settings-input-action:hover:not(:disabled) {
+    background: var(--workspace-surface-muted);
+    color: var(--ink);
+  }
+}
+
+@media (max-width: 767px) {
+  .settings-llm-chain {
+    gap: 5px 6px;
+  }
+
+  .settings-llm-chain-off {
+    flex-basis: 100%;
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .settings-llm-footer {
+    flex-wrap: wrap;
+  }
+
+  .settings-llm-footer-note {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
 }
 
 /* Messenger credentials heading rides inside its card as an inset header. */

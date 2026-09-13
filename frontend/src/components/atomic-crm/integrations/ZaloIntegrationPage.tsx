@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -11,7 +12,6 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
-  Cpu,
   Menu,
   MessageCircle,
   MessagesSquare,
@@ -630,6 +630,33 @@ const formatRelativeEpoch = (epoch: number | null): string => {
   if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} phút trước`;
   if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} giờ trước`;
   return `${Math.floor(diffSeconds / 86400)} ngày trước`;
+};
+
+// Provider probes surface upstream transport errors verbatim (HTTP status plus
+// a raw JSON body). An operator console should state the consequence, not the
+// wire format; the untouched text stays available as the element's tooltip.
+const describeProviderTestError = (raw: string): string => {
+  const text = raw.trim();
+  if (!text) return "Kiểm tra thất bại";
+  if (/\b429\b|rate.?limit|quota/i.test(text)) return "Hết hạn mức (429)";
+  if (/\b401\b|\b403\b|unauthor|invalid.?api.?key|forbidden/i.test(text)) {
+    return "Token bị từ chối (401)";
+  }
+  if (/\b404\b|not.?found|unknown.?model/i.test(text)) {
+    return "Sai model hoặc Base URL (404)";
+  }
+  if (/timeout|timed.?out|ETIMEDOUT|ECONNRESET/i.test(text)) {
+    return "Hết thời gian chờ";
+  }
+  if (/\b5\d{2}\b|internal.?server/i.test(text)) {
+    return "Lỗi phía nhà cung cấp";
+  }
+  if (/ENOTFOUND|ECONNREFUSED|getaddrinfo|network/i.test(text)) {
+    return "Không kết nối được";
+  }
+  // Unrecognised failure: keep the operator's own words, minus any JSON tail.
+  const headline = text.split(/[:{]/)[0].trim();
+  return headline.length > 0 && headline.length <= 80 ? headline : text;
 };
 
 const describeOaSignatureHealth = (health: ZaloOaSignatureHealth | null) => {
@@ -1334,7 +1361,7 @@ export const ZaloIntegrationPage = () => {
         openrouter: "OpenRouter",
         custom: "Xiaomi",
       };
-      // Reorder within the displayed strip (default pinned at index 0 — it
+      // Reorder within the displayed chain (default pinned at index 0 — it
       // always opens the turn); the stored ranking mirrors the displayed one.
       const moveProvider = (provider: LlmProvider, direction: -1 | 1) => {
         const index = chain.indexOf(provider);
@@ -1349,311 +1376,328 @@ export const ZaloIntegrationPage = () => {
         openrouter: openRouterEnabled,
         custom: customLlmEnabled,
       };
+      // Only enabled providers can serve a turn, so the visible rank counts
+      // them alone — a disabled card holds its slot but carries no number.
+      const servingChain = chain.filter((provider) => enabledOf[provider]);
+      const rankOf = (provider: LlmProvider): number | null => {
+        const index = servingChain.indexOf(provider);
+        return index === -1 ? null : index + 1;
+      };
       const chipOf = (
         provider: LlmProvider,
       ): { label: string; cls: string } => {
         if (!enabledOf[provider]) return { label: "Tắt", cls: "is-muted" };
-        if (llmDefaultProvider === provider)
-          return { label: "Đang dùng", cls: "is-accent" };
         const t = lastTests[provider];
         if (t?.ok) return { label: "Sẵn sàng", cls: "is-success" };
         if (t && !t.ok) return { label: "Lỗi kiểm tra", cls: "is-danger" };
         return { label: "Chưa kiểm tra", cls: "is-muted" };
       };
-      const testLineOf = (provider: LlmProvider): string | null => {
+      const testLineOf = (
+        provider: LlmProvider,
+      ): { text: string; title?: string; ok: boolean } => {
         const t = lastTests[provider];
-        if (!t) return null;
+        if (!t) return { text: "Chưa kiểm tra", ok: true };
         if (t.ok) {
-          return `Kiểm tra ${formatRelativeEpoch(t.tested_at)} · ${t.latency_ms ?? "?"}ms`;
+          return {
+            text: `Kiểm tra ${formatRelativeEpoch(t.tested_at)} · ${t.latency_ms ?? "?"}ms`,
+            ok: true,
+          };
         }
-        return t.error || "Kiểm tra thất bại";
+        const raw = t.error || "";
+        return { text: describeProviderTestError(raw), title: raw, ok: false };
       };
-      const radioOf = (provider: LlmProvider) => (
-        <label className="settings-llm-radio">
-          <input
-            type="radio"
-            name="llm_default_provider"
-            checked={llmDefaultProvider === provider}
-            disabled={!enabledOf[provider]}
-            onChange={() => setLlmDefaultProvider(provider)}
+      // Card header: the failover rank replaces a decorative glyph, so the
+      // card states its own position in the chain.
+      const rankBadgeOf = (provider: LlmProvider) => {
+        const rank = rankOf(provider);
+        return (
+          <span
+            className={`settings-llm-rank${rank === 1 ? " is-default" : ""}${
+              rank === null ? " is-off" : ""
+            }`}
+            aria-hidden="true"
+          >
+            {rank ?? "—"}
+          </span>
+        );
+      };
+      const cardMetaOf = (provider: LlmProvider) => {
+        const index = chain.indexOf(provider);
+        const movable = provider !== llmDefaultProvider;
+        const chip = chipOf(provider);
+        return (
+          <>
+            {movable ? (
+              <span className="settings-llm-moves">
+                <button
+                  type="button"
+                  className="settings-llm-move"
+                  disabled={index <= 1}
+                  onClick={() => moveProvider(provider, -1)}
+                  aria-label={`Tăng ưu tiên cho ${providerLabel[provider]}`}
+                >
+                  <ChevronUp className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  className="settings-llm-move"
+                  disabled={index === chain.length - 1}
+                  onClick={() => moveProvider(provider, 1)}
+                  aria-label={`Giảm ưu tiên cho ${providerLabel[provider]}`}
+                >
+                  <ChevronDown className="size-4" />
+                </button>
+              </span>
+            ) : null}
+            <span className={`settings-llm-chip ${chip.cls}`}>
+              {chip.label}
+            </span>
+          </>
+        );
+      };
+      const roleRowOf = (provider: LlmProvider, switchId: string) => (
+        <div className="settings-llm-role-row">
+          <label className="settings-llm-radio">
+            <input
+              type="radio"
+              name="llm_default_provider"
+              checked={llmDefaultProvider === provider}
+              disabled={!enabledOf[provider]}
+              onChange={() => setLlmDefaultProvider(provider)}
+            />
+            <span>Chạy đầu tiên</span>
+          </label>
+          <ProviderSwitchField
+            id={switchId}
+            label="Kích hoạt"
+            checked={enabledOf[provider]}
+            onCheckedChange={(checked) =>
+              handleProviderEnabledChange(provider, checked)
+            }
           />
-          <span>Mặc định</span>
-        </label>
+        </div>
+      );
+      const verifyRowOf = (provider: LlmProvider, ready: boolean) => {
+        const line = testLineOf(provider);
+        return (
+          <div className="settings-llm-verify">
+            <span
+              className={`settings-llm-testline${line.ok ? "" : " is-error"}`}
+              title={line.title}
+            >
+              {line.text}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              className="tt-btn-touch"
+              onClick={() => {
+                void testProvider(provider);
+              }}
+              disabled={testingProvider !== null || !ready}
+              aria-busy={testingProvider === provider}
+            >
+              {testingProvider === provider ? "Đang kiểm tra" : "Kiểm tra"}
+            </Button>
+          </div>
+        );
+      };
+      const disabledProviders = chain.filter(
+        (provider) => !enabledOf[provider],
       );
 
       return (
         <SettingsSectionPanel id="settings-llm-providers">
-          <div className="settings-llm-chain" data-slot="settings-llm-chain">
+          <p className="settings-llm-chain" data-slot="settings-llm-chain">
             <span className="settings-llm-chain-label">Thứ tự dự phòng</span>
-            {chain.map((provider, index) => {
-              const movable =
-                enabledOf[provider] && provider !== llmDefaultProvider;
-              return (
-                <span
-                  key={provider}
-                  className={[
-                    "settings-llm-chain-item",
-                    enabledOf[provider] ? "is-on" : "is-off",
-                    provider === chain[0] && enabledOf[provider]
-                      ? "is-default"
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  {enabledOf[provider]
-                    ? `${providerLabel[provider]}`
-                    : `${providerLabel[provider]} · tắt`}
-                  {movable ? (
-                    <span className="settings-llm-chain-moves">
-                      <button
-                        type="button"
-                        className="settings-llm-chain-move"
-                        disabled={index <= 1}
-                        onClick={() => moveProvider(provider, -1)}
-                        aria-label={`Đưa ${providerLabel[provider]} lên`}
-                      >
-                        <ChevronUp className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="settings-llm-chain-move"
-                        disabled={index === chain.length - 1}
-                        onClick={() => moveProvider(provider, 1)}
-                        aria-label={`Đưa ${providerLabel[provider]} xuống`}
-                      >
-                        <ChevronDown className="size-3.5" />
-                      </button>
+            {servingChain.length === 0 ? (
+              <span className="settings-llm-chain-empty">
+                Chưa bật nhà cung cấp nào — bot không thể trả lời.
+              </span>
+            ) : (
+              servingChain.map((provider, index) => (
+                <Fragment key={provider}>
+                  {index > 0 ? (
+                    <span className="settings-llm-chain-arrow" aria-hidden>
+                      →
                     </span>
                   ) : null}
-                </span>
-              );
-            })}
-            <span className="settings-llm-chain-hint">
-              Mặc định luôn chạy trước; hết hạn mức sẽ thử nhà cung cấp kế tiếp
-              theo thứ tự này.
-            </span>
-          </div>
+                  <span
+                    className={`settings-llm-chain-item is-on${
+                      index === 0 ? " is-default" : ""
+                    }`}
+                  >
+                    <em>{index + 1}</em>
+                    {providerLabel[provider]}
+                  </span>
+                </Fragment>
+              ))
+            )}
+            {disabledProviders.length > 0 ? (
+              <span className="settings-llm-chain-off">
+                Đang tắt:{" "}
+                {disabledProviders
+                  .map((provider) => providerLabel[provider])
+                  .join(", ")}
+              </span>
+            ) : null}
+          </p>
 
           <div className="settings-grid settings-grid-models">
-            {/* ── MiniMax card ── */}
-            <SettingsGroup
-              title={providerLabel.minimax}
-              icon={<Bot className="size-4" />}
-              meta={
-                <span className={`settings-llm-chip ${chipOf("minimax").cls}`}>
-                  {chipOf("minimax").label}
-                </span>
-              }
-            >
-              <div className="settings-llm-state-row">
-                {radioOf("minimax")}
-                <ProviderSwitchField
-                  id="minimax_enable"
-                  label={minimaxEnabled ? "Bật" : "Tắt"}
-                  checked={minimaxEnabled}
-                  onCheckedChange={(checked) =>
-                    handleProviderEnabledChange("minimax", checked)
-                  }
-                />
-              </div>
-              <div className="settings-readonly-field">
-                <span className="settings-readonly-label">Model chatbot</span>
-                <strong>{minimaxSettings?.minimax_agent_model ?? "—"}</strong>
-              </div>
-              <MinimaxSecretInput
-                id="minimax_api_key"
-                label="Access Token"
-                status={
-                  minimaxSettings?.minimax_api_key ?? { configured: false }
-                }
-                statusState={settingsStatusState}
-                value={minimaxForm.minimax_api_key}
-                onChange={setMinimaxValue}
-                notify={notify as CredentialFieldNotify}
-              />
-              <div className="settings-oa-actions">
-                <span className="settings-llm-testline">
-                  {testLineOf("minimax") ?? "Chưa kiểm tra"}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="tt-btn-touch"
-                  onClick={() => {
-                    void testProvider("minimax");
-                  }}
-                  disabled={testingProvider !== null || !minimaxSettings}
-                  aria-busy={testingProvider === "minimax"}
-                >
-                  Kiểm tra
-                </Button>
-              </div>
-            </SettingsGroup>
+            {/* Cards render in failover order, so the board itself is the
+                ranking: position, rank badge, and reorder control agree. */}
+            {chain.map((provider) => (
+              <SettingsGroup
+                key={provider}
+                className={`settings-llm-card${
+                  enabledOf[provider] ? "" : " is-off"
+                }`}
+                title={providerLabel[provider]}
+                icon={rankBadgeOf(provider)}
+                meta={cardMetaOf(provider)}
+              >
+                {provider === "minimax" ? (
+                  <>
+                    {roleRowOf("minimax", "minimax_enable")}
+                    <div className="settings-field">
+                      <div className="settings-field-label-row">
+                        <span className="settings-llm-field-label">
+                          Model chatbot
+                        </span>
+                        <span className="settings-llm-field-note">Cố định</span>
+                      </div>
+                      <p className="settings-llm-readonly-value">
+                        {minimaxSettings?.minimax_agent_model ?? "—"}
+                      </p>
+                    </div>
+                    <MinimaxSecretInput
+                      id="minimax_api_key"
+                      label="Access Token"
+                      status={
+                        minimaxSettings?.minimax_api_key ?? {
+                          configured: false,
+                        }
+                      }
+                      statusState={settingsStatusState}
+                      value={minimaxForm.minimax_api_key}
+                      onChange={setMinimaxValue}
+                      notify={notify as CredentialFieldNotify}
+                    />
+                    {verifyRowOf("minimax", Boolean(minimaxSettings))}
+                  </>
+                ) : null}
 
-            {/* ── OpenRouter card ── */}
-            <SettingsGroup
-              title={providerLabel.openrouter}
-              icon={<Cpu className="size-4" />}
-              meta={
-                <span
-                  className={`settings-llm-chip ${chipOf("openrouter").cls}`}
-                >
-                  {chipOf("openrouter").label}
-                </span>
-              }
-            >
-              <div className="settings-llm-state-row">
-                {radioOf("openrouter")}
-                <ProviderSwitchField
-                  id="openrouter_enable"
-                  label={openRouterEnabled ? "Bật" : "Tắt"}
-                  checked={openRouterEnabled}
-                  onCheckedChange={(checked) =>
-                    handleProviderEnabledChange("openrouter", checked)
-                  }
-                />
-              </div>
-              <div className="settings-field">
-                <Label htmlFor="openrouter_agent_model">Model chatbot</Label>
-                <Select
-                  value={openRouterModel}
-                  onValueChange={setOpenRouterModel}
-                >
-                  <SelectTrigger
-                    id="openrouter_agent_model"
-                    className="settings-input"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {OPENROUTER_MODEL_OPTIONS.map((model) => (
-                      <SelectItem key={model} value={model}>
-                        {model}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <OpenRouterSecretInput
-                id="openrouter_api_key"
-                label="Access Token"
-                status={
-                  openRouterSettings?.openrouter_api_key ?? {
-                    configured: false,
-                  }
-                }
-                statusState={settingsStatusState}
-                value={openRouterForm.openrouter_api_key}
-                onChange={setOpenRouterValue}
-                notify={notify as CredentialFieldNotify}
-              />
-              <div className="settings-oa-actions">
-                <span className="settings-llm-testline">
-                  {testLineOf("openrouter") ?? "Chưa kiểm tra"}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="tt-btn-touch"
-                  onClick={() => {
-                    void testProvider("openrouter");
-                  }}
-                  disabled={testingProvider !== null || !openRouterSettings}
-                  aria-busy={testingProvider === "openrouter"}
-                >
-                  Kiểm tra
-                </Button>
-              </div>
-            </SettingsGroup>
+                {provider === "openrouter" ? (
+                  <>
+                    {roleRowOf("openrouter", "openrouter_enable")}
+                    <div className="settings-field">
+                      <Label htmlFor="openrouter_agent_model">
+                        Model chatbot
+                      </Label>
+                      <Select
+                        value={openRouterModel}
+                        onValueChange={setOpenRouterModel}
+                      >
+                        <SelectTrigger
+                          id="openrouter_agent_model"
+                          className="settings-input"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {OPENROUTER_MODEL_OPTIONS.map((model) => (
+                            <SelectItem key={model} value={model}>
+                              {model}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <OpenRouterSecretInput
+                      id="openrouter_api_key"
+                      label="Access Token"
+                      status={
+                        openRouterSettings?.openrouter_api_key ?? {
+                          configured: false,
+                        }
+                      }
+                      statusState={settingsStatusState}
+                      value={openRouterForm.openrouter_api_key}
+                      onChange={setOpenRouterValue}
+                      notify={notify as CredentialFieldNotify}
+                    />
+                    {verifyRowOf("openrouter", Boolean(openRouterSettings))}
+                  </>
+                ) : null}
 
-            {/* ── Xiaomi (custom OpenAI-compatible) card ── */}
-            <SettingsGroup
-              title={providerLabel.custom}
-              icon={<Cpu className="size-4" />}
-              meta={
-                <span className={`settings-llm-chip ${chipOf("custom").cls}`}>
-                  {chipOf("custom").label}
-                </span>
-              }
-            >
-              <div className="settings-llm-state-row">
-                {radioOf("custom")}
-                <ProviderSwitchField
-                  id="custom_llm_enable"
-                  label={customLlmEnabled ? "Bật" : "Tắt"}
-                  checked={customLlmEnabled}
-                  onCheckedChange={(checked) =>
-                    handleProviderEnabledChange("custom", checked)
-                  }
-                />
-              </div>
-              <div className="settings-field">
-                <Label htmlFor="custom_llm_base_url">Base URL</Label>
-                <Input
-                  id="custom_llm_base_url"
-                  className="settings-input"
-                  autoComplete="off"
-                  value={customLlmForm.custom_llm_base_url}
-                  placeholder={
-                    customLlmSettings?.custom_llm_base_url ||
-                    "https://token-plan-sgp.xiaomimimo.com/v1"
-                  }
-                  onChange={(event) =>
-                    setCustomLlmValue("custom_llm_base_url", event.target.value)
-                  }
-                />
-              </div>
-              <div className="settings-field">
-                <Label htmlFor="custom_llm_agent_model">Model chatbot</Label>
-                <Input
-                  id="custom_llm_agent_model"
-                  className="settings-input"
-                  autoComplete="off"
-                  value={customLlmForm.custom_llm_agent_model}
-                  placeholder={
-                    customLlmSettings?.custom_llm_agent_model || "mimo-v2.5-pro"
-                  }
-                  onChange={(event) =>
-                    setCustomLlmValue(
-                      "custom_llm_agent_model",
-                      event.target.value,
-                    )
-                  }
-                />
-              </div>
-              <CustomLlmSecretInput
-                id="custom_llm_api_key"
-                label="Access Token"
-                status={
-                  customLlmSettings?.custom_llm_api_key ?? { configured: false }
-                }
-                statusState={settingsStatusState}
-                value={customLlmForm.custom_llm_api_key}
-                onChange={setCustomLlmValue}
-                notify={notify as CredentialFieldNotify}
-              />
-              <div className="settings-oa-actions">
-                <span className="settings-llm-testline">
-                  {testLineOf("custom") ?? "Chưa kiểm tra"}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="tt-btn-touch"
-                  onClick={() => {
-                    void testProvider("custom");
-                  }}
-                  disabled={testingProvider !== null || !customLlmSettings}
-                  aria-busy={testingProvider === "custom"}
-                >
-                  Kiểm tra
-                </Button>
-              </div>
-            </SettingsGroup>
+                {provider === "custom" ? (
+                  <>
+                    {roleRowOf("custom", "custom_llm_enable")}
+                    <div className="settings-field">
+                      <Label htmlFor="custom_llm_base_url">Base URL</Label>
+                      <Input
+                        id="custom_llm_base_url"
+                        className="settings-input"
+                        autoComplete="off"
+                        value={customLlmForm.custom_llm_base_url}
+                        placeholder={
+                          customLlmSettings?.custom_llm_base_url ||
+                          "https://token-plan-sgp.xiaomimimo.com/v1"
+                        }
+                        onChange={(event) =>
+                          setCustomLlmValue(
+                            "custom_llm_base_url",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="settings-field">
+                      <Label htmlFor="custom_llm_agent_model">
+                        Model chatbot
+                      </Label>
+                      <Input
+                        id="custom_llm_agent_model"
+                        className="settings-input"
+                        autoComplete="off"
+                        value={customLlmForm.custom_llm_agent_model}
+                        placeholder={
+                          customLlmSettings?.custom_llm_agent_model ||
+                          "mimo-v2.5-pro"
+                        }
+                        onChange={(event) =>
+                          setCustomLlmValue(
+                            "custom_llm_agent_model",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
+                    <CustomLlmSecretInput
+                      id="custom_llm_api_key"
+                      label="Access Token"
+                      status={
+                        customLlmSettings?.custom_llm_api_key ?? {
+                          configured: false,
+                        }
+                      }
+                      statusState={settingsStatusState}
+                      value={customLlmForm.custom_llm_api_key}
+                      onChange={setCustomLlmValue}
+                      notify={notify as CredentialFieldNotify}
+                    />
+                    {verifyRowOf("custom", Boolean(customLlmSettings))}
+                  </>
+                ) : null}
+              </SettingsGroup>
+            ))}
           </div>
 
-          <div className="settings-llm-footer">
+          <div
+            className={`settings-llm-footer${
+              hasProviderEdits ? " is-dirty" : ""
+            }`}
+          >
             <Button
               type="button"
               variant="ghost"
@@ -1674,7 +1718,9 @@ export const ZaloIntegrationPage = () => {
               {savingProviders ? "Đang lưu" : "Lưu thay đổi"}
             </Button>
             <span className="settings-llm-footer-note">
-              Token được mã hoá, không hiển thị lại.
+              {hasProviderEdits
+                ? "Có thay đổi chưa lưu."
+                : "Token được mã hoá, không hiển thị lại."}
             </span>
           </div>
         </SettingsSectionPanel>
