@@ -417,6 +417,7 @@ class _CustomLlmService:
             "custom_llm_enable": True,
             "custom_llm_usable": True,
             "llm_default_provider": "minimax",
+            "llm_failover_order": ["minimax", "openrouter", "custom"],
         }
 
     async def update_custom_llm(self, values: dict, *, actor_id) -> list[str]:  # noqa: ARG002

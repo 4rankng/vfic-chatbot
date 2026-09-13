@@ -9,6 +9,7 @@ import { useNotify, usePermissions, useTranslate } from "ra-core";
 import {
   Bot,
   ChevronDown,
+  ChevronUp,
   Copy,
   Cpu,
   Menu,
@@ -94,6 +95,7 @@ type MinimaxUpdatePayload = {
   minimax_api_key?: string;
   minimax_enable?: boolean;
   llm_default_provider?: LlmProvider;
+  llm_failover_order?: LlmProvider[];
 };
 
 type CustomLlmUpdatePayload = {
@@ -160,6 +162,20 @@ const LLM_PROVIDER_ORDER: readonly LlmProvider[] = [
   "openrouter",
   "custom",
 ];
+
+// Mirror of the backend normalizer: drop unknown names, dedupe, and append
+// anything unranked in canonical order, so the stored ranking is always full.
+const normalizeFailoverOrder = (order: LlmProvider[]): LlmProvider[] => {
+  const ranked = order.filter(
+    (provider, index) =>
+      LLM_PROVIDER_ORDER.includes(provider) &&
+      order.indexOf(provider) === index,
+  );
+  return [
+    ...ranked,
+    ...LLM_PROVIDER_ORDER.filter((provider) => !ranked.includes(provider)),
+  ];
+};
 
 const OPENROUTER_MODEL_OPTIONS = [
   "deepseek/deepseek-v4-flash",
@@ -662,6 +678,9 @@ export const ZaloIntegrationPage = () => {
   const [customLlmEnabled, setCustomLlmEnabled] = useState(false);
   const [llmDefaultProvider, setLlmDefaultProvider] =
     useState<LlmProvider>("minimax");
+  const [llmFailoverOrder, setLlmFailoverOrder] = useState<LlmProvider[]>(
+    [...LLM_PROVIDER_ORDER],
+  );
   const [openRouterModel, setOpenRouterModel] = useState(
     "deepseek/deepseek-v4-flash",
   );
@@ -709,6 +728,7 @@ export const ZaloIntegrationPage = () => {
         custom: customLlmData.last_test ?? undefined,
       });
       setLlmDefaultProvider(customLlmData.llm_default_provider);
+      setLlmFailoverOrder(normalizeFailoverOrder(customLlmData.llm_failover_order));
       setOpenRouterModel(openRouterData.openrouter_agent_model);
       setMinimaxForm(emptyMinimaxForm);
       setOpenRouterForm(emptyOpenRouterForm);
@@ -738,15 +758,29 @@ export const ZaloIntegrationPage = () => {
       payload.minimax_enable = minimaxEnabled;
     }
     // The default-provider radio is panel-global; a change rides exactly one
-    // PUT (minimax) so three payloads never write the shared key twice.
+    // PUT (minimax) so three payloads never write the shared key twice. The
+    // spare ranking shares that PUT.
     if (
       minimaxSettings &&
       llmDefaultProvider !== minimaxSettings.llm_default_provider
     ) {
       payload.llm_default_provider = llmDefaultProvider;
     }
+    if (
+      minimaxSettings &&
+      llmFailoverOrder.join(",") !==
+        minimaxSettings.llm_failover_order.join(",")
+    ) {
+      payload.llm_failover_order = llmFailoverOrder;
+    }
     return payload;
-  }, [minimaxForm, minimaxEnabled, llmDefaultProvider, minimaxSettings]);
+  }, [
+    minimaxForm,
+    minimaxEnabled,
+    llmDefaultProvider,
+    llmFailoverOrder,
+    minimaxSettings,
+  ]);
 
   const changedOpenRouterPayload = useMemo(() => {
     const payload: OpenRouterUpdatePayload = {};
@@ -891,6 +925,7 @@ export const ZaloIntegrationPage = () => {
         setMinimaxSettings(next);
         setMinimaxEnabled(next.minimax_enable);
         setLlmDefaultProvider(next.llm_default_provider);
+        setLlmFailoverOrder(normalizeFailoverOrder(next.llm_failover_order));
       }
       if (Object.keys(changedOpenRouterPayload).length > 0) {
         const next = await zaloIntegrationGateway.saveOpenRouterSettings(
@@ -926,8 +961,12 @@ export const ZaloIntegrationPage = () => {
       setCustomLlmEnabled(customLlmSettings.custom_llm_enable);
     if (openRouterSettings)
       setOpenRouterModel(openRouterSettings.openrouter_agent_model);
-    if (customLlmSettings)
+    if (customLlmSettings) {
       setLlmDefaultProvider(customLlmSettings.llm_default_provider);
+      setLlmFailoverOrder(
+        normalizeFailoverOrder(customLlmSettings.llm_failover_order),
+      );
+    }
     setMinimaxForm(emptyMinimaxForm);
     setOpenRouterForm(emptyOpenRouterForm);
     setCustomLlmForm(emptyCustomLlmForm);
@@ -1282,16 +1321,26 @@ export const ZaloIntegrationPage = () => {
     }
 
     if (activeItemId === "settings-llm-providers") {
-      // Failover order: the default starts every turn, the other ENABLED
-      // providers follow in canonical order; disabled ones cannot serve.
+      // Failover order: the default starts every turn, the other providers
+      // follow the operator-ranked spare order; disabled ones cannot serve.
       const chain: LlmProvider[] = [
         llmDefaultProvider,
-        ...LLM_PROVIDER_ORDER.filter((p) => p !== llmDefaultProvider),
+        ...llmFailoverOrder.filter((p) => p !== llmDefaultProvider),
       ];
       const providerLabel: Record<LlmProvider, string> = {
         minimax: "MiniMax",
         openrouter: "OpenRouter",
         custom: "Xiaomi",
+      };
+      // Reorder within the displayed strip (default pinned at index 0 — it
+      // always opens the turn); the stored ranking mirrors the displayed one.
+      const moveProvider = (provider: LlmProvider, direction: -1 | 1) => {
+        const index = chain.indexOf(provider);
+        const target = index + direction;
+        if (index < 1 || target < 1 || target >= chain.length) return;
+        const next = [...chain];
+        [next[index], next[target]] = [next[target], next[index]];
+        setLlmFailoverOrder(next);
       };
       const enabledOf: Record<LlmProvider, boolean> = {
         minimax: minimaxEnabled,
@@ -1334,24 +1383,54 @@ export const ZaloIntegrationPage = () => {
         <SettingsSectionPanel id="settings-llm-providers">
           <div className="settings-llm-chain" data-slot="settings-llm-chain">
             <span className="settings-llm-chain-label">Thứ tự dự phòng</span>
-            {chain.map((provider) => (
-              <span
-                key={provider}
-                className={[
-                  "settings-llm-chain-item",
-                  enabledOf[provider] ? "is-on" : "is-off",
-                  provider === chain[0] && enabledOf[provider]
-                    ? "is-default"
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                {enabledOf[provider]
-                  ? `${providerLabel[provider]}`
-                  : `${providerLabel[provider]} · tắt`}
-              </span>
-            ))}
+            {chain.map((provider, index) => {
+              const movable =
+                enabledOf[provider] && provider !== llmDefaultProvider;
+              return (
+                <span
+                  key={provider}
+                  className={[
+                    "settings-llm-chain-item",
+                    enabledOf[provider] ? "is-on" : "is-off",
+                    provider === chain[0] && enabledOf[provider]
+                      ? "is-default"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  {enabledOf[provider]
+                    ? `${providerLabel[provider]}`
+                    : `${providerLabel[provider]} · tắt`}
+                  {movable ? (
+                    <span className="settings-llm-chain-moves">
+                      <button
+                        type="button"
+                        className="settings-llm-chain-move"
+                        disabled={index <= 1}
+                        onClick={() => moveProvider(provider, -1)}
+                        aria-label={`Đưa ${providerLabel[provider]} lên`}
+                      >
+                        <ChevronUp className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="settings-llm-chain-move"
+                        disabled={index === chain.length - 1}
+                        onClick={() => moveProvider(provider, 1)}
+                        aria-label={`Đưa ${providerLabel[provider]} xuống`}
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </button>
+                    </span>
+                  ) : null}
+                </span>
+              );
+            })}
+            <span className="settings-llm-chain-hint">
+              Mặc định luôn chạy trước; hết hạn mức sẽ thử nhà cung cấp kế
+              tiếp theo thứ tự này.
+            </span>
           </div>
 
           <div className="settings-grid settings-grid-models">

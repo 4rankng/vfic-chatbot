@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
         minimax_safety_model: "minimax-model",
         minimax_enable: true,
         llm_default_provider: "minimax" as const,
+        llm_failover_order: ["minimax", "openrouter", "custom"],
       },
       openRouter: {
         openrouter_api_key: { configured: false },
@@ -38,6 +39,7 @@ const mocks = vi.hoisted(() => ({
         openrouter_digest_model: "deepseek/deepseek-v4-flash",
         openrouter_enable: false,
         llm_default_provider: "minimax" as const,
+        llm_failover_order: ["minimax", "openrouter", "custom"],
       },
       customLlm: {
         custom_llm_api_key: { configured: false },
@@ -49,6 +51,7 @@ const mocks = vi.hoisted(() => ({
         custom_llm_enable: false,
         custom_llm_usable: false,
         llm_default_provider: "minimax" as const,
+        llm_failover_order: ["minimax", "openrouter", "custom"],
       },
     }),
   ),
@@ -506,5 +509,58 @@ describe("ZaloIntegrationPage provider sections", () => {
     await expect
       .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
       .toBeVisible();
+  });
+
+  it("reorders the failover chain and flags the change as saveable", async () => {
+    mocks.isMobile = false;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    await expect
+      .element(screen.getByRole("button", { name: "Zalo", exact: true }))
+      .toBeVisible();
+    const providersButton = Array.from(
+      screen.container.querySelectorAll<HTMLButtonElement>(
+        ".settings-side-nav-link",
+      ),
+    ).find((button) => button.textContent?.includes("AI Providers"));
+    providersButton?.click();
+    await expect
+      .element(
+        screen.getByRole("heading", { name: "AI Providers", exact: true }),
+      )
+      .toBeVisible();
+
+    // Two spare providers must be enabled before they can join the chain.
+    screen.container.querySelector<HTMLButtonElement>("#openrouter_enable")?.click();
+    screen.container.querySelector<HTMLButtonElement>("#custom_llm_enable")?.click();
+
+    const chainItems = () =>
+      Array.from(
+        screen.container.querySelectorAll<HTMLElement>(
+          ".settings-llm-chain-item",
+        ),
+      ).map((item) => item.textContent ?? "");
+
+    await expect
+      .element(screen.getByRole("button", { name: "Đưa Xiaomi lên" }))
+      .toBeVisible();
+    expect(chainItems().join("|")).toBe("MiniMax|OpenRouter|Xiaomi");
+
+    await screen.getByRole("button", { name: "Đưa Xiaomi lên" }).click();
+
+    await vi.waitFor(() => {
+      expect(chainItems().join("|")).toBe("MiniMax|Xiaomi|OpenRouter");
+    });
+    // A reordered chain is a pending edit: save becomes available.
+    await expect
+      .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
+      .not.toBeDisabled();
   });
 });

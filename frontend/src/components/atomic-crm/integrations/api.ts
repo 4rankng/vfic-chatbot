@@ -50,6 +50,8 @@ export type MinimaxSettings = {
   minimax_safety_model: string;
   minimax_enable: boolean;
   llm_default_provider: LlmProvider;
+  /** Operator-ranked spare order; the default provider always starts a turn. */
+  llm_failover_order: LlmProvider[];
   last_test: ProviderTestStatus | null;
 };
 
@@ -61,6 +63,7 @@ export type OpenRouterSettings = {
   openrouter_digest_model: string;
   openrouter_enable: boolean;
   llm_default_provider: LlmProvider;
+  llm_failover_order: LlmProvider[];
   last_test: ProviderTestStatus | null;
 };
 
@@ -75,6 +78,7 @@ export type CustomLlmSettings = {
   /** True only when enabled AND key + base URL + agent model are all present. */
   custom_llm_usable: boolean;
   llm_default_provider: LlmProvider;
+  llm_failover_order: LlmProvider[];
   last_test: ProviderTestStatus | null;
 };
 
@@ -197,6 +201,7 @@ export const zaloIntegrationGateway = {
       minimax_api_key: string;
       minimax_enable: boolean;
       llm_default_provider: LlmProvider;
+      llm_failover_order: LlmProvider[];
     }>,
   ): Promise<MinimaxSettings> =>
     apiJson<MinimaxSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/minimax`, {

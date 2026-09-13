@@ -133,6 +133,7 @@ class MinimaxIntegrationSettingsOut(BaseModel):
     minimax_safety_model: str
     minimax_enable: bool
     llm_default_provider: Literal["minimax", "openrouter", "custom"]
+    llm_failover_order: list[Literal["minimax", "openrouter", "custom"]]
     last_test: ProviderTestStatus | None = None
 
 
@@ -142,6 +143,9 @@ class MinimaxIntegrationSettingsUpdate(BaseModel):
     minimax_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
     minimax_enable: bool | None = None
     llm_default_provider: Literal["minimax", "openrouter", "custom"] | None = None
+    # Operator-ranked spare order; like the default radio it rides the minimax
+    # PUT only, so the other panels' Update models deliberately omit it.
+    llm_failover_order: list[Literal["minimax", "openrouter", "custom"]] | None = None
 
 
 class MinimaxIntegrationTestOut(BaseModel):
@@ -164,6 +168,7 @@ class OpenRouterIntegrationSettingsOut(BaseModel):
     openrouter_embedding_dim: int
     openrouter_enable: bool
     llm_default_provider: Literal["minimax", "openrouter", "custom"]
+    llm_failover_order: list[Literal["minimax", "openrouter", "custom"]]
     last_test: ProviderTestStatus | None = None
 
 
@@ -205,6 +210,7 @@ class CustomLlmIntegrationSettingsOut(BaseModel):
     # so the UI can say "armed" rather than merely "saved".
     custom_llm_usable: bool
     llm_default_provider: Literal["minimax", "openrouter", "custom"]
+    llm_failover_order: list[Literal["minimax", "openrouter", "custom"]]
     last_test: ProviderTestStatus | None = None
 
 

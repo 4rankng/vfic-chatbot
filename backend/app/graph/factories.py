@@ -17,6 +17,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from typing import Callable, Sequence
 
 from app.core.config import get_settings
 from app.graph.clients import (
@@ -440,14 +441,23 @@ def _build_fast_llm(*, minimax_config, openrouter_config, custom_config=None):
         return None
 
 
-def _build_failover_chain(*, minimax_config, openrouter_config, custom_config):
+def _build_failover_chain(
+    *,
+    minimax_config,
+    openrouter_config,
+    custom_config,
+    failover_order: Sequence[str] = ("minimax", "openrouter", "custom"),
+):
     """Clients for every configured provider EXCEPT the active one, in order.
 
     The operator does not nominate a spare: any provider they have enabled with
     a usable credential is eligible, so enabling OpenRouter alongside MiniMax is
-    enough to survive a spent MiniMax plan. Order is deterministic — the other
-    first-class provider, then the generic OpenAI-compatible slot — so failover
-    behaviour is predictable rather than dependent on dict ordering.
+    enough to survive a spent MiniMax plan. ``failover_order`` is the
+    operator-ranked preference stored with the integration settings (see
+    ``resolve_llm_failover_order``); the canonical default reproduces the
+    historic order — the other first-class provider, then the generic
+    OpenAI-compatible slot. Unranked names trail the ranked ones, so a partial
+    operator order only moves the providers they actually ranked.
 
     Build failures are swallowed per-provider: a misconfigured spare must not
     take down the turn, it just does not join the chain.
@@ -465,38 +475,60 @@ def _build_failover_chain(*, minimax_config, openrouter_config, custom_config):
         if client is not None:
             chain.append(client)
 
+    # (rank name, log label, builder) — the custom slot keeps its legacy
+    # "fallback" log label while ranking under its canonical provider name.
+    candidates: list[tuple[str, str, Callable[[], object]]] = []
     if active != "minimax" and minimax_config.enabled and minimax_config.api_key:
-        _add(
-            "minimax",
-            # DB-managed model id wins over the env default, matching how the
-            # active provider resolves its model.
-            lambda: _minimax_chat(
-                minimax_config.agent_model or s.minimax_agent_model,
-                temperature=0.3,
-                api_key=minimax_config.api_key,
-            ),
+        candidates.append(
+            (
+                "minimax",
+                "minimax",
+                # DB-managed model id wins over the env default, matching how
+                # the active provider resolves its model.
+                lambda: _minimax_chat(
+                    minimax_config.agent_model or s.minimax_agent_model,
+                    temperature=0.3,
+                    api_key=minimax_config.api_key,
+                ),
+            )
         )
     if active != "openrouter" and openrouter_config.enabled and openrouter_config.api_key:
-        _add(
-            "openrouter",
-            lambda: _openrouter_chat(
-                openrouter_config.agent_model,
-                temperature=0.3,
-                timeout=s.openrouter_request_timeout,
-                api_key=openrouter_config.api_key,
-                capture_reasoning=True,
-            ),
+        candidates.append(
+            (
+                "openrouter",
+                "openrouter",
+                lambda: _openrouter_chat(
+                    openrouter_config.agent_model,
+                    temperature=0.3,
+                    timeout=s.openrouter_request_timeout,
+                    api_key=openrouter_config.api_key,
+                    capture_reasoning=True,
+                ),
+            )
         )
     if active != "custom" and custom_config is not None and custom_config.usable:
-        _add(
-            "fallback",
-            lambda: _custom_chat(
-                custom_config.agent_model,
-                temperature=0.3,
-                api_key=custom_config.api_key,
-                base_url=custom_config.base_url,
-            ),
+        candidates.append(
+            (
+                "custom",
+                "fallback",
+                lambda: _custom_chat(
+                    custom_config.agent_model,
+                    temperature=0.3,
+                    api_key=custom_config.api_key,
+                    base_url=custom_config.base_url,
+                ),
+            )
         )
+
+    rank = {name: index for index, name in enumerate(failover_order)}
+    # Stable sort: unranked candidates keep their canonical append order.
+    candidates.sort(
+        key=lambda candidate: (
+            rank[candidate[0]] if candidate[0] in rank else len(rank)
+        )
+    )
+    for _, label, build in candidates:
+        _add(label, build)
     return chain
 
 
@@ -632,6 +664,7 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
         minimax_config = await integration_settings.resolve_minimax()
         openrouter_config = await integration_settings.resolve_openrouter()
         custom_config = await integration_settings.resolve_custom_llm()
+        failover_order = await integration_settings.resolve_llm_failover_order()
         agent_llm = _chat_for_role(
             "agent",
             temperature=0.3,
@@ -656,6 +689,7 @@ async def _build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async fo
             minimax_config=minimax_config,
             openrouter_config=openrouter_config,
             custom_config=custom_config,
+            failover_order=failover_order,
         )
         bundle = _CachedClients(
             agent_llm=agent_llm,

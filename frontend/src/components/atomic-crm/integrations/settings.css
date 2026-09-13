@@ -1311,6 +1311,50 @@
   opacity: 0.45;
 }
 
+/* Reorder controls: quiet squares inside the pill, accenting on hover. */
+.settings-llm-chain-moves {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 1px;
+}
+
+.settings-llm-chain-move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.settings-llm-chain-move:hover:not(:disabled) {
+  border-color: var(--settings-border);
+  background: var(--settings-accent-soft);
+  color: var(--settings-accent-strong);
+}
+
+.settings-llm-chain-move:focus-visible {
+  outline: 2px solid var(--settings-accent);
+  outline-offset: 1px;
+}
+
+.settings-llm-chain-move:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.settings-llm-chain-hint {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
 .settings-llm-radio {
   display: flex;
   align-items: center;
@@ -1402,6 +1446,7 @@
 }
 
 .settings-llm-footer-note {
+  order: -1;
   margin-right: auto;
   font-size: 12px;
   color: var(--ink-muted);

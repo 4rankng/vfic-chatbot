@@ -237,3 +237,39 @@ def test_failover_chain_skips_a_disabled_spare(monkeypatch):
     )
 
     assert rec.built == ["custom:cu-agent"]
+
+
+def test_failover_chain_follows_the_operator_ranked_order(monkeypatch):
+    """The settings-page order decides who is tried first when the default
+    provider dies, not the hardcoded historic sequence."""
+    from app.graph.factories import _build_failover_chain
+
+    rec = _RecordingBuilders(monkeypatch)
+    minimax, openrouter, custom = _configs(default_provider="minimax")
+
+    _build_failover_chain(
+        minimax_config=minimax,
+        openrouter_config=openrouter,
+        custom_config=custom,
+        failover_order=("custom", "openrouter", "minimax"),
+    )
+
+    assert rec.built == ["custom:cu-agent", "openrouter:or-agent"]
+
+
+def test_failover_chain_treats_a_partial_order_as_a_ranking(monkeypatch):
+    """Providers the operator ranked move ahead; unranked ones trail in the
+    canonical order instead of being dropped from the chain."""
+    from app.graph.factories import _build_failover_chain
+
+    rec = _RecordingBuilders(monkeypatch)
+    minimax, openrouter, custom = _configs(default_provider="openrouter")
+
+    _build_failover_chain(
+        minimax_config=minimax,
+        openrouter_config=openrouter,
+        custom_config=custom,
+        failover_order=("custom",),
+    )
+
+    assert rec.built == ["custom:cu-agent", "minimax:mm-agent"]

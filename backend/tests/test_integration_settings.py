@@ -15,6 +15,8 @@ from app.services.integration_settings import (
     IntegrationSettingsCipher,
     IntegrationSettingsService,
     MINIMAX_API_KEY,
+    LLM_FAILOVER_ORDER,
+    normalize_llm_failover_order,
     OPENROUTER_API_KEY,
     ZALO_OA_REFRESH_TOKEN,
     ZALO_OA_ACCESS_TOKEN,
@@ -410,6 +412,65 @@ async def test_minimax_admin_view_masks_stored_token():
     assert view["minimax_agent_model"] == "MiniMax-M2.7-highspeed"
     assert view["minimax_enable"] is True
     assert view["llm_default_provider"] == "minimax"
+    # Nothing stored → the canonical ranking that reproduces the historic
+    # failover order (other first-class provider, then the custom slot).
+    assert view["llm_failover_order"] == ["minimax", "openrouter", "custom"]
+
+
+@pytest.mark.asyncio
+async def test_update_minimax_stores_failover_order_as_csv(monkeypatch):
+    async def fake_record_audit(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.record_audit",
+        fake_record_audit,
+    )
+
+    db = _WriteDb()
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    changed = await service.update_minimax(
+        {"llm_failover_order": ["custom", "openrouter", "minimax"]},
+        actor_id=uuid.uuid4(),
+    )
+
+    assert changed == [LLM_FAILOVER_ORDER]
+    assert db.rows[LLM_FAILOVER_ORDER].encrypted_value == "custom,openrouter,minimax"
+    assert db.rows[LLM_FAILOVER_ORDER].is_secret is False
+
+
+@pytest.mark.asyncio
+async def test_admin_view_reads_stored_failover_order():
+    service = IntegrationSettingsService(
+        _ReadDb([_Row(LLM_FAILOVER_ORDER, "custom,openrouter")]),
+        settings=_Settings(),
+    )
+
+    view = await service.admin_minimax_view()
+
+    # The default provider always opens the turn regardless of its rank here;
+    # the stored order ranks only the spares the operator cared to order.
+    assert view["llm_failover_order"] == ["custom", "openrouter", "minimax"]
+
+
+def test_normalize_failover_order_drops_unknown_and_fills_canonically():
+    assert normalize_llm_failover_order("custom,bogus,custom") == (
+        "custom",
+        "minimax",
+        "openrouter",
+    )
+    assert normalize_llm_failover_order(["openrouter"]) == (
+        "openrouter",
+        "minimax",
+        "custom",
+    )
+    assert normalize_llm_failover_order(None) == ("minimax", "openrouter", "custom")
+    assert normalize_llm_failover_order("  openrouter , minimax  ") == (
+        "openrouter",
+        "minimax",
+        "custom",
+    )
 
 
 @pytest.mark.asyncio

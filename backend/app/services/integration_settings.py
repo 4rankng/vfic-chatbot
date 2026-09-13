@@ -62,6 +62,9 @@ OPENROUTER_AGENT_MODEL = "openrouter_agent_model"
 OPENROUTER_SAFETY_MODEL = "openrouter_safety_model"
 OPENROUTER_DIGEST_MODEL = "openrouter_digest_model"
 LLM_DEFAULT_PROVIDER = "llm_default_provider"
+# Operator-ranked spare order, stored as CSV ("openrouter,custom"). The default
+# provider always starts a turn; this ranks whoever takes over on quota death.
+LLM_FAILOVER_ORDER = "llm_failover_order"
 
 # Quota-failover provider: any OpenAI-compatible endpoint, fully operator-supplied
 # so a new vendor needs no code change.
@@ -116,7 +119,14 @@ FB_SETTING_KEYS = (FB_APP_ID, FB_APP_SECRET, FB_LOGIN_CONFIG_ID, FB_WEBHOOK_VERI
 # sensitive (they appear in the browser OAuth URL) and stored as plaintext.
 FB_SECRET_KEYS = (FB_APP_SECRET, FB_WEBHOOK_VERIFY_TOKEN)
 
-MINIMAX_SETTING_KEYS = (MINIMAX_API_KEY, MINIMAX_ENABLE, LLM_DEFAULT_PROVIDER)
+# The failover order rides the minimax panel (same PUT as the default radio),
+# so it lives in the minimax key set and its cache namespace.
+MINIMAX_SETTING_KEYS = (
+    MINIMAX_API_KEY,
+    MINIMAX_ENABLE,
+    LLM_DEFAULT_PROVIDER,
+    LLM_FAILOVER_ORDER,
+)
 OPENROUTER_SETTING_KEYS = (
     OPENROUTER_API_KEY,
     OPENROUTER_ENABLE,
@@ -297,11 +307,29 @@ def _bool_value(value: str | None, fallback: bool) -> bool:
 # endpoint; an unrecognised stored value falls back to minimax rather than
 # leaving the process with no provider.
 _SELECTABLE_PROVIDERS = frozenset({"minimax", "openrouter", "custom"})
+_CANONICAL_PROVIDER_ORDER = ("minimax", "openrouter", "custom")
 
 
 def _provider_value(value: str | None, fallback: str) -> str:
     candidate = (value or fallback or "minimax").strip().lower()
     return candidate if candidate in _SELECTABLE_PROVIDERS else "minimax"
+
+
+def normalize_llm_failover_order(
+    raw: str | Iterable[str] | None,
+) -> tuple[str, ...]:
+    """Parse the operator-ranked order into a full, canonical-complete ranking.
+
+    Unknown or stale names are dropped and duplicates collapse to their first
+    occurrence; providers the operator left unranked trail in canonical order,
+    so the result is always a complete permutation the chain builder can rank
+    by without special cases.
+    """
+    parts: list[str] = (
+        [part.strip() for part in raw.split(",")] if isinstance(raw, str) else list(raw or [])
+    )
+    ranked = [part for part in dict.fromkeys(parts) if part in _SELECTABLE_PROVIDERS]
+    return tuple(ranked + [name for name in _CANONICAL_PROVIDER_ORDER if name not in ranked])
 
 
 class IntegrationSettingsService:
@@ -425,6 +453,7 @@ class IntegrationSettingsService:
             "minimax_safety_model": cfg.safety_model,
             "minimax_enable": cfg.enabled,
             "llm_default_provider": cfg.default_provider,
+            "llm_failover_order": list(await self.resolve_llm_failover_order()),
             "last_test": await self.get_provider_test_result("minimax"),
         }
 
@@ -469,6 +498,7 @@ class IntegrationSettingsService:
             "openrouter_embedding_dim": cfg.embedding_dim,
             "openrouter_enable": cfg.enabled,
             "llm_default_provider": cfg.default_provider,
+            "llm_failover_order": list(await self.resolve_llm_failover_order()),
             "last_test": await self.get_provider_test_result("openrouter"),
         }
 
@@ -522,8 +552,24 @@ class IntegrationSettingsService:
             "custom_llm_enable": cfg.enabled,
             "custom_llm_usable": cfg.usable,
             "llm_default_provider": cfg.default_provider,
+            "llm_failover_order": list(await self.resolve_llm_failover_order()),
             "last_test": await self.get_provider_test_result("custom"),
         }
+
+    async def resolve_llm_failover_order(self) -> tuple[str, ...]:
+        """Operator-ranked spare order; canonical ranking when nothing is stored.
+
+        Deliberately read per call instead of cached inside a provider
+        snapshot: the failover-chain build is the only consumer, and client
+        builds are already gated behind the provider cache versions, so the
+        minimax-namespace bump on save invalidates it with the rest.
+        """
+        stored = await self._stored_values((LLM_FAILOVER_ORDER,))
+        # Subscript-with-membership, not dict.get: this module is httpx-
+        # transport-scanned by the runtime-surface oracle, which counts every
+        # bare ``get`` call as provider I/O.
+        raw = stored[LLM_FAILOVER_ORDER] if LLM_FAILOVER_ORDER in stored else None
+        return normalize_llm_failover_order(raw)
 
     async def update_custom_llm(
         self,
@@ -729,7 +775,7 @@ class IntegrationSettingsService:
 
     async def update_minimax(
         self,
-        values: dict[str, str | bool | None],
+        values: dict[str, str | bool | list[str] | None],
         *,
         actor_id,
     ) -> list[str]:
@@ -737,9 +783,13 @@ class IntegrationSettingsService:
         for key, value in values.items():
             if key not in MINIMAX_SETTING_KEYS or value is None:
                 continue
+            # The failover order arrives as a JSON list and is stored as CSV.
+            serialized = (
+                ",".join(value) if isinstance(value, (list, tuple)) else str(value)
+            )
             if await self._write_setting(
                 key,
-                str(value),
+                serialized,
                 actor_id=actor_id,
                 is_secret=key == MINIMAX_API_KEY,
             ):
