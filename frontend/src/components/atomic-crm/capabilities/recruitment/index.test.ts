@@ -30,6 +30,17 @@ describe("OA recruitment profile presentation", () => {
     ).toBe("Nguyễn Văn An");
   });
 
+  it("falls back to the channel photo when the lead has no avatar", () => {
+    // The thread header shows the channel photo; the conversation list row
+    // must not degrade to a generic placeholder for the same conversation.
+    expect(
+      resolveRecruitmentProfile(oaConversation, {
+        name: "Nguyễn Văn An",
+        avatar_url: null,
+      }).avatarUrl,
+    ).toBe("https://example.test/oa-avatar.jpg");
+  });
+
   it("does not apply OA profile fallback to another channel", () => {
     expect(
       resolveRecruitmentProfile(

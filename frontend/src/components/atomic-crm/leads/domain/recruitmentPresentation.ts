@@ -34,17 +34,15 @@ export const resolveRecruitmentProfile = (
     conversation.zalo_channel === "oa"
       ? conversation.contact?.display_name?.trim()
       : undefined;
-  const oaProfileAvatar =
-    conversation.zalo_channel === "oa"
-      ? conversation.contact?.avatar_url
-      : undefined;
 
   return {
     displayName:
       lead?.name ||
       oaProfileName ||
       fallbackCandidateName(conversation.zalo_chat_id),
-    avatarUrl: lead?.avatar_url || oaProfileAvatar,
+    // Same fallback chain as the thread header: the channel profile photo
+    // serves every channel, the lead record's avatar is only the first pick.
+    avatarUrl: lead?.avatar_url || conversation.contact?.avatar_url || undefined,
     oaProfileName,
   };
 };
