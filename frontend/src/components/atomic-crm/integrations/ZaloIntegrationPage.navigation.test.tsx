@@ -582,5 +582,16 @@ describe("ZaloIntegrationPage provider sections", () => {
     await expect
       .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
       .not.toBeDisabled();
+
+    // Disabling the default must hand the turn to the operator's next-ranked
+    // provider (Xiaomi, just promoted to slot 2) — not to whichever provider
+    // happens to come first in the canonical array.
+    screen.container
+      .querySelector<HTMLButtonElement>("#minimax_enable")
+      ?.click();
+
+    await vi.waitFor(() => {
+      expect(chainOrder().join("|")).toBe("1Xiaomi|2OpenRouter");
+    });
   });
 });

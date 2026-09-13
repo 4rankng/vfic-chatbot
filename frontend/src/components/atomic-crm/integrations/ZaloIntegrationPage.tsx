@@ -154,9 +154,9 @@ const emptyCustomLlmForm: CustomLlmFormState = {
   custom_llm_agent_model: "",
 };
 
-// Deterministic failover order (also the default-provider pick order when a
-// default is disabled): the operator chooses WHERE a turn starts; quota or
-// rate-limit exhaustion walks the rest of the enabled providers in this order.
+// Canonical provider order. It seeds an operator who has never ranked the
+// chain and completes a partial ranking; once a ranking exists, that ranking —
+// not this array — decides who starts a turn and who takes over.
 const LLM_PROVIDER_ORDER: readonly LlmProvider[] = [
   "minimax",
   "openrouter",
@@ -830,20 +830,11 @@ export const ZaloIntegrationPage = () => {
       payload.openrouter_safety_model = openRouterModel.trim();
       payload.openrouter_digest_model = openRouterModel.trim();
     }
-    if (
-      openRouterSettings &&
-      llmDefaultProvider !== openRouterSettings.llm_default_provider
-    ) {
-      payload.llm_default_provider = llmDefaultProvider;
-    }
+    // The shared default-provider key rides the minimax PUT alone (see
+    // changedMinimaxPayload). Writing it here too issued a second, redundant
+    // PUT of the same value whenever the operator only switched the default.
     return payload;
-  }, [
-    openRouterForm,
-    openRouterEnabled,
-    openRouterModel,
-    llmDefaultProvider,
-    openRouterSettings,
-  ]);
+  }, [openRouterForm, openRouterEnabled, openRouterModel, openRouterSettings]);
 
   const changedCustomLlmPayload = useMemo(() => {
     const payload: CustomLlmUpdatePayload = {};
@@ -903,11 +894,15 @@ export const ZaloIntegrationPage = () => {
     else if (provider === "openrouter") setOpenRouterEnabled(checked);
     else setCustomLlmEnabled(checked);
 
-    const otherEnabled = LLM_PROVIDER_ORDER.filter(
+    // Walk the operator's ranked chain, not the canonical array: the panel
+    // advertises that ranking as who takes over, and the backend chain builder
+    // ranks by the same stored order. Picking canonically here would hand the
+    // turn to a provider the operator deliberately ranked last.
+    const otherEnabled = normalizeFailoverOrder(llmFailoverOrder).filter(
       (candidate) => candidate !== provider && providerEnabled(candidate),
     );
-    // Disabling the default hands it to the first other enabled provider;
-    // enabling the ONLY enabled provider makes it the default.
+    // Disabling the default hands it to the next enabled provider in that
+    // ranking; enabling the ONLY enabled provider makes it the default.
     if (
       !checked &&
       llmDefaultProvider === provider &&
