@@ -55,10 +55,13 @@ export const resolveRecruitmentProfile = (
   const channelProfileName = resolveChannelProfileName(conversation);
 
   return {
+    // List precedence: the recruiter-confirmed name and photo lead, because
+    // this is what recruiters scan to find a candidate. The thread header
+    // deliberately inverts this — see buildRecruitmentContextIdentity.
     displayName:
       lead?.name || channelProfileName || fallbackCandidateName(conversation),
-    // Same fallback chain as the thread header: the channel profile photo
-    // serves every channel, the lead record's avatar is only the first pick.
+    // The channel profile photo backs every channel; the lead record's avatar
+    // is only the first pick.
     avatarUrl:
       lead?.avatar_url || conversation.contact?.avatar_url || undefined,
     channelProfileName,
@@ -87,6 +90,13 @@ export const buildRecruitmentRowPresentation = (
   };
 };
 
+// Header precedence is the deliberate inverse of the list's: inside a thread
+// the candidate is shown as they present themselves on that channel, with the
+// recruiter-confirmed name demoted to the subtitle when the two differ. The
+// avatar follows whichever name leads, so name and photo always describe the
+// same identity. The rationale lives in capabilities/recruitment/index.tsx and
+// the divergence is pinned by recruitmentPresentation.test.ts — the two
+// surfaces are not meant to agree, so do not "tidy" them into consistency.
 export const buildRecruitmentContextIdentity = (
   conversation: RecruitmentProfileSource,
   lead: Pick<Lead, "name" | "avatar_url" | "phone"> | undefined,
