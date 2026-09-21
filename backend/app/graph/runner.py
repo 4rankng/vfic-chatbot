@@ -25,7 +25,7 @@ import time
 import uuid
 from contextlib import suppress
 from inspect import Parameter, iscoroutinefunction, signature
-from typing import Any
+from typing import Any, NamedTuple
 
 from app.conversation_messaging.domain.delivery import DeliveryState
 from app.core.config import get_settings
@@ -665,6 +665,76 @@ async def _record_silent_terminal(
     return {"outcome": base_outcome, "reply": ""}
 
 
+async def _authority_gate(
+    *,
+    state: BotRunState,
+    deps: GraphDeps,
+    conv,
+    svc,
+    reason: str,
+    lock_owner: str | None = None,
+    started=None,
+    timings: dict | None = None,
+    trace_sink=None,
+    status_task=None,
+    reply: str | None = None,
+    outcome_metadata: dict | None = None,
+    refresh_conv: bool = False,
+) -> TurnOutcome:
+    """The single stand-down exit for a turn denied authority or ownership.
+
+    Every suppressed-classed exit funnels here so the teardown exists in one
+    place. Three stand-down depths share the gate:
+
+    - Pre-pending guard (``started`` None): the turn never created its pending
+      row or typing heartbeat, so the gate releases the per-chat lock and
+      returns without writing an outcome row.
+    - Silent terminal (``reply`` None): the bot had nothing to send; the audit
+      row stays empty via ``_record_silent_terminal``.
+    - Lost-claim terminal (``reply`` set): the drafted candidate was never sent
+      (the claim lost) but is still recorded, sent=False, for the audit trail.
+
+    ``refresh_conv`` mirrors the pre-existing call shapes: the agent-error and
+    empty-candidate terminals refresh the bound conversation onto committed
+    state before recording, while the lost-claim terminal relies on the
+    refresh that immediately precedes ``claim_send``.
+    """
+    if status_task is not None:
+        await _cancel_status_task(status_task)
+    if started is None:
+        if lock_owner:
+            await svc.release_lock(conv, lock_owner=lock_owner)
+        return {"outcome": "suppressed", "reason": reason}
+    if refresh_conv:
+        await deps.db.refresh(conv)
+    if trace_sink is not None:
+        trace_sink.record_decision("ownership_verdict", "suppressed")
+    if reply is None:
+        return await _record_silent_terminal(
+            state, deps, conv, svc, started, reason,
+            stage_timings=timings,
+            trace_sink=trace_sink,
+            lock_owner=lock_owner,
+        )
+    decision_trace = trace_sink.snapshot_payload() if trace_sink is not None else None
+    db_t0 = time.monotonic()
+    await svc.record_bot_outcome(
+        conv,
+        version_at_start=state.version_at_start,
+        reply=reply,
+        started_at=started,
+        sent=False,
+        pending_message_id=state.pending_message_id,
+        stage_timings=timings,
+        lock_owner=lock_owner,
+        trace_id=state.trace_id or None,
+        outcome_metadata=outcome_metadata,
+        decision_trace=decision_trace,
+    )
+    _stamp_db(timings, "record_bot_outcome", db_t0)
+    return {"outcome": reason, "reply": reply}
+
+
 def _stamp_db(timings: dict, key: str, t0: float) -> None:
     """Accumulate wall-clock of one DB call into timings['db_ms'].
 
@@ -676,22 +746,6 @@ def _stamp_db(timings: dict, key: str, t0: float) -> None:
     timings["db_ms"] = timings.get("db_ms", 0) + elapsed
     breakdown = timings.setdefault("db_breakdown", {})
     breakdown[key] = breakdown.get(key, 0) + elapsed
-
-
-def _faq_should_abstain(bypass, settings) -> bool:
-    """True when the top FAQ match is only marginally better than the runner-up.
-
-    A low margin (score - runner_up_score < faq_abstain_margin) means the
-    semantic match is low-confidence — the top hit may not be the right answer.
-    Fall through to the LLM instead. Returns False when there's no runner-up
-    (single result) or the margin setting is 0 (legacy behavior).
-    """
-    margin = settings.faq_abstain_margin
-    if margin <= 0:
-        return False
-    if bypass.runner_up_score is None:
-        return False
-    return (bypass.score - bypass.runner_up_score) < margin
 
 
 # The legacy keyword volatile-markers list and the recent-vacancy body scan
@@ -764,18 +818,314 @@ def _vacancy_evidence_query(
     return None
 
 
-def _faq_bypass_allowed(decisions: TurnDecisions) -> bool:
-    """Prefer canonical vacancy FAQs; keep other volatile claims on live paths.
+class _LaneResolution(NamedTuple):
+    """What one answer lane produced, consumed by the finalize/dispatch tail.
 
-    Simplified for the Jev router: the vacancy-listing judgment gates the
-    legacy (currently disabled) bypass lane. The old volatile keyword markers
-    are gone with the keyword machinery.
+    ``terminal`` is set only when the lane itself stood the turn down (agent
+    crash → ``_authority_gate``); run_turn returns it untouched and skips the
+    finalize/dispatch tail.
     """
-    return not decisions.vacancy_listing
+
+    lane: str
+    candidate: str = ""
+    generated: bool = False
+    outcome_label: str = "sent"
+    faq_metadata: dict | None = None
+    terminal: TurnOutcome | None = None
+
+
+async def _resolve_lane(
+    *,
+    state: BotRunState,
+    deps: GraphDeps,
+    conv,
+    svc,
+    decisions: TurnDecisions,
+    turn_route: TurnRoute,
+    project_context,
+    recent_messages: list[Any],
+    manifest_policy,
+    provider: str,
+    recipient_id: str | None,
+    timings: dict,
+    trace_sink: DecisionTraceBuilder,
+    started,
+    lock_owner: str | None,
+    status_task,
+    t0: float,
+) -> _LaneResolution:
+    """Select and run the turn's answer lane: clarification → direct → agent.
+
+    ``timings['lane']`` and the decision trace record the winner exactly as
+    before; ``faq_metadata`` is reserved for lane provenance metadata. Only
+    the agent lane can fail — a crash stands the turn down through
+    ``_authority_gate`` and surfaces as ``terminal``.
+    """
+    if project_context is not None and project_context.clarification:
+        trace_sink.record_decision("context_selected", "project_clarification")
+        trace_sink.record_decision("lane_selected", "project_clarification")
+        timings["lane"] = "project_clarification"
+        return _LaneResolution(
+            lane="project_clarification",
+            candidate=project_context.clarification,
+            generated=False,
+            outcome_label="project_clarification",
+        )
+
+    direct_context = project_context.direct_context if project_context is not None else None
+    if direct_context is not None and turn_route.reason != "vacancy_listing":
+        trace_sink.record_decision("context_selected", "direct_context")
+        trace_sink.record_decision("lane_selected", "direct_context")
+        raw = await _direct_context_turn(
+            direct_context,
+            deps,
+            state.user_text,
+            recent_messages,
+            timings,
+            trace_sink=trace_sink,
+        )
+        state.reply = raw
+        return _LaneResolution(
+            lane="direct_context",
+            candidate=raw,
+            generated=True,
+            outcome_label="direct_context",
+        )
+
+    # --- agent lane (runs to completion; NO hard cap) ---
+    # The propagated deadline is advisory only — it bounds side lookups, never
+    # the agent. Cancelling a live LLM call mid-generation produced excessive
+    # TIMEOUT fallbacks in prod, so the agent is allowed to finish and its real
+    # answer is sent. A genuinely hung provider call is reaped by the RQ
+    # job_timeout backstop (>> any realistic turn) and the turn is recovered by
+    # the reconcile sweep.
+    trace_sink.record_decision(
+        "context_selected",
+        "focused_rag"
+        if (
+            project_context is not None
+            and project_context.state == "FOCUSED"
+            and project_context.knowledge_mode == "RAG"
+        )
+        else "agent_graph",
+    )
+    trace_sink.record_decision("lane_selected", "agent")
+    timings["lane"] = "agent"
+    try:
+        agent_kwargs = {
+            "provider": provider,
+            "chat_id": recipient_id,
+            "recent_messages": recent_messages,
+            "timings": timings,
+            "decisions": decisions,
+        }
+        if project_context is not None:
+            agent_kwargs["project_context"] = project_context
+        if manifest_policy is not None:
+            agent_kwargs["manifest_policy"] = manifest_policy
+        raw = await _agent_turn(
+            state,
+            deps,
+            state.user_text,
+            **_with_optional_trace(_agent_turn, agent_kwargs, trace_sink),
+        )
+    except LLMThrottled as exc:
+        # The worker owns the static degradation reply, but the
+        # request-local trace would otherwise be lost at this boundary.
+        # Transfer only the validated snapshot, never the live builder
+        # or any prompt, exception, or tool payload.
+        trace_sink.record_decision("degradation_reason", "llm_throttled")
+        exc.decision_trace = trace_sink.snapshot_payload()
+        raise  # let worker handle degradation msg (no LLM call)
+    except Exception as exc:  # noqa: BLE001 — agent blew up -> stay silent
+        # The bot could not produce an answer. An "internal error" text
+        # is an engineer-facing detail, so the turn goes quiet: stop the
+        # typing indicator, record the SUPPRESSED outcome (clears the
+        # per-chat mutex), and let the structured log carry the failure.
+        logger.error(
+            "agent error, reply suppressed conversation=%s trace=%s: %s",
+            state.conversation_id,
+            state.trace_id or "-",
+            exc,
+        )
+        trace_sink.record_decision("degradation_reason", "agent_error")
+        # The agent path may have used deps.db (lead / system-prompt reads).
+        # Clear any aborted transaction before the recovery reuses the
+        # session for record_bot_outcome. Safe: record_bot_pending
+        # already committed.
+        try:
+            await deps.db.rollback()
+        except Exception:  # noqa: BLE001 — best-effort; worker_session also rolls back
+            logger.debug("agent-error recovery rollback failed", exc_info=True)
+        timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
+        return _LaneResolution(
+            lane="agent",
+            terminal=await _authority_gate(
+                state=state,
+                deps=deps,
+                conv=conv,
+                svc=svc,
+                reason="error",
+                lock_owner=lock_owner,
+                started=started,
+                timings=timings,
+                trace_sink=trace_sink,
+                status_task=status_task,
+                refresh_conv=True,
+            ),
+        )
+
+    state.reply = raw
+    return _LaneResolution(
+        lane="agent",
+        candidate=raw,
+        generated=True,
+        outcome_label="sent",
+    )
+
+
+async def _claim_and_dispatch(
+    *,
+    state: BotRunState,
+    deps: GraphDeps,
+    conv,
+    svc,
+    zalo: DirectMessageSenderPort,
+    candidate: str,
+    timings: dict,
+    trace_sink: DecisionTraceBuilder,
+    started,
+    lock_owner: str | None,
+    status_task,
+    recipient_id: str | None,
+    outcome_label: str,
+    faq_metadata: dict | None,
+    manifest_policy,
+    allow_recruitment_fast_lane: bool,
+    t0: float,
+) -> TurnOutcome | None:
+    """Claim the send atomically, and when owned, dispatch and record as one unit.
+
+    Returns the turn's final outcome mapping when the claim won; ``None`` when
+    the claim lost (a takeover or newer inbound bumped the version) and the
+    caller must stand the turn down through ``_authority_gate``.
+    """
+    # --- pre_send_guard: atomically claim the send (PENDING→SENDING), gated
+    # server-side on version + lock_owner + lock liveness. Closes both the
+    # crash-window (a stale SENDING row left by a post-send crash is reconciled
+    # as sent-but-unconfirmed, at-most-once) and the recheck→send TOCTOU (a
+    # takeover or newer inbound bumping version before the claim yields rowcount
+    # 0 → suppress). refresh() keeps the bound conv on committed state. ---
+    db_t0 = time.monotonic()
+    await deps.db.refresh(conv)
+    owned = await svc.claim_send(
+        conv,
+        version_at_start=state.version_at_start,
+        lock_owner=lock_owner,
+        pending_message_id=state.pending_message_id,
+        reply=candidate,
+        outbox_channel=_channel_for_conversation(conv),
+        outbox_payload=_build_outbox_payload(
+            recipient_id, candidate, state.reply_to_message_id
+        ),
+    )
+    _stamp_db(timings, "claim_send", db_t0)
+    if not owned:
+        return None
+
+    trace_sink.record_decision("ownership_verdict", "claimed")
+    decision_trace = trace_sink.snapshot_payload()
+    await _cancel_status_task(status_task)
+    send_t0 = time.monotonic()
+    send_result = await _dispatch_claimed_message(
+        svc,
+        zalo,
+        conv,
+        message_id=state.pending_message_id,
+        text=candidate,
+        quote_message_id=state.reply_to_message_id,
+    )
+    timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
+    _stamp_outbound_telemetry(timings, send_result)
+    timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
+    _stamp_end_to_end(state, timings)
+    db_t0 = time.monotonic()
+    # Classify transport failures: ambiguous (timeout/reset after the
+    # request may have reached Zalo) → SEND_UNKNOWN (non-retriable); every
+    # other failure stays FAILED (the reconciler may re-enqueue).
+    send_suppressed = bool(getattr(send_result, "suppressed", False))
+    send_error_class = send_result.error_class if not send_result.ok else None
+    statuses = _delivery_statuses(deps)
+    override_status: Any | None = None
+    if send_suppressed:
+        override_status = statuses.suppressed
+    elif send_error_class in AMBIGUOUS_SEND_CLASSES:
+        override_status = statuses.send_unknown
+    await svc.record_bot_outcome(
+        conv,
+        version_at_start=state.version_at_start,
+        reply=candidate,
+        started_at=started,
+        sent=send_result.ok,
+        pending_message_id=state.pending_message_id,
+        external_error=None if send_result.ok else send_result.error,
+        zalo_message_id=send_result.msg_id,
+        stage_timings=timings,
+        lock_owner=lock_owner,
+        delivery_status=override_status,
+        trace_id=state.trace_id or None,
+        outcome_metadata=faq_metadata,
+        decision_trace=decision_trace,
+        outbox_channel=_channel_for_conversation(conv),
+        outbox_payload=_build_outbox_payload(
+            recipient_id, candidate, state.reply_to_message_id
+        ),
+    )
+    _stamp_db(timings, "record_bot_outcome", db_t0)
+    if send_suppressed:
+        return {"outcome": "suppressed", "reason": send_result.error, "reply": candidate}
+    if not send_result.ok:
+        return {
+            "outcome": (
+                "send_unknown"
+                if override_status is statuses.send_unknown
+                else "send_failed"
+            ),
+            "reason": send_result.error,
+            "reply": candidate,
+        }
+    # The post-send extraction owns lead, memory, and contact intent. Every
+    # LLM-generated turn is eligible for recruitment extraction.
+    # Candidate extraction owns recruitment lead/contact state. It is
+    # not a generic post-send hook, so never enqueue it for a
+    # manifest-composed non-recruitment installation.
+    if deps.persist is not None and allow_recruitment_fast_lane:
+        persist_job = {
+            "chat_id": recipient_id,
+            "user_text": state.user_text,
+            "bot_output": candidate,
+            "conversation_version": state.version_at_start,
+        }
+        if manifest_policy is not None:
+            persist_job.update(
+                {
+                    "runtime_revision_id": manifest_policy.revision_id,
+                    "authority_generation": state.authority_generation,
+                    "runtime_fingerprint": manifest_policy.fingerprint_checksum,
+                }
+            )
+        deps.persist(persist_job)
+    return {"outcome": outcome_label, "reply": candidate}
 
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
-    """Execute one bot turn end-to-end and persist the SENT/SUPPRESSED outcome."""
+    """Execute one bot turn end-to-end and persist the SENT/SUPPRESSED outcome.
+
+    Reads top-to-bottom as gate → lane → finalize → dispatch: authority/lock
+    gates, one answer lane (see ``_resolve_lane``), the converged reply-policy
+    boundary, then the atomic claim/dispatch unit (``_claim_and_dispatch``).
+    Every stand-down funnels through ``_authority_gate``.
+    """
     timings: dict = {"execution_source": state.execution_source}
     svc = deps.conversation
 
@@ -800,28 +1150,48 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             )
         )
         if not is_current:
-            if lock_owner:
-                await svc.release_lock(conv, lock_owner=lock_owner)
-            return {"outcome": "suppressed", "reason": "stale_runtime_authority"}
+            return await _authority_gate(
+                state=state,
+                deps=deps,
+                conv=conv,
+                svc=svc,
+                reason="stale_runtime_authority",
+                lock_owner=lock_owner,
+            )
     manifest_policy = None
     if has_runtime_stamp:
         if deps.runtime_policy is None:
-            if lock_owner:
-                await svc.release_lock(conv, lock_owner=lock_owner)
-            return {"outcome": "suppressed", "reason": "missing_runtime_policy"}
+            return await _authority_gate(
+                state=state,
+                deps=deps,
+                conv=conv,
+                svc=svc,
+                reason="missing_runtime_policy",
+                lock_owner=lock_owner,
+            )
         manifest_policy = await deps.runtime_policy.resolve_active_policy()
         if manifest_policy is None:
-            if lock_owner:
-                await svc.release_lock(conv, lock_owner=lock_owner)
-            return {"outcome": "suppressed", "reason": "inactive_runtime_policy"}
+            return await _authority_gate(
+                state=state,
+                deps=deps,
+                conv=conv,
+                svc=svc,
+                reason="inactive_runtime_policy",
+                lock_owner=lock_owner,
+            )
     elif deps.runtime_policy is not None:
         # A clean cutover never lets pre-authority jobs inherit today's
         # capabilities.  Tests and explicitly legacy deployments inject no
         # runtime policy and retain their existing behavior.
         if await deps.runtime_policy.resolve_active_policy() is not None:
-            if lock_owner:
-                await svc.release_lock(conv, lock_owner=lock_owner)
-            return {"outcome": "suppressed", "reason": "missing_runtime_authority"}
+            return await _authority_gate(
+                state=state,
+                deps=deps,
+                conv=conv,
+                svc=svc,
+                reason="missing_runtime_authority",
+                lock_owner=lock_owner,
+            )
     if lock_owner:
         db_t0 = time.monotonic()
         await deps.db.refresh(conv)
@@ -953,10 +1323,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     trace_sink.record_decision("route_selected", turn_route.reason)
 
     try:
-        candidate = ""
-        generated_reply = False
-        outcome_label = "sent"
-        faq_metadata: dict | None = None
         provider = provider_from_conversation(conv)
 
         project_context = None
@@ -973,7 +1339,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                         knowledge_mode="DIRECT_CONTEXT",
                         direct_context=legacy_direct,
                     )
-        direct_context = project_context.direct_context if project_context is not None else None
         if project_context is not None:
             timings["project_context_state"] = project_context.state
             if project_context.project_id:
@@ -994,234 +1359,41 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 or "candidate_intake" in recruitment_capabilities
             )
         )
-        allow_legacy_faq_bypass = False
+        # --- lane: clarification → direct context → agent (see _resolve_lane) ---
+        lane = await _resolve_lane(
+            state=state,
+            deps=deps,
+            conv=conv,
+            svc=svc,
+            decisions=decisions,
+            turn_route=turn_route,
+            project_context=project_context,
+            recent_messages=recent_messages,
+            manifest_policy=manifest_policy,
+            provider=provider,
+            recipient_id=recipient_id,
+            timings=timings,
+            trace_sink=trace_sink,
+            started=started,
+            lock_owner=lock_owner,
+            status_task=status_task,
+            t0=t0,
+        )
+        if lane.terminal is not None:
+            return lane.terminal
+        candidate = lane.candidate
+        outcome_label = lane.outcome_label
+        faq_metadata = lane.faq_metadata
 
-        # --- deterministic FAQ-bypass cascade (retired as a final-answer path) ---
-        # If re-enabled in the future, it must only provide evidence to the LLM;
-        # it must never return a final answer directly. It is currently disabled.
-        # It formerly answered
-        # directly from the knowledge base (0¢, sub-50ms on an embedding-cache hit);
-        # on any miss / ambiguity / timeout it abstains (None) and the turn falls
-        # through to the agent unchanged. Time-boxed so a cold embed can never burn
-        # the turn deadline. None in graph unit tests (no bypass wired).
-        bypass = None
-        if (
-            direct_context is None
-            and allow_legacy_faq_bypass
-            and deps.faq_bypass is not None
-            and _faq_bypass_allowed(decisions)
-        ):
-            try:
-                # Bound the bypass by both the soft cap and the propagated turn
-                # deadline (minus the send margin) so a cold-embed bypass can
-                # never consume the sliver the agent needs on a tight turn.
-                bypass_budget = min(
-                    settings.soft_fallback_remaining,
-                    max(0.0, _remaining(state) - settings.send_margin_seconds),
-                )
-                bypass = await asyncio.wait_for(
-                    deps.faq_bypass.try_answer(
-                        _vacancy_evidence_query(state.user_text, decisions, recent_messages)
-                        or state.user_text
-                    ),
-                    timeout=bypass_budget,
-                )
-            except asyncio.TimeoutError:
-                logger.info(
-                    "faq_bypass timed out (%.1fs); falling through to agent",
-                    settings.soft_fallback_remaining,
-                )
-                bypass = None
-            except Exception:  # noqa: BLE001 — bypass must never break a turn
-                logger.warning("faq_bypass adapter raised; abstaining", exc_info=True)
-                # The bypass adapter shares this turn's session (RetrievalRepository
-                # on deps.db). If it raised on a DB error the session is now in a
-                # needs-rollback state; clear it so the next DB op (refresh /
-                # claim_send below) does not cascade into a rollback error. Safe
-                # because record_bot_pending above already committed its row.
-                try:
-                    await deps.db.rollback()
-                except Exception:  # noqa: BLE001 — best-effort; worker_session also rolls back
-                    logger.debug("faq_bypass recovery rollback failed", exc_info=True)
-                bypass = None
-
-        # Abstention check: if the top FAQ match is only marginally better than
-        # the runner-up, record the abstention and clear bypass so the turn falls
-        # through to the agent branch below (the elif chain cannot fall through
-        # an already-matched branch).
-        if bypass is not None and _faq_should_abstain(bypass, settings):
-            timings["faq_bypass_ms"] = int(round(bypass.latency_ms))
-            timings["faq_abstained"] = True
-            faq_metadata = {
-                "faq_id": bypass.faq_id,
-                "tier": bypass.tier,
-                "similarity_score": bypass.score,
-                "runner_up_score": bypass.runner_up_score,
-                "abstained": True,
-            }
-            logger.info(
-                "faq_bypass abstained (low margin) tier=%s score=%.3f runner_up=%.3f "
-                "margin=%.3f threshold=%.3f — falling through to agent",
-                bypass.tier,
-                bypass.score,
-                bypass.runner_up_score or 0.0,
-                bypass.score - (bypass.runner_up_score or 0.0),
-                settings.faq_abstain_margin,
-            )
-            bypass = None
-
-        if project_context is not None and project_context.clarification:
-            trace_sink.record_decision("context_selected", "project_clarification")
-            trace_sink.record_decision("lane_selected", "project_clarification")
-            candidate = project_context.clarification
-            timings["lane"] = "project_clarification"
-            outcome_label = "project_clarification"
-        elif direct_context is not None and turn_route.reason != "vacancy_listing":
-            trace_sink.record_decision("context_selected", "direct_context")
-            trace_sink.record_decision("lane_selected", "direct_context")
-            raw = await _direct_context_turn(
-                direct_context,
-                deps,
-                state.user_text,
-                recent_messages,
-                timings,
-                trace_sink=trace_sink,
-            )
-            state.reply = raw
-            candidate = raw
-            generated_reply = True
-            outcome_label = "direct_context"
-        elif bypass is not None:
-            trace_sink.record_decision("context_selected", "faq_bypass")
-            trace_sink.record_decision("lane_selected", "faq_bypass")
-            timings["lane"] = "faq_bypass"
-            timings["faq_bypass_ms"] = int(round(bypass.latency_ms))
-            # Admin-authored canonical FAQ text — sent verbatim, like the template
-            # lane above (fast_safety_filter is tuned for LLM output, not curated text).
-            candidate = bypass.answer
-            outcome_label = "faq_bypass"
-            # Stamp provenance so the threshold can be tuned from production data.
-            faq_metadata = {
-                "faq_id": bypass.faq_id,
-                "tier": bypass.tier,
-                "similarity_score": bypass.score,
-                "runner_up_score": bypass.runner_up_score,
-                "abstained": False,
-            }
-            logger.info(
-                "faq_bypass hit tier=%s score=%.3f reason=%s faq_id=%s",
-                bypass.tier,
-                bypass.score,
-                bypass.reason,
-                bypass.faq_id,
-            )
-        else:
-            trace_sink.record_decision(
-                "context_selected",
-                "focused_rag"
-                if (
-                    project_context is not None
-                    and project_context.state == "FOCUSED"
-                    and project_context.knowledge_mode == "RAG"
-                )
-                else "agent_graph",
-            )
-            trace_sink.record_decision("lane_selected", "agent")
-            timings["lane"] = "agent"
-            # --- agent (runs to completion; NO hard cap) ---
-            # The propagated deadline is advisory only — it bounds the FAQ-bypass
-            # lookup above, never the agent. Cancelling a live LLM call mid-generation
-            # produced excessive TIMEOUT fallbacks in prod, so the agent is allowed to
-            # finish and its real answer is sent. A genuinely hung provider call is
-            # reaped by the RQ job_timeout backstop (>> any realistic turn) and the
-            # turn is recovered by the reconcile sweep.
-            try:
-                agent_kwargs = {
-                    "provider": provider,
-                    "chat_id": recipient_id,
-                    "recent_messages": recent_messages,
-                    "timings": timings,
-                    "decisions": decisions,
-                }
-                if project_context is not None:
-                    agent_kwargs["project_context"] = project_context
-                if manifest_policy is not None:
-                    agent_kwargs["manifest_policy"] = manifest_policy
-                raw = await _agent_turn(
-                    state,
-                    deps,
-                    state.user_text,
-                    **_with_optional_trace(_agent_turn, agent_kwargs, trace_sink),
-                )
-            except LLMThrottled as exc:
-                # The worker owns the static degradation reply, but the
-                # request-local trace would otherwise be lost at this boundary.
-                # Transfer only the validated snapshot, never the live builder
-                # or any prompt, exception, or tool payload.
-                trace_sink.record_decision("degradation_reason", "llm_throttled")
-                exc.decision_trace = trace_sink.snapshot_payload()
-                raise  # let worker handle degradation msg (no LLM call)
-            except Exception as exc:  # noqa: BLE001 — agent blew up -> stay silent
-                # The bot could not produce an answer. An "internal error" text
-                # is an engineer-facing detail, so the turn goes quiet: stop the
-                # typing indicator, record the SUPPRESSED outcome (clears the
-                # per-chat mutex), and let the structured log carry the failure.
-                logger.error(
-                    "agent error, reply suppressed conversation=%s trace=%s: %s",
-                    state.conversation_id,
-                    state.trace_id or "-",
-                    exc,
-                )
-                trace_sink.record_decision("degradation_reason", "agent_error")
-                # The agent path may have used deps.db (lead / system-prompt reads).
-                # Clear any aborted transaction before the recovery reuses the
-                # session for record_bot_outcome. Safe: record_bot_pending
-                # already committed.
-                try:
-                    await deps.db.rollback()
-                except Exception:  # noqa: BLE001 — best-effort; worker_session also rolls back
-                    logger.debug("agent-error recovery rollback failed", exc_info=True)
-                timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
-                if status_task is not None:
-                    await _cancel_status_task(status_task)
-                await deps.db.refresh(conv)
-                lock_owner = state.lock_owner or None
-                if trace_sink is not None:
-                    trace_sink.record_decision("ownership_verdict", "suppressed")
-                return await _record_silent_terminal(
-                    state,
-                    deps,
-                    conv,
-                    svc,
-                    started,
-                    "error",
-                    stage_timings=timings,
-                    trace_sink=trace_sink,
-                    lock_owner=lock_owner,
-                )
-
-            state.reply = raw
-            candidate = raw
-            generated_reply = True
-
-            # --- structural output gate (no LLM judge, no lexical filtering) ---
-            # The fast filter strips <think>/markdown/code-fences from the raw
-            # reply and flags only shape-based conditions:
-            #   - empty after cleaning → suppress the turn (nothing to send)
-            #   - over-long (>1800)    → truncate_for_chat, then SEND (already
-            #     applied by fast_safety_filter — a detailed job-presentation
-            #     reply is legitimate content, not a safety issue)
-            # This replaces the former LLM safety judge (a ~10s second model call
-            # that p50'd at 10.3s) and the lexical blocklist that discarded
-            # grounded answers over ordinary Vietnamese wording.
-        # All routing lanes converge on one content boundary before persistence
-        # and transport. Generated replies receive the full safety policy;
-        # curated replies preserve authored formatting while still enforcing the
-        # invariant that provider reasoning tags never reach an end user.
+        # --- finalize: all routing lanes converge on one content boundary
+        # before persistence and transport. Generated replies receive the full
+        # safety policy; curated replies preserve authored formatting while
+        # still enforcing the invariant that provider reasoning tags never
+        # reach an end user. ---
         candidate = _finalize_user_visible_reply(
             candidate,
             deps=deps,
-            generated=generated_reply,
+            generated=lane.generated,
             user_text=state.user_text,
             timings=timings,
             trace_sink=trace_sink,
@@ -1239,151 +1411,59 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 state.trace_id or "-",
             )
             trace_sink.record_decision("degradation_reason", "agent_error")
-            if status_task is not None:
-                await _cancel_status_task(status_task)
-            await deps.db.refresh(conv)
-            trace_sink.record_decision("ownership_verdict", "suppressed")
-            return await _record_silent_terminal(
-                state,
-                deps,
-                conv,
-                svc,
-                started,
-                "suppressed",
-                stage_timings=timings,
+            return await _authority_gate(
+                state=state,
+                deps=deps,
+                conv=conv,
+                svc=svc,
+                reason="suppressed",
+                lock_owner=lock_owner,
+                started=started,
+                timings=timings,
                 trace_sink=trace_sink,
-                lock_owner=lock_owner,
+                status_task=status_task,
+                refresh_conv=True,
             )
 
-        # --- pre_send_guard: atomically claim the send (PENDING→SENDING), gated
-        # server-side on version + lock_owner + lock liveness. Closes both the
-        # crash-window (a stale SENDING row left by a post-send crash is reconciled
-        # as sent-but-unconfirmed, at-most-once) and the recheck→send TOCTOU (a
-        # takeover or newer inbound bumping version before the claim yields rowcount
-        # 0 → suppress). refresh() keeps the bound conv on committed state. ---
-        db_t0 = time.monotonic()
-        await deps.db.refresh(conv)
-        owned = await svc.claim_send(
-            conv,
-            version_at_start=state.version_at_start,
+        # --- dispatch: claim → send → record (see _claim_and_dispatch). ---
+        outcome = await _claim_and_dispatch(
+            state=state,
+            deps=deps,
+            conv=conv,
+            svc=svc,
+            zalo=zalo,
+            candidate=candidate,
+            timings=timings,
+            trace_sink=trace_sink,
+            started=started,
             lock_owner=lock_owner,
-            pending_message_id=state.pending_message_id,
-            reply=candidate,
-            outbox_channel=_channel_for_conversation(conv),
-            outbox_payload=_build_outbox_payload(
-                recipient_id, candidate, state.reply_to_message_id
-            ),
+            status_task=status_task,
+            recipient_id=recipient_id,
+            outcome_label=outcome_label,
+            faq_metadata=faq_metadata,
+            manifest_policy=manifest_policy,
+            allow_recruitment_fast_lane=allow_recruitment_fast_lane,
+            t0=t0,
         )
-        _stamp_db(timings, "claim_send", db_t0)
-        if owned:
-            trace_sink.record_decision("ownership_verdict", "claimed")
-            decision_trace = trace_sink.snapshot_payload()
-            await _cancel_status_task(status_task)
-            send_t0 = time.monotonic()
-            send_result = await _dispatch_claimed_message(
-                svc,
-                zalo,
-                conv,
-                message_id=state.pending_message_id,
-                text=candidate,
-                quote_message_id=state.reply_to_message_id,
-            )
-            timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
-            _stamp_outbound_telemetry(timings, send_result)
-            timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
-            _stamp_end_to_end(state, timings)
-            db_t0 = time.monotonic()
-            # Classify transport failures: ambiguous (timeout/reset after the
-            # request may have reached Zalo) → SEND_UNKNOWN (non-retriable); every
-            # other failure stays FAILED (the reconciler may re-enqueue).
-            send_suppressed = bool(getattr(send_result, "suppressed", False))
-            send_error_class = send_result.error_class if not send_result.ok else None
-            statuses = _delivery_statuses(deps)
-            override_status: Any | None = None
-            if send_suppressed:
-                override_status = statuses.suppressed
-            elif send_error_class in AMBIGUOUS_SEND_CLASSES:
-                override_status = statuses.send_unknown
-            await svc.record_bot_outcome(
-                conv,
-                version_at_start=state.version_at_start,
-                reply=candidate,
-                started_at=started,
-                sent=send_result.ok,
-                pending_message_id=state.pending_message_id,
-                external_error=None if send_result.ok else send_result.error,
-                zalo_message_id=send_result.msg_id,
-                stage_timings=timings,
-                lock_owner=lock_owner,
-                delivery_status=override_status,
-                trace_id=state.trace_id or None,
-                outcome_metadata=faq_metadata,
-                decision_trace=decision_trace,
-                outbox_channel=_channel_for_conversation(conv),
-                outbox_payload=_build_outbox_payload(
-                    recipient_id, candidate, state.reply_to_message_id
-                ),
-            )
-            _stamp_db(timings, "record_bot_outcome", db_t0)
-            if send_suppressed:
-                return {"outcome": "suppressed", "reason": send_result.error, "reply": candidate}
-            if not send_result.ok:
-                return {
-                    "outcome": (
-                        "send_unknown"
-                        if override_status is statuses.send_unknown
-                        else "send_failed"
-                    ),
-                    "reason": send_result.error,
-                    "reply": candidate,
-                }
-            # The post-send extraction owns lead, memory, and contact intent. Every
-            # LLM-generated turn is eligible for recruitment extraction.
-            pure_fast_pleasantry = False
-            # Candidate extraction owns recruitment lead/contact state. It is
-            # not a generic post-send hook, so never enqueue it for a
-            # manifest-composed non-recruitment installation.
-            if (
-                deps.persist is not None
-                and allow_recruitment_fast_lane
-                and not pure_fast_pleasantry
-            ):
-                persist_job = {
-                    "chat_id": recipient_id,
-                    "user_text": state.user_text,
-                    "bot_output": candidate,
-                    "conversation_version": state.version_at_start,
-                }
-                if manifest_policy is not None:
-                    persist_job.update(
-                        {
-                            "runtime_revision_id": manifest_policy.revision_id,
-                            "authority_generation": state.authority_generation,
-                            "runtime_fingerprint": manifest_policy.fingerprint_checksum,
-                        }
-                    )
-                deps.persist(persist_job)
-            return {"outcome": outcome_label, "reply": candidate}
+        if outcome is not None:
+            return outcome
 
+        # Claim lost: a takeover or newer inbound bumped the version between the
+        # recheck and the claim — the drafted candidate is recorded unsent.
         timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
         _stamp_end_to_end(state, timings)
-        trace_sink.record_decision("ownership_verdict", "suppressed")
-        decision_trace = trace_sink.snapshot_payload()
-        db_t0 = time.monotonic()
-        await svc.record_bot_outcome(
-            conv,
-            version_at_start=state.version_at_start,
+        return await _authority_gate(
+            state=state,
+            deps=deps,
+            conv=conv,
+            svc=svc,
+            reason="suppressed",
             reply=candidate,
-            started_at=started,
-            sent=False,
-            pending_message_id=state.pending_message_id,
-            stage_timings=timings,
-            lock_owner=lock_owner,
-            trace_id=state.trace_id or None,
             outcome_metadata=faq_metadata,
-            decision_trace=decision_trace,
+            lock_owner=lock_owner,
+            started=started,
+            timings=timings,
+            trace_sink=trace_sink,
         )
-        _stamp_db(timings, "record_bot_outcome", db_t0)
-        return {"outcome": "suppressed", "reply": candidate}
     finally:
         await _cancel_status_task(status_task)

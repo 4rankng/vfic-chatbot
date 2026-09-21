@@ -35,14 +35,6 @@ from app.graph.types import BotRunState, GraphDeps
 CONV_ID = "00000000-0000-0000-0000-000000000001"
 
 
-def test_faq_bypass_gate_is_vacancy_listing_only():
-    """Legacy bypass gate: only the Jev vacancy-listing judgment blocks it."""
-    from app.graph.ports import TurnDecisions
-
-    assert runner._faq_bypass_allowed(TurnDecisions()) is True
-    assert runner._faq_bypass_allowed(TurnDecisions(vacancy_listing=True)) is False
-
-
 def test_vacancy_evidence_query_prefers_durable_project_focus_over_free_text_history():
     from app.graph.ports import TurnDecisions
 
