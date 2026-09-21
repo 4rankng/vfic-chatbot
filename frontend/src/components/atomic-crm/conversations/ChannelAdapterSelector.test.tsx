@@ -85,11 +85,14 @@ describe("ChannelAdapterSelector", () => {
       .element(screen.getByRole("tooltip"))
       .toHaveTextContent("Zalo OA — 135 hội thoại cần phản hồi");
 
-    // The selected scope must stay visually marked after the click, not just
+    // The selected scope must stay visibly marked after the click, not just
     // while focused: the option doubles as a TooltipTrigger, so styling keyed
     // on data-state is silently overwritten by the tooltip's own state.
-    // Polled: under full-suite browser contention the computed border color
-    // settles after the synchronous sample would have run.
+    // Which state hook marks the selection depends on the active inbox skin:
+    // workspace-rail colors the border, untitledui colors the background (its
+    // border shift is documented as a visual no-op). Assert "some state hook
+    // differs" so the pin survives legitimate skin changes and CSS cascade
+    // order in the shared test browser. Polled for style settlement.
     await vi.waitFor(() => {
       const checked = screen.container.querySelector(
         '.channel-adapter-option[aria-checked="true"]',
@@ -101,9 +104,10 @@ describe("ChannelAdapterSelector", () => {
       expect(unchecked).not.toBeNull();
       const checkedStyle = getComputedStyle(checked as Element);
       const uncheckedStyle = getComputedStyle(unchecked as Element);
-      expect(checkedStyle.borderTopColor).not.toBe(
-        uncheckedStyle.borderTopColor,
-      );
+      const visuallyMarked =
+        checkedStyle.borderTopColor !== uncheckedStyle.borderTopColor ||
+        checkedStyle.backgroundColor !== uncheckedStyle.backgroundColor;
+      expect(visuallyMarked).toBe(true);
     });
 
     await oaRadio.click();
