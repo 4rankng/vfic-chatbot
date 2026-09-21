@@ -88,17 +88,23 @@ describe("ChannelAdapterSelector", () => {
     // The selected scope must stay visually marked after the click, not just
     // while focused: the option doubles as a TooltipTrigger, so styling keyed
     // on data-state is silently overwritten by the tooltip's own state.
-    const checked = screen.container.querySelector(
-      '.channel-adapter-option[aria-checked="true"]',
-    );
-    const unchecked = screen.container.querySelector(
-      '.channel-adapter-option[aria-checked="false"]',
-    );
-    expect(checked).not.toBeNull();
-    expect(unchecked).not.toBeNull();
-    const checkedStyle = getComputedStyle(checked as Element);
-    const uncheckedStyle = getComputedStyle(unchecked as Element);
-    expect(checkedStyle.borderTopColor).not.toBe(uncheckedStyle.borderTopColor);
+    // Polled: under full-suite browser contention the computed border color
+    // settles after the synchronous sample would have run.
+    await vi.waitFor(() => {
+      const checked = screen.container.querySelector(
+        '.channel-adapter-option[aria-checked="true"]',
+      );
+      const unchecked = screen.container.querySelector(
+        '.channel-adapter-option[aria-checked="false"]',
+      );
+      expect(checked).not.toBeNull();
+      expect(unchecked).not.toBeNull();
+      const checkedStyle = getComputedStyle(checked as Element);
+      const uncheckedStyle = getComputedStyle(unchecked as Element);
+      expect(checkedStyle.borderTopColor).not.toBe(
+        uncheckedStyle.borderTopColor,
+      );
+    });
 
     await oaRadio.click();
     expect(onProviderChange).toHaveBeenCalledWith("zalo_oa");
