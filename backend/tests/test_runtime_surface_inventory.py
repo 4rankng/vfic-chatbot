@@ -76,14 +76,14 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Same site again: the OA user-detail error branch reads envelope.message
     # to tell a dead follower (-201 naming user_id) from a request bug —
     # bumps get_user_detail's get count 3→4, no new site.
-    "provider_boundary": 123,
+    "provider_boundary": 122,
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
     # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
     # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
     "queue_producer": 40,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "8491dfe97ec2a44a45c3fbb754558cdf7c0b57adcf25512f461c931c5352106c"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "ae9a7184eb7c617cfa74b9fd7cddd3afe6ab49eb58d82e70a1032c78a80d6412"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

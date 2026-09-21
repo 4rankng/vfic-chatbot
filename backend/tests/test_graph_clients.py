@@ -9,7 +9,6 @@ from app.graph.clients import (
     OpenRouterEmbedder,
     _active_llm_provider,
     _chat_for_role,
-    _compare_income_safe_reply,
     _ground_reply,
     _extract_returned_reasoning,
     _ground_active_job_reply,
@@ -20,6 +19,7 @@ from app.graph.clients import (
     _scope_project_tool_args,
     build_embedder,
 )
+from app.graph.income_contract import IncomeVerdict, build_income_verdict, safe_reply_from
 from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
 
 
@@ -125,7 +125,7 @@ def test_compare_income_safe_reply_rejects_mismatched_or_contradictory_payload()
     tool_result = "COMPARE_INCOME_JSON=" + json.dumps(payload, ensure_ascii=False)
 
     assert (
-        _compare_income_safe_reply(
+        safe_reply_from(
             tool_result,
             expected_target_monthly_vnd=20_000_000,
         )
@@ -134,12 +134,34 @@ def test_compare_income_safe_reply_rejects_mismatched_or_contradictory_payload()
     payload["target_monthly_vnd"] = 20_000_000
     tool_result = "COMPARE_INCOME_JSON=" + json.dumps(payload, ensure_ascii=False)
     assert (
-        _compare_income_safe_reply(
+        safe_reply_from(
             tool_result,
             expected_target_monthly_vnd=20_000_000,
         )
         is None
     )
+
+
+def test_safe_reply_from_consumes_typed_verdict_from_contract():
+    """The tool's typed IncomeVerdict is consumed field-wise, no JSON re-parse."""
+    projects = [
+        {
+            "project_slug": "rorze",
+            "project_name": "Rorze",
+            "evidence": [
+                {
+                    "name_vi": "Thu nhập",
+                    "value_text": "20-21 triệu/tháng bình quân năm gồm thưởng.",
+                }
+            ],
+        }
+    ]
+    verdict = build_income_verdict(projects, target_monthly_vnd=20_000_000)
+
+    assert isinstance(verdict, IncomeVerdict)
+    assert verdict.status == "matched"
+    assert safe_reply_from(verdict, expected_target_monthly_vnd=20_000_000) == verdict.safe_reply
+    assert safe_reply_from(verdict, expected_target_monthly_vnd=15_000_000) is None
 
 
 def test_matched_vacancy_reply_uses_structured_safe_reply_deterministically():

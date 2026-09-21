@@ -32,6 +32,39 @@ from app.graph.tools import (
     search_knowledge,
     search_user_memory,
 )
+from app.graph.income_contract import IncomeVerdict
+
+# The tools package splits tool logic into domain modules; each holds its own
+# module-level binding of get_settings/cache helpers, so the cache fixtures
+# below patch every submodule (not just the package attribute).
+_TOOL_MODULES = tuple(
+    getattr(tools, name)
+    for name in ("_shared", "memory", "knowledge", "jobs", "income", "catalog")
+)
+
+
+def _patch_tool_io(monkeypatch, settings_cls, **cache_overrides):
+    """Apply fake settings + fake cache IO to every tool submodule."""
+    async def _noop_get(*_a, **_k):
+        return None
+
+    async def _noop_set(*_a, **_k):
+        return None
+
+    async def _noop_version(*_a, **_k):
+        return "0"
+
+    for module in _TOOL_MODULES:
+        monkeypatch.setattr(module, "get_settings", lambda: settings_cls(), raising=False)
+        monkeypatch.setattr(
+            module, "cache_get_json", cache_overrides.get("get", _noop_get), raising=False
+        )
+        monkeypatch.setattr(
+            module, "cache_set_json", cache_overrides.get("set", _noop_set), raising=False
+        )
+        monkeypatch.setattr(
+            module, "cache_version", cache_overrides.get("version", _noop_version), raising=False
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -84,20 +117,7 @@ def no_cache_io(monkeypatch):
         embedding_cache_ttl_seconds = 60
         rag_result_cache_ttl_seconds = 60
 
-    monkeypatch.setattr(tools, "get_settings", lambda: _S())
-
-    async def _noop_get(*a, **k):
-        return None
-
-    async def _noop_set(*a, **k):
-        return None
-
-    async def _noop_version(*a, **k):
-        return "0"
-
-    monkeypatch.setattr(tools, "cache_get_json", _noop_get)
-    monkeypatch.setattr(tools, "cache_set_json", _noop_set)
-    monkeypatch.setattr(tools, "cache_version", _noop_version)
+    _patch_tool_io(monkeypatch, _S)
     return _S()
 
 
@@ -194,16 +214,17 @@ async def test_compare_income_formats_threshold_evidence(no_cache_io):
 
     out = await compare_income(retrieval=repo, target_monthly_vnd=20_000_000)
 
-    payload = json.loads(out.splitlines()[0].removeprefix("COMPARE_INCOME_JSON="))
-    assert payload["status"] == "matched"
-    assert payload["target_monthly_vnd"] == 20_000_000
-    assert payload["projects"][0]["project_slug"] == "rorze"
-    assert "comparison" not in payload["projects"][0]
-    assert "comparison" not in payload["projects"][1]
+    assert isinstance(out, IncomeVerdict)
+    assert out.status == "matched"
+    assert out.target_monthly_vnd == 20_000_000
+    payload = out.projects
+    assert payload[0]["project_slug"] == "rorze"
+    assert "comparison" not in payload[0]
+    assert "comparison" not in payload[1]
     assert "14-15 triệu/tháng" in out
     assert "20-21 triệu/tháng" in out
     assert "Kỳ lương" in out
-    assert [item["feature_key"] for item in payload["projects"][0]["evidence"]] == [
+    assert [item["feature_key"] for item in payload[0]["evidence"]] == [
         "take_home_income",
         "salary_transparency",
         "overtime_rate",
@@ -254,9 +275,9 @@ async def test_compare_income_ranks_target_evidence_before_project_cap(no_cache_
 
     out = await compare_income(retrieval=repo, target_monthly_vnd=20_000_000)
 
-    payload = json.loads(out.splitlines()[0].removeprefix("COMPARE_INCOME_JSON="))
-    assert len(payload["projects"]) == 20
-    assert payload["projects"][0]["project_slug"] == "rorze"
+    payload = out.projects
+    assert len(payload) == 20
+    assert payload[0]["project_slug"] == "rorze"
 
 
 @pytest.mark.asyncio
@@ -269,11 +290,10 @@ async def test_compare_income_reports_retrieval_failure_as_unavailable(no_cache_
         target_monthly_vnd=20_000_000,
     )
 
-    payload = json.loads(out.splitlines()[0].removeprefix("COMPARE_INCOME_JSON="))
-    assert payload["status"] == "unavailable"
-    assert payload["projects"] == []
-    assert "chưa thể kiểm tra dữ liệu thu nhập" in payload["safe_reply"]
-    assert "chưa có dữ liệu thu nhập" not in payload["safe_reply"]
+    assert out.status == "unavailable"
+    assert out.projects == []
+    assert "chưa thể kiểm tra dữ liệu thu nhập" in out.safe_reply
+    assert "chưa có dữ liệu thu nhập" not in out.safe_reply
 
 
 # ---------------------------------------------------------------------------
@@ -964,8 +984,6 @@ def cache_enabled_io(monkeypatch):
         embedding_cache_ttl_seconds = 60
         rag_result_cache_ttl_seconds = 60
 
-    monkeypatch.setattr(tools, "get_settings", lambda: _S())
-
     state = {"exact": None}
 
     async def _fake_get(key):
@@ -977,9 +995,7 @@ def cache_enabled_io(monkeypatch):
     async def _noop_version(*a, **k):
         return "0"
 
-    monkeypatch.setattr(tools, "cache_get_json", _fake_get)
-    monkeypatch.setattr(tools, "cache_set_json", _noop_set)
-    monkeypatch.setattr(tools, "cache_version", _noop_version)
+    _patch_tool_io(monkeypatch, _S, get=_fake_get, set=_noop_set, version=_noop_version)
     return state
 
 

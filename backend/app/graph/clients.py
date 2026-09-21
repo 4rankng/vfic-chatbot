@@ -17,6 +17,7 @@ from functools import lru_cache
 from typing import Literal
 
 from app.core.config import get_settings
+from app.graph.income_contract import safe_reply_from
 from app.graph.schemas import _dispatch_tool
 from app.graph.usage import record_token_usage as _record_token_usage
 
@@ -27,7 +28,6 @@ _VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
 )
 _ACTIVE_JOB_LOOKUP_PREFIX = "ACTIVE_JOB_LOOKUP_JSON="
 _ACTIVE_JOB_LOOKUP_STATUSES = frozenset({"matched", "no_match", "catalog_empty", "unavailable"})
-_COMPARE_INCOME_PREFIX = "COMPARE_INCOME_JSON="
 _REASONING_RESPONSE_FIELDS = ("reasoning_details", "reasoning_content", "reasoning")
 _THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>(.*?)</think\s*>", re.IGNORECASE | re.DOTALL)
 
@@ -309,72 +309,6 @@ def _active_job_safe_reply(tool_result: object) -> str | None:
     if not isinstance(safe_reply, str) or not safe_reply.strip():
         return None
     return safe_reply.strip()
-
-
-def _compare_income_safe_reply(
-    tool_result: object,
-    *,
-    expected_target_monthly_vnd: int | None,
-) -> str | None:
-    """Validate a cross-project income payload and return its trusted renderer output."""
-    first_line = str(tool_result).partition("\n")[0]
-    if not first_line.startswith(_COMPARE_INCOME_PREFIX):
-        return None
-    try:
-        payload = json.loads(first_line.removeprefix(_COMPARE_INCOME_PREFIX))
-    except (TypeError, ValueError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    status = payload.get("status")
-    target_monthly_vnd = payload.get("target_monthly_vnd")
-    projects = payload.get("projects")
-    safe_reply = payload.get("safe_reply")
-    if status not in {"matched", "catalog_empty", "unavailable"} or not isinstance(projects, list):
-        return None
-    if target_monthly_vnd != expected_target_monthly_vnd:
-        return None
-    if not isinstance(safe_reply, str) or not safe_reply.strip():
-        return None
-    safe_reply = safe_reply.strip()
-    if status == "matched" and not projects:
-        return None
-    if status in {"catalog_empty", "unavailable"} and projects:
-        return None
-    if status == "unavailable":
-        expected = "Hiện tôi chưa thể kiểm tra dữ liệu thu nhập. Bạn vui lòng thử lại sau nhé."
-        return safe_reply if safe_reply == expected else None
-    if status == "catalog_empty":
-        expected = "Hiện tôi chưa có dữ liệu thu nhập đã xác minh để so sánh giữa các dự án."
-        return safe_reply if safe_reply == expected else None
-    for project in projects:
-        if (
-            not isinstance(project, dict)
-            or not isinstance(project.get("project_name"), str)
-            or not isinstance(project.get("evidence"), list)
-            or not project["evidence"]
-        ):
-            return None
-        if any(
-            not isinstance(evidence, dict)
-            or not isinstance(evidence.get("name_vi"), str)
-            or not isinstance(evidence.get("value_text"), str)
-            for evidence in project["evidence"]
-        ):
-            return None
-    first_project = projects[0]
-    if first_project["project_name"] not in safe_reply:
-        return None
-    if any(
-        evidence["name_vi"] not in safe_reply or evidence["value_text"] not in safe_reply
-        for evidence in first_project["evidence"]
-    ):
-        return None
-    if expected_target_monthly_vnd is not None:
-        target_text = f"{expected_target_monthly_vnd / 1_000_000:g} triệu/tháng"
-        if target_text not in safe_reply:
-            return None
-    return safe_reply
 
 
 def _ground_reply(reply: str, tool_results: list[str], *, trace_sink=None) -> str:
@@ -928,7 +862,7 @@ class MiniMaxAgent:
                 resolved_tool_registry,
             )
             if prefetch_hit:
-                safe_reply = _compare_income_safe_reply(
+                safe_reply = safe_reply_from(
                     prefetched,
                     expected_target_monthly_vnd=(required_tool_args or {}).get(
                         "target_monthly_vnd"
@@ -1338,7 +1272,7 @@ class MiniMaxAgent:
                     required_tool_called = True
                     authority_valid = True
                     if required_tool == "compare_income":
-                        safe_reply = _compare_income_safe_reply(
+                        safe_reply = safe_reply_from(
                             out,
                             expected_target_monthly_vnd=(required_tool_args or {}).get(
                                 "target_monthly_vnd"
