@@ -3,7 +3,7 @@ name: ak:skill-creator
 description: "Create, update, audit, validate, and package agent skills. Use when authoring SKILL.md resources or diagnosing skill routing and behavior. Not for implementing CLI or MCP servers."
 user-invocable: true
 when_to_use: "Use when creating or maintaining a skill, auditing its instructions, or evaluating its activation and outputs."
-category: dev-tools
+category: meta
 keywords: [skills, authoring, audit, routing, evaluation]
 license: Apache-2.0 and MIT; see LICENSE.txt and LICENSE-MIT.txt
 argument-hint: "<create|update|audit|optimize> [skill-name|path|kit|--all] [--kit <kit>|--project|--user] [--long-horizon] [--apply] [--from-audit <report>] [--advice]"

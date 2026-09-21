@@ -3,7 +3,7 @@ name: ak:predict
 description: "5 expert personas debate proposed changes before implementation. Catches architectural, security, performance, and UX issues early. Use before major features or risky changes."
 user-invocable: true
 when_to_use: "Invoke before high-risk changes that need persona debate."
-category: utilities
+category: reasoning
 keywords: [prediction, debate, review, risk]
 argument-hint: "<feature description or change proposal> [--files <glob>] [--chain reason|probe]"
 metadata:

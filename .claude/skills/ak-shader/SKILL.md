@@ -3,7 +3,7 @@ name: ak:shader
 description: "Write GLSL fragment shaders for procedural graphics. Topics: shapes (SDF), patterns, noise (Perlin/simplex/cellular), fBm, colors (HSB/RGB), matrices, gradients, animations. Use for generative art, textures, visual effects, WebGL, Three.js shaders."
 user-invocable: true
 when_to_use: "Invoke for GLSL, procedural visuals, or WebGL effects."
-category: frontend
+category: engineering
 keywords: [glsl, shaders, procedural, webgl]
 argument-hint: "[effect or pattern]"
 metadata:

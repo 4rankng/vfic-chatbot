@@ -81,6 +81,18 @@ descriptions.
 For marketing installs. Names below are skill names (`ak-<name>`) to invoke on
 installs that ship them; guard each link with the Step 2 inventory:
 
+**Product discovery** (class discover-validate) — the founder or product-owner
+entry point, for a market or idea that has no validated offer yet:
+
+```
+ak-play create <name> --template product-discovery   (installs shipping ak-play)
+otherwise: ak-marketing-research → ak-competitor → ak-brainstorm (decide)
+  → ak-marketing-planning → ak-journal (decision record)
+```
+
+When the decision is build, the decision record is the input for ak-brainstorm
+→ ak-plan; the discovery chain itself stops at the record.
+
 **Campaign** (class plan-campaign):
 
 ```

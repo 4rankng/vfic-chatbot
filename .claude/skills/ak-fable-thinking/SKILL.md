@@ -3,7 +3,7 @@ name: ak:fable-thinking
 description: Reasoning protocol distilled from Claude Fable 5.1 — evidence-grounded claims, multi-hypothesis diagnosis, adversarial self-review, calibrated outcome-first delivery. Its Floor check catches simple-looking trick questions models answer confidently wrong; its Constraint Loop mechanically verifies banned letters, exact counts, and strict formats.
 user-invocable: true
 when_to_use: "Invoke when being right matters more than being fast — diagnosis, review, root-cause analysis, architecture or strategy decisions, contested claims, or output that must satisfy a mechanically checkable constraint."
-category: utilities
+category: reasoning
 keywords: [reasoning, calibration, hypotheses, verification, rigor, evidence, fable-5, fable-5-1, constrained-writing, agentic, orchestration, subagents, runtimes, coding, research, security, vision, token-efficiency, skills, motion, animation, engineering-prose, engineering-standards, system-design, debugging, root-cause, solution-design, first-principles, sequential, creative]
 argument-hint: "[task or question to reason through]"
 metadata:

@@ -3,7 +3,7 @@ name: ak:explain
 description: Explain concepts, code, systems, errors, and documents with grounded evidence. Use --eli5 for plain-language analogies or --html for a visual explanation.
 user-invocable: true
 when_to_use: "Invoke when the user wants an explanation, walkthrough, mental model, ELI5 simplification, or visual HTML explanation of a concept, codebase, or system."
-category: utilities
+category: reasoning
 keywords: [explain, walkthrough, mental-model, eli5, visual, html, code, concept, architecture]
 argument-hint: "[subject|path|URL] [--html] [--eli5]"
 license: MIT

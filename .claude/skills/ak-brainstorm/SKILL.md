@@ -3,7 +3,7 @@ name: ak:brainstorm
 description: "Turn unclear intent into an accepted outcome and compare viable approaches before delivery."
 user-invocable: true
 when_to_use: "Use at the opening of multi-step delivery or when a diagnosed problem has meaningful solution choices."
-category: utilities
+category: workflow
 keywords: [ideation, tradeoffs, decisions, intent, acceptance]
 license: MIT
 argument-hint: "[topic or problem] [--ask] [--advice] [--html] [--report] [--ultra] [--yagni] [--no-antv|--no-diagram-design|--no-editorial-visuals]"

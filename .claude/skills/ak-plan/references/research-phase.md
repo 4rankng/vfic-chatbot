@@ -10,7 +10,7 @@
 - Each researcher investigates a specific aspect or approach
 
 ### Sequential Thinking
-- Use `ak:sequential-thinking` skill for dynamic and reflective problem-solving
+- Use `ak:fable-thinking` skill for dynamic and reflective problem-solving
 - Structured thinking process for complex analysis
 - Enables multi-step reasoning with revision capability
 

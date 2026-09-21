@@ -3,7 +3,7 @@ name: ak:github
 description: "Operate and manage GitHub projects fluently with the gh CLI — create/update/close issues with evidence-backed dedup checks, manage labels, PRs (create, review, rebase, auto-merge), GitHub Projects, Actions CI/CD, and org/repo/environment/secret administration. Use whenever the user asks to file an issue, triage issues, manage a PR lifecycle, inspect CI runs, or administer repositories via gh."
 user-invocable: true
 when_to_use: "Invoke for any gh CLI operation: issue lifecycle (create/update/close with dedup + evidence checks), label management, PR lifecycle, GitHub Projects, Actions runs, or org/repo/environment/secret administration."
-category: dev-tools
+category: workflow
 keywords: [github, gh, issue, label, pr, pull request, projects, actions, ci, cd, workflow, org, repo, environment, secrets, auto-merge, rebase, triage]
 argument-hint: "<task description or issue/PR ref> [--interactive] [--advice]"
 allowed-tools:
@@ -57,7 +57,7 @@ never report success without command output proving it.
 - **Advisory** (`--advice`): run the whole task under `kongming` advisory
   supervision. Load `../ak-brainstorm/references/advisory-supervision.md` for
   host detection and model routing (Claude subscription → Fable 5; Codex →
-  `gpt-5.6-sol` + high effort). Spawn `kongming` after planning, before any
+  `gpt-6-astra` + low effort). Spawn `kongming` after planning, before any
   irreversible action, and when stuck. It never bypasses this skill's safety
   gates.
 

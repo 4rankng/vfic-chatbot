@@ -3,7 +3,7 @@ name: ak:mintlify
 description: Build and maintain Mintlify documentation sites. Covers docs.json, MDX components, navigation, page frontmatter, theming, OpenAPI/AsyncAPI, AI docs assets such as llms.txt and skill.md, deployment targets, and local validation CLI commands.
 user-invocable: true
 when_to_use: "Invoke for Mintlify docs site structure, MDX, or local checks."
-category: dev-tools
+category: engineering
 keywords: [docs-site, API-docs, MDX, Mintlify]
 license: MIT
 argument-hint: "[task] [path]"

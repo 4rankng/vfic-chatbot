@@ -2,9 +2,9 @@
 name: ak:ui-ux-pro-max
 description: "UI/UX design intelligence for web and mobile: style selection, color systems, typography, layout, accessibility, interaction states, responsive behavior, forms, charts, design systems, and code review across React, Next.js, Vue, Svelte, SwiftUI, React Native, Flutter, Tailwind, shadcn/ui, and HTML/CSS."
 user-invocable: true
-when_to_use: "Invoke for UX strategy, design systems, accessibility, or review."
-category: frontend
-keywords: [ui-ux, styles, palettes, fonts]
+when_to_use: "Invoke for UX strategy, design systems, accessibility, or a UI/UX guideline review of existing interface code."
+category: design
+keywords: [ui-ux, styles, palettes, fonts, ui-review, accessibility, ux-audit]
 argument-hint: "[component|page|design-system] [--style <style>] [--framework <fw>]"
 metadata:
   author: agentkit
@@ -112,7 +112,7 @@ Use this skill when the user requests any of the following:
 | **New project / page** | "Build a landing page", "Build a dashboard" | Step 1 → Step 2 (design system) |
 | **New component** | "Create a pricing card", "Add a modal" | Step 3 (domain search: style, ux) |
 | **Choose style / color / font** | "What style fits a fintech app?", "Recommend a color palette" | Step 2 (design system) |
-| **Review existing UI** | "Review this page for UX issues", "Check accessibility" | Quick Reference checklist above |
+| **Review existing UI** | "Review this page for UX issues", "Check accessibility", "check my site against best practices" | Quick Reference checklist above, plus `references/web-interface-guidelines-review.md` for the external Web Interface Guidelines pass |
 | **Fix a UI bug** | "Button hover is broken", "Layout shifts on load" | Quick Reference → relevant section |
 | **Improve / optimize** | "Make this faster", "Improve mobile experience" | Step 3 (domain search: ux, react) |
 | **Implement dark mode** | "Add dark mode support" | Step 3 (domain: style "dark mode") |

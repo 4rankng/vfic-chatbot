@@ -3,7 +3,7 @@ name: ak:shopify
 description: Build Shopify apps, extensions, themes with Shopify CLI. Use for GraphQL/REST APIs, Polaris UI, Liquid templates, checkout customization, webhooks, billing integration.
 user-invocable: true
 when_to_use: "Invoke for Shopify apps, themes, extensions, or billing."
-category: frameworks
+category: engineering
 keywords: [shopify, polaris, liquid, checkout]
 argument-hint: "[extension-type] [feature]"
 metadata:

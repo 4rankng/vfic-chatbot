@@ -42,14 +42,14 @@ auth mode), then apply exactly one row:
 | Detected host | Model for kongming | Effort / notes |
 |---------------|--------------------|----------------|
 | **Claude Code with subscription / OAuth** (Claude Max or equivalent; not API-key-only) | Claude **Fable 5** via kit tier `fable` (Claude Code keeps `model: fable` on the agent) | Prefer subscription sessions — Fable is subscription-backed. If Fable is unavailable on the account, hard-stop the advice spawn and say so; do not silently fall back to Sonnet/Opus and claim `--advice` ran on Fable. |
-| **Codex** | **`gpt-5.6-sol`** | **`high`** reasoning effort. Prefer the emitted `.codex/agents/kongming.toml` override (`model` + `model_reasoning_effort`). When the host requires an explicit model/effort on the delegate call, pass those same values. |
+| **Codex** | **`gpt-6-astra`** | **`low`** reasoning effort. Prefer the emitted `.codex/agents/kongming.toml` override (`model` + `model_reasoning_effort`). When the host requires an explicit model/effort on the delegate call, pass those same values. |
 | **Cursor** | Emitted agent model for `fable` → **`claude-fable-5-high`** | When `delegate_agent` requires an explicit `model` argument, pass that Cursor ID. Do not pass bare `fable`. |
-| **Other / single-model hosts** (e.g. Pi inherit-only, Grok) | Strongest available session model | Tell the user in one sentence that `--advice` could not pin Fable/Sol and is same-model counsel. Still spawn `kongming` for the protocol; do not invent unavailable IDs. |
+| **Other / single-model hosts** (e.g. Pi inherit-only, Grok) | Strongest available session model | Tell the user in one sentence that `--advice` could not pin Fable/Astra and is same-model counsel. Still spawn `kongming` for the protocol; do not invent unavailable IDs. |
 
 ### Detection rules (practical)
 
 1. **Prefer emitted agent config.** If the installed `kongming` agent already
-   carries the correct host model (Claude `fable`, Codex `gpt-5.6-sol` + high,
+   carries the correct host model (Claude `fable`, Codex `gpt-6-astra` + low,
    Cursor `claude-fable-5-high`), spawn by `subagent_type="kongming"` and let
    the runtime load that definition.
 2. **When the delegate API requires an explicit model**, pin using the table
@@ -76,5 +76,5 @@ on the PR and source issue (when one exists) — unless a skill (e.g.
   protections, or security policy.
 - Do not skip checkpoints because counsel was empty; record the miss and
   continue under the skill's authoritative gates.
-- Do not claim Fable or `gpt-5.6-sol` high was used unless the spawn actually
+- Do not claim Fable or `gpt-6-astra` low was used unless the spawn actually
   targeted that tier.

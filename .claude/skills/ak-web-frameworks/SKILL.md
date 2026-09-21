@@ -3,7 +3,7 @@ name: ak:web-frameworks
 description: Build with Next.js (App Router, RSC, SSR, ISR), Turborepo monorepos. Use for React apps, server rendering, build optimization, caching strategies, shared dependencies.
 user-invocable: true
 when_to_use: "Invoke for Next.js, RSC, SSR, ISR, Turborepo, or caching."
-category: frameworks
+category: engineering
 keywords: [nextjs, turborepo, ssr, isr, rsc]
 license: MIT
 argument-hint: "[framework] [feature]"

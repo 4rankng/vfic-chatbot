@@ -192,8 +192,9 @@ effort was insufficient. Never repeat a failed probe harder. Change exactly one 
   reproduction, a bisect).
 
 Deeper toolkit for stuck-ness: `ak:problem-solving`. Long multi-step chains with explicit
-revision: `ak:sequential-thinking`. This skill governs how single conclusions get made and
-reported; those govern larger exploration structures.
+revision: the sequential mode in `references/thinking-modes.md`. This skill governs how
+single conclusions get made and reported; the stuck toolkit governs larger exploration
+structures.
 
 ## Portable Techniques (how to think the moves, on any model)
 

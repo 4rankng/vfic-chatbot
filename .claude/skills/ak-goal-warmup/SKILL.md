@@ -3,7 +3,7 @@ name: ak:goal-warmup
 description: "Outcome-locked preflight before long-running /goal or autonomous runs. Interview to a user-approved Outcome Contract, plan without silent scope drift, contract-preserving review, whole-plan preflight matrix, then Ready/Blocked/Decision handoff. Never auto-starts /goal. Use for goal warmup, goal prepare, long-running goal prep, outcome lock, execution readiness."
 user-invocable: true
 when_to_use: "Invoke before expensive multi-phase /goal or long-run work when outcome must stay locked and blockers must surface first."
-category: dev-tools
+category: workflow
 keywords: [goal, warmup, preflight, outcome-contract, readiness, codex-goal, long-running]
 argument-hint: "\"<goal>\" [--fast]"
 license: MIT

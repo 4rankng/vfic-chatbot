@@ -4,7 +4,7 @@ description: "Set coding experience level for tailored output. Use for adjusting
 user-invocable: true
 disable-model-invocation: true
 when_to_use: "Invoke when response depth should match user expertise."
-category: utilities
+category: meta
 keywords: [experience, level, explanation, format]
 argument-hint: "[0-5]"
 metadata:

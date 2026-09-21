@@ -143,3 +143,17 @@ Visualizes state machines, status transitions, retries, and terminal outcomes.
   ]
 }
 ```
+
+## Layout semantics (what the compiler does with the IR)
+
+Authors never supply coordinates. The compiler derives geometry from the fields above:
+
+| Archetype | Column (rank) | Row / grouping | Frames |
+|---|---|---|---|
+| `architecture` | `layer` when given, else longest path from sources | barycenter ordering, boundary members kept adjacent | `boundaries` as dashed frames |
+| `workflow` | longest path from `start` steps | `lane` (authored order); steps sharing a lane and rank stack vertically | `lanes` as full-width rows |
+| `dataflow` | `stage.order` (nodes without a stage join a trailing `Processing` stage) | barycenter ordering | `stages` as column frames |
+| `lifecycle` | longest path from `initial` states | barycenter ordering | none |
+| `sequence` | participant order | message order, one row per message; `sync-call` opens an activation closed by the next `return` | none |
+
+Edges leave the right side and enter the left side of nodes with ports spread by target position, turn inside the gap between columns, detour above or below the blocking band when a straight run would cross an unrelated node, and loop back through a corridor for cycles. Labels sit on the last horizontal run that fits them and are pushed apart when they would overlap.

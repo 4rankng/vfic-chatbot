@@ -3,7 +3,7 @@ name: ak:bro
 description: "Restate the assistant's last message in simpler, shorter, jargon-free language. Use when the user says ak:bro, simplify that, say it plainly, or explain it like a human."
 user-invocable: true
 when_to_use: "Invoke when the user wants the immediately previous assistant message restated plainly, coherently, and concisely."
-category: utilities
+category: reasoning
 keywords: [restate, simplify, plain-language, concise, jargon-free]
 argument-hint: "[last message]"
 metadata:

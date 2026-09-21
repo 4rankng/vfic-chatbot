@@ -3,7 +3,7 @@
 When `--advice` is present, run this skill under `kongming` supervision.
 Load `advisory-supervision.md` for supervisor identity, host
 detection, and model routing (Claude subscription → Fable 5; Codex →
-`gpt-5.6-sol` + high effort; Cursor → `claude-fable-5-high`).
+`gpt-6-astra` + low effort; Cursor → `claude-fable-5-high`).
 
 Spawn `kongming` at these checkpoints:
 

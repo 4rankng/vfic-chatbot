@@ -3,7 +3,7 @@ name: ak:preview
 description: "View files or generate visual explanations, slides, and diagrams. Use for code walkthroughs, architecture visualization, HTML/Markdown presentations."
 user-invocable: true
 when_to_use: "Invoke for visual explanations, file previews, or diagrams."
-category: utilities
+category: media
 keywords: [preview, visual, slides, diagrams, HTML]
 argument-hint: "[path] OR [--html] --explain|--slides|--diagram|--ascii [topic] OR --html --diff|--plan-review|--recap [--no-antv|--no-diagram-design|--no-editorial-visuals]"
 metadata:

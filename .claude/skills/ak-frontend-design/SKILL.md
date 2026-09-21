@@ -3,7 +3,7 @@ name: ak:frontend-design
 description: Create polished frontend interfaces from designs/screenshots/videos. Use for web components, 3D experiences, replicating UI designs, quick prototypes, immersive interfaces, avoiding AI slop.
 user-invocable: true
 when_to_use: "Invoke when visual fidelity and polished UI are primary."
-category: frontend
+category: design
 keywords: [ui, design, screenshots, prototyping]
 license: Complete terms in LICENSE.txt
 argument-hint: "[prompt|image-path|component]"

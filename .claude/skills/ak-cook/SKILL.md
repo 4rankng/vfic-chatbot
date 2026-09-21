@@ -3,7 +3,7 @@ name: ak:cook
 description: "Implement features, plans, and fixes with structured workflow. Use for feature development, plan execution, code implementation pipelines."
 user-invocable: true
 when_to_use: "Invoke to implement known scope after requirements are clear."
-category: utilities
+category: workflow
 keywords: [implementation, workflow, feature, pipeline]
 argument-hint: "[task|plan-path] [--interactive|--fast|--parallel|--auto|--no-test] [--tdd] [--advice] [--yagni] [--skip-journal]"
 metadata:

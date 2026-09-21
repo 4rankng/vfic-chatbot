@@ -3,7 +3,7 @@ name: ak:journal
 description: "Write chronological technical journals for session reflection and change analysis. Journals preserve work history; they do not replace current docs or ADRs."
 user-invocable: true
 when_to_use: "Invoke for technical session reflection or chronological work records."
-category: utilities
+category: workflow
 keywords: [journal, reflection, changes, session]
 argument-hint: "[topic or reflection]"
 metadata:

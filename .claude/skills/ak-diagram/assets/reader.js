@@ -52,6 +52,17 @@
     const chapterPrevBtn = container.querySelector('.ak-btn-prev-chapter');
     const chapterNextBtn = container.querySelector('.ak-btn-next-chapter');
     const chapterLabel = container.querySelector('.ak-chapter-label');
+    const motionBtn = container.querySelector('.ak-btn-motion');
+    const svgEl = container.querySelector('.ak-diagram-svg');
+
+    // Replay the finite entrance/trace motion by re-arming data-motion on the svg.
+    function replayMotion() {
+      if (!svgEl) return;
+      svgEl.removeAttribute('data-motion');
+      void svgEl.getBoundingClientRect();
+      svgEl.setAttribute('data-motion', 'play');
+    }
+    if (motionBtn) motionBtn.addEventListener('click', replayMotion);
 
     // Build Graph Adjacency & Distinct Roles
     const outgoing = new Map();
@@ -524,6 +535,9 @@
       } else if (e.key === 'l' || e.key === 'L') {
         e.preventDefault();
         cycleRoleLens();
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        replayMotion();
       } else if (e.key === '[') {
         e.preventDefault();
         setChapter(state.currentChapterIndex - 1);

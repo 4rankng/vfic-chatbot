@@ -3,7 +3,7 @@ name: ak:find-skills
 description: "Discover or install agent skills when users explicitly seek new capabilities or a verified capability gap blocks their task. Prefer the live installed catalog before external search."
 user-invocable: true
 when_to_use: "Invoke when the user is looking for a skill capability."
-category: dev-tools
+category: meta
 keywords: [discover, install, skills, search]
 argument-hint: "[capability or task description]"
 metadata:

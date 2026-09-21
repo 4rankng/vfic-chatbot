@@ -16,7 +16,7 @@ Consult for the selected archetype; compiler validation remains required.
 
 ### 3. Sequence (`diagram_type: "sequence"`)
 - `participants[]` (2–50): `role`: `client` | `service` | `database` | `gateway` | `external` | `queue`.
-- `messages[]` (1–500): `kind`: `sync-call` | `async-signal` | `return` | `self-call` | `error` (only `return` renders dashed line).
+- `messages[]` (1–500): `kind`: `sync-call` | `async-signal` | `return` | `self-call` | `error` (`return` and `async-signal` render dashed, `return` with an open arrowhead, `error` in the failure tone; `sync-call` opens an activation bar closed by the next `return`).
 
 ### 4. Dataflow (`diagram_type: "dataflow"`)
 - `stages[]`: `id`, `label`, `order` (integer).
@@ -37,3 +37,4 @@ Interactive HTML readers include built-in client-side capabilities operating on 
 - **Presentation Stage (`F`)**: Toggles distraction-free full-window view (`Esc` to exit).
 - **Guided Stories (`[` / `]`)**: Advances through authored `meta.views` chapters.
 - **Theme Toggle (`☀️/🌙`)**: Switches between light and dark palette without geometry shift.
+- **Replay Motion (`M`)**: Re-arms the finite entrance and trace pass.

@@ -3,7 +3,7 @@ name: ak:mobile-development
 description: Build mobile apps with React Native, Flutter, Swift/SwiftUI, Kotlin/Jetpack Compose. Use for iOS/Android, mobile UX, performance optimization, offline-first, app store deployment.
 user-invocable: true
 when_to_use: "Invoke when the target is an iOS or Android app."
-category: frameworks
+category: engineering
 keywords: [react-native, flutter, swift, kotlin, ios]
 license: MIT
 argument-hint: "[platform] [feature]"

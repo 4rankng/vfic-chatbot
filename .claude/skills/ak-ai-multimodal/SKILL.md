@@ -3,7 +3,7 @@ name: ak:ai-multimodal
 description: Analyze and generate image, audio, video, and document content. Prefers the active model's native vision for image/document understanding; falls back to the npm-latest Multix CLI and live provider catalogs only when native vision is ineligible or a generation/audio/video task needs a configured provider.
 user-invocable: true
 when_to_use: "Invoke for media generation, transcription, or vision/OCR tasks the active model's native vision cannot handle."
-category: ai-ml
+category: media
 keywords: [vision, image, video, audio, Gemini]
 license: MIT
 allowed-tools:

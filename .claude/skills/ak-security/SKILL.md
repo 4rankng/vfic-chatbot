@@ -3,7 +3,7 @@ name: ak:security
 description: "Scan codebase for security vulnerabilities, hardcoded secrets, dependency issues, and OWASP patterns, with optional STRIDE threat modeling, red-team persona discovery, and auto-fix. Use when asked to 'security scan', 'check for secrets', 'audit security', or before major releases."
 user-invocable: true
 when_to_use: "Invoke for security scan, secret detection, dependency audit, STRIDE/OWASP threat audit, or auto-fix loops."
-category: utilities
+category: workflow
 keywords: [security, secrets, vulnerabilities, dependencies, STRIDE, OWASP, audit, red-team, penetration-testing, vulnerability-discovery]
 argument-hint: "[scope] [--secrets-only] [--deps-only] [--fix] [--red-team] [--iterations N]"
 metadata:

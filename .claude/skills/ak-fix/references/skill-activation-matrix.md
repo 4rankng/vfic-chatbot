@@ -5,7 +5,7 @@
 | Clear local failure | Direct file reads, cause-aligned repair, relevant checker |
 | Unclear causal path | `ak:debug` and one discriminating test |
 | Repeated refuted hypotheses | `ak:problem-solving` if reframing would help |
-| Difficult evidence comparison | `ak:sequential-thinking` for a decision/evidence log |
+| Difficult evidence comparison | `ak:fable-thinking` (sequential mode) for a decision/evidence log |
 | Multiple viable fixes | `ak:brainstorm` after diagnosis |
 | Complex phases | Existing plan and optional live progress tracking |
 | Independent areas/issues | Delegates with disjoint ownership when authorized and available |

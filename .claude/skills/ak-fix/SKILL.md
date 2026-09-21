@@ -3,7 +3,7 @@ name: ak:fix
 description: "Fix bugs, errors, test failures, and CI/CD issues with intelligent routing. Use for type errors, lint issues, log errors, UI bugs, code problems."
 user-invocable: true
 when_to_use: "Invoke when there is a concrete bug, error, or CI failure."
-category: utilities
+category: workflow
 keywords: [bugfix, error, test-failure, CI, lint]
 argument-hint: "[issue] --auto|--review|--quick|--parallel [--ultra] [--advice] [--skip-journal]"
 metadata:

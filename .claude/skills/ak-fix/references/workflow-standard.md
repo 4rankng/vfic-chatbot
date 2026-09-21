@@ -43,7 +43,7 @@ Record the diagnose phase as active.
 **Mandatory skill chain:**
 1. **Capture pre-fix state:** Record exact error messages, failing test output, stack traces.
 2. Activate `ak:debug` skill. Use `debugger` subagent if needed.
-3. Use `ak:sequential-thinking` only when a decision/evidence log would help — form hypotheses through structured reasoning.
+3. Use `ak:fable-thinking` (sequential mode) only when a decision/evidence log would help — form hypotheses through structured reasoning.
 4. Use delegated `Explore` subagents to test hypotheses only when delegation is explicitly requested/permitted.
 5. If 2+ hypotheses fail → auto-activate `ak:problem-solving`.
 6. Trace backward to root cause (not just symptom location).
@@ -64,7 +64,7 @@ Record the implementation phase as active once scout and diagnosis are complete.
 Fix the ROOT CAUSE per diagnosis findings. Not symptoms.
 
 - Apply `ak:problem-solving` skill if stuck
-- Use `ak:sequential-thinking` for complex logic
+- Use `ak:fable-thinking` (sequential mode) for complex logic
 - Minimal changes. Follow existing patterns.
 - Preserve the opening constraints and non-goals.
 
@@ -118,8 +118,8 @@ Record the finalize phase as completed in the live surface when available and in
 | Step | Skills/Subagents |
 |------|------------------|
 | 1 | `ak:scout` OR parallel `Explore` subagents when delegation is permitted |
-| 2 | `ak:debug`, `ak:sequential-thinking`, optional delegated debugger/Explore when permitted, optional `ak:problem-solving` when stuck, conditional `ak:brainstorm` after diagnosis |
-| 3 | `ak:problem-solving` (if stuck), `ak:sequential-thinking` (complex logic) |
+| 2 | `ak:debug`, `ak:fable-thinking` (sequential mode), optional delegated debugger/Explore when permitted, optional `ak:problem-solving` when stuck, conditional `ak:brainstorm` after diagnosis |
+| 3 | `ak:problem-solving` (if stuck), `ak:fable-thinking` (sequential mode) (complex logic) |
 | 4 | `run_shell` verification; optional delegated tester/workers when permitted |
 | 5 | `code-reviewer` via `delegate_agent` when permitted, otherwise local review |
 | 6 | `ak:project-management`; docs/git delegation only when permitted |

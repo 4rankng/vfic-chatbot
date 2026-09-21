@@ -3,7 +3,7 @@ name: ak:bootstrap
 description: "Bootstrap new projects with research, tech stack, design, planning, and implementation. Modes: full (default thorough), auto (explicit autonomous), fast (skip research), parallel (multi-agent)."
 user-invocable: true
 when_to_use: "Invoke to start a new project or full-stack setup from scratch."
-category: utilities
+category: workflow
 keywords: [scaffold, project, setup, boilerplate]
 license: MIT
 argument-hint: "[requirements] [--full|--auto|--fast|--parallel] [--ultra] [--yagni] [--skip-journal]"

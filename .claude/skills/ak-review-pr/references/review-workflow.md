@@ -3,7 +3,7 @@
 Detected PRs and API mode (prelude — heavy metadata loads per-PR inside Instructions):
 
 ```
-!`_ak_lib=.claude/skills/ak-review-pr/references/gh-api-helpers.sh; [ -f "$_ak_lib" ] || _ak_lib="${HOME:-}/.claude/skills/ak-review-pr/references/gh-api-helpers.sh"; [ -f "$_ak_lib" ] || _ak_lib=kits/core/skills/ak-review-pr/references/gh-api-helpers.sh; [ -f "$_ak_lib" ] || { (set +u; [ -n "${CLAUDE_PLUGIN_ROOT}" ]) && _ak_lib="${CLAUDE_PLUGIN_ROOT}/skills/ak-review-pr/references/gh-api-helpers.sh"; }; [ -f "$_ak_lib" ] && . "$_ak_lib" && _ak_probe_gh_api 2>/dev/null; ARGS_STRIPPED="$(printf '%s' "$ARGUMENTS" | sed -E 's/[[:space:]]*--(fix|reply|merge|advice|ultra)([[:space:]]+|$)/ /g; s/,/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//')"; PR_REFS="$ARGS_STRIPPED"; printf 'PR_REFS: %s\nAK_GH_REST: %s (%s)\nLIB: %s\n' "$PR_REFS" "${AK_GH_REST:-?}" "$( [ "${AK_GH_REST:-0}" = 1 ] && echo 'GraphQL blocked — REST fallback active' || echo 'GraphQL available — native gh pr commands preferred' )" "${_ak_lib:-not-found}"`
+!`_ak_lib=.claude/skills/ak-review-pr/references/gh-api-helpers.sh; [ -f "$_ak_lib" ] || _ak_lib="${HOME:-}/.claude/skills/ak-review-pr/references/gh-api-helpers.sh"; [ -f "$_ak_lib" ] || _ak_lib=kits/engineer/skills/ak-review-pr/references/gh-api-helpers.sh; [ -f "$_ak_lib" ] || { (set +u; [ -n "${CLAUDE_PLUGIN_ROOT}" ]) && _ak_lib="${CLAUDE_PLUGIN_ROOT}/skills/ak-review-pr/references/gh-api-helpers.sh"; }; [ -f "$_ak_lib" ] && . "$_ak_lib" && _ak_probe_gh_api 2>/dev/null; ARGS_STRIPPED="$(printf '%s' "$ARGUMENTS" | sed -E 's/[[:space:]]*--(fix|reply|merge|advice|ultra)([[:space:]]+|$)/ /g; s/,/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//')"; PR_REFS="$ARGS_STRIPPED"; printf 'PR_REFS: %s\nAK_GH_REST: %s (%s)\nLIB: %s\n' "$PR_REFS" "${AK_GH_REST:-?}" "$( [ "${AK_GH_REST:-0}" = 1 ] && echo 'GraphQL blocked — REST fallback active' || echo 'GraphQL available — native gh pr commands preferred' )" "${_ak_lib:-not-found}"`
 ```
 
 ## Instructions
@@ -31,7 +31,7 @@ ref resolve a single time:
 ```bash
 _ak_lib=.claude/skills/ak-review-pr/references/gh-api-helpers.sh
 [ -f "$_ak_lib" ] || _ak_lib="${HOME:-}/.claude/skills/ak-review-pr/references/gh-api-helpers.sh"
-[ -f "$_ak_lib" ] || _ak_lib=kits/core/skills/ak-review-pr/references/gh-api-helpers.sh
+[ -f "$_ak_lib" ] || _ak_lib=kits/engineer/skills/ak-review-pr/references/gh-api-helpers.sh
 [ -f "$_ak_lib" ] || { (set +u; [ -n "${CLAUDE_PLUGIN_ROOT}" ]) && _ak_lib="${CLAUDE_PLUGIN_ROOT}/skills/ak-review-pr/references/gh-api-helpers.sh"; }
 [ -f "$_ak_lib" ] || { echo "gh-api-helpers.sh not found" >&2; exit 1; }
 . "$_ak_lib"

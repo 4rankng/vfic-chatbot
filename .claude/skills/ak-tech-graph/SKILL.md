@@ -9,7 +9,7 @@ description: >-
   for inline-doc diagrams; this skill is the publish-grade output mode.
 user-invocable: true
 when_to_use: "Invoke for publish-grade architecture or flow diagrams."
-category: dev-tools
+category: engineering
 keywords: [diagrams, architecture, flowchart, sequence, svg, png, agent, memory, visualization]
 argument-hint: "[diagram-type or system description]"
 metadata:

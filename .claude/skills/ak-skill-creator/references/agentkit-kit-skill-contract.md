@@ -40,7 +40,7 @@ name: ak:<slug>
 description: "What it does, when to use it, what it does not cover."
 user-invocable: true
 when_to_use: "A precise activation condition for the routing catalog."
-category: utilities
+category: workflow
 keywords: [three, to, six, nouns]
 argument-hint: "<subcommand> [path] [--flag]"
 metadata:
@@ -53,6 +53,16 @@ metadata:
 ```
 
 - `name` uses the `ak:` namespace; the directory is `ak-<slug>`.
+- `user-invocable`, `when_to_use`, `category`, and `keywords` are required on
+  every kit skill; a content test fails the build when one is missing.
+- `category` is one of `workflow` (the delivery loop: plan, build, test,
+  review, ship, hand off), `engineering` (building and operating software with
+  a specific stack or tool), `design` (visual, interface, brand), `marketing`
+  (growth, content, go-to-market), `media` (producing or transforming audio,
+  video, images, documents, slides), `reasoning` (thinking protocols and
+  explanation), `meta` (AgentKit itself, skills, routing), or `runtime`
+  (runtime-specific operating modes). The owner is
+  `apps/cli/internal/core/kitloader/skill_routing_frontmatter_test.go`.
 - `description` is at most 1024 characters. The block-scalar form (`>-`) is
   valid, and `quick_validate.py` measures the folded text.
 - `allowed-tools`, `license`, `compatibility`, `disable-model-invocation`

@@ -2,16 +2,21 @@
 
 Use this workflow to reconcile project documentation with current intent and
 evidence. An update is not a mandate to touch every document. Read
-`references/doc-content-rules.md` before authoring or delegating changes. When
+`doc-content-rules.md` before authoring or delegating changes. When
 the impacted docs carry test-related guidance (setup, running, or structuring
 tests), also load
-`references/practical-principles-for-setting-up-and-running-tests.md` and
+`../../ak-test/references/practical-principles-for-setting-up-and-running-tests.md` and
 reconcile against it; the evidence and keep-or-cut gates still apply.
 
 ## 1. Brainstorm the impact
 
 Run the opening gate from the parent skill. Define the changed contract, the
 affected audience, the accepted scope, and the proof required.
+
+The impact surface includes authorized work done outside the repository: a
+changed deploy path, a verified log source, a moved credential source, a new
+webhook, OAuth, or DNS setup, a confirmed backup or rollback route, or a lookup
+route proven wrong.
 
 ## 2. Discover authority and evidence
 
@@ -32,13 +37,23 @@ by independent topics, not arbitrary file-count thresholds.
 
 Use `docs-manager` through delegation when available, or perform the same work
 locally. Include the relevant ownership, drift-resistance, and per-document
-rules from `references/doc-content-rules.md` in delegated context.
+rules from `doc-content-rules.md` in delegated context.
 
 Prune, do not refresh: delete implementation-describing prose or convert it to
 a pointer. Preserve WHY content such as decisions, rationale, domain rules, and
 terminology.
 
 - Edit only impacted authority surfaces.
+- Add, correct, or remove the affected route records (`operational-lookup.md`
+  defines the fields). Require no source diff and
+  no prior repeated incident; a first verified route is added rather than
+  deferred until a mistake happens, and a route that no longer applies is
+  deleted rather than kept for history.
+- When there is no new durable instruction or the content is already equivalent,
+  leave the file untouched. Do not reorder, re-voice, or rewrite a file to show
+  that an update ran.
+- Do not read secrets and do not re-run a production query just to refresh a
+  timestamp.
 - Remove stale and duplicate material.
 - Point repeated commands and inventories to their owning script, manifest, or
   generated source.
@@ -53,6 +68,9 @@ terminology.
 - Run owning generators or contract scripts when generated or executable docs
   changed.
 - Review the final route from a cold-start human and AI perspective.
+- Verify a changed route against its current source, redact incidental secrets
+  and personal data before recording or reporting an observation, and record the
+  remaining limit or blocker in the report.
 - Report changed claims, their evidence, validation, and unresolved questions.
 
 **Do not implement product code during this workflow.**

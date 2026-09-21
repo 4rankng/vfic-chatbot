@@ -3,7 +3,7 @@ name: ak:agentize
 description: "Expose existing code or APIs through an agent-friendly CLI, MCP server, or both. Choose the surface and deployment scope from the user’s task and existing project."
 user-invocable: true
 when_to_use: "Invoke to expose existing code as a reusable CLI or MCP tool across Claude, ChatGPT, Cursor, and skills.sh."
-category: dev-tools
+category: engineering
 keywords: [agentize, mcp, cli, monorepo, npm, cloudflare, oauth, openapi, discovery, marketplace, skills-sh]
 argument-hint: "[feature-or-module] [--both|--mcp|--cli] [--auto|--ask] [--ultra] [--advice] [--yagni]"
 metadata:

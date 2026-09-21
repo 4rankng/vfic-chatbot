@@ -3,7 +3,7 @@ name: ak:copywriting
 description: Conversion copywriting formulas, headline templates, email copy patterns, landing page structures, CTA optimization, and writing style extraction. Activate for writing high-converting copy, crafting headlines, email campaigns, landing pages, or applying custom writing styles from assets/writing-styles/ directory.
 user-invocable: true
 when_to_use: "Invoke for conversion copy, headlines, emails, or style transfer."
-category: utilities
+category: marketing
 keywords: [copy, headlines, email, landing-page]
 license: MIT
 argument-hint: "[copy-type] [context]"

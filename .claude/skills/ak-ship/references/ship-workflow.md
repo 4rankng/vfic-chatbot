@@ -234,8 +234,8 @@ test -f "$WL_BIN" || WL_BIN=kits/core/hooks/lib/writing-language.cjs
 node "$WL_BIN" --json
 ```
 Load `references/pr-template.md` and the shared contracts:
-- `kits/core/skills/ak-review-pr/references/writing-language.md`
-- `kits/core/skills/ak-review-pr/references/pr-body-contract.md`
+- `kits/engineer/skills/ak-review-pr/references/writing-language.md`
+- `kits/engineer/skills/ak-review-pr/references/pr-body-contract.md`
 
 Render the **seven required sections** plus Linked Issues / Ship Mode in the
 effective language. Keep the PR **title** English conventional-commit form.

@@ -3,7 +3,7 @@ name: ak:agent-browser
 description: Automate tool-managed browsers with agent-browser for snapshots, clicks, forms and browser testing. Use chrome-profile when real Chrome account state is required.
 user-invocable: true
 when_to_use: "Invoke for browser/app automation that needs snapshots or clicks and does not require the user's real Chrome profile state."
-category: dev-tools
+category: engineering
 keywords: [browser, automation, playwright, testing, e2e, browserbase, autonomous, headless, electron, slack, dogfood, agentcore, vercel-sandbox]
 license: Apache-2.0
 allowed-tools: Bash(agent-browser:*), Bash(npx agent-browser:*)

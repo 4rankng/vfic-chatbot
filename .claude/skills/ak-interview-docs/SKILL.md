@@ -3,7 +3,7 @@ name: ak:interview-docs
 description: Extract a user's vision and decisions into durable project documents through a guided interview. Use for README, ADR, strategy, principles, and structured-doc authoring.
 user-invocable: true
 when_to_use: Invoke when the user's answers, not AI proposals or code inspection, should become the document.
-category: utilities
+category: workflow
 keywords: [interview, documentation, adr, strategy, vision]
 license: MIT
 argument-hint: "<vision | document-path | topic>"

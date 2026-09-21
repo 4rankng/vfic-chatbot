@@ -3,7 +3,7 @@ name: ak:issue-to-plan
 description: "Turn a GitHub issue into an audited, validated implementation plan. Reads the issue, scouts the codebase, runs a hard brainstorm gate, and only then plans with mandatory --html --wiki, validate, and red-team, before pushing a plan branch and handing off on the issue. Use to convert a GitHub issue into a validated plan that is ready for plan audit."
 user-invocable: true
 when_to_use: "Invoke when a user wants one command to take a GitHub issue through scouting, an audit/brainstorm gate, and (only if it passes) plan generation, validation, red-team, a pushed plan branch, and an issue handoff — stopping before implementation."
-category: dev-tools
+category: workflow
 keywords: [issue-to-plan, plan, scout, brainstorm, audit, gate, worktree, agentwiki, red-team, validate]
 argument-hint: "<github-issue-url | issue-number> [--repo owner/name] [--plan-ready-label <name>] [--decision-label <name>]"
 license: MIT

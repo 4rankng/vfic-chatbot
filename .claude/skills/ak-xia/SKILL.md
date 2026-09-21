@@ -3,7 +3,7 @@ name: ak:xia
 description: "Extract, compare, port, or adapt a feature from a GitHub repository or local repo path into the current project. Use when the user wants to copy behavior from another repo, study how another codebase implements something, compare implementations, or rewrite a feature in the local stack. Triggers on: 'port from', 'copy from repo', 'like how X does it', 'clone feature from', 'adapt from', 'bring feature from', 'borrow from', 'take from repo', 'xia', 'xi a', 'xia feature'."
 user-invocable: true
 when_to_use: "Invoke for repo feature ports."
-category: dev-tools
+category: workflow
 keywords: [port, extract, compare, feature, repo]
 argument-hint: "<github-url-or-owner/repo|local-path> [feature] [--compare|--copy|--improve|--port] [--auto|--fast]"
 metadata:
@@ -103,7 +103,7 @@ For each core component:
 - map configuration surface: env vars, flags, runtime switches
 
 For complex features with 3+ layers or stateful workflows:
-- activate `/ak:sequential-thinking` to trace multi-step flows
+- activate `ak:fable-thinking` to trace multi-step flows
 - draw state transitions if the behavior depends on workflow state
 - mark transaction boundaries and partial-failure paths
 

@@ -3,7 +3,7 @@ name: ak:ak
 description: "Operate the ak control-plane CLI itself — the AgentKit binary that installs, inspects, updates, recovers, and removes kits and their skills. Use when the next action is invoking an ak subcommand (init, kit, skills, plan, journal, doctor, recover, self-update, login), deciding between read-only inspection and lifecycle mutation, disambiguating project vs global scope, or interpreting ak --json output. Not for authoring skills (use ak:skill-creator) or routing generic work (use ak:agentkit)."
 user-invocable: true
 when_to_use: "Invoke when the next action is running an ak subcommand or interpreting its output. Do not invoke for skill authoring (ak:skill-creator), plan writing (ak:plan), journal writing (ak:journal), generic task routing (ak:agentkit), or kit-specific workflows already covered by their own skills."
-category: cli
+category: meta
 keywords: [ak, cli, lifecycle, install, kit, skills, scope, adapter, doctor, recover, self-update]
 argument-hint: "[goal or subcommand]"
 metadata:
@@ -128,6 +128,20 @@ flags.
   `ak analytics`, `ak backups`, `ak versions`, `ak changelog`,
   `ak diagnostics export`. Nearly all read-only; enable/disable/delete
   under `analytics` and `content-search` are mutating.
+- **Effectiveness** — `ak insights skills|agents|evidence|compare|improvements`
+  read local quality, cost, time, uncertainty and coverage. `consent` changes
+  collection/sharing only for supplied flags; `collect`, `record`, and
+  `evaluate` write local evidence. A completed process is not acceptance.
+  `skills` and `agents` support `--since`/`--until` in Unix milliseconds and
+  `--previous-period` for descriptive changes across equally long windows.
+  Keep configuration/evaluator revisions and unknown resource coverage visible;
+  use paired evaluations before attributing improvement to a skill or runtime.
+  `ak eval run <suite.json>` executes trusted commands in isolated workspaces
+  and runtime homes; model calls may cost money. Inspect the suite first.
+  `ak insights contribute preview --month YYYY-MM` freezes an aggregate
+  locally. `contribute send --month YYYY-MM --digest <preview-digest>` sends
+  that exact payload only with separate sharing consent and an approved HTTPS
+  endpoint. Sharing defaults off; never infer remote grading consent.
 - **Runtime orchestration** — inspect installed `ak orchestrate --help` first.
   `probe` runs bounded version/help checks and writes an owned metadata cache;
   it does not prove authentication or invoke inference. `prepare`, `advance`

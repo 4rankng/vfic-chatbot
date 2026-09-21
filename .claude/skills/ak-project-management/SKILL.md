@@ -3,7 +3,7 @@ name: ak:project-management
 description: "Track progress, update plan statuses, coordinate runtime work, generate reports, and preserve cross-session continuity."
 user-invocable: true
 when_to_use: "Invoke for progress tracking, plan status, or handoffs."
-category: utilities
+category: workflow
 keywords: [project, progress, status, reports]
 argument-hint: "[task: status, hydrate, sync, report]"
 metadata:

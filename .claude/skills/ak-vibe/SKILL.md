@@ -3,7 +3,7 @@ name: ak:vibe
 description: "Run the full vibe pipeline from request intake to PR readiness, with optional merge and post-merge CI convergence. Orchestrates worktree, plan, cook/fix, code-review, ship, and review-pr, integrating debug, research, test, and docs. Supports dual-stage beta-then-stable ships via --both, ultra verifier mode via --ultra, and kongming advisory supervision via --advice."
 user-invocable: true
 when_to_use: "Invoke when a user wants one command to take a GitHub issue or feature request from planning through implementation, PR review, shipping, and optional merge."
-category: dev-tools
+category: workflow
 keywords: [vibe, pipeline, autonomous, ship, worktree, plan, cook, fix, review-pr, ci, advice, kongming, ultra, debug, research, test, docs]
 argument-hint: "[--ship] [--beta] [--both] [--advice] [--ultra] <github-issue-url | feature request>"
 license: MIT

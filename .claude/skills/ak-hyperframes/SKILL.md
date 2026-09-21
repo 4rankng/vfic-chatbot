@@ -3,7 +3,7 @@ name: ak:hyperframes
 description: "Wrap HeyGen HyperFrames CLI for HTML-first programmatic video generation. Use for short vertical/social videos, product-launch clips, motion graphics rendered from HTML composition. See also the installed remotion skill for a React-based alternative."
 user-invocable: true
 when_to_use: "Invoke for HTML-first programmatic video via HeyGen HyperFrames."
-category: frontend
+category: media
 keywords: [video, hyperframes, heygen, html, vertical, social, motion-graphics]
 license: Apache-2.0
 argument-hint: "[composition or command]"
@@ -96,9 +96,9 @@ full attribute reference and a complete vertical 1080×1920 example.
 - The installed remotion skill (`ak-remotion`) — React-based programmatic
   video generation; use it when the composition is naturally a React
   component tree rather than HTML markup.
-- The ak-html-video skill — a separate HTML-to-MP4 wrapper
-  (`nexu-io/html-video`) with its own template/Studio workflow; use
-  ak-hyperframes specifically when the task is a HeyGen HyperFrames
-  composition.
+- [references/nexu-html-video-alternative.md](references/nexu-html-video-alternative.md)
+  — the `nexu-io/html-video` template/Studio CLI, an alternative HTML-to-MP4
+  engine; use it only when its template catalog or an existing install fits
+  the request better than a HyperFrames composition.
 - The ak-motion-graphics skill — router across all in-repo video/motion
   skills plus external motion-skills packs.

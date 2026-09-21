@@ -47,7 +47,7 @@ Record the diagnose phase as active.
 **Mandatory skill chain:**
 1. **Capture pre-fix state:** Record ALL error messages, failing tests, stack traces, logs.
 2. Activate `ak:debug` skill (systematic-debugging + root-cause-tracing).
-3. Use `ak:sequential-thinking` only when a decision/evidence log would help — structured hypothesis formation.
+3. Use `ak:fable-thinking` (sequential mode) only when a decision/evidence log would help — structured hypothesis formation.
 4. Use delegated `Explore` subagents to test hypotheses only when delegation is explicitly requested/permitted.
 5. If 2+ hypotheses fail → auto-activate `ak:problem-solving`.
 6. Trace backward through call chain to ROOT CAUSE origin.
@@ -153,11 +153,11 @@ Record finalization as completed in the live surface when available and in the a
 | Step | Skills/Subagents |
 |------|------------------|
 | 1 | `ak:scout` OR parallel `Explore` subagents when delegation is permitted |
-| 2 | `ak:debug`, `ak:sequential-thinking`, optional delegated Explore when permitted, optional `ak:problem-solving` when stuck |
+| 2 | `ak:debug`, `ak:fable-thinking` (sequential mode), optional delegated Explore when permitted, optional `ak:problem-solving` when stuck |
 | 3 | `researcher` via `delegate_agent` when permitted |
 | 4 | `ak:brainstorm` |
 | 5 | `planner` |
-| 6 | `ak:problem-solving`, `ak:sequential-thinking`, `ak:context-engineering` |
+| 6 | `ak:problem-solving`, `ak:fable-thinking` (sequential mode), `ak:context-engineering` |
 | 7 | `run_shell` verification; optional delegated tester when permitted |
 | 8 | `code-reviewer` via `delegate_agent` when permitted, otherwise local review |
 | 9 | `ak:project-management`; docs/git delegation only when permitted |

@@ -3,7 +3,7 @@ name: ak:review-pr
 description: "Review GitHub pull requests for correctness, regressions and security. Optional fix, reply and merge modes authorize their respective delivery steps."
 user-invocable: true
 when_to_use: "Invoke to review one or more GitHub PRs by number/URL, optionally fix findings, optionally post the review back to GitHub, optionally merge when ready and watch CI."
-category: utilities
+category: workflow
 keywords: [pr, pull request, review, github, gh, fix, reply, merge, ci, anti-slop, ai-slop, multi-pr, graphql, rest, cloud-environment]
 argument-hint: "<PR number or URL> [<PR number or URL> ...] [--fix] [--reply] [--merge] [--advice] [--ultra]"
 allowed-tools:

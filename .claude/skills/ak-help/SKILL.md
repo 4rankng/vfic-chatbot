@@ -1,6 +1,10 @@
 ---
 name: ak:help
 description: Open the AgentKit help index. Use when users ask how to use ak, what skills are available, or which workflow to run.
+user-invocable: true
+when_to_use: "Invoke when the user asks how to use ak or which skills and commands exist."
+category: meta
+keywords: [help, index, commands, skills, usage]
 argument-hint: "[topic|skill|command]"
 metadata:
   author: agentkit

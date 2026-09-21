@@ -66,8 +66,9 @@ makes each step depend visibly on the previous one and allows revision without r
   contradiction is open.
 
 **Where to run it.** In the private reasoning space when the runtime grants one; otherwise
-as a short visible chain (restate → numbered steps → answer last). For explicit scaffolding
-and tracking scripts, `ak:sequential-thinking`.
+as a short visible chain (restate → numbered steps → answer last). Number each thought
+(`T1/N`), mark revisions (`[REVISION of T2]`) and branches (`[BRANCH A]`), and close with
+`[FINAL]` so a reader can audit the chain without extra tooling.
 
 **Token rules.** One to three sentences per thought. Reference earlier thoughts by number;
 never restate them. Contract the estimate when the problem turns out simpler.

@@ -32,7 +32,7 @@ Post via `_ak_pr_review` from the sourced helpers — it tries native `gh pr rev
 ```bash
 _ak_lib=.claude/skills/ak-review-pr/references/gh-api-helpers.sh
 [ -f "$_ak_lib" ] || _ak_lib="${HOME:-}/.claude/skills/ak-review-pr/references/gh-api-helpers.sh"
-[ -f "$_ak_lib" ] || _ak_lib=kits/core/skills/ak-review-pr/references/gh-api-helpers.sh
+[ -f "$_ak_lib" ] || _ak_lib=kits/engineer/skills/ak-review-pr/references/gh-api-helpers.sh
 [ -f "$_ak_lib" ] || { (set +u; [ -n "${CLAUDE_PLUGIN_ROOT}" ]) && _ak_lib="${CLAUDE_PLUGIN_ROOT}/skills/ak-review-pr/references/gh-api-helpers.sh"; }
 [ -f "$_ak_lib" ] || { echo "gh-api-helpers.sh not found" >&2; exit 1; }
 . "$_ak_lib"

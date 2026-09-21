@@ -64,7 +64,7 @@ Do **not** substitute:
 - inferences from unrelated files.
 
 The successor agent uses `Not captured in this session` as a signal to
-gather that evidence itself before acting, and `ak:handover` treats an
+gather that evidence itself before acting, and `ak:handoff --dispatch` treats an
 empty required section as a validation failure.
 
 ## Verification recipe (for the `--advice` reviewer)

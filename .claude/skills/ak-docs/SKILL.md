@@ -3,12 +3,12 @@ name: ak:docs
 description: "Analyze a codebase and create, refresh, summarize, or audit project documentation without imposing a fixed docs layout, with an opt-in classic layout via --preset classic, including authoring and optimizing the root CLAUDE.md/AGENTS.md agent context file, or distilling DO/DON'T rules for that file from git history, CI runs, and (with --source) current source-tree markers."
 user-invocable: true
 when_to_use: "Invoke to create, refresh, summarize, or audit project documentation; to author or optimize the root CLAUDE.md/AGENTS.md agent context file; or to distill DO/DON'T rules for that file from git history, CI runs, and optionally source-tree markers via --source."
-category: utilities
+category: workflow
 keywords: [documentation, init, update, summarize, audit, agent-context, claude-md, agents-md, agents, rules, git-history, ci-failures, source-mining, scout, preset, classic-layout]
 argument-hint: "init|update|summarize|agent-context|agents|llms"
 metadata:
   author: agentkit
-  version: "1.10.1"
+  version: "1.11.0"
 ---
 
 # Documentation Management
@@ -59,6 +59,10 @@ Parse the first word of `$ARGUMENTS`:
 
 Other workflows deciding whether docs are affected should load
 `references/documentation-management.md`.
+
+`init`, `update`, and `agent-context` also load
+`references/operational-lookup.md` when the operation establishes, changes, or
+disproves a route to a system the repository does not own.
 
 ## Flags
 
@@ -119,6 +123,18 @@ Discovery still decides what content each file earns and which files to skip.
 
 ## Maintenance Rules
 
+- Maintain affected instructions in authorized scope on completion or at a
+  meaningful operational milestone, even when no source file changed; do not
+  wait to be asked for a separate update run.
+- Write nothing when there is no new durable instruction or the content is
+  already equivalent. A no-op is a correct outcome, and it is not a reason to
+  touch timestamps, reorder sections, or rewrite a file.
+- Apply the write-authority ladder and the credential invariant in
+  `references/doc-content-rules.md`; do not restate them here.
+- A root agent context file may carry a short policy plus a pointer to the
+  project's operational guide. The pointer is one line — a link plus a purpose
+  clause, never a locator, URL, account or project id, or customer name. Root
+  does not import the whole runbook and does not become a copy of outside state.
 - Update only documents whose contract or evidence changed.
 - Delete stale or duplicate guidance instead of preserving it for history.
 - Link to the owning script, manifest, or generated source instead of copying

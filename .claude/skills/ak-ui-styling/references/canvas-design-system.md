@@ -170,8 +170,9 @@ Embed conceptual DNA without announcing:
 - Large sizes for impact moments
 
 **Font integration:**
-- Search `./canvas-fonts` directory
-- Download needed fonts
+- Pull open-licensed families from Google Fonts (for example Instrument Serif, Bricolage
+  Grotesque, Crimson Pro, Geist Mono, IBM Plex Mono, Outfit, Work Sans, Young Serif)
+- Download only the weights the piece needs
 - Bring typography onto canvas
 - Part of art, not typeset digitally
 

@@ -3,7 +3,7 @@ name: ak:research-prompt
 description: Draft a self-contained research brief for a human or AI researcher. Use when users ask for a research prompt, research brief, or a deep-research task to hand off.
 user-invocable: true
 when_to_use: Invoke to write the research assignment, not to perform the research.
-category: utilities
+category: workflow
 keywords: [research, brief, prompt, sources, evidence]
 license: MIT
 argument-hint: "<research topic | decision>"

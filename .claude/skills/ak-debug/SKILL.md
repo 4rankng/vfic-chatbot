@@ -3,7 +3,7 @@ name: ak:debug
 description: "Debug systematically with root cause analysis before fixes. Use for bugs, test failures, unexpected behavior, performance issues, call stack tracing, multi-layer validation, log analysis, CI/CD failures, database diagnostics, system investigation."
 user-invocable: true
 when_to_use: "Invoke when root cause must be proven before a fix."
-category: utilities
+category: workflow
 keywords: [debug, root-cause, bugs, test-failures]
 languages: all
 argument-hint: "[error or issue description] [--ultra]"

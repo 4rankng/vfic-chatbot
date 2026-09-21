@@ -3,7 +3,7 @@ name: ak:deep-swe
 description: Benchmark a coding model on DeepSWE through Pier and OpenRouter. Use when users ask to run DeepSWE, score a model, or verify coding-agent benchmark results.
 user-invocable: true
 when_to_use: Invoke for a costed external coding-agent evaluation, not repository-local optimization.
-category: dev-tools
+category: workflow
 keywords: [benchmark, deepswe, pier, openrouter, evaluation]
 license: MIT
 argument-hint: "<OpenRouter model slug>"

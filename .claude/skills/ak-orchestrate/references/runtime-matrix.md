@@ -12,6 +12,9 @@ evidence fields used by that decision.
 Use `ak orchestrate probe --json` for bounded local version/help discovery;
 `--runtime` narrows candidates and repeated `--path <id>=<executable>` handles
 explicit installations outside PATH. `--refresh` discards cached help evidence.
+A `help-probe-timeout` reason is a probe-budget failure, not a broken binary;
+raise `--timeout` on a slow host. The probe asks Pi for help without
+extensions, so extension-provided flags are verified only at dispatch.
 Reuse session discovery only while identity, host, authentication context and
 required controls remain unchanged; invalidate on change or probe failure.
 Version is freshly probed; cached help is keyed by resolved executable,
@@ -75,7 +78,7 @@ Google Antigravity CLI (`agy`), and Grok Build (`grok`) independently.
 
 | Requested candidate | Upstream reference | Probe focus |
 | --- | --- | --- |
-| Pi agent (`pi`) | Pi coding-agent README, upstream GitHub repository `badlogic/pi-mono` (follow repository redirects) | Print/JSON versus RPC mode, provider/model resolution, tool and extension controls, explicit skill loading, session identity |
+| Pi agent (`pi`) | Installed package `docs/` and upstream GitHub repository `earendil-works/pi-mono`; session, dispatch and onboarding contract in [pi-sessions.md](pi-sessions.md) and [pi-onboarding.md](pi-onboarding.md) | Print/JSON versus RPC mode, provider/model resolution, tool and extension controls, explicit skill loading, project trust, run-scoped session directory and session identity |
 | Oh My Pi (`omp`) | Oh My Pi README, upstream GitHub repository `can1357/oh-my-pi` | Print/JSON versus RPC/ACP mode, provider/model roles, cwd, approval, extensions, nested task agents, native time limit |
 | Antigravity CLI (`agy`) | Google Antigravity headless documentation at `www.agy.dev/docs/cli/headless/` | Print input/output, model/agent discovery, sandbox on this OS, print timeout, conversation identity, instruction discovery |
 | Grok Build (`grok`) | Grok Build CLI reference at `docs.x.ai/build/cli/reference` | Single-turn/prompt-file input, structured terminal result, model discovery, permission/sandbox controls, nested agents, session identity |
@@ -89,7 +92,11 @@ Prefer a status-only, non-refreshing auth probe when advertised. Never use a
 credential-printing command, a credential-output option, or read auth stores
 to establish readiness. If no non-secret readiness probe exists, keep auth
 unverified until an authorized bounded invocation proves it. Never start a
-login, install, update, or configuration migration as discovery.
+login, install, update, or configuration migration as discovery. A candidate
+that a job or the user requires and that discovery reports missing or
+unauthenticated leaves discovery and enters its onboarding reference as a
+separate visible setup step (Pi: [pi-onboarding.md](pi-onboarding.md)), after
+which it is probed again.
 
 Record provider, resolved model, model family when evidenced, enabled
 extensions, and nested-agent controls. Pi and OMP can select the same model

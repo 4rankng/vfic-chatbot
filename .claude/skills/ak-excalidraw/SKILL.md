@@ -9,7 +9,7 @@ description: >-
   "diagram this repo" or "visualize the architecture".
 user-invocable: true
 when_to_use: "Invoke for editable canvas diagrams or codebase visual maps."
-category: dev-tools
+category: engineering
 keywords: [diagrams, architecture, flowcharts, whiteboard, SVG]
 argument-hint: "[diagram description|path] [--export <png|svg>] [--live]"
 metadata:

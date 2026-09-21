@@ -3,7 +3,7 @@ name: ak:plan
 description: Create, validate or review implementation plans with acceptance criteria and executable phases. Use for planning and roadmaps; implementation belongs to cook.
 user-invocable: true
 when_to_use: "Invoke when work needs phases, architecture, or a roadmap."
-category: utilities
+category: workflow
 keywords: [planning, architecture, phases, roadmap, html, github, wiki, agentwiki, publish]
 argument-hint: "[task] [--fast|--hard|--deep|--parallel|--two|--debate|--ultra] [--tdd|--no-tasks] [--html] [--github] [--wiki] [--advice] [--yagni] [--skip-journal] [--no-antv|--no-diagram-design|--no-editorial-visuals] OR [archive|red-team|validate]"
 license: MIT

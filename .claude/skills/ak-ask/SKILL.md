@@ -4,7 +4,7 @@ description: "Answer technical and architectural questions with expert analysis.
 user-invocable: true
 disable-model-invocation: true
 when_to_use: "Invoke for analysis-only answers before changing code."
-category: utilities
+category: reasoning
 keywords: [questions, consultation, architecture]
 argument-hint: "[technical-question] [--yagni]"
 metadata:

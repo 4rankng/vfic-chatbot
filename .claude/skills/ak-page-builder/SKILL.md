@@ -3,7 +3,7 @@ name: ak:page-builder
 description: "Build, extend, or operate a dynamic page builder using a project's components and stack. Use for configurable resizable widgets, responsive touch editors, previews, publishing, and agent interfaces with a project operator skill. Not for one-off page design or a generic API wrapper."
 user-invocable: true
 when_to_use: "Invoke to integrate or extend an agent-operated page builder, or operate one when its project operator skill is not yet available."
-category: web-development
+category: engineering
 keywords: [page-builder, blocks, editor, responsive, mcp, publishing]
 argument-hint: "[setup|update|operate] [project-path] [request]"
 metadata:

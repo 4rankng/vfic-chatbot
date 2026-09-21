@@ -6,7 +6,7 @@ description: >-
   compression evaluation, benchmark cost/duration/agent steps, memory and agent systems.
 user-invocable: true
 when_to_use: "Invoke for context budget, model efficiency, compaction, or agent architecture."
-category: utilities
+category: engineering
 keywords: [context, tokens, limits, memory, optimization, compaction, budget, benchmarks]
 argument-hint: "[topic or question]"
 metadata:

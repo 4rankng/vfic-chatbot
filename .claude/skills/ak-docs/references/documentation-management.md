@@ -9,7 +9,11 @@ or `/ak:docs agent-context` (root `CLAUDE.md`/`AGENTS.md`).
 - user-visible behavior, setup, commands, or configuration;
 - architecture, data flow, public contracts, security, or recovery;
 - machine-readable contracts or generated reference output;
-- an accepted maintainer decision that future work must not rediscover.
+- an accepted maintainer decision that future work must not rediscover;
+- authorized work outside the repository that establishes or changes an
+  operational route — deploy path, log source, credential source,
+  webhook/OAuth/DNS, backup/rollback, or a lookup route proven wrong (route
+  records are defined in the sibling `operational-lookup.md`).
 
 Do not add documentation churn for internal edits whose observable contract did
 not change. Docs own WHY and WHERE; current WHAT and HOW must point to an

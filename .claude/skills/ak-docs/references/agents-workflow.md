@@ -17,7 +17,7 @@ filter and write/don't-write table in that file; this workflow adds mining and
 ranking only, and never invents a second filter.
 
 Before proposing or applying a test-related root-context edit, load and apply
-`references/practical-principles-for-setting-up-and-running-tests.md`. It does
+`../../ak-test/references/practical-principles-for-setting-up-and-running-tests.md`. It does
 not bypass the evidence, keep-or-cut, placement, or user-confirmation gates.
 
 ## Hard constraints
@@ -28,7 +28,9 @@ not bypass the evidence, keep-or-cut, placement, or user-confirmation gates.
   200 CI runs. Positional override: `agents 30d`, `agents 500`.
   Never open-ended: old history describes code that no longer exists.
 - **Confirm before write.** Nothing lands in the agent context file without
-  explicit user approval on the proposed diff.
+  explicit user approval on the proposed diff. This mining operation keeps its
+  own confirmed-change contract; the routine write authority in
+  `doc-content-rules.md` belongs to the other documentation operations.
 - **`--advice` is implied.** The Kongming review pass is built into step 5.
   A separate `--advice` flag is redundant here.
 - **`--dry-run` stops after step 3.** Reports mined signals and watchlist,

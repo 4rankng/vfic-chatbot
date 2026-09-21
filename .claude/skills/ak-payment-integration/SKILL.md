@@ -3,7 +3,7 @@ name: ak:payment-integration
 description: Integrate payments with SePay (VietQR), Polar, and Stripe. Checkout, webhooks, subscriptions, QR codes, and multi-provider orders.
 user-invocable: true
 when_to_use: "Invoke for checkout, subscriptions, webhooks, or QR payments."
-category: backend
+category: engineering
 keywords: [payments, stripe, polar, webhooks, qr]
 license: MIT
 argument-hint: "[provider] [task]"

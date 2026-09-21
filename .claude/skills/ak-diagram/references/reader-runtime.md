@@ -18,6 +18,7 @@ Every interaction operates strictly on **authored nodes and relationships** in t
 | **Guided Stories** | `[` / `]` or Chapter UI | Plays through authored `meta.views` chapters sequentially |
 | **Share Card Export** | 📤 Card button | Exports a canonical 1200×630 SVG share card representing the current diagram state |
 | **Theme Toggle** | ☀️ / 🌙 | Toggles between `light` and `dark` color tokens without altering geometry or preset |
+| **Replay Motion** | `M` or Replay button | Re-arms the finite entrance (and trace pass when authored) from the first column |
 
 ## Visual Presets
 
@@ -30,7 +31,8 @@ Visual presets modify typography, line vocabulary, and density without mutating 
 
 ## Finite Motion & Accessibility
 
-- Motion is enabled only when `meta.animation: "trace"` is specified.
-- Trace animation is **finite** ($\le 8\text{s}$ duration), user-replayable, and does not loop indefinitely.
+- Every diagram plays a finite staggered entrance: nodes rise in by column (`--step` index), edges draw along their route, labels fade in last.
+- `meta.animation: "trace"` adds one finite flow pass along every route plus a single stroke pulse per node after the entrance; nothing loops indefinitely and the whole sequence stays under 8 s.
+- Motion is user-replayable (`M` or the Replay button) and lives entirely in CSS (`assets/diagram-core.css`), so standalone SVG output animates the same way.
 - Under `@media (prefers-reduced-motion: reduce)`, all transitions and animations are completely disabled and final state is rendered statically.
 - All controls feature visible keyboard focus rings, semantic labels, and ARIA attributes.

@@ -39,7 +39,7 @@ path.
   model-tier degrade note below).
 - **Verifier** — one verifier subagent (Kongming). Model routing matches
   `--advice`: Claude Code subscription → `fable` (Fable 5); Codex →
-  `gpt-5.6-sol` at high reasoning; see
+  `gpt-6-astra` at low reasoning; see
   `advisory-supervision.md`. It runs on the runtime's strongest available
   model when tier routing exists; otherwise it shares the candidates' tier
   under the degrade note. Advisory: it scores and selects; it does not edit

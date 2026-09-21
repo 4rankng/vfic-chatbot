@@ -3,7 +3,7 @@ name: ak:project-organization
 description: Organize files, directories, and content structure in any project. Use when explicitly designing or reorganizing project structure, resolving a layout conflict, or organizing existing assets.
 user-invocable: true
 when_to_use: "Invoke for project structure design or reorganization, not ordinary file creation."
-category: utilities
+category: workflow
 keywords: [files, directories, structure, layout]
 argument-hint: "[directories or files to organize]"
 metadata:

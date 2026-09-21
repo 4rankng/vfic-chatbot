@@ -1,6 +1,15 @@
 # Deployment Doc Template
 
-After successful deploy, create `docs/deployment.md`:
+After a successful deploy, update the existing owning deployment document
+discovered through repository navigation, and only when the operational contract
+changed. Create one only when the project has none and the information is worth
+keeping. Route the change through the project's documentation workflow
+(`/ak:docs update`) for the route-record schema.
+
+- Record the retrieval route, never a credential value.
+- Classify dashboard URLs, account or project ids, and vault locators against the repository's audience before recording them. When that audience is public, inaccessible, or unverifiable, keep the detail in an approved restricted owner and record a non-sensitive pointer plus a blocker instead; never create a public fallback.
+- Redact incidental secrets and personal data, including from any example, receipt, or diff.
+- Keep observed state out of the document.
 
 ```markdown
 # Deployment
@@ -17,10 +26,10 @@ After successful deploy, create `docs/deployment.md`:
 \`\`\`
 
 ## Environment Variables
-| Variable | Description | Required |
-|---|---|---|
-| NODE_ENV | Environment | Yes |
-| DATABASE_URL | Database connection | Yes |
+| Variable | Source of value |
+|---|---|
+| `DATABASE_URL` | secret store or broker entry (record the locator, not the value) |
+| `API_TOKEN` | deploy platform secret store |
 
 ## Custom Domain
 [Steps to configure custom domain, if applicable]

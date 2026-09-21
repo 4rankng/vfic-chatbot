@@ -4,7 +4,7 @@ description: "Autonomous iterative optimization loop — run N iterations agains
 user-invocable: true
 disable-model-invocation: true
 when_to_use: "Invoke only when an objective metric can drive repeated trials."
-category: utilities
+category: workflow
 keywords: [optimization, iteration, metrics, loop]
 argument-hint: "[Goal/Metric description] or inline config block"
 metadata:

@@ -170,9 +170,5 @@
         "matcher": "*"
       }
     ]
-  },
-  "statusLine": {
-    "command": "/Users/dev/.nvm/versions/node/v24.18.0/bin/node /Users/dev/Documents/projects/chatbot/.claude/ak-engineer-statusline.cjs",
-    "type": "command"
   }
 }

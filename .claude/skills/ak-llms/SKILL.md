@@ -3,7 +3,7 @@ name: ak:llms
 description: "Generate llms.txt files from docs or codebase scanning. Follows llmstxt.org spec. Use for LLM-friendly site indexes, documentation summaries, AI context optimization."
 user-invocable: true
 when_to_use: "Invoke to produce LLM-friendly indexes like llms.txt."
-category: dev-tools
+category: engineering
 keywords: [llms-txt, documentation, AI-context]
 argument-hint: "[path|url] [--full] [--output path]"
 metadata:

@@ -3,7 +3,7 @@ name: ak:webmcp
 description: Build agent-ready websites with browser WebMCP tools, schemas, safety annotations, and evals. Use for page actions and agent-callable forms; server MCP belongs to ak:mcp-builder.
 user-invocable: true
 when_to_use: "Invoke to expose website features as WebMCP tools for in-browser AI agents (document.modelContext), imperative or declarative."
-category: frontend
+category: engineering
 keywords: [webmcp, model-context, browser-agents, document-modelcontext, agentic-web]
 argument-hint: "[page, form, or feature to expose as a tool]"
 metadata:

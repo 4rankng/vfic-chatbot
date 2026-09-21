@@ -1,7 +1,7 @@
 # `ak:handoff` Artifact Schema
 
 The handoff artifact is a Markdown document with a fixed section order. This
-schema is validated by `ak:handover` before dispatch (by heading name,
+schema is validated by `ak:handoff --dispatch` before dispatch (by heading name,
 tolerating extra sections between required ones).
 
 ## Frontmatter (optional but recommended)
@@ -18,7 +18,7 @@ head: 26f9ff8
 ---
 ```
 
-`handoff-version` lets `ak:handover` reject artifacts written by a future
+`handoff-version` lets `ak:handoff --dispatch` reject artifacts written by a future
 incompatible schema.
 
 ## Required section order
@@ -40,7 +40,7 @@ these exact headings:
 ## Source pointers
 ```
 
-Additional H2 sections may appear between required ones. `ak:handover`
+Additional H2 sections may appear between required ones. `ak:handoff --dispatch`
 tolerates extra sections; it fails closed only when a required heading is
 missing.
 
@@ -133,7 +133,7 @@ Not captured in this session
 - `docs/auth/oauth-callback-spec.md`
 ```
 
-## Validation summary (used by `ak:handover`)
+## Validation summary (used by `ak:handoff --dispatch`)
 
 An artifact passes validation when:
 
@@ -144,4 +144,4 @@ An artifact passes validation when:
 - `Exact next actions` includes at least one item, and the first item is
   bold-prefixed `**First safe step**`.
 
-Any failure is a hard blocker — `ak:handover` refuses to dispatch.
+Any failure is a hard blocker — `ak:handoff --dispatch` refuses to dispatch.

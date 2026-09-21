@@ -3,7 +3,7 @@ name: ak:autoresearch
 description: Route bounded, goal-directed iteration to the AgentKit skill that owns the desired outcome.
 user-invocable: true
 when_to_use: Invoke when work should improve a measurable result through repeated, verified iterations.
-category: utilities
+category: workflow
 keywords: [autoresearch, autonomous, iteration, framework, router]
 related: [ak-loop, ak-predict, ak-scenario, ak-security]
 argument-hint: "<goal or hypothesis> [--iterations N] [--metric <metric>]"

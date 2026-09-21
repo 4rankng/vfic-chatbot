@@ -3,7 +3,7 @@ name: ak:retro
 description: "Generate data-driven sprint retrospectives from any git history. Use for sprint reviews, commit analysis, code-health indicators, team-velocity reporting, and quarterly engineering reviews. Works on solo or team repos."
 user-invocable: true
 when_to_use: "Invoke to summarize engineering history from git activity."
-category: utilities
+category: workflow
 keywords: [retrospective, sprint, metrics, review]
 license: MIT
 argument-hint: "[timeframe] [--compare] [--team] [--format html|md] [--no-antv|--no-diagram-design|--no-editorial-visuals]"

@@ -3,12 +3,12 @@ name: ak:agentkit
 description: "Task router for AgentKit installs. Classifies the task, activates the right installed skills, chains them into the shortest workflow that fits, and spawns installed subagents at defined trigger points to raise output quality. Use at the start of multi-step, multi-domain, or ambiguous work, or when unsure which skill or agent applies."
 user-invocable: true
 when_to_use: "Invoke at the start of multi-step or multi-domain work, when the right skill is unclear, when skills need sequencing into a workflow, or when deciding whether and when to spawn subagents."
-category: utilities
+category: meta
 keywords: [routing, dispatch, skills, chaining, subagents, delegation, workflow, quality]
 argument-hint: "[task to route]"
 metadata:
   author: agentkit
-  version: "1.0.1"
+  version: "1.0.2"
 ---
 
 # AgentKit router

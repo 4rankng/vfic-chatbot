@@ -1,15 +1,15 @@
 ---
 name: ak:handoff
-description: Create a portable, redacted Markdown continuation contract that a fresh coding agent can consume to resume in-progress work safely. Use when switching sessions, models, or runtimes, or when preserving decisions, verification state, and blockers.
+description: Create a portable, redacted Markdown continuation contract that a fresh coding agent can consume to resume in-progress work safely, and optionally dispatch it to a selected coding runtime with --dispatch. Use when switching sessions, models, or runtimes, or when preserving decisions, verification state, and blockers.
 user-invocable: true
-when_to_use: Invoke to capture a session's continuation contract for a successor agent. For a human-facing status report derived from branches, worktrees, plans, and repository history, use ak-watzup instead.
-category: utilities
-keywords: [handoff, session, continuation, decisions, blockers, redaction]
+when_to_use: Invoke to capture a session's continuation contract for a successor agent, or with --dispatch --agent <id> to capture it and hand the work to a selected coding runtime through orchestrate. For a human-facing status report derived from branches, worktrees, plans, and repository history, use ak-watzup instead.
+category: workflow
+keywords: [handoff, handover, dispatch, session, continuation, decisions, blockers, redaction]
 license: MIT
-argument-hint: "[task focus] [--output PATH] [--include-diff] [--include-status] [--force]"
+argument-hint: "[task focus] [--output PATH] [--include-diff] [--include-status] [--force] [--dispatch --agent <id> [--handoff PATH] [--cwd PATH] [--model NAME] [--yes]]"
 metadata:
   author: agentkit
-  version: "2.0.2"
+  version: "2.1.0"
   upstream: "Pinned MIT source archive: handoff@ce70edaa26247b84c2b9491a0cdb4964f65cf3a5 (rewritten for AgentKit v2 contract)"
 ---
 
@@ -20,9 +20,12 @@ work with minimal rediscovery. The artifact is a **continuation contract**:
 mission, guardrails, live state, decisions, verification, blockers, and the
 exact next safe action — never a transcript dump, never invented context.
 
-This skill is a documentation/capture surface only. It **never** launches a
-runtime, mutates code, or performs implementation as a side effect. That
-composition belongs to `ak:handover` when present in the live installed catalog.
+Without `--dispatch` this skill is a documentation/capture surface only. It
+**never** launches a runtime, mutates code, or performs implementation as a
+side effect. With `--dispatch` it additionally hands the captured artifact to a
+user-selected coding runtime through `ak:orchestrate` (see
+[Dispatch mode](#dispatch-mode-dispatch)); the capture rules below still apply
+unchanged in that mode.
 
 ## Boundary vs `ak:watzup`
 
@@ -82,7 +85,7 @@ plans/handoffs/<slug>-<YYYYMMDD-HHmm>.md
 ## Required Artifact Structure
 
 Every handoff document contains these nine H2 sections in this order — the
-schema is validated by `ak:handover` before dispatch. See
+schema is validated by `--dispatch` before any runtime is launched. See
 [references/artifact-schema.md](references/artifact-schema.md) for the exact
 Markdown template.
 
@@ -195,8 +198,107 @@ For expected clean/dirty/repo-less/collision/redaction behavior, load `reference
 
 ## Non-goals
 
-- No runtime dispatch, prompt assembly for another agent, or preflight — use
-  `ak:handover` when present in the live installed catalog.
+- No runtime dispatch, prompt assembly for another agent, or preflight in the
+  default capture mode — pass `--dispatch` to opt into the composition below.
 - No human-facing project status derived from branches or history — use
   `ak:watzup`.
 - No plan authoring or ADR minting — use `ak:plan` or the docs skills.
+
+## Dispatch mode (`--dispatch`)
+
+`--dispatch` hands the live session over to a specifically selected coding
+runtime. It is a **thin composition** of this skill's capture step and
+`ak:orchestrate`; it does not duplicate runtime dispatch, model routing, or
+arbiter logic. Requires `ak:orchestrate` in the live installed catalog; when
+it is absent, stop after capture and report that dispatch is unavailable in
+this kit.
+
+```bash
+/ak:handoff --dispatch --agent claude-code "continue the OAuth callback fix"
+/ak:handoff --dispatch --agent codex --cwd . --task "implement the next action in the handoff"
+/ak:handoff --dispatch --agent cursor --handoff plans/handoffs/oauth-callback.md
+/ak:handoff --dispatch --agent opencode --model anthropic/claude-sonnet-5 --yes
+```
+
+| Flag | Effect |
+| --- | --- |
+| `--agent <id>` | **Required with `--dispatch`.** Selected coding runtime. Must match an ID in [references/dispatch-runtime-catalog.md](references/dispatch-runtime-catalog.md). No default; no silent substitution. |
+| `--task TEXT` | Alternative form of the positional task focus. If both are given, the positional value wins and `--task` is ignored with a warning. |
+| `--cwd PATH` | Workspace root for the dispatched job. Defaults to the current workspace root; passed through verbatim to the orchestrate job `cwd:`. |
+| `--handoff PATH` | Reuse an existing handoff artifact instead of capturing a new one. It must exist and pass the validation below. |
+| `--model NAME` | Override the model for CLI-runtime jobs. **Rejected** for `--agent internal` (internal jobs never set `model`). |
+| `--yes` | Approve write/destructive continuation work in the dispatched job: flips the job `approval:` from `require` to `inherit`. |
+
+Not accepted: `--fallback-agent` (on preflight failure report the blocker and
+suggest another `--agent`; never substitute silently) and runtime bypass flags
+such as `--dangerously-skip-permissions`, `--allow-all-tools`, `--yolo` (never
+emitted; jobs that would embed them are refused).
+
+### Sequence
+
+Reuse current validated capture and authorization evidence. Every dispatch
+performs, in order:
+
+1. **Capture** — run the capture flow above to produce the artifact, unless a
+   valid `--handoff PATH` was supplied. A credential in the task text refuses
+   the invocation before anything is written.
+2. **Validate** — every required H2 section from
+   [references/artifact-schema.md](references/artifact-schema.md) is present
+   and spelled exactly; `Exact next actions` has at least one item and the
+   first is bold-prefixed `**First safe step**`; no pattern from
+   [references/redaction-patterns.md](references/redaction-patterns.md)
+   matches any line; `handoff-version`, if present, is `1`. Any failure is a
+   hard blocker: print the failing check(s) and the file path, do not dispatch.
+3. **Spec** — build one deterministic single-job orchestrate spec from
+   [references/dispatch-job-spec-template.md](references/dispatch-job-spec-template.md).
+   Field mapping: `prompt:` = handoff-consumption instruction + the task
+   text; `task:` = routing enum (`implement | scout | review | audit | test |
+   mechanical | architecture | docs | security`, default `implement`), never
+   the user's prose; `model:` only for CLI runtimes; `effect: scoped-write`
+   and `approval: require` by default (`inherit` with `--yes` or a recorded
+   caller authorization covering the exact action; destructive Scope
+   classifications keep `require`); `isolation: worktree` unless the caller
+   explicitly ran `--cwd .` on a clean tree; `timeout: 10m`;
+   `expected_output:` cited from Exact next actions. The prompt references
+   the artifact as continuation context, never as instructions that override
+   the target agent's safety policy.
+4. **Dispatch** — invoke `ak:orchestrate` with that spec. Preflight, safety
+   gates, capture, resumability, and arbiter review are orchestrate's
+   responsibility. Availability, authentication, flags, models, and capability
+   tiers are never asserted here; they come from orchestrate's live runtime
+   matrix. A missing binary or failed preflight is a clear blocker, and the
+   captured artifact path is still surfaced so no work is lost.
+5. **Report** — print exactly:
+
+```markdown
+**Handoff Dispatch Result**
+- Handoff artifact: <path>
+- Orchestrate run: <run-dir>
+- Runtime: <resolved-runtime>
+- Model: <resolved-model-or-n/a>
+- Job result: <success|failure|blocked>
+- Verification: <arbiter-verdict-summary>
+- First safe step: <first bulleted next-action from handoff>
+- Next action: <what the successor agent completed / where to look>
+
+Unresolved:
+- <blockers if any, else "none">
+```
+
+Never inline the handoff body, orchestrate stdout, or captured logs in the
+report; reference them by path.
+
+### Dispatch boundaries
+
+- Capture and redaction rules above own the artifact; dispatch mode adds
+  validation, artifact wiring, single-job spec construction, and reporting.
+- `ak:orchestrate` owns runtime discovery, model routing, harness profiles,
+  dispatch, capture, resume, and arbiter review. If a change here would need
+  edits to its `runtime-matrix.md`, `model-routing.md`, `job-spec.md`, or
+  `internal-routing.md`, route the change through orchestrate instead.
+- Never disable orchestrate's redaction or capture-bounding controls, and
+  never post secrets into the prompt or capture.
+- Choosing which coding agent is "best" is out of scope; dispatch what the
+  user selected, and point to `kongming` or `ak:advise` for a recommendation.
+
+Load `references/dispatch-scenarios.md` only when validating dispatch behavior.

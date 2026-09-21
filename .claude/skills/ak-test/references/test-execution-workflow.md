@@ -8,6 +8,9 @@ Determine what to test based on recent changes:
 - Refactor → existing test suite (no new tests unless gaps found)
 - Coverage check → full suite with coverage flags
 
+The risk-scope and lowest-reliable-layer rules in
+`practical-principles-for-setting-up-and-running-tests.md` govern this list.
+
 ## Step 2: Pre-flight Checks
 
 Start with the smallest check that can establish the affected contract. Use these syntax/type examples when relevant; do not run every command. Reuse passing evidence only when revision, configuration and environment assumptions remain unchanged:

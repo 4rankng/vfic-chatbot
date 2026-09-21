@@ -3,7 +3,7 @@ name: ak:code-review
 description: "Review code quality with evidence-based rigor. Supports input modes: pending changes, PR number, commit hash, and codebase scan. Focuses on bugs, regressions, maintainability, reliability, and verification gaps."
 user-invocable: true
 when_to_use: "Invoke to review diffs, PRs, commits, or full codebases."
-category: utilities
+category: workflow
 keywords: [review, quality, verification, reliability]
 argument-hint: "[#PR | COMMIT | --pending | codebase [parallel]] [--ultra] [--advice] [--yagni]"
 metadata:

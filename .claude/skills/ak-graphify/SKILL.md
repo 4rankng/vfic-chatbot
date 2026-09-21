@@ -3,7 +3,7 @@ name: ak:graphify
 description: "Build queryable knowledge graphs from code, docs, papers, and images. Use for repeated relationship queries and architecture analysis when a reusable graph adds value beyond native search."
 user-invocable: true
 when_to_use: "Invoke to turn code or docs into a queryable graph."
-category: dev-tools
+category: engineering
 keywords: [knowledge-graph, code-analysis, tree-sitter, codebase-understanding, ast]
 argument-hint: "[path] [--mcp|--report|--watch]"
 related: [ak:repomix, ak:scout, ak:gkg]

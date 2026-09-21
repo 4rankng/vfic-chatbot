@@ -3,12 +3,12 @@ name: ak:test
 description: "Run unit, integration, e2e, and UI tests. Use for test execution, coverage analysis, build verification, visual regression, and QA reports."
 user-invocable: true
 when_to_use: "Invoke for running or designing validation suites."
-category: utilities
+category: workflow
 keywords: [test, unit, integration, e2e, coverage]
 argument-hint: "[context] OR ui [url] OR create|optimize|audit [scope] [--advice] [--ultra] [--interview]"
 metadata:
   author: agentkit
-  version: "1.1.2"
+  version: "1.2.0"
   workflow:
     precedes: [ak-git]
 ---
@@ -34,6 +34,10 @@ Present as options via `ask_user capability` with header "Test Operation", quest
 ## Core Principle
 
 **NEVER IGNORE FAILING TESTS.** Fix root causes, not symptoms. No mocks/cheats/tricks to pass builds.
+
+`references/practical-principles-for-setting-up-and-running-tests.md` is the
+authority for scope, layer, environment, and execution choices. Every workflow
+and operation below assumes it; load it before designing or changing tests.
 
 ## When to Use
 
@@ -89,9 +93,25 @@ security gaps), then report ranked findings and proposed repairs. Audit alone do
 
 **Load when:** `audit` argument — trust or quality concerns about the suite
 
+### 7. Test Principles (`references/practical-principles-for-setting-up-and-running-tests.md`)
+
+The eleven governing rules for every operation: test what your system owns,
+scope by risk, test at the lowest reliable layer, isolate environments, run
+sequentially by default, run expensive tests with a purpose, keep concurrency
+tests deterministic, never game the green build, investigate failures with
+evidence, test the final code, and keep tests in sync with specifications.
+
+**Load when:** choosing test scope, layer, or environment; deciding whether a
+slow, flaky, or parallel test earns its place; triaging a failure; or
+reconciling tests with changed specifications. Any suite change, optimize or
+audit proposal, or QA report must be consistent with these rules.
+
 ## Quick Reference
 
 ```
+Principles     → practical-principles-for-setting-up-and-running-tests.md
+  Scope, layer, environment, sequential vs parallel, expensive tests, failure triage
+
 Code tests     → test-execution-workflow.md
   npm test / pytest / go test / cargo test / flutter test
   Coverage: npm run test:coverage / pytest --cov
@@ -121,7 +141,7 @@ Reports        → report-format.md
 - **Browser**: `ak:agent-browser` for live browser interaction without real user cookies; `ak:chrome-profile` for the user's actual Chrome login state, opened with `chrome-profile open --json` and bound by the returned selector; `ak:web-testing` or project-native Playwright/Vitest/k6 for repeatable UI tests
 - **Analysis**: `ak:ai-multimodal` skill for screenshot analysis
 - **Debugging**: `ak:debug` skill when tests reveal bugs requiring investigation
-- **Thinking**: `ak:sequential-thinking` skill for complex test failure analysis
+- **Thinking**: `ak:fable-thinking` skill for complex test failure analysis
 
 ## Quality Standards
 

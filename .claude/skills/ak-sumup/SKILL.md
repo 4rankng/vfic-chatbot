@@ -3,7 +3,7 @@ name: ak:sumup
 description: "Summarize completed implementation, failures, workarounds, decisions, behavior, architecture, usage, follow-ups, and next steps. Use after implementation or for a technical recap."
 user-invocable: true
 when_to_use: "Invoke after implementation or when the user asks what changed, how it works, what failed, how to use it, or what remains."
-category: utilities
+category: workflow
 keywords: [summary, implementation, recap, architecture, user-flow, decisions, follow-ups]
 argument-hint: "[task|PR|branch|recent]"
 metadata:

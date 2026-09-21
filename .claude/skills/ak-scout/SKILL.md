@@ -3,7 +3,7 @@ name: ak:scout
 description: "Fast codebase scouting using native search, optional Explore agents, and user-permitted OpenCode probes. Use for file discovery, task context gathering, and scoped searches across directories."
 user-invocable: true
 when_to_use: "Invoke for fast file discovery and codebase orientation."
-category: dev-tools
+category: workflow
 keywords: [codebase, scouting, file-discovery, search]
 argument-hint: "[search-target] [ext] [--ultra]"
 metadata:

@@ -3,7 +3,7 @@ name: ak:ship
 description: "Ship a completed branch through tests, review, commit, push, and PR creation. Supports official/beta aliases, Kongming advice, and optional reviewed merge with CI convergence."
 user-invocable: true
 when_to_use: "Invoke when a completed branch needs PR shipping workflow."
-category: dev-tools
+category: workflow
 keywords: [ship, PR, merge, push, release, advice, kongming, review-pr]
 argument-hint: "[official|stable|main|beta|dev|next] [--both] [--advice] [--merge] [--skip-tests] [--skip-review] [--skip-journal] [--skip-docs] [--social] [--yes-post] [--yes-post-private] [--dry-run]"
 license: MIT
@@ -75,7 +75,7 @@ When `--advice` is present, the workflow MUST spawn `kongming` to supervise
 the local ship-to-PR path, because the flag's entire contract is that a
 supervisor saw the change. Load `../ak-brainstorm/references/advisory-supervision.md`
 for supervisor identity, host detection, and model routing (Claude
-subscription → Fable 5; Codex → `gpt-5.6-sol` + high effort; Cursor →
+subscription → Fable 5; Codex → `gpt-6-astra` + low effort; Cursor →
 `claude-fable-5-high`). Kongming returns counsel, never code; the main agent
 remains responsible for every decision, edit, and gate.
 
@@ -142,8 +142,8 @@ Step 14: Social publish   → if --social: after Step 13 terminal-green when mer
 **Detailed steps:** Load `references/ship-workflow.md`
 **Auto-detection:** Load `references/auto-detect.md`
 **PR template:** Load `references/pr-template.md`
-**Writing language:** Load `kits/core/skills/ak-review-pr/references/writing-language.md`
-**PR body contract:** Load `kits/core/skills/ak-review-pr/references/pr-body-contract.md`
+**Writing language:** Load `kits/engineer/skills/ak-review-pr/references/writing-language.md`
+**PR body contract:** Load `kits/engineer/skills/ak-review-pr/references/pr-body-contract.md`
 
 ## Writing language + PR body (#1195)
 

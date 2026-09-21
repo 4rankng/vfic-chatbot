@@ -11,6 +11,10 @@ upstream:
     - 'Copyright (c) 2025 Cocoon AI (original "architecture-diagram-generator")'
 
 provenance:
+  relationship: design reference only. The typed IR archetypes, presets, and reader interaction
+    vocabulary follow archify; the layout engine, edge router, SVG renderer, motion CSS and
+    reader runtime under scripts/compiler/ and assets/ are AgentKit-authored and share no code
+    with the upstream repository.
   adapted_archetypes:
     - architecture
     - workflow

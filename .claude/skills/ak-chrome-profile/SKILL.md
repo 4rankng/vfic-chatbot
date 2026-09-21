@@ -3,7 +3,7 @@ name: ak:chrome-profile
 description: Target a real Google Chrome profile for browser automation through Chrome DevTools MCP. Provides the chrome-profile CLI, profile discovery, live DevTools probing guidance, setup playbooks, and URL-anchor tab selection.
 user-invocable: true
 when_to_use: "Invoke when browser automation needs the user's real Chrome profile, cookies, account, or a deterministic profile target."
-category: dev-tools
+category: engineering
 keywords: [chrome, browser, profile, mcp, devtools, automation, cookies]
 license: MIT
 allowed-tools:

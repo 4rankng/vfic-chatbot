@@ -3,7 +3,7 @@ name: ak:threejs
 description: "Build 3D web experiences with Three.js. Use for WebGL/WebGPU scenes, GLTF models, animations, physics, VR/XR."
 user-invocable: true
 when_to_use: "Invoke for 3D, WebGL/WebGPU, GLTF, physics, or XR."
-category: frontend
+category: engineering
 keywords: [threejs, 3d, webgl, webgpu, gltf]
 license: MIT
 argument-hint: "[3D scene or feature]"

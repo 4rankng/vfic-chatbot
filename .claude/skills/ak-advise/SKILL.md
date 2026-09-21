@@ -4,7 +4,7 @@ description: "Interview to clarify requirements or pressure-test a plan, then de
 user-invocable: true
 disable-model-invocation: true
 when_to_use: "Invoke when the user wants honest advice, a second opinion, requirement reframing, or an interview that pressure-tests an existing plan, design, or proposal — before planning or implementation."
-category: utilities
+category: workflow
 keywords: [advice, interview, requirements, reframing, tradeoffs, second-opinion, github, wiki, html, report]
 argument-hint: "[prompt-or-url] [--html] [--md] [--wiki] [--github] [--agent] [--ultra] [--yagni] [--no-antv|--no-diagram-design|--no-editorial-visuals]"
 license: MIT
