@@ -6,11 +6,11 @@ import uuid
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
 from app.api import personas
 from app.api.auth_dependencies import require_admin
 from app.schemas.personas import PersonaAssignmentOut, PersonaAssignmentUpdate
+from app.shared.domain.errors import ValidationError
 
 
 def test_persona_assignments_routes_use_exact_admin_paths_and_rbac() -> None:
@@ -52,7 +52,7 @@ async def test_update_persona_assignment_surfaces_invalid_provider_as_422(monkey
 
     monkeypatch.setattr(personas.PersonaService, "update_adapter_assignment", update_adapter_assignment)
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(ValidationError) as exc:
         await personas.update_persona_assignment(
             provider="invalid",
             body=PersonaAssignmentUpdate(persona_id=None),

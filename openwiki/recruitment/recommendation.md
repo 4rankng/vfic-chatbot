@@ -3,9 +3,6 @@ type: wiki
 title: "Salary/profile recommendation logic"
 description: "Salary band parsing, profile statement detection, recency/salary sort intents, and the recommendation query port used by the bot."
 tags: [recommendation, salary, scoring, job-matching, lead-profile, active-jobs]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-6dcfc1451bcbf8009d0484a9
     resource: repo://backend/app/core/config.py
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-c7eeccf62aa70ad3ab79514b
     resource: repo://backend/app/recruitment/domain/recommendation.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 # Salary/profile recommendation logic

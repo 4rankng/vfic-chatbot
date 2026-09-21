@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import get_current_user, require_admin
@@ -17,6 +17,7 @@ from app.schemas.user import (
     UserOut,
     UserUpdate,
 )
+from app.shared.domain.errors import BadRequestError, ConflictError, NotFoundError
 from app.shared.infrastructure.db import get_request_db
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -43,7 +44,7 @@ async def update_me(
     try:
         return await svc.update_me(current=user, body=body)
     except ValueError as exc:  # email already exists
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ConflictError(str(exc)) from exc
 
 
 # ── Admin CRUD ─────────────────────────────────────────────────────────────
@@ -70,7 +71,7 @@ async def create_user(
     try:
         return await svc.create_user(body=body, actor_id=admin.id)
     except ValueError as exc:  # email already exists
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ConflictError(str(exc)) from exc
 
 
 @router.get("/{user_id}", response_model=UserOut)
@@ -81,7 +82,7 @@ async def get_user(
 ) -> UserOut:
     user = await build_user_http_service(db).get_user(user_id=user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+        raise NotFoundError("user not found")
     return user
 
 
@@ -96,9 +97,9 @@ async def update_user(
     try:
         return await svc.update_user(user_id=user_id, body=body, actor_id=admin.id)
     except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+        raise NotFoundError("user not found")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ConflictError(str(exc)) from exc
 
 
 @router.post("/{user_id}/disable", response_model=UserOut)
@@ -130,9 +131,9 @@ async def reset_user_password(
     try:
         await svc.reset_password(user_id=user_id, body=body, actor_id=admin.id)
     except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+        raise NotFoundError("user not found")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise BadRequestError(str(exc)) from exc
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -145,9 +146,9 @@ async def delete_user(
     try:
         await svc.delete_user(user_id=user_id, actor_id=admin.id)
     except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+        raise NotFoundError("user not found")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise BadRequestError(str(exc)) from exc
 
 
 async def _set_disabled(
@@ -161,6 +162,6 @@ async def _set_disabled(
     try:
         return await svc.set_disabled(user_id=user_id, disabled=disabled, actor_id=actor.id)
     except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+        raise NotFoundError("user not found")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise BadRequestError(str(exc)) from exc

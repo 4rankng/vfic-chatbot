@@ -3,9 +3,6 @@ type: system
 title: Knowledge base, RAG retrieval, and pgvector layout
 description: Per-project knowledge documents, the EMBEDDING_DIM schema pin, pgvector halfvec HNSW + exact rerank, the retrieval flow with chunk visibility rules, and the direct-context capacity invariants.
 tags: [rag, pgvector, hnsw, halfvec, embedding, retrieval, knowledge-base]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-5a536de57792cef4de4e76e8
     resource: repo://backend/alembic/versions/0016_query_perf_indexes.py
@@ -26,6 +23,9 @@ sources:
   - id: openwiki-source-8f27a28439eaf3ce0c8244eb
     resource: repo://backend/app/services/retrieval/repository.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 RAG (retrieval-augmented generation) is the spine of the bot's answers.

@@ -3,9 +3,6 @@ type: system
 title: Bot-turn pipeline (LangGraph runtime)
 description: Per-turn pipeline node order (load → typing → agent → safety → pre-send guard → send), how the graph brain depends on Ports and GraphDeps, how factories wire concrete services, and the conversation lock that enforces at-most-one in-flight turn.
 tags: [graph, langgraph, ports, runner, factories, bot-run, lock-ttl]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-6dcfc1451bcbf8009d0484a9
     resource: repo://backend/app/core/config.py
@@ -19,9 +16,14 @@ sources:
     resource: repo://backend/app/graph/runner.py
   - id: openwiki-source-4226af23735c635b26f5609d
     resource: repo://backend/app/graph/types.py
+  - id: openwiki-source-085098b884681cab422762c1
+    resource: repo://backend/app/services/integration_settings.py
   - id: openwiki-source-b47277678b763ccf81e44e6a
     resource: repo://backend/app/shared/application/outbound.py
-generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+generated: { by: "opencode", at: "2026-09-21T02:42:43.794Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 The bot turn is the hot edge of the system. The pipeline mirrors a
@@ -119,9 +121,12 @@ directly into `GraphDeps`.
 `backend/app/graph/factories.py` defines two layers:
 
 1. **`_build_cached_clients(db)`** — once per (Minimax version × OpenRouter
-   version), constructs the LLM clients + embedder. The cache key covers
-   only the LLM providers — **not** Zalo — so an OA token rotation does
-   not tear down the cached clients.
+   version × Custom LLM version), constructs the LLM clients + embedder.
+   The cache key covers the LLM providers — **not** Zalo — so an OA token
+   rotation does not tear down the cached clients. Displaced bundles are
+   retired behind a 600s grace window so any in-flight turn that already
+   captured a reference can finish, then the underlying HTTP pools are
+   closed.
 2. **`build_deps(db, *, session_factory=None)`** — once per turn, re-binds
    the per-turn pieces:
 

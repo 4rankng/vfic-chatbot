@@ -3,15 +3,15 @@ type: wiki
 title: "Configuration, settings, and ownership of env keys"
 description: "Settings split between code constants (Zalo endpoints, EMBEDDING_DIM, DIGEST_*), Settings() env-loaded fields (DB pool, intervals, CORS, secrets), and admin-managed runtime credentials."
 tags: [configuration, settings, env, secrets, db-pool, admin-managed]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-6dcfc1451bcbf8009d0484a9
     resource: repo://backend/app/core/config.py
   - id: openwiki-source-085098b884681cab422762c1
     resource: repo://backend/app/services/integration_settings.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 # Configuration, settings, and ownership of env keys

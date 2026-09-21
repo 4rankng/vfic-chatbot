@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import HTTPException, status
-
 from app.conversation_messaging.application.outbound_recovery import (
     OutboundRecoveryCandidate,
     recover_outbound_batch,
@@ -21,6 +19,7 @@ from app.conversation_messaging.application.http import (
     ConversationHttpRecord,
     InlineWebChatTurnResult,
 )
+from app.shared.domain.errors import ConflictError, DomainError
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +56,7 @@ async def run_inline_web_chat_turn(
 
     active = await InstallationService(db).resolve_active()
     if active is None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
+        raise ConflictError(
             "Chatbot chưa được bật. Hãy hoàn tất cấu hình rồi bật chatbot trước khi thử hội thoại.",
         )
     authority = active.fingerprint
@@ -82,8 +80,8 @@ async def run_inline_web_chat_turn(
     )
     try:
         outcome = await run_turn(state, deps=await build_deps(db))
-    except Exception as exc:  # noqa: BLE001 - preserve route-level HTTP behavior
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - surface the failure as a 500 with its detail
+        raise DomainError(str(exc)) from exc
     return {
         "outcome": outcome.get("outcome"),
         "reply": outcome.get("reply"),

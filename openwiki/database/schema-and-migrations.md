@@ -3,9 +3,6 @@ type: data
 title: Schema, hand-written Alembic migrations, and seed data
 description: How the schema is owned (Alembic writes DDL, SQLAlchemy 2.x models mirror it), the canonical migration heads, the key tables (users, conversations, messages, leads, knowledge chunks, integration_settings, external_source_sync_state, bot_runs), and the dev seeding workflow.
 tags: [alembic, sqlmodel, migrations, pgvector, seed, schema, encryption]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-588dae121ebffa44febf9dcf
     resource: repo://backend/alembic/versions/0001_baseline.py
@@ -44,6 +41,9 @@ sources:
   - id: openwiki-source-012f2c78e3b1446dfc35803f
     resource: repo://Makefile
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 Schema ownership is **explicit**: Alembic writes the DDL; SQLAlchemy 2.x

@@ -1,6 +1,6 @@
 # Project Roadmap
 
-**Last updated:** 2026-07-18
+**Last updated:** 2026-09-21
 **Production:** `bot.tingting.vip` — stable, serving candidates over Zalo.
 
 ---
@@ -100,9 +100,11 @@ as candidate work items; confirm with the owner before scheduling.
 1. **Complete the protected Phase 5–7 activation gates** above without
    weakening the dormant fail-closed boundary.
 2. **Decide logout-on-browser-close behavior** — product call (K-4).
-3. **Investigate the open `lead_stage` PATCH issue** (K-6).
-4. **Tighten domain exception coverage** — some routers still raise raw
-   `HTTPException`; convert when touched (code-standards notes this).
+3. ~~**Investigate the open `lead_stage` PATCH issue**~~ — done 2026-09-21; it was
+   a real concurrency guard bypass, now fixed (K-6).
+4. ~~**Tighten domain exception coverage**~~ — done 2026-09-21; see K-9.
+   Every router and the conversation-messaging composition root now raise
+   domain errors.
 5. **Zalo OA path hardening** — the OA integration is newer than the Bot
    Platform path; load-test + golden-case before promoting to primary.
 
@@ -126,8 +128,17 @@ as candidate work items; confirm with the owner before scheduling.
   the widened column and deploy cleanly.
 
 ### K-3. Test Redis port mismatch (6380 vs 6382) — RESOLVED
-- **Status:** resolved — no `6380` reference remains in the backend Makefile,
-  dev compose, docs, or READMEs at current HEAD.
+- **Status:** resolved, but the earlier "resolved" note here was itself wrong:
+  at that HEAD, `docs/code-standards.md` still pinned
+  `REDIS_URL=redis://localhost:6380/0` in its documented test command and
+  `docs/troubleshooting/README.md` named `redis://localhost:6379/0` as the dev
+  default. Both were corrected 2026-09-21.
+- The real finding: the unit suite needs **no Redis at all**. `tests/conftest.py`
+  replaces the Redis singletons with a no-op double, which is why the
+  `backend-unit` CI job runs a bare `pytest -m "not integration"` with no env
+  vars. The documented `REDIS_URL` prefix was vestigial.
+- Ports in use: dev `:6382` (host, per `docker-compose.dev.yml` — 6379 belongs
+  to a sibling project), prod `:6379` inside the compose network.
 
 ### K-4. Logout-on-browser-close is undecided (product call)
 - **Current behavior:** JWT access (60 min) + refresh (14 day) tokens are
@@ -148,12 +159,25 @@ as candidate work items; confirm with the owner before scheduling.
   for this repository; root `quality-gates.yml` covers every gate they
   provided.
 
-### K-6. Open `lead_stage` PATCH issue
-- **Status:** per project memory, an open issue exists with `lead_stage`
-  PATCH behavior. Not diagnosed here.
-- **Owner action:** reproduce against current HEAD, capture the failing
-  request/response, and scope a fix. (Documented to prevent it being
-  forgotten — do not assume it is still reproducible without verifying.)
+### K-6. `lead_stage` PATCH dropped the concurrency guard — RESOLVED
+- **Diagnosed and fixed 2026-09-21.** Root cause: in `update_lead`
+  (`app/api/leads.py`), a payload carrying `lead_stage` **and** other fields runs
+  `set_stage` — which advances the row version — and then discarded the caller's
+  `version` via `changes.pop("version", None)`.
+- **Impact:** with no `version` in `changes`, `LeadService.update` takes its
+  "trusted internal caller" branch, which never calls `optimistic_apply`. So the
+  remaining fields were written with **no** optimistic-concurrency check, and a
+  concurrent edit was silently lost (lost update).
+- **Proof:** `LeadService.update(lead, {...})` with no `version` makes **0**
+  `optimistic_apply` calls and mutates + commits directly; the handler was
+  observed handing `{'name': 'edited'}` (no `version`) to the second write.
+- **Fix:** re-arm the guard with the version `set_stage` just produced —
+  `changes["version"] = lead.version`.
+- **Regression test:** `backend/tests/test_lead_update_concurrency.py` — fails
+  with `KeyError: 'version'` against the old behaviour, passes now.
+- **Blast radius:** latent. The frontend never PATCHes `lead_stage` (it reads the
+  field for display and reporting only), so no UI symptom surfaced; any client
+  using the documented PATCH contract could have hit it.
 
 ### K-7. Legacy / dead code in frontend — RESOLVED
 - **Status:** resolved — `@radix-ui/react-navigation-menu` is no longer in
@@ -164,10 +188,30 @@ as candidate work items; confirm with the owner before scheduling.
   backend unit (ruff + pytest), backend integration smoke, frontend quality,
   functional E2E, and the release gate on every PR and push to `main`.
 
-### K-9. Domain exception coverage partial
-- `register_domain_exception_handlers` is the canonical error path, but ~8
-  routers still raise raw `HTTPException`. Convert when those modules are
-  next touched; do not mix styles within one module.
+### K-9. Domain exception coverage partial — RESOLVED
+- **Status:** resolved (2026-09-21). The scope was understated: **12 routers, 64
+  `raise HTTPException` sites** (not "~8 routers").
+- `app/shared/domain/errors.py` now has a single framework-free `DomainError`
+  base; each subclass owns its `status_code` and optional response `headers`,
+  and `detail` carries the exact JSON payload. Added `BadRequestError` (400),
+  `UnauthorizedError` (401, adds `WWW-Authenticate: Bearer`), `GoneError` (410),
+  `ValidationError` (422) and `RateLimitedError` (429) to close the gaps the old
+  `_STATUS_MAP` could not express.
+- `app/core/errors.py` registers one handler against `DomainError` — Starlette
+  resolves by MRO, so a future error class cannot be silently forgotten.
+- Converted 64 router sites plus 2 in `app/composition/conversation_messaging.py`.
+  `grep -rn "raise HTTPException" app/` now returns only `app/core/ratelimit.py`
+  (2 sites), which is the sanctioned internal exception.
+- **Contract parity proven:** every status code, `detail` payload (including the
+  dict `{"errors": [...]}` 422 bodies and the runtime 409-vs-400 branch in
+  `knowledge.py`) and header is byte-identical. Unit suite 2312 passed.
+- Test fallout fixed: 4 fixtures built a bare `FastAPI()` without
+  `register_domain_exception_handlers`, and 4 modules asserted
+  `pytest.raises(HTTPException)` on direct dependency calls. Both patterns now
+  use the domain errors.
+- **Behaviour delta to note:** `/auth/login` and `/auth/refresh` 401s now carry
+  `WWW-Authenticate: Bearer`, which they previously omitted. Status and body are
+  unchanged; RFC 7235 requires a challenge on 401.
 
 ### K-10. Malformed character data in some conversation messages
 - **Symptom:** the recruiter inbox can render the replacement character (`�`)
@@ -178,6 +222,32 @@ as candidate work items; confirm with the owner before scheduling.
 - **Owner action:** trace the affected records through the Zalo ingestion and
   storage pipeline, capture the original payload encoding, and repair data at
   the source with a separately scoped migration or remediation plan.
+
+### K-11. Web-chat 500 responses echo raw exception text
+- **Where:** `app/composition/conversation_messaging.py`, in
+  `run_inline_web_chat_turn`.
+- **Current behavior:** a failure inside `run_turn` is re-raised as a 500 whose
+  `detail` is the raw `str(exc)`, deliberately bypassing the catch-all handler
+  in `main.py` that returns a generic Vietnamese 500.
+- **Risk:** internal exception text reaches the client on the admin-only
+  web-chat trial path. Low exposure (admin-gated), but it is an
+  information-disclosure smell.
+- **Note:** the K-9 conversion preserved this behavior exactly rather than
+  silently changing the contract. Collapsing it to the generic message is a
+  small, separate, user-visible decision.
+- **Owner action:** confirm whether the raw detail is still wanted for
+  debugging; if not, delete the `except` and let the catch-all handle it.
+
+### K-12. Frontend `react-refresh/only-export-components` warnings (16)
+- **Where:** 9 component modules under `frontend/src/components/`.
+- **Status:** deliberately tolerated. `eslint.config.js` sets the rule to
+  `warn` (with `allowConstantExport`), and CI runs a bare `npm run lint` with no
+  `--max-warnings`, so warnings never fail the build.
+- **Impact:** Fast Refresh degrades to a full reload while editing those files.
+  Development-time only; no runtime or production effect.
+- **Owner action:** only worth doing alongside real work on those modules —
+  it means extracting the non-component exports into sibling modules and
+  updating every importer.
 
 ---
 

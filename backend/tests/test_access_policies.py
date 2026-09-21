@@ -4,11 +4,10 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-
 from app.access.application.installation_access import InstallationAccessPolicy
 from app.access.domain.errors import ResourceNotFoundError
 from app.api import auth_dependencies, installation_dependencies
+from app.shared.domain.errors import ForbiddenError, NotFoundError
 
 
 class FakeInstallationAuthority:
@@ -75,12 +74,12 @@ def test_role_dependencies_preserve_exact_403_details() -> None:
     assert auth_dependencies.require_recruiter(admin) is admin
     assert auth_dependencies.require_recruiter(recruiter) is recruiter
 
-    with pytest.raises(HTTPException) as admin_exc:
+    with pytest.raises(ForbiddenError) as admin_exc:
         auth_dependencies.require_admin(recruiter)
     assert admin_exc.value.status_code == 403
     assert admin_exc.value.detail == "admin only"
 
-    with pytest.raises(HTTPException) as recruiter_exc:
+    with pytest.raises(ForbiddenError) as recruiter_exc:
         auth_dependencies.require_recruiter(SimpleNamespace(id=uuid4(), role="viewer"))
     assert recruiter_exc.value.status_code == 403
     assert recruiter_exc.value.detail == "recruiter only"
@@ -99,7 +98,7 @@ async def test_capability_dependency_maps_not_found_detail(monkeypatch) -> None:
     )
     dependency = installation_dependencies.require_capability("conversation")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError) as exc_info:
         await dependency(SimpleNamespace(id=uuid4()), SimpleNamespace())
 
     assert exc_info.value.status_code == 404
@@ -119,7 +118,7 @@ async def test_capability_or_legacy_dependency_maps_not_found_detail(monkeypatch
     )
     dependency = installation_dependencies.require_capability_or_legacy("conversation")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError) as exc_info:
         await dependency(SimpleNamespace(id=uuid4()), SimpleNamespace())
 
     assert exc_info.value.status_code == 404

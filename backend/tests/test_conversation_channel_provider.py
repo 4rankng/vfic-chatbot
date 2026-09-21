@@ -14,10 +14,12 @@ from httpx import ASGITransport
 from app.api.conversations import router as conversations_router
 from app.api.auth_dependencies import get_current_user
 from app.core.db import get_db
+from app.core.errors import register_domain_exception_handlers
 from app.models.user import Role
 
 
 _app = FastAPI()
+register_domain_exception_handlers(_app)
 _app.include_router(conversations_router, prefix="/api/v1")
 
 

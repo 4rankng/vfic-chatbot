@@ -3,9 +3,6 @@ type: architecture
 title: System overview and component topology
 description: How the synchronous answer path, background workers, edge, and realtime push fit together — and which subsystem owns each step of an inbound Zalo message.
 tags: [architecture, fastapi, rq, redis, postgres, pgvector, socketio, lifespan]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-770f01d7351c567fc93944dd
     resource: repo://backend/app/api/webhooks.py
@@ -36,6 +33,9 @@ sources:
   - id: openwiki-source-62317b515c31ac5b3e190eb4
     resource: repo://docs/system-architecture.md
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 TingHire (formerly Ting Ting / VFIC) is a Vietnamese recruiting chatbot and

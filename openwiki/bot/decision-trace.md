@@ -3,9 +3,6 @@ type: observability
 title: Decision trace, audit log, and bot_runs resource
 description: How every bot execution is recorded (allowlisted control-flow events only), how audit is appended, how decision traces are bounded and pruned, and how the bot_runs API surfaces them to recruiters.
 tags: [observability, decision-trace, audit, bot-runs, retention, pii-redaction]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-7e6a9dc23433aa6dfaa372aa
     resource: repo://backend/app/api/bot_runs.py
@@ -30,6 +27,9 @@ sources:
   - id: openwiki-source-54372f2d9834a49eaebe0cb9
     resource: repo://backend/app/workers/decision_trace_retention_worker.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 Every interactive bot turn records two parallel artifacts: an **append-only

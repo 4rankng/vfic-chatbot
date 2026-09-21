@@ -3,9 +3,6 @@ type: wiki
 title: "Lead pipeline: capture, enrichment, kanban, events"
 description: "Lead capture from inbound webhooks, persistence_low enrichment, kanban stages/tags/assignee, lead events, and chatops shortcuts."
 tags: [leads, kanban, enrichment, candidate-extraction, chatops, follow-up, lead-score, zalo]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-e4225e8ec527cd572e3a6fe0
     resource: repo://backend/app/recruitment/domain/statuses.py
@@ -22,6 +19,9 @@ sources:
   - id: openwiki-source-bce480b49c9a9f0493b5b435
     resource: repo://backend/app/services/profile_enrichment.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 # Lead pipeline: capture, enrichment, kanban, events

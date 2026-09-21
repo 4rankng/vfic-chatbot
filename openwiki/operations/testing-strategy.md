@@ -3,9 +3,6 @@ type: wiki
 title: "Testing pyramid, integration lane, and E2E harness"
 description: "Test layers (unit, integration, API, E2E Playwright, RAG benchmark), the disposable PostgreSQL integration lane, and the E2E harness that boots a real stack."
 tags: [testing, pytest, vitest, playwright, integration, e2e, rag-benchmark, ci]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-070c6307b3860e1806baf566
     resource: repo://backend/pyproject.toml
@@ -24,6 +21,9 @@ sources:
   - id: openwiki-source-012f2c78e3b1446dfc35803f
     resource: repo://Makefile
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 # Testing pyramid, integration lane, and E2E harness

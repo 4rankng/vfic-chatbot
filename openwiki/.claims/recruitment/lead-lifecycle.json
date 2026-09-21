@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:81371ef4cde91652a8077c07f12af03fc226d5f4a58fbe1216024163bde0008c",
+  "pageVersion": "sha256:5868622984a0e5c866789e7225aa8f9d6d4e7e641d6cb40500a1ed1bf8fba2c7",
   "claims": [
     {
       "id": "claim_3763d2d2d4464aac9e6b0920fd94ad56",
@@ -12,7 +12,7 @@
         },
         {
           "resource": "repo://backend/app/services/lead/normalizers.py",
-          "version": "repo-file-v1:sha256:8ba38513b2f2a5c524e0a420b6b2c9f998599e578f593c92544f1f3df852db51"
+          "version": "repo-file-v1:sha256:8dfae9a23866459b9b3563fdccd7ac5764d21835205bd60ae6caf16c911206ab"
         }
       ]
     },
@@ -52,7 +52,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/services/profile_enrichment.py",
-          "version": "repo-file-v1:sha256:57cbabd410ba7e5e8388f100613430fbc0d5ad2e64a7fb03b7ecf568fb5d0d89"
+          "version": "repo-file-v1:sha256:470c9ab27eb7403549a1c62ee75ee887c8fb653b18740b6622aec71435619725"
         }
       ]
     },
@@ -83,6 +83,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

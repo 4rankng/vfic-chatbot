@@ -5,7 +5,7 @@ description: "FollowupRulesPolicy by lead score, cadence hours (10h/22h/46h), 3-
 tags: [proactive, followup, lead-score, zalo-48h, scheduler, followup-worker]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
+    at: 2026-09-21T02:42:43.794Z
 sources:
   - id: openwiki-source-55002f5b1d39cf35fd6d60e2
     resource: repo://backend/app/main.py

@@ -5,11 +5,11 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
 
 from app.api import auth_dependencies
 from app.identity.application.authentication import AccessTokenAuthenticator
 from app.identity.domain.errors import AuthenticationError
+from app.shared.domain.errors import UnauthorizedError
 
 
 class TrackingPayload(Mapping[str, object]):
@@ -137,7 +137,7 @@ async def test_access_token_dependency_raises_exact_401_credentials_error(monkey
         lambda _db: FailingAuthenticator(),
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(UnauthorizedError) as exc_info:
         await auth_dependencies.get_user_from_token("bad-token", SimpleNamespace())
 
     exc = exc_info.value

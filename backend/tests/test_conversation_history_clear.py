@@ -17,10 +17,12 @@ from httpx import ASGITransport
 from app.api.conversations import router as conversations_router
 from app.api.auth_dependencies import get_current_user
 from app.shared.infrastructure.db import get_request_db as get_db
+from app.core.errors import register_domain_exception_handlers
 
 # Standalone FastAPI app with just the conversations router — avoids the
 # socketio.ASGIApp wrapper that the real app.main exports.
 _test_app = FastAPI()
+register_domain_exception_handlers(_test_app)
 _test_app.include_router(conversations_router, prefix="/api/v1")
 
 

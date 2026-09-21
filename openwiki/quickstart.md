@@ -3,9 +3,6 @@ type: wiki
 title: "TingHire quickstart"
 description: "Task-routing entry point that maps user intent to the right wiki page (deploy, debug bot turn, RAG, lead pipeline, RBAC, frontend)."
 tags: [quickstart, routing, index, onboarding]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-8037e2358a2c4f9b2c722a11
     resource: repo://AGENTS.md
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-097e0c9cfb011c3e4a091e1a
     resource: repo://docs/codebase-summary.md
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 # TingHire quickstart

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:a06e809ff2a8ac7ad0cdd1ecf91ff8e817a57a84e050a90633752d568be47957",
+  "claims": [
+    {
+      "id": "claim_878da2ecac7d424aaa3e23636d091894",
+      "statement": "The frontend is TingHire's recruiter/admin console: React 19 + TypeScript single-page app on react-admin (ra-core) and a vendored shadcn-admin-kit template, Vietnamese-only, talking to the FastAPI backend over REST and Socket.IO.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/AGENTS.md",
+          "version": "repo-file-v1:sha256:ba82a50d06f51c644b8f0961b88d961a80e02edc1c4182a69e76d0ceb4d6d7ac"
+        },
+        {
+          "resource": "repo://frontend/src/App.tsx",
+          "version": "repo-file-v1:sha256:4e78f9d83981f8dfe9f4b4e4f915cddb117f63c06f981b1af852a864ae070f0e"
+        }
+      ]
+    },
+    {
+      "id": "claim_9ad2ec484b184678933ba1e01dafa4d8",
+      "statement": "Product code lives in `frontend/src/components/atomic-crm/`. The dependency direction is strictly one-way: `atomic-crm → admin → ui`. `admin/` and `ui/` are vendored copy-paste dependencies and must never import from `atomic-crm/`.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/AGENTS.md",
+          "version": "repo-file-v1:sha256:ba82a50d06f51c644b8f0961b88d961a80e02edc1c4182a69e76d0ceb4d6d7ac"
+        }
+      ]
+    },
+    {
+      "id": "claim_bd0ad3d880a747649e751c6318464c56",
+      "statement": "The runtime that the app shell renders is statically compiled at build time by `src/components/atomic-crm/capabilities/static-recruitment-runtime.ts` from contributions under `capabilities/kernel/` and `capabilities/recruitment/`. `src/components/atomic-crm/root/CRM.tsx` renders the compiled runtime. Adding a new resource means writing a contribution, re-running the compiler, and rebuilding — there is no runtime registration.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/src/components/atomic-crm/capabilities/static-recruitment-runtime.ts",
+          "version": "repo-file-v1:sha256:9be9bc4994902efece751d52c342eb1f62c9bd699e4bf128d626d50b33445403"
+        }
+      ]
+    },
+    {
+      "id": "claim_867bf40dd1e44696acd273a5a5fb0ebc",
+      "statement": "One data provider: `src/components/atomic-crm/providers/rest/dataProvider.ts` maps react-admin verbs onto `/api/v1/{resource}`. There is no Supabase client and no FakeRest in production. Chat-specific ports live in `conversations/application/`; their REST and Socket.IO adapters live in `conversations/infrastructure/` and `providers/realtime/`. All HTTP adapters use `src/lib/apiClient.ts`.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/src/components/atomic-crm/providers/rest/dataProvider.ts",
+          "version": "repo-file-v1:sha256:9d917431b2609191d82ac6be1251e6e4981c327e85c679da3ab3640322d60310"
+        }
+      ]
+    },
+    {
+      "id": "claim_9aa8c64e0cbc4e5bb1ac124d7c2ce665",
+      "statement": "Realtime: Socket.IO (WebSocket + polling fallback) at `/socket.io/`. Auth tokens live in `localStorage` under `RaStore.auth.*` (access + refresh); a 401 triggers one transparent refresh. The legacy `knowledge_sources` resource name targets the backend `/api/v1/knowledge/documents` route via the `RESOURCE_PATH` in the dataProvider.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/src/components/atomic-crm/providers/rest/dataProvider.ts",
+          "version": "repo-file-v1:sha256:9d917431b2609191d82ac6be1251e6e4981c327e85c679da3ab3640322d60310"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-21T02:42:43.794Z"
+  }
+}

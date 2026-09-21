@@ -246,7 +246,7 @@ async def test_oauth_start_returns_400_when_app_id_not_configured(monkeypatch):
     """A missing Meta App ID surfaces a clear Vietnamese 400 instead of building
     an OAuth URL with an empty ``client_id`` that Facebook rejects generically."""
     import app.api.integrations as api
-    from fastapi import HTTPException
+    from app.shared.domain.errors import BadRequestError
 
     from app.services.integration_settings import FacebookOAuthConfig
 
@@ -261,7 +261,7 @@ async def test_oauth_start_returns_400_when_app_id_not_configured(monkeypatch):
 
     monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(BadRequestError) as exc_info:
         await api.start_facebook_oauth(
             admin=SimpleNamespace(id=UUID(int=1), token_version=1),
             db=MagicMock(),
@@ -707,7 +707,7 @@ async def test_oauth_pages_rejects_other_admin_or_changed_session(monkeypatch, a
 
     monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.HTTPException) as exc_info:
+    with pytest.raises(api.GoneError) as exc_info:
         await api.list_facebook_pages(
             flow_id="not-owned", admin=admin, db=MagicMock()
         )
@@ -743,7 +743,7 @@ async def test_oauth_pages_missing_or_invalid_flow_returns_410(monkeypatch, caps
 
     monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.HTTPException) as exc_info:
+    with pytest.raises(api.GoneError) as exc_info:
         await api.list_facebook_pages(
             flow_id="expired-flow",
             admin=SimpleNamespace(
@@ -774,7 +774,7 @@ async def test_oauth_complete_wrong_admin_does_not_consume_owner_flow(monkeypatc
 
     monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.HTTPException) as exc_info:
+    with pytest.raises(api.GoneError) as exc_info:
         await api.complete_facebook_oauth(
             payload=FacebookOAuthCompleteRequest(
                 flow_id="owned-flow", page_id="page-1"
@@ -804,7 +804,7 @@ async def test_oauth_complete_changed_session_consumes_and_rejects_flow(monkeypa
 
     monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.HTTPException) as exc_info:
+    with pytest.raises(api.GoneError) as exc_info:
         await api.complete_facebook_oauth(
             payload=FacebookOAuthCompleteRequest(
                 flow_id="stale-flow", page_id="page-1"
@@ -858,7 +858,7 @@ async def test_oauth_complete_atomically_consumes_before_side_effects(monkeypatc
     )
     assert result.status == ChannelAccountStatus.ACTIVE
 
-    with pytest.raises(api.HTTPException) as exc_info:
+    with pytest.raises(api.GoneError) as exc_info:
         await api.complete_facebook_oauth(
             payload=request, admin=admin, db=MagicMock()
         )
@@ -905,7 +905,7 @@ async def test_oauth_complete_maps_expected_provider_failures_to_generic_502(
         activate,
     )
 
-    with pytest.raises(api.HTTPException) as exc_info:
+    with pytest.raises(api.UpstreamError) as exc_info:
         await api.complete_facebook_oauth(
             payload=FacebookOAuthCompleteRequest(
                 flow_id=flow_id, page_id="page-1"
@@ -971,7 +971,7 @@ async def test_oauth_pages_rejects_malformed_decrypted_capsules(monkeypatch, pay
 
     monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.HTTPException) as exc_info:
+    with pytest.raises(api.GoneError) as exc_info:
         await api.list_facebook_pages(
             flow_id="malformed",
             admin=SimpleNamespace(
@@ -1313,7 +1313,7 @@ async def test_disconnect_returns_404_when_no_active_page(monkeypatch):
         AsyncMock(return_value=[]),
     )
 
-    with pytest.raises(api.HTTPException) as exc_info:
+    with pytest.raises(api.NotFoundError) as exc_info:
         await api.disconnect_facebook(
             admin=SimpleNamespace(id="admin-id"), db=MagicMock()
         )

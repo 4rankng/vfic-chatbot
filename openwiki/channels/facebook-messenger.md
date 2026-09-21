@@ -3,9 +3,6 @@ type: integration
 title: Facebook Messenger adapter
 description: HMAC-SHA256 webhook signature, OAUTH flow that issues the page-scoped token used for outbound dispatch, the 24-hour Standard Window policy, and the channels/port isolation that keeps the rest of the app provider-neutral.
 tags: [facebook-messenger, oauth, hmac, signature, standard-window, page-token, channels-port]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-9835cc890236326b828ea0b7
     resource: repo://backend/app/channels/ports.py
@@ -24,6 +21,9 @@ sources:
   - id: openwiki-source-085098b884681cab422762c1
     resource: repo://backend/app/services/integration_settings.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 Facebook Messenger is the secondary channel after Zalo. The adapter is

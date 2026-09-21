@@ -3,9 +3,6 @@ type: system
 title: Knowledge ingestion pipeline and category worker
 description: From upload to pgvector — parse → canonicalize → digest (LLM) → embed → write — plus the version-ingest path, the category worker that reconciles project taxonomy, and the recovery semantics introduced by migration 0050.
 tags: [ingestion, embedding, pgvector, digest, category-worker, recovery, kb-versions]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-8de84e18d91ee444093db299
     resource: repo://backend/alembic/versions/0050_data_ingestion_recovery.py
@@ -20,6 +17,9 @@ sources:
   - id: openwiki-source-fb4738e80917294d18cfb99e
     resource: repo://backend/app/workers/ingest_worker.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 The ingestion pipeline runs on the `ingest` RQ queue (`worker-ingest`,

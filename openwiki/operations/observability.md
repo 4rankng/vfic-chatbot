@@ -3,9 +3,6 @@ type: wiki
 title: "Logging, structured context, and observability"
 description: "setup_logging + request_id_ctx middleware, what gets logged and what never does (secrets/PII/message content), and how the decision trace ties into recruiter-visible bot_runs."
 tags: [logging, observability, health, metrics, request-id, trace-id, structured-logging]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-09b84fd9a979d89a5af63d7f
     resource: repo://backend/app/api/performance.py
@@ -24,6 +21,9 @@ sources:
   - id: openwiki-source-54372f2d9834a49eaebe0cb9
     resource: repo://backend/app/workers/decision_trace_retention_worker.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 # Logging, structured context, and observability

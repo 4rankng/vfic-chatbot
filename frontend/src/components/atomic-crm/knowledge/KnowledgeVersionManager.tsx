@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { History, RefreshCw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,7 @@ export const KnowledgeVersionManager = ({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!projectId) return;
     setError(null);
     try {
@@ -37,11 +37,11 @@ export const KnowledgeVersionManager = ({
         cause instanceof Error ? cause.message : "Không tải được phiên bản KB.",
       );
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
     if (open) void load();
-  }, [open, projectId]);
+  }, [open, load]);
 
   const publish = async (version: KnowledgeBaseVersion) => {
     if (!projectId) return;

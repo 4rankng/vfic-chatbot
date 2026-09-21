@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:acf16079a75f7901d76bd7ebbbe50a13ceaacccba3223fff3430389c227c7389",
+  "pageVersion": "sha256:ac110c41d82f7638b0594209acc7b76e20105cfb1231cae793a8b05ed3314dd5",
   "claims": [
     {
       "id": "claim_a1ceb7952306452da5f01eddcbdf6e4b",
@@ -38,7 +38,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/channels/providers/facebook_oauth.py",
-          "version": "repo-file-v1:sha256:b5fb788ab1bece76fe8d37a22861f5152fc05ffcc3890fc70f990187243a0182"
+          "version": "repo-file-v1:sha256:d538992342c10f2a32b09c79ed263ed92f113cea9e3b5cd8555f36bb504de86f"
         },
         {
           "resource": "repo://backend/app/integrations/facebook_oauth/application.py",
@@ -52,11 +52,11 @@
       "evidence": [
         {
           "resource": "repo://backend/app/channels/providers/facebook_account.py",
-          "version": "repo-file-v1:sha256:01caac7b272bdab3473809b6af78b220763da7c780c030c047f0f7c220d73dd8"
+          "version": "repo-file-v1:sha256:36f61517c45444624389d2151d495838ef97bde6bf26515bb3d38e50a4f2a03c"
         },
         {
           "resource": "repo://backend/app/services/integration_settings.py",
-          "version": "repo-file-v1:sha256:6c2ba9488d150b9f85ae0e5cf49b4fcedac6dd9d26be8898fd2e3f7a5778a5f2"
+          "version": "repo-file-v1:sha256:cbd9ad02d949bcb5390adba895403db7b3b688b7cff0fcf203c9067c6a040808"
         }
       ]
     },
@@ -70,13 +70,13 @@
         },
         {
           "resource": "repo://backend/app/channels/providers/facebook_account.py",
-          "version": "repo-file-v1:sha256:01caac7b272bdab3473809b6af78b220763da7c780c030c047f0f7c220d73dd8"
+          "version": "repo-file-v1:sha256:36f61517c45444624389d2151d495838ef97bde6bf26515bb3d38e50a4f2a03c"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

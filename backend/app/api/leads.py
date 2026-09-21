@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import get_current_user
@@ -28,7 +28,7 @@ from app.schemas.lead import (
     LeadUpdate,
     StageRequest,
 )
-from app.shared.domain.errors import ConflictError
+from app.shared.domain.errors import BadRequestError, ConflictError, NotFoundError
 from app.services.lead import LeadService
 from app.services.memory_repository import MemoryRepository
 from app.shared.infrastructure.db import get_request_db as get_db
@@ -43,7 +43,7 @@ router = APIRouter(
 async def _load(lead_id: int, db: AsyncSession):
     lead = await LeadService(db).get(lead_id)
     if lead is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "lead not found")
+        raise NotFoundError("lead not found")
     return lead
 
 
@@ -141,12 +141,18 @@ async def update_lead(
         service = LeadService(db)
         if stage is not None:
             lead = await service.set_stage(lead, stage, actor=user)
-            changes.pop("version", None)
+            # `set_stage` advanced the row version and refreshed `lead`, so the
+            # caller's original version is now stale. Re-arm the guard with the
+            # fresh value: discarding it (the previous behaviour) pushed the
+            # remaining fields onto the unchecked write path and silently lost
+            # concurrent edits.
+            if changes:
+                changes["version"] = lead.version
         if changes:
             lead = await service.update(lead, changes)
         return LeadOut.model_validate(lead)
     except ConflictError:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
+        raise ConflictError("Vừa được nhân viên khác thay đổi")
 
 
 @router.post("/{lead_id}/assign", response_model=LeadOut)
@@ -162,7 +168,7 @@ async def assign_lead(
             await LeadService(db).assign(lead, body.recruiter_id, actor=user)
         )
     except ConflictError:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
+        raise ConflictError("Vừa được nhân viên khác thay đổi")
 
 
 @router.post("/{lead_id}/stage", response_model=LeadOut)
@@ -176,7 +182,7 @@ async def set_stage(
     try:
         return LeadOut.model_validate(await LeadService(db).set_stage(lead, body.stage, actor=user))
     except ConflictError:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Vừa được nhân viên khác thay đổi")
+        raise ConflictError("Vừa được nhân viên khác thay đổi")
 
 
 @router.post(
@@ -247,7 +253,7 @@ async def run_chatops_action(
     try:
         updated = await service.apply_chatops_action(lead, action, actor=user)
     except ValueError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Thao tác ChatOps không hợp lệ")
+        raise BadRequestError("Thao tác ChatOps không hợp lệ")
     return LeadChatOpsActionResult(
         lead=LeadOut.model_validate(updated),
         tags=[

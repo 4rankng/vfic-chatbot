@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:3a6e1c7145da3ee185cbfbb7e0e6df5a16611a9a5be2cd33108e2fe2e7e8c3c1",
+  "pageVersion": "sha256:b0b89e2c72f71168f35fc67ac832f4ed21082bd5edbee3d0072c45f3882648f1",
   "claims": [
     {
       "id": "claim_21bd3120233447538d2d613d99fac18b",
@@ -12,13 +12,13 @@
         },
         {
           "resource": "repo://docs/deployment-guide.md",
-          "version": "repo-file-v1:sha256:63cb0ad5314f84fb45e79c376bb95be0899debc0a782e6e56f245cee8e83d127"
+          "version": "repo-file-v1:sha256:e2d5c5d4c2dc6d7eef45b54f5e5a5a8f23ce55fca87f9515438b91b80d12e3bc"
         }
       ]
     },
     {
       "id": "claim_1d79b4a626894552ace2fe24100aea48",
-      "statement": "Two web replicas (web-blue, web-green) share an identical image; the active color is tracked in /opt/vfic/ACTIVE_COLOR and Caddy routes only to web-<active>:8000 via a Caddyfile regenerated from backend/Caddyfile.template by scripts/flip_caddy.sh.",
+      "statement": "Two web replicas (`web-blue`, `web-green`) share the identical `ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}` image; the active color is tracked in `/opt/vfic/ACTIVE_COLOR`, and Caddy routes only to `web-<active>:8000` via a Caddyfile regenerated from `backend/Caddyfile.template` by `scripts/flip_caddy.sh`.",
       "evidence": [
         {
           "resource": "repo://backend/Caddyfile.template",
@@ -26,21 +26,29 @@
         },
         {
           "resource": "repo://backend/docker-compose.yml",
-          "version": "repo-file-v1:sha256:e628603873d748d5d3f86f74856febe4af04ad2a5dd310b9487efe4a55a5db9a"
+          "version": "repo-file-v1:sha256:b9b3092f58e9dca571b0e5ea8df035d773fb47e591d657639ec0636152e45ce2"
+        },
+        {
+          "resource": "repo://backend/scripts/flip_caddy.sh",
+          "version": "repo-file-v1:sha256:99615da6f0cf46e44a455b7a34da5dcdf9a3e9c72f247ba54bea5c91f89c956d"
         }
       ]
     },
     {
       "id": "claim_b91872dc41f44de1a53102b19577b6af",
-      "statement": "Deploys pin to franknguyenvd/vfic-backend:<git-sha>; latest is a registry convenience tag and is never used by make deploy.",
+      "statement": "Deploys pin to `ghcr.io/4rankng/tinghire-be:${IMAGE_TAG}` where `IMAGE_TAG ?= $(GIT_SHA)` is the short git sha from `git rev-parse --short HEAD`. `:latest` is a registry convenience tag and is never used by `make deploy`. The frontend ships from `ghcr.io/4rankng/tinghire-fe:${IMAGE_TAG}`.",
       "evidence": [
         {
           "resource": "repo://Makefile",
           "version": "repo-file-v1:sha256:60eccc7b724982d924784e9e58bee8ef54d27ddec95e3b341a739e7ec68c6122"
         },
         {
-          "resource": "repo://docs/deployment-guide.md",
-          "version": "repo-file-v1:sha256:63cb0ad5314f84fb45e79c376bb95be0899debc0a782e6e56f245cee8e83d127"
+          "resource": "repo://backend/Makefile",
+          "version": "repo-file-v1:sha256:c59a4bfa3c0a0dcf99ef9a498cb339caf8aedf14c87d48e602bee9e0e06848f1"
+        },
+        {
+          "resource": "repo://backend/docker-compose.yml",
+          "version": "repo-file-v1:sha256:b9b3092f58e9dca571b0e5ea8df035d773fb47e591d657639ec0636152e45ce2"
         }
       ]
     },
@@ -50,7 +58,7 @@
       "evidence": [
         {
           "resource": "repo://backend/scripts/bg_deploy.sh",
-          "version": "repo-file-v1:sha256:bf8ee4f31fc79c87d201fce26e54feb206e4666e2eb951da3b41d5911dbd4415"
+          "version": "repo-file-v1:sha256:139f74f50239b2090198cfeb5380d1efdc88c486d9b4570e8a51423b1e914025"
         }
       ]
     },
@@ -70,11 +78,11 @@
       "evidence": [
         {
           "resource": "repo://backend/docker-compose.yml",
-          "version": "repo-file-v1:sha256:e628603873d748d5d3f86f74856febe4af04ad2a5dd310b9487efe4a55a5db9a"
+          "version": "repo-file-v1:sha256:b9b3092f58e9dca571b0e5ea8df035d773fb47e591d657639ec0636152e45ce2"
         },
         {
           "resource": "repo://docs/deployment-guide.md",
-          "version": "repo-file-v1:sha256:63cb0ad5314f84fb45e79c376bb95be0899debc0a782e6e56f245cee8e83d127"
+          "version": "repo-file-v1:sha256:e2d5c5d4c2dc6d7eef45b54f5e5a5a8f23ce55fca87f9515438b91b80d12e3bc"
         }
       ]
     },
@@ -101,6 +109,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

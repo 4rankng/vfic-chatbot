@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 
 type HasId = { id: string | number };
 
+/** Stable default accessor — defined once so the effect below never re-runs
+ *  merely because an inline fallback was recreated on each render. */
+const defaultIdOf = <T extends HasId>(item: T): string => String(item.id);
+
 /**
  * Manages a master-detail selection that auto-syncs with a data list.
  *
@@ -22,7 +26,7 @@ export function useMasterDetailSelection<T extends HasId>({
   getId?: (item: T) => string;
   autoSelectNewlyAppeared?: boolean;
 }) {
-  const idOf = getId ?? ((item: T) => String(item.id));
+  const idOf = getId ?? defaultIdOf;
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Track IDs we've seen to detect newly appeared items. Seeded with the first

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:620e1df7348327b7f28169b00c5ae622ab5a5d5776380d10a19d9e3f47f29138",
+  "pageVersion": "sha256:da536944cceabc398980e7021b39c8327dd57935eec87efacc01b497b2954106",
   "claims": [
     {
       "id": "claim_fd6902f99f4a42a1a72980276139baa6",
@@ -12,7 +12,7 @@
         },
         {
           "resource": "repo://docs/codebase-summary.md",
-          "version": "repo-file-v1:sha256:58fe65f60c0fbc3aff8c6821ab86d9c6bf2b95f9445dda1bfc3b1874a3e77270"
+          "version": "repo-file-v1:sha256:29cd8bebaa9a71578e6c2008f89405a12aae8c1b5949c72115b953db44cac382"
         }
       ]
     },
@@ -33,6 +33,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

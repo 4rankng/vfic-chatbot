@@ -8,11 +8,13 @@ from fastapi import Depends, FastAPI
 from app.api.auth_dependencies import get_current_user
 from app.api.installation_dependencies import require_capability, require_capability_or_legacy
 from app.core.db import get_db
+from app.core.errors import register_domain_exception_handlers
 from app.services.installation.service import InstallationService
 
 
 def _isolated_app(repository_calls: list[str]) -> FastAPI:
     app = FastAPI()
+    register_domain_exception_handlers(app)
 
     @app.get("/hidden", dependencies=[Depends(require_capability("conversation"))])
     async def hidden() -> dict[str, bool]:
@@ -99,6 +101,7 @@ async def test_legacy_recruitment_route_remains_available_without_installation_s
     repository_calls: list[str] = []
 
     app = FastAPI()
+    register_domain_exception_handlers(app)
 
     @app.get(
         "/legacy",
@@ -139,6 +142,7 @@ async def test_legacy_recruitment_route_remains_available_without_installation_s
 
 async def test_legacy_route_is_hidden_after_installation_adoption(monkeypatch) -> None:
     app = FastAPI()
+    register_domain_exception_handlers(app)
 
     @app.get(
         "/legacy",

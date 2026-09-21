@@ -7,7 +7,7 @@ import time
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,6 +59,14 @@ from app.services.integration_settings import (
 from app.services.zalo_bot_service import ZaloBotAdminClient, SendResult
 from app.services.zalo_oa_service import ZaloOASender
 from app.services.zalo_oa_signature import verify_signature
+from app.shared.domain.errors import (
+    BadRequestError,
+    ConflictError,
+    GoneError,
+    NotFoundError,
+    UpstreamError,
+    ValidationError,
+)
 from app.shared.infrastructure.db import get_request_db as get_db
 
 router = APIRouter(prefix="/admin/integrations", tags=["integrations"])
@@ -707,10 +715,7 @@ async def _load_facebook_oauth_flow(*, flow_id: str, admin: User, consume: bool 
         )
     except FacebookOAuthFlowUnavailable:
         pass
-    raise HTTPException(
-        status_code=410,
-        detail="Phiên chọn Trang không hợp lệ hoặc đã hết hạn. Vui lòng kết nối lại.",
-    )
+    raise GoneError("Phiên chọn Trang không hợp lệ hoặc đã hết hạn. Vui lòng kết nối lại.")
 
 
 @router.post("/facebook/oauth/start", response_model=FacebookOAuthStartOut)
@@ -728,12 +733,9 @@ async def start_facebook_oauth(
     settings_service = IntegrationSettingsService(db)
     oauth_cfg = await settings_service.resolve_facebook_oauth()
     if not oauth_cfg.app_id:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Chưa cấu hình Meta App ID. Vào Cài đặt → Facebook Messenger để "
-                "cấu hình thông tin ứng dụng Meta trước khi kết nối."
-            ),
+        raise BadRequestError(
+            "Chưa cấu hình Meta App ID. Vào Cài đặt → Facebook Messenger để "
+            "cấu hình thông tin ứng dụng Meta trước khi kết nối."
         )
     coordinator = await _facebook_oauth_coordinator()
     state = await coordinator.issue_state(
@@ -873,7 +875,7 @@ async def complete_facebook_oauth(
                 payload.project_ids
             )
         except FacebookPageAssignmentInvalidError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from None
+            raise ValidationError(str(exc)) from None
         project_ids = [str(pid) for pid in validated]
 
     flow = await _load_facebook_oauth_flow(
@@ -906,10 +908,7 @@ async def complete_facebook_oauth(
             type(exc).__name__,
             exc,
         )
-        raise HTTPException(
-            status_code=502,
-            detail="Kích hoạt Trang thất bại. Vui lòng kết nối lại.",
-        )
+        raise UpstreamError("Kích hoạt Trang thất bại. Vui lòng kết nối lại.")
 
     try:
         lifecycle = FacebookPageLifecycle(db)
@@ -929,12 +928,9 @@ async def complete_facebook_oauth(
             await unsubscribe_app_from_page(payload.page_id, page_token)
         except Exception:  # noqa: BLE001 — compensation is best-effort
             pass
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Trang chưa được gán dự án nào đang hoạt động. "
-                "Hãy chọn ít nhất một dự án rồi thử lại."
-            ),
+        raise ConflictError(
+            "Trang chưa được gán dự án nào đang hoạt động. "
+            "Hãy chọn ít nhất một dự án rồi thử lại."
         ) from None
     except Exception:
         # The Meta-side subscription succeeded but the DB activation failed
@@ -1124,14 +1120,11 @@ async def disconnect_facebook(
     else:
         active_refs = [ref for ref in await resolver.list_facebook_accounts() if ref.is_active]
         if not active_refs:
-            raise HTTPException(status_code=404, detail="Không tìm thấy Trang Facebook.")
+            raise NotFoundError("Không tìm thấy Trang Facebook.")
         if len(active_refs) > 1:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Nhiều Trang đang hoạt động — hãy chọn Trang cụ thể "
-                    "để ngắt kết nối."
-                ),
+            raise ConflictError(
+                "Nhiều Trang đang hoạt động — hãy chọn Trang cụ thể "
+                "để ngắt kết nối."
             )
         target_key = active_refs[0].account_key
 
@@ -1155,7 +1148,7 @@ async def disconnect_facebook(
     lifecycle = FacebookPageLifecycle(db)
     account = await lifecycle.disconnect(page_id=target_key, admin_id=admin.id)
     if account is None:
-        raise HTTPException(status_code=404, detail="Không tìm thấy Trang Facebook.")
+        raise NotFoundError("Không tìm thấy Trang Facebook.")
     return FacebookAccountStatusOut(
         page_id=target_key,
         page_id_suffix=target_key[-4:],
@@ -1209,9 +1202,7 @@ async def get_facebook_page_projects(
     try:
         account = await service.load_page(page_id)
     except FacebookPageNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Không tìm thấy Trang Facebook."
-        ) from None
+        raise NotFoundError("Không tìm thấy Trang Facebook.") from None
     return _assignments_out(
         account.account_key, await service.assignments(account.id)
     )
@@ -1237,11 +1228,9 @@ async def replace_facebook_page_projects(
             page_id=page_id, project_ids=body.project_ids, actor_id=admin.id
         )
     except FacebookPageNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Không tìm thấy Trang Facebook."
-        ) from None
+        raise NotFoundError("Không tìm thấy Trang Facebook.") from None
     except FacebookPageAssignmentInvalidError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from None
+        raise ValidationError(str(exc)) from None
     return _assignments_out(account.account_key, views)
 
 
@@ -1265,11 +1254,9 @@ async def add_facebook_page_project(
             page_id=page_id, project_id=body.project_id, actor_id=admin.id
         )
     except FacebookPageNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Không tìm thấy Trang Facebook."
-        ) from None
+        raise NotFoundError("Không tìm thấy Trang Facebook.") from None
     except FacebookPageAssignmentInvalidError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from None
+        raise ValidationError(str(exc)) from None
     return _assignments_out(account.account_key, views)
 
 
@@ -1295,12 +1282,7 @@ async def remove_facebook_page_project(
             page_id=page_id, project_id=project_id, actor_id=admin.id
         )
     except FacebookPageNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Không tìm thấy Trang Facebook."
-        ) from None
+        raise NotFoundError("Không tìm thấy Trang Facebook.") from None
     if views is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Không tìm thấy dự án được gán cho Trang này.",
-        )
+        raise NotFoundError("Không tìm thấy dự án được gán cho Trang này.")
     return _assignments_out(page_id, views)

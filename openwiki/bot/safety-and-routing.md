@@ -3,9 +3,6 @@ type: system
 title: Safety filter chain and turn routing
 description: Deterministic fast safety filter, LLM safety judge, retry-rewrite cap, grounding cross-check, pre-send claim fence, and the routing intents that drive model tier selection.
 tags: [safety, fast-filter, llm-judge, grounding, retry, routing, fast-lane, model-tier]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-3b192284fa645018ff2cdd55
     resource: repo://backend/app/graph/fast_lane.py
@@ -18,6 +15,9 @@ sources:
   - id: openwiki-source-66bf7d038f006b04f232f780
     resource: repo://backend/app/graph/safety.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 The pipeline's safety story is **fail-closed**: every reply must clear a

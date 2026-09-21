@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:544f8659d82a4808cfc60c20845359ecefedc126ac585ae9e4185b3d13251726",
+  "pageVersion": "sha256:996dfd65faddf20307f649f447f692ed820eb309e80ae55be98805dc07371224",
   "claims": [
     {
       "id": "claim_46bcc605b1bb4c66a17641aead6a90e7",
@@ -8,7 +8,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/core/config.py",
-          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+          "version": "repo-file-v1:sha256:705ba0f53577d055a83ba1b8c190a59ba6bbd5bb57587eda02e7ba0d63caa41b"
         },
         {
           "resource": "repo://backend/app/models/conversation.py",
@@ -36,7 +36,7 @@
         },
         {
           "resource": "repo://backend/app/graph/runner.py",
-          "version": "repo-file-v1:sha256:5cf463d498767b257ce364f112a62c854d82af3088c7432bbeb5ff6561ad9d9d"
+          "version": "repo-file-v1:sha256:14aa78a79a8aecdb994487ad51150e73576ef303ca95dd9b8e2b72a457f9ceba"
         }
       ]
     },
@@ -115,6 +115,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

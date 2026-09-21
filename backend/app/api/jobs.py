@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import get_current_user, require_admin
@@ -22,7 +22,7 @@ from app.schemas.job import (
     JobUpdate,
 )
 from app.services.job_service import JobService
-from app.shared.domain.errors import ConflictError
+from app.shared.domain.errors import ConflictError, NotFoundError
 
 router = APIRouter(
     prefix="/jobs",
@@ -60,7 +60,7 @@ async def get_job(
 ) -> JobOut:
     job = await JobService(db).get(job_id)
     if job is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+        raise NotFoundError("job not found")
     return JobOut.model_validate(job)
 
 

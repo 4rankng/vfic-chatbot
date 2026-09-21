@@ -5,7 +5,7 @@ description: How authentication (JWT access + rotated refresh, argon2 hashing), 
 tags: [auth, jwt, rbac, capabilities, argon2, parity, recruiter, admin]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
+    at: 2026-09-21T02:42:43.794Z
 sources:
   - id: openwiki-source-31cf33c71e0ccd9bfb3ea9a3
     resource: repo://backend/app/access/application/roles.py
@@ -27,13 +27,15 @@ sources:
     resource: repo://backend/app/core/config.py
   - id: openwiki-source-b52886aad1fc413e4e030f22
     resource: repo://backend/app/core/security.py
+  - id: openwiki-source-8b373631ac8c5d9bdb7cf697
+    resource: repo://backend/app/identity/domain/role.py
   - id: openwiki-source-c9bc42f5d02131750255b324
     resource: repo://backend/app/identity/infrastructure/rate_limits.py
   - id: openwiki-source-ce7dc7e47de3c3d7faa5a645
     resource: repo://backend/tests/test_capability_registry.py
   - id: openwiki-source-472e308be87e0efe4fb4c277
     resource: repo://frontend/src/components/atomic-crm/providers/commons/canAccess.ts
-generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+generated: { by: "opencode", at: "2026-09-21T02:42:43.794Z" }
 ---
 
 TingHire splits access control into three layers: **authentication**
@@ -106,24 +108,32 @@ credential-stuffing burst cannot pin the FastAPI workers.
 
 ## Authorization
 
-Two roles live in `backend/app/identity/domain/role.py`:
+Two roles live in `backend/app/identity/domain/role.py` as a `Role(str, Enum)`:
 
 | Role | Vietnamese | Scope |
 |---|---|---|
 | `admin` | _Quản trị_ | Full access. Manages users, integration credentials, all projects / personas / knowledge. |
 | `recruiter` | _Tuyển dụng_ | Default role. Owns conversations, leads, follow-ups, knowledge curation. Cannot manage users or integration secrets. |
 
+The same role names are re-exported as string constants
+(`ADMIN_ROLE = "admin"`, `RECRUITER_ROLE = "recruiter"`) in
+`backend/app/access/domain/policies.py` so the access layer never has to
+import the identity enum.
+
 ### Dependency gates
 
 `backend/app/api/auth_dependencies.py` exposes the FastAPI dependencies:
 
 ```text
-get_current_user     # validates Bearer JWT, loads the user
-require_admin        # role == "admin"
-require_recruiter    # role in {"admin", "recruiter"}
+get_current_user          # validates Bearer JWT, loads the user
+require_admin             # role == "admin"
+require_recruiter         # role in {"admin", "recruiter"}
 ```
 
-Both are implemented as thin wrappers over framework-free policy helpers in
+`get_current_user` delegates to `build_access_token_authenticator(db).authenticate(token)`,
+which performs the JWT decode, `ver` check (bumped on disable/delete), and
+user lookup; `AuthenticationError` translates to `HTTP 401`. The role
+dependencies are thin wrappers over framework-free policy helpers in
 `backend/app/access/application/roles.py`:
 
 ```python
@@ -142,17 +152,32 @@ both `admin` and `recruiter` — admins implicitly pass every recruiter gate.
 `require_admin` returns 403 for non-admins. The check raises
 `AccessDeniedError`, which the dependency translates to `HTTP 403`.
 
-The framework-free split (domain vs application) keeps RBAC testable
-without spinning up FastAPI and lets the same policies be re-used by
-other transports.
+The framework-free split (identity enum → access string constants →
+application helpers → FastAPI dependency) keeps RBAC testable without
+spinning up FastAPI and lets the same policies be re-used by other
+transports.
 
-### Installation gate
+### Installation and capability gates
 
-`backend/app/api/installation_dependencies.py` gates every non-auth route
-on the installation state — the first request after a fresh deploy must
-walk the installation flow (admin bootstrap, admin-managed secrets,
-default persona, etc.) before any other route is reachable. The dependency
-runs after `get_current_user` so the same JWT can later be used post-install.
+`backend/app/api/installation_dependencies.py` provides three layers of
+post-auth gating:
+
+- `get_active_installation` — resolves the active installation row after
+  `get_current_user`. Used by routes needing installation state.
+- `require_capability(capability_id)` — gates a route on a single
+  capability registered in the capability registry (see below). The id is
+  validated against the registry at dependency-construction time, so an
+  unknown capability id raises `ValueError` at app startup, not per
+  request.
+- `require_capability_or_legacy(capability_id)` — the legacy transition
+  variant: returns the capability if active, otherwise falls back to the
+  legacy resolver (returning `None` instead of raising) so pre-capability
+  callers keep working during a migration.
+
+The capability registry is the modern, code-reviewed replacement for the
+plain "is installed" gate: a route that needs a specific capability (e.g.
+`conversation.zalo`, `candidate_intake`) declares the dependency instead
+of "everything after install".
 
 ## Capability registry
 
@@ -235,19 +260,36 @@ mirrors the backend gate as a UX-layer filter:
 
 ```ts
 const RECRUITER_RESOURCES = new Set(["conversations", "projects"]);
+const KNOWN_ACTIONS = new Set([
+  "list", "show", "create", "edit", "delete", "read", "write",
+]);
 
 export const canAccess(role, params, availableResources) {
+  if (!KNOWN_ACTIONS.has(params.action)) return false;
+  if (!availableResources.has(params.resource)) return false;
   if (role === "admin") return true;
   return RECRUITER_RESOURCES.has(params.resource);
 }
 ```
 
-Recruiters see `conversations` and `projects`; every other resource
-(`users`, `bot_runs`, `knowledge_sources`, `personas`, …) is admin-only.
+Three filters gate the answer:
+
+1. The action must be one of the known react-admin verbs (`list`,
+   `show`, `create`, `edit`, `delete`, `read`, `write`).
+2. The resource must be present in `availableResources` — the set
+   compiled at app boot from the static capability runtime. Resources the
+   app does not know about cannot be accessed at the UI layer even if the
+   backend gate would allow them.
+3. Admins pass through; recruiters see `conversations` and `projects`
+   only. Every other resource (`users`, `bot_runs`,
+   `knowledge_sources`, `personas`, `settings`, `knowledge_bases`, …)
+   is admin-only.
+
 The comment in `canAccess.ts` is explicit: **"Real enforcement is the
 FastAPI backend (`app/api/dependencies.py`); this is the UX layer."** The
-console never relies on the client gate to keep secrets off-screen — every
-admin-only API path returns 403 if the JWT does not carry the admin role.
+console never relies on the client gate to keep secrets off-screen —
+every admin-only API path returns 403 if the JWT does not carry the
+admin role.
 
 ## Layered guarantees
 
@@ -255,9 +297,20 @@ admin-only API path returns 403 if the JWT does not carry the admin role.
 |---|---|---|
 | Identity | `get_current_user` (JWT + `ver` check) | 401 if token missing, expired, or user disabled/deleted |
 | Role | `require_admin` / `require_recruiter` | 403 if role insufficient |
-| Installation | `installation_dependencies.require_installation` | Redirects to install flow until the install bootstrap completes |
+| Installation | `get_active_installation` / `require_capability` | 404 / `NotFoundError` if installation not bootstrapped or capability inactive |
 | Public contract | `CapabilityRegistry.resolve` | `ValueError` on schema / kernel ABI / pack version / contract hash mismatch |
 | UX gating | `canAccess(role, ...)` | Hides controls; cannot bypass server gates |
 
 The four backend layers fail closed independently. The frontend mirror is a
 UX hint, never a security boundary.
+
+## Test gaps surfaced by detect-changes
+
+`code-review-graph detect-changes` flagged the following functions as
+modified without a direct test in the new surface: `login`,
+`reset_password`, `change_password` (modified, untested),
+`get_user_from_token` (modified, untested), `require_admin` and
+`require_recruiter` (reached only through a caller). The integration
+tests for the auth lifecycle live under `backend/tests/`; any new test
+that exercises the modified helpers directly should land before the
+corresponding code paths are considered covered.

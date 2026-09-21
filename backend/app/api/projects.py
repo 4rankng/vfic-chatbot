@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin, require_recruiter
@@ -58,7 +58,7 @@ from app.services.knowledge.category_contracts import (
 )
 from app.composition.project_knowledge import build_category_use_cases
 from app.services.project import ProjectService
-from app.shared.domain.errors import ConflictError
+from app.shared.domain.errors import BadRequestError, ConflictError, RateLimitedError
 
 router = APIRouter(prefix="/knowledge/projects", tags=["projects"])
 _SINGLE_PAGE_SOURCE_BAD_REQUESTS = {
@@ -192,7 +192,7 @@ async def create_project_single_page_external_source(
         row = await ProjectService(db).create_single_page_external_source(project_id, body, admin)
     except ConflictError as exc:
         if str(exc) in _SINGLE_PAGE_SOURCE_BAD_REQUESTS:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+            raise BadRequestError(str(exc)) from exc
         raise
     return SinglePageExternalSourceOut.model_validate(row)
 
@@ -210,7 +210,7 @@ async def run_project_single_page_external_source_now(
         )
     except ConflictError as exc:
         if str(exc) == "run_now_cooldown":
-            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "run_now_cooldown") from exc
+            raise RateLimitedError("run_now_cooldown") from exc
         raise
     return {"job_id": job_id}
 

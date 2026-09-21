@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:6e81661294782cd9c4e2d5ebc3e0b07b088f19e39f2d2c7f2bb4361dfedd8098",
+  "pageVersion": "sha256:93ababd69d0fd28ec62302159270014603020c2ec637dc894f82b20af7344970",
   "claims": [
     {
       "id": "claim_4a5f34651010427fb81d496a6ebd0b55",
@@ -8,7 +8,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/core/config.py",
-          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+          "version": "repo-file-v1:sha256:705ba0f53577d055a83ba1b8c190a59ba6bbd5bb57587eda02e7ba0d63caa41b"
         },
         {
           "resource": "repo://backend/app/core/security.py",
@@ -22,7 +22,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/core/config.py",
-          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+          "version": "repo-file-v1:sha256:705ba0f53577d055a83ba1b8c190a59ba6bbd5bb57587eda02e7ba0d63caa41b"
         }
       ]
     },
@@ -32,7 +32,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/api/auth.py",
-          "version": "repo-file-v1:sha256:af57bddc332ff4ab52ffcb74a62b638bed76d5c31684fb4d742536309141cd2f"
+          "version": "repo-file-v1:sha256:3397c5374c769735744e62f2000aaa72cd58d24e7a5ed80a59a36db822c95bc0"
         },
         {
           "resource": "repo://backend/app/identity/infrastructure/rate_limits.py",
@@ -42,7 +42,7 @@
     },
     {
       "id": "claim_d29f8fc0a79b4db6a8d7c832b0c15887",
-      "statement": "Two roles (admin, recruiter) live in app/identity/domain/role.py; require_admin accepts only admin, require_recruiter accepts admin and recruiter so admins implicitly pass every recruiter gate, and the access policies are split framework-free across access/domain (policies.py) and access/application (roles.py) for testability.",
+      "statement": "Two roles live in `backend/app/identity/domain/role.py` as `Role(str, Enum)` with values `admin` and `recruiter`. The same names are re-exported as string constants `ADMIN_ROLE = \"admin\"` and `RECRUITER_ROLE = \"recruiter\"` in `backend/app/access/domain/policies.py` so the access layer never imports the identity enum. `require_admin` accepts only `admin`; `require_recruiter` accepts both `admin` and `recruiter` — admins implicitly pass every recruiter gate. The role check raises `AccessDeniedError`, translated by the FastAPI dependency to `HTTP 403`. The framework-free split (identity enum → access string constants → `application/roles.py` helpers → FastAPI dependency) keeps RBAC testable without spinning up FastAPI.",
       "evidence": [
         {
           "resource": "repo://backend/app/access/application/roles.py",
@@ -54,17 +54,25 @@
         },
         {
           "resource": "repo://backend/app/api/auth_dependencies.py",
-          "version": "repo-file-v1:sha256:39d07da424bba274c23879d83ae03c2ea73a2bee0c215e648539ebf3f6366de7"
+          "version": "repo-file-v1:sha256:ba6852513b64873463c3d9453aafa19581122a01087cb590544a9a3b07bc22c8"
+        },
+        {
+          "resource": "repo://backend/app/identity/domain/role.py",
+          "version": "repo-file-v1:sha256:bc4ffe53c2a48506db039bdd737150e1a56d278ab96322ba027544e54dc6b270"
         }
       ]
     },
     {
       "id": "claim_1f3708fac5e5425a85ba7e4e2dd0311b",
-      "statement": "installation_dependencies gates every non-auth route on installation state, so the first request after a fresh deploy must complete the admin bootstrap before any other route is reachable.",
+      "statement": "`backend/app/api/installation_dependencies.py` provides three layers of post-auth gating: `get_active_installation` resolves the active installation row after `get_current_user`; `require_capability(capability_id)` gates a route on a single capability registered in the capability registry (the id is validated against the registry at dependency-construction time, so an unknown id raises `ValueError` at app startup, not per request); `require_capability_or_legacy(capability_id)` returns the capability if active, otherwise falls back to the legacy resolver (returning `None` instead of raising) so pre-capability callers keep working during a migration. The capability registry is the modern, code-reviewed replacement for the plain \"is installed\" gate.",
       "evidence": [
         {
           "resource": "repo://backend/app/api/installation_dependencies.py",
-          "version": "repo-file-v1:sha256:4ce6a1b380ec8b1b09496b645581a3278b14576679ea5f1ce58d7ee401b843af"
+          "version": "repo-file-v1:sha256:92d0418bd2a8f2d05e7c707fafd74d7c54b38e39ead57cdf2210fef04daa9486"
+        },
+        {
+          "resource": "repo://backend/app/capabilities/registry.py",
+          "version": "repo-file-v1:sha256:0a8237d90b5071e364823532b4c0683b9dc04e393a68f02a1f90a30766471807"
         }
       ]
     },
@@ -108,17 +116,31 @@
     },
     {
       "id": "claim_97e49feb9c564b588fc82e1b2d2c68aa",
-      "statement": "The frontend canAccess(role, params, availableResources) mirrors the backend as a UX layer only — recruiters see conversations and projects, every other resource is admin-only, and the file's own comment declares real enforcement is the FastAPI backend.",
+      "statement": "`frontend/src/components/atomic-crm/providers/commons/canAccess.ts` applies three filters before returning `true`: (1) the action must be one of the known react-admin verbs (`list`, `show`, `create`, `edit`, `delete`, `read`, `write`); (2) the resource must be present in `availableResources`, the set compiled at app boot from the static capability runtime — resources the app does not know about cannot be accessed at the UI layer even if the backend gate would allow them; (3) admins pass through, recruiters see `conversations` and `projects` only. The comment in `canAccess.ts` is explicit: \"Real enforcement is the FastAPI backend (`app/api/dependencies.py`); this is the UX layer.\"",
       "evidence": [
         {
           "resource": "repo://frontend/src/components/atomic-crm/providers/commons/canAccess.ts",
-          "version": "repo-file-v1:sha256:39ababb10ab75a3da2279f89114a6f0c70f162cfe33b4675aa11394855e02953"
+          "version": "repo-file-v1:sha256:be609f9cab8ea731dbfd04e115186e4a4c519151ec50f91e49fa9f452105982c"
+        }
+      ]
+    },
+    {
+      "id": "claim_eaeb6d869b2f4a26a1abfc0d6550da54",
+      "statement": "`code-review-graph detect-changes` flagged the following functions as modified without a direct test in the new surface: `login`, `reset_password`, `change_password`, `get_user_from_token` (modified, untested), `require_admin` and `require_recruiter` (reached only through a caller). Integration tests for the auth lifecycle live under `backend/tests/`; new tests that exercise the modified helpers directly should land before the corresponding code paths are considered covered.",
+      "evidence": [
+        {
+          "resource": "repo://backend/app/api/auth.py",
+          "version": "repo-file-v1:sha256:3397c5374c769735744e62f2000aaa72cd58d24e7a5ed80a59a36db822c95bc0"
+        },
+        {
+          "resource": "repo://backend/app/api/auth_dependencies.py",
+          "version": "repo-file-v1:sha256:ba6852513b64873463c3d9453aafa19581122a01087cb590544a9a3b07bc22c8"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

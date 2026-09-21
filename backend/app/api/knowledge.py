@@ -15,7 +15,7 @@ import uuid
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,7 +48,13 @@ from app.services.knowledge.canonical import (
     load_template,
 )
 from app.services.knowledge.external_source_admin import KnowledgeExternalSourceAdminService
-from app.shared.domain.errors import ConflictError
+from app.shared.domain.errors import (
+    BadRequestError,
+    ConflictError,
+    NotFoundError,
+    RateLimitedError,
+    ValidationError,
+)
 from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -151,7 +157,7 @@ async def upload_kb_version_file(
             actor=admin,
         )
     except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
+        raise ValidationError(str(exc)) from exc
     return KBTextFileOut.model_validate(uploaded)
 
 
@@ -194,7 +200,7 @@ async def publish_kb_version(
     try:
         version = await KnowledgeService(db).publish_version(project_id, version_id)
     except ValueError as exc:
-        raise HTTPException(409, str(exc)) from exc
+        raise ConflictError(str(exc)) from exc
     await record_audit(
         db,
         action="kb_version_published",
@@ -224,7 +230,7 @@ async def project_rag_test(
 async def _load(doc_id: uuid.UUID, db: AsyncSession):
     doc = await KnowledgeService(db).get(doc_id)
     if doc is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
+        raise NotFoundError("document not found")
     return doc
 
 
@@ -372,9 +378,9 @@ async def upload_file(
             require_canonical=True,
         )
     except CanonicalValidationError as exc:
-        raise HTTPException(422, {"errors": exc.errors}) from exc
+        raise ValidationError({"errors": exc.errors}) from exc
     except KnowledgeFileExtractionError as exc:
-        raise HTTPException(422, {"errors": [str(exc)]}) from exc
+        raise ValidationError({"errors": [str(exc)]}) from exc
     await record_audit_safe(db, "upload_knowledge", _admin.id, str(doc.id))
     _project_knowledge_jobs.ingest_document(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
@@ -490,12 +496,9 @@ async def create_external_source(
         row = await KnowledgeExternalSourceAdminService(db).create_source(project_id, body, admin)
     except ConflictError as exc:
         detail = str(exc)
-        code = (
-            status.HTTP_409_CONFLICT
-            if detail == "external_source_already_exists"
-            else status.HTTP_400_BAD_REQUEST
-        )
-        raise HTTPException(code, detail) from exc
+        if detail == "external_source_already_exists":
+            raise ConflictError(detail) from exc
+        raise BadRequestError(detail) from exc
     return ExternalSourceSyncStateOut.model_validate(row)
 
 
@@ -517,9 +520,9 @@ async def run_external_source_now(
         job_id = await KnowledgeExternalSourceAdminService(db).run_now(project_id, source_id, admin)
     except Exception as exc:
         if str(exc) == "run_now_cooldown":
-            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "run_now_cooldown") from exc
+            raise RateLimitedError("run_now_cooldown") from exc
         if str(exc) == "external_source_not_found":
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "external_source_not_found") from exc
+            raise NotFoundError("external_source_not_found") from exc
         raise
     return {"job_id": job_id}
 
@@ -539,5 +542,5 @@ async def delete_external_source(
         await KnowledgeExternalSourceAdminService(db).delete_source(project_id, source_id, admin)
     except Exception as exc:
         if str(exc) == "external_source_not_found":
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "external_source_not_found") from exc
+            raise NotFoundError("external_source_not_found") from exc
         raise

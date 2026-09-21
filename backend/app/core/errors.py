@@ -1,9 +1,13 @@
 """Global domain-error → HTTP exception handlers.
 
-Registers handlers for the four service-layer domain errors so they
-automatically return the correct HTTP status code with the
-``{"detail": "<message>"}`` shape, eliminating per-route try/except
-boilerplate.
+Registers a handler for :class:`DomainError` (and its subclasses) so service
+and API code can raise a framework-free domain error and still receive the
+correct HTTP status with the ``{"detail": "<payload>"}`` shape, eliminating
+per-route try/except boilerplate.
+
+Starlette resolves handlers by walking the raised exception's MRO, so the
+single base-class registration covers every subclass — including any added
+later, which cannot be silently forgotten.
 """
 
 from __future__ import annotations
@@ -13,22 +17,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.shared.domain.errors import (
-    ConflictError,
-    DeliveryEligibilityError,
-    ForbiddenError,
-    InstallationError,
-    NotFoundError,
-    UpstreamError,
-)
-
-_STATUS_MAP: dict[type[Exception], int] = {
-    NotFoundError: 404,
-    ConflictError: 409,
-    ForbiddenError: 403,
-    UpstreamError: 502,
-    DeliveryEligibilityError: 422,
-}
+from app.shared.domain.errors import DomainError, InstallationError
 
 
 def register_domain_exception_handlers(app: FastAPI) -> None:
@@ -37,10 +26,18 @@ def register_domain_exception_handlers(app: FastAPI) -> None:
     Must be called once, after ``FastAPI()`` is created but before the
     app is mounted behind Socket.IO.
     """
-    for exc_class, status_code in _STATUS_MAP.items():
-        app.add_exception_handler(exc_class, _make_handler(status_code))
+    app.add_exception_handler(DomainError, _domain_handler)
     app.add_exception_handler(InstallationError, _installation_handler)
     app.add_exception_handler(RequestValidationError, _request_validation_handler)
+
+
+async def _domain_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, DomainError)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=exc.headers,
+    )
 
 
 async def _installation_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -77,13 +74,3 @@ async def _request_validation_handler(request: Request, exc: Exception):
             "issues": issues,
         },
     )
-
-
-def _make_handler(status_code: int):
-    async def handler(request: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse(
-            status_code=status_code,
-            content={"detail": str(exc)},
-        )
-
-    return handler

@@ -106,8 +106,13 @@ export const KnowledgeBaseShowContent = () => {
   const [loadFailed, setLoadFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Stable primitives: the load effect keys off these rather than the
+  // record object identity, which changes on every provider refresh.
+  const kbId = kb?.id;
+  const kbMode = kb?.mode;
+
   useEffect(() => {
-    if (!kb) return;
+    if (!kbId) return;
     let active = true;
     setProjects([]);
     setFile(null);
@@ -118,25 +123,25 @@ export const KnowledgeBaseShowContent = () => {
 
     const load = async () => {
       try {
-        if (kb.mode === "RAG") {
+        if (kbMode === "RAG") {
           const value = await apiJson<KnowledgeBaseProject[]>(
-            `/api/v1/knowledge-bases/${kb.id}/projects`,
+            `/api/v1/knowledge-bases/${kbId}/projects`,
           );
           if (active) setProjects(value);
           return;
         }
         const [ownedProjects, directFile, directCapacity] = await Promise.all([
           apiJson<KnowledgeBaseProject[]>(
-            `/api/v1/knowledge-bases/${kb.id}/projects`,
+            `/api/v1/knowledge-bases/${kbId}/projects`,
           ),
           apiJson<DirectFile>(
-            `/api/v1/knowledge-bases/${kb.id}/direct-file`,
+            `/api/v1/knowledge-bases/${kbId}/direct-file`,
           ).catch((error: unknown) => {
             if (error instanceof ApiError && error.status === 409) return null;
             throw error;
           }),
           apiJson<Capacity>(
-            `/api/v1/knowledge-bases/${kb.id}/direct-context-capacity`,
+            `/api/v1/knowledge-bases/${kbId}/direct-context-capacity`,
           ).catch(() => null),
         ]);
         if (!active) return;
@@ -157,7 +162,7 @@ export const KnowledgeBaseShowContent = () => {
     return () => {
       active = false;
     };
-  }, [kb?.id, kb?.mode, notify, reloadKey]);
+  }, [kbId, kbMode, notify, reloadKey]);
 
   if (!kb) return null;
 

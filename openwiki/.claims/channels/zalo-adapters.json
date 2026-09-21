@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:58c5fcdb5635c197e7585b5769b89a068ce2a18f5d5bc92793f333825bb81012",
+  "pageVersion": "sha256:d3310dd77a9f7bf1a4d7a115358b48ecb5dfdff3cc20bd7c22b5f07109a25a58",
   "claims": [
     {
       "id": "claim_528648de25aa4a289c81ed5c15319efe",
@@ -8,7 +8,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/api/webhooks.py",
-          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+          "version": "repo-file-v1:sha256:61983dd6c81a2e4728eb41e8a7579492f3dc37ca27bba8a73784908c81b51b5e"
         }
       ]
     },
@@ -18,7 +18,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/api/webhooks.py",
-          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+          "version": "repo-file-v1:sha256:61983dd6c81a2e4728eb41e8a7579492f3dc37ca27bba8a73784908c81b51b5e"
         }
       ]
     },
@@ -28,7 +28,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/api/webhooks.py",
-          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+          "version": "repo-file-v1:sha256:61983dd6c81a2e4728eb41e8a7579492f3dc37ca27bba8a73784908c81b51b5e"
         }
       ]
     },
@@ -38,7 +38,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/api/webhooks.py",
-          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+          "version": "repo-file-v1:sha256:61983dd6c81a2e4728eb41e8a7579492f3dc37ca27bba8a73784908c81b51b5e"
         }
       ]
     },
@@ -82,17 +82,17 @@
       "evidence": [
         {
           "resource": "repo://backend/app/api/webhooks.py",
-          "version": "repo-file-v1:sha256:67220c7d9495813f5fba828ec2e47fc3738b17cd60ded95097ca92b1a3174c41"
+          "version": "repo-file-v1:sha256:61983dd6c81a2e4728eb41e8a7579492f3dc37ca27bba8a73784908c81b51b5e"
         },
         {
           "resource": "repo://backend/app/services/integration_settings.py",
-          "version": "repo-file-v1:sha256:6c2ba9488d150b9f85ae0e5cf49b4fcedac6dd9d26be8898fd2e3f7a5778a5f2"
+          "version": "repo-file-v1:sha256:cbd9ad02d949bcb5390adba895403db7b3b688b7cff0fcf203c9067c6a040808"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

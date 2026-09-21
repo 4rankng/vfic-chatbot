@@ -3,9 +3,6 @@ type: wiki
 title: "RQ queues, scheduler ticks, and reconcile worker"
 description: "Queue ownership (webhook_high, persistence_low, ingest, followup), per-tick registration in lifespan, reconcile sweep, and crash recovery model."
 tags: [rq, workers, scheduler, reconcile, queues, crash-recovery, ticks]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-6dcfc1451bcbf8009d0484a9
     resource: repo://backend/app/core/config.py
@@ -22,6 +19,9 @@ sources:
   - id: openwiki-source-7865fb2b5570e6ebb2f50ca8
     resource: repo://docs/deployment-guide.md
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 # RQ queues, scheduler ticks, and reconcile worker

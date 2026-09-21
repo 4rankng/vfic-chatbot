@@ -8,7 +8,7 @@ fans out events.
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import get_current_user, require_admin
@@ -31,6 +31,7 @@ from app.schemas.conversation import (
     SendMessageRequest,
 )
 from app.schemas.dashboard import AttentionReason
+from app.shared.domain.errors import ConflictError, NotFoundError, ValidationError
 from app.shared.infrastructure.db import get_request_db
 from app.services.bot_run_service import BotRunService
 from app.services.conversation import ConversationConflict, ConversationService
@@ -50,7 +51,7 @@ async def _load(
     else:
         conv = await ConversationService(db).get_visible(conv_id, viewer=user)
     if conv is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation not found")
+        raise NotFoundError("conversation not found")
     return conv
 
 
@@ -85,7 +86,7 @@ async def list_conversations(
         # Validate against the canonical enum; FastAPI does not do this for a
         # plain str param, so reject unknown values with 422 explicitly.
         if reason not in AttentionReason._value2member_map_:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid reason")
+            raise ValidationError("invalid reason")
         rows, total = await run_conversation_attention_query(
             db,
             viewer=user,
@@ -123,10 +124,7 @@ async def list_conversations_by_zalo_ids(
 ) -> ConversationListResponse:
     zalo_chat_ids = list(dict.fromkeys(value for value in ids.split(",") if value))
     if not zalo_chat_ids or len(zalo_chat_ids) > 200:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "ids must contain between 1 and 200 Zalo chat ids",
-        )
+        raise ValidationError("ids must contain between 1 and 200 Zalo chat ids")
     rows = await ConversationService(db).list_by_zalo_ids(
         viewer=user,
         zalo_chat_ids=zalo_chat_ids,
@@ -274,7 +272,7 @@ async def take_over(
         conv = await ConversationService(db).take_over(conv, user)
     except ConversationConflict as exc:
         who = exc.owner_name or "nhân viên khác"
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Đã được {who} tiếp nhận")
+        raise ConflictError(f"Đã được {who} tiếp nhận")
     return ConversationOut.model_validate(conv)
 
 
@@ -293,9 +291,8 @@ async def release(
         )
     except ConversationConflict as exc:
         who = exc.owner_name or "một nhân viên"
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"Cần tiếp quản hội thoại trước khi trả lại ChatBot ({who}).",
+        raise ConflictError(
+            f"Cần tiếp quản hội thoại trước khi trả lại ChatBot ({who})."
         )
     return ConversationOut.model_validate(conv)
 
@@ -311,7 +308,7 @@ async def semi_auto(
         conv = await ConversationService(db).semi_auto(conv, user)
     except ConversationConflict as exc:
         who = exc.owner_name or "nhân viên khác"
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Đã được {who} tiếp nhận")
+        raise ConflictError(f"Đã được {who} tiếp nhận")
     return ConversationOut.model_validate(conv)
 
 
@@ -374,9 +371,7 @@ async def send_recruiter_message(
         ConversationMode.SEMI_AUTO,
     ) and (owns or user.role == Role.admin)
     if not allowed:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "Bạn cần tiếp nhận hội thoại trước khi trả lời"
-        )
+        raise ConflictError("Bạn cần tiếp nhận hội thoại trước khi trả lời")
     # The RECRUITER message is persisted in both outcomes (FAILED rows are the
     # audit trail and surface in the thread via SSE); the HTTP status reports
     # whether the upstream Zalo delivery itself succeeded.
@@ -400,17 +395,12 @@ async def retry_recruiter_message(
         owns or user.role == Role.admin
     )
     if not allowed:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "Bạn cần tiếp nhận hội thoại trước khi trả lời"
-        )
+        raise ConflictError("Bạn cần tiếp nhận hội thoại trước khi trả lời")
     msg, delivered = await ConversationService(db).retry_recruiter_message(
         conv, message_id=message_id
     )
     if msg is None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Tin nhắn này không còn ở trạng thái có thể thử lại.",
-        )
+        raise ConflictError("Tin nhắn này không còn ở trạng thái có thể thử lại.")
     response.status_code = status.HTTP_201_CREATED if delivered else status.HTTP_502_BAD_GATEWAY
     return MessageOut.model_validate(msg)
 

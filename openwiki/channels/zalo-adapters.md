@@ -3,9 +3,6 @@ type: integration
 title: Zalo Bot Platform and Official Account adapters
 description: The two webhook endpoints, their signature schemes, ingress normalization, dispatch path, and the rule that Zalo adapters are intentionally thin so the rest of the app stays channel-neutral.
 tags: [zalo, bot-platform, official-account, signature, channels-port, registry, dispatch]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-770f01d7351c567fc93944dd
     resource: repo://backend/app/api/webhooks.py
@@ -20,6 +17,9 @@ sources:
   - id: openwiki-source-085098b884681cab422762c1
     resource: repo://backend/app/services/integration_settings.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 Zalo is the primary channel. The platform exposes two webhook surfaces —

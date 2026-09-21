@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:1d05411d6d6ea17aa8046ed146b98b75e86ce14c2e83080aa13756eff4b3cbe4",
+  "pageVersion": "sha256:a690a1844d37c4e1dab58413840f46115b19bc8eab47ec86f076ae0887eab2d2",
   "claims": [
     {
       "id": "claim_246c568b82624b3bbe61037a92650d6f",
@@ -12,7 +12,7 @@
         },
         {
           "resource": "repo://backend/app/schemas/bot_run.py",
-          "version": "repo-file-v1:sha256:8df12775d371f9a7fea7c0a3995b3900a8c20bc5753a9173ef53b336f1556f04"
+          "version": "repo-file-v1:sha256:aaa8c8af624222fca7b5e611364c33f49fedf46746cbff1b5ff198fe86634855"
         }
       ]
     },
@@ -26,7 +26,7 @@
         },
         {
           "resource": "repo://backend/app/schemas/bot_run.py",
-          "version": "repo-file-v1:sha256:8df12775d371f9a7fea7c0a3995b3900a8c20bc5753a9173ef53b336f1556f04"
+          "version": "repo-file-v1:sha256:aaa8c8af624222fca7b5e611364c33f49fedf46746cbff1b5ff198fe86634855"
         }
       ]
     },
@@ -46,7 +46,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/core/config.py",
-          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+          "version": "repo-file-v1:sha256:705ba0f53577d055a83ba1b8c190a59ba6bbd5bb57587eda02e7ba0d63caa41b"
         },
         {
           "resource": "repo://backend/app/main.py",
@@ -74,7 +74,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/graph/runner.py",
-          "version": "repo-file-v1:sha256:5cf463d498767b257ce364f112a62c854d82af3088c7432bbeb5ff6561ad9d9d"
+          "version": "repo-file-v1:sha256:14aa78a79a8aecdb994487ad51150e73576ef303ca95dd9b8e2b72a457f9ceba"
         },
         {
           "resource": "repo://backend/app/models/conversation.py",
@@ -88,7 +88,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/api/bot_runs.py",
-          "version": "repo-file-v1:sha256:c7ab86456fbd52172e0d71c176b9c7fe4880968049540abbe4d5d5972ae1e645"
+          "version": "repo-file-v1:sha256:a0bce2121b18a5a957f4ff6cee4b28103cf009d2fb6b628e892985c9bb4b7e5f"
         },
         {
           "resource": "repo://backend/app/services/bot_run_service.py",
@@ -106,13 +106,13 @@
         },
         {
           "resource": "repo://backend/app/services/integration_settings.py",
-          "version": "repo-file-v1:sha256:6c2ba9488d150b9f85ae0e5cf49b4fcedac6dd9d26be8898fd2e3f7a5778a5f2"
+          "version": "repo-file-v1:sha256:cbd9ad02d949bcb5390adba895403db7b3b688b7cff0fcf203c9067c6a040808"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

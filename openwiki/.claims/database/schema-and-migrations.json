@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:562f81796f938c03f834c1a6e64b1ebc12a533740fa0cf5b2b447f14bdb66e74",
+  "pageVersion": "sha256:b8a0b14b7196cdb7fbd14fb6a48afd4dc374ecc8c0ef2ac281c054aff8a61bc1",
   "claims": [
     {
       "id": "claim_4028f960068f40b7b3f590dd51576db6",
@@ -12,7 +12,7 @@
         },
         {
           "resource": "repo://backend/app/models/__init__.py",
-          "version": "repo-file-v1:sha256:fe00b1d8260e547c1e59ce2edda7123029cc836e12ffd95b3ac022e00f345f07"
+          "version": "repo-file-v1:sha256:9c902c31ccc33cc65214bc7ca6d0df25e7e2f3af0ededc2b320259487101e6cb"
         }
       ]
     },
@@ -90,7 +90,7 @@
         },
         {
           "resource": "repo://backend/app/services/integration_settings.py",
-          "version": "repo-file-v1:sha256:6c2ba9488d150b9f85ae0e5cf49b4fcedac6dd9d26be8898fd2e3f7a5778a5f2"
+          "version": "repo-file-v1:sha256:cbd9ad02d949bcb5390adba895403db7b3b688b7cff0fcf203c9067c6a040808"
         }
       ]
     },
@@ -129,6 +129,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

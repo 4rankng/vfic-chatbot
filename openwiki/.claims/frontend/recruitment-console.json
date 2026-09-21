@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:2fbf85b25b84a75079ba549c94a209b8a54d376add9d4ec3c5d765a74d04f7d0",
+  "pageVersion": "sha256:e7e4462f19f978b9041cd6a38d8e5a600af91ed4b1ef4ed344af74b54a9c9b68",
   "claims": [
     {
       "id": "claim_cb7229d5a8974d27a2ee4107ef0d1da9",
@@ -12,7 +12,7 @@
         },
         {
           "resource": "repo://frontend/vite.config.ts",
-          "version": "repo-file-v1:sha256:75c6dd235e562bf5700f0311bcbd023ec3f86313baee1563d9871170f36caf0d"
+          "version": "repo-file-v1:sha256:55d0d81c388fde9d1baae24676736db2823cc5a94c69ace61efd4df0fb4988ec"
         }
       ]
     },
@@ -36,7 +36,7 @@
       "evidence": [
         {
           "resource": "repo://frontend/src/components/atomic-crm/capabilities/static-recruitment-runtime.ts",
-          "version": "repo-file-v1:sha256:05f5c0710eb495bb659ca13d39a5678374ac595dac888a07c7ab5f433ffdd091"
+          "version": "repo-file-v1:sha256:9be9bc4994902efece751d52c342eb1f62c9bd699e4bf128d626d50b33445403"
         },
         {
           "resource": "repo://frontend/src/components/atomic-crm/root/reset-runtime-state.ts",
@@ -64,7 +64,7 @@
       "evidence": [
         {
           "resource": "repo://frontend/src/components/atomic-crm/providers/commons/canAccess.ts",
-          "version": "repo-file-v1:sha256:39ababb10ab75a3da2279f89114a6f0c70f162cfe33b4675aa11394855e02953"
+          "version": "repo-file-v1:sha256:be609f9cab8ea731dbfd04e115186e4a4c519151ec50f91e49fa9f452105982c"
         }
       ]
     },
@@ -74,13 +74,13 @@
       "evidence": [
         {
           "resource": "repo://frontend/vite.config.ts",
-          "version": "repo-file-v1:sha256:75c6dd235e562bf5700f0311bcbd023ec3f86313baee1563d9871170f36caf0d"
+          "version": "repo-file-v1:sha256:55d0d81c388fde9d1baae24676736db2823cc5a94c69ace61efd4df0fb4988ec"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

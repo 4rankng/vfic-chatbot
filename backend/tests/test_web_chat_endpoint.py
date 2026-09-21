@@ -7,7 +7,7 @@ Covers:
 - Admin-only: require_admin dep is wired (non-admin rejected by FastAPI)
 - run_turn is invoked with execution_source="web_chat"
 - Successful turn returns the bot's reply inline as JSON
-- An exception inside run_turn surfaces as HTTPException 500
+- An exception inside run_turn surfaces as a 500 domain error
 - The endpoint loads the conversation via _load (404 path is _load's job)
 """
 
@@ -85,9 +85,8 @@ async def test_web_chat_turn_invokes_run_turn_with_web_chat_source(monkeypatch) 
 
 @pytest.mark.asyncio
 async def test_web_chat_turn_requires_an_active_chatbot(monkeypatch) -> None:
-    from fastapi import HTTPException
-
     from app.api import conversations
+    from app.shared.domain.errors import ConflictError
 
     conv = SimpleNamespace(id=uuid.uuid4(), version=1, zalo_chat_id="chat-1")
 
@@ -99,7 +98,7 @@ async def test_web_chat_turn_requires_an_active_chatbot(monkeypatch) -> None:
         "app.services.installation.service.InstallationService.resolve_active", _inactive
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConflictError) as exc_info:
         await conversations.web_chat_turn(
             conv.id,
             body=SimpleNamespace(body="chào bạn"),
@@ -133,10 +132,9 @@ async def test_web_chat_turn_uses_admin_only_dependency(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_web_chat_turn_exception_surfaces_as_500(monkeypatch) -> None:
-    """An exception inside run_turn is caught and re-raised as HTTPException 500."""
-    from fastapi import HTTPException
-
+    """An exception inside run_turn is caught and re-raised as a 500 domain error."""
     from app.api import conversations
+    from app.shared.domain.errors import DomainError
 
     conv = SimpleNamespace(
         id=uuid.uuid4(),
@@ -156,7 +154,7 @@ async def test_web_chat_turn_exception_surfaces_as_500(monkeypatch) -> None:
     monkeypatch.setattr("app.graph.runner.run_turn", exploding_run_turn)
     monkeypatch.setattr("app.graph.factories.build_deps", fake_build_deps)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(DomainError) as exc_info:
         await conversations.web_chat_turn(
             conv.id,
             body=SimpleNamespace(body="hello"),

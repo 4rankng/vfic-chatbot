@@ -1,3 +1,4 @@
+import type * as RaCore from "ra-core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router";
@@ -17,7 +18,7 @@ vi.mock("@/lib/apiClient", () => ({
 }));
 
 vi.mock("ra-core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ra-core")>();
+  const actual = await importOriginal<typeof RaCore>();
   return {
     ...actual,
     useDataProvider: () => ({ update: mockDataProviderUpdate }),

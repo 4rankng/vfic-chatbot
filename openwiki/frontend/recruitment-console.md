@@ -3,9 +3,6 @@ type: frontend
 title: Frontend architecture and the atomic-crm recruitment console
 description: Three-layer dependency direction (atomic-crm → admin → ui), bootstrap and PWA service worker, runtime generation reset on authority bumps, and how the console is wired to the FastAPI backend.
 tags: [frontend, atomic-crm, shadcn-admin-kit, pwa, runtime-generation, vite]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-454c9bcdde0b77b35e0fc994
     resource: repo://frontend/src/App.tsx
@@ -24,6 +21,9 @@ sources:
   - id: openwiki-source-378e3cf05ab0d05d335c68d5
     resource: repo://frontend/vite.config.ts
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 The frontend is a **React Admin SPA** built on the `atomic-crm` template,

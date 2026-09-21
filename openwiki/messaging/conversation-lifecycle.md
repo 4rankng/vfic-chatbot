@@ -3,9 +3,6 @@ type: system
 title: Conversation lifecycle, ownership, and delivery state
 description: Conversation persistence model, per-conversation DB lock + owner token + TTL, delivery-state machine, recruiter-driven transitions (take_over / release / semi_auto / close / reopen), and the outbound dispatcher tick that recovers stale commands.
 tags: [conversation, lifecycle, lock, ownership, delivery-state, takeover, release, semi-auto, outbox]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
 sources:
   - id: openwiki-source-f1735c06f5f45e7db8851d34
     resource: repo://backend/app/conversation_messaging/application/outbound_recovery.py
@@ -28,6 +25,9 @@ sources:
   - id: openwiki-source-2fdb3b18938bc915ec6158ea
     resource: repo://backend/app/workers/outbound_dispatch_worker.py
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T02:42:43.794Z
 ---
 
 A conversation is the unit of work between a candidate and a recruiter

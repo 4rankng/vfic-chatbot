@@ -63,12 +63,29 @@ surrounding code.
   env_file_encoding="utf-8", extra="ignore")`.
 
 ### Error handling
-- Domain exceptions are mapped to JSON responses by
-  `register_domain_exception_handlers(app)` in `main.py`.
+- Domain errors live in `app/shared/domain/errors.py` and are **framework-free**
+  (no FastAPI import — enforced by the shared-kernel boundary rule).
+  `DomainError` is the base: each subclass declares `status_code` and optional
+  response `headers`, and `detail` is the exact JSON payload serialised under
+  the response's `detail` key — normally a message string, or a mapping when a
+  contract needs structured detail (e.g. `{"errors": [...]}`).
+- `register_domain_exception_handlers(app)` in `app/core/errors.py` registers one
+  handler against `DomainError`; Starlette resolves handlers by MRO, so every
+  subclass — including any added later — is covered automatically. Do not go
+  back to registering classes one at a time (that is how a new error gets
+  silently forgotten).
 - A catch-all `Exception` handler returns a Vietnamese 500 to clients.
-- Prefer raising domain exceptions over returning raw `HTTPException` in
-  service code. (Some older APIs still use `HTTPException` — convert when
-  touched; do not mix styles in one module.)
+- Raise domain errors, **not** raw `HTTPException`. The only sanctioned
+  `HTTPException` in the app is `app/core/ratelimit.py`, which raises its own 429
+  from inside a dependency.
+  Available: `BadRequestError` 400 · `UnauthorizedError` 401 (adds
+  `WWW-Authenticate: Bearer`) · `ForbiddenError` 403 · `NotFoundError` 404 ·
+  `ConflictError` 409 · `GoneError` 410 · `ValidationError` /
+  `DeliveryEligibilityError` 422 · `RateLimitedError` 429 · `UpstreamError` 502 ·
+  `InstallationError` (dynamic status + `code`/`lifecycle`/`issues`).
+- When a test builds a bare `FastAPI()` around a router, call
+  `register_domain_exception_handlers(app)` on it, or domain errors escape as
+  raw exceptions instead of HTTP responses.
 
 ### The `-strip` directive is load-bearing
 - A `-strip` directive in the bot prompt pipeline is **load-bearing**. Never
@@ -226,9 +243,11 @@ directly, but treat changes with the weight of an upstream fork:
 ## Testing
 
 ### Backend
-- **Pure unit tests only** in `backend/tests/` (28 files). No live DB, Redis,
-  or external services. `conftest.py` docstring states integration tests were
-  moved out.
+- **Pure unit tests only** in `backend/tests/` (187 `test_*.py` modules, ~2334
+  collected tests). No live DB, Redis, or external services — `conftest.py`
+  replaces the Redis singletons with a no-op double, so no infrastructure is
+  required to run them. The 25 DB-backed modules live in
+  `backend/tests/integration/` and are deselected by default.
 - `asyncio_mode = "auto"`.
 - Coverage: graph (clients, factories, safety), concurrency, LLM semaphore,
   reconcile worker + repository, persistence worker, async runner, scheduler
@@ -236,14 +255,14 @@ directly, but treat changes with the weight of an upstream fork:
   text ingestion, persona + follow-up rules, product features, project
   service, prompts registry, RAG benchmark, schema contracts, webhooks, Zalo
   Bot + OA service, conversation history clear, integration settings.
-- Run:
+- Run (matches the `backend-unit` CI job — no env vars needed):
   ```bash
   cd backend
-  REDIS_URL=redis://localhost:6380/0 APP_ENV=development \
-    .venv/bin/python -m pytest -q --tb=short
+  .venv/bin/python -m pytest -q -m "not integration" --tb=short
   ```
-  > Note: the test command pins Redis port **6380** while dev compose exposes
-  > **6382** — implies a dedicated test Redis. Flagged in roadmap.
+  The DB-backed integration lane is opt-in (`-m integration`) and needs the
+  pgvector dev service:
+  `docker compose -f docker-compose.dev.yml up -d postgres`.
 
 ### Frontend
 - **Vitest 4.1** with two projects:

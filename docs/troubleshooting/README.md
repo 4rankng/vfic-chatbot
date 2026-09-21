@@ -26,7 +26,7 @@ Contains:
 
 **Checks:**
 1. Is Redis running? `docker compose -f backend/docker-compose.dev.yml ps redis`
-2. Can the app reach it? Check `REDIS_URL` in `backend/.env` (default: `redis://localhost:6379/0`)
+2. Can the app reach it? Check `REDIS_URL` in `backend/.env` (dev default: `redis://localhost:6382/0` — the dev compose file maps host port 6382; 6379 belongs to a sibling project)
 3. Redis CLI: `redis-cli ping` → `PONG`
 4. Check Redis memory: `redis-cli info memory` — if `used_memory` is near `maxmemory`, evictions may cause silent failures.
 

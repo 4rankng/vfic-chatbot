@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:8fc7bbe066f2121248da533ef425be9c245197f5ceb6f44795682dd0c0bcdf07",
+  "pageVersion": "sha256:464714361c0c6d204f49f1a23a65658301662bcd641e1a23558d94339053bcc8",
   "claims": [
     {
       "id": "claim_4473dad49c1b4e7da387d5c0a04d2f31",
@@ -8,11 +8,11 @@
       "evidence": [
         {
           "resource": "repo://backend/docker-compose.yml",
-          "version": "repo-file-v1:sha256:e628603873d748d5d3f86f74856febe4af04ad2a5dd310b9487efe4a55a5db9a"
+          "version": "repo-file-v1:sha256:b9b3092f58e9dca571b0e5ea8df035d773fb47e591d657639ec0636152e45ce2"
         },
         {
           "resource": "repo://docs/deployment-guide.md",
-          "version": "repo-file-v1:sha256:63cb0ad5314f84fb45e79c376bb95be0899debc0a782e6e56f245cee8e83d127"
+          "version": "repo-file-v1:sha256:e2d5c5d4c2dc6d7eef45b54f5e5a5a8f23ce55fca87f9515438b91b80d12e3bc"
         }
       ]
     },
@@ -52,7 +52,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/core/config.py",
-          "version": "repo-file-v1:sha256:94584dca6b94a14af80c850b27fec07db92343ad14b2c3a5d5097039e3e01f57"
+          "version": "repo-file-v1:sha256:705ba0f53577d055a83ba1b8c190a59ba6bbd5bb57587eda02e7ba0d63caa41b"
         },
         {
           "resource": "repo://backend/app/workers/reconcile_worker.py",
@@ -87,6 +87,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T09:17:45.993Z"
+    "at": "2026-09-21T02:42:43.794Z"
   }
 }

@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import get_current_user, require_admin
 from app.identity.application.http import AuthenticatedUser
 from app.schemas.bot_run import BotRunListResponse, BotRunOut, BotRunOutcome, BotRunTraceDetailOut
+from app.shared.domain.errors import NotFoundError
 from app.shared.infrastructure.db import get_request_db
 from app.services.bot_run_service import BotRunService
 
@@ -46,5 +47,5 @@ async def get_bot_run_detail(
 ) -> BotRunTraceDetailOut:
     detail = await BotRunService(db).get_trace_detail(run_id)
     if detail is None:
-        raise HTTPException(status_code=404, detail="bot run not found")
+        raise NotFoundError("bot run not found")
     return detail

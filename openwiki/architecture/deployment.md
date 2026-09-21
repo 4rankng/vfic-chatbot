@@ -5,21 +5,25 @@ description: How the production stack ships via manual blue/green cutover, why C
 tags: [deployment, blue-green, caddy, release-check, smoke-gate, docker, zero-downtime]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-08T09:17:45.993Z
+    at: 2026-09-21T02:42:43.794Z
 sources:
   - id: openwiki-source-c1f81dc12181334bf105db16
     resource: repo://backend/Caddyfile.template
   - id: openwiki-source-3641e44aef067384d4965781
     resource: repo://backend/docker-compose.yml
+  - id: openwiki-source-d90fca79839a07479341ddb0
+    resource: repo://backend/Makefile
   - id: openwiki-source-fa1d9591fcc1f4e1672f652e
     resource: repo://backend/scripts/bg_deploy.sh
   - id: openwiki-source-af0d70ef064f90ef3be7a8ab
     resource: repo://backend/scripts/bg_rollback.sh
+  - id: openwiki-source-1e8c818630ff949250d0742f
+    resource: repo://backend/scripts/flip_caddy.sh
   - id: openwiki-source-7865fb2b5570e6ebb2f50ca8
     resource: repo://docs/deployment-guide.md
   - id: openwiki-source-012f2c78e3b1446dfc35803f
     resource: repo://Makefile
-generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+generated: { by: "opencode", at: "2026-09-21T02:42:43.794Z" }
 ---
 
 Production runs on a single DigitalOcean droplet (`bot.tingting.vip`, 2 vCPU
@@ -33,25 +37,26 @@ color still serving.
 ## Stack topology
 
 `backend/docker-compose.yml` ships to `/opt/vfic` and auto-loads
-`/opt/vfic/.env`. Images are pulled from DockerHub:
+`/opt/vfic/.env`. Images are pulled from GitHub Container Registry
+(`ghcr.io/4rankng/inghire-be` and `ghcr.io/4rankng/inghire-fe`):
 
-- `franknguyenvd/vfic-backend:<git-sha>` — immutable, what `make deploy`
-  uses.
-- `franknguyenvd/vfic-backend:latest` — registry convenience tag only,
+- `ghcr.io/4rankng/tinghire-be:<git-sha>` — immutable, what `make deploy`
+  uses (`IMAGE_TAG ?= $(GIT_SHA)` from the short git sha).
+- `ghcr.io/4rankng/tinghire-be:latest` — registry convenience tag only,
   never used by the deploy script.
-- `franknguyenvd/vfic-frontend:<git-sha>` — nginx static SPA.
+- `ghcr.io/4rankng/tinghire-fe:<git-sha>` — nginx static SPA.
 
 | Service | Image / base | Replicas | Role |
 |---|---|---|---|
 | `postgres` | `pgvector/pgvector:pg16` | 1 | `max_connections=150`, healthcheck `pg_isready`, volume `vfic_pgdata`. |
 | `redis` | `redis:7-alpine` | 1 | RQ broker + pub/sub + LLM semaphore/cache. AOF on, 256 MB cap `allkeys-lru`, volume `vfic_redisdata`. |
-| `web-blue` / `web-green` | `franknguyenvd/vfic-backend:<tag>` | 1 each (only active receives traffic) | FastAPI (uvicorn, 1 worker). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. |
-| `worker-chatbot` | `franknguyenvd/vfic-backend:<tag>` | 2 | RQ queue `webhook_high` only. Chatbot imports and LLM clients warmed at boot. 180 s `stop_grace_period`, 512 MB limit. |
-| `worker-persistence` | `franknguyenvd/vfic-backend:<tag>` | 1 | RQ queue `persistence_low` only. Best-effort enrichment isolated from candidate replies. 512 MB limit. |
-| `worker-ingest` | `franknguyenvd/vfic-backend:<tag>` | 1 | RQ queue `ingest`. Mounts `vfic_kb_uploads`. |
-| `worker-followup` | `franknguyenvd/vfic-backend:<tag>` | 1 | RQ queue `followup`. Low proactive volume → single replica. |
-| `scheduler` | `franknguyenvd/vfic-backend:<tag>` | 1 | `rqscheduler`. |
-| `frontend` | `franknguyenvd/vfic-frontend:<tag>` | 1 | nginx static SPA. Expose 80. |
+| `web-blue` / `web-green` | `ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}` | 1 each (only active receives traffic) | FastAPI (uvicorn, 1 worker). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. |
+| `worker-chatbot` | `ghcr.io/4rankng/tinghire-be:<tag>` | 2 | RQ queue `webhook_high` only. Chatbot imports and LLM clients warmed at boot. 180 s `stop_grace_period`, 512 MB limit. |
+| `worker-persistence` | `ghcr.io/4rankng/tinghire-be:<tag>` | 1 | RQ queue `persistence_low` only. Best-effort enrichment isolated from candidate replies. 512 MB limit. |
+| `worker-ingest` | `ghcr.io/4rankng/tinghire-be:<tag>` | 1 | RQ queue `ingest`. Mounts `vfic_kb_uploads`. |
+| `worker-followup` | `ghcr.io/4rankng/tinghire-be:<tag>` | 1 | RQ queue `followup`. Low proactive volume → single replica. |
+| `scheduler` | `ghcr.io/4rankng/tinghire-be:<tag>` | 1 | `rqscheduler`. |
+| `frontend` | `ghcr.io/4rankng/tinghire-fe:<tag>` | 1 | nginx static SPA. Expose 80. |
 | `adminer` | `adminer:4` | 1 | DB UI, bound to `127.0.0.1:8081` (loopback only; reach via `make adminer` SSH tunnel). |
 | `caddy` | `caddy:2` | 1 | Edge. `80:80`, `443:443`. Caddyfile RO, regenerated from template. |
 
@@ -87,7 +92,7 @@ Encoding: `zstd gzip`.
 `backend/scripts/bg_deploy.sh` runs **on the droplet** with
 `IMAGE_TAG=<git-sha>` in the environment:
 
-1. `docker pull franknguyenvd/vfic-backend:$IMAGE_TAG`.
+1. `docker pull ghcr.io/4rankng/tinghire-be:$IMAGE_TAG`.
 2. Ensure `postgres` and `redis` are up (`--wait`).
 3. One-shot Alembic migration on a transient web-blue container
    (`alembic upgrade head`).

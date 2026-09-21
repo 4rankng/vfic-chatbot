@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,7 @@ from app.services.personas import (
     load_persona_template,
     persona_out_from_model,
 )
+from app.shared.domain.errors import BadRequestError, ValidationError
 from app.shared.infrastructure.db import get_request_db as get_db
 
 router = APIRouter(prefix="/knowledge/personas", tags=["personas"])
@@ -77,7 +78,7 @@ async def update_persona_assignment(
     try:
         return await PersonaService(db).update_adapter_assignment(provider, body, admin)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+        raise ValidationError(str(exc)) from exc
 
 
 @router.post("", response_model=PersonaOut, status_code=status.HTTP_201_CREATED)
@@ -133,7 +134,7 @@ async def activate_persona(
     try:
         return persona_out_from_model(await PersonaService(db).activate(persona_id))
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise BadRequestError(str(exc)) from exc
 
 
 @router.get("/format/template")
@@ -156,15 +157,9 @@ async def import_persona(
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Tệp không phải UTF-8 hợp lệ.",
-        ) from None
+        raise ValidationError("Tệp không phải UTF-8 hợp lệ.") from None
     try:
         persona = await PersonaService(db).import_persona(text, admin, knowledge_base_id)
     except ValueError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            str(exc),
-        ) from exc
+        raise ValidationError(str(exc)) from exc
     return persona_out_from_model(persona)

@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from app.api import knowledge as knowledge_api
 from app.api.auth_dependencies import require_admin
+from app.core.errors import register_domain_exception_handlers
 from app.shared.infrastructure.db import get_request_db as get_db
 from app.models.external_source_sync_state import ExternalSourceSyncState
 
@@ -63,6 +64,7 @@ def test_unique_constraint_present() -> None:
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app = FastAPI()
+    register_domain_exception_handlers(app)
     app.include_router(knowledge_api.router, prefix="/api/v1")
     app.dependency_overrides[require_admin] = lambda: SimpleNamespace(id=uuid.uuid4())
     # A db that fails loudly if the rejection path ever reaches it.
