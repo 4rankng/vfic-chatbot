@@ -79,24 +79,138 @@ import "./settings.css";
 
 type FormState = ZaloFormState;
 
-type MinimaxFormState = {
+// ---------------------------------------------------------------------------
+// Provider settings panels (descriptor-driven)
+//
+// The four LLM-model-like providers (minimax, openrouter, custom-llm, jev)
+// share one dirty-check/save/probe/status implementation. Each provider is a
+// single declarative descriptor below; adding provider #6 means adding one
+// entry, not another parallel slice of state and handlers.
+// ---------------------------------------------------------------------------
+
+/** Form keys are unique across providers, so one flat form record serves all. */
+type ProviderFormState = {
   minimax_api_key: string;
-};
-
-type OpenRouterFormState = {
   openrouter_api_key: string;
-};
-
-type CustomLlmFormState = {
+  openrouter_agent_model: string;
   custom_llm_api_key: string;
   custom_llm_base_url: string;
   custom_llm_agent_model: string;
-};
-
-type JevFormState = {
   jev_api_key: string;
   jev_model: string;
 };
+
+type ProviderSettingsBundle = {
+  minimax: MinimaxSettings | null;
+  openRouter: OpenRouterSettings | null;
+  customLlm: CustomLlmSettings | null;
+  jev: JevSettings | null;
+};
+
+type ProviderPanelId = "minimax" | "openrouter" | "custom-llm" | "jev";
+
+/** Chain cards render in the failover ranking; standalone (jev) does not. */
+type ProviderPanelGroup = "chain" | "standalone";
+
+type ProviderPayloadValue = string | boolean | string[];
+type ProviderPayload = Record<string, ProviderPayloadValue>;
+
+/** Shared LLM-chain state the panel-global radio/failover ranking rides on. */
+type ProviderLlmContext = {
+  defaultProvider: LlmProvider;
+  failoverOrder: LlmProvider[];
+  setDefaultProvider: (provider: LlmProvider) => void;
+  setFailoverOrder: (order: LlmProvider[]) => void;
+};
+
+type ProviderFieldDescriptor =
+  | {
+      kind: "secret";
+      formKey: keyof ProviderFormState;
+      label: string;
+      placeholder: string;
+      status: (bundle: ProviderSettingsBundle) => SecretStatus;
+    }
+  | {
+      kind: "text";
+      formKey: keyof ProviderFormState;
+      label: string;
+      placeholder: (bundle: ProviderSettingsBundle) => string;
+      saved: (bundle: ProviderSettingsBundle) => string;
+    }
+  | {
+      kind: "select";
+      formKey: keyof ProviderFormState;
+      label: string;
+      options: readonly string[];
+      saved: (bundle: ProviderSettingsBundle) => string;
+      /** OpenRouter fans one model choice out to agent/safety/digest keys. */
+      payloadKeys?: readonly string[];
+    }
+  | {
+      kind: "readonly";
+      label: string;
+      note?: string;
+      value: (bundle: ProviderSettingsBundle) => string;
+    };
+
+type ProviderPanelDescriptor = {
+  id: ProviderPanelId;
+  /** Slice of {@link ProviderSettingsBundle} this provider owns. */
+  bundleKey: keyof ProviderSettingsBundle;
+  chrome: ProviderPanelGroup;
+  title: string;
+  description?: string;
+  /** Standalone-card icon; chain cards render a rank badge instead. */
+  icon?: ReactNode;
+  /** Standalone-card group status (configured/total); chain cards use chips. */
+  status?: (
+    bundle: ProviderSettingsBundle,
+    enabled: boolean,
+  ) => { configured: number; total: number; disabled: boolean };
+  fields: readonly ProviderFieldDescriptor[];
+  /** Switch id and PUT payload key ("minimax_enable", ...). */
+  enableKey: string;
+  /** Saved enable flag; null = settings not loaded yet. */
+  readEnabled: (bundle: ProviderSettingsBundle) => boolean | null;
+  initialTest: (bundle: ProviderSettingsBundle) => ProviderTestStatus | null;
+  testFieldLabels: Record<string, string>;
+  testConnection: (
+    body?: Record<string, string>,
+  ) => Promise<ProviderTestResult>;
+  buildTestBody?: (form: ProviderFormState) => Record<string, string>;
+  save: (
+    payload: ProviderPayload,
+  ) => Promise<
+    MinimaxSettings | OpenRouterSettings | CustomLlmSettings | JevSettings
+  >;
+  /** Panel-global keys (default provider, failover order) beyond fields. */
+  extraPayload?: (
+    llm: ProviderLlmContext,
+    bundle: ProviderSettingsBundle,
+  ) => ProviderPayload;
+  /** Post-save sync of panel-global state from the freshly saved settings. */
+  afterSaveSync?: (
+    bundle: ProviderSettingsBundle,
+    llm: ProviderLlmContext,
+  ) => void;
+  /** Discard-time sync of panel-global state from the saved settings. */
+  discardSync?: (
+    bundle: ProviderSettingsBundle,
+    llm: ProviderLlmContext,
+  ) => void;
+};
+
+const emptyProviderForm = (): ProviderFormState => ({
+  minimax_api_key: "",
+  openrouter_api_key: "",
+  openrouter_agent_model: "deepseek/deepseek-v4-flash",
+  custom_llm_api_key: "",
+  custom_llm_base_url: "",
+  custom_llm_agent_model: "",
+  jev_api_key: "",
+  jev_model: "",
+});
 
 type MinimaxUpdatePayload = {
   minimax_api_key?: string;
@@ -145,33 +259,267 @@ const ZALO_TEST_FIELD_LABELS: Record<string, string> = {
   zalo_oa_refresh_token: "OA Refresh Token",
 };
 
-const INTEGRATION_TEST_FIELD_LABELS: Record<string, string> = {
-  minimax_api_key: "Access Token",
-  openrouter_api_key: "Access Token",
-  custom_llm_api_key: "Access Token",
-  custom_llm_base_url: "Base URL",
-  custom_llm_agent_model: "Model chatbot",
-  jev_api_key: "API Key",
-  jev_model: "Model",
+const OPENROUTER_MODEL_OPTIONS = [
+  "deepseek/deepseek-v4-flash",
+  "deepseek/deepseek-chat",
+  "deepseek/deepseek-r1",
+];
+
+const MINIMAX_PANEL: ProviderPanelDescriptor = {
+  id: "minimax",
+  bundleKey: "minimax",
+  chrome: "chain",
+  title: "MiniMax",
+  enableKey: "minimax_enable",
+  readEnabled: (bundle) => bundle.minimax?.minimax_enable ?? null,
+  initialTest: (bundle) => bundle.minimax?.last_test ?? null,
+  fields: [
+    {
+      kind: "readonly",
+      label: "Model chatbot",
+      note: "Cố định",
+      value: (bundle) => bundle.minimax?.minimax_agent_model ?? "—",
+    },
+    {
+      kind: "secret",
+      formKey: "minimax_api_key",
+      label: "Access Token",
+      placeholder: "Dán token Minimax",
+      status: (bundle) =>
+        bundle.minimax?.minimax_api_key ?? { configured: false },
+    },
+  ],
+  testFieldLabels: { minimax_api_key: "Access Token" },
+  testConnection: () => zaloIntegrationGateway.testMinimaxConnection(),
+  save: (payload) =>
+    zaloIntegrationGateway.saveMinimaxSettings(payload as MinimaxUpdatePayload),
+  extraPayload: (llm, bundle) => {
+    const payload: ProviderPayload = {};
+    const settings = bundle.minimax;
+    if (!settings) return payload;
+    // The default-provider radio is panel-global; a change rides exactly one
+    // PUT (minimax) so three payloads never write the shared key twice. The
+    // spare ranking shares that PUT.
+    if (llm.defaultProvider !== settings.llm_default_provider) {
+      payload.llm_default_provider = llm.defaultProvider;
+    }
+    if (llm.failoverOrder.join(",") !== settings.llm_failover_order.join(",")) {
+      payload.llm_failover_order = llm.failoverOrder;
+    }
+    return payload;
+  },
+  afterSaveSync: (bundle, llm) => {
+    const next = bundle.minimax;
+    if (!next) return;
+    llm.setDefaultProvider(next.llm_default_provider);
+    llm.setFailoverOrder(normalizeFailoverOrder(next.llm_failover_order));
+  },
 };
 
-const emptyMinimaxForm: MinimaxFormState = {
-  minimax_api_key: "",
+const OPENROUTER_PANEL: ProviderPanelDescriptor = {
+  id: "openrouter",
+  bundleKey: "openRouter",
+  chrome: "chain",
+  title: "OpenRouter",
+  enableKey: "openrouter_enable",
+  readEnabled: (bundle) => bundle.openRouter?.openrouter_enable ?? null,
+  initialTest: (bundle) => bundle.openRouter?.last_test ?? null,
+  fields: [
+    {
+      kind: "select",
+      formKey: "openrouter_agent_model",
+      label: "Model chatbot",
+      options: OPENROUTER_MODEL_OPTIONS,
+      saved: (bundle) => bundle.openRouter?.openrouter_agent_model ?? "",
+      payloadKeys: [
+        "openrouter_agent_model",
+        "openrouter_safety_model",
+        "openrouter_digest_model",
+      ],
+    },
+    {
+      kind: "secret",
+      formKey: "openrouter_api_key",
+      label: "Access Token",
+      placeholder: "Dán token OpenRouter",
+      status: (bundle) =>
+        bundle.openRouter?.openrouter_api_key ?? { configured: false },
+    },
+  ],
+  testFieldLabels: { openrouter_api_key: "Access Token" },
+  testConnection: () => zaloIntegrationGateway.testOpenRouterConnection(),
+  save: (payload) =>
+    zaloIntegrationGateway.saveOpenRouterSettings(
+      payload as OpenRouterUpdatePayload,
+    ),
 };
 
-const emptyOpenRouterForm: OpenRouterFormState = {
-  openrouter_api_key: "",
+const CUSTOM_LLM_PANEL: ProviderPanelDescriptor = {
+  id: "custom-llm",
+  bundleKey: "customLlm",
+  chrome: "chain",
+  title: "Xiaomi",
+  enableKey: "custom_llm_enable",
+  readEnabled: (bundle) => bundle.customLlm?.custom_llm_enable ?? null,
+  initialTest: (bundle) => bundle.customLlm?.last_test ?? null,
+  fields: [
+    {
+      kind: "text",
+      formKey: "custom_llm_base_url",
+      label: "Base URL",
+      placeholder: (bundle) =>
+        bundle.customLlm?.custom_llm_base_url ||
+        "https://token-plan-sgp.xiaomimimo.com/v1",
+      saved: (bundle) => bundle.customLlm?.custom_llm_base_url ?? "",
+    },
+    {
+      kind: "text",
+      formKey: "custom_llm_agent_model",
+      label: "Model chatbot",
+      placeholder: (bundle) =>
+        bundle.customLlm?.custom_llm_agent_model || "mimo-v2.5-pro",
+      saved: (values) => values.customLlm?.custom_llm_agent_model ?? "",
+    },
+    {
+      kind: "secret",
+      formKey: "custom_llm_api_key",
+      label: "Access Token",
+      placeholder: "Dán token Xiaomi",
+      status: (bundle) =>
+        bundle.customLlm?.custom_llm_api_key ?? { configured: false },
+    },
+  ],
+  testFieldLabels: {
+    custom_llm_api_key: "Access Token",
+    custom_llm_base_url: "Base URL",
+    custom_llm_agent_model: "Model chatbot",
+  },
+  testConnection: (body) =>
+    zaloIntegrationGateway.testCustomLlmConnection(body),
+  buildTestBody: (form) =>
+    Object.fromEntries(
+      (
+        [
+          ["custom_llm_api_key", form.custom_llm_api_key],
+          ["custom_llm_base_url", form.custom_llm_base_url],
+          ["custom_llm_agent_model", form.custom_llm_agent_model],
+        ] as const
+      )
+        .map(([key, raw]) => [key, raw.trim()] as const)
+        .filter(([, value]) => value !== ""),
+    ),
+  save: (payload) =>
+    zaloIntegrationGateway.saveCustomLlmSettings(
+      payload as CustomLlmUpdatePayload,
+    ),
+  discardSync: (bundle, llm) => {
+    const settings = bundle.customLlm;
+    if (!settings) return;
+    llm.setDefaultProvider(settings.llm_default_provider);
+    llm.setFailoverOrder(normalizeFailoverOrder(settings.llm_failover_order));
+  },
 };
 
-const emptyCustomLlmForm: CustomLlmFormState = {
-  custom_llm_api_key: "",
-  custom_llm_base_url: "",
-  custom_llm_agent_model: "",
+const JEV_PANEL: ProviderPanelDescriptor = {
+  id: "jev",
+  bundleKey: "jev",
+  chrome: "standalone",
+  title: "Jev (TypeSafe)",
+  description:
+    "Mô hình quyết định System One — phân loại ý định, hướng sắp xếp, và nhận diện lời xã giao cho bot. Bot vẫn hoạt động bình thường khi Jev tắt.",
+  icon: <Brain className="size-4" />,
+  status: (bundle, enabled) => ({
+    configured: [
+      bundle.jev?.jev_api_key.configured,
+      Boolean(bundle.jev?.jev_model),
+    ].filter(Boolean).length,
+    total: 2,
+    disabled: !enabled,
+  }),
+  enableKey: "jev_enable",
+  readEnabled: (bundle) => bundle.jev?.jev_enable ?? null,
+  initialTest: () => null,
+  fields: [
+    {
+      kind: "text",
+      formKey: "jev_model",
+      label: "Model",
+      placeholder: (bundle) => bundle.jev?.jev_model || "jev-latest",
+      saved: (bundle) => bundle.jev?.jev_model ?? "",
+    },
+    {
+      kind: "secret",
+      formKey: "jev_api_key",
+      label: "API Key",
+      placeholder: "Dán API key TypeSafe",
+      status: (bundle) => bundle.jev?.jev_api_key ?? { configured: false },
+    },
+  ],
+  testFieldLabels: { jev_api_key: "API Key", jev_model: "Model" },
+  testConnection: () => zaloIntegrationGateway.testJevConnection(),
+  save: (payload) =>
+    zaloIntegrationGateway.saveJevSettings(payload as JevUpdatePayload),
 };
 
-const emptyJevForm: JevFormState = {
-  jev_api_key: "",
-  jev_model: "",
+const PROVIDER_PANELS: readonly ProviderPanelDescriptor[] = [
+  MINIMAX_PANEL,
+  OPENROUTER_PANEL,
+  CUSTOM_LLM_PANEL,
+  JEV_PANEL,
+];
+
+const PROVIDER_PANELS_BY_ID: Record<ProviderPanelId, ProviderPanelDescriptor> =
+  {
+    minimax: MINIMAX_PANEL,
+    openrouter: OPENROUTER_PANEL,
+    "custom-llm": CUSTOM_LLM_PANEL,
+    jev: JEV_PANEL,
+  };
+
+const PROVIDER_GROUP_IDS: Record<
+  ProviderPanelGroup,
+  readonly ProviderPanelId[]
+> = {
+  chain: PROVIDER_PANELS.filter((panel) => panel.chrome === "chain").map(
+    (panel) => panel.id,
+  ),
+  standalone: PROVIDER_PANELS.filter(
+    (panel) => panel.chrome === "standalone",
+  ).map((panel) => panel.id),
+};
+
+const CHAIN_PANEL_ID_BY_PROVIDER: Record<LlmProvider, ProviderPanelId> = {
+  minimax: "minimax",
+  openrouter: "openrouter",
+  custom: "custom-llm",
+};
+
+const PROVIDER_SETTINGS_BUNDLE_NULL: ProviderSettingsBundle = {
+  minimax: null,
+  openRouter: null,
+  customLlm: null,
+  jev: null,
+};
+
+/**
+ * Per-field reset values for the provider form: secrets and free text clear,
+ * while select fields re-sync to their saved value — the same shape the load,
+ * save, and discard flows produced before the panel refactor. Scoped to the
+ * given panels so a chain save never wipes an in-progress Jev edit (and vice
+ * versa), matching the pre-refactor behavior.
+ */
+const resetProviderForm = (
+  bundle: ProviderSettingsBundle,
+  panels: readonly ProviderPanelDescriptor[] = PROVIDER_PANELS,
+): ProviderFormState => {
+  const form = emptyProviderForm();
+  for (const descriptor of panels) {
+    for (const field of descriptor.fields) {
+      if (field.kind === "readonly") continue;
+      form[field.formKey] = field.kind === "select" ? field.saved(bundle) : "";
+    }
+  }
+  return form;
 };
 
 // Canonical provider order. It seeds an operator who has never ranked the
@@ -196,12 +544,6 @@ const normalizeFailoverOrder = (order: LlmProvider[]): LlmProvider[] => {
     ...LLM_PROVIDER_ORDER.filter((provider) => !ranked.includes(provider)),
   ];
 };
-
-const OPENROUTER_MODEL_OPTIONS = [
-  "deepseek/deepseek-v4-flash",
-  "deepseek/deepseek-chat",
-  "deepseek/deepseek-r1",
-];
 
 type SettingsItemId =
   | "settings-zalo-channel"
@@ -323,21 +665,23 @@ const SETTINGS_VIEW_COPY: Record<
   },
 };
 
-const SecretInput = ({
+const SecretInput = <K extends string>({
   id,
   label,
   status,
   statusState,
   value,
+  placeholder,
   onChange,
   notify,
 }: {
-  id: keyof FormState;
+  id: K;
   label: string;
   status: SecretStatus;
   statusState?: SettingsStatusState;
   value: string;
-  onChange: (key: keyof FormState, value: string) => void;
+  placeholder: string;
+  onChange: (key: K, value: string) => void;
   notify: CredentialFieldNotify;
 }) => (
   <CredentialSecretField
@@ -346,123 +690,7 @@ const SecretInput = ({
     status={status}
     statusState={statusState}
     value={value}
-    placeholder="Nhập giá trị"
-    onValueChange={(nextValue) => onChange(id, nextValue)}
-    notify={notify}
-  />
-);
-
-const MinimaxSecretInput = ({
-  id,
-  label,
-  status,
-  statusState,
-  value,
-  onChange,
-  notify,
-}: {
-  id: keyof MinimaxFormState;
-  label: string;
-  status: SecretStatus;
-  statusState?: SettingsStatusState;
-  value: string;
-  onChange: (key: keyof MinimaxFormState, value: string) => void;
-  notify: CredentialFieldNotify;
-}) => (
-  <CredentialSecretField
-    id={id}
-    label={label}
-    status={status}
-    statusState={statusState}
-    value={value}
-    placeholder="Dán token Minimax"
-    onValueChange={(nextValue) => onChange(id, nextValue)}
-    notify={notify}
-  />
-);
-
-const OpenRouterSecretInput = ({
-  id,
-  label,
-  status,
-  statusState,
-  value,
-  onChange,
-  notify,
-}: {
-  id: keyof OpenRouterFormState;
-  label: string;
-  status: SecretStatus;
-  statusState?: SettingsStatusState;
-  value: string;
-  onChange: (key: keyof OpenRouterFormState, value: string) => void;
-  notify: CredentialFieldNotify;
-}) => (
-  <CredentialSecretField
-    id={id}
-    label={label}
-    status={status}
-    statusState={statusState}
-    value={value}
-    placeholder="Dán token OpenRouter"
-    onValueChange={(nextValue) => onChange(id, nextValue)}
-    notify={notify}
-  />
-);
-
-const CustomLlmSecretInput = ({
-  id,
-  label,
-  status,
-  statusState,
-  value,
-  onChange,
-  notify,
-}: {
-  id: keyof CustomLlmFormState;
-  label: string;
-  status: SecretStatus;
-  statusState?: SettingsStatusState;
-  value: string;
-  onChange: (key: keyof CustomLlmFormState, value: string) => void;
-  notify: CredentialFieldNotify;
-}) => (
-  <CredentialSecretField
-    id={id}
-    label={label}
-    status={status}
-    statusState={statusState}
-    value={value}
-    placeholder="Dán token Xiaomi"
-    onValueChange={(nextValue) => onChange(id, nextValue)}
-    notify={notify}
-  />
-);
-
-const JevSecretInput = ({
-  id,
-  label,
-  status,
-  statusState,
-  value,
-  onChange,
-  notify,
-}: {
-  id: keyof JevFormState;
-  label: string;
-  status: SecretStatus;
-  statusState?: SettingsStatusState;
-  value: string;
-  onChange: (key: keyof JevFormState, value: string) => void;
-  notify: CredentialFieldNotify;
-}) => (
-  <CredentialSecretField
-    id={id}
-    label={label}
-    status={status}
-    statusState={statusState}
-    value={value}
-    placeholder="Dán API key TypeSafe"
+    placeholder={placeholder}
     onValueChange={(nextValue) => onChange(id, nextValue)}
     notify={notify}
   />
@@ -747,52 +975,35 @@ export const ZaloIntegrationPage = () => {
   const { permissions, isPending: permissionsPending } = usePermissions();
   const isMobile = useIsMobile();
   const [settings, setSettings] = useState<ZaloSettings | null>(null);
-  const [minimaxSettings, setMinimaxSettings] =
-    useState<MinimaxSettings | null>(null);
-  const [openRouterSettings, setOpenRouterSettings] =
-    useState<OpenRouterSettings | null>(null);
-  const [customLlmSettings, setCustomLlmSettings] =
-    useState<CustomLlmSettings | null>(null);
-  const [jevSettings, setJevSettings] = useState<JevSettings | null>(null);
+  const [providerSettings, setProviderSettings] =
+    useState<ProviderSettingsBundle>(PROVIDER_SETTINGS_BUNDLE_NULL);
   const [settingsStatusState, setSettingsStatusState] =
     useState<SettingsStatusState>("loading");
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [minimaxForm, setMinimaxForm] =
-    useState<MinimaxFormState>(emptyMinimaxForm);
-  const [openRouterForm, setOpenRouterForm] =
-    useState<OpenRouterFormState>(emptyOpenRouterForm);
-  const [customLlmForm, setCustomLlmForm] =
-    useState<CustomLlmFormState>(emptyCustomLlmForm);
-  const [jevForm, setJevForm] = useState<JevFormState>(emptyJevForm);
-  const [minimaxEnabled, setMinimaxEnabled] = useState(true);
-  const [openRouterEnabled, setOpenRouterEnabled] = useState(false);
-  const [customLlmEnabled, setCustomLlmEnabled] = useState(false);
-  const [jevEnabled, setJevEnabled] = useState(false);
+  const [providerForm, setProviderForm] =
+    useState<ProviderFormState>(emptyProviderForm());
+  const [providerEnabled, setProviderEnabled] = useState<
+    Record<ProviderPanelId, boolean>
+  >({ minimax: true, openrouter: false, "custom-llm": false, jev: false });
+  const [providerTesting, setProviderTesting] = useState<
+    Record<ProviderPanelId, boolean>
+  >({ minimax: false, openrouter: false, "custom-llm": false, jev: false });
+  const [providerSaving, setProviderSaving] = useState<
+    Record<ProviderPanelGroup, boolean>
+  >({ chain: false, standalone: false });
+  const [providerLastTests, setProviderLastTests] = useState<
+    Partial<Record<ProviderPanelId, ProviderTestStatus>>
+  >({});
   const [llmDefaultProvider, setLlmDefaultProvider] =
     useState<LlmProvider>("minimax");
   const [llmFailoverOrder, setLlmFailoverOrder] = useState<LlmProvider[]>([
     ...LLM_PROVIDER_ORDER,
   ]);
-  const [openRouterModel, setOpenRouterModel] = useState(
-    "deepseek/deepseek-v4-flash",
-  );
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(
     resolveInitialSettingsItemId,
   );
   const [testingBot, setTestingBot] = useState(false);
-  const [testingJev, setTestingJev] = useState(false);
-  const [savingJev, setSavingJev] = useState(false);
-  const [jevLastTest, setJevLastTest] = useState<ProviderTestStatus | null>(
-    null,
-  );
   const [testingOa, setTestingOa] = useState(false);
-  const [savingProviders, setSavingProviders] = useState(false);
-  const [testingProvider, setTestingProvider] = useState<LlmProvider | null>(
-    null,
-  );
-  const [lastTests, setLastTests] = useState<
-    Partial<Record<LlmProvider, ProviderTestStatus>>
-  >({});
   const handleCopy = useCallback(
     (label: string, value: string) =>
       copyCredentialFieldValue(label, value, notify as CredentialFieldNotify),
@@ -810,32 +1021,39 @@ export const ZaloIntegrationPage = () => {
         jev: jevData,
       } = await zaloIntegrationGateway.loadSettingsBundle();
       setSettings(data);
-      setMinimaxSettings(minimaxData);
-      setOpenRouterSettings(openRouterData);
-      setCustomLlmSettings(customLlmData);
-      setJevSettings(jevData);
+      const loadedBundle: ProviderSettingsBundle = {
+        minimax: minimaxData,
+        openRouter: openRouterData,
+        customLlm: customLlmData,
+        jev: jevData,
+      };
+      setProviderSettings(loadedBundle);
       setForm((current) => ({
         ...current,
         zalo_oa_app_id: data.zalo_oa_app_id.value ?? "",
       }));
-      setMinimaxEnabled(minimaxData.minimax_enable);
-      setOpenRouterEnabled(openRouterData.openrouter_enable);
-      setCustomLlmEnabled(customLlmData.custom_llm_enable);
-      setJevEnabled(jevData.jev_enable);
-      setLastTests({
-        minimax: minimaxData.last_test ?? undefined,
-        openrouter: openRouterData.last_test ?? undefined,
-        custom: customLlmData.last_test ?? undefined,
-      });
+      const nextEnabled: Record<ProviderPanelId, boolean> = {
+        minimax: true,
+        openrouter: false,
+        "custom-llm": false,
+        jev: false,
+      };
+      const nextLastTests: Partial<
+        Record<ProviderPanelId, ProviderTestStatus>
+      > = {};
+      for (const descriptor of PROVIDER_PANELS) {
+        const saved = descriptor.readEnabled(loadedBundle);
+        if (saved !== null) nextEnabled[descriptor.id] = saved;
+        const lastTest = descriptor.initialTest(loadedBundle);
+        if (lastTest) nextLastTests[descriptor.id] = lastTest;
+      }
+      setProviderEnabled(nextEnabled);
+      setProviderLastTests(nextLastTests);
       setLlmDefaultProvider(customLlmData.llm_default_provider);
       setLlmFailoverOrder(
         normalizeFailoverOrder(customLlmData.llm_failover_order),
       );
-      setOpenRouterModel(openRouterData.openrouter_agent_model);
-      setMinimaxForm(emptyMinimaxForm);
-      setOpenRouterForm(emptyOpenRouterForm);
-      setCustomLlmForm(emptyCustomLlmForm);
-      setJevForm(emptyJevForm);
+      setProviderForm(resetProviderForm(loadedBundle));
       setSettingsStatusState("ready");
     } catch {
       setSettingsStatusState("error");
@@ -853,153 +1071,195 @@ export const ZaloIntegrationPage = () => {
     return buildZaloUpdatePayload(form, settings?.zalo_oa_app_id.value);
   }, [form, settings]);
 
-  const changedMinimaxPayload = useMemo(() => {
-    const payload: MinimaxUpdatePayload = {};
-    const value = minimaxForm.minimax_api_key.trim();
-    if (value) payload.minimax_api_key = value;
-    if (minimaxSettings && minimaxEnabled !== minimaxSettings.minimax_enable) {
-      payload.minimax_enable = minimaxEnabled;
-    }
-    // The default-provider radio is panel-global; a change rides exactly one
-    // PUT (minimax) so three payloads never write the shared key twice. The
-    // spare ranking shares that PUT.
-    if (
-      minimaxSettings &&
-      llmDefaultProvider !== minimaxSettings.llm_default_provider
-    ) {
-      payload.llm_default_provider = llmDefaultProvider;
-    }
-    if (
-      minimaxSettings &&
-      llmFailoverOrder.join(",") !==
-        minimaxSettings.llm_failover_order.join(",")
-    ) {
-      payload.llm_failover_order = llmFailoverOrder;
-    }
-    return payload;
-  }, [
-    minimaxForm,
-    minimaxEnabled,
-    llmDefaultProvider,
-    llmFailoverOrder,
-    minimaxSettings,
-  ]);
+  // ---------------------------------------------------------------------------
+  // ProviderSettingsPanel: ONE dirty-check/save/probe/status implementation
+  // for all descriptor-driven providers (minimax, openrouter, custom-llm, jev).
+  // ---------------------------------------------------------------------------
 
-  const changedOpenRouterPayload = useMemo(() => {
-    const payload: OpenRouterUpdatePayload = {};
-    const value = openRouterForm.openrouter_api_key.trim();
-    if (value) payload.openrouter_api_key = value;
-    if (
-      openRouterSettings &&
-      openRouterEnabled !== openRouterSettings.openrouter_enable
-    ) {
-      payload.openrouter_enable = openRouterEnabled;
-    }
-    if (
-      openRouterSettings &&
-      openRouterModel.trim() &&
-      openRouterModel.trim() !== openRouterSettings.openrouter_agent_model
-    ) {
-      payload.openrouter_agent_model = openRouterModel.trim();
-      payload.openrouter_safety_model = openRouterModel.trim();
-      payload.openrouter_digest_model = openRouterModel.trim();
-    }
-    // The shared default-provider key rides the minimax PUT alone (see
-    // changedMinimaxPayload). Writing it here too issued a second, redundant
-    // PUT of the same value whenever the operator only switched the default.
-    return payload;
-  }, [openRouterForm, openRouterEnabled, openRouterModel, openRouterSettings]);
+  // Panel-global LLM-chain context the descriptors read and sync; identity
+  // changes every render, which is fine — the shared helpers are plain
+  // per-render closures like the rest of the page's handlers.
+  const llmContext: ProviderLlmContext = {
+    defaultProvider: llmDefaultProvider,
+    failoverOrder: llmFailoverOrder,
+    setDefaultProvider: setLlmDefaultProvider,
+    setFailoverOrder: setLlmFailoverOrder,
+  };
 
-  const changedCustomLlmPayload = useMemo(() => {
-    const payload: CustomLlmUpdatePayload = {};
-    const apiKey = customLlmForm.custom_llm_api_key.trim();
-    if (apiKey) payload.custom_llm_api_key = apiKey;
-    const textFields: Array<
-      [key: keyof CustomLlmSettings, formKey: keyof CustomLlmFormState]
-    > = [
-      ["custom_llm_base_url", "custom_llm_base_url"],
-      ["custom_llm_agent_model", "custom_llm_agent_model"],
-    ];
-    for (const [key, formKey] of textFields) {
-      const trimmed = customLlmForm[formKey].trim();
-      if (trimmed && customLlmSettings && trimmed !== customLlmSettings[key]) {
-        payload[formKey] = trimmed;
+  // One dirty-check builder for every provider: secrets go out when non-empty,
+  // text/select fields when they differ from their saved value, the enable
+  // switch when it differs from the saved flag, plus any panel-global keys the
+  // descriptor adds (default provider, failover order).
+  const providerPayload = (id: ProviderPanelId): ProviderPayload => {
+    const descriptor = PROVIDER_PANELS_BY_ID[id];
+    const bundle = providerSettings;
+    const savedEnabled = descriptor.readEnabled(bundle);
+    const payload: ProviderPayload = {};
+    for (const field of descriptor.fields) {
+      if (field.kind === "readonly") continue;
+      const raw = providerForm[field.formKey].trim();
+      if (field.kind === "secret") {
+        if (raw) payload[field.formKey] = raw;
+        continue;
+      }
+      // Saved settings must exist before a text/select/enable diff is legal.
+      if (savedEnabled === null) continue;
+      if (!raw || raw === field.saved(bundle)) continue;
+      const payloadKeys =
+        field.kind === "select"
+          ? (field.payloadKeys ?? [field.formKey])
+          : [field.formKey];
+      for (const key of payloadKeys) {
+        payload[key] = raw;
       }
     }
-    if (
-      customLlmSettings &&
-      customLlmEnabled !== customLlmSettings.custom_llm_enable
-    ) {
-      payload.custom_llm_enable = customLlmEnabled;
+    if (savedEnabled !== null && providerEnabled[id] !== savedEnabled) {
+      payload[descriptor.enableKey] = providerEnabled[id];
+    }
+    if (descriptor.extraPayload) {
+      Object.assign(payload, descriptor.extraPayload(llmContext, bundle));
     }
     return payload;
-  }, [customLlmForm, customLlmEnabled, customLlmSettings]);
+  };
 
-  const changedJevPayload = useMemo(() => {
-    const payload: JevUpdatePayload = {};
-    const apiKey = jevForm.jev_api_key.trim();
-    if (apiKey) payload.jev_api_key = apiKey;
-    const model = jevForm.jev_model.trim();
-    if (model && jevSettings && model !== jevSettings.jev_model) {
-      payload.jev_model = model;
+  const hasProviderPanelEdits = (group: ProviderPanelGroup): boolean =>
+    PROVIDER_GROUP_IDS[group].some(
+      (id) => Object.keys(providerPayload(id)).length > 0,
+    );
+
+  const saveProviderPanels = async (group: ProviderPanelGroup) => {
+    // One save action per group, sequential PUTs: only the payloads that
+    // actually changed go out; the default-provider radio rides the minimax
+    // PUT.
+    const descriptors = PROVIDER_GROUP_IDS[group].map(
+      (id) => PROVIDER_PANELS_BY_ID[id],
+    );
+    if (
+      descriptors.every(
+        (descriptor) =>
+          Object.keys(providerPayload(descriptor.id)).length === 0,
+      )
+    ) {
+      return;
     }
-    if (jevSettings && jevEnabled !== jevSettings.jev_enable) {
-      payload.jev_enable = jevEnabled;
+    setProviderSaving((current) => ({ ...current, [group]: true }));
+    try {
+      let bundle = providerSettings;
+      for (const descriptor of descriptors) {
+        const payload = providerPayload(descriptor.id);
+        if (Object.keys(payload).length === 0) continue;
+        const saved = await descriptor.save(payload);
+        bundle = {
+          ...bundle,
+          [descriptor.bundleKey]: saved,
+        } as ProviderSettingsBundle;
+        descriptor.afterSaveSync?.(bundle, llmContext);
+      }
+      setProviderSettings(bundle);
+      const nextEnabled = { ...providerEnabled };
+      for (const descriptor of descriptors) {
+        const savedEnabled = descriptor.readEnabled(bundle);
+        if (savedEnabled !== null) nextEnabled[descriptor.id] = savedEnabled;
+      }
+      setProviderEnabled(nextEnabled);
+      setProviderForm(resetProviderForm(bundle, descriptors));
+      notify("Đã lưu thay đổi", { type: "success" });
+    } catch {
+      notify("Không lưu được thay đổi.", { type: "error" });
+    } finally {
+      setProviderSaving((current) => ({ ...current, [group]: false }));
     }
-    return payload;
-  }, [jevForm, jevEnabled, jevSettings]);
+  };
+
+  const discardProviderPanels = (group: ProviderPanelGroup) => {
+    const bundle = providerSettings;
+    const nextEnabled = { ...providerEnabled };
+    for (const descriptor of PROVIDER_GROUP_IDS[group].map(
+      (id) => PROVIDER_PANELS_BY_ID[id],
+    )) {
+      const savedEnabled = descriptor.readEnabled(bundle);
+      if (savedEnabled !== null) nextEnabled[descriptor.id] = savedEnabled;
+      descriptor.discardSync?.(bundle, llmContext);
+    }
+    setProviderEnabled(nextEnabled);
+    setProviderForm(
+      resetProviderForm(
+        bundle,
+        PROVIDER_GROUP_IDS[group].map((id) => PROVIDER_PANELS_BY_ID[id]),
+      ),
+    );
+  };
+
+  const testProviderPanel = async (id: ProviderPanelId) => {
+    const descriptor = PROVIDER_PANELS_BY_ID[id];
+    setProviderTesting((current) => ({ ...current, [id]: true }));
+    try {
+      // Probe, never write: testing must not persist an untested credential.
+      const result = await descriptor.testConnection(
+        descriptor.buildTestBody?.(providerForm),
+      );
+      setProviderLastTests((current) => ({
+        ...current,
+        [id]: {
+          ok: result.ok,
+          latency_ms: result.latency_ms,
+          tested_at: Math.floor(Date.now() / 1000),
+          error: result.error,
+        },
+      }));
+      if (result.ok) {
+        notify(`Kết nối thành công (${result.latency_ms ?? "?"}ms)`, {
+          type: "success",
+        });
+      } else if (!result.configured && result.missing.length > 0) {
+        const missing = result.missing
+          .map((key) => descriptor.testFieldLabels[key] ?? key)
+          .join(", ");
+        notify(`Thiếu cấu hình: ${missing}`, { type: "warning" });
+      } else {
+        notify(result.error || "Không kết nối được", { type: "error" });
+      }
+    } finally {
+      setProviderTesting((current) => ({ ...current, [id]: false }));
+    }
+  };
 
   const setValue = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const setMinimaxValue = (key: keyof MinimaxFormState, value: string) => {
-    setMinimaxForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const setOpenRouterValue = (
-    key: keyof OpenRouterFormState,
+  const setProviderFormValue = (
+    key: keyof ProviderFormState,
     value: string,
   ) => {
-    setOpenRouterForm((current) => ({ ...current, [key]: value }));
+    setProviderForm((current) => ({ ...current, [key]: value }));
   };
 
-  const setCustomLlmValue = (key: keyof CustomLlmFormState, value: string) => {
-    setCustomLlmForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const setJevValue = (key: keyof JevFormState, value: string) => {
-    setJevForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const providerEnabled = (provider: LlmProvider): boolean => {
-    if (provider === "minimax") return minimaxEnabled;
-    if (provider === "openrouter") return openRouterEnabled;
-    return customLlmEnabled;
+  const chainProviderEnabled = (provider: LlmProvider): boolean => {
+    if (provider === "minimax") return providerEnabled.minimax;
+    if (provider === "openrouter") return providerEnabled.openrouter;
+    return providerEnabled["custom-llm"];
   };
 
   const handleProviderEnabledChange = (
     provider: LlmProvider,
     checked: boolean,
   ) => {
-    if (provider === "minimax") setMinimaxEnabled(checked);
-    else if (provider === "openrouter") setOpenRouterEnabled(checked);
-    else setCustomLlmEnabled(checked);
+    setProviderEnabled((current) => ({
+      ...current,
+      [CHAIN_PANEL_ID_BY_PROVIDER[provider]]: checked,
+    }));
 
     // Walk the operator's ranked chain, not the canonical array: the panel
     // advertises that ranking as who takes over, and the backend chain builder
     // ranks by the same stored order. Picking canonically here would hand the
     // turn to a provider the operator deliberately ranked last.
     const otherEnabled = normalizeFailoverOrder(llmFailoverOrder).filter(
-      (candidate) => candidate !== provider && providerEnabled(candidate),
+      (candidate) => candidate !== provider && chainProviderEnabled(candidate),
     );
     // Disabling the default hands it to the next enabled provider in that
     // ranking; enabling the ONLY enabled provider makes it the default.
-    if (
-      !checked &&
-      llmDefaultProvider === provider &&
-      otherEnabled.length > 0
-    ) {
+    if (!checked && llmDefaultProvider === provider && otherEnabled.length) {
       setLlmDefaultProvider(otherEnabled[0]);
     }
     if (checked && otherEnabled.length === 0) {
@@ -1023,163 +1283,8 @@ export const ZaloIntegrationPage = () => {
     return nextZalo;
   };
 
-  const hasProviderEdits = Boolean(
-    Object.keys(changedMinimaxPayload).length ||
-      Object.keys(changedOpenRouterPayload).length ||
-      Object.keys(changedCustomLlmPayload).length,
-  );
-
-  const saveProviders = async () => {
-    // One save action, sequential PUTs: only the payloads that actually
-    // changed go out; the default-provider radio rides the minimax PUT.
-    setSavingProviders(true);
-    try {
-      if (Object.keys(changedMinimaxPayload).length > 0) {
-        const next = await zaloIntegrationGateway.saveMinimaxSettings(
-          changedMinimaxPayload,
-        );
-        setMinimaxSettings(next);
-        setMinimaxEnabled(next.minimax_enable);
-        setLlmDefaultProvider(next.llm_default_provider);
-        setLlmFailoverOrder(normalizeFailoverOrder(next.llm_failover_order));
-      }
-      if (Object.keys(changedOpenRouterPayload).length > 0) {
-        const next = await zaloIntegrationGateway.saveOpenRouterSettings(
-          changedOpenRouterPayload,
-        );
-        setOpenRouterSettings(next);
-        setOpenRouterEnabled(next.openrouter_enable);
-        setOpenRouterModel(next.openrouter_agent_model);
-      }
-      if (Object.keys(changedCustomLlmPayload).length > 0) {
-        const next = await zaloIntegrationGateway.saveCustomLlmSettings(
-          changedCustomLlmPayload,
-        );
-        setCustomLlmSettings(next);
-        setCustomLlmEnabled(next.custom_llm_enable);
-      }
-      setMinimaxForm(emptyMinimaxForm);
-      setOpenRouterForm(emptyOpenRouterForm);
-      setCustomLlmForm(emptyCustomLlmForm);
-      notify("Đã lưu thay đổi", { type: "success" });
-    } catch {
-      notify("Không lưu được thay đổi.", { type: "error" });
-    } finally {
-      setSavingProviders(false);
-    }
-  };
-
-  const discardProviderChanges = () => {
-    if (minimaxSettings) setMinimaxEnabled(minimaxSettings.minimax_enable);
-    if (openRouterSettings)
-      setOpenRouterEnabled(openRouterSettings.openrouter_enable);
-    if (customLlmSettings)
-      setCustomLlmEnabled(customLlmSettings.custom_llm_enable);
-    if (openRouterSettings)
-      setOpenRouterModel(openRouterSettings.openrouter_agent_model);
-    if (customLlmSettings) {
-      setLlmDefaultProvider(customLlmSettings.llm_default_provider);
-      setLlmFailoverOrder(
-        normalizeFailoverOrder(customLlmSettings.llm_failover_order),
-      );
-    }
-    setMinimaxForm(emptyMinimaxForm);
-    setOpenRouterForm(emptyOpenRouterForm);
-    setCustomLlmForm(emptyCustomLlmForm);
-  };
-
-  const testProvider = async (provider: LlmProvider) => {
-    setTestingProvider(provider);
-    try {
-      // Probe, never write: testing must not persist an untested credential.
-      let result: ProviderTestResult;
-      if (provider === "minimax") {
-        result = await zaloIntegrationGateway.testMinimaxConnection();
-      } else if (provider === "openrouter") {
-        result = await zaloIntegrationGateway.testOpenRouterConnection();
-      } else {
-        const body = Object.fromEntries(
-          (
-            [
-              ["custom_llm_api_key", customLlmForm.custom_llm_api_key],
-              ["custom_llm_base_url", customLlmForm.custom_llm_base_url],
-              ["custom_llm_agent_model", customLlmForm.custom_llm_agent_model],
-            ] as const
-          )
-            .map(([key, raw]) => [key, raw.trim()] as const)
-            .filter(([, value]) => value !== ""),
-        );
-        result = await zaloIntegrationGateway.testCustomLlmConnection(body);
-      }
-      setLastTests((current) => ({
-        ...current,
-        [provider]: {
-          ok: result.ok,
-          latency_ms: result.latency_ms,
-          tested_at: Math.floor(Date.now() / 1000),
-          error: result.error,
-        },
-      }));
-      if (result.ok) {
-        notify(`Kết nối thành công (${result.latency_ms ?? "?"}ms)`, {
-          type: "success",
-        });
-      } else if (!result.configured && result.missing.length > 0) {
-        const missing = result.missing
-          .map((key) => INTEGRATION_TEST_FIELD_LABELS[key] ?? key)
-          .join(", ");
-        notify(`Thiếu cấu hình: ${missing}`, { type: "warning" });
-      } else {
-        notify(result.error || "Không kết nối được", { type: "error" });
-      }
-    } finally {
-      setTestingProvider(null);
-    }
-  };
-
-  const saveJevChanges = async () => {
-    if (Object.keys(changedJevPayload).length === 0) return;
-    setSavingJev(true);
-    try {
-      const next =
-        await zaloIntegrationGateway.saveJevSettings(changedJevPayload);
-      setJevSettings(next);
-      setJevEnabled(next.jev_enable);
-      setJevForm(emptyJevForm);
-      notify("Đã lưu thay đổi", { type: "success" });
-    } catch {
-      notify("Không lưu được thay đổi.", { type: "error" });
-    } finally {
-      setSavingJev(false);
-    }
-  };
-
-  const testJev = async () => {
-    setTestingJev(true);
-    try {
-      const result = await zaloIntegrationGateway.testJevConnection();
-      setJevLastTest({
-        ok: result.ok,
-        latency_ms: result.latency_ms,
-        tested_at: Math.floor(Date.now() / 1000),
-        error: result.error,
-      });
-      if (result.ok) {
-        notify(`Kết nối thành công (${result.latency_ms ?? "?"}ms)`, {
-          type: "success",
-        });
-      } else if (!result.configured && result.missing.length > 0) {
-        const missing = result.missing
-          .map((key) => INTEGRATION_TEST_FIELD_LABELS[key] ?? key)
-          .join(", ");
-        notify(`Thiếu cấu hình: ${missing}`, { type: "warning" });
-      } else {
-        notify(result.error || "Không kết nối được", { type: "error" });
-      }
-    } finally {
-      setTestingJev(false);
-    }
-  };
+  const hasProviderEdits = hasProviderPanelEdits("chain");
+  const hasJevEdits = hasProviderPanelEdits("standalone");
 
   const testChannel = async (
     request: () => Promise<ZaloChannelTestResult>,
@@ -1299,6 +1404,81 @@ export const ZaloIntegrationPage = () => {
     );
   };
 
+  // One renderer for every descriptor field kind across chain and standalone
+  // provider cards; zalo keeps its hand-built panel (channel tests, webhook
+  // health, and the plain App ID field with copy button are channel-specific).
+  const renderProviderField = (field: ProviderFieldDescriptor) => {
+    if (field.kind === "readonly") {
+      return (
+        <div className="settings-field" key={field.label}>
+          <div className="settings-field-label-row">
+            <span className="settings-llm-field-label">{field.label}</span>
+            {field.note ? (
+              <span className="settings-llm-field-note">{field.note}</span>
+            ) : null}
+          </div>
+          <p className="settings-llm-readonly-value">
+            {field.value(providerSettings)}
+          </p>
+        </div>
+      );
+    }
+    if (field.kind === "select") {
+      return (
+        <div className="settings-field" key={field.formKey}>
+          <Label htmlFor={field.formKey}>{field.label}</Label>
+          <Select
+            value={providerForm[field.formKey]}
+            onValueChange={(value) =>
+              setProviderFormValue(field.formKey, value)
+            }
+          >
+            <SelectTrigger id={field.formKey} className="settings-input">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {field.options.map((model) => (
+                <SelectItem key={model} value={model}>
+                  {model}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    }
+    if (field.kind === "text") {
+      return (
+        <div className="settings-field" key={field.formKey}>
+          <Label htmlFor={field.formKey}>{field.label}</Label>
+          <Input
+            id={field.formKey}
+            className="settings-input"
+            autoComplete="off"
+            value={providerForm[field.formKey]}
+            placeholder={field.placeholder(providerSettings)}
+            onChange={(event) =>
+              setProviderFormValue(field.formKey, event.target.value)
+            }
+          />
+        </div>
+      );
+    }
+    return (
+      <SecretInput
+        key={field.formKey}
+        id={field.formKey}
+        label={field.label}
+        placeholder={field.placeholder}
+        status={field.status(providerSettings)}
+        statusState={settingsStatusState}
+        value={providerForm[field.formKey]}
+        onChange={setProviderFormValue}
+        notify={notify as CredentialFieldNotify}
+      />
+    );
+  };
+
   const renderSettingsBody = () => {
     if (activeItemId === "settings-agents") {
       return (
@@ -1339,6 +1519,7 @@ export const ZaloIntegrationPage = () => {
               <SecretInput
                 id="zalo_bot_token"
                 label="Bot Token"
+                placeholder="Nhập giá trị"
                 status={settings?.zalo_bot_token ?? { configured: false }}
                 statusState={settingsStatusState}
                 value={form.zalo_bot_token}
@@ -1348,6 +1529,7 @@ export const ZaloIntegrationPage = () => {
               <SecretInput
                 id="zalo_bot_webhook_secret"
                 label="Bot Secret"
+                placeholder="Nhập giá trị"
                 status={
                   settings?.zalo_bot_webhook_secret ?? {
                     configured: false,
@@ -1418,6 +1600,7 @@ export const ZaloIntegrationPage = () => {
                 <SecretInput
                   id="zalo_oa_secret_key"
                   label="Bot Secret"
+                  placeholder="Nhập giá trị"
                   status={settings?.zalo_oa_secret_key ?? { configured: false }}
                   statusState={settingsStatusState}
                   value={form.zalo_oa_secret_key}
@@ -1427,6 +1610,7 @@ export const ZaloIntegrationPage = () => {
                 <SecretInput
                   id="zalo_oa_access_token"
                   label="OA Access Token"
+                  placeholder="Nhập giá trị"
                   status={
                     settings?.zalo_oa_access_token ?? {
                       configured: false,
@@ -1440,6 +1624,7 @@ export const ZaloIntegrationPage = () => {
                 <SecretInput
                   id="zalo_oa_refresh_token"
                   label="OA Refresh Token"
+                  placeholder="Nhập giá trị"
                   status={
                     settings?.zalo_oa_refresh_token ?? {
                       configured: false,
@@ -1503,9 +1688,9 @@ export const ZaloIntegrationPage = () => {
         setLlmFailoverOrder(next);
       };
       const enabledOf: Record<LlmProvider, boolean> = {
-        minimax: minimaxEnabled,
-        openrouter: openRouterEnabled,
-        custom: customLlmEnabled,
+        minimax: providerEnabled.minimax,
+        openrouter: providerEnabled.openrouter,
+        custom: providerEnabled["custom-llm"],
       };
       // Only enabled providers can serve a turn, so the visible rank counts
       // them alone — a disabled card holds its slot but carries no number.
@@ -1518,7 +1703,7 @@ export const ZaloIntegrationPage = () => {
         provider: LlmProvider,
       ): { label: string; cls: string } => {
         if (!enabledOf[provider]) return { label: "Tắt", cls: "is-muted" };
-        const t = lastTests[provider];
+        const t = providerLastTests[CHAIN_PANEL_ID_BY_PROVIDER[provider]];
         if (t?.ok) return { label: "Sẵn sàng", cls: "is-success" };
         if (t && !t.ok) return { label: "Lỗi kiểm tra", cls: "is-danger" };
         return { label: "Chưa kiểm tra", cls: "is-muted" };
@@ -1526,7 +1711,7 @@ export const ZaloIntegrationPage = () => {
       const testLineOf = (
         provider: LlmProvider,
       ): { text: string; title?: string; ok: boolean } => {
-        const t = lastTests[provider];
+        const t = providerLastTests[CHAIN_PANEL_ID_BY_PROVIDER[provider]];
         if (!t) return { text: "Chưa kiểm tra", ok: true };
         if (t.ok) {
           return {
@@ -1610,6 +1795,10 @@ export const ZaloIntegrationPage = () => {
       );
       const verifyRowOf = (provider: LlmProvider, ready: boolean) => {
         const line = testLineOf(provider);
+        const panelId = CHAIN_PANEL_ID_BY_PROVIDER[provider];
+        const anyChainTesting = PROVIDER_GROUP_IDS.chain.some(
+          (id) => providerTesting[id],
+        );
         return (
           <div className="settings-llm-verify">
             <span
@@ -1623,12 +1812,12 @@ export const ZaloIntegrationPage = () => {
               variant="outline"
               className="tt-btn-touch"
               onClick={() => {
-                void testProvider(provider);
+                void testProviderPanel(panelId);
               }}
-              disabled={testingProvider !== null || !ready}
-              aria-busy={testingProvider === provider}
+              disabled={anyChainTesting || !ready}
+              aria-busy={providerTesting[panelId]}
             >
-              {testingProvider === provider ? "Đang kiểm tra" : "Kiểm tra"}
+              {providerTesting[panelId] ? "Đang kiểm tra" : "Kiểm tra"}
             </Button>
           </div>
         );
@@ -1677,151 +1866,26 @@ export const ZaloIntegrationPage = () => {
           <div className="settings-grid settings-grid-models">
             {/* Cards render in failover order, so the board itself is the
                 ranking: position, rank badge, and reorder control agree. */}
-            {chain.map((provider) => (
-              <SettingsGroup
-                key={provider}
-                className={`settings-llm-card${
-                  enabledOf[provider] ? "" : " is-off"
-                }`}
-                title={providerLabel[provider]}
-                icon={rankBadgeOf(provider)}
-                meta={cardMetaOf(provider)}
-              >
-                {provider === "minimax" ? (
-                  <>
-                    {roleRowOf("minimax", "minimax_enable")}
-                    <div className="settings-field">
-                      <div className="settings-field-label-row">
-                        <span className="settings-llm-field-label">
-                          Model chatbot
-                        </span>
-                        <span className="settings-llm-field-note">Cố định</span>
-                      </div>
-                      <p className="settings-llm-readonly-value">
-                        {minimaxSettings?.minimax_agent_model ?? "—"}
-                      </p>
-                    </div>
-                    <MinimaxSecretInput
-                      id="minimax_api_key"
-                      label="Access Token"
-                      status={
-                        minimaxSettings?.minimax_api_key ?? {
-                          configured: false,
-                        }
-                      }
-                      statusState={settingsStatusState}
-                      value={minimaxForm.minimax_api_key}
-                      onChange={setMinimaxValue}
-                      notify={notify as CredentialFieldNotify}
-                    />
-                    {verifyRowOf("minimax", Boolean(minimaxSettings))}
-                  </>
-                ) : null}
-
-                {provider === "openrouter" ? (
-                  <>
-                    {roleRowOf("openrouter", "openrouter_enable")}
-                    <div className="settings-field">
-                      <Label htmlFor="openrouter_agent_model">
-                        Model chatbot
-                      </Label>
-                      <Select
-                        value={openRouterModel}
-                        onValueChange={setOpenRouterModel}
-                      >
-                        <SelectTrigger
-                          id="openrouter_agent_model"
-                          className="settings-input"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {OPENROUTER_MODEL_OPTIONS.map((model) => (
-                            <SelectItem key={model} value={model}>
-                              {model}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <OpenRouterSecretInput
-                      id="openrouter_api_key"
-                      label="Access Token"
-                      status={
-                        openRouterSettings?.openrouter_api_key ?? {
-                          configured: false,
-                        }
-                      }
-                      statusState={settingsStatusState}
-                      value={openRouterForm.openrouter_api_key}
-                      onChange={setOpenRouterValue}
-                      notify={notify as CredentialFieldNotify}
-                    />
-                    {verifyRowOf("openrouter", Boolean(openRouterSettings))}
-                  </>
-                ) : null}
-
-                {provider === "custom" ? (
-                  <>
-                    {roleRowOf("custom", "custom_llm_enable")}
-                    <div className="settings-field">
-                      <Label htmlFor="custom_llm_base_url">Base URL</Label>
-                      <Input
-                        id="custom_llm_base_url"
-                        className="settings-input"
-                        autoComplete="off"
-                        value={customLlmForm.custom_llm_base_url}
-                        placeholder={
-                          customLlmSettings?.custom_llm_base_url ||
-                          "https://token-plan-sgp.xiaomimimo.com/v1"
-                        }
-                        onChange={(event) =>
-                          setCustomLlmValue(
-                            "custom_llm_base_url",
-                            event.target.value,
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="settings-field">
-                      <Label htmlFor="custom_llm_agent_model">
-                        Model chatbot
-                      </Label>
-                      <Input
-                        id="custom_llm_agent_model"
-                        className="settings-input"
-                        autoComplete="off"
-                        value={customLlmForm.custom_llm_agent_model}
-                        placeholder={
-                          customLlmSettings?.custom_llm_agent_model ||
-                          "mimo-v2.5-pro"
-                        }
-                        onChange={(event) =>
-                          setCustomLlmValue(
-                            "custom_llm_agent_model",
-                            event.target.value,
-                          )
-                        }
-                      />
-                    </div>
-                    <CustomLlmSecretInput
-                      id="custom_llm_api_key"
-                      label="Access Token"
-                      status={
-                        customLlmSettings?.custom_llm_api_key ?? {
-                          configured: false,
-                        }
-                      }
-                      statusState={settingsStatusState}
-                      value={customLlmForm.custom_llm_api_key}
-                      onChange={setCustomLlmValue}
-                      notify={notify as CredentialFieldNotify}
-                    />
-                    {verifyRowOf("custom", Boolean(customLlmSettings))}
-                  </>
-                ) : null}
-              </SettingsGroup>
-            ))}
+            {chain.map((provider) => {
+              const descriptor =
+                PROVIDER_PANELS_BY_ID[CHAIN_PANEL_ID_BY_PROVIDER[provider]];
+              const ready = descriptor.readEnabled(providerSettings) !== null;
+              return (
+                <SettingsGroup
+                  key={provider}
+                  className={`settings-llm-card${
+                    enabledOf[provider] ? "" : " is-off"
+                  }`}
+                  title={providerLabel[provider]}
+                  icon={rankBadgeOf(provider)}
+                  meta={cardMetaOf(provider)}
+                >
+                  {roleRowOf(provider, descriptor.enableKey)}
+                  {descriptor.fields.map((field) => renderProviderField(field))}
+                  {verifyRowOf(provider, ready)}
+                </SettingsGroup>
+              );
+            })}
           </div>
 
           <div
@@ -1833,8 +1897,8 @@ export const ZaloIntegrationPage = () => {
               type="button"
               variant="ghost"
               className="tt-btn-touch"
-              onClick={discardProviderChanges}
-              disabled={!hasProviderEdits || savingProviders}
+              onClick={() => discardProviderPanels("chain")}
+              disabled={!hasProviderEdits || providerSaving.chain}
             >
               Huỷ
             </Button>
@@ -1842,11 +1906,11 @@ export const ZaloIntegrationPage = () => {
               type="button"
               className="settings-primary-action tt-btn-touch"
               onClick={() => {
-                void saveProviders();
+                void saveProviderPanels("chain");
               }}
-              disabled={!hasProviderEdits || savingProviders}
+              disabled={!hasProviderEdits || providerSaving.chain}
             >
-              {savingProviders ? "Đang lưu" : "Lưu thay đổi"}
+              {providerSaving.chain ? "Đang lưu" : "Lưu thay đổi"}
             </Button>
             <span className="settings-llm-footer-note">
               {hasProviderEdits
@@ -1859,70 +1923,59 @@ export const ZaloIntegrationPage = () => {
     }
 
     if (activeItemId === "settings-jev") {
-      const hasJevEdits = Object.keys(changedJevPayload).length > 0;
-      const jevConfigured = [
-        jevSettings?.jev_api_key.configured,
-        Boolean(jevSettings?.jev_model),
-      ].filter(Boolean).length;
+      const descriptor = PROVIDER_PANELS_BY_ID.jev;
+      const ready = descriptor.readEnabled(providerSettings) !== null;
       const jevTestLine: { text: string; title?: string; ok: boolean } =
-        jevLastTest
-          ? jevLastTest.ok
+        providerLastTests.jev
+          ? providerLastTests.jev.ok
             ? {
-                text: `Kiểm tra ${formatRelativeEpoch(jevLastTest.tested_at)} · ${jevLastTest.latency_ms ?? "?"}ms`,
+                text: `Kiểm tra ${formatRelativeEpoch(providerLastTests.jev.tested_at)} · ${providerLastTests.jev.latency_ms ?? "?"}ms`,
                 ok: true,
               }
             : {
-                text: describeProviderTestError(jevLastTest.error || ""),
-                title: jevLastTest.error ?? undefined,
+                text: describeProviderTestError(
+                  providerLastTests.jev.error || "",
+                ),
+                title: providerLastTests.jev.error ?? undefined,
                 ok: false,
               }
           : { text: "Chưa kiểm tra", ok: true };
+      const jevStatus = descriptor.status?.(
+        providerSettings,
+        providerEnabled.jev,
+      );
 
       return (
         <SettingsSectionPanel id="settings-jev">
           <div className="settings-grid settings-grid-models">
             <SettingsGroup
               className="settings-llm-card"
-              title="Jev (TypeSafe)"
-              description="Mô hình quyết định System One — phân loại ý định, hướng sắp xếp, và nhận diện lời xã giao cho bot. Bot vẫn hoạt động bình thường khi Jev tắt."
-              icon={<Brain className="size-4" />}
+              title={descriptor.title}
+              description={descriptor.description}
+              icon={descriptor.icon}
               meta={
-                <SettingsGroupStatus
-                  configured={jevConfigured}
-                  total={2}
-                  disabled={!jevEnabled}
-                  state={settingsStatusState}
-                />
+                jevStatus ? (
+                  <SettingsGroupStatus
+                    configured={jevStatus.configured}
+                    total={jevStatus.total}
+                    disabled={jevStatus.disabled}
+                    state={settingsStatusState}
+                  />
+                ) : null
               }
             >
               <ProviderSwitchField
-                id="jev_enable"
+                id={descriptor.enableKey}
                 label="Kích hoạt"
-                checked={jevEnabled}
-                onCheckedChange={setJevEnabled}
+                checked={providerEnabled.jev}
+                onCheckedChange={(checked) =>
+                  setProviderEnabled((current) => ({
+                    ...current,
+                    jev: checked,
+                  }))
+                }
               />
-              <div className="settings-field">
-                <Label htmlFor="jev_model">Model</Label>
-                <Input
-                  id="jev_model"
-                  className="settings-input"
-                  autoComplete="off"
-                  value={jevForm.jev_model}
-                  placeholder={jevSettings?.jev_model || "jev-latest"}
-                  onChange={(event) =>
-                    setJevValue("jev_model", event.target.value)
-                  }
-                />
-              </div>
-              <JevSecretInput
-                id="jev_api_key"
-                label="API Key"
-                status={jevSettings?.jev_api_key ?? { configured: false }}
-                statusState={settingsStatusState}
-                value={jevForm.jev_api_key}
-                onChange={setJevValue}
-                notify={notify as CredentialFieldNotify}
-              />
+              {descriptor.fields.map((field) => renderProviderField(field))}
               <div className="settings-llm-verify">
                 <span
                   className={`settings-llm-testline${jevTestLine.ok ? "" : " is-error"}`}
@@ -1935,12 +1988,12 @@ export const ZaloIntegrationPage = () => {
                   variant="outline"
                   className="tt-btn-touch"
                   onClick={() => {
-                    void testJev();
+                    void testProviderPanel("jev");
                   }}
-                  disabled={testingJev || !jevSettings}
-                  aria-busy={testingJev}
+                  disabled={providerTesting.jev || !ready}
+                  aria-busy={providerTesting.jev}
                 >
-                  {testingJev ? "Đang kiểm tra" : "Kiểm tra"}
+                  {providerTesting.jev ? "Đang kiểm tra" : "Kiểm tra"}
                 </Button>
               </div>
             </SettingsGroup>
@@ -1953,11 +2006,11 @@ export const ZaloIntegrationPage = () => {
               type="button"
               className="settings-primary-action tt-btn-touch"
               onClick={() => {
-                void saveJevChanges();
+                void saveProviderPanels("standalone");
               }}
-              disabled={!hasJevEdits || savingJev}
+              disabled={!hasJevEdits || providerSaving.standalone}
             >
-              {savingJev ? "Đang lưu" : "Lưu thay đổi"}
+              {providerSaving.standalone ? "Đang lưu" : "Lưu thay đổi"}
             </Button>
             <span className="settings-llm-footer-note">
               {hasJevEdits
