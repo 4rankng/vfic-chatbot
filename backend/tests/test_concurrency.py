@@ -120,7 +120,7 @@ async def test_extracted_intent_handoff_is_atomic_and_emits_after_commit(monkeyp
     db.rollback = AsyncMock()
     db.refresh = AsyncMock()
     audit = AsyncMock()
-    monkeypatch.setattr("app.services.conversation.state.record_audit", audit)
+    monkeypatch.setattr("app.services.conversation.bot_path.record_audit", audit)
     events = AsyncMock()
 
     transitioned = await ConversationState(db, MagicMock(), events).escalate_extracted_intent(
@@ -159,7 +159,7 @@ async def test_extracted_intent_handoff_is_idempotent(monkeypatch):
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
     audit = AsyncMock()
-    monkeypatch.setattr("app.services.conversation.state.record_audit", audit)
+    monkeypatch.setattr("app.services.conversation.bot_path.record_audit", audit)
     events = AsyncMock()
 
     transitioned = await ConversationState(db, MagicMock(), events).escalate_extracted_intent(
@@ -199,7 +199,7 @@ async def test_extracted_intent_handoff_repairs_partial_review_state(
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
     db.refresh = AsyncMock()
-    monkeypatch.setattr("app.services.conversation.state.record_audit", AsyncMock())
+    monkeypatch.setattr("app.services.conversation.bot_path.record_audit", AsyncMock())
 
     transitioned = await ConversationState(
         db, MagicMock(), AsyncMock()

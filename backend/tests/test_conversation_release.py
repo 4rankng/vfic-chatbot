@@ -143,7 +143,7 @@ async def test_owner_release_clears_human_review_flag(monkeypatch) -> None:
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
     audit = AsyncMock()
-    monkeypatch.setattr("app.services.conversation.state.record_audit", audit)
+    monkeypatch.setattr("app.services.conversation.recruiter_path.record_audit", audit)
     events = MagicMock(conversation_updated=AsyncMock())
 
     await ConversationState(db, MagicMock(), events).release(conv, actor)
@@ -169,7 +169,7 @@ async def test_release_does_not_commit_when_audit_write_fails(monkeypatch) -> No
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
     monkeypatch.setattr(
-        "app.services.conversation.state.record_audit",
+        "app.services.conversation.recruiter_path.record_audit",
         AsyncMock(side_effect=RuntimeError("audit unavailable")),
     )
 

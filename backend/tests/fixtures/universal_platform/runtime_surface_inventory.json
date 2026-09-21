@@ -31,36 +31,36 @@
     "call": "create_pending_outbox",
     "category": "outbox_boundary",
     "count": 1,
-    "file": "app/services/conversation/state.py",
+    "file": "app/services/conversation/bot_path.py",
     "scope": "claim_send"
   },
   {
     "call": "create_pending_outbox",
     "category": "outbox_boundary",
     "count": 1,
-    "file": "app/services/conversation/state.py",
+    "file": "app/services/conversation/bot_path.py",
     "scope": "prepare_proactive_message"
-  },
-  {
-    "call": "create_pending_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/conversation/state.py",
-    "scope": "prepare_recruiter_message"
   },
   {
     "call": "enqueue_outbox",
     "category": "outbox_boundary",
     "count": 1,
-    "file": "app/services/conversation/state.py",
+    "file": "app/services/conversation/bot_path.py",
     "scope": "record_bot_outcome"
   },
   {
     "call": "enqueue_outbox",
     "category": "outbox_boundary",
     "count": 1,
-    "file": "app/services/conversation/state.py",
+    "file": "app/services/conversation/bot_path.py",
     "scope": "record_proactive_outcome"
+  },
+  {
+    "call": "create_pending_outbox",
+    "category": "outbox_boundary",
+    "count": 1,
+    "file": "app/services/conversation/recruiter_path.py",
+    "scope": "prepare_recruiter_message"
   },
   {
     "call": "dispatch_outbox",
