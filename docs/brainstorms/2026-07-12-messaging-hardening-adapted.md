@@ -213,8 +213,8 @@ column is DRY violation. Mitigation: verify in plan, reuse if possible.
 
 ## Next Step
 
-Recommend `/ck:plan --tdd` for items 1 and 3 (they modify critical send + FAQ paths
+Recommend `/ak:plan --tdd` for items 1 and 3 (they modify critical send + FAQ paths
 where regression risk is real and existing tests can lock behavior first), and
-default `/ck:plan` for items 2 and 4 (additive instrumentation). Or one combined plan
+default `/ak:plan` for items 2 and 4 (additive instrumentation). Or one combined plan
 with phased ordering: 1 (bug fix, standalone) → 4 (instrumentation, standalone) →
 3 (needs 2's surface) → 2 (aggregation).

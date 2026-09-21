@@ -13,7 +13,7 @@ Full evidence: `plans/260712-1502-recruiter-attention-dashboard/reports/verifica
 
 ## What shipped
 
-All three phases in one session via `/ck:plan red-team` + `/ck:plan validate` + `/ck:cook implement`:
+All three phases in one session via `/ak:plan red-team` + `/ak:plan validate` + `/ak:cook implement`:
 
 - `GET /api/v1/dashboard/attention` — read-only, 5 exact counters, 2 bounded deduped queues, 9-reason precedence, REPEATABLE READ snapshot via `SET LOCAL`, per-viewer Redis cache.
 - `GET /api/v1/conversations?reason=<enum>` — continuation filter, end-to-end.
