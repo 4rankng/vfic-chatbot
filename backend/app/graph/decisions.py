@@ -1,0 +1,260 @@
+"""Jev-backed turn decisions — the System One fan-out replacing the keyword router.
+
+One parallel ``systemone`` call per inbound turn classifies intent, sort
+direction, pleasantry kind, and conversation-context flags with calibrated
+probabilities. Policy (strategy mapping, confidence floors, fallbacks) stays
+in code (:mod:`app.graph.router`); Jev supplies only the meaning judgments.
+This follows the TypeSafe pattern: ask independent questions over the same
+state together — extra questions barely add latency and are priced by tokens.
+
+Failure contract: an admin can switch Jev off (``jev_enable`` setting), and an
+invalid key or an unreachable API behaves the same way: any transport error,
+timeout, or unusable intent answer returns the neutral fallback
+``TurnDecisions(degraded=True)`` — the same neutral ``general``/``agent``
+route the keyword router produced for unmatched traffic. The bot keeps
+working on the agent path; a Jev outage never blocks a turn.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from typing import Any
+
+from app.core.http import get_http_client
+from app.graph.ports import TurnDecisions
+
+logger = logging.getLogger(__name__)
+
+JEV_SYSTEMONE_URL = "https://api.typesafe.ai/v1/systemone"
+# Attempts share one per-call deadline: attempt 1 gets most of the budget, the
+# retry (429/529 per the API contract) gets what remains. Both are bounded.
+JEV_ATTEMPT_TIMEOUT_S = 3.5
+JEV_RETRY_HTTP_STATUSES = frozenset({429, 529})
+
+# Shared context so the model judges every question against the same product
+# frame. Kept short — irrelevant state degrades accuracy (context rot).
+_BOT_CONTEXT = (
+    "Tro ly tuyen dung tren Zalo cho cac du an cong nghiep/nha may. "
+    "Ung vien hoi ve viec lam, luong, ca lam, ky tuc xa, xe dua don, ho so ung tuyen."
+)
+
+# 300 chars keeps a history message meaningful without letting old turns
+# dominate the token budget (state is re-sent per call).
+_RECENT_MESSAGE_LIMIT = 6
+_RECENT_MESSAGE_MAX_CHARS = 300
+
+# Noul answers gate at 0.5: below it means "no" or "model cannot tell" — the
+# conservative direction for every gate in this module.
+_NOUL_GATE = 0.5
+
+# Intent taxonomy — mirrors the TurnIntent Literal in app.graph.router.
+_INTENT_CRITERIA = {
+    "small_talk": "Chào hỏi, cảm ơn, tạm biệt hoặc câu xã giao, không có nội dung chính",
+    "recommend": "Muốn được gợi ý việc làm phù hợp hoặc xem việc đang tuyển",
+    "profile_update": "Cung cấp thông tin cá nhân: tên, khu vực sống, lương mong muốn, kinh nghiệm",
+    "timetable": "Hỏi về xe đưa đón, tuyến xe, điểm đón, giờ đón",
+    "contact": "Hỏi số điện thoại, admin, hotline, cách thức liên hệ",
+    "faq_detail": "Hỏi chi tiết tuyển dụng: lương, ca làm, ký túc xá, yêu cầu, nội dung công việc",
+    "out_of_scope": "Ngoài phạm vi tuyển dụng và hỗ trợ nhân viên của công ty",
+    "general": "Liên quan đến tuyển dụng nhưng ý định chưa rõ",
+}
+
+_SORT_CRITERIA = {
+    "none": "Không yêu cầu sắp xếp",
+    "salary_desc": "Sắp xếp việc làm theo lương từ cao xuống thấp",
+    "salary_asc": "Sắp xếp việc làm theo lương từ thấp lên cao",
+    "created_at": "Xem việc mới đăng / mới nhất trước",
+}
+
+_PLEASANTRY_KIND_CRITERIA = {
+    "greeting": "Lời chào (hi, chào bạn, xin chào…)",
+    "thanks": "Lời cảm ơn (cảm ơn, thanks…)",
+    "goodbye": "Lời tạm biệt (tạm biệt, bye…)",
+    "help": "Hỏi bot làm được gì / cần giúp gì",
+    "none": "Không thuộc nhóm nào",
+}
+
+_NOUL_CRITERIA = {"true": "Có", "false": "Không"}
+
+
+def build_turn_questions() -> dict:
+    """Return the turn fan-out questions (one narrow judgment per question).
+
+    Module-level so tests can pin the taxonomy against the TurnIntent
+    contract without any HTTP call.
+    """
+    return {
+        "intent": {
+            "type": "choice",
+            "instructions": "Ý định chính của tin nhắn `message` là gì?",
+            "criteria": _INTENT_CRITERIA,
+        },
+        "vacancy_listing": {
+            "type": "noul",
+            "instructions": (
+                "Tin nhắn `message` yêu cầu xem TOÀN BỘ danh sách việc đang tuyển "
+                "(không phải gợi ý cá nhân hóa, không phải hỏi chi tiết một việc)"
+            ),
+            "criteria": _NOUL_CRITERIA,
+        },
+        "sort_by": {
+            "type": "choice",
+            "instructions": (
+                "Khi xem danh sách việc làm, tin nhắn `message` yêu cầu sắp xếp "
+                "theo cách nào?"
+            ),
+            "criteria": _SORT_CRITERIA,
+        },
+        "pleasantry": {
+            "type": "noul",
+            "instructions": (
+                "Tin nhắn `message` CHỈ là lời chào/cảm ơn/tạm biệt/xã giao, "
+                "hoàn toàn không chứa câu hỏi hay yêu cầu nội dung"
+            ),
+            "criteria": _NOUL_CRITERIA,
+        },
+        "pleasantry_kind": {
+            "type": "choice",
+            "instructions": "Loại lời xã giao của tin nhắn `message` là gì?",
+            "criteria": _PLEASANTRY_KIND_CRITERIA,
+        },
+        "recent_vacancy": {
+            "type": "noul",
+            "instructions": (
+                "Có tin nhắn nào trong `recent` (tin trước đó của ứng viên) "
+                "yêu cầu xem toàn bộ danh sách việc đang tuyển không?"
+            ),
+            "criteria": _NOUL_CRITERIA,
+        },
+        "contact_info": {
+            "type": "noul",
+            "instructions": (
+                "Tin nhắn `message` có chứa thông tin liên hệ cá nhân "
+                "(số điện thoại, zalo, email) của ứng viên không?"
+            ),
+            "criteria": _NOUL_CRITERIA,
+        },
+    }
+
+
+def build_turn_state(user_text: str, recent_messages: list[Any] | None) -> dict:
+    """Shared state: product context + current message + recent candidate messages."""
+    recent: list[str] = []
+    for message in (recent_messages or [])[-_RECENT_MESSAGE_LIMIT:]:
+        body = str(getattr(message, "body", "") or "")
+        if body:
+            recent.append(body[:_RECENT_MESSAGE_MAX_CHARS])
+    return {
+        "context": _BOT_CONTEXT,
+        "message": user_text or "",
+        "recent": recent,
+    }
+
+
+class JevDecisionClient:
+    """Async TypeSafe systemone client (httpx directly — no SDK dependency).
+
+    One call answers all turn questions in parallel. Parsing is defensive:
+    every wire answer is validated before use, and an unusable ``intent``
+    answer degrades the whole result to the neutral fallback.
+    """
+
+    def __init__(self, api_key: str, model: str = "jev-latest") -> None:
+        self._api_key = (api_key or "").strip()
+        self._model = (model or "jev-latest").strip() or "jev-latest"
+
+    @property
+    def usable(self) -> bool:
+        return bool(self._api_key)
+
+    async def decide_turn(
+        self,
+        *,
+        user_text: str,
+        recent_messages: list[Any] | None = None,
+    ) -> TurnDecisions:
+        if not self.usable:
+            return TurnDecisions(degraded=True)
+        state = build_turn_state(user_text, recent_messages)
+        started = time.perf_counter()
+        try:
+            payload = await self._system_one(state, build_turn_questions())
+        except Exception:  # noqa: BLE001 — decisions must never break a turn
+            logger.warning("jev decide_turn failed; using neutral route", exc_info=True)
+            return TurnDecisions(degraded=True)
+        latency_ms = int(round((time.perf_counter() - started) * 1000))
+
+        answers = (payload or {}).get("answers") or {}
+        usage = (payload or {}).get("usage") or {}
+        intent_answer = answers.get("intent") or {}
+        intent = str(intent_answer.get("choice") or "")
+        if intent not in _INTENT_CRITERIA:
+            logger.warning("jev unusable intent answer=%r; using neutral route", intent)
+            return TurnDecisions(degraded=True)
+
+        sort_by = str((answers.get("sort_by") or {}).get("choice") or "none")
+        if sort_by not in _SORT_CRITERIA:
+            sort_by = "none"
+        pleasantry_kind = str(
+            (answers.get("pleasantry_kind") or {}).get("choice") or "none"
+        )
+        if pleasantry_kind not in _PLEASANTRY_KIND_CRITERIA:
+            pleasantry_kind = "none"
+
+        return TurnDecisions(
+            intent=intent,
+            intent_confidence=self._confidence(answers.get("intent")),
+            vacancy_listing=self._noul(answers.get("vacancy_listing")),
+            sort_by=None if sort_by == "none" else sort_by,
+            pleasantry=self._noul(answers.get("pleasantry")),
+            pleasantry_kind=pleasantry_kind,
+            recent_vacancy=self._noul(answers.get("recent_vacancy")),
+            contact_info=self._noul(answers.get("contact_info")),
+            model=str((payload or {}).get("model") or self._model),
+            input_tokens=int(usage.get("input_tokens") or 0),
+            output_tokens=int(usage.get("output_tokens") or 0),
+            latency_ms=latency_ms,
+        )
+
+    async def _system_one(self, state: dict, questions: dict) -> dict:
+        """One bounded systemone call with a single 429/529 retry."""
+        from app.core.config import get_settings
+
+        body = {"model": self._model, "state": state, "questions": questions}
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        last_status: int | None = None
+        for attempt in (1, 2):
+            try:
+                client = await get_http_client(
+                    "jev_decisions",
+                    timeout=JEV_ATTEMPT_TIMEOUT_S,
+                    settings=get_settings(),
+                )
+                response = await client.post(JEV_SYSTEMONE_URL, json=body, headers=headers)
+            except Exception as exc:  # noqa: BLE001 — transport: no retry (deadline)
+                raise RuntimeError(f"jev transport error: {exc}") from exc
+            if response.status_code == 200:
+                return response.json()
+            last_status = response.status_code
+            if response.status_code in JEV_RETRY_HTTP_STATUSES and attempt == 1:
+                await asyncio.sleep(0.25)
+                continue
+            break
+        raise RuntimeError(f"jev http status={last_status}")
+
+    # -- answer parsers (defensive; unknown shapes read as "no") -------------
+
+    @staticmethod
+    def _noul(answer: Any) -> bool:
+        value = (answer or {}).get("noul") if isinstance(answer, dict) else None
+        return isinstance(value, (int, float)) and value >= _NOUL_GATE
+
+    @staticmethod
+    def _confidence(answer: Any) -> float:
+        value = (answer or {}).get("confidence") if isinstance(answer, dict) else None
+        return float(value) if isinstance(value, (int, float)) else 0.0

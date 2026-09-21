@@ -82,6 +82,14 @@ export type CustomLlmSettings = {
   last_test: ProviderTestStatus | null;
 };
 
+export type JevSettings = {
+  jev_api_key: SecretStatus;
+  jev_model: string;
+  jev_enable: boolean;
+  /** True only when enabled AND the TypeSafe API key is present. */
+  jev_usable: boolean;
+};
+
 export type ZaloChannelTestResult = {
   configured: boolean;
   connected: boolean;
@@ -178,14 +186,16 @@ export const zaloIntegrationGateway = {
     minimax: MinimaxSettings;
     openRouter: OpenRouterSettings;
     customLlm: CustomLlmSettings;
+    jev: JevSettings;
   }> => {
-    const [zalo, minimax, openRouter, customLlm] = await Promise.all([
+    const [zalo, minimax, openRouter, customLlm, jev] = await Promise.all([
       apiJson<ZaloSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/zalo`),
       apiJson<MinimaxSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/minimax`),
       apiJson<OpenRouterSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/openrouter`),
       apiJson<CustomLlmSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/custom-llm`),
+      apiJson<JevSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/jev`),
     ]);
-    return { zalo, minimax, openRouter, customLlm };
+    return { zalo, minimax, openRouter, customLlm, jev };
   },
 
   saveZaloSettings: async (
@@ -273,6 +283,23 @@ export const zaloIntegrationGateway = {
       `${ADMIN_INTEGRATIONS_BASE_PATH}/custom-llm/test`,
       { method: "POST", body: body ?? {} },
     ),
+
+  saveJevSettings: async (
+    body: Partial<{
+      jev_api_key: string;
+      jev_model: string;
+      jev_enable: boolean;
+    }>,
+  ): Promise<JevSettings> =>
+    apiJson<JevSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/jev`, {
+      method: "PUT",
+      body,
+    }),
+
+  testJevConnection: async (): Promise<ProviderTestResult> =>
+    apiJson<ProviderTestResult>(`${ADMIN_INTEGRATIONS_BASE_PATH}/jev/test`, {
+      method: "POST",
+    }),
 } as const;
 
 export const facebookIntegrationGateway = {

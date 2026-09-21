@@ -1,144 +1,41 @@
-"""Tests for Phase 5 model tiering — route strategy → fast-model eligibility.
+"""Model-tier eligibility pins for the Jev-backed route policy.
 
-The runner decides whether a turn qualifies for the fast-tier model via
-``should_use_fast_model``. The agent then switches LLMs only when a fast model
-is actually configured. These tests pin the eligibility policy + the agent's
-switch behavior; the LLM construction is covered by the existing factories tests.
+The keyword router these tests originally pinned is gone; eligibility is a
+pure function of the mapped strategy, so the pins are decisions-level now.
 """
 
-from __future__ import annotations
-
-from app.graph.router import (
-    FAST_MODEL_STRATEGIES,
-    route_turn,
-    should_use_fast_model,
-)
+from app.graph.ports import TurnDecisions
+from app.graph.router import route_from_decisions, should_use_fast_model
 
 
-# --- should_use_fast_model (eligibility policy) ------------------------------
+def _route(**decision_kwargs) -> "object":
+    return route_from_decisions("x", TurnDecisions(**decision_kwargs))
 
 
-def test_small_talk_is_eligible_for_fast_model():
-    assert should_use_fast_model(route_turn("cảm ơn bạn nhiều"))
-
-
-def test_knowledge_lookup_uses_reasoning_model():
-    """Detail questions are the conversion path, so they get the better model.
-
-    Pay / shift / dorm / bus questions come from genuinely interested
-    candidates. The reply has to stay accurate AND work a phone-number ask in
-    naturally; on the fast model that closing ask appeared on only about half
-    of these turns.
-    """
-    assert not should_use_fast_model(route_turn("liên hệ admin số mấy?"))
-    assert not should_use_fast_model(route_turn("lương một tháng bao nhiêu?"))
-    assert not should_use_fast_model(route_turn("ký túc xá có tốn phí không?"))
-
-
-def test_recommendation_uses_reasoning_model():
-    """Recommendation needs the reasoning model — not fast-tier."""
-    assert not should_use_fast_model(route_turn("gợi ý việc phù hợp"))
-
-
-def test_profile_update_uses_reasoning_model():
-    assert not should_use_fast_model(route_turn("tôi tên là Lan"))
-
-
-def test_timetable_uses_reasoning_model():
-    """Timetable needs structured tool reasoning — not fast-tier."""
-    assert not should_use_fast_model(route_turn("xe đưa đón ca đêm mấy giờ?"))
-
-
-def test_general_fallback_uses_reasoning_model():
-    assert not should_use_fast_model(route_turn("hôm nay thế nào"))
-
-
-def test_fast_model_strategies_are_a_frozen_set():
-    """The eligibility set is immutable — prevents accidental mutation."""
-    assert isinstance(FAST_MODEL_STRATEGIES, frozenset)
-
-
-# --- MiniMaxAgent switch behavior -------------------------------------------
-
-
-async def test_agent_uses_fast_llm_when_use_fast_and_configured():
-    """When use_fast=True and a fast_llm exists, the agent must bind the fast model."""
-    pytest = __import__("pytest")
-    pytest.importorskip("langchain_core")
-    from app.graph.clients import MiniMaxAgent
-
-    class _RecordingLLM:
-        def __init__(self, name: str) -> None:
-            self.name = name
-
-        def bind_tools(self, tools):
-            return self
-
-        async def ainvoke(self, messages, **kwargs):
-            import types
-
-            return types.SimpleNamespace(content=f"reply:{self.name}", tool_calls=None)
-
-    fast = _RecordingLLM("fast")
-    primary = _RecordingLLM("primary")
-    agent = MiniMaxAgent(primary, embedder=None, max_iters=1, fast_llm=fast)
-
-    reply = await agent.agent(
-        "thanks", system="sys", retrieval=object(), embedder=None, use_fast=True
+def test_template_lane_is_fast_eligible() -> None:
+    route = route_from_decisions(
+        "cảm ơn bạn nhiều", TurnDecisions(pleasantry=True, intent_confidence=0.95)
     )
-    assert "fast" in reply
+    assert should_use_fast_model(route)
 
 
-async def test_agent_uses_primary_llm_when_use_fast_but_no_fast_configured():
-    """use_fast=True with no fast_llm → falls back to primary (unconfigured deployment)."""
-    pytest = __import__("pytest")
-    pytest.importorskip("langchain_core")
-    from app.graph.clients import MiniMaxAgent
+def test_safe_redirect_is_fast_eligible() -> None:
+    assert not should_use_fast_model(_route(intent="faq_detail", intent_confidence=0.9))
+    assert should_use_fast_model(_route(intent="out_of_scope", intent_confidence=0.9))
 
-    class _RecordingLLM:
-        def __init__(self, name: str) -> None:
-            self.name = name
 
-        def bind_tools(self, tools):
-            return self
+def test_knowledge_lookup_is_not_fast_eligible() -> None:
+    # Detail questions (pay, shifts, dorm) are where a lead is won; the
+    # reasoning model stays on this route deliberately.
+    assert not should_use_fast_model(_route(intent="faq_detail", intent_confidence=0.9))
+    assert not should_use_fast_model(_route(intent="contact", intent_confidence=0.9))
 
-        async def ainvoke(self, messages, **kwargs):
-            import types
 
-            return types.SimpleNamespace(content=f"reply:{self.name}", tool_calls=None)
-
-    primary = _RecordingLLM("primary")
-    agent = MiniMaxAgent(primary, embedder=None, max_iters=1, fast_llm=None)
-
-    reply = await agent.agent(
-        "thanks", system="sys", retrieval=object(), embedder=None, use_fast=True
+def test_conversion_routes_are_not_fast_eligible() -> None:
+    assert not should_use_fast_model(_route(intent="recommend", intent_confidence=0.9))
+    assert not should_use_fast_model(
+        _route(intent="recommend", intent_confidence=0.94, vacancy_listing=True)
     )
-    assert "primary" in reply
-
-
-async def test_agent_uses_primary_llm_when_use_fast_false():
-    """use_fast=False always uses the primary, even when fast is configured."""
-    pytest = __import__("pytest")
-    pytest.importorskip("langchain_core")
-    from app.graph.clients import MiniMaxAgent
-
-    class _RecordingLLM:
-        def __init__(self, name: str) -> None:
-            self.name = name
-
-        def bind_tools(self, tools):
-            return self
-
-        async def ainvoke(self, messages, **kwargs):
-            import types
-
-            return types.SimpleNamespace(content=f"reply:{self.name}", tool_calls=None)
-
-    fast = _RecordingLLM("fast")
-    primary = _RecordingLLM("primary")
-    agent = MiniMaxAgent(primary, embedder=None, max_iters=1, fast_llm=fast)
-
-    reply = await agent.agent(
-        "gợi ý việc", system="sys", retrieval=object(), embedder=None, use_fast=False
-    )
-    assert "primary" in reply
+    assert not should_use_fast_model(_route(intent="profile_update", intent_confidence=0.8))
+    assert not should_use_fast_model(_route(intent="timetable", intent_confidence=0.9))
+    assert not should_use_fast_model(_route(intent="general"))

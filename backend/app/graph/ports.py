@@ -56,6 +56,44 @@ class DirectMessageSenderPort(Protocol):
     ) -> DeliveryResultPort: ...
 
 
+# TypeSafe Jev decision model. The graph depends on this Protocol, never on the
+# HTTP client (graph/decisions.py); tests inject stubs.
+class TurnDecisionsPort(Protocol):
+    """One parallel decision fan-out over a single inbound turn."""
+
+    async def decide_turn(
+        self,
+        *,
+        user_text: str,
+        recent_messages: list[Any],
+    ) -> TurnDecisions: ...
+
+
+@dataclass(frozen=True)
+class TurnDecisions:
+    """Raw, calibrated judgments for one inbound turn (see graph/decisions.py).
+
+    ``router.route_from_decisions`` owns the policy that turns these raw
+    judgments into a :class:`~app.graph.router.TurnRoute` (strategy, tools,
+    trace reason). ``degraded=True`` marks the neutral fallback produced when
+    Jev is unconfigured, unreachable, or returned an unusable answer.
+    """
+
+    intent: str = "general"
+    intent_confidence: float = 0.1
+    vacancy_listing: bool = False
+    sort_by: str | None = None
+    pleasantry: bool = False
+    pleasantry_kind: str = "none"
+    recent_vacancy: bool = False
+    contact_info: bool = False
+    model: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: int = 0
+    degraded: bool = False
+
+
 @dataclass(frozen=True)
 class FaqBypassResult:
     """A high-confidence FAQ answer ready to send without an LLM turn.

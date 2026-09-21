@@ -27,7 +27,7 @@ import pytest
 from app.graph import runner
 from app.graph.direct_context import DirectContext, ProjectTurnContext
 from app.graph.llm_semaphore import LLMThrottled
-from app.graph.ports import ReplyPolicyResult
+from app.graph.ports import ReplyPolicyResult, TurnDecisions
 from app.graph.runner import run_turn
 from app.graph.safety import DeterministicReplyPolicy
 from app.graph.types import BotRunState, GraphDeps
@@ -35,38 +35,56 @@ from app.graph.types import BotRunState, GraphDeps
 CONV_ID = "00000000-0000-0000-0000-000000000001"
 
 
-def test_faq_bypass_refuses_volatile_operational_questions():
-    assert runner._faq_bypass_allowed("Hồ sơ cần những gì?", []) is True
-    assert runner._faq_bypass_allowed("Lương vị trí này bao nhiêu?", []) is False
-    assert runner._faq_bypass_allowed("Bên mình còn tuyển không?", []) is False
-    assert runner._faq_bypass_allowed("bên bạn có nhận thợ hàn không?", []) is False
-    assert runner._faq_bypass_allowed("bên mình đang tuyển gì?", []) is False
-    assert runner._faq_bypass_allowed("bên bạn còn việc không?", []) is False
-    assert (
-        runner._faq_bypass_allowed(
-            "lương bao nhiêu?",
-            [SimpleNamespace(sender="WORKER", body="bên bạn tuyển thợ hàn CO2 đúng ko?")],
-        )
-        is True
-    )
+def test_faq_bypass_gate_is_vacancy_listing_only():
+    """Legacy bypass gate: only the Jev vacancy-listing judgment blocks it."""
+    from app.graph.ports import TurnDecisions
+
+    assert runner._faq_bypass_allowed(TurnDecisions()) is True
+    assert runner._faq_bypass_allowed(TurnDecisions(vacancy_listing=True)) is False
 
 
 def test_vacancy_evidence_query_prefers_durable_project_focus_over_free_text_history():
+    from app.graph.ports import TurnDecisions
+
     history = [SimpleNamespace(sender="WORKER", body="LG Tràng Duệ đang tuyển không?")]
 
-    assert runner._vacancy_evidence_query("lương bao nhiêu?", history).startswith(
-        "LG Tràng Duệ đang tuyển không?"
-    )
-    assert runner._vacancy_evidence_query("giờ làm của LG", history) == (
-        "LG Tràng Duệ đang tuyển không?\ngiờ làm của LG"
+    # The Jev recent_vacancy flag marks the thread; the latest candidate body
+    # supplies the context (what the keyword scan used to stitch in).
+    assert (
+        runner._vacancy_evidence_query(
+            "lương bao nhiêu?",
+            TurnDecisions(intent="faq_detail", recent_vacancy=True),
+            history,
+        )
+        == "LG Tràng Duệ đang tuyển không?\nlương bao nhiêu?"
     )
     assert (
         runner._vacancy_evidence_query(
-            "lương bao nhiêu?", history, focused_project=True
+            "giờ làm của LG",
+            TurnDecisions(intent="faq_detail", recent_vacancy=True),
+            history,
+        )
+        == "LG Tràng Duệ đang tuyển không?\ngiờ làm của LG"
+    )
+    assert (
+        runner._vacancy_evidence_query(
+            "lương bao nhiêu?",
+            TurnDecisions(intent="faq_detail"),
+            focused_project=True,
         )
         == "lương bao nhiêu?"
     )
-    assert runner._vacancy_evidence_query("bên mình còn tuyển không?", history) is None
+    assert (
+        runner._vacancy_evidence_query(
+            "bên mình còn tuyển không?", TurnDecisions(vacancy_listing=True)
+        )
+        is None
+    )
+    # Without a vacancy thread context, a detail question gets no forced evidence.
+    assert (
+        runner._vacancy_evidence_query("lương bao nhiêu?", TurnDecisions(intent="faq_detail"))
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +209,7 @@ def _stub_agent(monkeypatch, *replies) -> None:
     seq = list(replies)
 
     async def _fake(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         r = seq.pop(0) if seq else ""
         if isinstance(r, Exception):
@@ -466,6 +484,14 @@ async def test_generic_vacancy_listing_bypasses_focused_single_page(monkeypatch)
     deps = _deps(_FakeZalo(), conversation=svc)
     direct_reader = _DirectReader()
     deps.direct_context = direct_reader
+    # Jev decision port stub: this scenario is a generic vacancy listing turn.
+    deps.turn_decisions = SimpleNamespace(
+        decide_turn=AsyncMock(
+            return_value=TurnDecisions(
+                intent="recommend", intent_confidence=0.94, vacancy_listing=True
+            )
+        )
+    )
     agent_turn = AsyncMock(return_value="LG Display và Rorze đang tuyển.")
     monkeypatch.setattr(runner, "_agent_turn", agent_turn)
 
@@ -604,7 +630,7 @@ async def test_owned_oa_turn_enriches_profile_before_agent(monkeypatch):
         return True
 
     async def agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         events.append("agent")
         return "Chào bạn!"
@@ -709,7 +735,7 @@ async def test_direct_vacancy_question_reaches_agent_when_faq_bypass_misses(monk
     captured: dict[str, object] = {}
 
     async def _grounded_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         captured["user_text"] = user_text
         captured["chat_id"] = chat_id
@@ -789,7 +815,7 @@ async def test_vacancy_prompts_reach_agent_when_faq_bypass_misses(monkeypatch, u
     captured: dict[str, object] = {}
 
     async def _grounded_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         captured["user_text"] = user_text
         captured["chat_id"] = chat_id
@@ -825,7 +851,7 @@ async def test_vacancy_followup_reaches_agent_with_scoped_query_when_faq_bypass_
     captured: dict[str, object] = {}
 
     async def _grounded_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         captured["user_text"] = user_text
         captured["recent_messages"] = list(recent_messages)
@@ -891,7 +917,7 @@ async def test_lock_owner_lost_before_turn_suppresses_without_pending(monkeypatc
             raise AssertionError("stale owner must not record outcome")
 
     async def _must_not_run(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         raise AssertionError("agent must not run after owner loss")
 
@@ -1138,7 +1164,7 @@ async def test_agent_runs_to_completion_past_deadline(monkeypatch):
     svc, _ = _stub_svc(conv=conv, owned=True)
 
     async def _slow_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         await asyncio.sleep(0.3)  # well past the 0.1s former cap
         return "Câu trả lời thật của tôi."
@@ -1173,7 +1199,7 @@ async def test_slow_turn_pulses_typing_but_sends_no_filler(monkeypatch):
     svc, _ = _stub_svc(conv=conv, owned=True)
 
     async def _slow_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         # Long enough for the heartbeat's ~0.5s tick to pulse typing several times
         # while the turn is in flight, well before the real answer lands.
@@ -1497,7 +1523,7 @@ async def test_agent_error_rolls_back_session_before_silent_record(monkeypatch):
     db = _FakeDB()
 
     async def _boom(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         db._poisoned = True  # agent's lead / system-prompt read failed
         raise RuntimeError("agent DB error")
@@ -1527,7 +1553,7 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
     svc, recorded = _stub_svc(conv=conv, owned=True)
 
     async def _fake(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
     ):  # noqa: ARG001
         # Emulate the real _agent_turn stamping into the shared timings dict.
         # The LLM stage is now the split llm_queue_ms + llm_model_ms pair
@@ -1647,6 +1673,7 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
         chat_id="z1",
         recent_messages=[],
         timings=timings,
+        decisions=TurnDecisions(pleasantry=True, intent="small_talk", intent_confidence=0.9),
     )
 
     assert "system_prompt_ms" in timings
@@ -1695,6 +1722,7 @@ async def test_rag_vacancy_turn_requires_active_job_catalog_for_exact_reported_m
         chat_id="z1",
         recent_messages=[],
         timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="recommend", intent_confidence=0.94, vacancy_listing=True),
     )
 
     assert reply == "LG Display Tràng Duệ đang tuyển."
@@ -1749,6 +1777,7 @@ async def test_focused_rag_detail_forces_project_scoped_category_search(monkeypa
         ],
         timings={"lane": "agent"},
         project_context=context,
+        decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9),
     )
 
     assert reply == "LG Display làm ca ngày 08:00-20:00 và ca đêm 20:00-08:00."
@@ -1804,6 +1833,7 @@ async def test_cross_project_salary_target_requires_compare_income(monkeypatch):
             project_slug=None,
             project_name=None,
         ),
+        decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9),
     )
 
     assert reply == "Rorze có bằng chứng đạt mốc 20 triệu."
@@ -1858,6 +1888,7 @@ async def test_generic_vacancy_listing_requires_active_job_catalog(monkeypatch):
             project_slug=None,
             project_name=None,
         ),
+        decisions=TurnDecisions(intent="recommend", intent_confidence=0.94, vacancy_listing=True),
     )
 
     assert reply == "Danh sách việc đang tuyển."
@@ -1907,6 +1938,7 @@ async def test_terse_vacancy_followup_keeps_active_job_catalog_authority(monkeyp
             SimpleNamespace(sender="WORKER", body="có bao nhiêu nhà máy đang tuyển")
         ],
         timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="general", intent_confidence=0.5, recent_vacancy=True),
     )
 
     assert reply == "LG Display đang tuyển công nhân thời vụ."
@@ -1964,6 +1996,7 @@ async def test_rag_vacancy_salary_followup_scopes_knowledge_query_to_vacancy_thr
         chat_id="z1",
         recent_messages=history,
         timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9, recent_vacancy=True),
     )
 
     assert captured["allowed_tools"] == ("get_product_features", "search_knowledge")
@@ -2018,6 +2051,7 @@ async def test_agent_turn_does_not_append_collection_question(monkeypatch):
         chat_id="z1",
         recent_messages=[],
         timings={"lane": "agent"},
+        decisions=TurnDecisions(pleasantry=True, intent="small_talk", intent_confidence=0.9),
     )
     # The reply must be returned verbatim — no appended canonical question.
     assert result == raw_reply

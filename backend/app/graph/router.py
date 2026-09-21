@@ -1,18 +1,18 @@
-"""Deterministic turn routing for the chatbot brain.
+"""Turn routing policy for the chatbot brain.
 
-The router is intentionally cheap and conservative: it never calls an LLM and it
-does not decide the final answer. It annotates the turn with an intent/strategy
-so the existing tool-calling agent can start from the right retrieval path.
+The meaning judgments (intent, sort direction, vacancy listing, pleasantry
+kind, context flags) come from the Jev fan-out (``graph/decisions.py``) behind
+the ``TurnDecisionsPort``; this module owns only the policy that maps those
+raw judgments onto a retrieval strategy, tool set, and trace label. It never
+calls a model and does not decide the final answer.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Literal
 
-from app.shared.domain.text import normalize_vietnamese_text
-from app.graph.fast_lane import match as fast_lane_match
+from app.graph.ports import TurnDecisions
 
 TurnIntent = Literal[
     "small_talk",
@@ -36,14 +36,10 @@ TurnStrategy = Literal[
 ]
 
 # Strategies eligible for the fast-tier model (Phase 5 model tiering). Only
-# social chitchat qualifies: it carries no evidence and no conversion step.
-#
-# ``knowledge_lookup`` was moved off the fast tier deliberately. It serves the
-# detail questions — pay, shifts, dorm, bus — that a genuinely interested
-# candidate asks, which is exactly where the turn has to both stay accurate and
-# work a phone number into the reply naturally. On the fast model that closing
-# ask landed on roughly half of those turns; the reasoning model is worth the
-# extra seconds on the route most likely to produce a lead.
+# social chitchat and gentle redirects qualify: they carry no evidence and no
+# conversion step. ``knowledge_lookup`` stays off the fast tier deliberately —
+# it serves the detail questions (pay, shifts, dorm) most likely to produce a
+# lead, where accuracy beats the seconds a faster model saves.
 FAST_MODEL_STRATEGIES: frozenset[str] = frozenset({"template", "safe_redirect"})
 
 
@@ -66,326 +62,88 @@ class TurnRoute:
     confidence: float = 0.0
 
 
-_PHONE_RE = re.compile(r"(?:\+?84|0)(?:\D*\d){8,10}\b")
-
-_CONTACT_TERMS = (
-    "lien he",
-    "admin",
-    "hotline",
-    "so dien thoai",
-    "sdt",
-    "zalo",
-    "den cong ty",
-    "gap ai",
-)
-
-_TIMETABLE_TERMS = (
-    "xe dua don",
-    "tuyen xe",
-    "lich xe",
-    "diem don",
-    "gio don",
-    "xe may gio",
-    "xe buyt",
-    "bus",
-)
-
-_RECOMMEND_TERMS = (
-    "goi y",
-    "phu hop",
-    "tim viec",
-    "viec nao",
-    "con viec",
-    "muon lam",
-    "ung tuyen",
-    "can viec",
-    "kiem viec",
-)
-
-_PROFILE_TERMS = (
-    "toi ten",
-    "minh ten",
-    "em ten",
-    "ten la",
-    "toi o",
-    "minh o",
-    "song o",
-    "dang song",
-    "khu vuc",
-    "mong muon luong",
-    "luong mong muon",
-    "kinh nghiem",
-)
-
-_DETAIL_TERMS = (
-    "luong",
-    "thu nhap",
-    "phu cap",
-    "ktx",
-    "ky tuc xa",
-    "nha tro",
-    "khu tro",
-    "cho o",
-    "luu tru",
-    "o xa",
-    "ho so",
-    "ca lam",
-    "gio lam",
-    "lam may gio",
-    "thoi gian lam viec",
-    "lich lam viec",
-    "ca ngay",
-    "ca dem",
-    "tang ca",
-    "thuong",
-    "bao hiem",
-    "dia diem",
-    "yeu cau",
-    "dieu kien",
-    "quy trinh",
-    "do tuoi",
-    "gioi tinh",
-)
-
-# "What does the job actually involve?" — the single most common candidate
-# question after salary. It shares no keyword with _DETAIL_TERMS, so without this
-# it lands on the 0.45-confidence catch-all route with no retrieval hint at all.
-# Applied only in ``route_turn``: ``is_vacancy_lookup`` keeps its own narrower
-# detail set so "công ty có tuyển làm những gì" still lists open roles.
-_JOB_CONTENT_RE = re.compile(
-    r"\blam\s+(?:nhung\s+)?gi\b"
-    r"|\blam\s+(?:cong\s+)?viec\s+gi\b"
-    # Allows a qualifier between subject and question ("công việc ở LG là gì").
-    r"|\bcong\s+viec\b[^.?!]{0,40}?\b(?:la\s+)?(?:gi|nhu\s+the\s+nao|ra\s+sao)\b"
-    r"|\b(?:mo\s+ta|noi\s+dung|tinh\s+chat)\s+cong\s+viec\b"
-)
-
-_CURRENT_OPENING_PHRASES = (
-    "dang tuyen",
-    "con tuyen",
-    "co tuyen",
-    "can tuyen",
-)
-
-_VACANCY_PHRASES = (
-    *_CURRENT_OPENING_PHRASES,
-    "tuyen vi tri",
-    "tuyen cong viec",
-    "tuyen nhan vien",
-    "tuyen dung vi tri",
-    "tuyen dung cong viec",
-)
-
-_NON_ROLE_ACCEPTANCE_PREFIXES = (
-    "vien",  # normalized "nhân viên": avoids treating "có nhân viên" as "có nhận"
-    "ho so",
-    "cuoc goi",
-    "tin nhan",
-    "dien thoai",
-    "thanh toan",
-    "don hang",
-    "hang ",
-)
-
+# Machine protocol marker, not a user-language judgment: the retry-rewrite
+# path re-enters the graph with this sentinel as the pseudo user text. No
+# model call is spent classifying our own internal prompt.
 _INTERNAL_RETRY_PREFIX = "ban can viet lai cau tra loi"
 
-# Off-topic refusal used to be a keyword gate here. It could not survive
-# diacritic-stripped Vietnamese: "làm thợ" (work as a tradesman) normalizes to
-# the same "lam tho" as "làm thơ" (write poetry), so "tôi muốn làm thợ hàn" —
-# a candidate naming the exact job they want — was refused as out of scope.
-# Scope is now the model's call; it reads the whole message, not one token.
 
+def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
+    """Map the raw Jev judgments onto the first retrieval strategy.
 
-def _has_any(text: str, terms: tuple[str, ...]) -> bool:
-    return any(term in text for term in terms)
-
-
-def _normalize(text: str) -> str:
-    clean = normalize_vietnamese_text(text or "")
-    return re.sub(r"\s+", " ", clean).strip()
-
-
-def is_vacancy_lookup(user_text: str) -> bool:
-    """Whether a turn asks the LLM to check recruitment knowledge for openings."""
-    text = _normalize(user_text)
-    if not text:
-        return False
-    has_detail = _has_any(text, _DETAIL_TERMS)
-    if _has_any(text, _TIMETABLE_TERMS):
-        return False
-    if _has_any(text, _CURRENT_OPENING_PHRASES):
-        return True
-    if "tuyen" in text.split() and has_detail:
-        return False
-    if "tuyen" in text.split() or _has_any(text, _VACANCY_PHRASES):
-        return True
-    if re.search(
-        r"\b(?:hien\s+)?(?:co|con)\s+(?:viec(?:\s+lam)?|cong\s+viec|vi\s+tri)"
-        r"(?:\s+(?:gi|nao|trong))?\s+(?:khong|ko)\b",
-        text,
-    ):
-        return True
-    accepting = re.search(
-        r"\b(?:co|con|dang) nhan\s+(?P<object>.+?)(?:\s+(?:khong|ko))?[?.!]*$",
-        text,
-    )
-    if accepting is None:
-        return False
-    candidate_object = accepting.group("object").strip()
-    return not candidate_object.startswith(_NON_ROLE_ACCEPTANCE_PREFIXES)
-
-
-# Vietnamese diacritic-insensitive markers for salary-sort intent. Detection lives
-# in the router (the intent-classification layer) so the graph never imports a
-# service module merely to read the user's phrasing.
-_SALARY_SORT_DESC_MARKERS = (
-    "cao xuong thap",
-    "cao nhat",
-    "cao xuong",
-    "cao den thap",
-    "cao toi thap",
-    "giam dan",
-)
-_SALARY_SORT_ASC_MARKERS = (
-    "thap len cao",
-    "thap nhat",
-    "thap den cao",
-    "thap toi cao",
-    "tang dan",
-)
-
-
-def detect_salary_sort_intent(user_text: str) -> str | None:
-    """Return ``salary_desc`` / ``salary_asc`` when the user asks to sort by salary.
-
-    Matches Vietnamese phrasings like "sắp xếp theo lương từ cao xuống thấp" after
-    diacritic stripping. Returns ``None`` when no salary-sort intent is present so
-    callers keep the default ``updated_at`` ordering.
+    Mirrors the keyword router it replaced: a pure pleasantry wins first
+    (template lane); ``vacancy_listing`` refines ``recommend``; contact-info
+    presence upgrades an otherwise-unrouted turn to profile capture. Reason
+    codes reuse the existing decision-trace literals (schemas/bot_run.py) so
+    the trace contract stays intact.
     """
-    text = _normalize(user_text)
-    if not text:
-        return None
-    if "luong" not in text and "thu nhap" not in text:
-        return None
-    if any(marker in text for marker in _SALARY_SORT_DESC_MARKERS):
-        return "salary_desc"
-    if any(marker in text for marker in _SALARY_SORT_ASC_MARKERS):
-        return "salary_asc"
-    if "sap xep" in text or "sx" in text.split():
-        # "sắp xếp theo lương" without an explicit direction defaults to desc
-        # (candidates asking to "sort by salary" expect the highest first).
-        return "salary_desc"
-    return None
-
-
-# Vietnamese diacritic-insensitive markers for "newest / most-recently-posted" intent.
-# In Vietnamese recruitment, "gần nhất" / "mới nhất" means "most recently posted" (temporal
-# recency), not geographically nearest.
-_RECENCY_SORT_MARKERS = (
-    "gan nhat",
-    "moi nhat",
-    "vua moi",
-    "moi dang",
-    "moi dang tuyen",
-    "gan day",
-)
-
-
-def detect_recency_sort_intent(user_text: str) -> str | None:
-    """Return ``created_at`` when the user asks for the newest / most-recent postings.
-
-    Matches Vietnamese phrasings like "việc làm gần nhất" / "mới nhất" after diacritic
-    stripping. Returns ``None`` when no recency intent is present.
-    """
-    text = _normalize(user_text)
-    if not text:
-        return None
-    if any(marker in text for marker in _RECENCY_SORT_MARKERS):
-        return "created_at"
-    return None
-
-
-def route_turn(user_text: str) -> TurnRoute:
-    """Classify a user turn into the first retrieval strategy to try.
-
-    Priority order matters: bus/timetable and contact lookups are deterministic
-    evidence paths, so they beat broader recommendation/detail intents.
-    """
-    raw = user_text or ""
-    text = _normalize(raw)
+    text = (user_text or "").strip()
     if not text:
         return TurnRoute("general", "agent", reason="empty", confidence=0.1)
 
     if text.startswith(_INTERNAL_RETRY_PREFIX):
         return TurnRoute("general", "agent", reason="internal_retry_prompt", confidence=0.1)
 
-    if fast_lane_match(raw) is not None:
-        return TurnRoute("small_talk", "template", reason="fast_lane_match", confidence=0.95)
-
-    has_recommendation = _has_any(text, _RECOMMEND_TERMS)
-    has_detail = _has_any(text, _DETAIL_TERMS) or bool(_JOB_CONTENT_RE.search(text))
-    vacancy_lookup = is_vacancy_lookup(raw)
-    has_phone = bool(_PHONE_RE.search(raw))
-
-    if _has_any(text, _TIMETABLE_TERMS):
+    if decisions.pleasantry or decisions.intent == "small_talk":
         return TurnRoute(
-            "timetable",
-            "structured_lookup",
-            tools=("search_bus_timetable",),
-            reason="timetable_terms",
-            confidence=0.9,
+            "small_talk",
+            "template",
+            reason="fast_lane_match",
+            confidence=max(decisions.intent_confidence, 0.9 if decisions.pleasantry else 0.0),
         )
 
-    if _has_any(text, _CONTACT_TERMS) and not has_phone:
+    intent = decisions.intent if decisions.intent in TURN_INTENTS else "general"
+    if intent in {"general", "out_of_scope"} and decisions.contact_info:
         return TurnRoute(
-            "contact",
-            "knowledge_lookup",
-            tools=("search_knowledge",),
-            reason="contact_terms",
-            confidence=0.9,
+            "profile_update",
+            "profile",
+            reason="phone_number",
+            confidence=decisions.intent_confidence,
         )
 
-    if vacancy_lookup:
+    if intent == "recommend" and decisions.vacancy_listing:
         return TurnRoute(
             "recommend",
             "structured_lookup",
             tools=("list_active_jobs",),
             reason="vacancy_listing",
-            confidence=0.94,
+            confidence=decisions.intent_confidence,
         )
 
-    if has_recommendation:
-        return TurnRoute(
-            "recommend",
-            "recommendation",
-            tools=(
-                "list_active_jobs",
-                "recommend_jobs",
-                "recommend_projects",
-                "get_product_features",
-            ),
-            reason="recommendation_terms",
-            confidence=0.86,
-        )
-
-    if has_detail:
-        return TurnRoute(
-            "faq_detail",
-            "knowledge_lookup",
-            tools=("get_product_features", "search_knowledge"),
-            reason="job_detail_terms",
-            confidence=0.8,
-        )
-
-    if has_phone or _has_any(text, _PROFILE_TERMS):
-        reason = "phone_number" if has_phone else "profile_terms"
-        return TurnRoute("profile_update", "profile", reason=reason, confidence=0.78)
-
-    return TurnRoute("general", "agent", reason="fallback", confidence=0.45)
+    strategy, tools, reason = _INTENT_ROUTES[intent]
+    return TurnRoute(
+        intent,  # type: ignore[arg-type]
+        strategy,
+        tools=tools,
+        reason=reason,
+        confidence=decisions.intent_confidence,
+    )
 
 
+# intent -> (strategy, tools, trace reason) — one place for the whole mapping.
+_INTENT_ROUTES = {
+    "recommend": (
+        "recommendation",
+        ("list_active_jobs", "recommend_jobs", "recommend_projects", "get_product_features"),
+        "recommendation_terms",
+    ),
+    "profile_update": ("profile", (), "profile_terms"),
+    "timetable": ("structured_lookup", ("search_bus_timetable",), "timetable_terms"),
+    "contact": ("knowledge_lookup", ("search_knowledge",), "contact_terms"),
+    "faq_detail": ("knowledge_lookup", ("get_product_features", "search_knowledge"), "job_detail_terms"),
+    "out_of_scope": ("safe_redirect", (), "off_domain_terms"),
+    "general": ("agent", (), "fallback"),
+}
+
+# Runtime-visible intent names (derived so the Literal stays the single source).
+TURN_INTENTS: frozenset[str] = frozenset(
+    TurnIntent.__metadata__[0].__args__  # type: ignore[attr-defined]
+) if hasattr(TurnIntent, "__metadata__") else frozenset(_INTENT_ROUTES) | {"small_talk"}
+
+
+# Vietnamese prompt hint per intent for the tool-calling agent (consumed by
+# runner.build_agent_user_text via routing_instruction).
 def routing_instruction(route: TurnRoute) -> str:
-    """Vietnamese prompt hint for the tool-calling agent."""
     if route.intent == "small_talk":
         return "Ý định: trò chuyện xã giao. Trả lời ngắn gọn, thân thiện; không cần tra cứu nếu không có câu hỏi tuyển dụng."
     if route.intent == "recommend":

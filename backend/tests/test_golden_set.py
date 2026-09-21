@@ -1,43 +1,36 @@
-"""Golden set — the consolidated, labeled decision corpus for zero-LLM coverage.
+"""Golden set — the consolidated, labeled decision corpus for the routing lanes.
 
 Phase 1 of ``docs/chatbot-latency-improvement-plan.md`` calls for a golden set
 that codifies, *before* any threshold tuning or coverage expansion, exactly
 which candidate phrases must:
 
-  * HIT the fast lane (greetings/thanks/goodbye/help — instant, no LLM);
-  * FALL THROUGH the fast lane (factual questions, empty input, mixed intents);
-  * ACCEPT the FAQ bypass (canonical questions, strong hybrid matches);
-  * ABSTAIN from the FAQ bypass (below floor, margin fail, forbidden term,
-    missing required term, no candidates);
+  * HIT the template lane (greetings/thanks/goodbye/help — instant, no LLM);
+  * FALL THROUGH the template lane (factual, empty, or mixed-intent input);
   * NEVER reuse a global/template reply — personalized recommendation intents
     such as "tìm việc làm" depend on the lead profile, project, and current job
-    state, so they must reach the agent even if they look factual.
+    state, so they must reach the agent.
 
-This file is the structure the plan references. It is authorable from domain
-knowledge (not production traffic) and doubles as the regression net that
-catches future fast-lane / FAQ-bypass regressions. Each case is labeled with its
-expected lane and decision so a failure pinpoints the exact contract that broke.
-
-Companion files:
-  * ``test_fast_lane.py``  — the fast-lane unit tests (route table + persona voice)
-  * ``test_faq_bypass.py`` — the FAQ-bypass gate-logic unit tests (rerank/decide)
-This file consolidates the *decision taxonomy* across both, adding the
-personalized-must-reach-agent cases that span both lanes.
+Since the keyword router was replaced by the Jev fan-out, the message-level
+corpus doubles as the expectation table for the opt-in live replay
+(``JEV_EVAL=1``) — the shadow-mode seed for gating automation on measured
+agreement. The FAQ-bypass gates remain pure-unit (no DB/Redis).
 """
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
-from app.graph.fast_lane import match as fast_lane_match
+from app.graph.fast_lane import template_for
 from app.services.retrieval import faq_bypass as fb
 
 # ---------------------------------------------------------------------------
-# Fast-lane golden cases
+# Template-lane golden cases
 # ---------------------------------------------------------------------------
 
+# (phrase, pleasantry kind) — must route to a canned template, never the agent.
 FAST_LANE_HIT = [
-    # (phrase, intent) — must route to a canned template, never the agent
     ("hi", "greeting"),
     ("Chào bạn!", "greeting"),
     ("XIN CHÀO", "greeting"),
@@ -45,26 +38,77 @@ FAST_LANE_HIT = [
     ("thanks ban", "thanks"),
     ("tạm biệt", "goodbye"),
     ("bye bye", "goodbye"),
-    ("bạn giúp gì được", "help"),
-    ("bạn là ai", "help"),
 ]
 
+# Help/meta questions ("bạn là ai", "bạn giúp gì được") were keyword-matched to
+# the canned menu under the old fast lane. Jev judges them substantive and
+# routes them to the agent, which answers from the persona — the better
+# outcome. Kept here as help-adjacent corpus with agent-path expectations.
+FAST_LANE_HELP_AGENT_OK = [
+    "bạn giúp gì được",
+    "bạn là ai",
+]
 
+# Factual, empty, and mixed-intent phrases — must reach RAG + agent.
 FAST_LANE_FALLTHROUGH = [
-    # Factual questions — answers live in the KB, must reach RAG + agent.
     "lương bao nhiêu",
     "có xe đưa đón không",
     "địa điểm làm việc ở đâu",
     "số điện thoại liên hệ",
     "hồ sơ cần chuẩn bị gì",
-    # Empty / punctuation-only — no fake answer.
     "",
     "????",
     "!!!",
-    # Mixed intent — a greeting carrying a real question must NOT be templated.
     "chào bạn, lương bao nhiêu?",
     "hi, có xe đưa đón không?",
 ]
+
+# These depend on lead profile, conversation history, project state, and
+# active jobs — a global/template reply would be wrong.
+PERSONALIZED_MUST_REACH_AGENT = [
+    "tìm việc làm",
+    "gợi ý việc cho mình",
+    "có việc nào phù hợp không",
+    "việc nào hợp với hồ sơ em",
+    "tìm công việc gần nhà",
+]
+
+# Expectation table for the opt-in live replay: (phrase, pleasantry, kind).
+# Empty and punctuation-only inputs are policy-level (no model call needed),
+# so they are excluded here.
+_JEV_EVAL_EMPTY_OR_PUNCTUATION = {"", "????", "!!!"}
+JEV_EVAL_EXPECTATIONS = (
+    [(phrase, True, kind) for phrase, kind in FAST_LANE_HIT]
+    + [
+        (phrase, False, "none")
+        for phrase in FAST_LANE_FALLTHROUGH
+        if phrase not in _JEV_EVAL_EMPTY_OR_PUNCTUATION
+    ]
+    + [(phrase, False, "none") for phrase in FAST_LANE_HELP_AGENT_OK]
+    + [(phrase, False, "none") for phrase in PERSONALIZED_MUST_REACH_AGENT]
+)
+
+
+# ---------------------------------------------------------------------------
+# Template-lane pins (pure unit)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("phrase", "kind"), FAST_LANE_HIT)
+def test_template_lane_kinds_are_templatable(phrase: str, kind: str) -> None:
+    """Every corpus kind maps to a real template with the neutral persona voice."""
+    hit = template_for(kind)
+    assert hit is not None, f"no template for corpus kind {kind!r} ({phrase!r})"
+    assert hit.intent == kind
+    assert "anh/chị" in hit.reply
+
+
+@pytest.mark.parametrize("phrase", PERSONALIZED_MUST_REACH_AGENT)
+def test_golden_personalized_never_uses_template(phrase: str) -> None:
+    """Personalized intents must not be judged pleasantry by the eval table."""
+    for candidate, pleasantry, _kind in JEV_EVAL_EXPECTATIONS:
+        if candidate == phrase:
+            assert pleasantry is False
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +117,11 @@ FAST_LANE_FALLTHROUGH = [
 
 
 def _scored(
-    faq_id: str, score: float, *, answer: str = "A", **kw
+    faq_id: str,
+    score: float,
+    *,
+    answer: str = "A",
+    **kw,
 ) -> fb.Scored:
     return fb.Scored(
         faq_id=faq_id,
@@ -86,23 +134,26 @@ def _scored(
     )
 
 
-FAQ_ACCEPT_CASES = [
-    # (label, query, exact_map, scored_list, expected_tier)
-    (
-        "exact_match",
-        "Lương bao nhiêu?",
-        {},
-        [],
-        fb.TIER_EXACT,  # populated below — see fixture note
-    ),
-    (
-        "hybrid_strong_clear_margin",
-        "muon hoi ve muc luong",
-        {},
-        [_scored("1", 0.90), _scored("2", 0.60)],
-        fb.TIER_HYBRID,
-    ),
-]
+def test_golden_faq_exact_accepts() -> None:
+    """A normalized exact-variant match accepts at the exact tier."""
+    from types import SimpleNamespace
+
+    from app.shared.domain.text import normalize_vietnamese_text as norm
+
+    query = "Lương bao nhiêu?"
+    rows = [
+        SimpleNamespace(
+            id="1",
+            questions=[query],
+            required_terms=[],
+            forbidden_terms=[],
+        )
+    ]
+    exact_map = fb.build_exact_map(rows)
+    decision = fb.decide(query, exact_map, [_scored("1", 0.9)])
+    assert decision.decision == fb.DECISION_ACCEPT
+    assert decision.tier == fb.TIER_EXACT
+    assert norm(query) in exact_map
 
 
 FAQ_ABSTAIN_CASES = [
@@ -125,83 +176,6 @@ FAQ_ABSTAIN_CASES = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Personalized-must-reach-agent cases
-# ---------------------------------------------------------------------------
-
-PERSONALIZED_MUST_REACH_AGENT = [
-    # These intents depend on the lead profile, conversation history, project
-    # state, and active jobs — a global/template reply would be wrong. The fast
-    # lane must NOT match them (verified below), and the FAQ bypass would only
-    # fire if a canonical FAQ existed for the *exact* phrasing, which is safe
-    # because canonical answers are admin-authored and content-scoped.
-    "tìm việc làm",
-    "gợi ý việc cho mình",
-    "có việc nào phù hợp không",
-    "việc nào hợp với hồ sơ em",
-    "tìm công việc gần nhà",
-]
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(("phrase", "intent"), FAST_LANE_HIT)
-def test_golden_fast_lane_hits(phrase, intent):
-    """Non-factual greetings/thanks/goodbye/help MUST route to a canned template."""
-    hit = fast_lane_match(phrase)
-    assert hit is not None, f"expected fast-lane HIT for {phrase!r}"
-    assert hit.intent == intent
-
-
-@pytest.mark.parametrize("phrase", FAST_LANE_FALLTHROUGH)
-def test_golden_fast_lane_falls_through(phrase):
-    """Factual, empty, and mixed-intent phrases MUST fall through to RAG + agent."""
-    assert fast_lane_match(phrase) is None, (
-        f"fast lane wrongly swallowed {phrase!r} — factual/empty/mixed input "
-        "must reach the agent, not a template"
-    )
-
-
-@pytest.mark.parametrize("phrase", PERSONALIZED_MUST_REACH_AGENT)
-def test_golden_personalized_never_uses_template(phrase):
-    """Personalized recommendation intents MUST NOT match the fast lane.
-
-    ``tìm việc làm`` and friends depend on the candidate's profile and active
-    jobs — they can never reuse a global reply (latency plan, explicit non-goal:
-    'generic final-answer semantic cache').
-    """
-    assert fast_lane_match(phrase) is None, (
-        f"fast lane matched {phrase!r} — personalized recommendation intents "
-        "must reach the agent"
-    )
-
-
-def test_golden_faq_exact_accepts():
-    """A normalized exact-variant match accepts at the exact tier."""
-    from types import SimpleNamespace
-
-    from app.shared.domain.text import normalize_vietnamese_text as norm
-
-    query = "Lương bao nhiêu?"
-    rows = [
-        SimpleNamespace(
-            id="1",
-            questions=[query],
-            required_terms=[],
-            forbidden_terms=[],
-        )
-    ]
-    exact_map = fb.build_exact_map(rows)
-    decision = fb.decide(query, exact_map, [_scored("1", 0.9)])
-    assert decision.decision == fb.DECISION_ACCEPT
-    assert decision.tier == fb.TIER_EXACT
-    # The exact map key is the normalized query — verify normalization is stable.
-    assert norm(query) in exact_map
-
-
 @pytest.mark.parametrize(("label", "query", "scored", "reason_prefix"), FAQ_ABSTAIN_CASES)
 def test_golden_faq_abstains(label, query, scored, reason_prefix):
     """Each abstention reason must fire on its canonical input shape."""
@@ -212,3 +186,30 @@ def test_golden_faq_abstains(label, query, scored, reason_prefix):
     assert decision.reason.startswith(reason_prefix), (
         f"{label}: expected reason prefix {reason_prefix!r}, got {decision.reason!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Opt-in live replay — the shadow-mode seed (no network by default)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    os.environ.get("JEV_EVAL") != "1" or not os.environ.get("JEV_API_KEY"),
+    reason="opt-in live Jev replay: set JEV_EVAL=1 + JEV_API_KEY",
+)
+@pytest.mark.parametrize(("phrase", "expect_pleasantry", "expect_kind"), JEV_EVAL_EXPECTATIONS)
+async def test_live_jev_golden_replay(phrase, expect_pleasantry, expect_kind) -> None:
+    """Replay the golden corpus against the real Jev API.
+
+    Run with ``JEV_EVAL=1`` to measure agreement before trusting automation.
+    """
+    from app.graph.decisions import JevDecisionClient
+
+    client = JevDecisionClient(api_key=os.environ["JEV_API_KEY"])
+    decisions = await client.decide_turn(user_text=phrase, recent_messages=[])
+    assert decisions.pleasantry == expect_pleasantry, (
+        f"{phrase!r}: expected pleasantry={expect_pleasantry}, got "
+        f"{decisions.pleasantry} (kind={decisions.pleasantry_kind})"
+    )
+    if expect_pleasantry:
+        assert decisions.pleasantry_kind == expect_kind

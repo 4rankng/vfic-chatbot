@@ -44,7 +44,7 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 2,
     "conversations": 19,
     "dashboard": 2,
-    "integrations": 28,  # +3 custom OpenAI-compatible provider endpoints (settings page)
+    "integrations": 31,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints
     # +2 Meta App credentials UI; +4 multi-Page per-Page project CRUD
     # +1 admin-only credentials reveal (audited, no-store)
     "installation": 8,
@@ -59,7 +59,7 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "a12058bb5af8988ac26dd7917668e5f89efa169ad07e790dec8e592435bfb225"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "271f5809341b58aef3089515fc4230a51da9b08f360033cfff08c67f42c00454"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -76,14 +76,14 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Same site again: the OA user-detail error branch reads envelope.message
     # to tell a dead follower (-201 naming user_id) from a request bug —
     # bumps get_user_detail's get count 3→4, no new site.
-    "provider_boundary": 112,
+    "provider_boundary": 123,
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
     # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
     # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
     "queue_producer": 40,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "962aaf5709687acbfdcbd5390f08ec461bcf841958de563aed4e4df2e523e8c5"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "8491dfe97ec2a44a45c3fbb754558cdf7c0b57adcf25512f461c931c5352106c"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

@@ -223,3 +223,57 @@ async def probe_openai_compatible_chat(
             f"(finish_reason={finish or 'không rõ'}, usage={usage or 'không có'})."
         ),
     )
+
+
+async def probe_typesafe_systemone(api_key: str, model: str) -> dict:
+    """One minimal systemone call so a bad Jev key fails at save time.
+
+    Same result shape as the chat probes: ``sample`` carries the judged intent
+    of a canonical recruiting question — evidence the endpoint answered, not
+    merely accepted TCP.
+    """
+    started = time.perf_counter()
+    payload = {
+        "model": model or "jev-latest",
+        "state": {"message": "Chào bạn, lương bao nhiêu ạ?"},
+        "questions": {
+            "intent": {
+                "type": "choice",
+                "instructions": "Ý định chính của tin nhắn `message` là gì?",
+                "criteria": {
+                    "general": "Liên quan tuyển dụng",
+                    "small_talk": "Xã giao",
+                },
+            }
+        },
+    }
+    try:
+        async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                "https://api.typesafe.ai/v1/systemone",
+                json=payload,
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+    except Exception as exc:  # noqa: BLE001 — probe reports failures, never raises
+        return {
+            "ok": False,
+            "latency_ms": int(round((time.perf_counter() - started) * 1000)),
+            "sample": None,
+            "error": str(exc),
+        }
+    latency_ms = int(round((time.perf_counter() - started) * 1000))
+    if response.status_code != 200:
+        return {
+            "ok": False,
+            "latency_ms": latency_ms,
+            "sample": None,
+            "error": _error_body(response),
+        }
+    answers = (response.json() or {}).get("answers") or {}
+    sample = str((answers.get("intent") or {}).get("choice") or "")
+    return {
+        "ok": bool(sample),
+        "latency_ms": latency_ms,
+        "sample": sample or None,
+        "error": None,
+    }

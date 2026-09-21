@@ -802,6 +802,19 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
     # persistence_low retains the uncapped refresh-aware fallback.
     profile_sender = ZaloOASender(access_token=zalo_config.oa_access_token)
 
+    # Jev turn-decision fan-out (one systemone call per turn). The resolve is
+    # Redis-cached like the other integrations, so the enable toggle or a
+    # rotated key takes effect on the next turn. None when disabled or
+    # unconfigured: the runner then routes on the neutral agent fallback.
+    from app.graph.decisions import JevDecisionClient
+
+    jev_config = await integration_settings.resolve_jev()
+    turn_decisions = (
+        JevDecisionClient(api_key=jev_config.api_key, model=jev_config.model)
+        if jev_config.usable
+        else None
+    )
+
     async def _enrich_oa_profile(zalo_id: str, user_id: str) -> bool:
         # Production chatbot turns provide a session factory. Keep the provider
         # request and profile update isolated from the main turn transaction so
@@ -850,6 +863,7 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
         direct_context=_DirectContextAdapter(db),
         proactive_state=_build_proactive_state(db),
         delivery_statuses=_build_delivery_statuses(),
+        turn_decisions=turn_decisions,
     )
 
 

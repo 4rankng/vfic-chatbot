@@ -53,6 +53,12 @@ const mocks = vi.hoisted(() => ({
         llm_default_provider: "minimax" as const,
         llm_failover_order: ["minimax", "openrouter", "custom"],
       },
+      jev: {
+        jev_api_key: { configured: false },
+        jev_model: "",
+        jev_enable: false,
+        jev_usable: false,
+      },
     }),
   ),
   testOaConnection: vi.fn(() =>
@@ -107,6 +113,8 @@ vi.mock("./api", () => ({
     testMinimaxConnection: vi.fn(),
     testOpenRouterConnection: vi.fn(),
     testCustomLlmConnection: vi.fn(),
+    saveJevSettings: vi.fn(),
+    testJevConnection: vi.fn(),
   },
   facebookIntegrationGateway: {
     loadStatus: mocks.loadFacebookStatus,

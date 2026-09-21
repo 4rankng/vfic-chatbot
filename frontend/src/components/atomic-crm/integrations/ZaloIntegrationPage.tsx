@@ -9,6 +9,7 @@ import {
 import { useNotify, usePermissions, useTranslate } from "ra-core";
 import {
   Bot,
+  Brain,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -43,6 +44,7 @@ import {
 import {
   zaloIntegrationGateway,
   type CustomLlmSettings,
+  type JevSettings,
   type LlmProvider,
   type ProviderTestResult,
   type ProviderTestStatus,
@@ -91,6 +93,11 @@ type CustomLlmFormState = {
   custom_llm_agent_model: string;
 };
 
+type JevFormState = {
+  jev_api_key: string;
+  jev_model: string;
+};
+
 type MinimaxUpdatePayload = {
   minimax_api_key?: string;
   minimax_enable?: boolean;
@@ -113,6 +120,12 @@ type OpenRouterUpdatePayload = {
   openrouter_safety_model?: string;
   openrouter_digest_model?: string;
   llm_default_provider?: LlmProvider;
+};
+
+type JevUpdatePayload = {
+  jev_api_key?: string;
+  jev_model?: string;
+  jev_enable?: boolean;
 };
 
 const emptyForm: FormState = {
@@ -138,6 +151,8 @@ const INTEGRATION_TEST_FIELD_LABELS: Record<string, string> = {
   custom_llm_api_key: "Access Token",
   custom_llm_base_url: "Base URL",
   custom_llm_agent_model: "Model chatbot",
+  jev_api_key: "API Key",
+  jev_model: "Model",
 };
 
 const emptyMinimaxForm: MinimaxFormState = {
@@ -152,6 +167,11 @@ const emptyCustomLlmForm: CustomLlmFormState = {
   custom_llm_api_key: "",
   custom_llm_base_url: "",
   custom_llm_agent_model: "",
+};
+
+const emptyJevForm: JevFormState = {
+  jev_api_key: "",
+  jev_model: "",
 };
 
 // Canonical provider order. It seeds an operator who has never ranked the
@@ -187,6 +207,7 @@ type SettingsItemId =
   | "settings-zalo-channel"
   | "settings-facebook-messenger"
   | "settings-llm-providers"
+  | "settings-jev"
   | "settings-agents"
   | "settings-users";
 
@@ -243,6 +264,13 @@ const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     mode: "integrations",
   },
   {
+    itemId: "settings-jev",
+    label: "Jev",
+    description: "Mô hình quyết định",
+    Icon: Brain,
+    mode: "integrations",
+  },
+  {
     itemId: "settings-agents",
     label: "Agents",
     description: "Giọng trả lời",
@@ -277,6 +305,11 @@ const SETTINGS_VIEW_COPY: Record<
     title: "AI Providers",
     description:
       "Chọn một nhà cung cấp mặc định. Khi hết quota, hệ thống tự chuyển sang nhà cung cấp còn lại theo thứ tự bên dưới.",
+  },
+  "settings-jev": {
+    kicker: "Nhà cung cấp AI",
+    title: "Jev",
+    description: "Mô hình quyết định System One cho bot.",
   },
   "settings-agents": {
     kicker: "Không gian cài đặt",
@@ -401,6 +434,35 @@ const CustomLlmSecretInput = ({
     statusState={statusState}
     value={value}
     placeholder="Dán token Xiaomi"
+    onValueChange={(nextValue) => onChange(id, nextValue)}
+    notify={notify}
+  />
+);
+
+const JevSecretInput = ({
+  id,
+  label,
+  status,
+  statusState,
+  value,
+  onChange,
+  notify,
+}: {
+  id: keyof JevFormState;
+  label: string;
+  status: SecretStatus;
+  statusState?: SettingsStatusState;
+  value: string;
+  onChange: (key: keyof JevFormState, value: string) => void;
+  notify: CredentialFieldNotify;
+}) => (
+  <CredentialSecretField
+    id={id}
+    label={label}
+    status={status}
+    statusState={statusState}
+    value={value}
+    placeholder="Dán API key TypeSafe"
     onValueChange={(nextValue) => onChange(id, nextValue)}
     notify={notify}
   />
@@ -691,6 +753,7 @@ export const ZaloIntegrationPage = () => {
     useState<OpenRouterSettings | null>(null);
   const [customLlmSettings, setCustomLlmSettings] =
     useState<CustomLlmSettings | null>(null);
+  const [jevSettings, setJevSettings] = useState<JevSettings | null>(null);
   const [settingsStatusState, setSettingsStatusState] =
     useState<SettingsStatusState>("loading");
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -700,9 +763,11 @@ export const ZaloIntegrationPage = () => {
     useState<OpenRouterFormState>(emptyOpenRouterForm);
   const [customLlmForm, setCustomLlmForm] =
     useState<CustomLlmFormState>(emptyCustomLlmForm);
+  const [jevForm, setJevForm] = useState<JevFormState>(emptyJevForm);
   const [minimaxEnabled, setMinimaxEnabled] = useState(true);
   const [openRouterEnabled, setOpenRouterEnabled] = useState(false);
   const [customLlmEnabled, setCustomLlmEnabled] = useState(false);
+  const [jevEnabled, setJevEnabled] = useState(false);
   const [llmDefaultProvider, setLlmDefaultProvider] =
     useState<LlmProvider>("minimax");
   const [llmFailoverOrder, setLlmFailoverOrder] = useState<LlmProvider[]>([
@@ -715,6 +780,11 @@ export const ZaloIntegrationPage = () => {
     resolveInitialSettingsItemId,
   );
   const [testingBot, setTestingBot] = useState(false);
+  const [testingJev, setTestingJev] = useState(false);
+  const [savingJev, setSavingJev] = useState(false);
+  const [jevLastTest, setJevLastTest] = useState<ProviderTestStatus | null>(
+    null,
+  );
   const [testingOa, setTestingOa] = useState(false);
   const [savingProviders, setSavingProviders] = useState(false);
   const [testingProvider, setTestingProvider] = useState<LlmProvider | null>(
@@ -737,11 +807,13 @@ export const ZaloIntegrationPage = () => {
         minimax: minimaxData,
         openRouter: openRouterData,
         customLlm: customLlmData,
+        jev: jevData,
       } = await zaloIntegrationGateway.loadSettingsBundle();
       setSettings(data);
       setMinimaxSettings(minimaxData);
       setOpenRouterSettings(openRouterData);
       setCustomLlmSettings(customLlmData);
+      setJevSettings(jevData);
       setForm((current) => ({
         ...current,
         zalo_oa_app_id: data.zalo_oa_app_id.value ?? "",
@@ -749,6 +821,7 @@ export const ZaloIntegrationPage = () => {
       setMinimaxEnabled(minimaxData.minimax_enable);
       setOpenRouterEnabled(openRouterData.openrouter_enable);
       setCustomLlmEnabled(customLlmData.custom_llm_enable);
+      setJevEnabled(jevData.jev_enable);
       setLastTests({
         minimax: minimaxData.last_test ?? undefined,
         openrouter: openRouterData.last_test ?? undefined,
@@ -762,6 +835,7 @@ export const ZaloIntegrationPage = () => {
       setMinimaxForm(emptyMinimaxForm);
       setOpenRouterForm(emptyOpenRouterForm);
       setCustomLlmForm(emptyCustomLlmForm);
+      setJevForm(emptyJevForm);
       setSettingsStatusState("ready");
     } catch {
       setSettingsStatusState("error");
@@ -861,6 +935,20 @@ export const ZaloIntegrationPage = () => {
     return payload;
   }, [customLlmForm, customLlmEnabled, customLlmSettings]);
 
+  const changedJevPayload = useMemo(() => {
+    const payload: JevUpdatePayload = {};
+    const apiKey = jevForm.jev_api_key.trim();
+    if (apiKey) payload.jev_api_key = apiKey;
+    const model = jevForm.jev_model.trim();
+    if (model && jevSettings && model !== jevSettings.jev_model) {
+      payload.jev_model = model;
+    }
+    if (jevSettings && jevEnabled !== jevSettings.jev_enable) {
+      payload.jev_enable = jevEnabled;
+    }
+    return payload;
+  }, [jevForm, jevEnabled, jevSettings]);
+
   const setValue = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
@@ -878,6 +966,10 @@ export const ZaloIntegrationPage = () => {
 
   const setCustomLlmValue = (key: keyof CustomLlmFormState, value: string) => {
     setCustomLlmForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const setJevValue = (key: keyof JevFormState, value: string) => {
+    setJevForm((current) => ({ ...current, [key]: value }));
   };
 
   const providerEnabled = (provider: LlmProvider): boolean => {
@@ -1042,6 +1134,50 @@ export const ZaloIntegrationPage = () => {
       }
     } finally {
       setTestingProvider(null);
+    }
+  };
+
+  const saveJevChanges = async () => {
+    if (Object.keys(changedJevPayload).length === 0) return;
+    setSavingJev(true);
+    try {
+      const next =
+        await zaloIntegrationGateway.saveJevSettings(changedJevPayload);
+      setJevSettings(next);
+      setJevEnabled(next.jev_enable);
+      setJevForm(emptyJevForm);
+      notify("Đã lưu thay đổi", { type: "success" });
+    } catch {
+      notify("Không lưu được thay đổi.", { type: "error" });
+    } finally {
+      setSavingJev(false);
+    }
+  };
+
+  const testJev = async () => {
+    setTestingJev(true);
+    try {
+      const result = await zaloIntegrationGateway.testJevConnection();
+      setJevLastTest({
+        ok: result.ok,
+        latency_ms: result.latency_ms,
+        tested_at: Math.floor(Date.now() / 1000),
+        error: result.error,
+      });
+      if (result.ok) {
+        notify(`Kết nối thành công (${result.latency_ms ?? "?"}ms)`, {
+          type: "success",
+        });
+      } else if (!result.configured && result.missing.length > 0) {
+        const missing = result.missing
+          .map((key) => INTEGRATION_TEST_FIELD_LABELS[key] ?? key)
+          .join(", ");
+        notify(`Thiếu cấu hình: ${missing}`, { type: "warning" });
+      } else {
+        notify(result.error || "Không kết nối được", { type: "error" });
+      }
+    } finally {
+      setTestingJev(false);
     }
   };
 
@@ -1714,6 +1850,117 @@ export const ZaloIntegrationPage = () => {
             </Button>
             <span className="settings-llm-footer-note">
               {hasProviderEdits
+                ? "Có thay đổi chưa lưu."
+                : "Token được mã hoá, không hiển thị lại."}
+            </span>
+          </div>
+        </SettingsSectionPanel>
+      );
+    }
+
+    if (activeItemId === "settings-jev") {
+      const hasJevEdits = Object.keys(changedJevPayload).length > 0;
+      const jevConfigured = [
+        jevSettings?.jev_api_key.configured,
+        Boolean(jevSettings?.jev_model),
+      ].filter(Boolean).length;
+      const jevTestLine: { text: string; title?: string; ok: boolean } =
+        jevLastTest
+          ? jevLastTest.ok
+            ? {
+                text: `Kiểm tra ${formatRelativeEpoch(jevLastTest.tested_at)} · ${jevLastTest.latency_ms ?? "?"}ms`,
+                ok: true,
+              }
+            : {
+                text: describeProviderTestError(jevLastTest.error || ""),
+                title: jevLastTest.error ?? undefined,
+                ok: false,
+              }
+          : { text: "Chưa kiểm tra", ok: true };
+
+      return (
+        <SettingsSectionPanel id="settings-jev">
+          <div className="settings-grid settings-grid-models">
+            <SettingsGroup
+              className="settings-llm-card"
+              title="Jev (TypeSafe)"
+              description="Mô hình quyết định System One — phân loại ý định, hướng sắp xếp, và nhận diện lời xã giao cho bot. Bot vẫn hoạt động bình thường khi Jev tắt."
+              icon={<Brain className="size-4" />}
+              meta={
+                <SettingsGroupStatus
+                  configured={jevConfigured}
+                  total={2}
+                  disabled={!jevEnabled}
+                  state={settingsStatusState}
+                />
+              }
+            >
+              <ProviderSwitchField
+                id="jev_enable"
+                label="Kích hoạt"
+                checked={jevEnabled}
+                onCheckedChange={setJevEnabled}
+              />
+              <div className="settings-field">
+                <Label htmlFor="jev_model">Model</Label>
+                <Input
+                  id="jev_model"
+                  className="settings-input"
+                  autoComplete="off"
+                  value={jevForm.jev_model}
+                  placeholder={jevSettings?.jev_model || "jev-latest"}
+                  onChange={(event) =>
+                    setJevValue("jev_model", event.target.value)
+                  }
+                />
+              </div>
+              <JevSecretInput
+                id="jev_api_key"
+                label="API Key"
+                status={jevSettings?.jev_api_key ?? { configured: false }}
+                statusState={settingsStatusState}
+                value={jevForm.jev_api_key}
+                onChange={setJevValue}
+                notify={notify as CredentialFieldNotify}
+              />
+              <div className="settings-llm-verify">
+                <span
+                  className={`settings-llm-testline${jevTestLine.ok ? "" : " is-error"}`}
+                  title={jevTestLine.title}
+                >
+                  {jevTestLine.text}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="tt-btn-touch"
+                  onClick={() => {
+                    void testJev();
+                  }}
+                  disabled={testingJev || !jevSettings}
+                  aria-busy={testingJev}
+                >
+                  {testingJev ? "Đang kiểm tra" : "Kiểm tra"}
+                </Button>
+              </div>
+            </SettingsGroup>
+          </div>
+
+          <div
+            className={`settings-llm-footer${hasJevEdits ? " is-dirty" : ""}`}
+          >
+            <Button
+              type="button"
+              className="settings-primary-action tt-btn-touch"
+              onClick={() => {
+                void saveJevChanges();
+              }}
+              disabled={!hasJevEdits || savingJev}
+            >
+              {savingJev ? "Đang lưu" : "Lưu thay đổi"}
+            </Button>
+            <span className="settings-llm-footer-note">
+              {hasJevEdits
                 ? "Có thay đổi chưa lưu."
                 : "Token được mã hoá, không hiển thị lại."}
             </span>

@@ -96,11 +96,15 @@ CUSTOM_LLM_SETTING_KEYS = (
 # turns fall back to the neutral agent route, not to another provider.
 JEV_API_KEY = "jev_api_key"
 JEV_MODEL = "jev_model"
+# Operator switch: Jev decision hops run only when this is on AND a key is
+# present. Off (or an invalid key) leaves the bot fully working on the agent
+# path via the neutral fallback route.
+JEV_ENABLE = "jev_enable"
 # Pin per deployment via the settings UI (e.g. "jev-1.13.0"); "jev-latest"
 # tracks the vendor default and may change behavior on vendor releases.
 JEV_DEFAULT_MODEL = "jev-latest"
 
-JEV_SETTING_KEYS = (JEV_API_KEY, JEV_MODEL)
+JEV_SETTING_KEYS = (JEV_API_KEY, JEV_MODEL, JEV_ENABLE)
 JEV_SECRET_KEYS = (JEV_API_KEY,)
 
 # Real-probe outcomes per provider (persisted so the settings page can show
@@ -249,11 +253,12 @@ class JevRuntimeConfig:
 
     api_key: str = ""
     model: str = JEV_DEFAULT_MODEL
+    enabled: bool = False
 
     @property
     def usable(self) -> bool:
-        """Whether decision hops can actually run: a key is all that is required."""
-        return bool(self.api_key)
+        """Whether decision hops run: switched on AND a key is present."""
+        return bool(self.enabled and self.api_key)
 
 
 class IntegrationSettingsCipher:
@@ -598,6 +603,10 @@ class IntegrationSettingsService:
             return JevRuntimeConfig(
                 api_key=stored.get(JEV_API_KEY) or os.environ.get("JEV_API_KEY", ""),
                 model=stored.get(JEV_MODEL) or JEV_DEFAULT_MODEL,
+                # Default off: an operator must consciously switch Jev on,
+                # mirroring how openrouter_enable/custom_llm_enable gate those
+                # providers.
+                enabled=_bool_value(stored.get(JEV_ENABLE), False),
             ).__dict__
 
         cached = await cached_jev_config(_load)
@@ -611,10 +620,16 @@ class IntegrationSettingsService:
                 "preview": _preview(cfg.api_key),
             },
             "jev_model": cfg.model,
+            "jev_enable": cfg.enabled,
             "jev_usable": cfg.usable,
         }
 
-    async def update_jev(self, values: dict[str, str | None], *, actor_id) -> list[str]:
+    async def update_jev(
+        self,
+        values: dict[str, str | bool | None],
+        *,
+        actor_id,
+    ) -> list[str]:
         changed: list[str] = []
         for key, value in values.items():
             if key not in JEV_SETTING_KEYS or value is None:

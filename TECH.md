@@ -24,6 +24,7 @@ together*. For deeper detail, follow the links in §5.
 | Job queue | **RQ** `>=2.0` + **rq-scheduler** `>=0.14` | 4 queues; **offline only** — never on the answer path |
 | Realtime | **python-socketio** `>=5.11` | `AsyncServer` + `AsyncRedisManager` mounted under ASGI |
 | Agent brain | **LangGraph-style pipeline** (`app/graph/runner.py`) using `langchain-core` `>=0.3` message types | manual node topology, not the LangGraph engine |
+| Turn decisions | **TypeSafe Jev** (`graph/decisions.py`, System One model) | one parallel fan-out call per inbound turn: intent, sort direction, pleasantry kind, context flags — replaces the keyword router; admin-managed key in `IntegrationSetting`; disabled/absent/failing → neutral agent fallback |
 | LLM clients | **MiniMax + Gemini via OpenRouter**, embeddings via OpenRouter/Gemini (dim 3072) | all calls funneled through `graph/clients.py` |
 | Auth | **python-jose** JWT + **passlib[argon2]** | `token_version` bumping invalidates sessions |
 | Config | **pydantic-settings** `>=2.6` + **Pydantic v2** `>=2.10` | boot-time safety: refuses to start in prod with default `JWT_SECRET` or `*` CORS |
@@ -106,7 +107,7 @@ load_conversation_state → typing → agent
 ```
 
 Key invariants:
-- **Fast lane** (`fast_lane.py`) answers greetings/FAQ without an LLM round-trip → sub-second.
+- **Turn routing is a Jev fan-out** (`decisions.py` → `router.route_from_decisions`): one ~300 ms calibrated call replaces the keyword router; on any failure it degrades to the neutral `general/agent` route, never blocking a turn.
 - **Grounding** (`grounding.py`) strips hallucinated job IDs before delivery.
 - **Pre-send guard** enforces ownership: if a recruiter has taken over the conversation, bot replies are suppressed, not sent.
 - **Deadline-aware** — epoch-based turn deadline (`deadline_at_epoch`) survives the FastAPI→RQ process boundary.

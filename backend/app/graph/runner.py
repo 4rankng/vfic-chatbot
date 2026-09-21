@@ -30,7 +30,12 @@ from typing import Any
 from app.conversation_messaging.domain.delivery import DeliveryState
 from app.core.config import get_settings
 from app.graph.decision_trace import DecisionTraceBuilder
-from app.graph.ports import DeliveryResultPort, DirectMessageSenderPort, SendOutcome
+from app.graph.ports import (
+    DeliveryResultPort,
+    DirectMessageSenderPort,
+    SendOutcome,
+    TurnDecisions,
+)
 from app.shared.application.outbound import (
     AMBIGUOUS_SEND_CLASSES,
     OutboundTelemetry,
@@ -43,10 +48,8 @@ from app.graph.direct_context import (
     build_direct_user_text,
 )
 from app.graph.router import (
-    detect_recency_sort_intent,
-    detect_salary_sort_intent,
-    is_vacancy_lookup,
-    route_turn,
+    TurnRoute,
+    route_from_decisions,
     routing_instruction,
     should_use_fast_model,
 )
@@ -220,18 +223,20 @@ async def _agent_turn(
     trace_sink=None,
     manifest_policy=None,
     project_context=None,
+    decisions: TurnDecisions | None = None,
 ) -> str:
-    route = route_turn(user_text)
+    route = route_from_decisions(user_text, decisions or TurnDecisions(degraded=True))
     focused_project = bool(
         project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
     )
     evidence_query = _vacancy_evidence_query(
         user_text,
+        decisions,
         recent_messages,
         focused_project=focused_project,
     )
     vacancy_catalog_required = route.reason == "vacancy_listing" or (
-        route.intent == "general" and _recent_vacancy_query(recent_messages) is not None
+        route.intent == "general" and decisions.recent_vacancy
     )
     compare_income_required_args = _compare_income_required_args(
         user_text,
@@ -285,7 +290,7 @@ async def _agent_turn(
                 else "compare_income" if compare_income_required_args is not None else None
             ),
             required_tool_args=(
-                _vacancy_required_args(user_text)
+                _vacancy_required_args(decisions)
                 if vacancy_catalog_required
                 else compare_income_required_args
             ),
@@ -438,7 +443,9 @@ async def _agent_turn(
     route_hint = (
         _INCOME_COMPARE_HINT
         if compare_income_required_args is not None
-        else routing_instruction(route_turn(_recent_vacancy_query(recent_messages) or ""))
+        else routing_instruction(
+            TurnRoute("recommend", "structured_lookup", reason="vacancy_listing")
+        )
         if vacancy_catalog_required and route.reason != "vacancy_listing"
         else routing_instruction(route)
     )
@@ -470,7 +477,7 @@ async def _agent_turn(
         agent_kwargs["forced_project_slug"] = project_context.project_slug
     if vacancy_catalog_required:
         agent_kwargs["required_tool"] = "list_active_jobs"
-        required_args = _vacancy_required_args(user_text)
+        required_args = _vacancy_required_args(decisions)
         agent_kwargs["required_tool_args"] = required_args
     elif compare_income_required_args is not None:
         agent_kwargs["required_tool"] = "compare_income"
@@ -687,54 +694,24 @@ def _faq_should_abstain(bypass, settings) -> bool:
     return (bypass.score - bypass.runner_up_score) < margin
 
 
-# Volatile operational claims normally avoid FAQ prose. Vacancy threads are the
-# exception: published, effective-dated canonical FAQ answers are deterministic
-# evidence and take precedence over free-form generation.
-# The legacy service path takes an explicit ``published_vacancy_evidence`` flag
-# when it is used; the graph cannot import service modules across this boundary.
-_FAQ_BYPASS_VOLATILE_MARKERS = (
-    "lương",
-    "thu nhập",
-    "ca làm",
-    "giờ làm",
-    "tăng ca",
-    "phụ cấp",
-    "xe đưa đón",
-    "tuyến xe",
-    "xe lúc",
-    "xe mấy",
-    "đón xe",
-    "số điện thoại",
-    "hotline",
-    "liên hệ",
-)
-
-def _recent_vacancy_query(recent_messages: list[Any]) -> str | None:
-    for message in reversed(recent_messages):
-        sender = getattr(message, "sender", "")
-        sender_value = getattr(sender, "value", sender)
-        body = str(getattr(message, "body", "") or "")
-        if sender_value == "WORKER" and is_vacancy_lookup(body):
-            return body
-    return None
+# The legacy keyword volatile-markers list and the recent-vacancy body scan
+# are gone with the keyword router: the Jev fan-out answers both judgments
+# (vacancy_listing, recent_vacancy) with calibrated probabilities in the same
+# per-turn call.
 
 
-def _vacancy_required_args(user_text: str) -> dict:
+def _vacancy_required_args(decisions: TurnDecisions) -> dict:
     """Build forced ``list_active_jobs`` args for a vacancy-listing turn.
 
-    Always widens ``top_k`` to 10 so the full catalog is visible. When the user
-    asked to sort by salary ("sắp xếp theo lương từ cao xuống thấp"), the detected
-    direction is injected here because ``required_tool_args`` replaces the model's
-    own arguments for the forced first call — without this the LLM's ``sort_by``
-    would be dropped on the authoritative tool round. The same applies to recency
-    ("gần nhất" / "mới nhất" -> ``created_at``).
+    Always widens ``top_k`` to 10 so the full catalog is visible. When the
+    candidate asked to sort the catalog (salary direction or newest-first),
+    the Jev ``sort_by`` judgment is injected here because ``required_tool_args``
+    replaces the model's own arguments for the forced first call — without
+    this the LLM's ``sort_by`` would be dropped on the authoritative round.
     """
     args: dict = {"top_k": 10}
-    sort_by = detect_salary_sort_intent(user_text)
-    if sort_by is None:
-        sort_by = detect_recency_sort_intent(user_text)
-    if sort_by is not None:
-        args["sort_by"] = sort_by
+    if decisions.sort_by:
+        args["sort_by"] = decisions.sort_by
     return args
 
 
@@ -761,33 +738,40 @@ def _compare_income_required_args(
 
 def _vacancy_evidence_query(
     user_text: str,
-    recent_messages: list[Any],
+    decisions: TurnDecisions,
+    recent_messages: list[Any] | None = None,
     *,
     focused_project: bool = False,
 ) -> str | None:
     """Build detail evidence text while preferring durable Project focus over chat prose."""
-    if is_vacancy_lookup(user_text):
+    if decisions.vacancy_listing:
         return None
-    if route_turn(user_text).intent != "faq_detail":
+    if decisions.intent != "faq_detail":
         return None
     if focused_project:
         return user_text
-    vacancy_query = _recent_vacancy_query(recent_messages)
-    return f"{vacancy_query}\n{user_text}" if vacancy_query else None
+    if decisions.recent_vacancy:
+        # The Jev flag marks a vacancy thread; the candidate bodies supply the
+        # thread context the keyword scan used to stitch (the flag cannot name
+        # the exact message, so all of them ride along as retrieval context).
+        bodies = [
+            body
+            for message in (recent_messages or [])
+            if (body := str(getattr(message, "body", "") or "").strip())
+        ]
+        if bodies:
+            return "\n".join(bodies) + "\n" + user_text
+    return None
 
 
-def _faq_bypass_allowed(user_text: str, recent_messages: list[Any]) -> bool:
-    """Prefer canonical vacancy FAQs; keep other volatile claims on live paths."""
-    if is_vacancy_lookup(user_text):
-        return False
-    normalized = user_text.casefold()
-    if _vacancy_evidence_query(user_text, recent_messages) is not None:
-        # Published, effective-dated canonical FAQs are the preferred deterministic
-        # answer for vacancy threads; the confidence/margin gate still may abstain.
-        return True
-    if any(marker in normalized for marker in _FAQ_BYPASS_VOLATILE_MARKERS):
-        return False
-    return True
+def _faq_bypass_allowed(decisions: TurnDecisions) -> bool:
+    """Prefer canonical vacancy FAQs; keep other volatile claims on live paths.
+
+    Simplified for the Jev router: the vacancy-listing judgment gates the
+    legacy (currently disabled) bypass lane. The old volatile keyword markers
+    are gone with the keyword machinery.
+    """
+    return not decisions.vacancy_listing
 
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
@@ -949,7 +933,23 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         )
     t0 = time.monotonic()
     trace_sink = DecisionTraceBuilder()
-    turn_route = route_turn(state.user_text)
+    # Jev fan-out: one parallel decision call per turn. Absent port (tests /
+    # disabled) or any failure inside the client degrades to the neutral
+    # general/agent route — the bot keeps working without Jev.
+    decisions_t0 = time.monotonic()
+    if deps.turn_decisions is not None:
+        decisions = await deps.turn_decisions.decide_turn(
+            user_text=state.user_text,
+            recent_messages=recent_messages,
+        )
+    else:
+        decisions = TurnDecisions(degraded=True)
+    timings["jev_ms"] = int(round((time.monotonic() - decisions_t0) * 1000))
+    if decisions.degraded:
+        timings["jev_degraded"] = True
+    else:
+        timings["jev_model"] = decisions.model
+    turn_route = route_from_decisions(state.user_text, decisions)
     trace_sink.record_decision("route_selected", turn_route.reason)
 
     try:
@@ -1009,7 +1009,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             direct_context is None
             and allow_legacy_faq_bypass
             and deps.faq_bypass is not None
-            and _faq_bypass_allowed(state.user_text, recent_messages)
+            and _faq_bypass_allowed(decisions)
         ):
             try:
                 # Bound the bypass by both the soft cap and the propagated turn
@@ -1021,7 +1021,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 )
                 bypass = await asyncio.wait_for(
                     deps.faq_bypass.try_answer(
-                        _vacancy_evidence_query(state.user_text, recent_messages)
+                        _vacancy_evidence_query(state.user_text, decisions, recent_messages)
                         or state.user_text
                     ),
                     timeout=bypass_budget,
@@ -1141,6 +1141,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     "chat_id": recipient_id,
                     "recent_messages": recent_messages,
                     "timings": timings,
+                    "decisions": decisions,
                 }
                 if project_context is not None:
                     agent_kwargs["project_context"] = project_context

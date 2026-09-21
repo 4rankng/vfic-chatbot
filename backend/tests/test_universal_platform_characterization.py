@@ -16,7 +16,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.api import knowledge as knowledge_api
-from app.graph.router import route_turn
+from app.graph.ports import TurnDecisions
+from app.graph.router import route_from_decisions
 from app.graph.context import build_system_prompt
 from app.models.knowledge import KBVersionStatus
 from app.graph.types import BotRunState
@@ -38,7 +39,7 @@ FORBIDDEN_FIXTURE_TEXT = (
     "recruitment_factory_builtin",
 )
 REQUIRED_BEHAVIORAL_BASELINES = {
-    "test_graph_router.py": ("test_", "route_turn"),
+    "test_graph_decisions.py": ("test_", "route_from_decisions"),
     "test_graph_runner_turn.py": ("test_", "run_turn"),
     "test_graph_factories.py": ("test_build_deps_wires_graphdeps",),
     "test_lead_extraction.py": ("CandidateExtractionService",),
@@ -104,7 +105,10 @@ def test_installation_factory_has_no_implicit_business_defaults():
 
 
 def test_current_recruitment_router_is_a_migration_oracle_not_a_universal_router():
-    route = route_turn("LG có xe đưa đón ca đêm mấy giờ?")
+    route = route_from_decisions(
+        "LG có xe đưa đón ca đêm mấy giờ?",
+        TurnDecisions(intent="timetable", intent_confidence=0.99),
+    )
 
     assert route.strategy == "structured_lookup"
     assert route.tools == ("search_bus_timetable",)
@@ -114,7 +118,10 @@ def test_explicit_recruitment_fixture_reproduces_current_route_and_tool_selectio
     fixture = _load_fixture("recruitment_installation.json")
     golden = next(item for item in fixture["golden_turns"] if item["kind"] == "route")
 
-    route = route_turn(golden["user_text"])
+    route = route_from_decisions(
+        golden["user_text"],
+        TurnDecisions(intent="recommend", intent_confidence=0.94),
+    )
 
     assert route.strategy == golden["expected_strategy"]
     assert list(route.tools) == golden["expected_tools"]

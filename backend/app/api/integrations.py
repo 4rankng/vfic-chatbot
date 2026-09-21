@@ -38,6 +38,9 @@ from app.schemas.integrations import (
     CustomLlmIntegrationSettingsOut,
     CustomLlmIntegrationSettingsUpdate,
     CustomLlmIntegrationTestOut,
+    JevIntegrationSettingsOut,
+    JevIntegrationSettingsUpdate,
+    JevIntegrationTestOut,
     CustomLlmProbeIn,
     MinimaxIntegrationSettingsOut,
     MinimaxIntegrationSettingsUpdate,
@@ -551,6 +554,68 @@ async def update_custom_llm_integration_settings(
     )
     return CustomLlmIntegrationSettingsOut.model_validate(
         await IntegrationSettingsService(db).admin_custom_llm_view()
+    )
+
+
+@router.get("/jev", response_model=JevIntegrationSettingsOut)
+async def get_jev_integration_settings(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> JevIntegrationSettingsOut:
+    return JevIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_jev_view()
+    )
+
+
+@router.put("/jev", response_model=JevIntegrationSettingsOut)
+async def update_jev_integration_settings(
+    body: JevIntegrationSettingsUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> JevIntegrationSettingsOut:
+    await IntegrationSettingsService(db).update_jev(
+        body.model_dump(exclude_unset=True),
+        actor_id=admin.id,
+    )
+    return JevIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_jev_view()
+    )
+
+
+@router.post("/jev/test", response_model=JevIntegrationTestOut)
+async def test_jev_integration_settings(
+    body: JevIntegrationSettingsUpdate | None = None,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> JevIntegrationTestOut:
+    """Make a real systemone call so a bad key fails here, not in a live turn.
+
+    Credentials may be supplied in the body so they can be validated BEFORE
+    being saved; anything omitted falls back to the stored configuration.
+    """
+    from app.services.llm_probe import probe_typesafe_systemone
+
+    stored = await IntegrationSettingsService(db).resolve_jev()
+    supplied = body.model_dump(exclude_unset=True) if body is not None else {}
+    api_key = supplied.get("jev_api_key") or stored.api_key
+    model = supplied.get("jev_model") or stored.model
+
+    missing = [
+        name
+        for name, value in (("jev_api_key", api_key), ("jev_model", model))
+        if not value
+    ]
+    if missing:
+        return JevIntegrationTestOut(ok=False, configured=False, missing=missing)
+
+    result = await probe_typesafe_systemone(api_key=api_key, model=model)
+    return JevIntegrationTestOut(
+        ok=result["ok"],
+        configured=True,
+        missing=[],
+        latency_ms=result["latency_ms"],
+        sample=result["sample"],
+        error=result["error"],
     )
 
 

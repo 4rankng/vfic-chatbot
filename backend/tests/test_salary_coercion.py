@@ -7,7 +7,6 @@ marker, and the Vietnamese phrasings candidates use to ask for salary ordering.
 
 from __future__ import annotations
 
-from app.graph.router import detect_salary_sort_intent
 from app.services.knowledge.derived_jobs import _coerce_salary_value, salary_from_feature
 
 
@@ -111,43 +110,8 @@ class TestSalaryFromFeature:
         assert salary_from_feature({"value_json": "not a dict"}) == (None, None)
 
 
-class TestDetectSalarySortIntent:
-    def test_cao_xuong_thap_detected_as_desc(self) -> None:
-        # The exact user phrasing from the reported bug.
-        assert (
-            detect_salary_sort_intent(
-                "co bao nhieu vi tri dang tuyen sap xep theo luong tu cao xuong thap"
-            )
-            == "salary_desc"
-        )
-
-    def test_diacritics_cao_xuong_thap(self) -> None:
-        assert (
-            detect_salary_sort_intent("sắp xếp theo lương từ cao xuống thấp")
-            == "salary_desc"
-        )
-
-    def test_thap_len_cao_detected_as_asc(self) -> None:
-        assert (
-            detect_salary_sort_intent("sắp xếp theo lương từ thấp lên cao")
-            == "salary_asc"
-        )
-
-    def test_thu_nhap_keyword_also_triggers(self) -> None:
-        assert (
-            detect_salary_sort_intent("sắp xếp theo thu nhập từ cao xuống thấp")
-            == "salary_desc"
-        )
-
-    def test_plain_sap_xep_luong_defaults_to_desc(self) -> None:
-        assert detect_salary_sort_intent("sắp xếp theo lương") == "salary_desc"
-
-    def test_plain_vacancy_query_no_sort(self) -> None:
-        assert detect_salary_sort_intent("có bao nhiêu nhà máy đang tuyển") is None
-
-    def test_empty_text(self) -> None:
-        assert detect_salary_sort_intent("") is None
-
-    def test_salary_question_without_sort_not_triggered(self) -> None:
-        # A detail question about salary should not trigger sort.
-        assert detect_salary_sort_intent("lương ở Rorze bao nhiêu") is None
+# Sort-direction detection (salary/recency) moved to the Jev fan-out
+# (``app.graph.decisions``, the ``sort_by`` judgment). The policy mapping is
+# pinned in tests/test_graph_decisions.py; the phrase corpus that used to
+# drive the keyword detector lives on as the opt-in live replay expectations
+# in tests/test_golden_set.py.

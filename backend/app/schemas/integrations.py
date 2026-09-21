@@ -263,7 +263,8 @@ class CustomLlmIntegrationTestOut(BaseModel):
 class JevIntegrationSettingsOut(BaseModel):
     jev_api_key: SecretStatus
     jev_model: str
-    # True only when the key is present, so the UI can say "armed".
+    jev_enable: bool
+    # True only when enabled AND the key is present, so the UI can say "armed".
     jev_usable: bool
 
 
@@ -272,6 +273,7 @@ class JevIntegrationSettingsUpdate(BaseModel):
 
     jev_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
     jev_model: str | None = Field(default=None, min_length=1, max_length=128)
+    jev_enable: bool | None = None
 
 
 class JevIntegrationTestOut(BaseModel):

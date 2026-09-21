@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from app.graph.ports import TurnDecisions
 from app.graph.runtime_policy import build_policy_system_prompt, build_resolved_runtime_policy
 from app.graph.runner import _agent_turn, run_manifest_composed_agent
 
@@ -189,6 +190,7 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
         chat_id="chat-1",
         recent_messages=[],
         manifest_policy=policy,
+        decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9),
     )
 
     assert reply == "Thông tin có trong tài liệu."
@@ -225,6 +227,7 @@ async def test_non_recruitment_manifest_without_knowledge_authority_fails_closed
         chat_id="chat-1",
         recent_messages=[],
         manifest_policy=policy,
+        decisions=TurnDecisions(intent="recommend", intent_confidence=0.94, vacancy_listing=True),
     )
 
     assert "chưa thể kiểm tra" in reply.lower()
@@ -264,6 +267,7 @@ async def test_manifest_without_job_catalog_authority_fails_closed_for_generic_l
         chat_id="chat-1",
         recent_messages=[],
         manifest_policy=policy,
+        decisions=TurnDecisions(intent="recommend", intent_confidence=0.94, vacancy_listing=True),
     )
 
     assert "chưa thể kiểm tra" in reply.lower()
@@ -299,6 +303,7 @@ async def test_non_recruitment_manifest_preserves_generic_catalog_authority():
             chat_id="chat-1",
             recent_messages=[],
             manifest_policy=policy,
+            decisions=TurnDecisions(intent="recommend", intent_confidence=0.94, vacancy_listing=True),
         )
         == "catalog reply"
     )
@@ -340,6 +345,7 @@ async def test_non_recruitment_manifest_scopes_specific_vacancy_followup_to_know
             chat_id="chat-1",
             recent_messages=history,
             manifest_policy=policy,
+            decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9, recent_vacancy=True),
         )
         == "knowledge reply"
     )

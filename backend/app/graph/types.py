@@ -18,6 +18,7 @@ from app.graph.ports import (
     ReplyPolicyPort,
     GraphRetrievalPort,
     RuntimePolicyPort,
+    TurnDecisionsPort,
 )
 from app.recruitment.application.ports import ProactiveStatePort
 from app.conversation_messaging.application.ports import DeliveryStatusValuesPort
@@ -149,6 +150,11 @@ class GraphDeps:
     proactive_state: ProactiveStatePort | None = None
     # Persistence enum translation injected by the messaging composition root.
     delivery_statuses: DeliveryStatusValuesPort | None = None
+    # Jev turn-decision fan-out (intent, sort direction, pleasantry kind,
+    # context flags). None in tests and on deployments where the operator has
+    # not enabled Jev: the runner then routes on the neutral fallback route
+    # (general/agent) and the bot keeps working.
+    turn_decisions: TurnDecisionsPort | None = None
 
 
 def _now() -> datetime:
