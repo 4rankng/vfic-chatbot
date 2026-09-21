@@ -254,6 +254,37 @@ class CustomLlmIntegrationTestOut(BaseModel):
     error: str | None = None
 
 
+# ─── TypeSafe Jev (System One decision model) ───────────────────────────────
+# Server-side decision hops for the bot turn: intent routing, sort direction,
+# pleasantry kind, and conversation-context flags. One key + model pair, stored
+# like every other integration secret (encrypted at rest, set from the admin UI).
+
+
+class JevIntegrationSettingsOut(BaseModel):
+    jev_api_key: SecretStatus
+    jev_model: str
+    # True only when the key is present, so the UI can say "armed".
+    jev_usable: bool
+
+
+class JevIntegrationSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    jev_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    jev_model: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class JevIntegrationTestOut(BaseModel):
+    """Result of a real systemone call against TypeSafe."""
+
+    ok: bool
+    configured: bool
+    missing: list[str]
+    latency_ms: int | None = None
+    sample: str | None = None
+    error: str | None = None
+
+
 # ─── Facebook / Messenger (Phase 4) ─────────────────────────────────────────
 # Privacy contract: no Page token, app secret, or raw PSID ever appears in
 # these responses. Page ids are surfaced as a masked suffix only; the safe

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:93ababd69d0fd28ec62302159270014603020c2ec637dc894f82b20af7344970",
+  "pageVersion": "sha256:8ca94ffcb7e52e7f822ab2ecb5c0037ce58095b9800f86c6e145eecaf1ff4e12",
   "claims": [
     {
       "id": "claim_4a5f34651010427fb81d496a6ebd0b55",
-      "statement": "JWT tokens carry sub, type (access|refresh), ver (user version bumped on disable/delete), and runtime iat/exp; access expires in 60 minutes, refresh in 14 days, and decode runs on a worker thread via asyncio.to_thread so argon2 / jose do not block the event loop.",
+      "statement": "JWT tokens carry sub, type (access|refresh), ver (user version bumped on disable/delete), and runtime iat/exp; access expires in 60 minutes, refresh in 14 days. Argon2 password hashing and PyJWT encode/decode run on a worker thread via asyncio.to_thread so the crypto does not block the event loop. PyJWT replaced python-jose to drop the ecdsa dependency affected by the Minerva timing attack on P-256 (CVE-2024-23342); it uses the cryptography library for HS256/RS256/ES256/EdDSA.",
       "evidence": [
         {
           "resource": "repo://backend/app/core/config.py",
@@ -12,7 +12,7 @@
         },
         {
           "resource": "repo://backend/app/core/security.py",
-          "version": "repo-file-v1:sha256:f3276911464bd6ae15f6a31b0c46defa97a2e16b5737b5739c8601b2a29e3492"
+          "version": "repo-file-v1:sha256:c2c82c91dd9e424abc36753ca537efb6507e0282df6761eadfc8fe17a842ce28"
         }
       ]
     },
@@ -141,6 +141,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-21T02:42:43.794Z"
+    "at": "2026-09-21T12:36:52.415Z"
   }
 }

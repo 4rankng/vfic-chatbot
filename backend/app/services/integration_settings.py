@@ -30,11 +30,13 @@ from app.core.preamble_cache import (
     NS_INTEGRATION_CUSTOM_LLM,
     NS_INTEGRATION_OPENROUTER,
     NS_INTEGRATION_ZALO,
+    NS_INTEGRATION_JEV,
     cached_facebook_oauth_config,
     cached_minimax_config,
     cached_custom_llm_config,
     cached_openrouter_config,
     cached_zalo_config,
+    cached_jev_config,
     evict_local_namespace,
 )
 from app.models.integration import IntegrationSetting
@@ -86,6 +88,20 @@ CUSTOM_LLM_SETTING_KEYS = (
     CUSTOM_LLM_FAST_MODEL,
     LLM_DEFAULT_PROVIDER,
 )
+
+# TypeSafe Jev (System One decision model) — the server-side decision hop for
+# the bot turn: intent routing, sort direction, pleasantry kind, and
+# conversation-context flags, answered in one parallel fan-out call. Jev is
+# NOT part of the chat-LLM failover chain: when it is absent or erroring,
+# turns fall back to the neutral agent route, not to another provider.
+JEV_API_KEY = "jev_api_key"
+JEV_MODEL = "jev_model"
+# Pin per deployment via the settings UI (e.g. "jev-1.13.0"); "jev-latest"
+# tracks the vendor default and may change behavior on vendor releases.
+JEV_DEFAULT_MODEL = "jev-latest"
+
+JEV_SETTING_KEYS = (JEV_API_KEY, JEV_MODEL)
+JEV_SECRET_KEYS = (JEV_API_KEY,)
 
 # Real-probe outcomes per provider (persisted so the settings page can show
 # "tested 2 minutes ago · 412 ms" across reloads). Stored as plaintext JSON in
@@ -225,6 +241,19 @@ class CustomLlmRuntimeConfig:
     def usable(self) -> bool:
         """Whether this config can actually serve a turn."""
         return bool(self.enabled and self.api_key and self.base_url and self.agent_model)
+
+
+@dataclass(frozen=True)
+class JevRuntimeConfig:
+    """TypeSafe Jev decision-hop credentials (settings UI first, env fallback)."""
+
+    api_key: str = ""
+    model: str = JEV_DEFAULT_MODEL
+
+    @property
+    def usable(self) -> bool:
+        """Whether decision hops can actually run: a key is all that is required."""
+        return bool(self.api_key)
 
 
 class IntegrationSettingsCipher:
@@ -555,6 +584,62 @@ class IntegrationSettingsService:
             "llm_failover_order": list(await self.resolve_llm_failover_order()),
             "last_test": await self.get_provider_test_result("custom"),
         }
+
+    async def resolve_jev(self) -> JevRuntimeConfig:
+        """Resolve Jev decision-hop credentials (DB row first, JEV_API_KEY env fallback).
+
+        The env fallback reads ``os.environ`` directly because the key is
+        operator-supplied per deployment (e.g. exported in a shell profile)
+        and ``Settings`` intentionally has no ``jev_*`` field.
+        """
+
+        async def _load() -> dict:
+            stored = await self._stored_values(JEV_SETTING_KEYS)
+            return JevRuntimeConfig(
+                api_key=stored.get(JEV_API_KEY) or os.environ.get("JEV_API_KEY", ""),
+                model=stored.get(JEV_MODEL) or JEV_DEFAULT_MODEL,
+            ).__dict__
+
+        cached = await cached_jev_config(_load)
+        return JevRuntimeConfig(**cached)
+
+    async def admin_jev_view(self) -> dict:
+        cfg = await self.resolve_jev()
+        return {
+            "jev_api_key": {
+                "configured": bool(cfg.api_key),
+                "preview": _preview(cfg.api_key),
+            },
+            "jev_model": cfg.model,
+            "jev_usable": cfg.usable,
+        }
+
+    async def update_jev(self, values: dict[str, str | None], *, actor_id) -> list[str]:
+        changed: list[str] = []
+        for key, value in values.items():
+            if key not in JEV_SETTING_KEYS or value is None:
+                continue
+            if await self._write_setting(
+                key,
+                str(value),
+                actor_id=actor_id,
+                is_secret=key in JEV_SECRET_KEYS,
+            ):
+                changed.append(key)
+
+        if changed:
+            await record_audit(
+                self.db,
+                action="update_jev_integration_settings",
+                actor_id=actor_id,
+                target_type="integration_settings",
+                target_id="jev",
+                payload={"changed_keys": changed},
+            )
+            await self.db.commit()
+            evict_local_namespace(NS_INTEGRATION_JEV)
+            await bump_cache_version(NS_INTEGRATION_JEV)
+        return changed
 
     async def resolve_llm_failover_order(self) -> tuple[str, ...]:
         """Operator-ranked spare order; canonical ranking when nothing is stored.

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:da536944cceabc398980e7021b39c8327dd57935eec87efacc01b497b2954106",
+  "pageVersion": "sha256:2e07e73c81351e5ffc0f7f2bda276512d33b7f5ad5a36e31e743ee430931f8d4",
   "claims": [
     {
       "id": "claim_fd6902f99f4a42a1a72980276139baa6",
@@ -18,11 +18,19 @@
     },
     {
       "id": "claim_646870ae0a1042e897e45fe4261d8d48",
-      "statement": "Vietnamese domain terms glossary: Quản trị (Admin), Giám đốc (Manager), Kế toán (Accountant), Lái xe (Driver), đồng (VND), Mới/Đang liên hệ/Đã đăng ký/Bỏ qua (lead stages), Cần trả lời (needs reply kanban section).",
+      "statement": "Vietnamese domain terms for TingHire: Quản trị (admin role), Tuyển dụng (recruiter role, default), đồng (VND currency), lead stages NEW/CONTACTING/REGISTERED/SKIPPED, and common desired_job categories (lái xe, công nhân, kho, bán hàng, bảo vệ). The system has two roles (admin, recruiter); Lái xe is a candidate job category, not a system role.",
       "evidence": [
+        {
+          "resource": "repo://backend/app/identity/domain/role.py",
+          "version": "repo-file-v1:sha256:bc4ffe53c2a48506db039bdd737150e1a56d278ab96322ba027544e54dc6b270"
+        },
         {
           "resource": "repo://backend/app/models/user.py",
           "version": "repo-file-v1:sha256:ddffa276151109962f2b00df11fe30b42ff5239ef25e98f635ec252eb9367224"
+        },
+        {
+          "resource": "repo://backend/app/prompts/candidate_extraction.py",
+          "version": "repo-file-v1:sha256:7072261db5d2718edbab49b52587c72a2d8e28ea844e3cb9dca5e805f1d7979b"
         },
         {
           "resource": "repo://backend/app/recruitment/domain/statuses.py",
@@ -33,6 +41,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-21T02:42:43.794Z"
+    "at": "2026-09-21T12:36:52.415Z"
   }
 }

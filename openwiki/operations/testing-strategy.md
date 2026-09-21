@@ -23,7 +23,7 @@ sources:
 generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-21T02:42:43.794Z
+    at: 2026-09-21T12:36:52.415Z
 ---
 
 # Testing pyramid, integration lane, and E2E harness

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:b8a0b14b7196cdb7fbd14fb6a48afd4dc374ecc8c0ef2ac281c054aff8a61bc1",
+  "pageVersion": "sha256:0e87936458ddc4fabac4f6b0ff5904b4d36194be57b52eaec7ec2280d834547d",
   "claims": [
     {
       "id": "claim_4028f960068f40b7b3f590dd51576db6",
@@ -114,7 +114,7 @@
       "evidence": [
         {
           "resource": "repo://backend/app/core/security.py",
-          "version": "repo-file-v1:sha256:f3276911464bd6ae15f6a31b0c46defa97a2e16b5737b5739c8601b2a29e3492"
+          "version": "repo-file-v1:sha256:c2c82c91dd9e424abc36753ca537efb6507e0282df6761eadfc8fe17a842ce28"
         },
         {
           "resource": "repo://backend/scripts/create_admin.py",
@@ -129,6 +129,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-21T02:42:43.794Z"
+    "at": "2026-09-21T12:36:52.415Z"
   }
 }

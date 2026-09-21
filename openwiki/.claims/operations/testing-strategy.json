@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:26e8245ca94d73822cdc6e2a75ceb8f0170229d42025e1d657083d6c91953fce",
+  "pageVersion": "sha256:b3e535f69f1dc2e743d48e536422bb527229280742755038f9ce332b47c0ffe2",
   "claims": [
     {
       "id": "claim_417eea35325f47dbaf97e5fd9b1c54ac",
@@ -8,7 +8,7 @@
       "evidence": [
         {
           "resource": "repo://backend/pyproject.toml",
-          "version": "repo-file-v1:sha256:cf0fb57cc7363ee0c3aa57f156827cdd12023ab78a7aa78507211d48fdb73e2b"
+          "version": "repo-file-v1:sha256:f31aa325af6e8909f65034720706fc20c41c02a7dbac8c46c4b8b22eac68a872"
         },
         {
           "resource": "repo://backend/tests/conftest.py",
@@ -81,6 +81,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-21T02:42:43.794Z"
+    "at": "2026-09-21T12:36:52.415Z"
   }
 }

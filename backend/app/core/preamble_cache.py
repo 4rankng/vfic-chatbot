@@ -45,6 +45,7 @@ NS_INTEGRATION_OPENROUTER = "integration_openrouter"
 NS_INTEGRATION_CUSTOM_LLM = "integration_custom_llm"
 NS_INTEGRATION_ZALO = "integration_zalo"
 NS_INTEGRATION_FACEBOOK = "integration_facebook"
+NS_INTEGRATION_JEV = "integration_jev"
 NS_PREAMBLE = "preamble"
 
 # Integration settings change only via the admin UI; 5 min is a safety net for
@@ -217,6 +218,16 @@ async def cached_zalo_config(loader: Callable[[], Awaitable[dict]]) -> dict:
     return await cached_value(
         key_prefix="preamble:zalo",
         namespace=NS_INTEGRATION_ZALO,
+        ttl_seconds=_INTEGRATION_TTL_SECONDS,
+        loader=loader,
+    )
+
+
+async def cached_jev_config(loader: Callable[[], Awaitable[dict]]) -> dict:
+    """Cache the Jev runtime config dict (keyed by the jev namespace)."""
+    return await cached_value(
+        key_prefix="preamble:jev",
+        namespace=NS_INTEGRATION_JEV,
         ttl_seconds=_INTEGRATION_TTL_SECONDS,
         loader=loader,
     )

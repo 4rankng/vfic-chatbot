@@ -40,10 +40,10 @@ sources:
     resource: repo://backend/scripts/seed_dev.py
   - id: openwiki-source-012f2c78e3b1446dfc35803f
     resource: repo://Makefile
-generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+generated: { by: "opencode", at: "2026-09-21T12:36:52.415Z" }
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-21T02:42:43.794Z
+    at: 2026-09-21T12:36:52.415Z
 ---
 
 Schema ownership is **explicit**: Alembic writes the DDL; SQLAlchemy 2.x
@@ -68,10 +68,18 @@ backend/alembic/
     ├── 0051_bot_run_decision_trace.py
     ├── 0052_external_source_sync_state.py
     ├── 0053_single_page_external_source_sync_state.py
+    ├── 0054_channel_account_projects.py
     └── 091e7edc9f76_merge_0013_password_reset_otps_0013_.py
 ```
 
-The latest head on the main branch is `0053_single_page_external_source_sync_state`.
+The latest head on the main branch is `0054_channel_account_projects`,
+which adds Multi-Page Facebook Messenger support: relaxes
+`uq_channel_accounts_one_active_facebook_messenger` (a single Page per
+provider now, not a single Page globally) and adds the
+`channel_account_projects` join table that scopes each conversation's
+Project catalog to its Page. The downgrade is FAIL-CLOSED — it refuses
+while more than one ACTIVE facebook_messenger row exists.
+
 There is one merge migration (`091e7edc9f76`) that resolved a parallel
 heads situation during the password-reset OTP work. `make release-check`
 asserts exactly one Alembic head before any deploy.
@@ -154,6 +162,9 @@ the model:
 - `0052_external_source_sync_state` and
   `0053_single_page_external_source_sync_state` — Google-Sheet-driven
   sync bookkeeping for direct-context FAQ pages.
+- `0054_channel_account_projects` — Multi-Page Facebook Messenger:
+  per-account ACTIVE uniqueness plus the `channel_account_projects`
+  join table that maps Pages to Projects.
 
 The migration files' docstrings carry the rationale (e.g. "innocent-
 looking migration X would have silently dropped audit rows"). The

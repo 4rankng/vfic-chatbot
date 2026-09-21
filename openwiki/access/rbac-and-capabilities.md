@@ -5,7 +5,7 @@ description: How authentication (JWT access + rotated refresh, argon2 hashing), 
 tags: [auth, jwt, rbac, capabilities, argon2, parity, recruiter, admin]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-21T02:42:43.794Z
+    at: 2026-09-21T12:36:52.415Z
 sources:
   - id: openwiki-source-31cf33c71e0ccd9bfb3ea9a3
     resource: repo://backend/app/access/application/roles.py
@@ -35,7 +35,7 @@ sources:
     resource: repo://backend/tests/test_capability_registry.py
   - id: openwiki-source-472e308be87e0efe4fb4c277
     resource: repo://frontend/src/components/atomic-crm/providers/commons/canAccess.ts
-generated: { by: "opencode", at: "2026-09-21T02:42:43.794Z" }
+generated: { by: "opencode", at: "2026-09-21T12:36:52.415Z" }
 ---
 
 TingHire splits access control into three layers: **authentication**
@@ -58,7 +58,7 @@ the application-level authenticator.
 | `sub` | str (user UUID) | Subject — the user's id |
 | `type` | `"access"` \| `"refresh"` | One of the two token kinds |
 | `ver` | int | User version — bumped on disable/delete so a rotated token cannot outlive the user |
-| `iat`, `exp` | datetime (runtime) | Standard timestamps; the app only reads `ver`, not `iat`/`exp`, to avoid pinning jose's decoded types |
+| `iat`, `exp` | datetime (runtime) | Standard timestamps; the app only reads `ver`, not `iat`/`exp`, to avoid pinning PyJWT's decoded timestamp type |
 
 Settings (`backend/app/core/config.py`) define:
 
@@ -72,12 +72,17 @@ set a real secret so admin JWTs cannot be forged from the public default.
 
 ### Crypto off the event loop
 
-`passlib` (argon2) and `jose` (JWT) are CPU-bound and blocking. The async
-helpers `hash_password` / `verify_password` / `_encode` / `decode_token` wrap
-the sync primitives with `asyncio.to_thread` so a login burst cannot stall
-the event loop and freeze in-flight webhooks or SSE streams. Sync
-`*_sync` variants exist for the create-admin / migrate scripts; the async
-app must never call them from an `async def`.
+`passlib` (argon2) and PyJWT (encode/decode) are CPU-bound and blocking.
+The async helpers `hash_password` / `verify_password` / `_encode` /
+`decode_token` wrap the sync primitives with `asyncio.to_thread` so a login
+burst cannot stall the event loop and freeze in-flight webhooks or SSE
+streams. Sync `*_sync` variants exist for the create-admin / migrate
+scripts; the async app must never call them from an `async def`.
+
+PyJWT replaced python-jose as the JWT library: python-jose 3.5.0 still
+pulls `ecdsa`, which is affected by the Minerva timing attack on P-256
+(CVE-2024-23342) and has no upstream fix. PyJWT uses `cryptography` for
+HS256/RS256/ES256/EdDSA and does not transitively depend on `ecdsa`.
 
 ### Routes and rate limits
 

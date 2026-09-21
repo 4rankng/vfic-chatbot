@@ -6,16 +6,20 @@ tags: [quickstart, routing, index, onboarding]
 sources:
   - id: openwiki-source-8037e2358a2c4f9b2c722a11
     resource: repo://AGENTS.md
+  - id: openwiki-source-8b373631ac8c5d9bdb7cf697
+    resource: repo://backend/app/identity/domain/role.py
   - id: openwiki-source-83138473302f47a1c6ad79fa
     resource: repo://backend/app/models/user.py
+  - id: openwiki-source-7bf716cadda110352bd12063
+    resource: repo://backend/app/prompts/candidate_extraction.py
   - id: openwiki-source-e4225e8ec527cd572e3a6fe0
     resource: repo://backend/app/recruitment/domain/statuses.py
   - id: openwiki-source-097e0c9cfb011c3e4a091e1a
     resource: repo://docs/codebase-summary.md
-generated: { by: "claude-code", at: "2026-09-08T09:17:45.993Z" }
+generated: { by: "opencode", at: "2026-09-21T12:36:52.415Z" }
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-21T02:42:43.794Z
+    at: 2026-09-21T12:36:52.415Z
 ---
 
 # TingHire quickstart
@@ -95,9 +99,7 @@ follow the link.
 | Term | Meaning |
 |---|---|
 | *Quản trị* | Admin role |
-| *Giám đốc* | Manager role |
-| *Kế toán* | Accountant role |
-| *Lái xe* | Driver role |
-| *đồng* (VND) | Vietnamese currency (no decimal places) |
-| *Mới / Đang liên hệ / Đã đăng ký / Bỏ qua* | Lead stages (New / Contacting / Registered / Skipped) |
-| *Cần trả lời* | Needs reply (kanban priority section) |
+| *Tuyển dụng* | Recruiter role (default) |
+| *đồng* (VND) | Vietnamese currency |
+| *Mới / Đang liên hệ / Đã đăng ký / Bỏ qua* | Lead stages (NEW / CONTACTING / REGISTERED / SKIPPED) |
+| *lái xe / công nhân / kho / bán hàng / bảo vệ* | Common candidate desired_job categories |
