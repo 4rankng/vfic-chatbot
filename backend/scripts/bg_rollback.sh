@@ -20,8 +20,34 @@ _count_lines() {
   awk 'NF { count += 1 } END { print count + 0 }'
 }
 
+# Expected container count for a service, read from the compose file
+# (``deploy.replicas``) instead of a literal. A hardcoded 2 here aborted the
+# 2026-09-22 deploy *after* the flip once worker-chatbot moved to 3 replicas, and
+# the same literal in bg_rollback.sh then failed the rollback verification too.
+# Falls back to 1 when the count cannot be read, which is safe because the check
+# only fails when FEWER containers are running than declared.
+declared_replicas() {
+  local service="$1" value
+  value="$(
+    IMAGE_TAG="${IMAGE_TAG:-latest}" docker compose config --format json 2>/dev/null \
+      | python3 -c '
+import json, sys
+
+services = json.load(sys.stdin).get("services", {})
+service = services.get(sys.argv[1], {})
+replicas = service.get("deploy", {}).get("replicas", 1)
+print(replicas if isinstance(replicas, int) and replicas > 0 else 1)
+' "$service" 2>/dev/null || true
+  )"
+  case "$value" in
+    '' | *[!0-9]*) echo 1 ;;
+    *) echo "$value" ;;
+  esac
+}
+
 require_running_service_count() {
-  local service="$1" expected="$2"
+  local service="$1" expected="${2:-}"
+  [ -n "$expected" ] || expected="$(declared_replicas "$service")"
   local cids cid state health restart found=0 actual_count
   cids="$(IMAGE_TAG="$PREV_TAG" docker compose ps -q "$service" 2>/dev/null || true)"
   if [ -z "$cids" ]; then
@@ -29,8 +55,8 @@ require_running_service_count() {
     return 1
   fi
   actual_count="$(printf '%s\n' "$cids" | _count_lines)"
-  if [ "$actual_count" != "$expected" ]; then
-    echo "==> rollback check: service $service expected $expected running container(s), found $actual_count" >&2
+  if [ "$actual_count" -lt "$expected" ]; then
+    echo "==> rollback check: service $service expected at least $expected running container(s), found $actual_count" >&2
     return 1
   fi
   while IFS= read -r cid; do
@@ -105,12 +131,12 @@ PY
   # budget instead of failing on the first health=starting sighting.
   local _deadline=$(( $(date +%s) + ${POST_FLIP_WAIT_BUDGET:-300} ))
   while :; do
-    require_running_service_count "frontend" 1 &&
-      require_running_service_count "worker-chatbot" 2 &&
-      require_running_service_count "worker-persistence" 1 &&
-      require_running_service_count "worker-ingest" 1 &&
-      require_running_service_count "worker-followup" 1 &&
-      require_running_service_count "scheduler" 1 && break
+    require_running_service_count "frontend" &&
+      require_running_service_count "worker-chatbot" &&
+      require_running_service_count "worker-persistence" &&
+      require_running_service_count "worker-ingest" &&
+      require_running_service_count "worker-followup" &&
+      require_running_service_count "scheduler" && break
     if [ "$(date +%s)" -ge "$_deadline" ]; then
       echo "==> rollback check: services still not ready after ${POST_FLIP_WAIT_BUDGET:-300}s budget" >&2
       return 1
