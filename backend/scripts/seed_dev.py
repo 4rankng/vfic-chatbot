@@ -1672,6 +1672,10 @@ def seed_performance_metrics(runs: list[BotRun], messages: list[Message]) -> Non
 
         end_to_end_ms = total_ms + preamble_ms + webhook_to_pickup_ms
         timings = {
+            # Marks this row as local demo telemetry: the performance dashboard
+            # renders it, and the release gate (slo_service.exclude_synthetic)
+            # ignores it so a seeded machine can still deploy.
+            "synthetic": True,
             "webhook_to_pickup_ms": webhook_to_pickup_ms,
             "preamble_ms": preamble_ms,
             "lead_ms": lead_ms,

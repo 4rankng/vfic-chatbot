@@ -193,7 +193,20 @@ async def _rollup_webhook_ack() -> tuple[float | None, float | None]:
 # ─── Main entry point ────────────────────────────────────────────────────────
 
 
-async def compute_slos(db: AsyncSession, interval: timedelta) -> list[SloResult]:
+# Telemetry written by scripts/seed_dev.py (local-only demo data) is tagged
+# with stage_timings.synthetic. The performance dashboard shows it on purpose,
+# but the release gate must never evaluate a release on it: seeded "critical"
+# turns tripped the full_answer p95 / error-rate gates on an otherwise clean
+# tree and blocked deploys from any machine that had been seeded.
+_SYNTHETIC_FILTER = " AND COALESCE(stage_timings->>'synthetic', '') = ''"
+
+
+async def compute_slos(
+    db: AsyncSession,
+    interval: timedelta,
+    *,
+    exclude_synthetic: bool = False,
+) -> list[SloResult]:
     """Compute all 7 SLOs over ``interval``. ``db`` is a short-lived session.
 
     Reuses the same ``percentile_cont``-over-``stage_timings`` pattern as
@@ -217,7 +230,9 @@ async def compute_slos(db: AsyncSession, interval: timedelta) -> list[SloResult]
     )
 
     # 2-5. Latency SLOs from BotRun.stage_timings (one query, four rollups).
-    latency_rollups = await _latency_rollups(db, interval)
+    latency_rollups = await _latency_rollups(
+        db, interval, exclude_synthetic=exclude_synthetic
+    )
 
     # queue_wait = webhook_to_pickup_ms + preamble_ms
     out.append(
@@ -279,7 +294,9 @@ async def compute_slos(db: AsyncSession, interval: timedelta) -> list[SloResult]
     )
 
     # 6. error_or_timeout_rate — % of turns with outcome != 'SENT'
-    err_rate = await _error_or_timeout_rate(db, interval)
+    err_rate = await _error_or_timeout_rate(
+        db, interval, exclude_synthetic=exclude_synthetic
+    )
     out.append(
         SloResult(
             name="error_or_timeout_rate",
@@ -312,7 +329,12 @@ async def compute_slos(db: AsyncSession, interval: timedelta) -> list[SloResult]
     return out
 
 
-async def count_measured_runs(db: AsyncSession, interval: timedelta) -> int:
+async def count_measured_runs(
+    db: AsyncSession,
+    interval: timedelta,
+    *,
+    exclude_synthetic: bool = False,
+) -> int:
     """Count the SLO population: bot runs with stage timings in the window.
 
     Mirrors ``_latency_rollups``' WHERE clause so the release gate can tell
@@ -324,13 +346,19 @@ async def count_measured_runs(db: AsyncSession, interval: timedelta) -> int:
             "SELECT count(*) FROM bot_runs "
             "WHERE started_at >= now() - (:interval)::interval "
             "AND stage_timings IS NOT NULL"
+            + (_SYNTHETIC_FILTER if exclude_synthetic else "")
         ),
         {"interval": interval},
     )
     return int(row.scalar_one())
 
 
-async def _latency_rollups(db: AsyncSession, interval: timedelta) -> dict:
+async def _latency_rollups(
+    db: AsyncSession,
+    interval: timedelta,
+    *,
+    exclude_synthetic: bool = False,
+) -> dict:
     """One round-trip: p50/p95 for queue_wait, cached lanes, and full_answer.
 
     ``queue_wait_ms`` is computed per-row as webhook_to_pickup_ms + preamble_ms
@@ -351,6 +379,7 @@ async def _latency_rollups(db: AsyncSession, interval: timedelta) -> dict:
     base = (
         "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
         "AND stage_timings IS NOT NULL"
+        + (_SYNTHETIC_FILTER if exclude_synthetic else "")
     )
 
     def pct(expr: str, p: str) -> str:
@@ -385,7 +414,12 @@ async def _latency_rollups(db: AsyncSession, interval: timedelta) -> dict:
     }
 
 
-async def _error_or_timeout_rate(db: AsyncSession, interval: timedelta) -> float | None:
+async def _error_or_timeout_rate(
+    db: AsyncSession,
+    interval: timedelta,
+    *,
+    exclude_synthetic: bool = False,
+) -> float | None:
     """% of turns with outcome != 'SENT' over the window. None if no turns."""
     sql = text(
         "SELECT "
@@ -393,6 +427,7 @@ async def _error_or_timeout_rate(db: AsyncSession, interval: timedelta) -> float
         "COUNT(*) FILTER (WHERE outcome IS DISTINCT FROM 'SENT') AS bad "
         "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
         "AND stage_timings IS NOT NULL"
+        + (_SYNTHETIC_FILTER if exclude_synthetic else "")
     )
     row = (await db.execute(sql, {"interval": interval})).one_or_none()
     if row is None or not row.total:

@@ -154,8 +154,14 @@ async def evaluate_release_gate(
     window_run_count: int | None = None
 
     if settings.release_gate_latency_slo_enabled:
-        window_run_count = await count_measured_runs(db, timedelta(hours=window_hours))
-        slos = await compute_slos(db, timedelta(hours=window_hours))
+        # Synthetic local-seed telemetry (stage_timings.synthetic) is demo data for
+        # the performance dashboard; a release is never evaluated on it.
+        window_run_count = await count_measured_runs(
+            db, timedelta(hours=window_hours), exclude_synthetic=True
+        )
+        slos = await compute_slos(
+            db, timedelta(hours=window_hours), exclude_synthetic=True
+        )
     else:
         not_evaluated.append("latency_slo")
 

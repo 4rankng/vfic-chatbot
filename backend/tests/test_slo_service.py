@@ -145,14 +145,14 @@ async def test_compute_slos_returns_seven_named_slos(monkeypatch):
     """All 7 directive SLOs present, with correct names + units."""
 
     # Stub the DB-backed rollups to known values.
-    async def fake_latency(db, interval):
+    async def fake_latency(db, interval, **_kwargs):
         return {
             "queue_wait": {"p50": 80.0, "p95": 130.0},  # green (<150)
             "cached": {"p50": 250.0, "p95": 480.0},  # green (<500)
             "full_answer": {"p50": 2200.0, "p95": 3900.0},  # green (<4000)
         }
 
-    async def fake_err_rate(db, interval):
+    async def fake_err_rate(db, interval, **_kwargs):
         return 0.5  # 0.5% < 1.0 → green
 
     async def fake_ack():
@@ -207,14 +207,14 @@ async def test_compute_slos_returns_seven_named_slos(monkeypatch):
 async def test_compute_slos_red_status_when_p95_exceeds_target(monkeypatch):
     """full_answer p95 > 1.5× target → red."""
 
-    async def fake_latency(db, interval):
+    async def fake_latency(db, interval, **_kwargs):
         return {
             "queue_wait": {"p50": 80.0, "p95": 130.0},
             "cached": {"p50": 250.0, "p95": 480.0},
             "full_answer": {"p50": 5000.0, "p95": 7_000.0},  # > 1.5×4000 = 6000 → red
         }
 
-    async def fake_err_rate(db, interval):
+    async def fake_err_rate(db, interval, **_kwargs):
         return 0.5
 
     async def fake_ack():
@@ -230,14 +230,14 @@ async def test_compute_slos_red_status_when_p95_exceeds_target(monkeypatch):
 
 
 async def test_compute_slos_amber_when_between_target_and_1_5x(monkeypatch):
-    async def fake_latency(db, interval):
+    async def fake_latency(db, interval, **_kwargs):
         return {
             "queue_wait": {"p50": 100.0, "p95": 200.0},  # 150 < 200 ≤ 225 → amber
             "cached": {"p50": 250.0, "p95": 480.0},
             "full_answer": {"p50": 2200.0, "p95": 3900.0},
         }
 
-    async def fake_err_rate(db, interval):
+    async def fake_err_rate(db, interval, **_kwargs):
         return 0.5
 
     async def fake_ack():
@@ -253,14 +253,14 @@ async def test_compute_slos_amber_when_between_target_and_1_5x(monkeypatch):
 
 
 async def test_compute_slos_error_rate_red_when_over_target(monkeypatch):
-    async def fake_latency(db, interval):
+    async def fake_latency(db, interval, **_kwargs):
         return {
             "queue_wait": {"p50": 80.0, "p95": 130.0},
             "cached": {"p50": 250.0, "p95": 480.0},
             "full_answer": {"p50": 2200.0, "p95": 3900.0},
         }
 
-    async def fake_err_rate(db, interval):
+    async def fake_err_rate(db, interval, **_kwargs):
         return 5.0  # > 2×1.0 → red
 
     async def fake_ack():
@@ -397,3 +397,51 @@ class _Awaitable:
 
 def _async_return(value):
     return _Awaitable(value)
+
+
+async def test_synthetic_filter_only_applies_when_requested(monkeypatch):
+    """The dashboard keeps seed demo data; only the release gate excludes it."""
+    captured: list[str] = []
+
+    async def fake_latency(db, interval, **kwargs):
+        captured.append("latency")
+        return {"queue_wait": {"p50": None, "p95": None}, "cached": {"p50": None, "p95": None}, "full_answer": {"p50": None, "p95": None}}
+
+    async def fake_err_rate(db, interval, **kwargs):
+        captured.append("err")
+        return None
+
+    monkeypatch.setattr(slo_service, "_latency_rollups", fake_latency)
+    monkeypatch.setattr(slo_service, "_error_or_timeout_rate", fake_err_rate)
+    monkeypatch.setattr(slo_service, "_rollup_webhook_ack", lambda: _noop_ack())
+
+    default = slo_service._SYNTHETIC_FILTER
+    assert "synthetic" in default
+
+    class _CaptureSession:
+        def __init__(self) -> None:
+            self.sql: list[str] = []
+
+        async def execute(self, statement, params=None):
+            self.sql.append(str(statement))
+
+            class _R:
+                def scalar_one(self):
+                    return 5
+
+                def one_or_none(self):
+                    return None
+
+            return _R()
+
+    db = _CaptureSession()
+    await slo_service.count_measured_runs(db, timedelta(hours=24))
+    assert default not in db.sql[0]
+
+    db2 = _CaptureSession()
+    await slo_service.count_measured_runs(db2, timedelta(hours=24), exclude_synthetic=True)
+    assert default in db2.sql[0]
+
+
+async def _noop_ack():
+    return None, None

@@ -152,7 +152,7 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
 | ID | Category | Requirement |
 |---|---|---|
 | NFR-1 | Latency | Webhook ack <1s; bot turn completes within `chat_turn_job_timeout` = 60s (RQ kills stuck turns before per-chat lock expires). |
-| NFR-2 | Throughput | 6 `worker-chatbot` replicas sustain ~36 turns/min at 10s/turn — enough for ~100 concurrent bursty conversations. Scale to 8-10 replicas if `webhook_high` depth stays >0. |
+| NFR-2 | Throughput | 3 `worker-chatbot` replicas sustain ~18 turns/min at 10s/turn; recovered turns ride a lower-priority `recovery` queue so they never delay a live turn. Scale replicas if `webhook_high` depth stays >0. |
 | NFR-3 | Backpressure | Reject enqueue when `webhook_high` depth reaches `chat_queue_max_depth` = 40 (returns 503 so Zalo retries later). |
 | NFR-4 | Reliability | Reconcile sweep every 60s + 120s grace recovers any lost turn after worker crash (~3-4 min total). SETNX non-reentrancy + per-chat lock owner before touching PENDING rows. |
 | NFR-5 | Availability | Single small droplet; containers `restart: unless-stopped`. No external APM (no Sentry/Datadog). |

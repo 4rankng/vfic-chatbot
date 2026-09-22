@@ -81,7 +81,7 @@ dev: db
 		REDIS_URL="$$(grep "^REDIS_URL=" .env | cut -d= -f2-)"; \
 		(exec $(PY) -m uvicorn app.main:app --reload --port $(BACKEND_PORT)) & \
 		(exec $(PY) -m rq.cli worker ingest --worker-class rq.SimpleWorker --url "$$REDIS_URL") & \
-		(exec $(PY) -m rq.cli worker webhook_high persistence_low --worker-class rq.SimpleWorker --url "$$REDIS_URL") & \
+		(exec $(PY) -m rq.cli worker webhook_high recovery persistence_low --worker-class rq.SimpleWorker --url "$$REDIS_URL") & \
 		(exec $(PY) -m mock_servers.zalo_mock --port $(ZALO_MOCK_PORT)) & \
 		(cd ../frontend && exec npm run dev -- --port $(FRONTEND_PORT) --strictPort) & wait'
 

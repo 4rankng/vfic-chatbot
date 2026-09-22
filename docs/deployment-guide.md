@@ -379,8 +379,9 @@ procedure. Summary of the available targets:
 - Backend: `uvicorn app.main:app --reload --port 8000`.
 - Frontend: `npm run dev --port 5173 --strictPort` (Vite proxies `/api`,
   `/realtime`, `/socket.io` → `localhost:8000`).
-- Dev workers: `rq worker ingest` + `rq worker webhook_high persistence_low`
-  (production `worker-chatbot` consumes `webhook_high recovery`)
+- Dev workers: `rq worker ingest` + `rq worker webhook_high recovery persistence_low`
+  (production `worker-chatbot` consumes `webhook_high recovery`; live turns are
+  drained before recovered ones in both)
   as `SimpleWorker` on host.
 - Zalo mock: `mock_servers/zalo_mock.py` on `:8788`. `make dev` exports
   `ZALO_BOT_API_BASE` + `ZALO_BOT_TOKEN` so outbound Zalo traffic is captured
