@@ -96,6 +96,7 @@ type ProviderFormState = {
   custom_llm_api_key: string;
   custom_llm_base_url: string;
   custom_llm_agent_model: string;
+  custom_llm_context_window: string;
   jev_api_key: string;
   jev_model: string;
 };
@@ -208,6 +209,7 @@ const emptyProviderForm = (): ProviderFormState => ({
   custom_llm_api_key: "",
   custom_llm_base_url: "",
   custom_llm_agent_model: "",
+  custom_llm_context_window: "",
   jev_api_key: "",
   jev_model: "",
 });
@@ -223,6 +225,7 @@ type CustomLlmUpdatePayload = {
   custom_llm_api_key?: string;
   custom_llm_base_url?: string;
   custom_llm_agent_model?: string;
+  custom_llm_context_window?: string;
   custom_llm_enable?: boolean;
   llm_default_provider?: LlmProvider;
 };
@@ -381,6 +384,14 @@ const CUSTOM_LLM_PANEL: ProviderPanelDescriptor = {
       saved: (values) => values.customLlm?.custom_llm_agent_model ?? "",
     },
     {
+      kind: "text",
+      formKey: "custom_llm_context_window",
+      label: "Cửa sổ ngữ cảnh (token)",
+      placeholder: (bundle) =>
+        String(bundle.customLlm?.custom_llm_context_window ?? 32768),
+      saved: (values) => String(values.customLlm?.custom_llm_context_window ?? ""),
+    },
+    {
       kind: "secret",
       formKey: "custom_llm_api_key",
       label: "Access Token",
@@ -403,6 +414,7 @@ const CUSTOM_LLM_PANEL: ProviderPanelDescriptor = {
           ["custom_llm_api_key", form.custom_llm_api_key],
           ["custom_llm_base_url", form.custom_llm_base_url],
           ["custom_llm_agent_model", form.custom_llm_agent_model],
+          ["custom_llm_context_window", form.custom_llm_context_window],
         ] as const
       )
         .map(([key, raw]) => [key, raw.trim()] as const)

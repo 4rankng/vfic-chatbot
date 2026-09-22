@@ -83,7 +83,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
     "queue_producer": 40,
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "14d85b3f6f825e3de444339aa4e6d1eb1612bd926ef6f51241309027906c28ae"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "a35709aa65e9bd7c628ca8efe98baac58947e7dccc2a30ee83db056201b2c4e9"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

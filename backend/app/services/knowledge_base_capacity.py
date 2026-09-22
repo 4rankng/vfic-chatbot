@@ -35,6 +35,11 @@ _MINIMAX_CONTEXT_WINDOWS = {
 # A deliberately conservative Vietnamese/text estimate.  The provider tokenizer
 # remains authoritative at request time, so capacity is validated with headroom.
 _CHARS_PER_ESTIMATED_TOKEN = 2
+# Conservative fallback for custom (operator-supplied OpenAI-compatible)
+# providers: a too-small limit only forces a KB rejection the operator can
+# raise in the settings UI; a too-large one admits files that overflow the
+# real model window and fail at turn time.
+_DEFAULT_CUSTOM_CONTEXT_WINDOW = 32768
 _BASE_SYSTEM_RESERVE_TOKENS = 6_000
 _CHAT_HISTORY_RESERVE_TOKENS = 12_000
 _CURRENT_MESSAGE_RESERVE_TOKENS = 2_000
@@ -74,8 +79,17 @@ async def _active_model_context(db: AsyncSession) -> tuple[str, str, int]:
             )
         return "minimax", model, context_window
 
-    if minimax.default_provider != "openrouter":
-        raise ConflictError("The active LLM provider has no direct-context capacity resolver")
+    if minimax.default_provider == "custom":
+        custom = await settings.resolve_custom_llm()
+        model = custom.agent_model
+        # Operators supply the window for their own endpoint; the default is
+        # deliberately conservative — a too-small limit only forces a KB
+        # rejection, a too-large one admits files that overflow the real
+        # window and fail at turn time.
+        context_window = custom.context_window or _DEFAULT_CUSTOM_CONTEXT_WINDOW
+        return "custom", model, context_window
+
+    raise ConflictError("The active LLM provider has no direct-context capacity resolver")
 
     openrouter = await settings.resolve_openrouter()
     model = openrouter.agent_model

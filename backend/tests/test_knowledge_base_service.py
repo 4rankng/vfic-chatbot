@@ -238,3 +238,54 @@ async def test_direct_context_readiness_rejects_missing_file() -> None:
 
     with pytest.raises(ConflictError, match="needs one text file"):
         await knowledge_base_capacity.require_direct_context_ready(db, kb)
+
+
+@pytest.mark.asyncio
+async def test_active_model_context_resolves_custom_provider_window(monkeypatch) -> None:
+    """Custom (operator-supplied) providers resolve from the declared window."""
+    from app.services.integration_settings import (
+        CustomLlmRuntimeConfig,
+        IntegrationSettingsService,
+        MinimaxRuntimeConfig,
+    )
+
+    async def fake_minimax(self):
+        return MinimaxRuntimeConfig(default_provider="custom")
+
+    async def fake_custom(self):
+        return CustomLlmRuntimeConfig(agent_model="mimo-v2.5-pro", context_window=65536)
+
+    monkeypatch.setattr(IntegrationSettingsService, "resolve_minimax", fake_minimax)
+    monkeypatch.setattr(IntegrationSettingsService, "resolve_custom_llm", fake_custom)
+
+    provider, model, window = await knowledge_base_capacity._active_model_context(
+        SimpleNamespace()
+    )
+
+    assert (provider, model, window) == ("custom", "mimo-v2.5-pro", 65536)
+
+
+@pytest.mark.asyncio
+async def test_active_model_context_custom_falls_back_to_conservative_default(
+    monkeypatch,
+) -> None:
+    from app.services.integration_settings import (
+        CustomLlmRuntimeConfig,
+        IntegrationSettingsService,
+        MinimaxRuntimeConfig,
+    )
+
+    async def fake_minimax(self):
+        return MinimaxRuntimeConfig(default_provider="custom")
+
+    async def fake_custom(self):
+        return CustomLlmRuntimeConfig(agent_model="mimo-v2.5-pro", context_window=0)
+
+    monkeypatch.setattr(IntegrationSettingsService, "resolve_minimax", fake_minimax)
+    monkeypatch.setattr(IntegrationSettingsService, "resolve_custom_llm", fake_custom)
+
+    _provider, _model, window = await knowledge_base_capacity._active_model_context(
+        SimpleNamespace()
+    )
+
+    assert window == 32768

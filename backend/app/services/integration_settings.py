@@ -77,6 +77,9 @@ CUSTOM_LLM_BASE_URL = "custom_llm_base_url"
 CUSTOM_LLM_AGENT_MODEL = "custom_llm_agent_model"
 CUSTOM_LLM_SAFETY_MODEL = "custom_llm_safety_model"
 CUSTOM_LLM_FAST_MODEL = "custom_llm_fast_model"
+# Operator-declared context window (tokens) for the custom provider's model.
+# Feeds the direct-context capacity resolver; 0/absent = conservative default.
+CUSTOM_LLM_CONTEXT_WINDOW = "custom_llm_context_window"
 
 CUSTOM_LLM_SETTING_KEYS = (
     CUSTOM_LLM_ENABLE,
@@ -86,6 +89,7 @@ CUSTOM_LLM_SETTING_KEYS = (
     CUSTOM_LLM_AGENT_MODEL,
     CUSTOM_LLM_SAFETY_MODEL,
     CUSTOM_LLM_FAST_MODEL,
+    CUSTOM_LLM_CONTEXT_WINDOW,
     LLM_DEFAULT_PROVIDER,
 )
 
@@ -238,6 +242,8 @@ class CustomLlmRuntimeConfig:
     safety_model: str = ""
     fast_model: str = ""
     label: str = ""
+    # Operator-declared model context window (tokens); 0 = unset.
+    context_window: int = 0
     enabled: bool = False
     default_provider: str = "minimax"
 
@@ -335,6 +341,14 @@ def _bool_value(value: str | None, fallback: bool) -> bool:
     if value is None:
         return fallback
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _int_or_zero(value: str | None) -> int:
+    try:
+        parsed = int((value or "").strip())
+    except ValueError:
+        return 0
+    return parsed if parsed > 0 else 0
 
 
 # The selectable providers. "custom" is the operator-supplied OpenAI-compatible
@@ -557,6 +571,10 @@ class IntegrationSettingsService:
                 # reach a request.
                 safety_model=agent_model,
                 fast_model=agent_model,
+                context_window=_int_or_zero(
+                    stored.get(CUSTOM_LLM_CONTEXT_WINDOW)
+                    or _default("custom_llm_context_window", "")
+                ),
                 label=stored.get(CUSTOM_LLM_LABEL) or _default("custom_llm_label", "Dự phòng"),
                 enabled=_bool_value(
                     stored.get(CUSTOM_LLM_ENABLE),
@@ -583,6 +601,7 @@ class IntegrationSettingsService:
             "custom_llm_safety_model": cfg.safety_model,
             "custom_llm_fast_model": cfg.fast_model,
             "custom_llm_label": cfg.label,
+            "custom_llm_context_window": cfg.context_window or None,
             "custom_llm_enable": cfg.enabled,
             "custom_llm_usable": cfg.usable,
             "llm_default_provider": cfg.default_provider,
