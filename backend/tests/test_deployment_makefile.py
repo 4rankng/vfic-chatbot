@@ -16,6 +16,8 @@ The deploy invariants that used to live inline in the Makefile now live in
 
 from __future__ import annotations
 
+import re
+
 import os
 import subprocess
 from pathlib import Path
@@ -115,8 +117,14 @@ def test_bg_deploy_verifies_public_edge_frontend_and_queue_after_flip() -> None:
     assert "https://bot.tingting.vip/health" in script
     assert 'curl -fsS --max-time 15 "https://bot.tingting.vip/"' in script
     assert "http://127.0.0.1:8000/health/queue" in script
-    assert 'require_running_service_count "worker-chatbot" 2' in script
-    assert 'require_running_service_count "scheduler" 1' in script
+    # The expected container count comes from the compose file, never a literal:
+    # a hardcoded replica count aborted the 2026-09-22 deploy after the flip when
+    # worker-chatbot scaled to 3 (and the same literal broke the rollback check).
+    assert 'require_running_service_count "worker-chatbot"' in script
+    assert 'require_running_service_count "scheduler"' in script
+    assert "declared_replicas" in script
+    assert "docker compose config --format json" in script
+    assert not re.search(r'require_running_service_count "[a-z-]+" [0-9]', script)
 
 
 def test_bg_deploy_rolls_back_when_post_flip_verification_fails() -> None:
@@ -265,7 +273,12 @@ def test_bg_rollback_verifies_routed_service_before_state_swap() -> None:
     assert flip < verify < swap
     assert "assert_caddy_routes_color" in script
     assert 'curl -fsS --max-time 15 "$PUBLIC_BASE_URL/health"' in script
-    assert 'require_running_service_count "worker-chatbot" 2' in script
+    # The expected container count comes from the compose file, never a literal:
+    # a hardcoded replica count aborted the 2026-09-22 deploy after the flip when
+    # worker-chatbot scaled to 3 (and the same literal broke the rollback check).
+    assert 'require_running_service_count "worker-chatbot"' in script
+    assert "declared_replicas" in script
+    assert not re.search(r'require_running_service_count "[a-z-]+" [0-9]', script)
 
 
 def test_bg_rollback_failed_verification_keeps_state_unswapped_and_both_colors_running() -> None:
