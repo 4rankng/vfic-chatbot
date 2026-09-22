@@ -74,8 +74,6 @@ export type CustomLlmSettings = {
   custom_llm_safety_model: string;
   custom_llm_fast_model: string;
   custom_llm_label: string;
-  /** Operator-declared model context window (tokens); null = server default. */
-  custom_llm_context_window: number | null;
   custom_llm_enable: boolean;
   /** True only when enabled AND key + base URL + agent model are all present. */
   custom_llm_usable: boolean;
@@ -265,7 +263,6 @@ export const zaloIntegrationGateway = {
       custom_llm_api_key: string;
       custom_llm_base_url: string;
       custom_llm_agent_model: string;
-      custom_llm_context_window: string;
       custom_llm_enable: boolean;
       llm_default_provider: LlmProvider;
     }>,

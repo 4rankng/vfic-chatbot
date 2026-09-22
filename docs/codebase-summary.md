@@ -173,7 +173,7 @@ ChatBot/
 | `backend/app/services/retrieval/repository.py` | pgvector halfvec HNSW + exact re-rank retrieval (line 160). |
 | `backend/app/services/knowledge/category_service.py` | Stages, activates, clears, cuts over, rolls back, and derives category revisions for Project-owned RAG categories. |
 | `backend/app/workers/run_worker.py` | RQ worker container entrypoint; calls `Worker.clean_registries()` on startup. |
-| `backend/app/workers/chatbot_worker.py` | Stable chat-turn RQ entry point (consumes `webhook_high`, `persistence_low`). |
+| `backend/app/workers/chatbot_worker.py` | Stable chat-turn RQ entry point (`webhook_high` for live turns, `recovery` for recovered ones, `persistence_low` in dev). |
 | `backend/app/workers/reconcile_worker.py` | Reconcile sweep; SETNX non-reentrancy guard and Redis observability counters. |
 | `backend/app/workers/followup_worker.py` | Stable proactive follow-up RQ entry point. |
 | `backend/app/workers/async_runner.py` | One persistent event loop per worker process (sync RQ → async bridge). |

@@ -81,17 +81,17 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    command: ["python", "-m", "app.workers.run_worker", "webhook_high"]
+    command: ["python", "-m", "app.workers.run_worker", "webhook_high", "recovery"]
     stop_grace_period: 180s  # let rq finish the ≤60s turn on SIGTERM before SIGKILL
     deploy:
-      replicas: 2  # 2 RQ workers consume webhook_high in parallel; per-conversation
-                   # locks (state.acquire_lock) serialize same-chat turns, so the 2nd
-                   # worker only helps cross-conversation throughput — exactly the
-                   # pattern behind the 7d p95 queue dwell (10–17s waiting for the
-                   # single worker to finish a different conversation's turn).
+      replicas: 3  # RQ consumes webhook_high first and recovery second, so a
+                   # recovered-turn backlog can never delay a live candidate turn.
+                   # 3 replicas raise cross-conversation throughput (per-chat locks
+                   # serialize same-chat turns); the 2026-09-22 recovery storm of
+                   # 62 turns held candidates for 30–115s on 2.
       resources:
         limits:
-          # 2 instances × measured RSS ~145M ≈ 290M on the 2GB droplet. 512M cap
+          # 3 instances × measured RSS ~130M ≈ 390M on the 2GB droplet. 512M cap
           # per container lets Docker OOM-kill a runaway worker without taking
           # the host down; host headroom verified at deploy time.
           memory: 512M

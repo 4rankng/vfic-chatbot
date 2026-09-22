@@ -164,7 +164,7 @@ Redis serves multiple roles — all ephemeral (not backed up):
 
 | Role | Usage | Key pattern |
 |---|---|---|
-| **RQ broker** | Job queue for 4 queues (webhook_high, persistence_low, ingest, followup) | `rq:queue:*` |
+| **RQ broker** | Job queue for 5 queues (webhook_high, recovery, persistence_low, ingest, followup) | `rq:queue:*` |
 | **Cache** | General-purpose cache (preamble cache, etc.) | `cache:*` |
 | **Pub/sub** | Socket.IO cross-process emit bridge (`AsyncRedisManager`) | `socketio:*` |
 | **Semantic cache** | LLM response cache for non-personalized knowledge queries | `semcache:*` |

@@ -122,7 +122,7 @@ def _mock_redis(*, setnx_ok: bool = True) -> MagicMock:
 # Patch targets use SOURCE modules because all imports in reconcile_worker
 # are lazy (inside function bodies), not at module level.
 _PATCH_SESSION = "app.workers._db.worker_session"
-_PATCH_ENQUEUE = "app.workers.chatbot_worker.enqueue_chat_run"
+_PATCH_ENQUEUE = "app.workers.chatbot_worker.enqueue_recovery_chat_run"
 _PATCH_REDIS = "app.core.redis.get_redis_sync"
 
 
@@ -349,3 +349,52 @@ async def test_failed_bot_send_is_reenqueued(mock_session_cls, mock_enqueue):
     mock_enqueue.assert_called_once()
     assert mock_enqueue.call_args[0][0]["user_text"] == "bạn ăn tối chưa?"
     mock_redis.incrby.assert_any_call("reconcile_failed_send_total", 1)
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_recent_delivery_failure_is_deferred(mock_session_cls, mock_enqueue):
+    """A reply that just failed to deliver is not re-generated on the next tick.
+
+    The FAILED row is what makes the conversation a candidate, so without a
+    backoff an undeliverable conversation (unresolvable Page token, provider
+    rejection) consumes a full LLM turn every ~2 minutes forever.
+    """
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    failed_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    failed_bot_msg.created_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=failed_bot_msg)
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_not_called()
+    assert conv.bot_locked_until is None  # lock released for the next tick
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_recent_pending_is_still_recovered_fast(mock_session_cls, mock_enqueue):
+    """Lost-turn recovery keeps its ~60s cadence; the backoff is only for FAILED."""
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("xin chào")
+    pending_bot_msg = _make_bot_msg(status=DeliveryStatus.PENDING)
+    pending_bot_msg.created_at = datetime.now(timezone.utc) - timedelta(seconds=130)
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=pending_bot_msg)
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_called_once()
+    mock_redis.incrby.assert_any_call("reconcile_stale_pending_total", 1)

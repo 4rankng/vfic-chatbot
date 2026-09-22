@@ -76,19 +76,28 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Same site again: the OA user-detail error branch reads envelope.message
     # to tell a dead follower (-201 naming user_id) from a request bug —
     # bumps get_user_detail's get count 3→4, no new site.
-    "provider_boundary": 122,
+    "provider_boundary": 121,
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
     # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
     # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
-    "queue_producer": 40,
+    "queue_producer": 41,
+    # -1: the custom provider stopped reading a stored context-window row (the
+    # field left the settings UI), so resolve_custom_llm._load's `get` count
+    # drops 7→6 at the same site.
+    # -1: the direct-context capacity resolver no longer calls the OpenRouter
+    # model-metadata endpoint (every chatbot agent now runs the fixed 1M window),
+    # removing knowledge_base_capacity's provider-transport `get` site.
+    # +1: recovered turns go to their own low-priority queue, so the sweep's
+    # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "a35709aa65e9bd7c628ca8efe98baac58947e7dccc2a30ee83db056201b2c4e9"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "b89af3e1a3ebcf9862cfe5f60bf5a6ab703bdeca97fd5c86383ba4ac6e62066e"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
         "enqueue_job",
         "enqueue_chat_run",
+        "enqueue_recovery_chat_run",
         "enqueue_persist_candidate",
         "enqueue_enrich_oa_profile",
         "enqueue_followup",

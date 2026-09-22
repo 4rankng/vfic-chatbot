@@ -147,3 +147,24 @@ def test_named_enqueue_requeues_a_retained_failed_job(
 
     assert enqueue_job("ingest", _job, return_job_id=True, job_id="revision-3") == "revision-3"
     assert requeued == [True]
+
+
+def test_recovered_turns_use_their_own_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live candidate turns and recovered turns must not share one queue.
+
+    worker-chatbot consumes webhook_high first and recovery second, so a recovery
+    backlog (dozens of turns after an outage) can never delay a live turn.
+    """
+    from app.workers import chatbot_worker
+
+    seen: list[str] = []
+
+    def fake_enqueue(queue_name, *_args, **_kwargs):
+        seen.append(queue_name)
+        return True
+
+    monkeypatch.setattr("app.workers.utils.enqueue_job", fake_enqueue)
+
+    assert chatbot_worker.enqueue_chat_run({"conversation_id": "live"}) is True
+    assert chatbot_worker.enqueue_recovery_chat_run({"conversation_id": "recovered"}) is True
+    assert seen == ["webhook_high", "recovery"]

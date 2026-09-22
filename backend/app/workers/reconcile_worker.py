@@ -3,7 +3,8 @@
 The ``scheduler`` container periodically enqueues ``run_reconcile_tick`` onto
 the ``followup`` queue.  ``worker-followup`` consumes it and scans for
 conversations whose newest message is unanswered or stuck-PENDING, then
-re-enqueues a fresh chat turn through the existing ``enqueue_chat_run`` path.
+re-enqueues a fresh chat turn through the ``enqueue_recovery_chat_run`` path
+(low-priority ``recovery`` queue, consumed after ``webhook_high``).
 
 This is the primary reliability guarantee: regardless of *how* a turn was
 lost (OOM kill, SyntaxError, deploy force-recreate, exception-to-failed-queue,
@@ -35,6 +36,27 @@ _RECONCILE_SEND_UNKNOWN_SKIPPED = "reconcile_send_unknown_skipped_total"
 _RECONCILE_STALE_LOCK_BROKEN = "reconcile_stale_lock_broken"
 _RECONCILE_UNANSWERED_GAUGE = "reconcile_unanswered_gauge"
 _RECONCILE_TICK_LOCK = "reconcile_tick_lock"  # SETNX non-reentrancy key
+
+# A conversation whose newest message is a FAILED BOT row is a candidate again
+# on the very next tick — the failed row is what makes it a candidate — so the
+# sweep used to re-answer it with a full LLM turn every ~2 minutes, forever.
+# When the failure is not transient (unresolvable Page token, provider
+# rejection) that is a self-sustaining load generator: production carried 300k
+# re-enqueued recovery turns and 298k stale-lock breaks against 352 recorded
+# runs, and every one of them competes with live candidate turns for the two
+# chat workers. Wait this long between delivery-failure retries; lost-turn
+# recovery (WORKER/PENDING/SENDING newest) keeps its fast ~60s cadence.
+_FAILED_SEND_RETRY_BACKOFF_SECONDS = 900
+
+
+def _within_failed_send_backoff(newest, *, now: datetime) -> bool:
+    """Whether *newest* is a BOT delivery failure younger than the retry backoff."""
+    created_at = getattr(newest, "created_at", None)
+    if created_at is None:
+        return False
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return (now - created_at).total_seconds() < _FAILED_SEND_RETRY_BACKOFF_SECONDS
 
 
 def enqueue_reconcile_tick_now() -> bool:
@@ -93,7 +115,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
         conn.set(_RECONCILE_UNANSWERED_GAUGE, "0")
         return
 
-    from app.workers.chatbot_worker import enqueue_chat_run
+    from app.workers.chatbot_worker import enqueue_recovery_chat_run
 
     re_enqueued = 0
     stale_pending = 0
@@ -104,6 +126,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     unknown_send_outcome = 0
     send_unknown_skipped = 0
     stale_locks_broken = 0
+    failed_send_backoff = 0
 
     for conv in candidates:
         async with worker_session() as db:
@@ -199,6 +222,13 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                         await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                         continue
 
+                if reason == "failed_send" and _within_failed_send_backoff(newest, now=now):
+                    # Already tried to deliver a reply this recently; retrying
+                    # every tick only burns worker capacity (see the constant).
+                    await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
+                    failed_send_backoff += 1
+                    continue
+
                 if not user_text:
                     # No inbound text to reply to — release and skip.
                     await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
@@ -209,7 +239,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                 # SLA budget from recovery time (not the original inbound time,
                 # which would already be exhausted). Without it BotRunState's
                 # deadline defaults to 0.0 → unbounded agent budget on recoveries.
-                ok = enqueue_chat_run(
+                ok = enqueue_recovery_chat_run(
                     {
                         "conversation_id": str(conv_fresh.id),
                         "version_at_start": conv_fresh.version,
@@ -282,8 +312,10 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
         pipe.incrby(_RECONCILE_STALE_LOCK_BROKEN, stale_locks_broken)
     pipe.execute()
     logger.info(
-        "reconcile tick complete: %d candidates scanned, %d re-enqueued, %d send_unknown skipped",
+        "reconcile tick complete: %d candidates scanned, %d re-enqueued, %d "
+        "delivery-failure retries deferred, %d send_unknown skipped",
         len(candidates),
         re_enqueued,
+        failed_send_backoff,
         send_unknown_skipped,
     )

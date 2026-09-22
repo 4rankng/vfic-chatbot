@@ -241,51 +241,48 @@ async def test_direct_context_readiness_rejects_missing_file() -> None:
 
 
 @pytest.mark.asyncio
-async def test_active_model_context_resolves_custom_provider_window(monkeypatch) -> None:
-    """Custom (operator-supplied) providers resolve from the declared window."""
+async def test_active_model_context_uses_the_chatbot_window_for_every_provider(monkeypatch) -> None:
+    """Every chatbot agent resolves the same fixed window, on any provider.
+
+    The window is a deployment property, not an operator setting and not a
+    per-model lookup: no settings row may shrink it, and no vendor registry or
+    metadata call may fail the resolution.
+    """
     from app.services.integration_settings import (
         CustomLlmRuntimeConfig,
         IntegrationSettingsService,
         MinimaxRuntimeConfig,
+        OpenRouterRuntimeConfig,
     )
 
-    async def fake_minimax(self):
-        return MinimaxRuntimeConfig(default_provider="custom")
+    def minimax_with(provider: str, model: str = "MiniMax-M2.7-highspeed"):
+        async def _resolve(self):
+            return MinimaxRuntimeConfig(default_provider=provider, agent_model=model)
+
+        return _resolve
 
     async def fake_custom(self):
-        return CustomLlmRuntimeConfig(agent_model="mimo-v2.5-pro", context_window=65536)
+        return CustomLlmRuntimeConfig(agent_model="mimo-v2.5-pro")
 
-    monkeypatch.setattr(IntegrationSettingsService, "resolve_minimax", fake_minimax)
+    async def fake_openrouter(self):
+        return OpenRouterRuntimeConfig(agent_model="z-ai/glm-4.6")
+
     monkeypatch.setattr(IntegrationSettingsService, "resolve_custom_llm", fake_custom)
+    monkeypatch.setattr(IntegrationSettingsService, "resolve_openrouter", fake_openrouter)
 
-    provider, model, window = await knowledge_base_capacity._active_model_context(
-        SimpleNamespace()
+    cases = (
+        (minimax_with("minimax"), "minimax", "MiniMax-M2.7-highspeed"),
+        # A model name the old registry did not know: it used to raise ConflictError.
+        (minimax_with("minimax", "minimax-m9-turbo"), "minimax", "minimax-m9-turbo"),
+        (minimax_with("custom"), "custom", "mimo-v2.5-pro"),
+        (minimax_with("openrouter"), "openrouter", "z-ai/glm-4.6"),
     )
 
-    assert (provider, model, window) == ("custom", "mimo-v2.5-pro", 65536)
-
-
-@pytest.mark.asyncio
-async def test_active_model_context_custom_falls_back_to_conservative_default(
-    monkeypatch,
-) -> None:
-    from app.services.integration_settings import (
-        CustomLlmRuntimeConfig,
-        IntegrationSettingsService,
-        MinimaxRuntimeConfig,
-    )
-
-    async def fake_minimax(self):
-        return MinimaxRuntimeConfig(default_provider="custom")
-
-    async def fake_custom(self):
-        return CustomLlmRuntimeConfig(agent_model="mimo-v2.5-pro", context_window=0)
-
-    monkeypatch.setattr(IntegrationSettingsService, "resolve_minimax", fake_minimax)
-    monkeypatch.setattr(IntegrationSettingsService, "resolve_custom_llm", fake_custom)
-
-    _provider, _model, window = await knowledge_base_capacity._active_model_context(
-        SimpleNamespace()
-    )
-
-    assert window == 32768
+    for resolver, expected_provider, expected_model in cases:
+        monkeypatch.setattr(IntegrationSettingsService, "resolve_minimax", resolver)
+        provider, model, window = await knowledge_base_capacity._active_model_context(
+            SimpleNamespace()
+        )
+        assert (provider, model) == (expected_provider, expected_model)
+        assert window == knowledge_base_capacity._CHATBOT_CONTEXT_WINDOW_TOKENS
+        assert window == 1_024_000

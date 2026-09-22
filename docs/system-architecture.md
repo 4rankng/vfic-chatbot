@@ -648,7 +648,8 @@ load_conversation_state -> typing -> direct_context?
 
 | Queue | Consumer | Job timeout | Backpressure | Purpose |
 |---|---|---|---|---|
-| `webhook_high` | `worker-chatbot` (×1) | 60s (`chat_turn_job_timeout`) | 40 jobs | Interactive and recovered chat turns. |
+| `webhook_high` | `worker-chatbot` (×3, priority 1) | 60s (`chat_turn_job_timeout`) | 40 jobs | Live candidate chat turns. |
+| `recovery` | `worker-chatbot` (×3, priority 2) | 60s (`chat_turn_job_timeout`) | 40 jobs | Recovered turns re-enqueued by the reconcile sweep; consumed only when `webhook_high` is empty. |
 | `persistence_low` | `worker-persistence` (×1) | — | — | One post-SENT LLM extraction for lead fields, memory facts, and contact intent; high-confidence non-candidate/spam/testing results switch future turns to HUMAN. Isolated from the interactive queue. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
 | `followup` | `worker-followup` (×1) | — | — | Proactive follow-up, reconcile, and outbound-dispatch sweeps. |

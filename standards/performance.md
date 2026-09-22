@@ -54,6 +54,7 @@ Four queues isolate work by priority:
 | Queue | Priority | Purpose |
 |---|---|---|
 | `webhook_high` | Highest | Chat turns (candidate waiting) |
+| `recovery` | Low | Recovered turns from the reconcile sweep (never ahead of a live turn) |
 | `persistence_low` | Low | Candidate extraction after SENT |
 | `ingest` | Normal | Knowledge document/KB version pipeline |
 | `followup` | Normal | Proactive follow-up + reconcile sweeps |

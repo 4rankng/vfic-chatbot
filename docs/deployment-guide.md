@@ -24,7 +24,7 @@ remains a registry convenience tag but is never used by `make deploy`.
 | `postgres` | `pgvector/pgvector:pg16` | 1 | Source of truth. `max_connections=150`, healthcheck `pg_isready`, volume `vfic_pgdata`. |
 | `redis` | `redis:7-alpine` | 1 | RQ broker + pub/sub + LLM semaphore/cache. AOF on, 256 MB cap `allkeys-lru`, volume `vfic_redisdata`. |
 | `web-blue` / `web-green` | `ghcr.io/4rankng/tinghire-be:latest` | 1 each (only **active** receives traffic) | FastAPI (uvicorn, 1 worker). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. The **active** color is tracked in `/opt/vfic/ACTIVE_COLOR`; Caddy proxies only it. The inactive color is stopped between deploys (kept for instant rollback). |
-| `worker-chatbot` | `ghcr.io/4rankng/tinghire-be:latest` | **2** | RQ queue `webhook_high` only. Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit per container. |
+| `worker-chatbot` | `ghcr.io/4rankng/tinghire-be:latest` | **3** | RQ queues `webhook_high` then `recovery` (strict priority: a recovered-turn backlog can never delay a live candidate turn). Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit per container. |
 | `worker-persistence` | `ghcr.io/4rankng/tinghire-be:latest` | **1** | RQ queue `persistence_low` only. Best-effort lead/memory enrichment; isolated so it cannot delay candidate replies. 512 MB limit. |
 | `worker-ingest` | `ghcr.io/4rankng/tinghire-be:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
 | `worker-followup` | `ghcr.io/4rankng/tinghire-be:latest` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
@@ -319,7 +319,7 @@ Sourced from `backend/.env.example` (committed template) and
 |---|---|---|
 | `BOT_LOCK_TTL_SECONDS` | 180 | Per-chat mutex TTL (must exceed worst-case turn). |
 | `CHAT_TURN_JOB_TIMEOUT` | 60 | RQ job timeout (must be < lock TTL and reconcile grace). |
-| `CHAT_QUEUE_MAX_DEPTH` | 40 | Backpressure ceiling on `webhook_high`. |
+| `CHAT_QUEUE_MAX_DEPTH` | 40 | Backpressure ceiling on `webhook_high` and on the `recovery` queue. |
 | `LLM_CONCURRENCY_LIMIT` | 0 (disabled) | Redis cross-process semaphore token count. |
 | `MAX_LLM_CALLS_PER_TURN` | 6 | Agent tool-loop ceiling. |
 | `EMBED_CONCURRENCY_LIMIT` | 0 (disabled) | Separate embed semaphore. |
@@ -380,6 +380,7 @@ procedure. Summary of the available targets:
 - Frontend: `npm run dev --port 5173 --strictPort` (Vite proxies `/api`,
   `/realtime`, `/socket.io` → `localhost:8000`).
 - Dev workers: `rq worker ingest` + `rq worker webhook_high persistence_low`
+  (production `worker-chatbot` consumes `webhook_high recovery`)
   as `SimpleWorker` on host.
 - Zalo mock: `mock_servers/zalo_mock.py` on `:8788`. `make dev` exports
   `ZALO_BOT_API_BASE` + `ZALO_BOT_TOKEN` so outbound Zalo traffic is captured

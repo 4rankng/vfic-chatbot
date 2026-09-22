@@ -739,8 +739,8 @@ export const FacebookMessengerIntegrationPage = () => {
               >
                 Mã phiên OAuth
               </label>
-              <input
-                className="tt-input"
+              <Input
+                className="settings-input"
                 id="facebook-oauth-flow-id"
                 name="facebook-oauth-flow-id"
                 type="text"

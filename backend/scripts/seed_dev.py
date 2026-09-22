@@ -31,6 +31,7 @@ from app.core.config import get_settings  # noqa: E402
 from app.core.security import hash_password_sync  # noqa: E402
 from app.models.audit import AuditEvent  # noqa: E402
 from app.models.company import Company, Project  # noqa: E402
+from app.models.contact import Contact, ContactChannelIdentity  # noqa: E402
 from app.models.conversation import (  # noqa: E402
     BotRun,
     BotRunOutcome,
@@ -175,10 +176,16 @@ def make_companies(projects: list[Project]) -> list[Company]:
 
 
 def make_personas(users: list[User]) -> list[Persona]:
+    """Two global personas: exactly one active default, one inactive preset.
+
+    Personas are no longer project-scoped; they attach to a knowledge base
+    (``knowledge_base_id``) and adapter-specific overrides live in
+    ``adapter_persona_assignments``. Both seeded rows stay unattached so the
+    global active persona is the resolved default.
+    """
     return [
         Persona(
             id=_uuid(),
-            project_id=None,
             name="VFIC Bot mặc định",
             slug="default-vfic",
             body_md=(
@@ -196,7 +203,6 @@ def make_personas(users: list[User]) -> list[Persona]:
         ),
         Persona(
             id=_uuid(),
-            project_id=None,
             name="LG Display tư vấn viên",
             slug="lg-display",
             body_md=(
@@ -771,8 +777,11 @@ def make_leads(users: list[User], jobs: list[Job], convos: list[Conversation]) -
     """Generate 35 leads across all stages with Vietnamese names.
 
     The first 25 leads link to the seeded conversations via zalo_id (FK to
-    conversations.zalo_chat_id). Remaining 10 leads have zalo_id=None (candidates
-    who haven't chatted yet — e.g. inbound from other channels or manual entry).
+    conversations.zalo_chat_id) and inherit that conversation's canonical
+    contact_id, mirroring Alembic 0047's conversation→lead contact backfill and
+    the contact-keyed lead trigger. Remaining 10 leads have zalo_id=None and
+    contact_id=None (candidates who haven't chatted yet — e.g. inbound from
+    other channels or manual entry).
     """
     first_names_m = [
         "Nguyễn Văn",
@@ -874,7 +883,8 @@ def make_leads(users: list[User], jobs: list[Job], convos: list[Conversation]) -
         full = f"{names_pool[i % len(names_pool)]} {last_names[i % len(last_names)]}"
         stage = stages_pool[i]
         # Link to a conversation if available (first 25 leads match 25 convos)
-        zalo_id = convos[i % len(convos)].zalo_chat_id if i < len(convos) else None
+        conv = convos[i % len(convos)] if i < len(convos) else None
+        zalo_id = conv.zalo_chat_id if conv is not None else None
         created = days_ago(rng.randint(1, 30))
 
         score_map = {
@@ -886,6 +896,7 @@ def make_leads(users: list[User], jobs: list[Job], convos: list[Conversation]) -
 
         lead = Lead(
             zalo_id=zalo_id,
+            contact_id=conv.contact_id if conv is not None else None,
             name=full,
             phone=f"0{rng.randint(30, 79)}{rng.randint(1000000, 9999999)}" if i % 2 == 0 else None,
             age=rng.randint(19, 42),
@@ -962,8 +973,23 @@ def make_followup_tasks(leads: list[Lead], users: list[User]) -> list[FollowUpTa
     return tasks
 
 
-def make_conversations(users: list[User]) -> list[Conversation]:
+def make_conversations(
+    users: list[User],
+) -> tuple[list[Conversation], list[Contact], list[ContactChannelIdentity]]:
+    """Build 25 conversations, each with its canonical Contact + channel identity.
+
+    Alembic 0047 made ``conversations.contact_id`` / ``channel_identity_id``
+    mandatory: every thread hangs off exactly one ``Contact`` and one
+    ``ContactChannelIdentity``. Mirror ``ConversationState.ensure_by_identity``
+    (the production create path) against the seeded ACTIVE Zalo-bot account so
+    the threads resolve exactly like real inbound webhooks.
+
+    Returns ``(conversations, contacts, identities)`` — the caller inserts
+    contacts and identities first (FK order).
+    """
     convos: list[Conversation] = []
+    contacts: list[Contact] = []
+    identities: list[ContactChannelIdentity] = []
     modes = [
         ConversationMode.BOT,
         ConversationMode.BOT,
@@ -986,11 +1012,24 @@ def make_conversations(users: list[User]) -> list[Conversation]:
             if mode in (ConversationMode.HUMAN, ConversationMode.SEMI_AUTO)
             else None
         )
+        zalo_chat_id = f"zalo_conv_seed_{i:04d}"
+        contact = Contact(id=_uuid())
+        identity = ContactChannelIdentity(
+            id=_uuid(),
+            contact_id=contact.id,
+            provider="zalo_bot",
+            account_key="default:zalo_bot",  # seeded ACTIVE zalo_bot channel account
+            external_id=zalo_chat_id,
+        )
+        contacts.append(contact)
+        identities.append(identity)
 
         convos.append(
             Conversation(
                 id=_uuid(),
-                zalo_chat_id=f"zalo_conv_seed_{i:04d}",
+                zalo_chat_id=zalo_chat_id,
+                contact_id=contact.id,
+                channel_identity_id=identity.id,
                 mode=mode,
                 status=status,
                 needs_human=mode in (ConversationMode.HUMAN, ConversationMode.SEMI_AUTO),
@@ -1003,7 +1042,7 @@ def make_conversations(users: list[User]) -> list[Conversation]:
                 updated_at=created + timedelta(hours=rng.randint(1, 72)),
             )
         )
-    return convos
+    return convos, contacts, identities
 
 
 def remove_trigger_generated_leads(db: Session, convos: list[Conversation]) -> None:
@@ -1885,6 +1924,8 @@ _TRUNCATE_ORDER = [
     "messages",
     "bot_runs",
     "conversations",
+    "contact_channel_identities",
+    "contacts",
     "jobs",
     "personas",
     "companies",
@@ -1928,7 +1969,7 @@ def seed() -> None:
         db.flush()
         print(f"✓ {len(projects)} projects")
 
-        # 4. Personas (before companies since companies don't FK persona, but projects may)
+        # 4. Personas (global; provider-scoped overrides live in adapter_persona_assignments)
         personas = make_personas(users)
         db.add_all(personas)
         db.flush()
@@ -1959,11 +2000,17 @@ def seed() -> None:
         print(f"✓ {len(jfvs)} job feature values")
 
         # 9. Conversations (must be before leads — leads.zalo_id FK → conversations.zalo_chat_id)
-        convos = make_conversations(users)
+        #    Each conversation needs its canonical Contact + channel identity (Alembic 0047).
+        convos, contacts, identities = make_conversations(users)
+        db.add_all(contacts)
+        db.flush()
+        db.add_all(identities)
+        db.flush()
         db.add_all(convos)
         db.flush()
         remove_trigger_generated_leads(db, convos)
         db.flush()
+        print(f"✓ {len(contacts)} contacts, {len(identities)} channel identities")
         print(f"✓ {len(convos)} conversations")
 
         # 10. Leads (link first 25 to conversations via zalo_id)

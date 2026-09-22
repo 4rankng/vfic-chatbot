@@ -169,6 +169,30 @@ def enqueue_chat_run(job: dict) -> bool:
     )
 
 
+def enqueue_recovery_chat_run(job: dict) -> bool:
+    """Enqueue a recovered turn onto the low-priority ``recovery`` queue.
+
+    The reconcile sweep re-answers conversations whose turn was lost, which can
+    arrive in batches of dozens after an outage. On the live queue those batches
+    queue ahead of candidate-visible turns — the 2026-09-22 storm put 62 recovery
+    turns in front of live traffic and produced a 30-115s
+    ``webhook_to_pickup_ms``. ``worker-chatbot`` consumes ``webhook_high`` first
+    and ``recovery`` second, so a recovery backlog can never delay a live turn.
+    Backpressure and timeout semantics match the live queue.
+    """
+    from app.core.config import get_settings
+    from app.workers.utils import enqueue_job
+
+    s = get_settings()
+    return enqueue_job(
+        "recovery",
+        run_chat_turn_job,
+        job,
+        job_timeout=s.chat_turn_job_timeout,
+        max_depth=s.chat_queue_max_depth or None,
+    )
+
+
 def run_chat_turn_job(job: dict) -> None:
     """RQ chat-turn entrypoint (sync). Runs the async graph turn."""
     from app.workers.async_runner import run_async
@@ -273,6 +297,96 @@ def _preamble_timings(state, started_at, *, lane: str, throttle: bool = False) -
     return timings
 
 
+def _abandoned_turn_timings(job: dict) -> dict:
+    """Minimal ``stage_timings`` slice for a turn that never reached ``run_turn``.
+
+    Mirrors :func:`_preamble_timings` without needing a ``BotRunState``: a turn
+    can die before the state exists (build_deps, imports), and the dashboard
+    still has to attribute the failure to the enqueue/pickup stage.
+    """
+    timings: dict = {"lane": "unknown", "degraded": True}
+    received_at_epoch = float(job.get("received_at_epoch") or 0.0)
+    if received_at_epoch > 0:
+        timings["webhook_to_pickup_ms"] = max(
+            0, int(round((time.time() - received_at_epoch) * 1000))
+        )
+    return timings
+
+
+async def _record_abandoned_turn(job: dict, *, exc: BaseException) -> None:
+    """Record a turn that died before ``run_turn`` could log an outcome.
+
+    Without this, the crash guard below hid real failures: RQ's death penalty
+    raises ``JobTimeoutException`` *inside* the job, and because the guard
+    suppresses it, RQ recorded the job as successful. The conversation kept an
+    unanswered inbound message and its per-chat lock, so the reconcile sweep
+    re-enqueued the same turn every ~60s — measured in production as 298k
+    stale-lock breaks and 300k re-enqueues against 352 recorded runs — and the
+    dashboard showed a healthy pickup metric the whole time the bot answered
+    nobody (2026-09-21: zero bot_runs recorded for a full day of inbound
+    traffic). One ERROR BotRun + FAILED BOT row makes the failure visible, puts
+    the sender in the console's failed-reply view, and frees the lock.
+
+    Best-effort by design: the guard exists so a bad job cannot kill the worker,
+    so a recording failure must never raise either.
+    """
+    conversation_id = str(job.get("conversation_id") or "")
+    if not conversation_id:
+        return
+
+    from rq.timeouts import JobTimeoutException
+
+    from app.core.config import get_settings
+    from app.models.conversation import DeliveryStatus
+    from app.services.conversation import ConversationService
+    from app.workers._db import worker_session
+
+    if isinstance(exc, JobTimeoutException):
+        reason = (
+            f"chat turn exceeded the {get_settings().chat_turn_job_timeout}s job timeout"
+        )
+    else:
+        reason = f"chat turn crashed: {type(exc).__name__}"
+
+    try:
+        async with worker_session() as db:
+            svc = ConversationService(db)
+            conv = await svc.get(uuid.UUID(conversation_id))
+            if conv is None:
+                logger.error(
+                    "abandoned chat turn has no conversation conversation=%s",
+                    conversation_id,
+                )
+                return
+            await db.refresh(conv)
+            await svc.record_bot_outcome(
+                conv,
+                version_at_start=int(job.get("version_at_start") or conv.version),
+                reply="",  # nothing reached the customer
+                started_at=_now(),
+                sent=False,
+                # PENDING, not FAILED: this is the "turn started but never
+                # completed" state, which keeps the reconcile sweep's fast
+                # crash-recovery path (~2-4 min) instead of a delivery-failure
+                # retry. The ERROR outcome + external_error still surface the
+                # failure on the dashboard and in the console.
+                delivery_status=DeliveryStatus.PENDING,
+                external_error=reason,
+                stage_timings=_abandoned_turn_timings(job),
+                lock_owner=job.get("lock_owner") or None,
+                trace_id=str(job.get("trace_id") or "") or None,
+            )
+        logger.error(
+            "abandoned chat turn recorded conversation=%s reason=%s",
+            conversation_id,
+            reason,
+        )
+    except Exception:  # noqa: BLE001 — recording must never take the worker down
+        logger.exception(
+            "failed to record abandoned chat turn conversation=%s", conversation_id
+        )
+
+
 async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
     # Top-level crash-guard: under SimpleWorker (no fork), an unhandled exception
     # here would kill the worker process and interrupt every queued turn. The
@@ -284,16 +398,18 @@ async def _run_job_async(job: dict, *, source: str = "recovery") -> None:
     # Re-raises cooperative-control exceptions (CancelledError on job timeout /
     # worker shutdown, KeyboardInterrupt, SystemExit) so they're not swallowed —
     # catching BaseException here would break graceful shutdown. Everything else
-    # is logged and suppressed so one bad job can't take the worker down.
+    # is logged, recorded as an ERROR outcome, and suppressed so one bad job
+    # can't take the worker down.
     try:
         await _run_job_async_inner(job, source=source)
     except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
         raise
-    except BaseException:
+    except BaseException as exc:
         logger.exception(
             "chat turn crashed (conversation=%s); suppressed to protect the worker",
             job.get("conversation_id", "?"),
         )
+        await _record_abandoned_turn(job, exc=exc)
 
 
 async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:

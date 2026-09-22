@@ -205,9 +205,6 @@ class CustomLlmIntegrationSettingsOut(BaseModel):
     custom_llm_safety_model: str
     custom_llm_fast_model: str
     custom_llm_label: str
-    # Operator-declared model context window (tokens) for the direct-context
-    # capacity resolver; None = resolver applies its conservative default.
-    custom_llm_context_window: int | None = None
     custom_llm_enable: bool
     # True only when enabled + key + base URL + agent model are all present,
     # so the UI can say "armed" rather than merely "saved".
@@ -226,7 +223,6 @@ class CustomLlmIntegrationSettingsUpdate(BaseModel):
     custom_llm_safety_model: str | None = Field(default=None, min_length=1, max_length=256)
     custom_llm_fast_model: str | None = Field(default=None, min_length=1, max_length=256)
     custom_llm_label: str | None = Field(default=None, min_length=1, max_length=64)
-    custom_llm_context_window: int | None = Field(default=None, ge=1024, le=10_000_000)
     custom_llm_enable: bool | None = None
     llm_default_provider: Literal["minimax", "openrouter", "custom"] | None = None
 

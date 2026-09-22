@@ -248,6 +248,13 @@
     "call": "enqueue_job",
     "category": "queue_producer",
     "count": 1,
+    "file": "app/workers/chatbot_worker.py",
+    "scope": "enqueue_recovery_chat_run"
+  },
+  {
+    "call": "enqueue_job",
+    "category": "queue_producer",
+    "count": 1,
     "file": "app/workers/direct_context_worker.py",
     "scope": "enqueue_direct_context_index"
   },
@@ -308,7 +315,7 @@
     "scope": "enqueue_persist_candidate"
   },
   {
-    "call": "enqueue_chat_run",
+    "call": "enqueue_recovery_chat_run",
     "category": "queue_producer",
     "count": 1,
     "file": "app/workers/reconcile_worker.py",
