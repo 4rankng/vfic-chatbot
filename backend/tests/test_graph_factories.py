@@ -350,7 +350,14 @@ async def test_build_deps_wires_graphdeps(monkeypatch):
     class _FakeLLM:
         pass
 
-    monkeypatch.setattr("app.graph.factories._chat_for_role", lambda *a, **k: _FakeLLM())
+    reset_client_cache()
+    # The agent LLM is constructed inside client_cache, and every get_settings
+    # import binding must see the key-bearing fake so no real credential or
+    # lru_cache order decides the outcome.
+    monkeypatch.setattr("app.graph.client_cache._chat_for_role", lambda *a, **k: _FakeLLM())
+    monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.client_cache.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
 
     deps = await build_deps(object())
     assert isinstance(deps, GraphDeps)
@@ -359,6 +366,8 @@ async def test_build_deps_wires_graphdeps(monkeypatch):
     assert deps.safety is None
     assert isinstance(deps.embedder, OpenRouterEmbedder)
     assert deps.zalo is not None
+
+    reset_client_cache()
 
 
 @pytest.mark.asyncio
@@ -395,7 +404,14 @@ async def test_inline_oa_profile_lookup_has_no_refresh_and_uses_isolated_session
         profile_sessions.append(profile_db)
         yield profile_db
 
-    monkeypatch.setattr("app.graph.factories._chat_for_role", lambda *a, **k: _FakeLLM())
+    reset_client_cache()
+    # Same binding discipline as test_build_deps_wires_graphdeps: the operative
+    # _chat_for_role lives in client_cache, and every get_settings import sees
+    # the fake instead of the lru_cached real settings.
+    monkeypatch.setattr("app.graph.client_cache._chat_for_role", lambda *a, **k: _FakeLLM())
+    monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.client_cache.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.services.zalo_oa_service.ZaloOASender", _ProfileSender)
     monkeypatch.setattr("app.services.profile_enrichment.ProfileEnrichmentService", _ProfileService)
 
@@ -408,6 +424,8 @@ async def test_inline_oa_profile_lookup_has_no_refresh_and_uses_isolated_session
     assert profile_sessions == [profile_db]
     assert enrichment_calls[0][0] is profile_db
     assert enrichment_calls[0][2:] == ("oa:user-1", "user-1")
+
+    reset_client_cache()
 
 
 @pytest.mark.asyncio
