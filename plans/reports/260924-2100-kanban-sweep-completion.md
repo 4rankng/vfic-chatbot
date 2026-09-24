@@ -113,3 +113,11 @@ plus the closeout commits after it.
 - Output-corruption incidents (placeholder tokens in Edit/Write payloads) on two
   lanes/sessions → all caught by post-edit diff checks; nothing corrupted landed;
   provider-level anomaly worth watching on long agent sessions.
+
+## Deploy record — 2026-09-25 00:59 SGT
+
+- CI: quality-gates green on `fd4d75da` (run 36020710119) and `77302df3` (run 36021562235) — first runs of the new locked-toolchain CI, the coverage gate, the visual-e2e container job, and the release-gate turn smoke.
+- Deploy: `make deploy` completed exit 0 (log `/tmp/vfic-deploy-234316.log`). Pre-migration dump taken; database migrated to `0055_memories_match_halfvec`; blue/green flip to the new color; production turn smoke `SMOKE OK: outcome='sent'`; frontend recreated. Site 200, `web-blue` health `{"status":"ok","env":"production"}`, all containers on `77302df3`, infra images digest-pinned.
+- Live-config verification: Redis `maxmemory-policy=volatile-lru` (probed with auth injected via compose env, no secret printed); `REDIS_PASSWORD` and the `REDIS_URL`-embedded password confirmed paired.
+- Post-deploy fix: `worker-maintenance` was not created by the deploy's `up -d` (new-service creation gap in `bg_deploy.sh` — ledger item for the scripts owner); started manually and confirmed executing dispatch ticks.
+- Remaining ledger unchanged (FE-19/TEST-10 tails, droplet rehearsal for the restore path, dependabot pip↔uv.lock watch, `tokens_cached` telemetry, logging-credentials test approval).
