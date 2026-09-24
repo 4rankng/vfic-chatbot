@@ -2,7 +2,7 @@
 
 Backlog from the read-only codebase audit of **2026-09-24** (HEAD `923b1d3f`, `main`). One file per ticket. Nothing here has been implemented.
 
-**Board:** P0 8 · P1 35 · P2 63 · P3 5 · **Total 111**
+**Board:** P0 8 · P1 35 · P2 64 · P3 5 · **Total 112**
 
 ## How to use
 
@@ -79,7 +79,7 @@ The tree is lint-clean and type-clean, so the debt below is structural, not styl
 | [TEST-07](TEST-07-the-vitest-claude-project-matches-zero-files-and-is-never-run.md) | The vitest claude project matches zero files and is never run | testing | S |
 | [TEST-08](TEST-08-visual-regression-baselines-are-darwin-only-and-the-visual-proje.md) | Visual-regression baselines are darwin-only and the visual projects are excluded from CI | testing | M |
 
-## P2 — Medium — real debt, plan it (63)
+## P2 — Medium — real debt, plan it (64)
 
 | ID | Title | Area | Effort |
 |---|---|---|---|
@@ -113,6 +113,7 @@ The tree is lint-clean and type-clean, so the debt below is structural, not styl
 | [FE-13](FE-13-the-layered-slice-pattern-covers-6-of-22-features-and-the-two-wo.md) | The layered slice pattern covers 6 of ~22 features, and the two worst god files are unlayered | frontend | L |
 | [FE-14](FE-14-duplicated-credential-field-machinery-between-the-zalo-and-faceb.md) | Duplicated credential-field machinery between the Zalo and Facebook pages | frontend | M |
 | [FE-15](FE-15-dashboard-derivations-are-recomputed-on-every-render.md) | Dashboard derivations are recomputed on every render | frontend | S |
+| [FE-17](FE-17-registry-json-is-not-the-generator-s-output-and-registry-check-a.md) | registry.json is not the generator's output and registry:check already fails at HEAD | frontend | M |
 | [OPS-11](OPS-11-declared-but-unused-dependencies-and-a-dead-curl-in-the-runtime.md) | Declared-but-unused dependencies and a dead curl in the runtime image | ops | S |
 | [OPS-12](OPS-12-documentation-contradicts-the-code-on-operator-critical-knobs.md) | Documentation contradicts the code on operator-critical knobs | ops | S |
 | [OPS-13](OPS-13-dev-venv-is-python-3-14-while-production-and-ci-are-3-12.md) | Dev venv is Python 3.14 while production and CI are 3.12 | ops | S |
@@ -165,10 +166,12 @@ The tree is lint-clean and type-clean, so the debt below is structural, not styl
 | Reliability | 0 | 2 | 5 | 0 | 7 |
 | Performance | 0 | 5 | 8 | 1 | 14 |
 | Architecture & dead code | 0 | 4 | 14 | 1 | 19 |
-| Frontend | 0 | 5 | 10 | 1 | 16 |
+| Frontend | 0 | 5 | 11 | 1 | 17 |
 | Testing & CI | 3 | 5 | 6 | 1 | 15 |
 | Ops, deploy & data | 4 | 6 | 9 | 1 | 20 |
 | Docs & repo hygiene | 1 | 6 | 6 | 0 | 13 |
+
+Counts here derive from each ticket's single `area` field; `labels` may carry cross-cutting areas — e.g. SEC-02 and SEC-05 are also labeled `reliability`, so a label-based Reliability count reads 9, not 7.
 
 ## Suggested first wave
 
@@ -187,6 +190,12 @@ Findings the audit confirmed but which are **deliberately not ticketed yet**. Re
 **Unauthenticated Zalo OA webhook.** `POST /webhooks/zalo/oa` (`backend/app/api/webhooks.py:107-165`) performs no authentication of any kind — signature verification was deliberately disabled because the stored credential is the wrong Zalo secret (`backend/app/api/webhooks.py:138-146`). Any unauthenticated caller can create conversations, create and update leads, and enqueue real LLM turns: dedup is per `(sender, msg_id)`, so looping fresh sender ids yields unbounded cost against `llm_concurrency_limit = 8` on a 2 vCPU box. It is the only credential-free state-changing endpoint in the application.
 
 Root cause: the app holds the OA *access-token* secret rather than Zalo's webhook checksum key, so the (correct) verifier at `backend/app/services/zalo_oa_signature.py:verify_signature` could never pass. Fixing the code without fixing the credential would false-reject 100% of real events. Either obtain the checksum key and wire the verifier into the inbound route, or delete the route if the OA channel is not in production use.
+
+### Withdrawn ticket ids
+
+The id sequence is deliberately **not** contiguous: the finding above was allocated an id, then withdrawn by request before the board was published, and no id is renumbered. The gap SEC-02…SEC-08 is intentional — no ticket is missing or lost.
+
+- **SEC-01 (withdrawn)** — Unauthenticated Zalo OA webhook (`POST /webhooks/zalo/oa`) — deferred by request, not counted on the board. The stored credential is the OA *access-token* secret rather than Zalo's webhook checksum key, so wiring the (correct) verifier in without the matching credential would false-reject 100% of real OA events.
 
 ## Not tickets
 

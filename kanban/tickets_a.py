@@ -1,5 +1,20 @@
 """Security + reliability tickets."""
 
+# Ticket ids that were allocated, then withdrawn by request before the board was
+# published. They are deliberately NOT in ``TICKETS``: no id is ever renumbered,
+# so the security sequence starts at SEC-02 and that gap is intentional.
+WITHDRAWN = [
+    dict(
+        id="SEC-01",
+        title="Unauthenticated Zalo OA webhook (`POST /webhooks/zalo/oa`)",
+        reason=(
+            "The stored credential is the OA *access-token* secret rather than Zalo's "
+            "webhook checksum key, so wiring the (correct) verifier in without the "
+            "matching credential would false-reject 100% of real OA events."
+        ),
+    ),
+]
+
 TICKETS = [
     dict(
         id="SEC-02",
@@ -16,12 +31,12 @@ TICKETS = [
             "than a deliberate org-wide policy."
         ),
         evidence=[
-            "`backend/app/api/leads.py:44-47` — `_load(lead_id, db)` takes no viewer.",
-            "`backend/app/services/lead/service.py:52-53` — `get()` is a plain `db.get(Lead, lead_id)`; `update`/`assign`/`set_stage` apply no ownership check.",
-            "`backend/app/services/lead/service.py:56` — list *does* apply `viewer_scope_filter(...)`; `backend/app/services/conversation/repository.py:63-66` scopes conversation detail the same way.",
-            "`backend/app/api/leads.py:38-41` — the route gate is `require_capability_or_legacy(\"candidate_intake\")`, an installation capability, not a role.",
-            "`backend/app/schemas/lead.py:18-23` — `LeadOut` exposes name, phone, address, notes.",
-            "Related: `backend/app/api/bot_runs.py:26-39` is org-wide for both roles and its projection can echo `proposed_reply` for conversations the caller cannot open.",
+            "`backend/app/api/leads.py:43-53` — `_load(lead_id, db)` takes no viewer.",
+            "`backend/app/services/lead/service.py:52-58` — `get()` is a plain `db.get(Lead, lead_id)`; `update`/`assign`/`set_stage` apply no ownership check.",
+            "`backend/app/services/lead/service.py:75` — list *does* apply `viewer_scope_filter(...)`; `backend/app/services/conversation/repository.py:156-162` scopes conversation detail the same way.",
+            "`backend/app/api/leads.py:36-40` — the route gate is `require_capability_or_legacy(\"candidate_intake\")`, an installation capability, not a role.",
+            "`backend/app/schemas/lead.py:18-35` — `LeadOut` exposes name, phone, address, notes.",
+            "Related: `backend/app/api/bot_runs.py:32-42,45-60` is org-wide for both roles and its projection can echo `proposed_reply` for conversations the caller cannot open.",
         ],
         impact=(
             "Sequential integer ids make enumeration trivial: full candidate PII for the whole tenant, "
@@ -31,7 +46,7 @@ TICKETS = [
         fix=(
             "Thread the viewer through the lead read path as conversations do: add "
             "`LeadRepository.get_visible` mirroring `viewer_can_access_lead` "
-            "(`backend/app/services/viewer_scope.py:52-59`), return **404** rather than 403 so ids are "
+            "(`backend/app/services/viewer_scope.py:70-77`), return **404** rather than 403 so ids are "
             "not probeable, and apply it to every by-id route plus `LeadService.update/assign/"
             "set_stage/create_followup/replace_manual_tags`. Validate `AssignRequest.recruiter_id` "
             "resolves to an enabled user. Scope the `/bot_runs` projection or drop `proposed_reply` "
@@ -52,8 +67,8 @@ TICKETS = [
         ),
         evidence=[
             "`backend/app/api/auth.py` — the whole auth surface is login / forgot-password / reset-password / refresh / me / change-password; no logout route.",
-            "`backend/app/identity/infrastructure/http.py:65-86` — refresh validates `type`/`user`/`disabled`/`ver`, then mints new tokens; the presented token is never invalidated. No jti or generation store exists anywhere in `app/`.",
-            "`backend/app/core/config.py:92-93` — access token 60 min, refresh token 14 days.",
+            "`backend/app/identity/infrastructure/http.py:73-93` — refresh validates `type`/`user`/`disabled`/`ver`, then mints new tokens; the presented token is never invalidated. No jti or generation store exists anywhere in `app/`.",
+            "`backend/app/core/config.py:107-108` — access token 60 min, refresh token 14 days.",
             "Frontend logout only clears `localStorage` (`frontend/src/components/atomic-crm/providers/rest/authProvider.ts`).",
         ],
         impact=(
@@ -63,11 +78,11 @@ TICKETS = [
         ),
         fix=(
             "Add `POST /api/v1/auth/logout` that bumps `user.token_version` — both token types already "
-            "carry and check `ver` (`backend/app/identity/application/authentication.py:36-37`, "
-            "`identity/infrastructure/http.py:83-84`), making this the cheapest correct fix. For real "
+            "carry and check `ver` (`backend/app/identity/application/authentication.py:42-43`, "
+            "`backend/app/identity/infrastructure/http.py:94`), making this the cheapest correct fix. For real "
             "rotation, store a per-user refresh generation and reject a stale one so a replay "
             "invalidates the family. Also bump `token_version` on email change "
-            "(`backend/app/services/user_service.py:139-148`)."
+            "(`backend/app/services/user_service.py:125-126,141`)."
         ),
     ),
     dict(
@@ -83,9 +98,9 @@ TICKETS = [
             "fails open on Redis errors."
         ),
         evidence=[
-            "`backend/app/identity/infrastructure/rate_limits.py` — the complete configured surface; `backend/app/api/auth.py:23-28` is its only importer.",
-            "Unbounded expensive routes: `POST /jobs/search` (`backend/app/api/jobs.py:95-105`), `POST /projects/{id}/rag/test` (`api/knowledge.py:216`), `GET /leads/{id}/assist`, `POST /leads/{id}/chatops-actions/*`, `POST /conversations/{id}/web-chat-turn` (`api/conversations.py:408`), and all four webhook POSTs.",
-            "`backend/app/core/ratelimit.py:56-57` fails open on any Redis exception; `:22-28` trusts the first `X-Forwarded-For` hop for bucketing.",
+            "`backend/app/identity/infrastructure/rate_limits.py` — the complete configured surface; `backend/app/api/auth.py:20-25` is its only importer.",
+            "Unbounded expensive routes: `POST /jobs/search` (`backend/app/api/jobs.py:95-103`), `POST /projects/{id}/rag/test` (`backend/app/api/knowledge.py:229`), `GET /leads/{id}/assist`, `POST /leads/{id}/chatops-actions/*`, `POST /conversations/{id}/web-chat-turn` (`backend/app/api/conversations.py:408`), and all four webhook POSTs.",
+            "`backend/app/core/ratelimit.py:60-70` fails open on any Redis exception; `:32-39` trusts the first `X-Forwarded-For` hop for bucketing.",
         ],
         impact=(
             "An authenticated recruiter firing N parallel `/web-chat-turn` or `/jobs/search` requests "
@@ -111,9 +126,9 @@ TICKETS = [
             "every upload and webhook handler reads the entire body into memory before any check."
         ),
         evidence=[
-            "`backend/app/services/ingestion/limits.py:13,43-50` — `MAX_UPLOAD_BYTES`, `assert_upload_size`, `assert_archive_metadata`; a repo-wide grep finds only `backend/tests/test_generic_source_blocks.py:9-13,63-66`.",
-            "`backend/app/api/knowledge.py:366-369` and `backend/app/services/knowledge/service.py:363-364` — `data = await file.read()` then `upload_bytes(...)`; `backend/app/api/personas.py:150-156` reads with no cap at all.",
-            "`backend/app/api/webhooks.py:68,113,207` — `await request.body()` on all three POST routes.",
+            "`backend/app/services/ingestion/limits.py:13,47-55` — `MAX_UPLOAD_BYTES`, `assert_upload_size`, `assert_archive_metadata`; a repo-wide grep finds only `backend/tests/test_generic_source_blocks.py:9-13,63-66`.",
+            "`backend/app/api/knowledge.py:387-398` and `backend/app/services/knowledge/service.py:354` — `data = await file.read()` then `upload_bytes(...)`; `backend/app/api/personas.py:154-161` reads with no cap at all.",
+            "`backend/app/api/webhooks.py:66-90` — `await request.body()` on all three POST routes (`:101`, `:148`, `:243`).",
         ],
         impact=(
             "An admin-scoped session POSTs a multi-gigabyte body: the ASGI layer buffers it, "
@@ -139,7 +154,7 @@ TICKETS = [
             "absent from the repo."
         ),
         evidence=[
-            "`backend/app/main.py:176-182` — the only middleware is `CORSMiddleware`; no `TrustedHostMiddleware`.",
+            "`backend/app/main.py:189-195` — the only middleware is `CORSMiddleware`; no `TrustedHostMiddleware`.",
             "`frontend/index.html` has no CSP meta; a repo-wide grep for those header names finds them only inside `.claude/skills/` reference docs.",
             "`backend/docker-compose.yml` (caddy service) mounts `./Caddyfile`, which `backend/scripts/flip_caddy.sh` renders at deploy time — so this could **not** be verified from the repo. Confirm on the host before treating as confirmed.",
             "`frontend/src/lib/apiClient.ts:12-13` — the JWT pair sits in `localStorage` under `RaStore.auth.*`.",
@@ -171,8 +186,8 @@ TICKETS = [
             "re-authentication."
         ),
         evidence=[
-            "`backend/app/services/integration_settings.py:325-331` — `_preview()` returns `f\"{value[:4]}...{value[-4:]}\"`; attached at `:442-447`, `:481-484`, `:523-526`, `:577-580`, `:618-621`.",
-            "`backend/app/api/integrations.py:1116-1134` — `POST /admin/integrations/facebook/credentials/reveal` returns `facebook_app_secret` and the webhook verify token in plaintext; `require_admin` + `no-store` + actor logged, but no step-up.",
+            "`backend/app/services/integration_settings.py:350-366` — `_preview()` returns `f\"{value[:4]}...{value[-4:]}\"`; attached at `:465-473`, `:501`, `:540`, `:591`, `:629`, `:1099-1104`.",
+            "`backend/app/api/integrations.py:1116-1145` — `POST /admin/integrations/facebook/credentials/reveal` returns `facebook_app_secret` and the webhook verify token in plaintext; `require_admin` + `no-store` + actor logged, but no step-up.",
         ],
         impact=(
             "Eight characters of every credential narrow brute force, and the Meta app secret is the "
@@ -197,7 +212,7 @@ TICKETS = [
             "`jwt_algorithm` is an unvalidated environment string."
         ),
         evidence=[
-            "`backend/app/core/security.py:59-64` — `jwt.decode(token, secret, algorithms=[_settings.jwt_algorithm])`.",
+            "`backend/app/core/security.py:65-72` — `jwt.decode(token, secret, algorithms=[_settings.jwt_algorithm])`.",
             "`backend/app/core/config.py` — `jwt_algorithm: str = \"HS256\"` with no `field_validator`.",
             "Not exploitable today: `type`/`ver`/`disabled` are checked and the subject must parse as a UUID, and `alg: none` is unreachable because PyJWT rejects a non-`None` key.",
         ],
@@ -206,7 +221,7 @@ TICKETS = [
             "(e.g. `RS256`) silently breaks signing and turns logins into 500s with no boot-time guard, "
             "and if any sibling service is ever pointed at the same secret, tokens become "
             "interchangeable across trust boundaries. Note `jwt_secret` also serves as the "
-            "integration-settings cipher-key fallback (`backend/app/services/integration_settings.py:274`) "
+            "integration-settings cipher-key fallback (`backend/app/services/integration_settings.py:299`) "
             "— a key-reuse smell."
         ),
         fix=(
@@ -231,10 +246,10 @@ TICKETS = [
             "reconcile sweep treats it as a lost turn and re-answers the candidate."
         ),
         evidence=[
-            "`backend/app/services/zalo_bot_service.py:96-97` — `ZALO_VISIBLE_BUBBLE_CHARS = 420`, so any answer over 420 chars is multi-request.",
-            "`backend/app/services/zalo_bot_service.py:214-269` (`_aggregate_chunked_send`) — on failure returns `ok=False`, `msg_id=message_ids[0]` (`:251`), `error_class=result.error_class` (`:254`).",
-            "`backend/app/graph/runner.py:1073-1079` — only `AMBIGUOUS_SEND_CLASSES` map to SEND_UNKNOWN, so a definite mid-chunk failure becomes `FAILED` (`backend/app/services/conversation/bot_path.py:610-618`).",
-            "`backend/app/services/conversation/repository.py:459-533` admits a newest BOT message with `delivery_status IN ('PENDING','SENDING','FAILED')`; `backend/app/workers/reconcile_worker.py:211-212` classifies it `failed_send` and re-enqueues after the 900 s backoff (`:49`).",
+            "`backend/app/services/zalo_bot_service.py:105-106` — `ZALO_VISIBLE_BUBBLE_CHARS = 420`, so any answer over 420 chars is multi-request.",
+            "`backend/app/services/zalo_bot_service.py:223-283` (`_aggregate_chunked_send`) — on failure returns `ok=False`, `msg_id=message_ids[0]` (`:277`), `error_class=result.error_class` (`:280`).",
+            "`backend/app/graph/runner.py:1095-1112` — only `AMBIGUOUS_SEND_CLASSES` map to SEND_UNKNOWN, so a definite mid-chunk failure becomes `FAILED` (`backend/app/services/conversation/bot_path.py:620-636`).",
+            "`backend/app/services/conversation/repository.py:603-620` admits a newest BOT message with `delivery_status IN ('PENDING','SENDING','FAILED')`; `backend/app/workers/reconcile_worker.py:298-311` classifies it `failed_send` and re-enqueues after the 900 s backoff (`:93`).",
         ],
         impact=(
             "On the Zalo Bot channel there are no receipts, so the FAILED row is permanent and the "
@@ -265,11 +280,11 @@ TICKETS = [
             "avoids everywhere else."
         ),
         evidence=[
-            "`backend/app/graph/clients.py:142-152` `_record_llm_latency` (sync pipeline), called at `:1095` and `:1363` inside the async agent loop; `:157-167` `_record_llm_429`.",
+            "`backend/app/graph/clients.py:142-160` `_record_llm_latency` (sync pipeline), called at `:1103` and `:1371` inside the async agent loop; `:163-175` `_record_llm_429`.",
             "`backend/app/graph/usage.py:113-147` `record_token_usage` — sync pipeline per LLM response.",
-            "`backend/app/graph/llm_semaphore.py:60-70` `_ensure_tokens` (sync `llen`/`rpush`) from `__aenter__`, and `:119-137` `__aexit__` sync `rpush`+`llen` — while acquire at `:100-102` correctly uses `run_in_executor`. The class is internally inconsistent.",
-            "Same class elsewhere: `backend/app/services/dashboard/service.py:70,255,279-301` (sync Redis from `async def`), `backend/app/workers/chatbot_worker.py:436` (queue-depth read per turn).",
-            "Correct pattern already in-repo: `backend/app/core/ops_health.py:12-13`, `backend/app/main.py:216`.",
+            "`backend/app/graph/llm_semaphore.py:61-105` `_ensure_tokens` (sync `llen`/`rpush`) from `__aenter__`, and `:143-156` `__aexit__` sync `rpush`+`llen` — while acquire at `:124-126` correctly uses `run_in_executor`. The class is internally inconsistent.",
+            "Same class elsewhere: `backend/app/services/dashboard/service.py:274-280,304-331` (sync Redis from `async def`), `backend/app/workers/chatbot_worker.py:508-523` (queue-depth read per turn).",
+            "Correct pattern already in-repo: `backend/app/core/ops_health.py:12-13`, `backend/app/main.py:270-280`.",
         ],
         impact=(
             "4–12 blocking round trips per turn inside the loop of the process that also serves webhook "
@@ -282,7 +297,7 @@ TICKETS = [
             "Move the counters and the semaphore release onto the async client "
             "(`app/core/redis.py:get_redis()`) — they are fire-and-forget, so this is a drop-in — or "
             "wrap in `asyncio.to_thread`. Use `asyncio.to_thread` for the dashboard's sync-only reads. "
-            "Also replace the deprecated `asyncio.get_event_loop()` at `llm_semaphore.py:100` with "
+            "Also replace the deprecated `asyncio.get_event_loop()` at `backend/app/graph/llm_semaphore.py:124-126` with "
             "`asyncio.get_running_loop()`."
         ),
     ),
@@ -299,8 +314,8 @@ TICKETS = [
             "concurrent holder."
         ),
         evidence=[
-            "`backend/app/workers/reconcile_worker.py:83-89` — `SET NX EX=300` then a blind `conn.delete(...)`; the sweep can process `reconcile_batch_size = 50` conversations with a session each (`backend/app/core/config.py:366`).",
-            "`backend/app/services/integration_settings.py:800` acquires with `nx=True, ex=30` and `:868-871` releases blindly, while the guarded work is two provider POSTs at `zalo_bot_request_timeout = 30` s each plus a DB commit.",
+            "`backend/app/workers/reconcile_worker.py:132-139` — `SET NX EX=300` then a blind `conn.delete(...)`; the sweep can process `reconcile_batch_size = 50` conversations with a session each (`backend/app/core/config.py:415`).",
+            "`backend/app/services/integration_settings.py:812-817` acquires with `nx=True, ex=30` and `:887-897` releases blindly, while the guarded work is two provider POSTs at `zalo_bot_request_timeout = 30` s each plus a DB commit.",
             "Correct patterns already present: `backend/app/core/singleflight.py:123-138` (GETDEL ownership CAS) and `backend/app/services/profile_enrichment.py:160-172`.",
         ],
         impact=(
@@ -308,7 +323,7 @@ TICKETS = [
             "the atomic `acquire_lock`. For the OA token refresh it is a correctness defect: Zalo "
             "refresh tokens are single-use, so two workers redeeming one leaves the loser's stale pair "
             "overwriting the winner's and the OA access token invalid until an admin re-authorizes "
-            "(`backend/app/services/integration_settings.py:847-850` documents this outcome)."
+            "(`backend/app/services/integration_settings.py:864-867` documents this outcome)."
         ),
         fix=(
             "Use `singleflight.release(key, leader_id)` (or an equivalent Lua CAS-delete) for both "
@@ -330,7 +345,7 @@ TICKETS = [
         evidence=[
             "`backend/app/services/password_reset_service.py:87-88` — `asyncio.create_task(self._send_reset_email(...))`, handle dropped.",
             "`backend/app/services/password_reset_service.py:90-122` — the only sender and the only writer of the `password_reset_email_sent`/`_failed` audit rows.",
-            "Contrast in-repo: `backend/app/workers/chatbot_worker.py:37-47` and `backend/app/core/events.py:99-101` both keep a module-level task set with `add_done_callback`.",
+            "Contrast in-repo: `backend/app/workers/chatbot_worker.py:16,38-50` and `backend/app/services/conversation/events.py:99-101` both keep a module-level task set with `add_done_callback`.",
         ],
         impact=(
             "The API returns 200 (\"check your email\") while the mail never sends and no failure row is "
@@ -355,8 +370,8 @@ TICKETS = [
             "SQL update itself has no guard — so a concurrent provider enrichment can be overwritten."
         ),
         evidence=[
-            "`backend/app/recruitment/infrastructure/service_adapters.py:109-130` — `stored_gender()` reads, then `record_inferred_gender()` re-reads and calls `set_gender_by_id`.",
-            "`backend/app/services/lead/repository.py:90-95` — `UPDATE leads SET gender = :gender WHERE id = :lead_id`, no `IS NULL`/blank guard; the docstring at `:135-144` acknowledges the guard lives in the adapter. `version`/`updated_at` are untouched.",
+            "`backend/app/recruitment/infrastructure/service_adapters.py:114-143` — `stored_gender()` reads, then `record_inferred_gender()` re-reads and calls `set_gender_by_id`.",
+            "`backend/app/services/lead/repository.py:141-160` — `UPDATE leads SET gender = :gender WHERE id = :lead_id`, no `IS NULL`/blank guard; the docstring at `:142-153` acknowledges the guard lives in the adapter. `version`/`updated_at` are untouched.",
             "The provider path *is* atomic: `backend/app/services/profile_enrichment.py:287-312` uses `.where(..., _blank_column(Lead.gender))`.",
         ],
         impact=(

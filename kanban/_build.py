@@ -55,6 +55,14 @@ def tickets():
     return out
 
 
+def withdrawn():
+    """Ids that were allocated then withdrawn; rendered next to the deferred section."""
+    out = []
+    for mod in (tickets_a, tickets_b, tickets_c, tickets_d):
+        out.extend(getattr(mod, "WITHDRAWN", []))
+    return out
+
+
 def render_ticket(t) -> str:
     lines = [
         "---",
@@ -166,6 +174,10 @@ def main() -> None:
         )
     out += [
         "",
+        "Counts here derive from each ticket's single `area` field; `labels` may carry "
+        "cross-cutting areas — e.g. SEC-02 and SEC-05 are also labeled `reliability`, so a "
+        "label-based Reliability count reads 9, not 7.",
+        "",
         "## Suggested first wave",
         "",
         "Ordered by risk-per-hour, not by severity label:",
@@ -200,6 +212,19 @@ def main() -> None:
         "Fixing the code without fixing the credential would false-reject 100% of real "
         "events. Either obtain the checksum key and wire the verifier into the inbound "
         "route, or delete the route if the OA channel is not in production use.",
+        "",
+        "### Withdrawn ticket ids",
+        "",
+        "The id sequence is deliberately **not** contiguous: the finding above was "
+        "allocated an id, then withdrawn by request before the board was published, and "
+        "no id is renumbered. The gap SEC-02…SEC-08 is intentional — no ticket is "
+        "missing or lost.",
+        "",
+        *[
+            f"- **{w['id']} (withdrawn)** — {w['title']} — deferred by request, not "
+            f"counted on the board. {w['reason']}"
+            for w in withdrawn()
+        ],
         "",
         "## Not tickets",
         "",
