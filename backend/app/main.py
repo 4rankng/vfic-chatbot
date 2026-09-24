@@ -232,6 +232,7 @@ async def metrics() -> dict:
             "reconcile_re_enqueues_total",
             "reconcile_stale_pending_total",
             "reconcile_unanswered_inbound_total",
+            "reconcile_superseded_inbound_total",
             "reconcile_skipped_locked_total",
             "reconcile_enqueue_failed_total",
             "reconcile_unknown_send_outcome",

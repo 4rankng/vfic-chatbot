@@ -398,3 +398,77 @@ async def test_recent_pending_is_still_recovered_fast(mock_session_cls, mock_enq
 
     mock_enqueue.assert_called_once()
     mock_redis.incrby.assert_any_call("reconcile_stale_pending_total", 1)
+
+
+# --- the durable net for an inbound dropped behind a completed outcome ---
+
+_PATCH_NEVER_GIVEN = (
+    "app.services.conversation.repository.ConversationRepository"
+    ".latest_inbound_never_given_a_turn"
+)
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+@patch(_PATCH_NEVER_GIVEN, new_callable=AsyncMock, return_value=True)
+async def test_outcome_answering_an_older_inbound_recovers_the_dropped_message(
+    mock_never_given, mock_session_cls, mock_enqueue
+):
+    """A completed outcome that answered an OLDER inbound leaves the newest message lost.
+
+    The newest candidate message arrived while that outcome's turn held the
+    per-chat mutex, so the ingress dropped it and its outcome row became the
+    newest message — invisible to the loop-free predicate. The sweep recovers it
+    and counts it apart from an ordinary never-processed inbound.
+    """
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("Còn vị trí nào không?")
+    sent_bot_msg = _make_bot_msg(status=DeliveryStatus.SENT, body="Dạ em chào anh")
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=sent_bot_msg)
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_called_once()
+    payload = mock_enqueue.call_args[0][0]
+    assert payload["user_text"] == "Còn vị trí nào không?"
+    assert payload["execution_source"] == "recovery"
+    mock_redis.incrby.assert_any_call("reconcile_superseded_inbound_total", 1)
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+@patch(_PATCH_NEVER_GIVEN, new_callable=AsyncMock, return_value=False)
+async def test_outcome_that_answered_the_newest_message_is_not_recovered(
+    mock_never_given, mock_session_cls, mock_enqueue
+):
+    """Re-verification against fresh state gates the action.
+
+    Between the scan and the lock a turn may have answered the message; the
+    outcome then quotes it, the proof fails, and the sweep must not enqueue a
+    second answer to an already answered (or deliberately suppressed) message.
+    """
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("Còn vị trí nào không?")
+    sent_bot_msg = _make_bot_msg(status=DeliveryStatus.SENT, body="Dạ em chào anh")
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=sent_bot_msg)
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_not_called()
+    assert conv.bot_locked_until is None  # lock released for the next tick
+    assert not any(
+        call.args[0] == "reconcile_superseded_inbound_total"
+        for call in mock_redis.incrby.call_args_list
+    )

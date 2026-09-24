@@ -1,9 +1,12 @@
 """Tests for find_reconcile_candidates — the loop-free recovery predicate.
 
-Pure unit tests with mocked DB sessions. The critical assertions verify that
-the SQL predicate is loop-safe: only ``WORKER``-newest, ``BOT/PENDING``-newest,
-or ``BOT/FAILED``-newest conversations are returned; ``BOT/SENT``,
-``BOT/SUPPRESSED``, and in-grace messages are excluded.
+Pure unit tests with mocked DB sessions: they pin the query shape the sweep
+issues and the time bounds it computes.  What the predicate *selects* is proven
+behaviorally, against a real PostgreSQL, in
+``tests/integration/test_reconcile_superseded_inbound.py`` — the loop-safety
+invariants (only never-processed inbound, stuck PENDING/SENDING, or a delivery
+failure as the newest message; a deliberate SUPPRESSED silence never re-answered)
+are properties of the SQL, not of its text.
 """
 
 from __future__ import annotations
@@ -54,64 +57,6 @@ async def test_returns_empty_list_when_no_candidates():
     )
 
     assert result == []
-
-
-async def test_sql_contains_loop_free_predicate():
-    """The SQL must check for WORKER or recoverable BOT statuses as newest.
-
-    This is the core loop-safety guarantee: a completed turn (SENT or SUPPRESSED)
-    leaves BOT/SENT or BOT/SUPPRESSED as newest → neither matches → excluded.
-    """
-    db = _mock_db([])
-    repo = ConversationRepository(db)
-
-    now = datetime.now(timezone.utc)
-    await repo.find_reconcile_candidates(
-        now=now,
-        grace_seconds=120,
-        max_age_seconds=86400,
-        limit=50,
-    )
-
-    call_args = db.scalars.call_args
-    sql_text = str(call_args[0][0])  # the text(...) clause
-
-    # Loop-safety: must match WORKER or BOT+PENDING/SENDING/FAILED. SENT,
-    # SUPPRESSED, and SEND_UNKNOWN are terminal and must never enter a sweep.
-    assert "m.sender = 'WORKER'" in sql_text
-    assert "m.sender = 'BOT'" in sql_text
-    assert "m.delivery_status IN ('PENDING', 'SENDING', 'FAILED')" in sql_text
-    # The confirmed OA recipient rejection must not enter the recovery sweep;
-    # generic failures and Bot `Not Found` remain retryable until a structured
-    # provider error classification is available.
-    assert "c.zalo_channel = 'oa'" in sql_text
-    assert "LIKE '%user_id is invalid%'" in sql_text
-    assert "c.zalo_channel = 'bot'" not in sql_text
-    assert "SEND_UNKNOWN" not in sql_text
-    # Stale-lock recovery: a crashed worker's live lock with a stale heartbeat is
-    # included so reconcile can break it (instead of waiting the full bot_lock_ttl).
-    assert "bot_lock_heartbeat_at" in sql_text
-    assert ":stale_cutoff" in sql_text
-
-    # Must NOT match SENT or SUPPRESSED
-    assert "SENT" not in sql_text
-    assert "SUPPRESSED" not in sql_text
-
-    # Must filter by eligible modes
-    assert "'BOT', 'SEMI_AUTO'" in sql_text
-
-    # Must check lock is free
-    assert "bot_locked_until IS NULL" in sql_text
-
-    # Must respect OPEN status
-    assert "'OPEN'" in sql_text
-
-    # Must have time bounds (grace + max_age)
-    assert "now_minus_grace" in sql_text
-    assert "now_minus_max_age" in sql_text
-
-    # Must have a LIMIT
-    assert "LIMIT :limit" in sql_text
 
 
 async def test_sql_params_include_time_bounds():

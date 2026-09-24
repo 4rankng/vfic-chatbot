@@ -14,6 +14,13 @@ cycle (~60s scan + 120s grace ≈ 3-4 min total recovery).
 Loop-safety: a completed turn (sent OR suppressed) leaves ``BOT/SENT`` or
 ``BOT/SUPPRESSED`` as the newest message → excluded.  ``acquire_lock`` is
 taken *before* touching any PENDING row → overlapping ticks cannot double-enqueue.
+
+One exception is deliberate (``_MASKED_INBOUND_SQL``): a completed outcome whose
+own outbound command quotes a DIFFERENT inbound than the newest candidate message
+answered an older message, so the newest candidate message was dropped by the
+ingress while that turn held the per-chat mutex and never got a turn.  Without it
+that outcome row hides the conversation from this sweep forever — the durable net
+behind ``chatbot_worker._handoff_to_newer_inbound``.
 """
 
 from __future__ import annotations
@@ -28,6 +35,7 @@ logger = logging.getLogger(__name__)
 _RECONCILE_REENQUEUED = "reconcile_re_enqueues_total"
 _RECONCILE_STALE_PENDING = "reconcile_stale_pending_total"
 _RECONCILE_UNANSWERED_INBOUND = "reconcile_unanswered_inbound_total"
+_RECONCILE_SUPERSEDED_INBOUND = "reconcile_superseded_inbound_total"
 _RECONCILE_FAILED_SEND = "reconcile_failed_send_total"
 _RECONCILE_SKIPPED_LOCKED = "reconcile_skipped_locked_total"
 _RECONCILE_ENQUEUE_FAILED = "reconcile_enqueue_failed_total"
@@ -94,7 +102,10 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     """Core sweep: find candidates, re-enqueue where possible."""
     from app.core.config import get_settings
     from app.services.conversation import ConversationService
-    from app.services.conversation.repository import ConversationRepository
+    from app.services.conversation.repository import (
+        SUPERSEDED_OUTCOME_STATUSES,
+        ConversationRepository,
+    )
     from app.workers._db import worker_session
 
     settings = get_settings()
@@ -120,6 +131,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     re_enqueued = 0
     stale_pending = 0
     unanswered_inbound = 0
+    superseded_inbound = 0
     failed_send = 0
     skipped_locked = 0
     enqueue_failed = 0
@@ -206,7 +218,29 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     msg = (await db.scalars(stmt)).first()
                     user_text = msg.body if msg else ""
                     reply_to_message_id = msg.zalo_message_id if msg else ""
-                    if newest.delivery_status.name == "PENDING":
+                    # A completed BOT outcome whose durable outbound command
+                    # quotes a DIFFERENT inbound answered an older message: the
+                    # newest candidate message arrived while that turn held the
+                    # per-chat mutex, the ingress dropped it, and it never got a
+                    # turn. The outcome row is what hid the conversation from this
+                    # sweep. Re-verified against freshly read state — a turn
+                    # enqueued since the scan may have answered the message since,
+                    # and then the newest outcome quotes it and this is False.
+                    # Only the statuses the sweep selects for this branch can
+                    # match, so a stale placeholder or a delivery failure keeps
+                    # its own recovery path below untouched.
+                    superseded = (
+                        newest.delivery_status.name in SUPERSEDED_OUTCOME_STATUSES
+                        and await repo.latest_inbound_never_given_a_turn(
+                            conv_fresh,
+                            now=now,
+                            grace_seconds=settings.reconcile_grace_seconds,
+                            max_age_seconds=settings.reconcile_max_age_seconds,
+                        )
+                    )
+                    if superseded:
+                        reason = "superseded_inbound"
+                    elif newest.delivery_status.name == "PENDING":
                         reason = "stale_pending"
                     elif newest.delivery_status.name == "FAILED":
                         reason = "failed_send"
@@ -268,6 +302,8 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     stale_pending += 1
                 elif reason == "failed_send":
                     failed_send += 1
+                elif reason == "superseded_inbound":
+                    superseded_inbound += 1
                 else:
                     unanswered_inbound += 1
                 logger.info(
@@ -298,6 +334,8 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
         pipe.incrby(_RECONCILE_STALE_PENDING, stale_pending)
     if unanswered_inbound:
         pipe.incrby(_RECONCILE_UNANSWERED_INBOUND, unanswered_inbound)
+    if superseded_inbound:
+        pipe.incrby(_RECONCILE_SUPERSEDED_INBOUND, superseded_inbound)
     if failed_send:
         pipe.incrby(_RECONCILE_FAILED_SEND, failed_send)
     if skipped_locked:
