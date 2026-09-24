@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { CategoryDraft } from "../application/use-category-draft";
+import type { CategoryDraft } from "./use-category-draft";
 import type { KnowledgeCategoryStatus } from "../domain/project-knowledge-contracts";
 import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-policy";
 import { ExternalSourceLinkForm } from "../ExternalSourceLinkForm";

@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import type { SinglePageDraft } from "../application/use-single-page-draft";
+import type { SinglePageDraft } from "./use-single-page-draft";
 import { ExternalSourceLinkForm } from "../ExternalSourceLinkForm";
 import { ExternalSourceList } from "../ExternalSourceList";
 
