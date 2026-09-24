@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last updated:** 2026-07-26
+**Last updated:** 2026-09-24
 **Production host:** `bot.tingting.vip` (DigitalOcean droplet, 2 vCPU / ~4 GB RAM)
 **Stack path:** `/opt/vfic` · **Git remote:** `git@github.com:4rankng/ChatBotN8N.git` (`main`)
 
@@ -368,10 +368,10 @@ procedure. Summary of the available targets:
 
 | Target | What it does |
 |---|---|
-| `make backup` | `pg_dump` prod → scp to OneDrive (timestamped `.sql.gz`). Validates non-empty. |
-| `make restore` | Restore latest OneDrive backup into **local dev** DB. Drops + recreates `vfic`, `alembic stamp head`, resets all passwords to `admin123`, ensures dev admin. |
-| `make backup-full` | `bash scripts/backup-droplet.sh` → bundle `/opt/vfic/.env` + streamed gzipped `pg_dump` + volume tarballs (KB uploads, Caddy TLS) + config snapshot + manifest. Output is `backups/<ts>.zip` (LOCAL only, gitignored). Embeds `restore.sh` + runbook. **Redis intentionally skipped** (orphaned-job OOM source). |
-| `make restore-prod BUNDLE=backups/<bundle>` | `bash scripts/restore-droplet.sh` — rebuild on a **fresh droplet** from a bundle: preflight (SSH/Docker/free 80/443), restore `.env` + Caddyfile + compose, pull images, seed Caddy TLS + KB volumes best-effort, start postgres+redis, load SQL dump, bring up stack, verify health. Redis fresh. Alembic + `create_admin` skipped. Supports `--dry-run`. |
+| `make backup` | `pg_dump` prod (custom format) → OneDrive (timestamped `.dump`) **plus `/opt/vfic/.env`** (timestamped `vfic_env_<ts>.env`, mode 0600) so the credential-encryption key always travels with the dump. Warns when the `.env` has no `INTEGRATION_SETTINGS_ENCRYPTION_KEY`. Keeps the newest 10 dumps. |
+| `make restore` | Restore latest OneDrive backup into **local dev** DB. Fails *before* touching the DB when the backup's sealing key differs from `backend/.env` (`ALLOW_KEY_MISMATCH=1` acknowledges explicitly); warns when the backup predates `.env` snapshots. Loads with `ON_ERROR_STOP`, `alembic stamp head`, optional password reset (prompt; `FORCE=1`), then verifies sealed integration rows decrypt (`scripts/verify_integration_secrets.py`). |
+| `make backup-full` | `bash scripts/backup-droplet.sh` → bundle `/opt/vfic/.env` + streamed gzipped `pg_dump` + volume tarballs (KB uploads, Caddy TLS) + config snapshot (compose, `Caddyfile.template`, `prod-env.sh`, **and the rendered `/opt/vfic/Caddyfile`**) + manifests (git HEAD, **active colour, running image tag, alembic revision**, images, volume sizes). Refuses to produce a bundle whose `.env` carries no sealing key at all. Output is `backups/<ts>.zip` (LOCAL only, gitignored). Embeds `restore.sh` + runbook. **Redis intentionally skipped** (orphaned-job OOM source). |
+| `make restore-prod BUNDLE=backups/<bundle>` | `bash scripts/restore-droplet.sh` — rebuild on a **fresh droplet** from a bundle: preflight (SSH/Docker/free 80/443), restore `.env` + compose + edge config (rendered Caddyfile, or the template rendered with the recorded colour), write `ACTIVE_COLOR`/`PREV_COLOR`/`PREV_TAG`, pull images **at the tag recorded in the bundle** (`--tag` overrides; refuses `latest`/unknown), seed Caddy TLS + KB volumes best-effort, start postgres+redis, load SQL dump, run `widen_alembic_version` + `alembic upgrade head` **and assert the restored revision equals the pinned image's head**, bring up the stack, verify the running tag + container `/health` + that sealed integration rows decrypt. Redis fresh. `create_admin` skipped (dump has admins). Supports `--dry-run`. |
 
 ---
 
@@ -429,6 +429,23 @@ procedure. Summary of the available targets:
 - Runtime resolves them via `IntegrationSettingsService(db).resolve_*()`,
   falling back to env bootstrap values in dev only.
 - `/opt/vfic/.env` is generated mode `0600` by `scripts/prod-env.sh`.
+
+### The sealing key is DR-critical
+`INTEGRATION_SETTINGS_ENCRYPTION_KEY` is the one secret whose loss silently
+destroys data: every `integration_settings` row is AES-GCM-sealed under it, and
+a dump restored without the matching key yields rows that raise `InvalidTag`,
+get skipped with a warning, and fall back to env values — the stack looks
+healthy while the stored credentials are gone. `JWT_SECRET` is only the
+legacy/dev fallback; a value sealed under the fallback reopens only under that
+same secret, so rotating `JWT_SECRET` re-breaks every sealed row.
+
+Both backup paths therefore carry `/opt/vfic/.env` (`make backup`'s timestamped
+snapshot and `make backup-full`'s bundle, both mode 0600), a full-droplet bundle
+without any sealing key is refused outright, and every restore verifies sealed
+rows actually decrypt (`backend/scripts/verify_integration_secrets.py`, run in
+dev after `make restore` and inside the pinned image by `restore-droplet.sh`).
+Store the key in a password manager separate from the droplet and the backup
+files, and never rotate it without re-sealing stored credentials.
 
 ### Redis is not backed up (by design)
 Redis holds only ephemeral state: RQ broker, per-chat locks, pub/sub, rate

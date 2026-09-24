@@ -113,6 +113,7 @@ backup:
 	ssh root@$(PROD_SERVER) "rm -f /tmp/vfic_pg.dump" && \
 	echo "Fetching /opt/vfic/.env (holds the integration-credential encryption key)..." && \
 	scp root@$(PROD_SERVER):/opt/vfic/.env "$(BACKUP_DIR)/$${ENV_FILE}" && \
+	chmod 600 "$(BACKUP_DIR)/$${ENV_FILE}" && \
 	ssh root@$(PROD_SERVER) "chmod 600 /opt/vfic/.env" && \
 	if ! grep -q "^INTEGRATION_SETTINGS_ENCRYPTION_KEY=..*" "$(BACKUP_DIR)/$${ENV_FILE}"; then \
 		echo "WARNING: the backed-up .env has no INTEGRATION_SETTINGS_ENCRYPTION_KEY —"; \
@@ -139,6 +140,26 @@ restore:
 	LATEST_SQL=$$(ls -t "$(BACKUP_DIR)"/vfic_pg_backup_*.sql.gz 2>/dev/null | head -1) && \
 	if [ -n "$$LATEST_DUMP" ]; then SRC="$$LATEST_DUMP"; elif [ -n "$$LATEST_SQL" ]; then SRC="$$LATEST_SQL"; else echo "ERROR: No backup found in $(BACKUP_DIR)"; exit 1; fi && \
 	echo "Using backup: $$SRC ($$(du -h "$$SRC" | cut -f1))" && \
+	BACKUP_ENV="$(BACKUP_DIR)/vfic_env_$$(basename "$$SRC" | sed -e 's/^vfic_pg_backup_//' -e 's/\.dump$$//' -e 's/\.sql\.gz$$//').env" && \
+	BKEY="$$(sed -n 's/^INTEGRATION_SETTINGS_ENCRYPTION_KEY=//p' "$$BACKUP_ENV" 2>/dev/null | tail -1)" && \
+	BKEY="$${BKEY:-$$(sed -n 's/^JWT_SECRET=//p' "$$BACKUP_ENV" 2>/dev/null | tail -1)}" && \
+	LKEY="$$(sed -n 's/^INTEGRATION_SETTINGS_ENCRYPTION_KEY=//p' .env | tail -1)" && \
+	LKEY="$${LKEY:-$$(sed -n 's/^JWT_SECRET=//p' .env | tail -1)}" && \
+	if [ ! -f "$$BACKUP_ENV" ]; then \
+		echo "WARNING: $$BACKUP_ENV not found (backup predates the .env snapshot) —"; \
+		echo "         sealed integration credentials may be undecryptable after this restore."; \
+	elif [ "$$BKEY" != "$$LKEY" ]; then \
+		if [ "$(ALLOW_KEY_MISMATCH)" != "1" ]; then \
+			echo "ERROR: the backup's sealing key differs from backend/.env — after the restore every"; \
+			echo "       integration_settings row raises InvalidTag and the service silently falls back"; \
+			echo "       to env values (credentials look configured but are not)."; \
+			echo "       Fix: copy INTEGRATION_SETTINGS_ENCRYPTION_KEY from $$BACKUP_ENV into backend/.env,"; \
+			echo "       or acknowledge explicitly:  make restore ALLOW_KEY_MISMATCH=1"; \
+			exit 1; \
+		else \
+			echo "WARNING (ALLOW_KEY_MISMATCH=1): sealed integration rows will NOT decrypt in dev."; \
+		fi; \
+	fi && \
 	TMP="$$(mktemp -d -t vfic-restore.XXXXXX)" && \
 	trap 'rm -rf "$$TMP"' EXIT && \
 	echo "Terminating active connections and recreating database..." && \
@@ -163,6 +184,9 @@ restore:
 		.venv/bin/python -m scripts.create_admin --only-if-no-admins --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin && \
 		echo "  All users reset to password: admin123"; \
 	else echo "Password reset skipped (FORCE=1 to skip this prompt)."; fi && \
+	echo "Verifying sealed integration settings decrypt..." && \
+	if [ "$(ALLOW_KEY_MISMATCH)" = "1" ]; then echo "  skipped (ALLOW_KEY_MISMATCH=1)."; \
+	else .venv/bin/python -m scripts.verify_integration_secrets; fi && \
 	echo "Restore complete!"
 
 # ─── Full droplet backup / restore (delete + spin up later) ────────────────────

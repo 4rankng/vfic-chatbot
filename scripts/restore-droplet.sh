@@ -21,6 +21,7 @@ BUNDLE=""
 HOST="root@bot.tingting.vip"
 TAG=""
 DRY_RUN=0
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SSH_OPTS=(-o ConnectTimeout=15 -o ServerAliveInterval=30)
 
 usage() {
@@ -280,6 +281,22 @@ if [ "$DRY_RUN" -eq 0 ]; then
   ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && IMAGE_TAG=$TAG docker compose exec -T web-$COLOR python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5).status==200 else 1)\"" \
     || { echo "web-$COLOR /health did not return 200" >&2; exit 1; }
   printf '  web-%s /health ok\n' "$COLOR" >&2
+
+  # Sealed integration credentials must actually open under the restored key —
+  # the .env presence checks above cannot catch a rotated key. The probe ships
+  # from this repo and is piped over stdin, so it also runs against pinned
+  # images that predate it; it prints counts and row keys, never secrets.
+  if [ -f "$REPO_ROOT/backend/scripts/verify_integration_secrets.py" ]; then
+    printf '  verifying sealed integration settings decrypt ...\n' >&2
+    if ! ssh "${SSH_OPTS[@]}" "$HOST" \
+        "cd /opt/vfic && IMAGE_TAG=$TAG docker compose run -T --rm --no-deps web-$COLOR python -" \
+        < "$REPO_ROOT/backend/scripts/verify_integration_secrets.py"; then
+      echo "sealed integration_settings rows do not decrypt under the restored key — see probe output above." >&2
+      exit 1
+    fi
+  else
+    echo "WARN: backend/scripts/verify_integration_secrets.py not found — decrypt probe skipped." >&2
+  fi
 fi
 
 echo >&2
