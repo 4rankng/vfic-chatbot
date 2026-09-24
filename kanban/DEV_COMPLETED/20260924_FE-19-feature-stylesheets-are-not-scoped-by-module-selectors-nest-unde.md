@@ -5,7 +5,7 @@ severity: low
 area: frontend
 labels: [tech-debt]
 effort: L
-status: todo
+status: dev_completed
 column: TODO
 opened: 2026-09-24
 ---
