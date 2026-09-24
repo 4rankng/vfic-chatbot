@@ -42,10 +42,14 @@ def upgrade() -> None:
         f"UPDATE public.worker_feature_catalog SET is_active = false "
         f"WHERE feature_key IN {_INACTIVE_KEYS_SQL};"
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS worker_feature_catalog_active_idx "
-        "ON public.worker_feature_catalog (is_active);"
-    )
+    # worker_feature_catalog exists since 0004 with live rows, so the index
+    # builds CONCURRENTLY (plain CREATE INDEX would lock the table against
+    # writes for the build; migrations run mid-deploy on the serving DB).
+    with op.get_context().autocommit_block():
+        op.execute(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS worker_feature_catalog_active_idx "
+            "ON public.worker_feature_catalog (is_active);"
+        )
 
 
 def downgrade() -> None:

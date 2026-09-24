@@ -106,6 +106,10 @@ def upgrade() -> None:
         ),
     )
     # Dispatcher scan: pending rows ordered by age. Partial index keeps it small.
+    # Both indexes below sit on outbound_outbox, a table created earlier in
+    # this same migration: it has zero rows and no concurrent readers yet, so
+    # plain CREATE INDEX is correct — CONCURRENTLY would only add an extra
+    # transaction boundary (and an INVALID-index failure mode) for no benefit.
     op.execute(
         "CREATE INDEX ix_outbound_outbox_pending_created "
         "ON outbound_outbox (created_at) "

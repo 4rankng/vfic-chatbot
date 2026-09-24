@@ -37,12 +37,19 @@ def upgrade() -> None:
 
         ALTER TABLE public.leads ALTER COLUMN lead_stage SET DEFAULT 'NEW';
         DROP TYPE lead_stage_old;
-
-        -- ALTER COLUMN TYPE drops all indexes that depend on the column;
-        -- recreate the stage index that the baseline (0001) defined.
-        CREATE INDEX IF NOT EXISTS leads_stage_idx ON public.leads (lead_stage);
         """
     )
+    # ALTER COLUMN TYPE drops every index on the column, so the stage index the
+    # baseline defined must be recreated. leads is the hot recruiter-facing
+    # table, so the rebuild is CONCURRENTLY (plain CREATE INDEX write-blocks
+    # leads for the whole build while migrations run mid-deploy); it runs in
+    # its own autocommit block because CONCURRENTLY cannot sit inside the
+    # transaction that just swapped the enum.
+    with op.get_context().autocommit_block():
+        op.execute(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS leads_stage_idx "
+            "ON public.leads (lead_stage)"
+        )
 
 
 def downgrade() -> None:

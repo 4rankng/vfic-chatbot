@@ -149,7 +149,11 @@ def upgrade() -> None:
         ") UPDATE kb_versions SET status = 'ARCHIVED'"
         " WHERE id IN (SELECT id FROM ranked WHERE rn > 1)"
     )
-    op.execute("CREATE UNIQUE INDEX uq_active_kb_version_per_project ON kb_versions(project_id) WHERE status = 'ACTIVE'")
+    # kb_versions is an existing table with live rows: the uniqueness fence
+    # must build CONCURRENTLY or its CREATE UNIQUE INDEX write-blocks kb
+    # version flips for the whole build (migrations run mid-deploy).
+    with op.get_context().autocommit_block():
+        op.execute("CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_active_kb_version_per_project ON kb_versions(project_id) WHERE status = 'ACTIVE'")
 
 
 def downgrade() -> None:

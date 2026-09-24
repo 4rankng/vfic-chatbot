@@ -48,9 +48,15 @@ def upgrade() -> None:
         "UPDATE conversations SET conversation_seq = version "
         "WHERE conversation_seq = 1 AND version > 1"
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_bot_runs_trace_id ON bot_runs (trace_id)"
-    )
+    # bot_runs is an existing table with live rows: CREATE INDEX would take a
+    # write-blocking lock for the whole build, queueing candidate writes while
+    # the old colour still serves (migrations run mid-deploy). CONCURRENTLY
+    # needs no surrounding transaction — same pattern as 0014/0016.
+    with op.get_context().autocommit_block():
+        op.execute(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_bot_runs_trace_id "
+            "ON bot_runs (trace_id)"
+        )
 
 
 def downgrade() -> None:

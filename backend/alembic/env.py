@@ -46,6 +46,13 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        # One transaction per migration file (not one for the whole run):
+        # several revisions use autocommit_block() for CREATE INDEX
+        # CONCURRENTLY / ALTER TYPE ADD VALUE, which commits the open
+        # transaction — per-migration transactions keep that commit scoped to
+        # a single revision instead of every revision before it (the pairing
+        # Alembic's own autocommit_block docs recommend).
+        transaction_per_migration=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -59,7 +66,13 @@ def run_migrations_online() -> None:
         connect_args={"options": PG_SESSION_OPTIONS},
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            # See run_migrations_offline for why each migration is its own
+            # transaction.
+            transaction_per_migration=True,
+        )
         with context.begin_transaction():
             context.run_migrations()
 
