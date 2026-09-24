@@ -1,0 +1,11 @@
+{
+  "_comment": "Single shared source for the console resource-to-backend-path table. The frontend dataProvider test (dataProvider.test.ts) drives the provider against every entry; the backend contract test (backend/tests/test_frontend_api_contract.py) reads this same file and asserts each path resolves to a real GET route in the OpenAPI schema. Add or rename a console resource here first.",
+  "conversations": "conversations",
+  "leads": "leads",
+  "bot_runs": "bot_runs",
+  "knowledge_sources": "knowledge/documents",
+  "knowledge_bases": "knowledge-bases",
+  "projects": "knowledge/projects",
+  "personas": "knowledge/personas",
+  "users": "users"
+}

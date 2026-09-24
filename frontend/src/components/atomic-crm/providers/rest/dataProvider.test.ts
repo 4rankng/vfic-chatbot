@@ -2,6 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { clearTokens } from "@/lib/apiClient";
 import { getDataProvider } from "./dataProvider";
+import resourceTableRaw from "./resource-paths.json?raw";
+
+// The shared resource-to-backend-path table (also read by
+// backend/tests/test_frontend_api_contract.py — edit both via the JSON only).
+const RESOURCE_TABLE: Record<string, string> = Object.fromEntries(
+  Object.entries(JSON.parse(resourceTableRaw) as Record<string, string>).filter(
+    ([key]) => !key.startsWith("_"),
+  ),
+);
 
 /**
  * The REST dataProvider had zero tests. These cover the query-translation
@@ -227,5 +236,25 @@ describe("legacy configuration migration oracle", () => {
   it("does not expose browser-local business configuration methods", () => {
     expect("getConfiguration" in provider).toBe(false);
     expect("updateConfiguration" in provider).toBe(false);
+  });
+});
+
+// The contract half: the same table is asserted against the backend's OpenAPI
+// schema by backend/tests/test_frontend_api_contract.py.
+describe("backend route contract", () => {
+  it("emits the shared backend path for every console resource", async () => {
+    const entries = Object.entries(RESOURCE_TABLE);
+    expect(entries.length).toBeGreaterThanOrEqual(8);
+
+    for (const [resource, segment] of entries) {
+      const { fetch, lastUrl } = stubList([]);
+      globalThis.fetch = fetch;
+      await provider.getList(resource, {
+        pagination: { page: 1, perPage: 10 },
+        sort: { field: "id", order: "DESC" },
+        filter: {},
+      });
+      expect(lastUrl(), `resource ${resource}`).toContain(`/api/v1/${segment}?`);
+    }
   });
 });

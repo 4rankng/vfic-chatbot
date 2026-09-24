@@ -3,3 +3,8 @@ declare module "vitest/internal/browser" {
     setTimezone(timezoneId: string): Promise<void>;
   }
 }
+
+declare module "*?raw" {
+  const content: string;
+  export default content;
+}
