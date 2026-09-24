@@ -301,13 +301,13 @@ class Settings(BaseSettings):
     agent_max_seconds: float = 8.5
     send_margin_seconds: float = 1.0
     soft_fallback_remaining: float = 2.0
-    # Per-stage turn budgets (Tech-Lead Directive §4 "Use hard deadlines"). These
-    # bound the CHEAP, derived stages only — retrieval (vector + lexical arms),
-    # rerank. The agent LLM generation is deliberately NOT bounded here; see
-    # app/graph/deadlines.py docstring for the production rationale. Defaults
-    # leave headroom under sla_seconds for the uncapped agent + send.
-    turn_retrieval_budget_seconds: float = 1.2
-    turn_rerank_budget_seconds: float = 0.6
+    # Turn time-boxing is deadline-at-epoch ONLY: `deadline_at_epoch` (stamped by
+    # the webhook from `received_at_epoch + sla_seconds`) bounds the FAQ-bypass
+    # lookup and the SLO rollups. There is no per-stage retrieval/rerank budget —
+    # the directive-§4 stage budgets were never wired to a production caller and
+    # were removed with `app/services/chatbot/{paths,budget,deadlines}.py`
+    # (ARCH-03). The agent LLM generation is deliberately uncapped; see the
+    # `agent_max_seconds` note above.
     # Single-flight request coalescing (Tech-Lead Directive §6): when N concurrent
     # turns ask the same uncached question, only one process calls the model; the
     # others await the same result via Redis pub/sub. Applies ONLY to non-

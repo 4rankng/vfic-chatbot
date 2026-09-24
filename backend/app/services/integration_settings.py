@@ -292,6 +292,15 @@ class IntegrationSettingsCipher:
     The DB stores opaque `v1:<base64(nonce+ciphertext)>` values. In development,
     the JWT secret is accepted as a fallback key so local setup stays light; in
     production Settings.model_post_init requires INTEGRATION_SETTINGS_ENCRYPTION_KEY.
+
+    Migration hazard (OPS-03/SEC-08): a value sealed under the JWT-secret fallback
+    can only ever be reopened with that same secret. Setting the dedicated key on a
+    deployment that has been encrypting under the fallback makes every stored
+    credential undecryptable unless the old secret is preserved, and because
+    `make backup` historically shipped only the DB dump, rotating or losing the
+    secret silently destroys admin-managed integration credentials. Treat
+    INTEGRATION_SETTINGS_ENCRYPTION_KEY as part of the backup set, never rotate it
+    without re-sealing, and prefer a labelled derivation over reusing `jwt_secret`.
     """
 
     def __init__(self, settings: Settings | None = None) -> None:

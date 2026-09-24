@@ -3,12 +3,14 @@
 # backup-droplet.sh — full backup of the bot.tingting.vip droplet into a zip.
 #
 # Captures everything that is NOT in git and dies when the droplet is deleted:
-#   - /opt/vfic/.env            (all prod secrets)
+#   - /opt/vfic/.env            (all prod secrets, incl. the integration key)
 #   - PostgreSQL dump           (the database)
 #   - vfic_kb_uploads volume    (uploaded KB originals)
 #   - vfic_caddy_data/config    (Let's Encrypt TLS certs + ACME state)
-#   - config snapshot           (docker-compose.yml, Caddyfile, prod-env.sh)
-#   - manifests                 (git HEAD, running images, volume sizes)
+#   - config snapshot           (docker-compose.yml, Caddyfile.template,
+#                                prod-env.sh, and the RENDERED /opt/vfic/Caddyfile)
+#   - manifests                 (git HEAD, active colour, image tag, alembic
+#                                revision, running images, volume sizes)
 #
 # Redis is intentionally NOT backed up: it holds the orphaned RQ job hashes
 # that caused the prod OOM, and the scheduler re-registers its ticks on boot.
@@ -36,8 +38,20 @@ command -v scp    >/dev/null || die "scp not found."
 
 # --- preflight ----------------------------------------------------------------
 log "connecting to root@$PROD_SERVER ..."
+ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" "test -f /opt/vfic/.env" \
+  || die "cannot reach droplet or /opt/vfic/.env is missing. Is the droplet still up?"
+
+# The prod compose file requires IMAGE_TAG for EVERY subcommand — `${IMAGE_TAG:?}`
+# interpolates the whole file even for `ps`/`exec`/`run`, none of which use the
+# app images. Read the tag the active colour was deployed with once and pass it
+# to every compose call below (`unknown` is a read-only placeholder).
+COMPOSE_TAG="$(ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
+  "cat /opt/vfic/ACTIVE_TAG 2>/dev/null || cat /opt/vfic/PREV_TAG 2>/dev/null || echo unknown" \
+  | tr -d '[:space:]' || true)"
+[ -n "$COMPOSE_TAG" ] || COMPOSE_TAG=unknown
+
 ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
-  "test -f /opt/vfic/.env && cd /opt/vfic && docker compose ps -q postgres >/dev/null" \
+  "cd /opt/vfic && IMAGE_TAG=$COMPOSE_TAG docker compose ps -q postgres >/dev/null" \
   || die "cannot reach droplet, /opt/vfic/.env missing, or stack down. Is the droplet still up?"
 
 mkdir -p "$BUNDLE"/{env,postgres,kb_uploads,caddy,config-snapshot,manifests}
@@ -48,11 +62,24 @@ scp "${SCP_OPTS[@]}" "root@$PROD_SERVER:/opt/vfic/.env" "$BUNDLE/env/opt-vfic.en
 chmod 600 "$BUNDLE/env/opt-vfic.env"
 [ -s "$BUNDLE/env/opt-vfic.env" ] || die "downloaded .env is empty."
 
+# Every integration_settings row is sealed with AES-GCM under a key derived from
+# INTEGRATION_SETTINGS_ENCRYPTION_KEY (JWT_SECRET is only the legacy/dev
+# fallback). Without that key the restored rows raise InvalidTag, the service
+# skips them with a warning and callers silently fall back to env values — so a
+# bundle missing it restores a database of undecryptable credentials. Refuse to
+# produce one instead.
+env_value() { sed -n "s/^$1=//p" "$BUNDLE/env/opt-vfic.env" | tail -1; }
+if [ -z "$(env_value INTEGRATION_SETTINGS_ENCRYPTION_KEY)" ]; then
+  [ -n "$(env_value JWT_SECRET)" ] \
+    || die "restored .env carries neither INTEGRATION_SETTINGS_ENCRYPTION_KEY nor JWT_SECRET — every stored integration credential would be undecryptable."
+  log "warn: no INTEGRATION_SETTINGS_ENCRYPTION_KEY in .env; the JWT_SECRET fallback seals the rows, so rotating JWT_SECRET re-breaks them."
+fi
+
 # --- 2. Postgres dump (streamed over SSH, gzipped locally) --------------------
 log "dumping PostgreSQL (streamed, gzipped locally — may take a minute) ..."
 DUMP="$BUNDLE/postgres/vfic_pg_dump.sql.gz"
 ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
-  "cd /opt/vfic && docker compose exec -T postgres pg_dump -U vfic vfic" \
+  "cd /opt/vfic && IMAGE_TAG=$COMPOSE_TAG docker compose exec -T postgres pg_dump -U vfic vfic" \
   | gzip -c > "$DUMP"
 gunzip -t "$DUMP" || die "pg_dump gzip is corrupt."
 gzip -dc "$DUMP" | sed -n '1,3p' | grep -q 'PostgreSQL database dump' \
@@ -65,7 +92,7 @@ log "  dump ok ($(du -h "$DUMP" | cut -f1))."
 capture_volume() {  # $1 = service  $2 = in-container mount path  $3 = outfile
   log "capturing volume: $1 → $2"
   ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
-    "cd /opt/vfic && docker compose run -T --rm --no-deps --entrypoint /bin/sh $1 -c 'tar czf - -C $2 .'" \
+    "cd /opt/vfic && IMAGE_TAG=$COMPOSE_TAG docker compose run -T --rm --no-deps --entrypoint /bin/sh $1 -c 'tar czf - -C $2 .'" \
     > "$3" || die "volume capture failed for $1:$2"
   tar tzf "$3" >/dev/null 2>&1 || die "tarball is corrupt: $3"
 }
@@ -73,24 +100,84 @@ capture_volume caddy /data            "$BUNDLE/caddy/caddy_data.tar.gz"
 capture_volume caddy /config          "$BUNDLE/caddy/caddy_config.tar.gz"
 capture_volume web   /data/kb_uploads "$BUNDLE/kb_uploads/kb_uploads.tar.gz"
 
-# --- 4. config snapshot (version-controlled deploy files, for self-containment) -
-cp "$REPO_ROOT/backend/docker-compose.yml"  "$BUNDLE/config-snapshot/docker-compose.yml"
-cp "$REPO_ROOT/backend/Caddyfile"           "$BUNDLE/config-snapshot/Caddyfile"
-cp "$REPO_ROOT/backend/scripts/prod-env.sh" "$BUNDLE/config-snapshot/prod-env.sh"
+# --- 4. config snapshot (the deploy files, for self-containment) --------------
+# The edge config is RENDERED on the droplet: `backend/Caddyfile.template` is the
+# tracked source and `scripts/flip_caddy.sh` substitutes __WEB_UPSTREAM__ into
+# `/opt/vfic/Caddyfile` at cutover. Snapshot BOTH — the live rendered Caddyfile
+# (it is the real edge config and carries the active colour) and the template
+# (so the droplet can re-render later) — and refuse to ship a partial snapshot.
+snapshot_file() {  # $1 = source path  $2 = bundle destination
+  [ -f "$1" ] || die "config snapshot source missing: $1 — refusing a partial bundle."
+  cp "$1" "$2"
+}
+snapshot_file "$REPO_ROOT/backend/docker-compose.yml"  "$BUNDLE/config-snapshot/docker-compose.yml"
+snapshot_file "$REPO_ROOT/backend/Caddyfile.template"  "$BUNDLE/config-snapshot/Caddyfile.template"
+snapshot_file "$REPO_ROOT/backend/scripts/prod-env.sh" "$BUNDLE/config-snapshot/prod-env.sh"
+
+log "fetching the rendered /opt/vfic/Caddyfile ..."
+scp "${SCP_OPTS[@]}" "root@$PROD_SERVER:/opt/vfic/Caddyfile" "$BUNDLE/config-snapshot/Caddyfile" \
+  || die "cannot fetch /opt/vfic/Caddyfile — has the droplet ever been deployed?"
+[ -s "$BUNDLE/config-snapshot/Caddyfile" ] || die "fetched /opt/vfic/Caddyfile is empty."
+if grep -q '__WEB_UPSTREAM__' "$BUNDLE/config-snapshot/Caddyfile"; then
+  die "rendered /opt/vfic/Caddyfile still contains __WEB_UPSTREAM__ (never flipped) — refusing a broken edge config."
+fi
+grep -qE 'web-(blue|green)' "$BUNDLE/config-snapshot/Caddyfile" \
+  || die "rendered /opt/vfic/Caddyfile names no web-<colour> upstream — refusing an unusable edge config."
 
 # --- 5. manifests -------------------------------------------------------------
 git -C "$REPO_ROOT" rev-parse HEAD > "$BUNDLE/manifests/git-head.txt"
-ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" "cd /opt/vfic && docker compose images" \
+ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
+  "cd /opt/vfic && IMAGE_TAG=$COMPOSE_TAG docker compose images" \
   > "$BUNDLE/manifests/docker-images.txt" 2>&1 || true
 ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
   "du -sh /var/lib/docker/volumes/vfic_* 2>/dev/null | sort -k2" \
   > "$BUNDLE/manifests/volume-sizes.txt" 2>&1 || true
+
+# Which colour Caddy routes to, and the tag that colour is RUNNING. Restore pins
+# IMAGE_TAG to this tag: a bare `docker compose up` resolves `${IMAGE_TAG:-latest}`,
+# and `latest` is re-pushed on every deploy — i.e. new code against the dumped schema.
+ACTIVE_COLOR_SNAPSHOT="$(ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
+  "cat /opt/vfic/ACTIVE_COLOR 2>/dev/null || echo blue" | tr -d '[:space:]' || true)"
+case "$ACTIVE_COLOR_SNAPSHOT" in
+  blue|green) ;;
+  *) die "unexpected /opt/vfic/ACTIVE_COLOR value '$ACTIVE_COLOR_SNAPSHOT' (expected blue|green)." ;;
+esac
+printf '%s\n' "$ACTIVE_COLOR_SNAPSHOT" > "$BUNDLE/manifests/active-color.txt"
+
+IMAGE_TAG_SNAPSHOT="$(ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
+  "cd /opt/vfic && cid=\$(docker compose ps -q web-$ACTIVE_COLOR_SNAPSHOT | head -1); [ -n \"\$cid\" ] && docker inspect --format '{{.Config.Image}}' \"\$cid\" | sed 's/.*://'" \
+  | tr -d '[:space:]' || true)"
+if [ -n "$IMAGE_TAG_SNAPSHOT" ]; then
+  printf '%s\n' "$IMAGE_TAG_SNAPSHOT" > "$BUNDLE/manifests/image-tag.txt"
+  log "  active colour: $ACTIVE_COLOR_SNAPSHOT   running image tag: $IMAGE_TAG_SNAPSHOT"
+  if [ "$COMPOSE_TAG" != "unknown" ] && [ "$COMPOSE_TAG" != "$IMAGE_TAG_SNAPSHOT" ]; then
+    log "warn: /opt/vfic/ACTIVE_TAG ($COMPOSE_TAG) disagrees with the running web-$ACTIVE_COLOR_SNAPSHOT image ($IMAGE_TAG_SNAPSHOT) — the bundle records the running image."
+  fi
+else
+  log "warn: could not read web-$ACTIVE_COLOR_SNAPSHOT's image tag; restore will fall back to parsing manifests/docker-images.txt."
+fi
+
+# The revision the dump's schema sits at. Restore asserts the restored DB reaches
+# the pinned image's head before it declares success.
+ALEMBIC_REV_SNAPSHOT="$(ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
+  "cd /opt/vfic && IMAGE_TAG=$COMPOSE_TAG docker compose exec -T postgres psql -U vfic -d vfic -tAc \"select version_num from alembic_version\" | tr -d '[:space:]'" \
+  2>/dev/null || true)"
+if [ -n "$ALEMBIC_REV_SNAPSHOT" ]; then
+  printf '%s\n' "$ALEMBIC_REV_SNAPSHOT" > "$BUNDLE/manifests/alembic-version.txt"
+else
+  log "warn: could not read the droplet's alembic_version; restore will read it from the restored dump."
+fi
+
 cat > "$BUNDLE/manifests/backup-metadata.json" <<EOF
 {
   "timestamp_utc_local": "$TS",
   "host": "$PROD_SERVER",
   "git_head": "$(git -C "$REPO_ROOT" rev-parse HEAD)",
   "postgres_dump": "postgres/vfic_pg_dump.sql.gz",
+  "active_color": "$ACTIVE_COLOR_SNAPSHOT",
+  "image_tag": "$IMAGE_TAG_SNAPSHOT",
+  "alembic_revision": "$ALEMBIC_REV_SNAPSHOT",
+  "integration_settings_key_present": $([ -n "$(env_value INTEGRATION_SETTINGS_ENCRYPTION_KEY)" ] && echo true || echo false),
   "volumes_captured": ["vfic_kb_uploads", "vfic_caddy_data", "vfic_caddy_config"],
   "volumes_skipped": ["vfic_pgdata (restored via pg_dump)", "vfic_redisdata (restored fresh)"],
   "sha256": "see companion .zip.sha256 file"

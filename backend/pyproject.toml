@@ -2,7 +2,13 @@
 name = "vfic-backend"
 version = "0.1.0"
 description = "VFIC recruitment platform backend — FastAPI + LangGraph (replaces n8n)"
-requires-python = ">=3.12"
+# 3.12 everywhere: the image (backend/Dockerfile) and both CI jobs pin 3.12, so
+# the dev venv must too — uv creates the project venv from this range. The
+# passlib 'crypt' filter in [tool.pytest.ini_options] is a 3.12→3.13 stdlib
+# removal, i.e. this boundary is load-bearing.
+requires-python = ">=3.12,<3.13"
+# Exact versions come from uv.lock: the image and CI install from it via
+# `uv export --frozen`, so add a dependency here and run `uv lock` in backend/.
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
@@ -10,7 +16,8 @@ dependencies = [
     "asyncpg>=0.30",
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
-    "pgvector>=0.3.6",
+    # No pgvector Python package: embedding columns are raw SQL (vector(3072) /
+    # halfvec HNSW) and the extension comes from the pgvector/pgvector:pg16 image.
     "pydantic>=2.10",
     "pydantic-settings>=2.6",
     "email-validator>=2.2",
@@ -21,18 +28,19 @@ dependencies = [
     "rq>=2.0",
     "rq-scheduler>=0.14",
     "httpx>=0.28",
-    "sse-starlette>=2.1",
-    # Realtime: Socket.IO server + cross-process emit bridge (replaces the SSE
-    # firehose for chat). Async support is built in (no extra needed as of 5.x).
+    # Realtime: Socket.IO server + cross-process emit bridge — the whole realtime
+    # path since the SSE firehose was removed (no sse-starlette).
+    # Async support is built in (no extra needed as of 5.x).
     "python-socketio>=5.11",
     "python-multipart>=0.0.17",
     "PyYAML>=6.0.2",
-    "langgraph>=0.2",
+    # LLM layer: langchain-core/-openai only. The turn pipeline is a manual node
+    # topology (app/graph/runner.py), not the LangGraph engine — no langgraph.
     "langchain-core>=0.3",
     "langchain-openai>=0.2",
+    # Gemini embeddings + LLM probe only (`from google import genai`). No Drive
+    # API client and no OAuth flow library are imported anywhere in backend/.
     "google-genai>=0.3",
-    "google-api-python-client>=2.154",
-    "google-auth-oauthlib>=1.2",
 ]
 
 [project.optional-dependencies]

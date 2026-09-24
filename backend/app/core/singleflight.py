@@ -66,7 +66,7 @@ _RESULT_CHANNEL = "inflight:{key}:result"
 # turn budget is ~10s; 30s leaves comfortable headroom for a slow provider).
 _DEFAULT_TTL_SECONDS = 30
 # Default follower wait — should be ≤ the overall turn deadline. Callers pass
-# their own timeout derived from TurnDeadline.
+# their own timeout for the work they guard.
 _DEFAULT_FOLLOWER_TIMEOUT_SECONDS = 8.0
 
 

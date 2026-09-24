@@ -1,7 +1,7 @@
 # Codebase Summary
 
-**Repo:** `git@github.com:4rankng/ChatBotN8N.git` (branch `main`)
-**Last updated:** 2026-07-23
+**Repo:** `git@github.com:4rankng/vfic-chatbot.git` (branch `main`)
+**Last updated:** 2026-09-24
 
 A monorepo with two deployable subprojects (`backend/`, `frontend/`) plus
 root-level ops scripts. GHCR images: `ghcr.io/4rankng/tinghire-be:latest`
@@ -11,45 +11,45 @@ and `ghcr.io/4rankng/tinghire-fe:latest` (also tagged `:<git-sha>`).
 
 ```
 ChatBot/
-├── backend/              FastAPI + RQ workers + Alembic (~42.8k LOC Python)
+├── backend/              FastAPI + RQ workers + Alembic (~68.1k LOC Python)
 │   ├── app/
 │   │   ├── api/          Routers + auth/capability dependencies
 │   │   ├── capabilities/ Closed source-owned pack registry + parity artifacts
 │   │   ├── core/         config, db, redis, security,
 │   │   │                 logging, errors, cache,
 │   │   │                 ratelimit, embedding, vector,
-│   │   │                 text                              (~1,600 LOC)
+│   │   │                 text                              (~2,000 LOC)
 │   │   ├── graph/        runner, clients, factories,
 │   │   │                 tools, safety, prompts,
-│   │   │                 proactive                         (~5,300 LOC)
-│   │   ├── models/       SQLAlchemy 2.x ORM
+│   │   │                 proactive                         (~9,600 LOC)
+│   │   ├── models/       SQLAlchemy 2.x ORM (65 tables)
 │   │   ├── schemas/      Pydantic v2
 │   │   ├── services/     conversation/, lead/, knowledge/,
 │   │   │                 dashboard/, personas/, project/,
 │   │   │                 retrieval/, proactive/ + installation,
 │   │   │                 generic workflow/contact/case services + flat
 │   │   │                 project knowledge modes, zalo_*,
-│   │   │                 integration_settings, auth (~24,100 LOC)
+│   │   │                 integration_settings, auth (~33,200 LOC)
 │   │   ├── workers/      run_worker, chatbot, persistence,
 │   │   │                 ingest, followup, reconcile,
 │   │   │                 category_worker, async_runner,
-│   │   │                 scheduler_utils                   (~1,600 LOC)
-│   │   ├── realtime/     Socket.IO server + bridge         (~300 LOC)
+│   │   │                 scheduler_utils                   (~2,700 LOC)
+│   │   ├── realtime/     Socket.IO server + bridge         (~440 LOC)
 │   │   ├── prompts/
 │   │   └── main.py        FastAPI app + lifespan + ASGI wrap
-│   ├── alembic/          Hand-written migrations through 0050
+│   ├── alembic/          Hand-written migrations through 0054
 │   ├── mock_servers/     zalo_mock.py (local :8788)
 │   ├── scripts/          create_admin, seed_dev, prod-env,
 │   │                     benchmark_models, benchmark_rag,
 │   │                     capture_bus_timetable_golden, loadtest/
 │   ├── tests/            Unit + selected disposable PostgreSQL integration lanes
-│   ├── docker-compose.yml        10-service prod stack
+│   ├── docker-compose.yml        13-service prod stack
 │   ├── docker-compose.dev.yml    Postgres+Redis+Adminer only
 │   ├── Dockerfile        python:3.12-slim, pip install -e .
 │   ├── Caddyfile         edge routes for bot.tingting.vip
 │   ├── .env.example      committed env template (values blank/dev)
-│   └── Makefile          dev / db / push / deploy / adminer
-├── frontend/             React Admin SPA (~48.6k LOC TS/TSX)
+│   └── Makefile          dev / db / push / deploy / rollback / adminer
+├── frontend/             React Admin SPA (~64.6k LOC TS/TSX)
 │   ├── src/
 │   │   ├── main.tsx      StrictMode + vite:preloadError guard
 │   │   ├── App.tsx       fixed static recruitment console bootstrap
@@ -72,7 +72,7 @@ ChatBot/
 │   │   │       ├── providers/        dataProvider, authProvider, i18nProvider
 │   │   │       ├── layout/           Layout + MobileLayout
 │   │   │       ├── login/, settings/, profiles/, misc/, automation/
-│   │   │       └── inbox/            10 CSS section files (barrel = inbox.css)
+│   │   │       └── conversations/inbox/   19 CSS section files (barrel = conversations/inbox.css)
 │   │   ├── lib/          apiClient.ts, runtime-config.ts, utils.ts,
 │   │   │                 vietnameseSearch.ts
 │   │   └── hooks/        use-mobile.ts
@@ -85,20 +85,28 @@ ChatBot/
 └── README.md
 ```
 
-## LOC breakdown (approximate)
+## LOC breakdown
 
 | Area | LOC |
 |---|---|
-| Backend `app/services/` | ~24,100 |
-| Backend `app/api/` | ~4,000 |
-| Backend `app/graph/` | ~5,300 |
-| Backend `app/schemas/` | ~2,600 |
-| Backend `app/models/` | ~2,600 |
-| Backend `app/workers/` | ~1,600 |
-| Backend `app/core/` | ~1,600 |
-| Backend `app/realtime/` | ~300 |
-| **Backend `app/` total** | **~42,800** |
-| Frontend `src/` (TS/TSX) | ~48,600 |
+| Backend `app/services/` | 33,173 |
+| Backend `app/graph/` | 9,624 |
+| Backend `app/api/` | 4,700 |
+| Backend `app/schemas/` | 3,333 |
+| Backend `app/models/` | 3,175 |
+| Backend `app/workers/` | 2,664 |
+| Backend `app/core/` | 2,000 |
+| Backend `app/realtime/` | 438 |
+| Backend `app/capabilities/` | 328 |
+| Backend `app/prompts/` | 47 |
+| **Backend `app/` total** | **68,069** |
+| Frontend `src/` (TS/TSX) | 64,621 |
+
+Counted 2026-09-24 by walking each directory and summing `wc -l` over its
+`*.py` / `*.ts` / `*.tsx` files (physical lines, so blanks and comments are
+included), excluding `__pycache__/`, `__screenshots__/` and `node_modules/`.
+Re-measure from the tree rather than trusting these numbers once the tree has
+moved.
 
 ## Module map — backend `app/`
 
@@ -111,8 +119,12 @@ ChatBot/
 | `recruitment/`, `reporting/` | Recruitment domain/application behavior and reporting read-model ports/adapters. |
 | `composition/` | Explicit cross-context wiring for messaging, project/knowledge, recruitment, and reporting. Contains construction, not business rules. |
 | `capabilities/` | Closed-world industry pack/capability definitions, dependency/owner validation, canonical non-executable pack contract, and dormant recruitment delegation descriptor. Database values never select executable imports. |
+| `channels/` | Provider-neutral messaging boundary: ingress/dispatch ports and provider adapters consumed by API ingress, graph dispatch, recruiter delivery and workers. Deliberately not under `graph/`. |
+| `installation/` | Single-installation bounded context: lifecycle domain, application ports, and adapters. |
+| `integrations/` | Integration-layer application services and adapters (admin runtime, Facebook OAuth). |
+| `shared/` | Small inward-facing contracts shared by multiple bounded contexts (`application/`, `domain/`, `infrastructure/`). |
 | `core/` | Cross-cutting infra: config (Pydantic BaseSettings), async DB engine + session, Redis pool, security (JWT/argon2), structured logging + request_id, error handlers, cache, ratelimit, embedding + vector helpers, text utils. |
-| `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools.py` tool dispatch; `safety.py` fast + LLM safety; `prompts.py`; `proactive/`. |
+| `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools/` the tool implementations; `schemas.py` owns `TOOL_SCHEMAS` + `_dispatch_tool`; `safety.py` structural cleaning; `router.py` the Jev decision router; `prompts.py`; `proactive/`. |
 | `models/` | SQLAlchemy 2.x ORM mirroring the schema. Retired universal-platform tables remain mapped for historical migration compatibility. **Does not generate migrations** — migrations remain hand-written. |
 | `schemas/` | Pydantic v2 request/response models. |
 | `services/` | Business logic, the largest subpackage. Includes recruitment services, project-owned knowledge modes, and installation lifecycle authority used by the admin Settings surface. |

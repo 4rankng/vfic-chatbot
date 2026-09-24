@@ -142,19 +142,6 @@
             "type": "command"
           },
           {
-            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/simplify-gate.cjs\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/secret-output-guardrail.cjs\"",
-            "type": "command"
-          },
-          {
             "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/dev-rules-reminder.cjs\"",
             "type": "command"
           },

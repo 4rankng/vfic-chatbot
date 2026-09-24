@@ -1,3 +1,9 @@
-make registry-gen
+# Git runs hooks from the repository root, so resolve frontend/ explicitly.
+# Do not depend on frontend/makefile: frontend/package.json is the single
+# source for these steps.
+cd "$(git rev-parse --show-toplevel)/frontend" || exit 1
+npm run registry:gen
+npx prettier --config ./.prettierrc.json --write "registry.json"
 npx lint-staged
+cd "$(git rev-parse --show-toplevel)" || exit 1
 git update-index --again

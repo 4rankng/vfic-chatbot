@@ -2,10 +2,44 @@
 # Images: ghcr.io/4rankng/tinghire-be (web + workers + scheduler),
 #         ghcr.io/4rankng/tinghire-fe (nginx static). Caddy = edge (auto-TLS).
 # All app config comes from .env (compose auto-loads /opt/vfic/.env).
+#
+# Host (OPS-09, measured 2026-09-24): DigitalOcean droplet, 1 vCPU / 2 GB RAM
+# (1967 MB usable) + 4 GB swap, 48 GB disk. These deploy-time figures are the
+# authoritative ones; any doc claiming "4 GB" is stale. Memory limits are sized
+# from measured resident usage — see the sum documented in
+# docs/deployment-guide.md §1.
+#
+# App images are `${IMAGE_TAG:?…}`: a required variable, so no compose command
+# can silently resolve `:latest` (OPS-10). Base images are digest-pinned for the
+# same reason; .github/workflows/pin-refresh.yml opens a PR when a digest moves.
+
+# --- Log rotation (OPS-04) ---------------------------------------------------
+# Structured JSON logs to stdout are the only observability path by design, so
+# every container must be bounded: the default json-file driver grows without
+# limit and, when the volume fills, Postgres cannot write WAL and the whole stack
+# goes down. One anchor, attached to every service — 10 MB × 3 files = a 30 MB
+# ceiling per container.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    # Digest-pinned (OPS-10): the tag stays for readability, the digest is what
+    # resolves, so an unattended pull cannot change the runtime under a frozen
+    # application version.
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     command: ["postgres", "-c", "max_connections=150"]
+    # Docker's 64 MB /dev/shm default makes parallel sorts/hash joins fail with
+    # "could not resize shared memory segment" — reachable at max_connections=150.
+    shm_size: 256mb
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 448M  # measured 181 MB resident; shared_buffers alone is 128 MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vfic}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -19,7 +53,14 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          # --maxmemory 256mb bounds the dataset; the extra headroom covers the
+          # AOF rewrite fork's copy-on-write pages (measured 6 MB resident).
+          memory: 320M
     # volatile-lru: only TTL'd keys (embedding/RAG caches) are evictable. The
     # LLM semaphore token lists and cachever:* counters carry no TTL, so memory
     # pressure can never evict them and suppress every turn or resurrect stale
@@ -43,13 +84,20 @@ services:
   # stopped`` auto-restarts the active color on host reboot; the inactive color
   # is left ``stop``ped (not removed) so ``make rollback`` can revive it instantly.
   web-blue:
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     environment:
-      # DB connection budget (see config.py): 2 web × (8+4) + 7 workers × (4+2)
-      # = 66 worst case of the max_connections=150 ceiling.
+      # DB connection budget (see config.py): the steady state is ONE active web
+      # colour + 3 chatbot + persistence/ingest/followup/maintenance workers = 8
+      # DB-touching processes, i.e. 12 + 6×6 = 48 of the max_connections=150
+      # ceiling. A cutover briefly adds the second colour's 12 (60 worst case).
       DB_POOL_SIZE: "8"
       DB_MAX_OVERFLOW: "4"
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 384M  # measured 118 MB resident (single uvicorn worker)
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

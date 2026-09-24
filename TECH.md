@@ -14,19 +14,19 @@ together*. For deeper detail, follow the links in §5.
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Language | **Python ≥ 3.12** | `requires-python = ">=3.12"` |
+| Language | **Python ≥ 3.12, < 3.13** | `requires-python = ">=3.12,<3.13"` |
 | Framework | **FastAPI** `>=0.115` | async-first; mix of `async def` + thread-offloaded crypto |
 | ASGI server | **Uvicorn `[standard]`** `>=0.32` | 2 workers to use both vCPUs |
 | ORM | **SQLAlchemy 2.x async** (`asyncpg` `>=0.30`) + sync `psycopg` for Alembic/RQ | `AsyncSession(expire_on_commit=False)` |
-| Migrations | **Alembic** `>=1.14` | hand-written (0001–0053, current head `0053_single_page_external_source_sync_state`), ORM does **not** auto-generate |
+| Migrations | **Alembic** `>=1.14` | hand-written (0001–0054, current head `0054_channel_account_projects`), ORM does **not** auto-generate |
 | Database | **PostgreSQL 16 + pgvector** (`>=0.3.6`) | HNSW ANN + exact re-rank; `halfvec` for 3072-d embeddings |
 | Cache / queue / pubsub | **Redis** `>=5.2,<8.0` | broker, cache, presence, cross-process Socket.IO fan-out |
-| Job queue | **RQ** `>=2.0` + **rq-scheduler** `>=0.14` | 4 queues; **offline only** — never on the answer path |
+| Job queue | **RQ** `>=2.0` + **rq-scheduler** `>=0.14` | 6 queues (`webhook_high`, `recovery`, `persistence_low`, `ingest`, `followup`, `maintenance`); **offline only** — never on the answer path |
 | Realtime | **python-socketio** `>=5.11` | `AsyncServer` + `AsyncRedisManager` mounted under ASGI |
 | Agent brain | **LangGraph-style pipeline** (`app/graph/runner.py`) using `langchain-core` `>=0.3` message types | manual node topology, not the LangGraph engine |
 | Turn decisions | **TypeSafe Jev** (`graph/decisions.py`, System One model) | one parallel fan-out call per inbound turn: intent, sort direction, pleasantry kind, context flags, and the candidate's gender (from the profile name + the candidate's own messages) — replaces the keyword router; a confident `male`/`female` fills a blank `leads.gender` so replies address the candidate as anh/chị; admin-managed key in `IntegrationSetting`; disabled/absent/failing → neutral agent fallback |
 | LLM clients | **MiniMax + Gemini via OpenRouter**, embeddings via OpenRouter/Gemini (dim 3072) | all calls funneled through `graph/clients.py` |
-| Auth | **python-jose** JWT + **passlib[argon2]** | `token_version` bumping invalidates sessions |
+| Auth | **PyJWT** `>=2.9` (`pyjwt[crypto]`) + **passlib[argon2]** | python-jose was removed — 3.5.0 still pulls `ecdsa` (CVE-2024-23342); `token_version` bumping invalidates sessions |
 | Config | **pydantic-settings** `>=2.6` + **Pydantic v2** `>=2.10` | boot-time safety: refuses to start in prod with default `JWT_SECRET` or `*` CORS |
 | HTTP client | **httpx** `>=0.28` | async LLM / Zalo / Resend calls |
 | Email | **Resend** (transactional) | password-reset sender is a code constant, not config |
@@ -38,15 +38,15 @@ together*. For deeper detail, follow the links in §5.
 | Layer | Choice | Notes |
 |---|---|---|
 | Language | **TypeScript ~5.8** (strict, `noUnusedLocals`/`noUnusedParameters`) | no `any` in `admin/`, `hooks/`, `lib/` (ESLint error) |
-| Framework | **React 19.1** + **react-admin 5** (`ra-core ^5.14.7`) | resources defined in `CRM.tsx` |
-| Build | **Vite 7.3** + **vite-plugin-pwa** `^1.2` | manual chunks: react/ra/tanstack/lucide/router/realtime/forms/virtuoso |
+| Framework | **React 19.1** + **ra-core 5** (react-admin headless, `^5.14.7`) | product code imports `ra-core`/`ra-i18n-polyglot` directly, not the `react-admin` meta-package; resources defined in `CRM.tsx` |
+| Build | **Vite 7.3** + **vite-plugin-pwa** `^1.2` | manual chunks: react/ra/tanstack/lucide/router/realtime/forms/virtua/zod |
 | Styling | **TailwindCSS v4** (CSS-first, no `tailwind.config.js`) + **shadcn/ui** (new-york) + Lucide | tokens in `src/index.css` via `@theme inline` |
 | Server state | **TanStack Query v5** | module singleton, `staleTime 30s`, `gcTime 24h` |
 | Local state | **Zustand** (message store) + react-admin `localStorageStore` (config) | no global state libs |
 | Routing | **react-router v7** (via react-admin) | |
 | Realtime | **Socket.IO client** `^4.8` | singleton, lazy connect, per-conversation rooms |
 | Forms | **react-hook-form** + **zod v4** | |
-| Virtualization | **react-virtuoso** `^4.18` | all long lists (conversations, messages) |
+| Virtualization | **virtua** `^0.49` | all long lists (conversation thread, dashboard candidate list); `react-virtuoso` is no longer a dependency |
 | i18n | **ra-i18n-polyglot** — Vietnamese-first | English as base layer |
 | Node | **v22.19.0** (`.nvmrc`), npm + `legacy-peer-deps` | |
 | Tests | **Vitest 4** (two projects: `app` Playwright browser, `claude` Node) | |
@@ -56,7 +56,7 @@ together*. For deeper detail, follow the links in §5.
 | Piece | Choice |
 |---|---|
 | Edge / TLS | **Caddy** (`Caddyfile`) |
-| Orchestration | **Docker Compose** (~10 services on prod) |
+| Orchestration | **Docker Compose** (13 services on prod, plus the profile-gated `oa-profile-backfill` one-shot) |
 | Host | **DigitalOcean droplet**, 2 vCPU / 4 GB — the hard constraint that shapes every decision |
 | Backups | Postgres dumps → OneDrive; full-droplet bundle → `backups/<ts>.zip` |
 | Secrets | `.env` (gitignored); integration creds encrypted at rest in `IntegrationSetting` |
@@ -76,7 +76,7 @@ Service Layer app/services/    — business logic, repositories, events
       ↓  Protocol interfaces (graph/ports.py)
 Graph Layer   app/graph/       — bot-turn pipeline: agent loop, tools, safety, grounding
       ↓
-Data Layer    app/models/      — SQLAlchemy 2.x ORM (21 entities)
+Data Layer    app/models/      — SQLAlchemy 2.x ORM (65 entities)
       ↓
 Infra         app/core/        — DB engine, Redis, config, security
       ↓
@@ -138,13 +138,13 @@ Design choices:
 RQ is kept **off** the synchronous answer path — it protects user-facing latency,
 it doesn't sit inside it. Workers (`app/workers/`):
 
-| Worker | Responsibility |
-|---|---|
-| `chatbot_worker` | bot-turn execution on `webhook_high` / `chat` queues |
-| `ingest_worker` | KB ingestion, re-embedding, normalization (`ingest`) |
-| `persistence_worker` | durable writes off the hot path |
-| `reconcile_worker` | state repair / drift fixes |
-| `followup_worker` | proactive follow-ups, digests |
+| Worker | Queue | Responsibility |
+|---|---|---|
+| `chatbot_worker` | `webhook_high`, `recovery` | bot-turn execution (3 replicas; `recovery` drains second) |
+| `persistence_worker` | `persistence_low` | durable writes off the hot path |
+| `ingest_worker` | `ingest` | KB ingestion, re-embedding, normalization |
+| `followup_worker` | `followup` | proactive follow-ups, digests |
+| `reconcile_worker` + `outbound_dispatch_worker` | `maintenance` | reconcile sweep + outbound-dispatch ticks |
 
 > ⚠️ **Redis is not backed up.** Cache, presence, semaphore are ephemeral by
 > design — never store critical state there. Pub/Sub is at-most-once; use Redis
@@ -227,7 +227,7 @@ unbounded lists · no secrets logged · auth enforced · input validated.
 |---|---|
 | Runtime architecture, request lifecycle, queue model | [`docs/system-architecture.md`](docs/system-architecture.md) |
 | Retrieval / recommendation / deployment trade-offs (full HLD) | [`docs/HLD.md`](docs/HLD.md) |
-| Coding conventions (backend + frontend) | [`docs/code-standards.md`](docs/code-standards.md) · [`standards/coding-style.md`](standards/coding-style.md) |
+| Coding conventions (backend + frontend) | [`docs/code-standards.md`](docs/code-standards.md) |
 | Security baseline | [`standards/security.md`](standards/security.md) |
 | Performance baseline | [`standards/performance.md`](standards/performance.md) |
 | Production stack, deploy, backup/restore | [`docs/deployment-guide.md`](docs/deployment-guide.md) |

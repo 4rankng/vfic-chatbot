@@ -3,31 +3,36 @@
 # restore-droplet.sh — rebuild the VFIC stack on a FRESH droplet from a bundle.
 #
 # Run ON THIS MAC; pushes to the new droplet via SSH (mirrors `make deploy`).
-#   bash scripts/restore-droplet.sh --bundle backups/vfic-droplet-backup-<TS> [--host root@bot.tingting.vip] [--dry-run]
+#   bash scripts/restore-droplet.sh --bundle backups/vfic-droplet-backup-<TS> \
+#     [--host root@bot.tingting.vip] [--tag <image-tag>] [--dry-run]
 #
-# What it restores: /opt/vfic/{docker-compose.yml,Caddyfile,.env}, pulls images,
-#   seeds Caddy TLS + KB uploads volumes (best-effort), starts postgres+redis,
-#   loads the SQL dump, brings up the full stack, verifies health.
+# What it restores: /opt/vfic/{docker-compose.yml,Caddyfile(+template),.env},
+#   pulls the images at the tag RECORDED IN THE BUNDLE, seeds Caddy TLS + KB
+#   uploads volumes (best-effort), starts postgres+redis, loads the SQL dump,
+#   runs `alembic upgrade head` and asserts the schema revision equals the
+#   image's head, brings up the full stack, verifies the running tag.
 # Redis starts FRESH (not restored). Postgres is restored from the dump (the
 #   role password comes from the restored .env, so DATABASE_URL still matches).
-# Alembic + create_admin are skipped — the dump already has schema@head + admins.
+# create_admin is skipped — the dump already has admins.
 # =============================================================================
 set -euo pipefail
 
 BUNDLE=""
 HOST="root@bot.tingting.vip"
+TAG=""
 DRY_RUN=0
 SSH_OPTS=(-o ConnectTimeout=15 -o ServerAliveInterval=30)
 
 usage() {
-  sed -n '3,12p' "${BASH_SOURCE[0]}" >&2
-  echo "usage: $0 --bundle <unzipped-bundle-dir> [--host root@bot.tingting.vip] [--dry-run]" >&2
+  sed -n '3,16p' "${BASH_SOURCE[0]}" >&2
+  echo "usage: $0 --bundle <unzipped-bundle-dir> [--host root@bot.tingting.vip] [--tag <image-tag>] [--dry-run]" >&2
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --bundle)  BUNDLE="$2"; shift 2;;
     --host)    HOST="$2";   shift 2;;
+    --tag)     TAG="$2";    shift 2;;
     --dry-run) DRY_RUN=1;   shift;;
     -h|--help) usage; exit 0;;
     *) echo "unknown arg: $1" >&2; usage; exit 2;;
@@ -39,9 +44,73 @@ BUNDLE="${BUNDLE%/}"
 [ -f "$BUNDLE/env/opt-vfic.env" ]               || { echo "missing $BUNDLE/env/opt-vfic.env" >&2; exit 2; }
 [ -f "$BUNDLE/postgres/vfic_pg_dump.sql.gz" ]   || { echo "missing $BUNDLE/postgres/vfic_pg_dump.sql.gz" >&2; exit 2; }
 [ -f "$BUNDLE/config-snapshot/docker-compose.yml" ] || { echo "missing config-snapshot/docker-compose.yml" >&2; exit 2; }
-[ -f "$BUNDLE/config-snapshot/Caddyfile" ]      || { echo "missing config-snapshot/Caddyfile" >&2; exit 2; }
+
+# The edge config: prefer the RENDERED Caddyfile the bundle captured from the
+# live droplet. A template-only bundle (older, or hand-built) is rendered below
+# with the same __WEB_UPSTREAM__ substitution flip_caddy.sh performs, so a
+# missing backend/Caddyfile in the repo can no longer block a restore.
+CADDY_SOURCE=""
+if [ -f "$BUNDLE/config-snapshot/Caddyfile" ]; then
+  CADDY_SOURCE=rendered
+elif [ -f "$BUNDLE/config-snapshot/Caddyfile.template" ]; then
+  CADDY_SOURCE=template
+else
+  echo "missing config-snapshot/Caddyfile (or config-snapshot/Caddyfile.template) — the bundle carries no edge config" >&2
+  exit 2
+fi
+
+# Which colour Caddy routes to. A rendered Caddyfile already encodes it; a
+# template needs it to render, and the droplet needs it in ACTIVE_COLOR.
+COLOR="blue"
+if [ -f "$BUNDLE/manifests/active-color.txt" ]; then
+  COLOR="$(tr -d '[:space:]' < "$BUNDLE/manifests/active-color.txt")"
+fi
+case "$COLOR" in
+  blue|green) ;;
+  *) echo "bundle manifests/active-color.txt holds '$COLOR' (expected blue|green)" >&2; exit 2 ;;
+esac
+
+# Every prod compose command needs IMAGE_TAG (`${IMAGE_TAG:?}` interpolates the
+# whole file), and it must be the tag that produced this dump — NOT `latest`,
+# which is re-pushed on every deploy. Precedence: --tag, then the tag the backup
+# recorded, then the docker-images manifest; if none is available we fail closed
+# rather than boot new code against the restored schema.
+TAG_SOURCE="--tag"
+if [ -z "$TAG" ]; then
+  TAG_SOURCE="manifests/image-tag.txt"
+  if [ -f "$BUNDLE/manifests/image-tag.txt" ]; then
+    TAG="$(tr -d '[:space:]' < "$BUNDLE/manifests/image-tag.txt")"
+  elif [ -f "$BUNDLE/manifests/docker-images.txt" ]; then
+    TAG_SOURCE="manifests/docker-images.txt"
+    TAG="$(awk '$2 ~ /tinghire-be/ && $3 != "" && $3 != "TAG" { print $3; exit }' "$BUNDLE/manifests/docker-images.txt")"
+  fi
+fi
+case "$TAG" in
+  ""|latest)
+    echo "cannot determine the image tag this dump was taken at (got '${TAG:-<none>}' from $TAG_SOURCE)." >&2
+    echo "Refusing to restore: compose would resolve ':latest' — code that did not produce this schema." >&2
+    echo "Re-run with an explicit tag:  $0 --bundle $BUNDLE --tag <git-sha>" >&2
+    exit 2 ;;
+esac
+
+# The dump's integration_settings rows are sealed with a key derived from
+# INTEGRATION_SETTINGS_ENCRYPTION_KEY (JWT_SECRET is the legacy fallback). If the
+# bundle lost it, every restored credential raises InvalidTag and is silently
+# dropped — refuse instead.
+env_value() { sed -n "s/^$1=//p" "$BUNDLE/env/opt-vfic.env" | tail -1; }
+if [ -z "$(env_value INTEGRATION_SETTINGS_ENCRYPTION_KEY)" ]; then
+  [ -n "$(env_value JWT_SECRET)" ] || {
+    echo "bundle .env carries neither INTEGRATION_SETTINGS_ENCRYPTION_KEY nor JWT_SECRET —" >&2
+    echo "the restored integration_settings rows would be undecryptable. Refusing to restore." >&2
+    exit 2
+  }
+  echo "WARN: bundle .env has no INTEGRATION_SETTINGS_ENCRYPTION_KEY; the JWT_SECRET fallback seals the rows." >&2
+fi
 
 step() { printf '\n\033[1;36m[%s]\033[0m %s\n' "$1" "$2" >&2; }
+RENDERED_TMP=""
+cleanup() { [ -n "$RENDERED_TMP" ] && rm -f "$RENDERED_TMP"; return 0; }
+trap cleanup EXIT
 rmt()  {  # run remote (echoed; skipped in dry-run)
   printf '  $ ssh %s %s\n' "$HOST" "$*" >&2
   [ "$DRY_RUN" -eq 1 ] || ssh "${SSH_OPTS[@]}" "$HOST" "$@"
@@ -54,10 +123,12 @@ put() {  # scp local -> remote (echoed; skipped in dry-run)
 echo "== VFIC droplet restore ==" >&2
 echo "  bundle : $BUNDLE" >&2
 echo "  host   : $HOST"   >&2
+echo "  images : $TAG (from $TAG_SOURCE)" >&2
+echo "  caddy  : $CADDY_SOURCE (active colour: $COLOR)" >&2
 echo "  dry-run: $DRY_RUN" >&2
 
 # --- 0. preflight -------------------------------------------------------------
-step "0/7" "preflight: SSH + Docker + free ports 80/443"
+step "0/8" "preflight: SSH + Docker + free ports 80/443"
 if [ "$DRY_RUN" -eq 0 ]; then
   ssh "${SSH_OPTS[@]}" "$HOST" "echo SSH_OK" >/dev/null || { echo "cannot SSH to $HOST" >&2; exit 1; }
   if ! ssh "${SSH_OPTS[@]}" "$HOST" "docker compose version" >/dev/null 2>&1; then

@@ -9,7 +9,7 @@ instructions and neighboring files needed for that task.
 - System map and stack: `TECH.md`
 - Repository map: `docs/codebase-summary.md`
 - Architecture: `docs/system-architecture.md`
-- Code conventions: `docs/code-standards.md`, `standards/coding-style.md`
+- Code conventions: `docs/code-standards.md`
 - Testing: `docs/testing.md`
 - Completion record: `standards/agent-completion-checklist.md`
 
@@ -68,14 +68,14 @@ When asked to commit, work directly on `main` per the repository workflow.
 
 ## Task routing
 
-- Implementation: `.claude/skills/implement-change/SKILL.md`
-- Verification: `.claude/skills/verify-change/SKILL.md`
-- Dev-environment QA: `.claude/skills/qa-dev-environment/SKILL.md` (record only)
-- Bot diagnosis: `docs/troubleshooting/chatbot-response-path.html` and relevant
-  `.omc/skills/` expertise
+- Implementation: `.claude/skills/ak-cook/SKILL.md`
+- Verification: `.claude/skills/ak-debug/SKILL.md`
+- Dev-environment QA: `standards/agent-completion-checklist.md` (record only)
+- Bot diagnosis: `docs/troubleshooting/chatbot-response-path.html`
 - Deployment: read `docs/deployment-guide.md` in full, then obtain approval.
   `make deploy` is blue/green + smoke-gated (zero-downtime Caddy flip); the old
-  color serves until the new color is healthy and passes `scripts/smoke_turn.py`.
+  color serves until the new color is healthy and passes
+  `backend/scripts/smoke_turn.py`.
   `make rollback` flips back to the previous color/tag (~1s, no rebuild).
 
 Use `standards/definition-of-done.md` and `standards/review-checklist.md` only

@@ -420,10 +420,10 @@ async def test_schedule_realtime_publishes_prebuilt_payloads_off_greenlet(monkey
     bus.schedule_realtime(msg, conv)
     assert len(events_mod._background_tasks) == 1
     # Payloads are built synchronously before the task runs, so nothing is
-    # published until the loop is pumped.
+    # published until the scheduled task actually executes.
     assert published == []
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    (task,) = events_mod._background_tasks
+    await task  # await the real handle instead of pumping the loop a fixed number of times
 
     assert published == [
         (

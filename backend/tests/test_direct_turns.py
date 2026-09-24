@@ -26,8 +26,8 @@ async def test_direct_launcher_runs_the_shared_turn_executor(monkeypatch) -> Non
     job = {"conversation_id": "turn-1"}
 
     assert start_direct_chat_turn(job) is True
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    (task,) = chatbot_worker._direct_turn_tasks
+    await task  # await the real handle instead of pumping the loop
 
     assert observed == [(job, "direct")]
     assert chatbot_worker._direct_turn_tasks == set()

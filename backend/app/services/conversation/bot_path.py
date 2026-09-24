@@ -1,9 +1,20 @@
 """Bot-send path of the conversation state layer.
 
-Owns the bot-send family: webhook-side conversation primitives, inbound
-guards, intent escalation, per-chat locking, the TOCTOU send claim, bot
-outcomes, reconcile sweeps, and proactive follow-up. Recruiter-facing
-messaging lives in ``recruiter_path.py``; shared helpers in ``_shared.py``.
+Owns the part of the bot-send family that stays here: webhook-side conversation
+primitives, inbound guards, intent escalation, and proactive follow-up. The four
+extracted halves of the former god file are mixed into ``BotConversationState``
+below, so each change reason has its own module:
+
+- ``locking.LockingMixin`` — per-chat mutex acquire / release / renew / stale
+  recovery (pure model-state logic, no dependency on the send path).
+- ``send_claim.SendClaimMixin`` — the TOCTOU send claim and the finalization of
+  the durable outbox command.
+- ``bot_outcome.BotOutcomeMixin`` — bot_run + BOT message outcome recording.
+- ``reconcile.ReconcileMixin`` — the sweeps that resolve rows a crashed turn
+  left behind.
+
+Recruiter-facing messaging lives in ``recruiter_path.py``; shared helpers in
+``_shared.py``.
 """
 
 from __future__ import annotations

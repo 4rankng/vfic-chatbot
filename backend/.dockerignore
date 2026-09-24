@@ -5,6 +5,12 @@
 .ruff_cache
 vfic_backend.egg-info
 tests
+# Dev-only: the fake Zalo endpoint `make dev` runs, and the env template.
+# (`.env.*` above already matches .env.example; listed explicitly so the intent
+# survives a future edit of that pattern.) The Dockerfile COPYs an explicit
+# allowlist as well, so neither can drift back into the image.
+mock_servers
+.env.example
 __pycache__
 **/__pycache__
 *.pyc
