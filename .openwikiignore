@@ -25,10 +25,6 @@ Thumbs.db
 
 # --- AI agent runtime & orchestration state (not source of truth) ---
 .claude/
-!.claude/skills/
-!.claude/skills/**
-!.claude/hooks/
-!.claude/hooks/**
 .claude/settings.local.json
 .omc/
 CLAUDE.local.md
