@@ -85,6 +85,11 @@ async def search_knowledge(
     FAQ-first pre-pass: canonical FAQ chunks (``category='faq'``) are retrieved with a
     higher similarity floor and prepended so the agent leads with curated answers.
 
+    Semantic-cache entries are namespaced by the retrieval scope (sorted
+    ``project_ids`` + ``top_k``), so a Page-scoped lookup — ``project_slug=None`` with
+    the Page's non-empty ``project_ids`` — can never be served an answer cached
+    against another Page's catalog.
+
     When ``metrics`` is provided, RAG cache hit/miss + lookup latency are recorded
     under ``metrics["rag_cache"]`` (``exact_hit``, ``semantic_hit``, ``semantic_sim``)
     and ``metrics["rag_cache_lookup_ms"]`` so the release gate can evaluate whether
@@ -103,6 +108,11 @@ async def search_knowledge(
             project_ids = await active_project_ids()
             if not project_ids:
                 return "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
+    # The project-id list feeds the cache digest, so DB row order must never
+    # leak into the key: sort here as well as in the repository query so the
+    # digest does not depend on the port's ordering alone.
+    if project_ids is not None:
+        project_ids = sorted(project_ids)
     s = get_settings()
     knowledge_version = await cache_version("knowledge") if s.rag_cache_enabled else "0"
     cache_key = (
@@ -142,11 +152,11 @@ async def search_knowledge(
 
     # --- Single-flight request coalescing (Tech-Lead Directive §6) ---
     # When N concurrent turns ask the same uncached question, only one process
-    # calls the model; the others await the same result. Coalesce ONLY non-
-    # personalized, non-scoped lookups (project_slug is the personalization
-    # axis here; scoped lookups are already narrow). Gated by config so it can
-    # be disabled without a redeploy if it misbehaves.
-    coalesce_enabled = getattr(s, "singleflight_enabled", False) and project_ids is None
+    # calls the model; the others await the same result. The single-flight key
+    # IS the full cache key (query + sorted project scope + knowledge
+    # version), so scoped lookups coalesce safely too — the gate is only the
+    # config flag.
+    coalesce_enabled = getattr(s, "singleflight_enabled", False)
     if coalesce_enabled:
         result = await _search_knowledge_coalesced(
             cache_key=cache_key,
@@ -244,18 +254,29 @@ async def _search_knowledge_compute(
     emb = vec_literal(raw_emb)
 
     # Semantic cache (Phase 5): before hitting the DB, check if a *paraphrased*
-    # query was recently answered. Only for non-scoped knowledge lookups (no
-    # project_slug) to avoid cross-project false positives. Conservative threshold.
-    if getattr(s, "semantic_cache_enabled", False) and not project_slug:
+    # query was recently answered. Only lookups that are not slug-scoped are
+    # cached, and the entry is namespaced by the exact retrieval scope (sorted
+    # ``project_ids`` + ``top_k``): a Page-scoped conversation arrives here with
+    # ``project_slug=None`` but a non-empty ``project_ids``, so "no slug" alone
+    # must never be treated as the deployment-wide catalog (REL-07). Conservative
+    # threshold.
+    sem_enabled = getattr(s, "semantic_cache_enabled", False)
+    sem_scope: str | None = None
+    if sem_enabled and not project_slug:
+        from app.graph.semantic_cache import scope_key
+
+        sem_scope = scope_key(project_ids, top_k)
+
+    if sem_scope is not None:
         from app.graph.semantic_cache import semantic_cache_get
 
-        sem_hit = await semantic_cache_get(raw_emb)
+        sem_hit = await semantic_cache_get(raw_emb, scope=sem_scope)
         if sem_hit is not None:
             logger.debug("search_knowledge semantic cache hit (sim=%.3f)", sem_hit.similarity)
             _record_cache(semantic_hit=True, semantic_sim=sem_hit.similarity)
             return sem_hit.result
         _record_cache(semantic_hit=False)
-    elif metrics is not None and not getattr(s, "semantic_cache_enabled", False):
+    elif metrics is not None and not sem_enabled:
         # Semantic cache disabled — record the miss explicitly so dashboard
         # queries can distinguish "disabled" from "enabled-and-missed".
         metrics.setdefault("rag_cache", {})["semantic_hit"] = False
@@ -288,9 +309,10 @@ async def _search_knowledge_compute(
     result = "\n".join(lines)
     if s.rag_cache_enabled:
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
-    # Store in the semantic cache for future paraphrased hits (non-scoped only).
-    if getattr(s, "semantic_cache_enabled", False) and not project_slug:
+    # Store in the semantic cache for future paraphrased hits (unscoped lookups
+    # only), under the same scope namespace the read above used.
+    if sem_scope is not None:
         from app.graph.semantic_cache import semantic_cache_put
 
-        await semantic_cache_put(raw_emb, result)
+        await semantic_cache_put(raw_emb, result, scope=sem_scope)
     return result
