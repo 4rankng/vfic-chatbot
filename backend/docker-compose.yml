@@ -115,6 +115,7 @@ services:
     restart: unless-stopped
 
   web-green:
+    logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
@@ -136,6 +137,7 @@ services:
   # RQ worker: interactive/recovery turns only. It stays isolated from
   # post-send enrichment so a slow persistence job cannot delay a webhook.
   worker-chatbot:
+    logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
@@ -173,6 +175,7 @@ services:
   # RQ worker: best-effort lead/memory enrichment after a reply is sent.
   # It deliberately does not warm the chatbot graph or consume webhook_high.
   worker-persistence:
+    logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
@@ -198,6 +201,7 @@ services:
 
   # RQ worker: knowledge ingest / reindex / bus rebuild (slow, Drive-bound).
   worker-ingest:
+    logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
@@ -220,6 +224,7 @@ services:
 
   # rq-scheduler: hourly Drive reconcile, 5-min outbound retry, 30-min proactive follow-up tick.
   scheduler:
+    logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     depends_on:
@@ -240,6 +245,7 @@ services:
   # The reconcile sweep and outbound-dispatch ticks moved to worker-maintenance
   # so a backlog-driven reconcile cannot head-of-line-block the nudges.
   worker-followup:
+    logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
@@ -264,6 +270,7 @@ services:
   # non-reentrancy lock (reconcile_tick_lock, 300s), so overlapping schedules
   # skip; one worker keeps the two 60s ticks from competing with nudges.
   worker-maintenance:
+    logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
@@ -287,6 +294,7 @@ services:
   # One-shot, observable maintenance workload. The deploy starts this only
   # after the new web color is active; DB eligibility is its resume checkpoint.
   oa-profile-backfill:
+    logging: *default-logging
     profiles: ["maintenance"]
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
@@ -300,18 +308,21 @@ services:
 
   # SPA served by the frontend nginx image; Caddy reverse-proxies to it.
   frontend:
+    logging: *default-logging
     image: ghcr.io/4rankng/tinghire-fe:${IMAGE_TAG:-latest}
     expose: ["80"]
     restart: unless-stopped
 
   # DB UI — bound to loopback only. Reach via `make adminer` SSH tunnel.
   adminer:
+    logging: *default-logging
     image: adminer:4
     depends_on: [postgres]
     ports: ["127.0.0.1:8081:8080"]
     restart: unless-stopped
 
   caddy:
+    logging: *default-logging
     image: caddy:2
     depends_on:
       # Caddy proxies the ACTIVE web-<color> (tracked in /opt/vfic/ACTIVE_COLOR,

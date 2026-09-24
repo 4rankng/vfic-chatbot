@@ -1,6 +1,12 @@
 # Lightweight LOCAL DEV stack: Postgres+pgvector, Redis, Adminer only.
 # Backend (uvicorn --reload) and frontend (vite) run on the host for hot-reload,
 # so these services are exposed on localhost. `make dev` (from backend/) drives it.
+#
+# Loopback-only binding is the exposure control here (OPS-20): the dev DB is
+# typically a copy of production data, and these credentials are the well-known
+# `vfic/vfic`. If a dev Redis password is ever added, remember
+# `backend/tests/e2e_harness.py` defaults to `redis://127.0.0.1:6382/15` with no
+# password and would have to change in the same commit.
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -8,7 +14,7 @@ services:
       POSTGRES_USER: vfic
       POSTGRES_PASSWORD: vfic
       POSTGRES_DB: vfic
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: [vfic_dev_pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vfic -d vfic"]
@@ -20,7 +26,7 @@ services:
     image: redis:7-alpine
     # Host port 6382 (not 6379) to avoid clashing with the payroll project's
     # redis on the same dev machine. backend/.env's REDIS_URL must match.
-    ports: ["6382:6379"]
+    ports: ["127.0.0.1:6382:6379"]
     volumes: [vfic_dev_redisdata:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -33,7 +39,7 @@ services:
     depends_on: [postgres]
     # Host 8082 (not 8081) to avoid clashing with the tuyennhanvien
     # workspace's adminer running on the same dev machine.
-    ports: ["8082:8080"]
+    ports: ["127.0.0.1:8082:8080"]
 
 volumes:
   vfic_dev_pgdata:
