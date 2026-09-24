@@ -343,6 +343,83 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # In-stack ops-endpoint watcher: polls /health, /metrics and /health/queue
+  # on the web colours from inside the compose network and turns regressions
+  # into single-line JSON alerts on stdout — docker logs is the (rotation-
+  # bounded) observability path. This is the in-stack half of the alerting
+  # story; the host half is scripts/ops-alerts.sh (disk %, reclaimable Docker
+  # space, cron). Alerts reaching a human (email/Telegram relay) is
+  # deliberately not wired here: it needs an outbound token and belongs to the
+  # droplet runbook. Thresholds are env-tunable via .env: interval seconds,
+  # queue-depth ceiling (default 20 = half of CHAT_QUEUE_MAX_DEPTH), and how
+  # many consecutive all-busy polls count as saturation (default 10 ≈ 5 min).
+  metrics-watch:
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
+    env_file: .env
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          # stdlib-only poll loop (urllib + json); no app imports.
+          memory: 128M
+    command:
+      - python
+      - -c
+      - |
+        import json, os, time, urllib.request
+
+        POLL = int(os.environ.get("METRICS_WATCH_INTERVAL", "30"))
+        DEPTH_LIMIT = int(os.environ.get("METRICS_WATCH_MAX_QUEUE_DEPTH", "20"))
+        SATURATION_POLLS = int(os.environ.get("METRICS_WATCH_SATURATION_POLLS", "10"))
+        COLORS = ("web-blue", "web-green")
+        QUEUE_KEYS = ("webhook_high", "recovery", "persistence_low", "ingest", "followup", "maintenance")
+        COUNTERS = ("reconcile_enqueue_failed_total", "reconcile_unknown_send_outcome")
+
+        def get(url):
+            with urllib.request.urlopen(url, timeout=5) as r:
+                return json.loads(r.read().decode())
+
+        def emit(level, alert, **fields):
+            print(json.dumps({"ts": round(time.time()), "level": level, "alert": alert, **fields}), flush=True)
+
+        prev_counters = {}
+        saturation = {}
+        while True:
+            alive = []
+            for color in COLORS:
+                try:
+                    if get("http://%s:8000/health" % color).get("status") == "ok":
+                        alive.append(color)
+                except Exception:
+                    pass  # a stopped colour (normal between deploys) is not an alert
+            if not alive:
+                emit("error", "web_down", detail="neither web colour answered /health")
+            for color in alive:
+                try:
+                    m = get("http://%s:8000/metrics" % color)
+                    deep = {k: m[k] for k in QUEUE_KEYS if m.get(k, 0) > DEPTH_LIMIT}
+                    if deep:
+                        emit("error", "queue_depth_high", color=color, queues=deep, limit=DEPTH_LIMIT)
+                    if m.get("workers", 0) == 0:
+                        emit("error", "no_workers_registered", color=color)
+                    for key in COUNTERS:
+                        value = m.get(key, 0)
+                        if key in prev_counters and value > prev_counters[key]:
+                            emit("warn", "reconcile_counter_rising", color=color, counter=key, delta=value - prev_counters[key])
+                        prev_counters[key] = value
+                    qh = get("http://%s:8000/health/queue" % color)
+                    if qh.get("total_workers") and qh.get("busy_workers") == qh["total_workers"]:
+                        saturation[color] = saturation.get(color, 0) + 1
+                    else:
+                        saturation[color] = 0
+                    if saturation[color] >= SATURATION_POLLS:
+                        emit("warn", "workers_saturated", color=color, busy=qh.get("busy_workers"),
+                             total=qh.get("total_workers"), consecutive_polls=saturation[color])
+                except Exception as exc:
+                    emit("warn", "watcher_probe_failed", color=color, detail=repr(exc))
+            time.sleep(POLL)
+
   # One-shot, observable maintenance workload. The deploy starts this only
   # after the new web color is active; DB eligibility is its resume checkpoint.
   oa-profile-backfill:
