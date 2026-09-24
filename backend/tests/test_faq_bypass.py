@@ -191,7 +191,7 @@ class _FakeRepo:
 
 @pytest.mark.asyncio
 async def test_adapter_returns_result_on_confident_hit(monkeypatch):
-    from app.graph.factories import _FaqBypassAdapter
+    from app.graph.adapters import _FaqBypassAdapter
 
     vector_rows = [_row(id="1", similarity=0.95, answer="Trả lời 1", questions=["luong"])]
     lexical_rows = [_row(id="1", similarity=0.8), _row(id="2", similarity=0.5)]
@@ -214,7 +214,7 @@ async def test_adapter_returns_result_on_confident_hit(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_adapter_abstains_on_low_score(monkeypatch):
-    from app.graph.factories import _FaqBypassAdapter
+    from app.graph.adapters import _FaqBypassAdapter
 
     vector_rows = [_row(id="1", similarity=0.4)]  # below SCORE_FLOOR
     monkeypatch.setattr(
@@ -228,7 +228,7 @@ async def test_adapter_abstains_on_low_score(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_adapter_abstains_when_retrieval_raises(monkeypatch):
-    from app.graph.factories import _FaqBypassAdapter
+    from app.graph.adapters import _FaqBypassAdapter
 
     monkeypatch.setattr(
         "app.services.retrieval.RetrievalRepository",

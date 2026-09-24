@@ -252,7 +252,7 @@ class FaqBypassPort(Protocol):
 
     Returns a ready-to-send :class:`FaqBypassResult` on a high-confidence hit, or
     ``None`` to abstain (the agent then handles the turn as usual). Backed by
-    :class:`app.graph.factories._FaqBypassAdapter`; ``None`` in graph unit tests.
+    :class:`app.graph.adapters._FaqBypassAdapter`; ``None`` in graph unit tests.
     """
 
     async def try_answer(self, user_text: str) -> FaqBypassResult | None: ...

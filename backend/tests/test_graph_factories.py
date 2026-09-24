@@ -7,11 +7,13 @@ from types import SimpleNamespace
 import pytest
 
 from app.graph.clients import MiniMaxAgent, OpenRouterEmbedder
-from app.graph.factories import (
+from app.graph.adapters import (
     _DirectContextAdapter,
     _asks_to_explore,
-    _build_fast_llm,
     _is_general_or_comparative,
+)
+from app.graph.factories import (
+    _build_fast_llm,
     aclose_client_cache,
     build_deps,
     make_minimax_llm_json,
@@ -624,7 +626,7 @@ def test_openrouter_fast_tier_requests_returned_reasoning(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_aclose_client_cache_isolates_failures_and_closes_embedder_pool():
-    from app.graph import factories
+    from app.graph import client_cache
 
     closed: list[str] = []
 
@@ -645,7 +647,7 @@ async def test_aclose_client_cache_isolates_failures_and_closes_embedder_pool():
     failing_client = SimpleNamespace(root_async_client=_RootClient("agent", fails=True))
     fast_client = SimpleNamespace(root_async_client=_RootClient("fast"))
     embedder = SimpleNamespace(_client=SimpleNamespace(aio=_EmbedAio()))
-    factories._client_cache["test"] = factories._CachedClients(
+    client_cache._client_cache["test"] = client_cache._CachedClients(
         agent_llm=failing_client,
         fast_llm=fast_client,
         embedder=embedder,
@@ -654,7 +656,7 @@ async def test_aclose_client_cache_isolates_failures_and_closes_embedder_pool():
     await aclose_client_cache()
 
     assert closed == ["agent", "fast", "embedder"]
-    assert factories._client_cache == {}
+    assert client_cache._client_cache == {}
 
 
 @pytest.mark.asyncio
@@ -677,8 +679,9 @@ async def test_build_deps_caches_llm_clients_across_turns(monkeypatch):
         call_count["n"] += 1
         return _FakeLLM()
 
-    monkeypatch.setattr("app.graph.factories._chat_for_role", _counting_chat_for_role)
+    monkeypatch.setattr("app.graph.client_cache._chat_for_role", _counting_chat_for_role)
     monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.client_cache.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
 
     await build_deps(object())
@@ -702,15 +705,16 @@ async def test_build_deps_cache_invalidates_on_version_change(monkeypatch):
     covers only minimax + openrouter — the two providers whose settings drive
     agent_llm / embedder / fast_llm construction.
     """
-    from app.graph import factories
+    from app.graph import client_cache, factories
 
     reset_client_cache()
 
     class _FakeLLM:
         pass
 
-    monkeypatch.setattr("app.graph.factories._chat_for_role", lambda *a, **k: _FakeLLM())
+    monkeypatch.setattr("app.graph.client_cache._chat_for_role", lambda *a, **k: _FakeLLM())
     monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.client_cache.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
 
     versions = {
@@ -726,13 +730,13 @@ async def test_build_deps_cache_invalidates_on_version_change(monkeypatch):
     monkeypatch.setattr("app.core.cache.cache_version", _fake_cache_version)
 
     await factories.build_deps(object())
-    assert len(factories._client_cache) == 1
-    assert "mm:1|or:1|fb:1" in factories._client_cache
+    assert len(client_cache._client_cache) == 1
+    assert "mm:1|or:1|fb:1" in client_cache._client_cache
 
     # A minimax bump (admin edited the agent model / key) invalidates.
     versions["integration_minimax"] = "2"
     await factories.build_deps(object())
-    assert "mm:2|or:1|fb:1" in factories._client_cache
+    assert "mm:2|or:1|fb:1" in client_cache._client_cache
 
     reset_client_cache()
 
@@ -748,7 +752,7 @@ async def test_build_deps_cache_survives_zalo_version_change(monkeypatch):
     ZaloChannelSender, which is resolved fresh in build_deps — so a rotated
     token still takes effect on the next turn without touching this cache.
     """
-    from app.graph import factories
+    from app.graph import client_cache, factories
 
     reset_client_cache()
 
@@ -761,8 +765,9 @@ async def test_build_deps_cache_survives_zalo_version_change(monkeypatch):
         builds["n"] += 1
         return _FakeLLM()
 
-    monkeypatch.setattr("app.graph.factories._chat_for_role", _counting_chat_for_role)
+    monkeypatch.setattr("app.graph.client_cache._chat_for_role", _counting_chat_for_role)
     monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.client_cache.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
 
     versions = {
@@ -778,13 +783,13 @@ async def test_build_deps_cache_survives_zalo_version_change(monkeypatch):
     monkeypatch.setattr("app.core.cache.cache_version", _fake_cache_version)
 
     await factories.build_deps(object())
-    assert "mm:1|or:1|fb:1" in factories._client_cache
+    assert "mm:1|or:1|fb:1" in client_cache._client_cache
     assert builds["n"] == 1  # agent built once
 
     # Only the zalo namespace bumps (OA token refresh). The cache MUST NOT rebuild.
     versions["integration_zalo"] = "2"
     await factories.build_deps(object())
-    assert "mm:1|or:1|fb:1" in factories._client_cache  # same key, still cached
+    assert "mm:1|or:1|fb:1" in client_cache._client_cache  # same key, still cached
     assert builds["n"] == 1  # no additional LLM client construction
 
     reset_client_cache()
