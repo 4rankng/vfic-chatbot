@@ -41,7 +41,8 @@ user ID, never by password.
   system map and stack.
 - `docs/codebase-summary.md` — repository map.
 - `docs/system-architecture.md` — architecture, request lifecycle, queue model.
-- `docs/code-standards.md` and `standards/coding-style.md` — code conventions.
+- `docs/code-standards.md` — code conventions (`standards/coding-style.md`
+  holds project-specific preferences and points there).
 - `docs/testing.md` — testing approach.
 - `docs/deployment-guide.md` — production stack, deploy, backup/restore.
 - `standards/agent-completion-checklist.md` — completion record template.
