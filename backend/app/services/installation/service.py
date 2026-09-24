@@ -529,18 +529,29 @@ class InstallationService:
             or state.active_validation_id is None
         ):
             return None
-        revision = await self.repo.get_revision(state.active_revision_id)
+        # Cache-first: every lifecycle mutation advances both the identity
+        # (active revision, authority generation) and the cache namespace
+        # version via invalidate_installation_cache(), so a hit for the
+        # current identity is the fingerprint the full derivation would
+        # rebuild. The revision row, pack contract, and live KB vector stay
+        # DB-backed on this path: the KB vector is the one fingerprint input
+        # that moves on routine KB publishes, which do not bump the
+        # installation namespace.
+        revision: InstallationManifestRevision | None = None
+        cached = await get_cached_fingerprint(state.active_revision_id, state.authority_generation)
+        if cached is not None:
+            revision = await self.repo.get_revision(state.active_revision_id)
+            if revision is None or self._registry_pack_current(revision) is None:
+                return None
+            try:
+                kb_unchanged = cached.active_kb_vector == await self.repo.active_kb_vector()
+            except ValueError:
+                return None
+            if kb_unchanged:
+                return ActiveInstallation(revision=revision, fingerprint=cached)
         if revision is None:
-            return None
-        try:
-            pack = self.registry.get_pack(revision.pack_key)
-        except ValueError:
-            return None
-        if (
-            not pack.runtime_ready
-            or pack.version != revision.pack_version
-            or self.registry.pack_contract_hash(pack.key) != revision.pack_contract_hash
-        ):
+            revision = await self.repo.get_revision(state.active_revision_id)
+        if revision is None or self._registry_pack_current(revision) is None:
             return None
         validation = await self.db.get(InstallationManifestValidation, state.active_validation_id)
         if validation is None or not await self._validation_is_current(
@@ -551,15 +562,6 @@ class InstallationService:
             active_kb_vector = await self.repo.active_kb_vector()
         except ValueError:
             return None
-        expected = await self._active_context(
-            state,
-            validation,
-            active_kb_vector=active_kb_vector,
-            write_cache=False,
-        )
-        cached = await get_cached_fingerprint(revision.id, state.authority_generation)
-        if cached is not None and cached.checksum() == expected.fingerprint.checksum():
-            return ActiveInstallation(revision=revision, fingerprint=cached)
         return await self._active_context(state, validation, active_kb_vector=active_kb_vector)
 
     async def require_active(self) -> ActiveInstallation:
@@ -793,6 +795,20 @@ class InstallationService:
         await self.db.commit()
         await self._invalidate_cache_safely()
         return await self._active_context(state, validation)
+
+    def _registry_pack_current(self, revision: InstallationManifestRevision):
+        """Return the registry pack only while it matches the revision contract."""
+        try:
+            pack = self.registry.get_pack(revision.pack_key)
+        except ValueError:
+            return None
+        if (
+            not pack.runtime_ready
+            or pack.version != revision.pack_version
+            or self.registry.pack_contract_hash(pack.key) != revision.pack_contract_hash
+        ):
+            return None
+        return pack
 
     async def _validation_is_current(
         self,

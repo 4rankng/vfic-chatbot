@@ -176,12 +176,17 @@ async def test_revision_activation_rollback_suspend_and_resume_are_generation_sa
     first_active = await service.activate_revision(first.id, actor.id)
     assert first_active.fingerprint.authority_generation == 1
 
-    async def forged_cache(_revision_id, _generation):
-        return replace(first_active.fingerprint, manifest_checksum="b" * 64)
+    # Cache-first resolution: a hit for the exact current identity is served
+    # as-is (see the dedicated cache-first test below); any advanced identity
+    # must re-derive from the database instead of trusting the entry.
+    async def forged_cache(revision_id, generation):
+        if revision_id == first.id and generation == first_active.fingerprint.authority_generation:
+            return replace(first_active.fingerprint, manifest_checksum="b" * 64)
+        return None
 
     monkeypatch.setattr(installation_service_module, "get_cached_fingerprint", forged_cache)
     cache_checked = await service.require_active()
-    assert cache_checked.fingerprint.manifest_checksum != "b" * 64
+    assert cache_checked.fingerprint.manifest_checksum == "b" * 64
 
     current_lock = (await service.admin_view()).lock_version
     second = await service.create_revision(
@@ -227,6 +232,60 @@ async def test_revision_activation_rollback_suspend_and_resume_are_generation_sa
     with pytest.raises(InstallationError) as inactive:
         await service.require_active()
     assert inactive.value.code == "INSTALLATION_NOT_ACTIVE"
+
+
+async def test_resolve_active_serves_a_warm_hit_without_revalidating_and_rederives_on_cutover(
+    integration_session,
+    monkeypatch,
+):
+    actor, persona_version = await _seed_actor_and_persona(integration_session)
+    registry = _runtime_ready_registry()
+    service = InstallationService(integration_session, registry=registry)
+    first = await service.create_revision(
+        _revision_body(persona_version.id, display_name="Cache first"), actor.id
+    )
+    await service.validate_revision(first.id, actor.id)
+    first_active = await service.activate_revision(first.id, actor.id)
+
+    async def warm_hit(revision_id, generation):
+        if revision_id == first.id and generation == first_active.fingerprint.authority_generation:
+            return replace(first_active.fingerprint, manifest_checksum="b" * 64)
+        return None
+
+    monkeypatch.setattr(installation_service_module, "get_cached_fingerprint", warm_hit)
+    validation_calls = 0
+    real_validation = InstallationService._validation_is_current
+
+    async def counting_validation(*args, **kwargs):
+        nonlocal validation_calls
+        validation_calls += 1
+        return await real_validation(*args, **kwargs)
+
+    monkeypatch.setattr(InstallationService, "_validation_is_current", counting_validation)
+
+    served = await service.require_active()
+    assert served is not None
+    assert served.revision.id == first.id
+    assert served.fingerprint.manifest_checksum == "b" * 64
+    assert validation_calls == 0
+
+    current_lock = (await service.admin_view()).lock_version
+    second = await service.create_revision(
+        _revision_body(
+            persona_version.id,
+            display_name="After cutover",
+            expected_lock_version=current_lock,
+        ),
+        actor.id,
+    )
+    await service.validate_revision(second.id, actor.id)
+    second_active = await service.activate_revision(second.id, actor.id)
+
+    rederived = await service.require_active()
+    assert rederived.revision.id == second.id
+    assert rederived.fingerprint.checksum() == second_active.fingerprint.checksum()
+    assert rederived.fingerprint.manifest_checksum != "b" * 64
+    assert validation_calls > 0
 
 
 async def test_stale_admin_save_is_rejected_by_lock_version(integration_session):
