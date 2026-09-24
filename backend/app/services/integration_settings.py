@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import uuid
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -48,6 +49,25 @@ logger = logging.getLogger(__name__)
 # Access tokens are opaque and valid for 25 hours; refresh tokens are valid for
 # three months but single-use. Refresh on demand and persist every rotated pair.
 ZALO_OA_TOKEN_URL = "https://oauth.zaloapp.com/v4/oa/access_token"
+
+# Redis lock guarding the OA refresh. The refresh token is single-use, so two
+# concurrent redeemers leave the loser's stale pair overwriting the winner's and
+# the OA access token invalid until an admin re-authorizes.
+ZALO_OA_REFRESH_LOCK_KEY = "zalo:oa:token:refresh"
+# Headroom on top of the request budget for the persist + commit that follow the
+# refresh POST.
+_OA_REFRESH_LOCK_HEADROOM_SECONDS = 30
+
+
+def _oa_refresh_lock_ttl(request_timeout: int) -> int:
+    """Lock TTL above the work the lock guards (REL-03).
+
+    The guarded work is the caller's failed send plus the refresh POST — each
+    bounded by ``zalo_bot_request_timeout`` — and then the write + commit of the
+    rotated pair. A TTL shorter than that budget expires mid-flight, letting a
+    second worker acquire the lock and redeem the same single-use refresh token.
+    """
+    return 2 * max(int(request_timeout), 1) + _OA_REFRESH_LOCK_HEADROOM_SECONDS
 
 
 ZALO_BOT_TOKEN = "zalo_bot_token"
@@ -783,7 +803,10 @@ class IntegrationSettingsService:
 
         Called lazily by ``ZaloOASender`` when a send reports the token invalid.
         A Redis ``SET NX EX`` lock prevents RQ workers from refreshing in
-        parallel; losers re-read whatever token the winner just stored. Returns
+        parallel; losers re-read whatever token the winner just stored. The lock
+        value is a per-holder UUID and the release is a Lua compare-and-delete,
+        so a straggler whose TTL expired cannot delete a successor's lock and
+        admit a third redeemer of the single-use refresh token (REL-03). Returns
         the new access_token, or ``None`` on any failure — the caller then
         surfaces the original send error.
         """
@@ -795,9 +818,15 @@ class IntegrationSettingsService:
             return None
 
         redis = get_redis()
-        lock_key = "zalo:oa:token:refresh"
+        lock_key = ZALO_OA_REFRESH_LOCK_KEY
+        leader_id = uuid.uuid4().hex
         try:
-            acquired = await redis.set(lock_key, "1", nx=True, ex=30)
+            acquired = await redis.set(
+                lock_key,
+                leader_id,
+                nx=True,
+                ex=_oa_refresh_lock_ttl(self.settings.zalo_bot_request_timeout),
+            )
         except Exception:  # noqa: BLE001
             logger.warning("zalo OA token refresh lock unavailable", exc_info=True)
             return None
@@ -868,8 +897,16 @@ class IntegrationSettingsService:
                 logger.warning("zalo OA token refresh cache invalidation failed", exc_info=True)
             return new_access
         finally:
+            # Delete the marker only while we still own it (Lua CAS): a holder
+            # that outlived its TTL must never delete a successor's lock.
             try:
-                await redis.delete(lock_key)
+                await redis.eval(
+                    "if redis.call('get', KEYS[1]) == ARGV[1] "
+                    "then return redis.call('del', KEYS[1]) else return 0 end",
+                    1,
+                    lock_key,
+                    leader_id,
+                )
             except Exception:  # noqa: BLE001
                 logger.warning("zalo OA token refresh lock cleanup failed", exc_info=True)
 
