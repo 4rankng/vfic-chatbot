@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { apiJson, clearTokens, getAccessToken, setTokens } from "./apiClient";
+import {
+  apiJson,
+  clearTokens,
+  getAccessToken,
+  onAccessTokenRotated,
+  refreshOnce,
+  setTokens,
+} from "./apiClient";
 
 const accessTokenFor = (subject: string, generation: string): string =>
   `header.${btoa(JSON.stringify({ sub: subject, generation }))}.signature`;
@@ -234,5 +241,108 @@ describe("apiJson 401 refresh-retry", () => {
     expect(refreshCalls).toBe(1);
     expect(protectedCalls).toBe(4);
     expect(getAccessToken()).toBe("fresh-access");
+  });
+});
+
+/**
+ * The realtime socket holds the JWT from its connection handshake, so it
+ * subscribes to this notification to re-authenticate. A missed notification
+ * means silent dead realtime after a rotation; a spurious one means a needless
+ * re-handshake, so the exactly-once contract matters.
+ */
+describe("access token rotation notification", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    clearTokens();
+    vi.restoreAllMocks();
+  });
+
+  const stubRefresh = (accessToken: string, refreshToken: string): void => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        }),
+      }) as unknown as Response) as unknown as typeof globalThis.fetch;
+  };
+
+  it("notifies subscribers once with the rotated token", async () => {
+    setTokens("expired-access", "good-refresh");
+    stubRefresh("fresh-access", "fresh-refresh");
+    const seen: string[] = [];
+    onAccessTokenRotated((token) => seen.push(token));
+
+    await expect(refreshOnce()).resolves.toBe(true);
+
+    expect(seen).toEqual(["fresh-access"]);
+  });
+
+  it("notifies once for concurrent refreshes coalesced into a single request", async () => {
+    setTokens("expired-access", "good-refresh");
+    stubRefresh("fresh-access", "fresh-refresh");
+    const seen: string[] = [];
+    onAccessTokenRotated((token) => seen.push(token));
+
+    await Promise.all([refreshOnce(), refreshOnce()]);
+
+    expect(seen).toEqual(["fresh-access"]);
+  });
+
+  it("notifies with the pair another tab rotated in", async () => {
+    const expiredAccess = accessTokenFor("admin-1", "expired");
+    const otherTabAccess = accessTokenFor("admin-1", "fresh");
+    setTokens(expiredAccess, "shared-refresh");
+    globalThis.fetch = (async () => {
+      // Another tab completes rotation while this tab's request is in flight,
+      // so this refresh fails and the shared pair is picked up instead.
+      setTokens(otherTabAccess, "other-tab-refresh");
+      return {
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      } as unknown as Response;
+    }) as unknown as typeof globalThis.fetch;
+    const seen: string[] = [];
+    onAccessTokenRotated((token) => seen.push(token));
+
+    await expect(refreshOnce()).resolves.toBe(true);
+
+    expect(seen).toEqual([otherTabAccess]);
+    expect(getAccessToken()).toBe(otherTabAccess);
+  });
+
+  it("does not notify when the refresh fails", async () => {
+    setTokens("expired-access", "stale-refresh");
+    globalThis.fetch = (async () =>
+      ({
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      }) as unknown as Response) as unknown as typeof globalThis.fetch;
+    const seen: string[] = [];
+    onAccessTokenRotated((token) => seen.push(token));
+
+    await expect(refreshOnce()).resolves.toBe(false);
+
+    expect(seen).toEqual([]);
+  });
+
+  it("does not notify without a refresh token or after unsubscribe", async () => {
+    stubRefresh("fresh-access", "fresh-refresh");
+    const seen: string[] = [];
+    const unsubscribe = onAccessTokenRotated((token) => seen.push(token));
+    unsubscribe();
+
+    clearTokens();
+    await expect(refreshOnce()).resolves.toBe(false);
+    setTokens("expired-access", "good-refresh");
+    await expect(refreshOnce()).resolves.toBe(true);
+
+    expect(seen).toEqual([]);
   });
 });

@@ -137,6 +137,49 @@ const send = async (
   });
 };
 
+const accessTokenRotationListeners = new Set<(accessToken: string) => void>();
+
+/**
+ * Subscribe to stored-token rotation (a successful {@link refreshOnce}, including
+ * a pair another tab persisted first). Long-lived transports — the realtime
+ * socket — capture the token at their handshake and need this to re-authenticate.
+ * Returns an unsubscribe function.
+ */
+export const onAccessTokenRotated = (
+  listener: (accessToken: string) => void,
+): (() => void) => {
+  accessTokenRotationListeners.add(listener);
+  return () => {
+    accessTokenRotationListeners.delete(listener);
+  };
+};
+
+const notifyAccessTokenRotated = (): void => {
+  const accessToken = getAccessToken();
+  if (!accessToken) return;
+  for (const listener of [...accessTokenRotationListeners]) {
+    try {
+      listener(accessToken);
+    } catch (error) {
+      // A broken subscriber must never break the refresh ladder (that would log
+      // the user out), but silence is worse: a socket that fails to
+      // re-authenticate looks exactly like a backend that stopped emitting.
+      console.error("Access token rotation listener failed", error);
+    }
+  }
+};
+
+// A refresh that succeeds only because another tab rotated the pair still means
+// this tab's live connections hold a stale token, so it notifies as well.
+const settleRotation = (
+  accessToken: string | null,
+  refreshToken: string,
+): boolean => {
+  const rotated = sharedSessionRotated(accessToken, refreshToken);
+  if (rotated) notifyAccessTokenRotated();
+  return rotated;
+};
+
 const runRefresh = async (): Promise<boolean> => {
   const accessToken = getAccessToken();
   const refreshToken = getRefreshToken();
@@ -151,19 +194,20 @@ const runRefresh = async (): Promise<boolean> => {
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
     if (!response.ok) {
-      return sharedSessionRotated(accessToken, refreshToken);
+      return settleRotation(accessToken, refreshToken);
     }
     const tokens = (await response.json()) as {
       access_token: string;
       refresh_token: string;
     };
     if (getRefreshToken() !== refreshToken) {
-      return sharedSessionRotated(accessToken, refreshToken);
+      return settleRotation(accessToken, refreshToken);
     }
     setTokens(tokens.access_token, tokens.refresh_token);
+    notifyAccessTokenRotated();
     return true;
   } catch {
-    return sharedSessionRotated(accessToken, refreshToken);
+    return settleRotation(accessToken, refreshToken);
   }
 };
 

@@ -1,7 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { useDataProvider, useGetList, useNotify } from "ra-core";
 
-import { getRealtimeSocket } from "../../providers/realtime/realtime-socket";
+import {
+  getRealtimeSocket,
+  type RealtimeSocket,
+} from "../../providers/realtime/realtime-socket";
 import { Dashboard } from "../../dashboard/Dashboard";
 import { ConversationContextPanel } from "../../conversations/ConversationContextPanel";
 import type { CandidateProfileUpdate } from "../../leads/domain/candidateProfile";
@@ -17,6 +20,7 @@ import {
   shouldRefreshLeadIdentity,
 } from "../../leads/domain/recruitmentPresentation";
 import { leadDirectoryApi } from "../../leads/infrastructure/leadDirectoryApi";
+import type { LeadRealtimePort } from "../../leads/application/ports";
 import { createLeadRealtimePort } from "../../leads/infrastructure/leadRealtime";
 import type { CrmDataProvider } from "../../providers/types";
 import type {
@@ -29,7 +33,23 @@ import type {
 } from "../types";
 export { resolveRecruitmentProfile } from "../../leads/domain/recruitmentPresentation";
 
-const leadRealtimePort = createLeadRealtimePort(getRealtimeSocket());
+// Built on demand, never at import time: this module sits in the eager entry
+// graph, and creating the port would construct the socket.io Manager (and pull
+// socket.io-client onto first paint) before any conversation is opened. The
+// cache is keyed on the socket instance because logout drops the singleton —
+// a port that kept the old socket would emit into a closed connection.
+let cachedLeadRealtimePort: {
+  socket: RealtimeSocket;
+  port: LeadRealtimePort;
+} | null = null;
+
+const getLeadRealtimePort = (): LeadRealtimePort => {
+  const socket = getRealtimeSocket();
+  if (cachedLeadRealtimePort?.socket !== socket) {
+    cachedLeadRealtimePort = { socket, port: createLeadRealtimePort(socket) };
+  }
+  return cachedLeadRealtimePort.port;
+};
 
 const loadRecruitmentRows: ConversationRowSlot["load"] = async (
   conversations,
@@ -102,7 +122,7 @@ const RecruitmentConversationContext = ({
 
   useEffect(() => {
     if (!lead?.id) return;
-    return leadRealtimePort.subscribeToLeadUpdates(lead.id, (payload) => {
+    return getLeadRealtimePort().subscribeToLeadUpdates(lead.id, (payload) => {
       if (
         shouldRefreshLeadIdentity(lead.id, conversation?.zalo_chat_id, payload)
       ) {

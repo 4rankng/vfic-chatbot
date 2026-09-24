@@ -1,5 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+// socket.io-client must never be constructed by importing this capability: the
+// module sits in the eager entry graph (static-recruitment-runtime ->
+// reset-runtime-state -> App), so a module-scope realtime port would pull the
+// Manager — and the realtime-vendor chunk — onto first paint. The spy throws so
+// a regression fails loudly instead of silently costing entry bytes.
+const socketIo = vi.hoisted(() => ({
+  io: vi.fn(() => {
+    throw new Error("socket.io-client Manager constructed at import time");
+  }),
+}));
+vi.mock("socket.io-client", () => ({ io: socketIo.io }));
+
+import { getRealtimeSocket } from "../../providers/realtime/realtime-socket";
 import { resolveRecruitmentProfile } from "./index";
 
 describe("OA recruitment profile presentation", () => {
@@ -95,5 +108,22 @@ describe("OA recruitment profile presentation", () => {
         undefined,
       ).displayName,
     ).toBe("Ứng viên · 7654");
+  });
+});
+
+describe("recruitment capability import cost", () => {
+  it("does not construct the realtime socket when the module is imported", () => {
+    // The import of ./index above is the observation: a module-scope
+    // createLeadRealtimePort(getRealtimeSocket()) would have called io() here.
+    expect(socketIo.io).not.toHaveBeenCalled();
+  });
+
+  it("still constructs the socket on demand, so the guard above can fail", () => {
+    // Proves the spy is live: construction happens the moment the port asks for
+    // a socket, which is exactly what importing the capability must not do.
+    expect(() => getRealtimeSocket()).toThrow(
+      "socket.io-client Manager constructed at import time",
+    );
+    expect(socketIo.io).toHaveBeenCalledOnce();
   });
 });
