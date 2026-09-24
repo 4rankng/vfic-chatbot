@@ -84,6 +84,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: decisions._retry_after_seconds reads two Retry-After headers with
     # `.get`; the heuristic counts the site once (rows are per (file, scope,
     # call), not per occurrence).
+    # Same site, different verb: the OA refresh lock release became a Redis Lua
+    # compare-and-delete (`eval`) instead of a blind `delete` (REL-03), so
+    # integration_settings.refresh_oa_access_token contributes `eval` where it
+    # used to contribute `delete` — one reviewed site either way, which is why
+    # `eval` is in the scanned verb set.
     "provider_boundary": 122,
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
@@ -102,7 +107,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "f312f25c9e12d8df973df61a9011e2377917c85604e8b762e12b488835586cf1"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "17931237cfcbf95de0f6aef80e7749dfa94cc01566a96b2ae27f14fc9858293c"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
@@ -169,8 +174,11 @@ class _BroadCallInventory(_CallInventory):
                 categories.append("queue_producer")
             if name.startswith("send_") or (
                 self.provider_transport
+                # `eval` is the Redis Lua CAS the ownership-checked lock releases
+                # use (REL-03); it mutates state, so it belongs in the snapshot
+                # the same way `delete` did.
                 and name
-                in {"get", "getdel", "post", "put", "patch", "delete", "request"}
+                in {"get", "getdel", "post", "put", "patch", "delete", "request", "eval"}
             ):
                 categories.append("provider_boundary")
         for category in categories:
