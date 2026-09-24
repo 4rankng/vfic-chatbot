@@ -9,6 +9,18 @@
 # from measured resident usage — see the sum documented in
 # docs/deployment-guide.md §1.
 #
+# Memory-limit ledger (OPS-09): every service carries a
+# deploy.resources.limits.memory ceiling — postgres 448M, redis 320M, web-blue
+# 384M, web-green 384M, worker-chatbot 3×512M, worker-persistence 512M,
+# worker-ingest 512M, worker-followup 512M, worker-maintenance 384M, scheduler
+# 128M, frontend 64M, adminer 128M, caddy 64M, oa-profile-backfill 512M
+# (profile-gated). Sum of ceilings ≈ 5.3 GB against 1967 MB usable + swap: the
+# limits are per-container KILL FENCES, not reservations. Steady-state RSS is
+# far below each ceiling; the point of a fence is that a runaway container hits
+# ITS cap and gets OOM-killed by Docker alone, instead of growing until the
+# kernel OOM killer picks a victim (historically postgres or caddy — the
+# unbounded-blast-radius outage). Revisit the ledger if the host size changes.
+#
 # App images are `${IMAGE_TAG:?…}`: a required variable, so no compose command
 # can silently resolve `:latest` (OPS-10). Base images are digest-pinned for the
 # same reason; .github/workflows/pin-refresh.yml opens a PR when a digest moves.
@@ -121,6 +133,12 @@ services:
     environment:
       DB_POOL_SIZE: "8"
       DB_MAX_OVERFLOW: "4"
+    deploy:
+      resources:
+        limits:
+          # Mirrors web-blue (same image, same single uvicorn worker). Both
+          # colours only run at the same time during a cutover window.
+          memory: 384M
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -212,6 +230,12 @@ services:
       redis: { condition: service_healthy }
     volumes: [vfic_kb_uploads:/data/kb_uploads]
     command: ["rq", "worker", "ingest", "--url", "${REDIS_URL}"]
+    deploy:
+      resources:
+        limits:
+          # Embedding/digestion bursts are the largest single-job heap in the
+          # stack; same fence class as the other turn-executing workers.
+          memory: 512M
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
       # redis-py is present transitively via rq; python is on PATH in the image.
@@ -230,6 +254,12 @@ services:
     depends_on:
       redis: { condition: service_healthy }
     command: ["rqscheduler", "--url", "${REDIS_URL}"]
+    deploy:
+      resources:
+        limits:
+          # The scheduler only reads Redis sorted sets and enqueues jobs — a
+          # small fixed heap with no app imports worth fencing generously.
+          memory: 128M
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
       # redis-py is present transitively via rq; python is on PATH in the image.
@@ -255,6 +285,12 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     command: ["rq", "worker", "followup", "--url", "${REDIS_URL}"]
+    deploy:
+      resources:
+        limits:
+          # Executes full proactive-nudge turns (graph + LLM clients in
+          # memory) — same fence class as the other turn-executing workers.
+          memory: 512M
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
       # redis-py is present transitively via rq; python is on PATH in the image.
@@ -280,6 +316,12 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     command: ["rq", "worker", "maintenance", "--url", "${REDIS_URL}"]
+    deploy:
+      resources:
+        limits:
+          # Reconcile sweeps are DB-row + Redis-key work without LLM clients;
+          # below the turn-executing worker class.
+          memory: 384M
     stop_grace_period: 180s  # let a mid-sweep reconcile finish on SIGTERM
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
@@ -311,6 +353,11 @@ services:
     logging: *default-logging
     image: ghcr.io/4rankng/tinghire-fe:${IMAGE_TAG:-latest}
     expose: ["80"]
+    deploy:
+      resources:
+        limits:
+          # nginx serving a static SPA: a few MB of heap plus buffers.
+          memory: 64M
     restart: unless-stopped
 
   # DB UI — bound to loopback only. Reach via `make adminer` SSH tunnel.
@@ -319,6 +366,11 @@ services:
     image: adminer:4
     depends_on: [postgres]
     ports: ["127.0.0.1:8081:8080"]
+    deploy:
+      resources:
+        limits:
+          # Single PHP process serving an on-demand DB UI.
+          memory: 128M
     restart: unless-stopped
 
   caddy:
@@ -332,6 +384,12 @@ services:
       # brief cold-boot 502 window is unchanged from the single-web era.
       frontend: { condition: service_started }
     ports: ["80:80", "443:443"]
+    deploy:
+      resources:
+        limits:
+          # Caddy's own docs put idle usage at a few tens of MB; it must stay
+          # small so the edge never competes with the data plane for RAM.
+          memory: 64M
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - vfic_caddy_data:/data
