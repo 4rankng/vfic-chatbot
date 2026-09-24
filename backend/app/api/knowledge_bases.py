@@ -22,7 +22,7 @@ from app.schemas.knowledge_bases import (
     KnowledgeBaseUpdate,
     LegacyKnowledgeBootstrap,
 )
-from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.knowledge.base_service import KnowledgeBaseService
 from app.services.project.service import ProjectService
 
 

@@ -13,7 +13,7 @@ from app.models.user import Role, User
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.shared.domain.errors import ConflictError
 from app.services.knowledge.external_source_sync import ExternalSourceSyncError
-from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.knowledge.base_service import KnowledgeBaseService
 from app.services.project.single_page_external_sources import (
     SinglePageExternalSourceService,
     sync_single_page_external_source,
@@ -106,7 +106,7 @@ async def test_sync_success_noop_and_manual_edit_overwrite(
         AsyncMock(return_value=FAQ_CSV),
     )
     monkeypatch.setattr(
-        "app.services.knowledge_base_service.require_direct_context_ready",
+        "app.services.knowledge.base_service.require_direct_context_ready",
         AsyncMock(return_value=None),
     )
 
@@ -177,7 +177,7 @@ async def test_oversized_sync_marks_failed_without_replacing_existing_page(
         lambda: _FakeRedis(),
     )
     monkeypatch.setattr(
-        "app.services.knowledge_base_service.require_direct_context_ready",
+        "app.services.knowledge.base_service.require_direct_context_ready",
         AsyncMock(return_value=None),
     )
     await KnowledgeBaseService(integration_session).upsert_direct_file(
@@ -225,7 +225,7 @@ async def test_sync_failure_preserves_prior_page(
         AsyncMock(return_value=FAQ_CSV),
     )
     monkeypatch.setattr(
-        "app.services.knowledge_base_service.require_direct_context_ready",
+        "app.services.knowledge.base_service.require_direct_context_ready",
         AsyncMock(return_value=None),
     )
 
@@ -241,7 +241,7 @@ async def test_sync_failure_preserves_prior_page(
     )
 
     monkeypatch.setattr(
-        "app.services.knowledge_base_service.require_direct_context_ready",
+        "app.services.knowledge.base_service.require_direct_context_ready",
         AsyncMock(side_effect=ConflictError("capacity check failed")),
     )
     outcome = await sync_single_page_external_source(
@@ -278,7 +278,7 @@ async def test_activation_failure_rolls_back_replacement_and_stores_fixed_code(
         AsyncMock(return_value=FAQ_CSV),
     )
     monkeypatch.setattr(
-        "app.services.knowledge_base_service.require_direct_context_ready",
+        "app.services.knowledge.base_service.require_direct_context_ready",
         AsyncMock(return_value=None),
     )
     await KnowledgeBaseService(integration_session).upsert_direct_file(
@@ -361,7 +361,7 @@ async def test_private_or_empty_sheet_preserves_current_page(
         "app.services.project.single_page_external_sources.get_redis", lambda: _FakeRedis()
     )
     monkeypatch.setattr(
-        "app.services.knowledge_base_service.require_direct_context_ready",
+        "app.services.knowledge.base_service.require_direct_context_ready",
         AsyncMock(return_value=None),
     )
     fetch = (
@@ -406,7 +406,7 @@ async def test_missing_discovery_card_preserves_current_page(
         "app.services.project.single_page_external_sources.get_redis", lambda: _FakeRedis()
     )
     monkeypatch.setattr(
-        "app.services.knowledge_base_service.require_direct_context_ready",
+        "app.services.knowledge.base_service.require_direct_context_ready",
         AsyncMock(return_value=None),
     )
     await KnowledgeBaseService(integration_session).upsert_direct_file(

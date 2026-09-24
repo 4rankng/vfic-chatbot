@@ -11,7 +11,7 @@ from app.models.knowledge import KnowledgeBaseMode
 from app.models.persona import Persona, default_persona_followup_rules
 from app.models.user import Role, User
 from app.schemas.knowledge_bases import LegacyKnowledgeBootstrap
-from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.knowledge.base_service import KnowledgeBaseService
 
 
 pytestmark = pytest.mark.integration

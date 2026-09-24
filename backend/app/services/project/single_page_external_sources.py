@@ -36,7 +36,7 @@ from app.services.knowledge.external_source_sync import (
     validate_sheet_url,
 )
 from app.services.knowledge.external_source_sync.parsers import parse_faq_csv
-from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.knowledge.base_service import KnowledgeBaseService
 from app.services.project.repository import require_project
 from app.project_knowledge.application.jobs import (
     EnqueueReceiptUnknown,

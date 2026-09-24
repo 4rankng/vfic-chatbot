@@ -15,8 +15,8 @@ from app.schemas.knowledge_bases import (
     LegacyKnowledgeBootstrap,
 )
 from app.shared.domain.errors import ConflictError
-from app.services import knowledge_base_service
-from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.knowledge import base_service
+from app.services.knowledge.base_service import KnowledgeBaseService
 from app.services import knowledge_base_capacity
 
 
@@ -99,8 +99,8 @@ async def test_direct_file_preserves_raw_text_and_stores_normalized_text(
     async def audit(*args, **kwargs) -> None:
         return None
 
-    monkeypatch.setattr(knowledge_base_service, "require_direct_context_ready", ready)
-    monkeypatch.setattr(knowledge_base_service, "record_audit", audit)
+    monkeypatch.setattr(base_service, "require_direct_context_ready", ready)
+    monkeypatch.setattr(base_service, "record_audit", audit)
 
     direct_file = await KnowledgeBaseService(db).upsert_direct_file(
         kb_id,
@@ -150,7 +150,7 @@ async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references(
     async def record_bump(namespace):
         bumps.append(namespace)
 
-    monkeypatch.setattr(knowledge_base_service, "bump_cache_version", record_bump)
+    monkeypatch.setattr(base_service, "bump_cache_version", record_bump)
 
     result = await KnowledgeBaseService(db).bootstrap_legacy(
         LegacyKnowledgeBootstrap(
@@ -173,7 +173,7 @@ async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references(
     assert db.commits == 1
     # The attach invalidates the direct-context routing catalog like any
     # project write: one preamble bump, after the commit lands.
-    assert bumps == [knowledge_base_service.NS_PREAMBLE]
+    assert bumps == [base_service.NS_PREAMBLE]
 
 
 def test_direct_context_file_requires_a_text_filename() -> None:

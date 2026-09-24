@@ -20,13 +20,8 @@ class TextStats:
 
 
 def normalize_kb_scalar(raw: str) -> str:
-    text = raw.replace("\r\n", "\n").replace("\r", "\n")
-    text = text.replace("\ufeff", "")
-    text = unicodedata.normalize("NFC", text)
-    text = "".join(ch for ch in text if ch == "\n" or ch == "\t" or ch >= " ")
-    text = "\n".join(line.rstrip() for line in text.split("\n"))
-    text = re.sub(r"\n{4,}", "\n\n\n", text)
-    return text.strip()
+    """Shared pipeline plus per-line trailing-whitespace strip (canonical lane)."""
+    return _normalize_kb_text(raw, rstrip_lines=True)
 
 
 def normalize_kb_value(value: Any) -> Any:
@@ -43,11 +38,21 @@ def normalize_kb_value(value: Any) -> Any:
 
 
 def normalize_kb_text(raw: str) -> str:
-    """Preserve the established legacy Markdown normalization/checksum contract."""
+    """Established legacy Markdown normalization/checksum contract.
+
+    Deliberately keeps trailing whitespace inside lines: changing it would
+    rewrite every stored ``content_sha256``.
+    """
+    return _normalize_kb_text(raw, rstrip_lines=False)
+
+
+def _normalize_kb_text(raw: str, *, rstrip_lines: bool) -> str:
     text = raw.replace("\r\n", "\n").replace("\r", "\n")
     text = text.replace("\ufeff", "")
     text = unicodedata.normalize("NFC", text)
     text = "".join(ch for ch in text if ch == "\n" or ch == "\t" or ch >= " ")
+    if rstrip_lines:
+        text = "\n".join(line.rstrip() for line in text.split("\n"))
     text = re.sub(r"\n{4,}", "\n\n\n", text)
     return text.strip()
 

@@ -54,7 +54,7 @@ from app.services.project.faq import ProjectFaqService
 from app.services.project.features import ProjectFeatureService
 from app.services.project.single_page_external_sources import SinglePageExternalSourceService
 from app.services.project.repository import ProjectRepository, require_project
-from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.knowledge.base_service import KnowledgeBaseService
 from app.project_knowledge.domain.project import (
     ProjectActivationFacts,
     project_activation_error,
