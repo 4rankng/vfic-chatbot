@@ -204,6 +204,28 @@ def _backend_rule(rel: str, target: str) -> str | None:
         return "api_outward"
     if rel.startswith("backend/app/schemas/") and module.startswith(("app.models", "app.core")):
         return "schema_infra"
+    # Transport and read-side trees may not reach into the turn runtime or the
+    # HTTP layer. app.realtime's set deliberately omits "app.api" until its one
+    # remaining edge (socketio auth importing app.api.auth_dependencies) is
+    # retargeted at the identity context; app.channels may not import app.api
+    # either. Known edges still OUTSIDE every rule, each awaiting its owning
+    # change: channels/providers/facebook_account.py → app.models (persistence
+    # behind the resolver port), services/presence.py → app.realtime.emitter
+    # (should publish through conversation_messaging.application.ports), the
+    # API layer importing app.channels providers (api/integrations.py,
+    # api/webhooks.py), and models importing bounded-context enums.
+    if rel.startswith("backend/app/realtime/") and module.startswith(
+        ("app.graph", "app.workers")
+    ):
+        return "realtime_outward"
+    if rel.startswith("backend/app/channels/") and module.startswith(
+        ("app.api", "app.graph", "app.workers")
+    ):
+        return "channel_outward"
+    if rel.startswith("backend/app/reporting/") and module.startswith(
+        ("app.api", "app.graph", "app.workers")
+    ):
+        return "reporting_outward"
     return None
 
 
@@ -498,6 +520,28 @@ def test_python_scanner_normalizes_relative_imports_and_symbols() -> None:
     for target in {"app.core", "app.graph", "app.models", "app.workers"}:
         assert _backend_rule("backend/app/api/example.py", target) == "api_outward"
     assert _backend_rule("backend/app/services/example.py", "app.api") == "service_outward"
+
+
+def test_transport_and_read_side_trees_reject_runtime_and_api_imports() -> None:
+    """realtime/, channels/, and reporting/ are covered sources, not gaps.
+
+    realtime/ covers graph/workers; its app.api ban is pending the socketio
+    auth retarget (one known edge, tracked in the rule's comment), so the
+    assertion set mirrors what is enforceable today.
+    """
+    for target in ("app.graph", "app.workers"):
+        assert _backend_rule("backend/app/realtime/socketio.py", target) == "realtime_outward"
+    for target in ("app.api", "app.graph", "app.workers"):
+        assert (
+            _backend_rule("backend/app/channels/providers/example.py", target)
+            == "channel_outward"
+        )
+        assert _backend_rule("backend/app/reporting/infrastructure/example.py", target) == (
+            "reporting_outward"
+        )
+    # Importing services/models stays the documented direction for these trees.
+    assert _backend_rule("backend/app/channels/providers/example.py", "app.services") is None
+    assert _backend_rule("backend/app/reporting/infrastructure/example.py", "app.services") is None
 
 
 def test_shared_kernel_rejects_framework_and_infrastructure_imports() -> None:
