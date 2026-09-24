@@ -453,6 +453,10 @@ def _prepare_bg_deploy_sandbox(tmp_path: Path, *, active_color: str | None, fail
             if args[:2] == ["compose", "up"]:
                 raise SystemExit(0)
             if args[:4] == ["compose", "exec", "-T", "postgres"]:
+                if len(args) >= 5 and args[4] == "pg_dump":
+                    # Opaque custom-format payload — bg_deploy aborts the deploy
+                    # when the pre-migration dump is empty, so it must be non-empty.
+                    sys.stdout.write("PGDMP-fake-pre-migration-dump")
                 raise SystemExit(0)
             if len(args) >= 4 and args[:3] == ["compose", "ps", "-q"]:
                 sys.stdout.write(service_ps.get(args[3], ""))
@@ -697,6 +701,10 @@ def test_bg_deploy_exec_success_stops_old_color_only_after_public_checks(tmp_pat
         "docker compose stop web-green\n"
     )
     assert "docker compose stop web-green" in commands
+    # The pre-migration safety dump runs before any migration and lands in the
+    # sandbox's pre-migration-dumps directory.
+    assert "docker compose exec -T postgres pg_dump -U vfic -Fc -Z6 vfic" in commands
+    assert list((root / "pre-migration-dumps").glob("vfic-pre-*.dump"))
 
 
 def test_bg_rollback_exec_failed_public_verify_keeps_state_unswapped(tmp_path: Path) -> None:
