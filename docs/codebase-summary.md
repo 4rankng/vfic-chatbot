@@ -11,7 +11,7 @@ and `ghcr.io/4rankng/tinghire-fe:latest` (also tagged `:<git-sha>`).
 
 ```
 ChatBot/
-├── backend/              FastAPI + RQ workers + Alembic (~68.1k LOC Python)
+├── backend/              FastAPI + RQ workers + Alembic (~67.8k LOC Python)
 │   ├── app/
 │   │   ├── api/          Routers + auth/capability dependencies
 │   │   ├── capabilities/ Closed source-owned pack registry + parity artifacts
@@ -89,18 +89,18 @@ ChatBot/
 
 | Area | LOC |
 |---|---|
-| Backend `app/services/` | 33,173 |
-| Backend `app/graph/` | 9,624 |
-| Backend `app/api/` | 4,700 |
+| Backend `app/services/` | 32,904 |
+| Backend `app/graph/` | 9,626 |
+| Backend `app/api/` | 4,701 |
 | Backend `app/schemas/` | 3,333 |
 | Backend `app/models/` | 3,175 |
 | Backend `app/workers/` | 2,664 |
-| Backend `app/core/` | 2,000 |
+| Backend `app/core/` | 1,999 |
 | Backend `app/realtime/` | 438 |
 | Backend `app/capabilities/` | 328 |
 | Backend `app/prompts/` | 47 |
-| **Backend `app/` total** | **68,069** |
-| Frontend `src/` (TS/TSX) | 64,621 |
+| **Backend `app/` total** | **67,802** |
+| Frontend `src/` (TS/TSX) | 64,700 |
 
 Counted 2026-09-24 by walking each directory and summing `wc -l` over its
 `*.py` / `*.ts` / `*.tsx` files (physical lines, so blanks and comments are
@@ -169,20 +169,20 @@ moved.
 | `backend/app/capabilities/registry.py` | Closed registry resolution and canonical contract hashing; rejects unknown versions, dependency cycles, duplicate owners, and hash drift. |
 | `backend/app/capabilities/recruitment_v1_contract.json` | Non-executable backend/frontend parity artifact; canonical hash `2a7c602a...58622d9`. |
 | `backend/app/core/config.py` | `Settings(BaseSettings)` + `get_settings()` lru_cache singleton. Boot-time safety checks. `active_llm_provider` / `llm_fallback_enabled` properties. |
-| `backend/app/core/security.py` | passlib argon2, python-jose HS256 JWT, `asyncio.to_thread` for crypto. |
+| `backend/app/core/security.py` | PyJWT HS256 JWT + passlib argon2, `asyncio.to_thread` for crypto. |
 | `backend/app/core/db.py` | `create_async_engine(..., pool_pre_ping=True)`, `async_session` (`expire_on_commit=False`), `get_db()` (rolls back on exception). |
-| `backend/app/graph/runner.py` | Bot-turn pipeline node chain (`run_turn`). Topology documented in module docstring lines 1-18. |
-| `backend/app/graph/types.py` | `BotRunState` (line 21), `GraphDeps` (line 32). |
-| `backend/app/graph/factories.py` | `build_deps(db)` (line 65) — resolves admin-managed MiniMax/OpenRouter/Zalo creds. |
-| `backend/app/graph/clients.py` | MiniMax / OpenRouter LLM clients; `_chat_for_role` selects one configured provider per client; `_llm_call_with_retry` retries one 429 then fails over across enabled providers; `GeminiEmbedder` (line 127). |
+| `backend/app/graph/runner.py` | Bot-turn pipeline node chain (`run_turn`); the topology is documented in the module docstring. |
+| `backend/app/graph/types.py` | `BotRunState` and `GraphDeps` dataclasses. |
+| `backend/app/graph/factories.py` | `build_deps(db, ...)` — resolves admin-managed MiniMax/OpenRouter/Zalo creds. |
+| `backend/app/graph/clients.py` | MiniMax / OpenRouter LLM clients; `_chat_for_role` selects one configured provider per client; `_llm_call_with_retry` retries one 429 then fails over across enabled providers; `GeminiEmbedder`. |
 | `backend/app/graph/tools.py` | `TOOL_SCHEMAS` + `_dispatch_tool`. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
 | `backend/app/graph/safety.py` | `fast_safety_filter`, `parse_verdict`, `build_retry_prompt` — structural cleaning only; an empty result suppresses the turn. |
 | `backend/app/graph/llm_semaphore.py` | Redis-backed cross-process LLM concurrency semaphore; `LLMThrottled`. |
 | `backend/app/api/projects.py` | Project CRUD plus single-page knowledge, 12-category replacement, clear, cutover, and rollback endpoints. |
-| `backend/app/services/zalo_sender.py` | `ZaloChannelSender` facade (line 19) — dispatches per `conv.zalo_channel`. |
-| `backend/app/services/zalo_bot_service.py` | `ZaloBotSender` (line 241); `send_message` (line 253); `send_chat_action` (line 335). Base `https://bot-api.zaloplatforms.com`. |
-| `backend/app/services/zalo_oa_service.py` | `ZaloOASender` (line 12); `POST /v3.0/oa/message/cs` (line 81). Base `https://openapi.zalo.me`. |
-| `backend/app/services/retrieval/repository.py` | pgvector halfvec HNSW + exact re-rank retrieval (line 160). |
+| `backend/app/services/zalo_sender.py` | `ZaloChannelSender` facade — dispatches per `conv.zalo_channel`. |
+| `backend/app/services/zalo_bot_service.py` | `ZaloBotSender`; `send_message`; `send_chat_action`. Base `https://bot-api.zaloplatforms.com`. |
+| `backend/app/services/zalo_oa_service.py` | `ZaloOASender`; `POST /v3.0/oa/message/cs`. Base `https://openapi.zalo.me`. |
+| `backend/app/services/retrieval/repository.py` | pgvector halfvec HNSW + exact re-rank retrieval. |
 | `backend/app/services/knowledge/category_service.py` | Stages, activates, clears, cuts over, rolls back, and derives category revisions for Project-owned RAG categories. |
 | `backend/app/workers/run_worker.py` | RQ worker container entrypoint; calls `Worker.clean_registries()` on startup. |
 | `backend/app/workers/chatbot_worker.py` | Stable chat-turn RQ entry point (`webhook_high` for live turns, `recovery` for recovered ones, `persistence_low` in dev). |
@@ -196,7 +196,7 @@ moved.
 | `backend/alembic/versions/0050_data_ingestion_recovery.py` | Adds durable category processing leases, retry metadata, quality-result storage, and Project cutover snapshot columns. |
 | `backend/alembic/env.py` | Injects `settings.database_url_sync`; registers models on `Base.metadata`; baseline is raw SQL. |
 | `backend/Makefile` | `dev`, `db`, `push`, `deploy`, `deploy-restart`, `deploy-restart-frontend`, `adminer`. |
-| `backend/docker-compose.yml` | 10-service prod stack (postgres, redis, web, worker-chatbot ×6, worker-ingest, scheduler, worker-followup, frontend, adminer, caddy). |
+| `backend/docker-compose.yml` | 13-service prod stack: postgres, redis, web-blue + web-green (one active colour), worker-chatbot (replicas 3), worker-persistence, worker-ingest, scheduler, worker-followup, worker-maintenance, frontend, adminer, caddy. |
 | `backend/Caddyfile` | Edge routes for `bot.tingting.vip`. |
 | `backend/scripts/create_admin.py` | Bootstrap admin; sync engine psycopg; idempotent `--only-if-no-admins`. |
 | `backend/scripts/seed_dev.py` | Truncate + re-insert Vietnamese dev data (LOCAL only). |
@@ -217,7 +217,7 @@ moved.
 | `frontend/src/components/atomic-crm/knowledge/infrastructure/http-knowledge-adapter.ts` | HTTP adapter for Project single-page and category knowledge operations. |
 | `frontend/src/lib/runtime-config.ts` | API base resolution: `window.__VFIC__.API_BASE` → `VITE_API_BASE` → same origin. |
 | `frontend/src/components/atomic-crm/providers/realtime/realtime-socket.ts` | Socket.IO transport adapter; lazy connection and JWT re-read on reconnect. |
-| `frontend/src/conversations/inbox.css` | Barrel `@import`-ing 10 section files under `conversations/inbox/`. |
+| `frontend/src/components/atomic-crm/conversations/inbox.css` | Barrel `@import`-ing the 19 section stylesheets under `conversations/inbox/`. |
 | `frontend/vite.config.ts` | Vite 7.3 config; Tailwind v4 plugin; VitePWA autoUpdate (≤5 MiB); manual chunks; dev proxies `/api`, `/realtime`, `/socket.io` → `localhost:8000`. |
 | `Makefile` (root) | `dev`, `deploy`, `deploy-backend`, `deploy-frontend`, `adminer`, `seed`, `backup`, `restore`, `backup-full`, `restore-prod`. |
 | `scripts/backup-droplet.sh` | Full droplet backup: env + streamed gzipped pg_dump + volume tarballs + Caddy TLS + manifest; embeds restore.sh. |
