@@ -1079,4 +1079,74 @@ TICKETS = [
             "points at a deleted file). Pre-existing at HEAD; not caused by FE-06."
         ),
     ),
+    dict(
+        id="FE-18",
+        title="npm run lint never reaches src/components, so the CI lint step is vacuous",
+        sev="high",
+        area="testing",
+        labels=["testing", "tech-debt"],
+        effort="S",
+        problem=(
+            "The lint script is `eslint **/*.{mjs,ts,tsx} --no-warn-ignored` — unquoted — so `/bin/sh` "
+            "expands `**` as `*`. ESLint therefore receives only the top-level files and never reaches "
+            "`src/components/**`, which is essentially the whole application. `npm run lint` exits 0 "
+            "regardless of what the code does, and the `frontend-quality` CI job's Lint step has been "
+            "enforcing nothing."
+        ),
+        evidence=[
+            "`frontend/package.json:9` — `\"lint\": \"eslint **/*.{mjs,ts,tsx} --no-warn-ignored\"`, unquoted.",
+            "`sh -c 'printf \"%s\\n\" **/*.{mjs,ts,tsx} | wc -l'` returns **11** files (App.tsx, main.tsx, App.installation.test.tsx, vite-env.d.ts, e2e/*.ts), while `npx eslint \"**/*.{mjs,ts,tsx}\" --no-warn-ignored` lints **457**.",
+            "`.github/workflows/quality-gates.yml` runs `npm run lint` in the `frontend-quality` job, so the vacuous glob is what CI executes.",
+            "Surfaced by FE-08: adding `src/components/atomic-crm/**` to the `no-explicit-any` scope had no observable effect until the glob was quoted.",
+        ],
+        impact=(
+            "Three quarters of the codebase has had no lint enforcement at all, and the CI signal that "
+            "was supposed to catch it reported success. A rule change to `eslint.config.js` is "
+            "unverifiable through the script that runs it."
+        ),
+        fix=(
+            "Quote the glob: `eslint \"**/*.{mjs,ts,tsx}\" --no-warn-ignored`. Measured at the time of "
+            "the fix, the tree has only 3 errors (in two files being edited concurrently) and 15 "
+            "warnings, so the corrected script is immediately green — this is a one-line change, not a "
+            "backlog."
+        ),
+        evidence_log=[
+            "2026-09-24 — fixed: glob quoted in `frontend/package.json`; verified `npm run lint` now lints 457 files and exits 0. The `no-explicit-any` scope added by FE-08 is now actually enforced.",
+        ],
+    ),
+    dict(
+        id="FE-19",
+        title="Feature stylesheets are not scoped by module; selectors nest under one global container class",
+        sev="low",
+        area="frontend",
+        labels=["tech-debt"],
+        effort="L",
+        problem=(
+            "Feature CSS is not scoped by module: selectors nest under a shared global container class, "
+            "so any global rule can reach any feature's elements. The sheet surface is one 48 KB global "
+            "`index.css` plus ~19 feature stylesheets."
+        ),
+        evidence=[
+            "`frontend/src/index.css` is 49,208 bytes, and `conversations/inbox/` holds 19 stylesheets (`chat.css` 32.6 KB, `features.css` 30.9 KB, `untitledui-conversations.css` 21.7 KB, `personas-studio.css` 19.7 KB, `tokens.css` 13.3 KB), plus `integrations/settings.css` 37.8 KB, `projects/projects.css` 30.2 KB and `performance/performance.css` 27.7 KB.",
+            "`conversations/inbox/chat.css` alone has ~170 `inbox-bg-container` rules and `context-drawer.css` ~145, including `.inbox-bg-container .candidate-info-row[data-field=\"notes\"]`.",
+            "Positive signs to preserve, not replace: the hoisted `--tt-*` token bridge in `kit/tailkit-system.css`, `contain: layout style paint` in `conversations/inbox/chat.css`, and the dedicated CSS regression tests.",
+        ],
+        impact=(
+            "A global rule can silently restyle an unrelated feature, and there is no module boundary to "
+            "reason about — but this is a maintainability cost, not a defect users can see."
+        ),
+        fix=(
+            "Fold each feature sheet into Tailwind utilities or CSS modules **as those files are "
+            "touched** — do not attempt a big-bang migration. The audit's own recommendation was to "
+            "defer this and do it incrementally, which is why it is carded separately from FE-16 rather "
+            "than bundled into it. Scope each feature under its own container class when you next open "
+            "the file; verify visually, since the existing CSS tests assert source text rather than "
+            "rendered layout (see TEST-10)."
+        ),
+        notes=(
+            "Split out of FE-16, whose other two parts (the unreachable English i18n default and the "
+            "unused dependencies) are done. Deferred deliberately: it needs browser QA per screen and "
+            "the audit advised against a big-bang rewrite."
+        ),
+    ),
 ]

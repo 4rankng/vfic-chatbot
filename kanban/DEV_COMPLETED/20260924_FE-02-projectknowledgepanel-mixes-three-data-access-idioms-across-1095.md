@@ -5,8 +5,8 @@ severity: high
 area: frontend
 labels: [tech-debt]
 effort: L
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** frontend · **Effort:** L · **Labels:** tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,13 @@ Two panels write the same resource through different paths, so cache coherence d
 ## Suggested fix
 
 Introduce `useProjectKnowledgeCatalog(projectId)` (query + mutations, owns `pollUntilActive`), `useCategoryDraft(projectId, key)` and `useSinglePageDraft(projectId)`, with pure `CategoryEditor`, `SinglePageEditor`, `FaqAutoSyncSection` and `DiscoveryCardEditor` components. Route all writes through one layer — prefer the existing `project-knowledge-service` facade and delete the `useDataProvider` path, or the reverse — and do not keep both.
+
+## Evidence log
+
+- 0567d63b — `ProjectKnowledgePanel.tsx` 1095 → 316 LOC, 21 `useState` → 2; data layer to `projects/application/*` (catalog + cutover poll, category/single-page/discovery drafts), rendering to `projects/presentation/*`.
+- One write path: the `project-knowledge-service` facade. `DiscoveryCardEditor`'s react-admin write became the port operation `updateProjectDiscoveryCard` (`PATCH /api/v1/knowledge/projects/{id}`, matching the backend `ProjectUpdate` schema). The two surviving `useRefresh()` calls are cache invalidation for the react-admin-cached project record, not a second write path.
+- The `exhaustive-deps` disable and both hand-rolled generation guards are gone.
+- Verified: `ProjectKnowledgePanel.test.tsx` 13/13 (harness-only change), `projects` suite 66 tests pass; a canary that broke one Vietnamese string flipped exactly the dependent test.
 
 ---
 

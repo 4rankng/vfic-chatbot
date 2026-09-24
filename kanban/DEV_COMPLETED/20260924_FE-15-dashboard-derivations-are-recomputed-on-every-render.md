@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [performance]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** performance
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -34,6 +34,11 @@ O(n) grouping plus filter plus sort is re-executed for unrelated UI events; with
 ## Suggested fix
 
 `useMemo` both derivations on `[data?.immediate]` / `[candidatesQuery.data]` and hoist the count into the same memo. Also stop `saveCandidateProfile` (`RecruitingCommandCenter.tsx:119`) refetching on the failure path, which doubles list traffic on every failed edit.
+
+## Evidence log
+
+- 21221d2c — `filterHumanInterventions`, `groupCandidatesByDay` and the reduce-count are memoized on their real inputs, and `saveCandidateProfile` no longer refetches on the failure path (a failed edit used to double list traffic).
+- Verified: dashboard suite 5 files / 59 tests pass.
 
 ---
 

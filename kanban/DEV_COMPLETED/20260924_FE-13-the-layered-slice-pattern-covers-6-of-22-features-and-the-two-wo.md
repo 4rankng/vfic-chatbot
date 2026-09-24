@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [tech-debt]
 effort: L
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** L · **Labels:** tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -38,6 +38,14 @@ Declare the rule in the folder context doc and either apply or drop it. At minim
 ## Notes
 
 Layering in the direction that was audited is verified clean and is **not** a ticket: `components/ui/**` imports nothing from `components/admin/**` or `components/atomic-crm/**`; `components/admin/**` imports nothing from `atomic-crm` and depends only on `ui` + `lib` + `ra-core`; `src/lib/**` and `src/hooks/**` import no feature code (`ui/sidebar.tsx:7` imports only `@/hooks/use-mobile` + `@/lib/utils`); product code stays inside `atomic-crm/` with only the app shell (`main.tsx:6`, `App.tsx:1-6`) as an outside consumer.
+
+## Evidence log
+
+- 31f78da5 — both slice-migration shims finished and deleted: `conversation-list-filters.ts` (which also carried the live `getChannelProviderSearchParams`, moved into `domain/`) and the `messageOrdering` re-export; 5 importers repointed.
+- Three feature tests moved beside their subjects and renamed to the kebab-case convention; `candidateNotes.ts` moved to `domain/candidate-notes.ts` so its test had a subject to sit beside (2 importers repointed).
+- The layering rule is now recorded in `frontend/AGENTS.md`. Deliberately not applied to `integrations/`/`dashboard/` here — the god files were split along these seams and `dashboard/` stays flat.
+- 01000395 keeps `registry.json` in step with the moved modules.
+- Verified: conversations suite 21 files / 121 tests pass.
 
 ---
 

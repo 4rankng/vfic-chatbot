@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [performance, tech-debt]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** M · **Labels:** performance, tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,13 @@ Two virtualization libraries are maintained for one list each (~30–50 KB combi
 ## Suggested fix
 
 Pick one list virtualizer — `virtua` is already the hot path, so migrate `RecruitingCommandCenter` and drop `react-virtuoso` — and update `manualChunks` in `frontend/vite.config.ts` to name `virtua` and `zod`, with a comment that the rule set must track imports.
+
+## Evidence log
+
+- 21221d2c — the last `GroupedVirtuoso` migrated to `virtua` (desktop `VList`, mobile `WindowVirtualizer` since the workspace frame is not a scroll container at ≤767px), with the day grouping flattened into one virtualized child list so headings stay virtualized with their rows.
+- `manualChunks` now names `virtua` and `zod` instead of the legacy library. Verified in the build output: `virtua-vendor` and `zod-vendor` exist, `virtuoso-vendor` is gone, and react-virtuoso appears in no chunk.
+- `react-virtuoso` removed from `package.json` in 3ca1ee78 once nothing imported it.
+- Verified: the render test now exercises the real virtualizer instead of mocking react-virtuoso, and asserts the day-group heading still renders.
 
 ---
 

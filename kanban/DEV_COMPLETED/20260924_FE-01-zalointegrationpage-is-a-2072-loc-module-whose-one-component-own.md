@@ -5,8 +5,8 @@ severity: high
 area: frontend
 labels: [tech-debt]
 effort: L
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** frontend · **Effort:** L · **Labels:** tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,12 @@ Any change to one integration risks the other three, because the LLM descriptor 
 ## Suggested fix
 
 Extract along the seams the audit names: `integrations/domain/providerDescriptors.ts` (move `:82-465` types and `PROVIDER_PANELS_BY_ID`), `application/useSettingsBundle.ts` (owns `load`), `application/useZaloForm.ts`, `application/useProviderPanels.ts` (owns 7 `useState` + 5 handlers — the single biggest win), `presentation/SettingsChrome.tsx`, `ZaloChannelSection.tsx`, `LlmProvidersSection.tsx` and `JevSection.tsx`, leaving a ~120-LOC shell. Move the three embedded foreign pages (`settings-agents`, `settings-users`, `settings-facebook-messenger`) to the routes that own those products.
+
+## Evidence log
+
+- decb8b63 — `ZaloIntegrationPage.tsx` 2072 → 98 LOC: descriptor table to `domain/providerDescriptors.ts`, state owners to `application/{useSettingsBundle,useZaloForm,useProviderPanels}.ts`, chrome/sections to `presentation/*`; the three save/dirty mechanisms collapse onto one.
+- Deliberate deviation: the settings navigation is unchanged. The embedded `PersonaList`, `UserList` and `FacebookMessengerIntegrationPage` render from thin section components instead of moving to their own routes, because that would be a user-visible navigation change.
+- Verified: `npx vitest --run src/components/atomic-crm/integrations` — 5 files / 48 tests pass; `npm run typecheck` clean.
 
 ---
 

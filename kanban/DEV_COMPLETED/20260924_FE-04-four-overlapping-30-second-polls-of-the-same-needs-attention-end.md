@@ -5,8 +5,8 @@ severity: high
 area: frontend
 labels: [performance, reliability]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** frontend · **Effort:** S · **Labels:** performance, reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,13 @@ Four queries poll the same `/conversations/needs-attention` endpoint every 30 se
 ## Suggested fix
 
 Consolidate into one `useAttentionCounts()` returning `{total, byProvider}` from a single query — the backend already supports `channel_provider`, so one unfiltered call plus client-side bucketing replaces three — raise the interval to 60 s, or drive it from the socket's `message.created` event since the socket is already connected on this screen. Update `useNotifications.test.ts` to the new contract.
+
+## Evidence log
+
+- 1535255c — four pollers collapsed into one `useAttentionCounts()` returning `{total, byProvider}` under a single key family; inbox polling drops from 8 requests/min to 4 and the cadence moves to 60s.
+- Per-provider fetches were kept deliberately: the backend returns only `{"count": n}` per provider filter and has no breakdown endpoint, and `contact_channel_identities.provider` is an unconstrained string column, so a derived total could undercount the bell.
+- Socket-driven invalidation was evaluated and rejected: `message.created` is routed only to the `conv:<id>` room a client joins by opening that conversation.
+- Verified: topbar + `ChannelAdapterSelector` tests pass (8 tests) under the new contract.
 
 ---
 

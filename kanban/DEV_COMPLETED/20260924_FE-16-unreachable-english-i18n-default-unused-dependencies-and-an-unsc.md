@@ -5,8 +5,8 @@ severity: low
 area: frontend
 labels: [tech-debt, documentation]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** low · **Area:** frontend · **Effort:** S · **Labels:** tech-debt, documentation
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,13 @@ Four packages of audit and `npm ci` surface buy nothing, the locale question has
 ## Suggested fix
 
 Delete `frontend/src/lib/i18nProvider.ts` (or make the admin default Vietnamese), remove the four confirmed-unused dependencies after checking `scripts/` and `*.mjs` hooks, and scope the feature stylesheets under a per-module container class instead of the shared `.inbox-bg-container`.
+
+## Evidence log
+
+- e0ea8c8b — the unreachable English `lib/i18nProvider.ts` deleted; `i18nProvider` is now a required prop on `Admin`/`CRM`, which also removes the upward `admin/` → `atomic-crm/` import the first fix would have needed and keeps the enforced `atomic-crm → admin → ui` direction.
+- 3ca1ee78 — six unused dependencies removed (each grep-verified at zero importers): `react-virtuoso`, both `@tanstack` persister packages, `diacritic`, `qs`, `ra-language-english`. The vestigial `pnpm-lock.yaml` is deleted too — the repo is npm (`npm ci` in CI and the Dockerfile) and the second lockfile was already pinning `react-virtuoso` at a different version.
+- The CSS-scoping third of this card is split out as FE-19 and deliberately deferred: it needs browser QA per screen and the audit advised against a big-bang rewrite.
+- Verified: `npm run build` succeeds (2.55s) and the full unit suite passes after the removals.
 
 ---
 

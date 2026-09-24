@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [performance, reliability]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** M · **Labels:** performance, reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -34,6 +34,13 @@ A single open project page issues up to 466 list requests over ~3.7 h, each rend
 ## Suggested fix
 
 Replace with `useQuery({queryKey: ["external-sources", projectId, variant], refetchInterval: (q) => nextPollDelay(q.state.data)})` — TanStack already pauses on `refetchIntervalInBackground: false` and exposes `isFetching`. Keep the pure helpers as `projects/domain/externalSourceRow.ts` (`rowProgressSignature` `:129`, `statusDotClass` `:68`, `formatTimestamp` `:86`, `truncate` `:126`) and move the table to `presentation/ExternalSourceRow.tsx`, leaving a ~120-LOC component.
+
+## Evidence log
+
+- Landed in 7f28d2a8 (swept in by a directory pathspec alongside FE-07 and FE-12 — attribution recorded here).
+- `ExternalSourceList.tsx` 568 → 286 lines: the 466-poll state machine is now `useQuery({refetchInterval: (q) => nextPollDelay(q.state.data, watch, Date.now())})` with `refetchIntervalInBackground: false`; 15 state holders → 7.
+- The follow-up policy moved to `projects/domain/externalSourcePolling.ts` (pure, with 5 boundary tests) and row rendering to `projects/presentation/ExternalSourceRow.tsx`.
+- Verified: `externalSourcePolling.test.ts` covers the 4s/30s boundary and budget expiry; a new test proves a hidden tab stops polling and resumes.
 
 ---
 

@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [reliability, performance]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** reliability, performance
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -34,6 +34,13 @@ A long-lived tab holds every response ever fetched, and an offlineFirst mutation
 ## Suggested fix
 
 Drop `gcTime` to the 5-minute default unless persistence is actually implemented; either implement the persister (the deps are already declared) or remove both packages. Consider `networkMode: "online"` for chat mutations and keep the server's `send_unknown` as the duplicate guard.
+
+## Evidence log
+
+- Landed in 7f28d2a8 (swept in by a directory pathspec alongside FE-07 and FE-09 — attribution recorded here).
+- `gcTime` dropped from 24h to the TanStack default 5 minutes (nothing persists across reloads, so the 24h window only grew in-tab memory), and mutations moved from `offlineFirst` to `online` so a write reported as failed cannot land later.
+- Queries keep `offlineFirst`, and the deliberate `staleTime 25s < refetchInterval 30s` pairing in the dashboard is untouched.
+- Verified by a regression test written red-first: restoring the old config makes it fail at `expect(mutation.state.isPaused).toBe(true)` and the retention assertion.
 
 ---
 

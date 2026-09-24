@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [tech-debt]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** M · **Labels:** tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -34,6 +34,12 @@ Every credential-policy change (masking rules, reveal-on-demand, "blank means ke
 ## Suggested fix
 
 Generalise `CredentialSecretField` into an `admin/`-level `SecretField` + `PlainField` pair with a `reveal?: () => Promise<string | null>` prop, delete `MetaAppSecretField` and `MetaAppPlainField`, and move the Zalo page's load/save/test onto TanStack Query using the key conventions Facebook already uses.
+
+## Evidence log
+
+- decb8b63 — one `SecretField` + `PlainField` pair over a shared `FieldShell` replaces `CredentialSecretField` and the inline `MetaAppSecretField`/`MetaAppPlainField`. The two pages' real differences became props: supplying `notify` adds the copy action (Zalo), supplying `reveal` makes the eye fetch the stored secret and render read-only while revealed (Facebook).
+- The Zalo page's load/save/test moved onto TanStack Query with the same key conventions the Facebook page already used. `FacebookMessengerIntegrationPage` 794 → 676 LOC.
+- Verified: `CredentialSecretField.test.tsx` moved to `presentation/SecretField.test.tsx` with assertions preserved and extended; integrations suite 48 tests pass.
 
 ---
 

@@ -5,8 +5,8 @@ severity: high
 area: frontend
 labels: [performance]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** frontend · **Effort:** M · **Labels:** performance
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,11 @@ On a 25-row list every deferred keystroke rebuilds 25 objects, re-sorts, and re-
 ## Suggested fix
 
 Split the row view-model: keep `rows` as the raw `conversations` array and pass `presentation`/`snippet` as separate props pulled from a per-id `Map<convId, rowVM>` cache memoized on `conversationIdsKey`, so identity is stable while inputs are unchanged. Pass the single `isRead: boolean` for a row instead of the whole `readIds` set, so read state cannot invalidate row identity.
+
+## Evidence log
+
+- ff2fbfc3 — rows keep the raw `conversations` array for identity; `presentation`/`snippet` resolve through a per-id view-model cache (`conversation-row-view-model.ts`) that reuses the previous object while inputs are unchanged. The row takes its own `isRead` boolean instead of the shared `Set`, and `onSelect` is stabilised via a ref.
+- Verified by falsifiable render tests: a search keystroke and a read-toggle each leave sibling rows un-rendered, each with a positive control. Both tests fail if the view-model reuse or the stable `onSelect` is reverted.
 
 ---
 

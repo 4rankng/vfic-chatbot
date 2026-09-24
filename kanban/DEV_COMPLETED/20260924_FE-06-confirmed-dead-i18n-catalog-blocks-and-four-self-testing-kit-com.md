@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [tech-debt, documentation]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** tech-debt, documentation
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -39,6 +39,13 @@ Delete the unreferenced `crm.*`/`resources.*` blocks from `vietnameseCrmMessages
 ## Notes
 
 The `contacts/`, `cases/`, `workflows/`, `deals/`, `companies/`, `notes/` and `tasks/` features are **already deleted** — there are no such directories, `capabilities/kernel/index.tsx:165-230` registers exactly 8 resources and `capabilities/static-recruitment-runtime.ts:19-28` is the authoritative id list. The doc that lists them as dormant is wrong today; fix the doc, do not open a deletion ticket. `admin/*-guesser.tsx` (`edit/list/show`) is suspect RA scaffolding, not confirmed dead — grep its consumers first. `automation/` is live (registered as `kernel.resource.bot-runs` at `capabilities/kernel/index.tsx:172-179`).
+
+## Evidence log
+
+- 5751a766 — deleted `kit/{stat-card,data-table-card,sidebar}.tsx`, the `AlternateCard` export and their four test files; kept `PageShell`/`PageHeading`/`EmptyState` and the `tailkit-system.css` token bridge.
+- Removed 12 unreferenced catalog blocks from `vietnameseCrmMessages.ts`; every deleted key grep-verified to have zero references, all eight live resources kept.
+- Removed the three dangling `registry.json` entries so no manifest path points at a deleted file.
+- Verified: kit/users/commons suites 7 files / 23 tests pass.
 
 ---
 

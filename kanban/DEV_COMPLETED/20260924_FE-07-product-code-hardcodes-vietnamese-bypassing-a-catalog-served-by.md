@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [tech-debt]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** M · **Labels:** tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,12 @@ Two ellipsis glyphs and four copies of every action label make a wording fix an 
 ## Suggested fix
 
 Add the ~40 missing micro-copy keys to `vietnameseCrmMessages` (`common.save_changes`, `common.retrying`, `common.retry`, `common.loading`, `common.load_failed`, `common.unsaved_changes`), move product strings onto `useTranslate`, and delete `frontend/src/lib/i18nProvider.ts` in favour of the Vietnamese provider as the admin default.
+
+## Evidence log
+
+- 7f28d2a8 — 91 catalog keys added (235 → 326), 26 components migrated onto `useTranslate`, one ellipsis form used consistently, and the `ra.saved_queries.*`/adjacent `ra.*` gaps filled so no English leaks into the Vietnamese UI.
+- `leads/domain/candidateProfile.ts` moved from `label: string` to `labelKey: string`, so one field definition feeds both the candidate dialog and the conversation context panel.
+- Verified: the component tests assert Vietnamese output, so their passing is the evidence wording survived; full suite 595 tests green.
 
 ---
 

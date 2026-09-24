@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [tech-debt]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,13 @@ The stated standard ("no any in admin/, hooks/, lib/") is met only in the letter
 ## Suggested fix
 
 Change the globs to `**` form (`src/components/admin/**/*.{ts,tsx}`) and move the shared no-any set into the root config. Replace the two `as unknown as` casts with a properly typed `CrmDataProvider` that includes `setConversationMode`/`sendConversationReply`, and either type the RA guesser files out or delete them after checking consumers.
+
+## Evidence log
+
+- f81c1042 — `no-explicit-any` scope made recursive and extended to `src/components/atomic-crm/**` (previously unguarded, 62k LOC); the product tree lands with zero new violations.
+- The 31 vendored `admin/` files keep their explicit file-level disables by decision — they are a copy-paste dependency and rewriting their type signatures is not worth the regression risk.
+- The two `as unknown as` casts at the conversation-mutation seam are replaced by one real `CrmDataProvider` type, so dropping a provider method is now a compile error.
+- Verified: `npm run lint` 0 errors, `npm run typecheck` clean, provider/chat tests 28 pass.
 
 ---
 

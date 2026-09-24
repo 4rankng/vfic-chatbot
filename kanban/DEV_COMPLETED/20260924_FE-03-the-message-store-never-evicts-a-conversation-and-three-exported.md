@@ -5,8 +5,8 @@ severity: high
 area: frontend
 labels: [performance, tech-debt]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** frontend · **Effort:** S · **Labels:** performance, tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,13 @@ A recruiter who opens 500 conversations in a shift holds ~10k message objects pl
 ## Suggested fix
 
 Call `clear(convId)` when the active conversation changes past a small LRU bound (keep the last ~5), or drop the cache-persistence feature and reset on switch. Delete `message-store.ts:200-258` and `getNewestRealMessageId`, keeping `useMessageStore` + `conversationMessageStatePort`, and move selection into the store or use `subscribeWithSelector` to cut notification fan-out.
+
+## Evidence log
+
+- 131f8c67 — LRU bound of 5 conversations enforced through the existing `clear(convId)`, which is now its only removal mechanism; the active conversation is excluded from its own eviction pass so in-flight optimistic messages survive.
+- The port's unselected `subscribe` became `subscribeTo(selector, listener)` over `subscribeWithSelector`; a write to one conversation no longer wakes subscribers of another.
+- Deleted the three dead exports (`useConversationMessages`, `useConversationFlags`, `getNewestRealMessageId`).
+- Verified: 16 tests in `useConversationRealtime.test.ts` cover the bound, the optimistic-survival guarantee and the fan-out isolation.
 
 ---
 

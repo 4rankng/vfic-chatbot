@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [performance, reliability]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** performance, reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,13 @@ Entry-bundle bytes are spent on a library only needed inside the inbox, plus a s
 ## Suggested fix
 
 Convert `leadRealtimePort` into a lazily-created getter inside `RecruitmentConversationContext`, and lazy-load `Dashboard` (which already owns the only `react-virtuoso` usage). For the token, emit a socket re-auth (`socket.disconnect().connect()` or an `auth.refresh` event) when `refreshOnce()` succeeds.
+
+## Evidence log
+
+- 8be895b6 — the module-scope `createLeadRealtimePort(getRealtimeSocket())` became a lazy, socket-memoized getter, so socket.io-client is no longer constructed at import and its chunk is not fetched on first paint.
+- `apiClient` gained an `onAccessTokenRotated` seam and the socket re-handshakes on it, so a long-lived connection re-presents a rotated JWT instead of silently going dead.
+- Fixed a pre-existing bug found on the way: `leadRealtime` did not re-emit `join lead` on reconnect, so `lead.updated` silently stopped after any network blip. It now rejoins through one shared `join()` helper.
+- Verified by mutation: re-adding the module-scope construction fails the suite at import with a thrown sentinel; the re-auth test reproduces the real library's auth-callback contract.
 
 ---
 
