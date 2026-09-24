@@ -21,6 +21,11 @@ ZALO_OA_API_BASE: str = "https://openapi.zalo.me"
 # public domain changes.
 ZALO_BOT_WEBHOOK_URL: str = "https://bot.tingting.vip/webhooks/zalo/chatbot"
 
+# Signing algorithms this service may issue/accept (SEC-08). Code-owned: a
+# misconfigured JWT_ALGORITHM must fail at boot, not break every login at
+# request time.
+ALLOWED_JWT_ALGORITHMS: frozenset[str] = frozenset({"HS256", "HS384", "HS512"})
+
 # ---------------------------------------------------------------------------
 # Knowledge pipeline constants (not configurable via env)
 # ---------------------------------------------------------------------------
@@ -443,9 +448,28 @@ class Settings(BaseSettings):
             ) from exc
         return value
 
+    @field_validator("jwt_algorithm")
+    @classmethod
+    def _validate_jwt_algorithm(cls, value: str) -> str:
+        # SEC-08: an unvalidated env value (e.g. RS256) would silently break
+        # every login with a request-time 500 — refuse to boot instead. PyJWT's
+        # algorithms= allowlist already rejects `none`, so this only has to pin
+        # the HMAC family this single-secret deployment actually uses.
+        normalized = value.strip().upper()
+        if normalized not in ALLOWED_JWT_ALGORITHMS:
+            raise ValueError(
+                f"jwt_algorithm must be one of {sorted(ALLOWED_JWT_ALGORITHMS)} "
+                f"(got {value!r})"
+            )
+        return normalized
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def allowed_hosts_list(self) -> list[str]:
+        return [h.strip() for h in self.allowed_hosts.split(",") if h.strip()]
 
     @property
     def active_llm_provider(self) -> str:
@@ -504,6 +528,14 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "CORS_ORIGINS must not contain '*' — credentials are enabled "
                 "(set an explicit origin list)."
+            )
+        # TrustedHostMiddleware treats '*' as "allow any Host", which turns the
+        # host allowlist into a no-op — the exact silent degradation the CORS
+        # guard above refuses to boot on.
+        if "*" in self.allowed_hosts_list:
+            raise RuntimeError(
+                "ALLOWED_HOSTS must not contain '*' — the host allowlist is a "
+                "security control (set an explicit host list)."
             )
 
 
