@@ -278,7 +278,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      # Latency is deliberately not release-gated in CI: the gate needs a 30-run
+      # production telemetry window (MIN_WINDOW_RUNS) that CI cannot supply, and
+      # synthetic seed telemetry is excluded from release evaluation by design.
+      # Latency stays observable post-deploy via the SLO surfaces.
       RELEASE_GATE_LATENCY_SLO_ENABLED: "false"
+      DATABASE_URL: postgresql+asyncpg://vfic:vfic@127.0.0.1:5432/vfic
+      DATABASE_URL_SYNC: postgresql+psycopg://vfic:vfic@127.0.0.1:5432/vfic
+      REDIS_URL: redis://127.0.0.1:6382/0
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: vfic
+          POSTGRES_PASSWORD: vfic
+          POSTGRES_DB: vfic
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vfic -d vfic"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6382:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
@@ -328,6 +358,22 @@ jobs:
 
       - name: Evaluate release gate
         run: .venv/bin/python scripts/release_gate_check.py --golden-results "$GOLDEN_RESULTS"
+
+      - name: Migrate the disposable database
+        env:
+          APP_ENV: development
+        run: .venv/bin/python -m alembic upgrade head
+
+      - name: Turn smoke (one real turn, LLM and Zalo transport stubbed)
+        run: .venv/bin/python -m scripts.smoke_turn
+
+      - name: Turn smoke must fail closed
+        run: |
+          if .venv/bin/python -m scripts.smoke_turn --inject-failure; then
+            echo "smoke_turn --inject-failure exited 0 — the smoke gate no longer fails closed" >&2
+            exit 1
+          fi
+          echo "the smoke gate correctly blocked the injected failure"
 
   dependency-audit:
     name: Dependency audit (advisory)
