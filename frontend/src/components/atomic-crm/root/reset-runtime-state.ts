@@ -44,11 +44,25 @@ export const createRuntimeQueryClient = (): QueryClient =>
   new QueryClient({
     defaultOptions: {
       queries: {
+        // Served from cache for up to 30s — the same cadence as the polling
+        // queries that refresh the dashboard and inbox on a timer.
         staleTime: 30_000,
-        gcTime: 1000 * 60 * 60 * 24,
+        // Reads keep firing on a flaky Zalo/recruiter connection instead of
+        // pausing, so the inbox keeps its socket-fed cache reachable.
         networkMode: "offlineFirst",
+        // gcTime is deliberately left at the TanStack default (5 minutes).
+        // Nothing persists the cache across reloads — the persister packages
+        // are not wired up — so a longer window would only grow in-tab memory.
       },
-      mutations: { networkMode: "offlineFirst" },
+      mutations: {
+        // Deliberately NOT "offlineFirst". That mode fires the request while
+        // the device is offline, then pauses and replays it on reconnect, so a
+        // write the caller has already reported as failed can still land later
+        // (duplicate reply, out-of-order mode change). The "online" default
+        // sends nothing while offline and drains once on reconnect, which the
+        // server's send_unknown guard then de-duplicates.
+        networkMode: "online",
+      },
     },
   });
 

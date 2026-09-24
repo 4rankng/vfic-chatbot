@@ -35,6 +35,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   EditBase: ({ children }: { children: ReactNode }) => children,
   ShowBase: ({ children }: { children: ReactNode }) => children,
   useDataProvider: () => ({ update: mocks.update }),
@@ -86,6 +88,7 @@ vi.mock("./ProjectPicker", () => ({
 
 import { KnowledgeSourceEdit } from "./KnowledgeSourceEdit";
 import { KnowledgeSourceShow } from "./KnowledgeSourceShow";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 describe("Knowledge source subpages", () => {
   beforeEach(() => {

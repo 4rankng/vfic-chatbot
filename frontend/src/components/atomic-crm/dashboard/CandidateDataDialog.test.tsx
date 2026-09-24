@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Lead } from "../types";
 import { CandidateDataDialog } from "./CandidateDataDialog";
 import "@/index.css";
+import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
 
 const lead: Lead = {
   id: 42,
@@ -26,15 +27,17 @@ describe("CandidateDataDialog", () => {
       .fn()
       .mockRejectedValue(new Error("Vừa được nhân viên khác thay đổi"));
     const screen = await render(
-      <CandidateDataDialog
-        lead={lead}
-        displayName="Bùi Hải Anh"
-        open
-        onOpenChange={vi.fn()}
-        returnFocusRef={createRef<HTMLButtonElement>()}
-        canEdit
-        onSave={onSave}
-      />,
+      <TestMessages>
+        <CandidateDataDialog
+          lead={lead}
+          displayName="Bùi Hải Anh"
+          open
+          onOpenChange={vi.fn()}
+          returnFocusRef={createRef<HTMLButtonElement>()}
+          canEdit
+          onSave={onSave}
+        />
+      </TestMessages>,
     );
 
     await screen.getByRole("button", { name: "Chỉnh sửa" }).click();
@@ -57,15 +60,17 @@ describe("CandidateDataDialog", () => {
 
   it("does not expose editing controls to a read-only user", async () => {
     const screen = await render(
-      <CandidateDataDialog
-        lead={lead}
-        displayName="Bùi Hải Anh"
-        open
-        onOpenChange={vi.fn()}
-        returnFocusRef={createRef<HTMLButtonElement>()}
-        canEdit={false}
-        onSave={vi.fn()}
-      />,
+      <TestMessages>
+        <CandidateDataDialog
+          lead={lead}
+          displayName="Bùi Hải Anh"
+          open
+          onOpenChange={vi.fn()}
+          returnFocusRef={createRef<HTMLButtonElement>()}
+          canEdit={false}
+          onSave={vi.fn()}
+        />
+      </TestMessages>,
     );
 
     await expect

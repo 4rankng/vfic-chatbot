@@ -5,7 +5,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { useGetList, useNotify } from "ra-core";
+import { useGetList, useNotify, useTranslate } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -81,6 +81,7 @@ const PersonaForm = ({
   extraActions,
 }: PersonaFormProps) => {
   const notify = useNotify();
+  const translate = useTranslate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(initial.name);
   const [sectionValues, setSectionValues] = useState<PersonaSectionValues>(
@@ -483,7 +484,7 @@ const PersonaForm = ({
                 <BotMessageSquare className="size-4 text-primary" />
                 Follow-up
               </div>
-              <p>Lịch nhắc theo mức ưu tiên.</p>
+              <p>{translate("personas.followup_schedule_hint")}</p>
               <div className="persona-followup-editor-list">
                 {FOLLOWUP_SCORE_ORDER.map((score) => {
                   const rule = followupRules[score];
@@ -593,7 +594,7 @@ const PersonaForm = ({
                   className="tt-loading tt-loading-spinner tt-loading-sm"
                   aria-hidden="true"
                 />
-                Đang lưu...
+                {translate("crm.common.saving")}
               </>
             ) : (
               submitLabel

@@ -1,3 +1,4 @@
+import { focusManager, onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const realtime = vi.hoisted(() => ({
@@ -9,6 +10,7 @@ vi.mock("../providers/realtime/realtime-socket", () => realtime);
 import { useMessageStore } from "../conversations/infrastructure/message-store";
 import {
   abandonRuntimeGenerationForTests,
+  createRuntimeQueryClient,
   ensureRuntimeGeneration,
   getActiveRuntimeBundle,
   getRuntimeEpoch,
@@ -100,5 +102,70 @@ describe("runtime generation reset", () => {
     expect(
       bundle.queryClient.getQueryData(["decision-trace", "admin-1", "run", 71]),
     ).toBeUndefined();
+  });
+});
+
+describe("runtime QueryClient network and retention policy", () => {
+  beforeEach(() => {
+    focusManager.setFocused(true);
+    onlineManager.setOnline(true);
+  });
+
+  afterEach(() => {
+    focusManager.setFocused(undefined);
+    onlineManager.setOnline(true);
+  });
+
+  it("sends no write while offline and drains it exactly once on reconnect", async () => {
+    const client = createRuntimeQueryClient();
+    client.mount();
+    try {
+      const mutationFn = vi.fn().mockResolvedValue("sent");
+      const mutation = client.getMutationCache().build(client, { mutationFn });
+
+      onlineManager.setOnline(false);
+      const execution = mutation.execute(undefined);
+
+      expect(mutation.state.isPaused).toBe(true);
+      expect(mutationFn).not.toHaveBeenCalled();
+
+      onlineManager.setOnline(true);
+
+      await expect(execution).resolves.toBe("sent");
+      expect(mutationFn).toHaveBeenCalledTimes(1);
+    } finally {
+      client.unmount();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("keeps reading through the cache while the browser reports offline", async () => {
+    const client = createRuntimeQueryClient();
+    onlineManager.setOnline(false);
+    try {
+      const queryFn = vi.fn().mockResolvedValue("last-good-snapshot");
+
+      await expect(
+        client.fetchQuery({ queryKey: ["offline-read"], queryFn }),
+      ).resolves.toBe("last-good-snapshot");
+      expect(queryFn).toHaveBeenCalledTimes(1);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("collects an unobserved query after the default five-minute window", () => {
+    vi.useFakeTimers();
+    try {
+      const client = createRuntimeQueryClient();
+      client.getQueryCache().build(client, { queryKey: ["retention-probe"] });
+      expect(client.getQueryCache().getAll()).toHaveLength(1);
+
+      vi.advanceTimersByTime(5 * 60_000);
+
+      expect(client.getQueryCache().getAll()).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

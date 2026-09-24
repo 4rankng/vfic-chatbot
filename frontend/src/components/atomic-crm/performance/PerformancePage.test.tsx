@@ -5,6 +5,7 @@ import { formatMetricDuration } from "../reporting/domain/performanceDiagnostics
 import type { PerfMetrics, PerfSlowTurn } from "./usePerformanceStats";
 import { PerformanceMetrics } from "./PerformancePage";
 import { formatTrendBucket } from "./trendAxis";
+import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
 
 const emptyMetrics: PerfMetrics = {
   window: "24h",
@@ -113,7 +114,11 @@ const manySlowTurns = Array.from({ length: 10 }, (_, index) => ({
 
 describe("PerformanceMetrics", () => {
   it("replaces repeated empty panels with one concise low-data state", async () => {
-    const screen = await render(<PerformanceMetrics data={emptyMetrics} />);
+    const screen = await render(
+      <TestMessages>
+        <PerformanceMetrics data={emptyMetrics} />
+      </TestMessages>,
+    );
 
     await expect
       .element(
@@ -138,7 +143,11 @@ describe("PerformanceMetrics", () => {
   });
 
   it("keeps deep diagnostics collapsed until the operator asks for them", async () => {
-    const screen = await render(<PerformanceMetrics data={populatedMetrics} />);
+    const screen = await render(
+      <TestMessages>
+        <PerformanceMetrics data={populatedMetrics} />
+      </TestMessages>,
+    );
     const details = screen.container.querySelector<HTMLDetailsElement>(
       ".performance-details",
     );
@@ -177,13 +186,15 @@ describe("PerformanceMetrics", () => {
 
   it("keeps the slow-turn list short until more rows are requested", async () => {
     const screen = await render(
-      <PerformanceMetrics
-        data={{
-          ...populatedMetrics,
-          by_outcome: { SENT: manySlowTurns.length },
-          slow_turns: manySlowTurns,
-        }}
-      />,
+      <TestMessages>
+        <PerformanceMetrics
+          data={{
+            ...populatedMetrics,
+            by_outcome: { SENT: manySlowTurns.length },
+            slow_turns: manySlowTurns,
+          }}
+        />
+      </TestMessages>,
     );
 
     expect(
@@ -210,7 +221,11 @@ describe("PerformanceMetrics", () => {
   });
 
   it("publishes bucket-level trend data to assistive technology", async () => {
-    const screen = await render(<PerformanceMetrics data={populatedMetrics} />);
+    const screen = await render(
+      <TestMessages>
+        <PerformanceMetrics data={populatedMetrics} />
+      </TestMessages>,
+    );
 
     const trendTable = screen.getByRole("table", {
       name: "Dữ liệu xu hướng độ trễ ứng viên chờ",

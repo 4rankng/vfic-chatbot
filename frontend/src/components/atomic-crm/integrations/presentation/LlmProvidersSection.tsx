@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useNotify } from "ra-core";
+import { useNotify, useTranslate } from "ra-core";
 
 import { Button } from "@/components/ui/button";
 
@@ -41,6 +41,7 @@ export const LlmProvidersSection = ({
   statusState: SettingsStatusState;
 }) => {
   const notify = useNotify();
+  const translate = useTranslate();
   const {
     chain,
     chainEnabled,
@@ -170,7 +171,9 @@ export const LlmProvidersSection = ({
           disabled={anyChainTesting || !ready}
           aria-busy={providerTesting[panelId]}
         >
-          {providerTesting[panelId] ? "Đang kiểm tra" : "Kiểm tra"}
+          {providerTesting[panelId]
+            ? translate("crm.common.testing")
+            : translate("crm.common.test")}
         </Button>
       </div>
     );
@@ -269,11 +272,13 @@ export const LlmProvidersSection = ({
           }}
           disabled={!panels.dirty.chain || providerSaving.chain}
         >
-          {providerSaving.chain ? "Đang lưu" : "Lưu thay đổi"}
+          {providerSaving.chain
+            ? translate("crm.common.saving")
+            : translate("crm.common.save_changes")}
         </Button>
         <span className="settings-llm-footer-note">
           {panels.dirty.chain
-            ? "Có thay đổi chưa lưu."
+            ? translate("crm.common.unsaved_changes")
             : "Token được mã hoá, không hiển thị lại."}
         </span>
       </div>

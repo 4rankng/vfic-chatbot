@@ -6,6 +6,7 @@ import {
   useNotify,
   useRecordContext,
   useRedirect,
+  useTranslate,
 } from "ra-core";
 import { TextInput } from "@/components/admin/text-input";
 import { BooleanInput } from "@/components/admin/boolean-input";
@@ -21,6 +22,7 @@ const ProjectEditContent = () => {
   const project = useRecordContext<Project>();
   const notify = useNotify();
   const redirect = useRedirect();
+  const translate = useTranslate();
   const { isAdmin, canEdit } = useRoleActions();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
@@ -105,7 +107,7 @@ const ProjectEditContent = () => {
                 className="project-edit-save"
                 disabled={submitting}
               >
-                Lưu thay đổi
+                {translate("crm.common.save_changes")}
               </Button>
             </div>
           </Form>

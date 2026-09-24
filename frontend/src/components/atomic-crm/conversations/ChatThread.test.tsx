@@ -99,13 +99,15 @@ const dataProviderMock = {
 };
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   useDataProvider: () => dataProviderMock,
   useGetIdentity: () => ({ identity: { id: "recruiter-1" } }),
   useNotify: vi.fn(),
-  useTranslate: () => (key: string) => key,
 }));
 
 import { ChatThread, isUnseenWorthyArrival } from "./presentation/ChatThread";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 // --- Helpers -----------------------------------------------------------
 

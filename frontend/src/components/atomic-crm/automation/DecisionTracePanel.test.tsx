@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   useDataProvider: () => ({
     getConversationBotRuns: mocks.getConversationBotRuns,
     getBotRunTrace: mocks.getBotRunTrace,
@@ -23,6 +25,7 @@ import {
   DecisionTraceRenderer,
 } from "./DecisionTracePanel";
 import { DECISION_TRACE_QUERY_KEY } from "./decisionTraceQueries";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 const createQueryClient = () =>
   new QueryClient({

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNotify, useRefresh } from "ra-core";
+import { useNotify, useRefresh, useTranslate } from "ra-core";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import {
   BookOpen,
@@ -24,6 +24,7 @@ import { ProjectPicker } from "./ProjectPicker";
 export const InlineKnowledgeUploader = () => {
   const notify = useNotify();
   const refresh = useRefresh();
+  const translate = useTranslate();
   const [projectChoice, setProjectChoice] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -235,7 +236,9 @@ export const InlineKnowledgeUploader = () => {
             ) : (
               <Upload className="size-4" />
             )}
-            {busy ? "Đang tải lên..." : "Tải lên"}
+            {busy
+              ? translate("crm.common.uploading")
+              : translate("crm.common.upload")}
           </Button>
         </div>
       </div>

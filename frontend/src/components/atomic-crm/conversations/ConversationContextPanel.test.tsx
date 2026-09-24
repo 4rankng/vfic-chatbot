@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-react";
 import type { Lead } from "../types";
 import { ConversationContextPanel } from "./ConversationContextPanel";
+import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
 
 const lead: Lead = {
   id: 1,
@@ -20,14 +21,16 @@ const lead: Lead = {
 describe("ConversationContextPanel notes", () => {
   it("renders stored note lines as a semantic bullet list", async () => {
     const screen = await render(
-      <div className="inbox-bg-container">
-        <ConversationContextPanel
-          lead={lead}
-          open
-          persistent
-          onClose={() => undefined}
-        />
-      </div>,
+      <TestMessages>
+        <div className="inbox-bg-container">
+          <ConversationContextPanel
+            lead={lead}
+            open
+            persistent
+            onClose={() => undefined}
+          />
+        </div>
+      </TestMessages>,
     );
 
     await expect.element(screen.getByRole("list")).toBeVisible();
@@ -44,16 +47,18 @@ describe("ConversationContextPanel notes", () => {
   it("lets an authorized recruiter edit real profile fields atomically", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const screen = await render(
-      <div className="inbox-bg-container">
-        <ConversationContextPanel
-          lead={{ ...lead, version: 4 }}
-          open
-          persistent
-          canEdit
-          onSave={onSave}
-          onClose={() => undefined}
-        />
-      </div>,
+      <TestMessages>
+        <div className="inbox-bg-container">
+          <ConversationContextPanel
+            lead={{ ...lead, version: 4 }}
+            open
+            persistent
+            canEdit
+            onSave={onSave}
+            onClose={() => undefined}
+          />
+        </div>
+      </TestMessages>,
     );
 
     await screen
@@ -80,16 +85,18 @@ describe("ConversationContextPanel notes", () => {
   it("cancels edits without saving", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const screen = await render(
-      <div className="inbox-bg-container">
-        <ConversationContextPanel
-          lead={lead}
-          open
-          persistent
-          canEdit
-          onSave={onSave}
-          onClose={() => undefined}
-        />
-      </div>,
+      <TestMessages>
+        <div className="inbox-bg-container">
+          <ConversationContextPanel
+            lead={lead}
+            open
+            persistent
+            canEdit
+            onSave={onSave}
+            onClose={() => undefined}
+          />
+        </div>
+      </TestMessages>,
     );
 
     await screen
@@ -106,16 +113,18 @@ describe("ConversationContextPanel notes", () => {
 
   it("does not expose profile editing without recruiter edit permission", async () => {
     const screen = await render(
-      <div className="inbox-bg-container">
-        <ConversationContextPanel
-          lead={lead}
-          open
-          persistent
-          canEdit={false}
-          onSave={vi.fn().mockResolvedValue(undefined)}
-          onClose={() => undefined}
-        />
-      </div>,
+      <TestMessages>
+        <div className="inbox-bg-container">
+          <ConversationContextPanel
+            lead={lead}
+            open
+            persistent
+            canEdit={false}
+            onSave={vi.fn().mockResolvedValue(undefined)}
+            onClose={() => undefined}
+          />
+        </div>
+      </TestMessages>,
     );
 
     await expect

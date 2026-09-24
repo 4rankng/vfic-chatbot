@@ -29,12 +29,13 @@ const notifyMock = vi.fn();
 const refreshMock = vi.fn();
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   useDataProvider: () => dataProviderMock,
   useNotify: () => notifyMock,
   usePermissions: () => ({ permissions: "admin", loading: false }),
   useRecordContext: () => recordState.record,
   useRefresh: () => refreshMock,
-  useTranslate: () => (key: string) => key,
   ShowBase: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
@@ -104,6 +105,7 @@ vi.mock("../automation/DecisionTracePanel", () => ({
 }));
 
 import { ConversationShowContent } from "./presentation/ConversationShow";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 // --- State holder so the ra-core `useRecordContext` mock can be re-keyed --
 const recordState: { record: Conversation | null } = {

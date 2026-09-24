@@ -33,6 +33,7 @@ vi.mock("@/hooks/use-mobile", () => ({
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
 import "@/index.css";
 import "./dashboard.css";
+import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
 
 const LocationProbe = () => {
   const location = useLocation();
@@ -91,12 +92,14 @@ describe("RecruitingCommandCenter candidate rows", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const screen = await render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <RecruitingCommandCenter />
-          <LocationProbe />
-        </QueryClientProvider>
-      </MemoryRouter>,
+      <TestMessages>
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <RecruitingCommandCenter />
+            <LocationProbe />
+          </QueryClientProvider>
+        </MemoryRouter>
+      </TestMessages>,
     );
 
     await expect
@@ -168,12 +171,14 @@ describe("RecruitingCommandCenter candidate rows", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const screen = await render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <RecruitingCommandCenter />
-          <LocationProbe />
-        </QueryClientProvider>
-      </MemoryRouter>,
+      <TestMessages>
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <RecruitingCommandCenter />
+            <LocationProbe />
+          </QueryClientProvider>
+        </MemoryRouter>
+      </TestMessages>,
     );
 
     await expect.element(screen.getByText("Phạm Hùng")).toBeVisible();
@@ -277,11 +282,13 @@ describe("RecruitingCommandCenter candidate rows", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const screen = await render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <RecruitingCommandCenter />
-        </QueryClientProvider>
-      </MemoryRouter>,
+      <TestMessages>
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <RecruitingCommandCenter />
+          </QueryClientProvider>
+        </MemoryRouter>
+      </TestMessages>,
     );
 
     await expect
@@ -332,11 +339,13 @@ describe("RecruitingCommandCenter candidate rows", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const screen = await render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <RecruitingCommandCenter />
-        </QueryClientProvider>
-      </MemoryRouter>,
+      <TestMessages>
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <RecruitingCommandCenter />
+          </QueryClientProvider>
+        </MemoryRouter>
+      </TestMessages>,
     );
 
     await expect.element(screen.getByText("Ứng viên tĩnh")).toBeVisible();
@@ -388,12 +397,14 @@ describe("RecruitingCommandCenter candidate rows", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const screen = await render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <RecruitingCommandCenter />
-          <LocationProbe />
-        </QueryClientProvider>
-      </MemoryRouter>,
+      <TestMessages>
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <RecruitingCommandCenter />
+            <LocationProbe />
+          </QueryClientProvider>
+        </MemoryRouter>
+      </TestMessages>,
     );
 
     const firstRow = screen.getByRole("button", {

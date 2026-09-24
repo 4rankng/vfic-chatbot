@@ -1,40 +1,32 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNotify } from "ra-core";
-import { Loader2, RefreshCw, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 import {
-  deleteSinglePageExternalSource,
+  createSyncWatch,
+  nextPollDelay,
+  resolveSyncWatch,
+  syncWatchExpired,
+  type SyncWatch,
+} from "./domain/externalSourcePolling";
+import {
+  successfulSyncSignature,
+  type ExternalSourceRowState,
+} from "./domain/externalSourceRow";
+import { ExternalSourceRow } from "./presentation/ExternalSourceRow";
+import {
   deleteExternalSource,
-  listSinglePageExternalSources,
+  deleteSinglePageExternalSource,
   listExternalSources,
-  runSinglePageExternalSourceNow,
+  listSinglePageExternalSources,
   runExternalSourceNow,
+  runSinglePageExternalSourceNow,
   singlePageSyncErrorMessage,
-  type ExternalSourceSyncState,
-  type SinglePageExternalSourceSyncState,
 } from "./project-knowledge-service";
 
 const RUN_NOW_COOLDOWN_MS = 5 * 60 * 1000;
-const FAST_FOLLOW_UP_REFRESH_MS = 4000;
-const SLOW_FOLLOW_UP_REFRESH_MS = 30_000;
-const FAST_FOLLOW_UP_POLLS = 30;
-const WORKER_ATTEMPTS = 4;
-const WORKER_JOB_TIMEOUT_MS = 30 * 60 * 1000;
-const WORKER_RETRY_INTERVAL_MS = 2000 * 1000;
-export const SINGLE_PAGE_SYNC_MAX_POLL_MS =
-  WORKER_ATTEMPTS * WORKER_JOB_TIMEOUT_MS +
-  (WORKER_ATTEMPTS - 1) * WORKER_RETRY_INTERVAL_MS;
-const FAST_FOLLOW_UP_WINDOW_MS =
-  FAST_FOLLOW_UP_POLLS * FAST_FOLLOW_UP_REFRESH_MS;
-const MAX_FOLLOW_UP_POLLS =
-  FAST_FOLLOW_UP_POLLS +
-  Math.ceil(
-    (SINGLE_PAGE_SYNC_MAX_POLL_MS - FAST_FOLLOW_UP_WINDOW_MS) /
-      SLOW_FOLLOW_UP_REFRESH_MS,
-  );
+
+type Variant = "category" | "single-page";
 
 type Props = {
   projectId: string;
@@ -42,132 +34,23 @@ type Props = {
   refreshSignal?: number;
   onChange?: () => void;
   disabled?: boolean;
-  variant?: "category" | "single-page";
+  variant?: Variant;
   mutable?: boolean;
   onSynchronized?: () => void;
 };
 
-type ExternalSourceRow =
-  | ExternalSourceSyncState
-  | SinglePageExternalSourceSyncState;
-
-type PollSession = {
-  baselineById: Map<string, string>;
-  targetId?: string;
-  attempts: number;
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  NEW: "Chưa đồng bộ",
-  PROCESSING: "Đang đồng bộ",
-  OK: "Đã đồng bộ",
-  NO_OP: "Không thay đổi",
-  FAILED: "Lỗi đồng bộ",
-};
-
-const statusDotClass = (
-  row: Pick<ExternalSourceRow, "last_status">,
-): string => {
-  if (row.last_status === "FAILED") return "bg-destructive";
-  if (row.last_status === "OK" || row.last_status === "NO_OP") {
-    return "bg-primary";
-  }
-  if (row.last_status === "NEW" || row.last_status === "PROCESSING") {
-    return "bg-amber-500";
-  }
-  return "bg-muted-foreground";
-};
-
-const statusErrorClass = (
-  row: Pick<ExternalSourceRow, "last_status">,
-): string =>
-  row.last_status === "FAILED" ? "text-destructive" : "text-muted-foreground";
-
-const formatTimestamp = (value?: string | null): string => {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
-};
-
-const formatCompactTimestamp = (value?: string | null): string => {
-  if (!value) return "—";
-  try {
-    const date = new Date(value);
-    const includeYear = date.getFullYear() !== new Date().getFullYear();
-    const time = new Intl.DateTimeFormat("vi-VN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-    const dateParts = new Intl.DateTimeFormat("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      ...(includeYear ? { year: "2-digit" as const } : {}),
-    }).formatToParts(date);
-    const part = (type: Intl.DateTimeFormatPartTypes) =>
-      dateParts.find((item) => item.type === type)?.value ?? "";
-    const day = [part("day"), part("month"), includeYear ? part("year") : ""]
-      .filter(Boolean)
-      .join("/");
-    return `${time} · ${day}`;
-  } catch {
-    return value;
-  }
-};
-
-const truncate = (url: string, max = 48): string =>
-  url.length > max ? `${url.slice(0, max)}…` : url;
-
-const rowProgressSignature = (row: ExternalSourceRow): string =>
-  [
-    row.last_status,
-    row.last_synced_at ?? "",
-    row.last_content_hash ?? "",
-    row.updated_at,
-  ].join(":");
-
-const successfulSyncSignature = (nextRows: ExternalSourceRow[]): string =>
-  nextRows
-    .filter((row) => row.last_status === "OK" || row.last_status === "NO_OP")
-    .map((row) => `${row.id}:${rowProgressSignature(row)}`)
-    .join("|");
-
-const isTerminal = (row: ExternalSourceRow): boolean =>
-  row.last_status === "OK" ||
-  row.last_status === "NO_OP" ||
-  row.last_status === "FAILED";
-
-const rowsNeedFollowUp = (nextRows: ExternalSourceRow[]): boolean =>
-  nextRows.some(
-    (row) => row.last_status === "NEW" || row.last_status === "PROCESSING",
-  );
-
-const pollHasCompleted = (
-  session: PollSession,
-  nextRows: ExternalSourceRow[],
-): boolean => {
-  const candidates = session.targetId
-    ? nextRows.filter((row) => row.id === session.targetId)
-    : nextRows;
-  return candidates.some(
-    (row) =>
-      isTerminal(row) &&
-      rowProgressSignature(row) !== session.baselineById.get(row.id),
-  );
-};
+const externalSourcesQueryKey = (projectId: string, variant: Variant) =>
+  ["external-sources", projectId, variant] as const;
 
 /**
  * Read-only list of configured external sources for a project. Auto-sync state
  * is shown but not editable inline (delete + re-create to change it). Each row
  * has a "Process now" button (5-minute cooldown) and a "Remove" button.
+ *
+ * Follow-up polling is delegated to TanStack Query: `refetchInterval` is
+ * derived from the rows themselves (4 s while a sync is fresh, then 30 s, then
+ * no polling once it settles) and TanStack skips the interval while the tab is
+ * hidden.
  */
 export const ExternalSourceList = ({
   projectId,
@@ -179,187 +62,131 @@ export const ExternalSourceList = ({
   onSynchronized,
 }: Props) => {
   const notify = useNotify();
-  const [rows, setRows] = useState<ExternalSourceRow[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [cooldownId, setCooldownId] = useState<string | null>(null);
+  const [watch, setWatch] = useState<SyncWatch | null>(null);
   const cooldownTimer = useRef<number | null>(null);
-  const followUpTimer = useRef<number | null>(null);
-  const rowsRef = useRef<ExternalSourceRow[]>([]);
-  const syncSignatureRef = useRef<string | null>(null);
-  const initializedSyncSignature = useRef(false);
-  const pollSessionRef = useRef<PollSession | null>(null);
-  const requestGenerationRef = useRef(0);
-  const requestControllerRef = useRef<AbortController | null>(null);
-  const previousRefreshSignalRef = useRef({ projectId, value: refreshSignal });
+  /** Set by a delete so the parent's refresh signal does not start a poll. */
   const suppressNextRefreshPollRef = useRef(false);
-  const loadRef = useRef<() => Promise<void>>(async () => undefined);
-  const onSynchronizedRef = useRef(onSynchronized);
+  const previousRefreshSignalRef = useRef({ projectId, value: refreshSignal });
+  const syncSignatureRef = useRef<string | null>(null);
   const isSinglePage = variant === "single-page";
+  const queryKey = useMemo(
+    () => externalSourcesQueryKey(projectId, variant),
+    [projectId, variant],
+  );
 
+  const query = useQuery<ExternalSourceRowState[]>({
+    queryKey,
+    queryFn: ({ signal }) =>
+      isSinglePage
+        ? listSinglePageExternalSources(projectId, signal)
+        : listExternalSources(projectId, signal),
+    // Follow-up cadence comes from the row data, never from a poll counter.
+    refetchInterval: (current) =>
+      nextPollDelay(current.state.data, watch, Date.now()),
+    // A hidden tab must not keep hitting the backend: TanStack skips the
+    // interval refetch while the document is not visible.
+    refetchIntervalInBackground: false,
+    // The interval is the only refresh source this list ever had; a focus
+    // refetch on top of it would add requests the old poller never made.
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const { error, errorUpdatedAt, isError } = query;
+  const rows = query.data;
+
+  // A different project (or variant) is a different list: no watch, no baseline
+  // from the previous one, and no leftover cooldown.
   useEffect(() => {
-    onSynchronizedRef.current = onSynchronized;
-  }, [onSynchronized]);
-
-  const clearFollowUpTimer = useCallback(() => {
-    if (followUpTimer.current !== null) {
-      window.clearTimeout(followUpTimer.current);
-      followUpTimer.current = null;
-    }
-  }, []);
-
-  const stopPolling = useCallback(() => {
-    pollSessionRef.current = null;
-    clearFollowUpTimer();
-  }, [clearFollowUpTimer]);
-
-  const beginPolling = useCallback((targetId?: string) => {
-    if (pollSessionRef.current) return;
-    pollSessionRef.current = {
-      baselineById: new Map(
-        rowsRef.current.map((row) => [row.id, rowProgressSignature(row)]),
-      ),
-      targetId,
-      attempts: 0,
-    };
-  }, []);
-
-  const scheduleNextPoll = useCallback(() => {
-    const session = pollSessionRef.current;
-    clearFollowUpTimer();
-    if (!session) return;
-    if (session.attempts >= MAX_FOLLOW_UP_POLLS) {
-      pollSessionRef.current = null;
-      return;
-    }
-    session.attempts += 1;
-    const delay =
-      session.attempts <= FAST_FOLLOW_UP_POLLS
-        ? FAST_FOLLOW_UP_REFRESH_MS
-        : SLOW_FOLLOW_UP_REFRESH_MS;
-    followUpTimer.current = window.setTimeout(
-      () => void loadRef.current(),
-      delay,
-    );
-  }, [clearFollowUpTimer]);
-
-  const load = useCallback(async () => {
-    const requestGeneration = ++requestGenerationRef.current;
-    requestControllerRef.current?.abort();
-    const controller = new AbortController();
-    requestControllerRef.current = controller;
-    try {
-      const nextRows = isSinglePage
-        ? await listSinglePageExternalSources(projectId, controller.signal)
-        : await listExternalSources(projectId, controller.signal);
-      if (
-        controller.signal.aborted ||
-        requestGeneration !== requestGenerationRef.current
-      ) {
-        return;
-      }
-      rowsRef.current = nextRows;
-      setRows(nextRows);
-
-      if (isSinglePage) {
-        const nextSignature = successfulSyncSignature(nextRows);
-        const successfulSyncChanged =
-          initializedSyncSignature.current &&
-          Boolean(nextSignature) &&
-          nextSignature !== syncSignatureRef.current;
-        if (!initializedSyncSignature.current) {
-          initializedSyncSignature.current = true;
-        }
-        syncSignatureRef.current = nextSignature;
-
-        const pollSession = pollSessionRef.current;
-        if (pollSession && pollHasCompleted(pollSession, nextRows)) {
-          stopPolling();
-        } else {
-          if (!pollSession && rowsNeedFollowUp(nextRows)) beginPolling();
-          if (pollSessionRef.current) scheduleNextPoll();
-        }
-
-        if (successfulSyncChanged) onSynchronizedRef.current?.();
-      }
-    } catch (error) {
-      if (
-        controller.signal.aborted ||
-        requestGeneration !== requestGenerationRef.current
-      ) {
-        return;
-      }
-      notify(
-        isSinglePage
-          ? singlePageSyncErrorMessage(error)
-          : (error as Error).message,
-        { type: "error" },
-      );
-      if (pollSessionRef.current) scheduleNextPoll();
-    } finally {
-      if (requestGeneration === requestGenerationRef.current) setLoading(false);
-    }
-  }, [
-    beginPolling,
-    isSinglePage,
-    notify,
-    projectId,
-    scheduleNextPoll,
-    stopPolling,
-  ]);
-
-  loadRef.current = load;
-
-  useEffect(() => {
-    setLoading(true);
-    setRows(null);
-    rowsRef.current = [];
-    syncSignatureRef.current = null;
-    initializedSyncSignature.current = false;
-    pollSessionRef.current = null;
+    setWatch(null);
     setCooldownId(null);
     setProcessingId(null);
-    void load();
+    syncSignatureRef.current = null;
+    suppressNextRefreshPollRef.current = false;
     return () => {
-      requestGenerationRef.current += 1;
-      requestControllerRef.current?.abort();
-      if (cooldownTimer.current !== null)
+      if (cooldownTimer.current !== null) {
         window.clearTimeout(cooldownTimer.current);
-      stopPolling();
+        cooldownTimer.current = null;
+      }
     };
-  }, [isSinglePage, load, projectId, stopPolling]);
+  }, [isSinglePage, projectId]);
+
+  // Follow-up lifecycle: drop the watch once the watched sync settled or the
+  // worker budget ran out, and pick one up when the data reports a sync.
+  useEffect(() => {
+    if (!rows) return;
+    setWatch((current) => resolveSyncWatch(current, rows, Date.now()));
+  }, [rows]);
+
+  // A changed successful-sync signature means sheet content actually moved; the
+  // parent uses that to reload the page knowledge it renders.
+  useEffect(() => {
+    if (!isSinglePage || !rows) return;
+    const signature = successfulSyncSignature(rows);
+    const previous = syncSignatureRef.current;
+    syncSignatureRef.current = signature;
+    if (previous !== null && signature !== "" && signature !== previous) {
+      onSynchronized?.();
+    }
+  }, [isSinglePage, onSynchronized, rows]);
 
   useEffect(() => {
-    if (previousRefreshSignalRef.current.projectId !== projectId) {
-      previousRefreshSignalRef.current = { projectId, value: refreshSignal };
+    if (!isError || !error) return;
+    notify(
+      isSinglePage
+        ? singlePageSyncErrorMessage(error)
+        : (error as Error).message,
+      { type: "error" },
+    );
+  }, [error, errorUpdatedAt, isError, isSinglePage, notify]);
+
+  const refresh = useCallback(async () => {
+    // Replace any in-flight request so the newest response is the one that
+    // reaches the list.
+    await queryClient.cancelQueries({ queryKey });
+    await query.refetch();
+  }, [query, queryClient, queryKey]);
+
+  // The parent bumps refreshSignal after it changes a source elsewhere: fetch
+  // again, and for single-page follow the sync up even if the row is not there
+  // yet.
+  useEffect(() => {
+    const previous = previousRefreshSignalRef.current;
+    previousRefreshSignalRef.current = { projectId, value: refreshSignal };
+    if (previous.projectId !== projectId || previous.value === refreshSignal) {
       return;
     }
-    if (refreshSignal === previousRefreshSignalRef.current.value) return;
-    previousRefreshSignalRef.current.value = refreshSignal;
     const suppressPoll = suppressNextRefreshPollRef.current;
     suppressNextRefreshPollRef.current = false;
-    if (
-      isSinglePage &&
-      !suppressPoll &&
-      rowsRef.current.length === 0 &&
-      !pollSessionRef.current
-    ) {
-      beginPolling();
+    const currentRows =
+      queryClient.getQueryData<ExternalSourceRowState[]>(queryKey) ?? [];
+    if (isSinglePage && !suppressPoll && currentRows.length === 0) {
+      // The parent just changed a source. The row can still be missing from the
+      // list, so follow the sync up even though the list is empty.
+      const now = Date.now();
+      setWatch((current) =>
+        current && !syncWatchExpired(current, now)
+          ? current
+          : createSyncWatch([], undefined, now),
+      );
     }
-    void load();
-  }, [beginPolling, isSinglePage, load, projectId, refreshSignal]);
+    void refresh();
+  }, [isSinglePage, projectId, queryClient, queryKey, refresh, refreshSignal]);
 
   const startCooldown = (id: string) => {
     setCooldownId(id);
-    if (cooldownTimer.current !== null)
+    if (cooldownTimer.current !== null) {
       window.clearTimeout(cooldownTimer.current);
+    }
     cooldownTimer.current = window.setTimeout(
       () => setCooldownId(null),
       RUN_NOW_COOLDOWN_MS,
     );
   };
 
-  const runNow = async (row: ExternalSourceRow) => {
+  const runNow = async (row: ExternalSourceRowState) => {
     setProcessingId(row.id);
     try {
       if (isSinglePage) {
@@ -372,9 +199,8 @@ export const ExternalSourceList = ({
       });
       startCooldown(row.id);
       if (isSinglePage) {
-        stopPolling();
-        beginPolling(row.id);
-        scheduleNextPoll();
+        // A fresh sync started for this row: follow it up from what it shows now.
+        setWatch(createSyncWatch(rows ?? [], row.id, Date.now()));
       }
     } catch (error) {
       const status = (error as { status?: number }).status;
@@ -394,7 +220,7 @@ export const ExternalSourceList = ({
     }
   };
 
-  const remove = async (row: ExternalSourceRow) => {
+  const remove = async (row: ExternalSourceRowState) => {
     if (
       !window.confirm(
         "Xóa nguồn đồng bộ này? Nội dung đã nhập vẫn được giữ cho Agent cho đến khi thay thế.",
@@ -409,8 +235,8 @@ export const ExternalSourceList = ({
         await deleteExternalSource(projectId, row.id);
       }
       notify("Đã xóa nguồn đồng bộ.", { type: "success" });
-      stopPolling();
-      await load();
+      setWatch(null);
+      await refresh();
       suppressNextRefreshPollRef.current = isSinglePage;
       onChange?.();
     } catch (error) {
@@ -423,7 +249,7 @@ export const ExternalSourceList = ({
     }
   };
 
-  if (loading) {
+  if (query.isLoading) {
     return <Skeleton className="h-20 w-full" />;
   }
   if (!rows || rows.length === 0) {
@@ -442,127 +268,19 @@ export const ExternalSourceList = ({
 
   return (
     <div className="space-y-2" aria-live="polite">
-      {rows.map((row) => {
-        const isProcessing = processingId === row.id;
-        const isCoolingDown = cooldownId === row.id;
-        const autoDisabled =
-          row.last_status === "FAILED" && !row.auto_sync_enabled;
-        return (
-          <div key={row.id} className="project-external-source-row">
-            <div className="project-external-source-identity">
-              <div className="project-external-source-heading">
-                <p className="project-external-source-name">
-                  {"category_key" in row && row.category_key
-                    ? row.category_key
-                    : `gid=${row.sheet_gid}`}
-                </p>
-              </div>
-              <p className="project-external-source-url" title={row.sheet_url}>
-                {truncate(row.sheet_url)}
-              </p>
-            </div>
-
-            <div className="project-external-source-sync">
-              <div className="project-external-source-status-line">
-                <span
-                  className={cn(
-                    "project-external-source-status-dot",
-                    statusDotClass(row),
-                  )}
-                  aria-hidden="true"
-                />
-                <span className="project-external-source-status-label">
-                  {STATUS_LABEL[row.last_status] ?? row.last_status}
-                </span>
-                {row.auto_sync_enabled ? (
-                  <Badge
-                    variant="secondary"
-                    title="Tự động mỗi ngày"
-                    aria-label="Tự động mỗi ngày"
-                    className="project-external-source-schedule"
-                  >
-                    <RefreshCw className="size-3" aria-hidden="true" />
-                    24h
-                  </Badge>
-                ) : (
-                  <Badge variant="outline">Thủ công</Badge>
-                )}
-                {autoDisabled && (
-                  <Badge variant="destructive">Đã tắt lịch</Badge>
-                )}
-              </div>
-              <div
-                className={cn(
-                  "project-external-source-meta",
-                  statusErrorClass(row),
-                )}
-              >
-                <span
-                  className="project-external-source-meta-item"
-                  title={`Đồng bộ gần nhất: ${formatTimestamp(row.last_synced_at)}`}
-                  aria-label={`Đồng bộ gần nhất: ${formatTimestamp(row.last_synced_at)}`}
-                >
-                  <time dateTime={row.last_synced_at ?? undefined}>
-                    {formatCompactTimestamp(row.last_synced_at)}
-                  </time>
-                </span>
-                {typeof row.last_row_count === "number" ? (
-                  <span
-                    className="project-external-source-meta-item project-external-source-row-count"
-                    aria-label={`${row.last_row_count} hàng`}
-                    title={`${row.last_row_count} hàng đã đồng bộ`}
-                  >
-                    {row.last_row_count} hàng
-                  </span>
-                ) : null}
-                {row.last_status === "FAILED" && row.last_error ? (
-                  <span className="project-external-source-error">
-                    {isSinglePage
-                      ? singlePageSyncErrorMessage(row.last_error)
-                      : row.last_error}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            {mutable && (
-              <div className="project-external-source-actions">
-                <Button
-                  type="button"
-                  size="sm"
-                  aria-label="Đồng bộ ngay"
-                  onClick={() => void runNow(row)}
-                  disabled={disabled || isProcessing || isCoolingDown}
-                  title={
-                    isCoolingDown
-                      ? "Vui lòng đợi 5 phút giữa các lần đồng bộ"
-                      : undefined
-                  }
-                  className="project-external-source-sync-button"
-                >
-                  {isProcessing ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="size-4" />
-                  )}
-                  Đồng bộ
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="project-source-delete"
-                  onClick={() => void remove(row)}
-                  disabled={disabled}
-                  aria-label="Xóa nguồn đồng bộ"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {rows.map((row) => (
+        <ExternalSourceRow
+          key={row.id}
+          row={row}
+          isSinglePage={isSinglePage}
+          mutable={mutable}
+          disabled={disabled}
+          processing={processingId === row.id}
+          coolingDown={cooldownId === row.id}
+          onRunNow={(target) => void runNow(target)}
+          onRemove={(target) => void remove(target)}
+        />
+      ))}
     </div>
   );
 };

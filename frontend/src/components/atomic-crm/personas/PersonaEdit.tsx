@@ -5,6 +5,7 @@ import {
   useRecordContext,
   useRedirect,
   useRefresh,
+  useTranslate,
 } from "ra-core";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
 const PersonaEditContent = () => {
   const persona = useRecordContext<Persona>();
   const notify = useNotify();
+  const translate = useTranslate();
   const redirect = useRedirect();
   const refresh = useRefresh();
   const dataProvider = useDataProvider<CrmDataProvider>();
@@ -133,7 +135,7 @@ const PersonaEditContent = () => {
               knowledge_base_id: persona.knowledge_base_id ?? "",
               followup_rules: persona.followup_rules,
             }}
-            submitLabel="Lưu"
+            submitLabel={translate("ra.action.save")}
             onSubmit={onSubmit}
             extraActions={
               <>
@@ -154,7 +156,7 @@ const PersonaEditContent = () => {
                   className="tt-btn-touch"
                   onClick={() => redirect("/personas")}
                 >
-                  Hủy
+                  {translate("ra.action.cancel")}
                 </Button>
               </>
             }

@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   useDataProvider: () => ({ update: vi.fn() }),
   useNotify: () => mocks.notify,
   useRefresh: () => mocks.refresh,
@@ -60,6 +62,7 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
 }));
 
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 const project: Project = {
   id: "project-1",

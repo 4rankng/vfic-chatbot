@@ -116,11 +116,14 @@ vi.mock("./api", () => ({
 // The multi-Page editor lists active Projects via useGetList; this harness has
 // no DataProvider context, so the options are provided inline.
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   useGetList: () => ({ data: mocks.projects }),
   useNotify: () => mocks.notify,
 }));
 
 import { FacebookMessengerIntegrationPage } from "./FacebookMessengerIntegrationPage";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 const renderPage = async () => {
   const queryClient = new QueryClient({

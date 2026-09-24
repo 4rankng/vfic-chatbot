@@ -203,7 +203,9 @@ const ProfileForm = ({
                   ) : (
                     <Save />
                   )}
-                  {isSaving ? "Đang lưu" : translate("ra.action.save")}
+                  {isSaving
+                    ? translate("crm.common.saving")
+                    : translate("ra.action.save")}
                 </Button>
               </>
             ) : (

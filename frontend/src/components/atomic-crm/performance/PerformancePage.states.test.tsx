@@ -14,6 +14,7 @@ vi.mock(import("react-router-dom"), () => ({
 }));
 
 import { PerformancePage } from "./PerformancePage";
+import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
 
 const metrics: PerfMetrics = {
   window: "24h",
@@ -53,7 +54,11 @@ describe("PerformancePage wrapper states", () => {
       dataUpdatedAt: 0,
     });
 
-    const screen = await render(<PerformancePage />);
+    const screen = await render(
+      <TestMessages>
+        <PerformancePage />
+      </TestMessages>,
+    );
 
     await expect
       .element(screen.getByRole("heading", { name: "Hiệu suất chatbot" }))
@@ -81,7 +86,11 @@ describe("PerformancePage wrapper states", () => {
       dataUpdatedAt: 0,
     });
 
-    const screen = await render(<PerformancePage />);
+    const screen = await render(
+      <TestMessages>
+        <PerformancePage />
+      </TestMessages>,
+    );
 
     await expect
       .element(
@@ -108,7 +117,11 @@ describe("PerformancePage wrapper states", () => {
       dataUpdatedAt: Date.parse("2026-07-26T20:00:00+08:00"),
     }));
 
-    const screen = await render(<PerformancePage />);
+    const screen = await render(
+      <TestMessages>
+        <PerformancePage />
+      </TestMessages>,
+    );
 
     await expect
       .element(screen.getByRole("button", { name: /Cập nhật lúc/ }))

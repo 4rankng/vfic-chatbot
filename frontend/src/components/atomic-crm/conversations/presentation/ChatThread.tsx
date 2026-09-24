@@ -202,6 +202,7 @@ const ChatMessageRow = memo(
     isRetrying = false,
     onRetry,
   }: ChatMessageRowProps) => {
+    const translate = useTranslate();
     const textBlocks = useMemo(
       () => splitMessageTextBlocks(m.content),
       [m.content],
@@ -292,7 +293,9 @@ const ChatMessageRow = memo(
                 disabled={isRetrying}
                 onClick={() => onRetry?.(m.id)}
               >
-                {isRetrying ? "Đang thử lại…" : "Thử lại"}
+                {isRetrying
+                  ? translate("crm.common.retrying")
+                  : translate("crm.common.retry")}
               </button>
             ) : null}
             <span className="bubble-time-inline">
@@ -766,7 +769,7 @@ export const ChatThread = ({
                 className="tt-btn tt-btn-sm tt-btn-outline"
                 onClick={() => retryHistory(messages[0].id)}
               >
-                Thử lại
+                {translate("crm.common.retry")}
               </button>
             </div>
           ) : null}
@@ -783,7 +786,7 @@ export const ChatThread = ({
                 type="button"
                 onClick={retryInitial}
               >
-                Thử lại
+                {translate("crm.common.retry")}
               </button>
             </div>
           ) : messages.length === 0 && isLoading ? (

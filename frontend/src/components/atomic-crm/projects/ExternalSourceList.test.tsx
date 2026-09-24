@@ -1,3 +1,5 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement, ReactNode } from "react";
 import { render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,10 +31,18 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
   deleteSinglePageExternalSource: mocks.deleteSinglePageExternalSource,
 }));
 
-import {
-  ExternalSourceList,
-  SINGLE_PAGE_SYNC_MAX_POLL_MS,
-} from "./ExternalSourceList";
+import { ExternalSourceList } from "./ExternalSourceList";
+import { SINGLE_PAGE_SYNC_MAX_POLL_MS } from "./domain/externalSourcePolling";
+
+let queryClient: QueryClient;
+
+/** The list reads its query from the react-admin QueryClient in the app. */
+const QueryClientWrapper = ({ children }: { children: ReactNode }) => (
+  <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+);
+
+const renderList = (ui: ReactElement) =>
+  render(ui, { wrapper: QueryClientWrapper });
 
 const faqRow = {
   id: "src-1",
@@ -69,10 +79,14 @@ describe("ExternalSourceList", () => {
 
   afterEach(async () => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     await page.viewport(1280, 720);
   });
 
   beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.listExternalSources.mockResolvedValue([faqRow]);
     mocks.listSinglePageExternalSources.mockResolvedValue([singlePageRow]);
@@ -85,7 +99,9 @@ describe("ExternalSourceList", () => {
   });
 
   it("renders the configured source row with its status", async () => {
-    const screen = await render(<ExternalSourceList projectId="project-1" />);
+    const screen = await renderList(
+      <ExternalSourceList projectId="project-1" />,
+    );
     await vi.waitFor(() =>
       expect(mocks.listExternalSources).toHaveBeenCalledWith(
         "project-1",
@@ -106,12 +122,19 @@ describe("ExternalSourceList", () => {
   it("separates source identity, sync state, and actions on wide screens", async () => {
     await page.viewport(1200, 720);
 
-    const screen = await render(<ExternalSourceList projectId="project-1" />);
+    const screen = await renderList(
+      <ExternalSourceList projectId="project-1" />,
+    );
     await vi.waitFor(() =>
       expect(mocks.listExternalSources).toHaveBeenCalledWith(
         "project-1",
         expect.any(AbortSignal),
       ),
+    );
+    await vi.waitFor(() =>
+      expect(
+        screen.container.querySelector(".project-external-source-row"),
+      ).not.toBeNull(),
     );
 
     const row = screen.container.querySelector(".project-external-source-row")!;
@@ -132,12 +155,19 @@ describe("ExternalSourceList", () => {
   it("stacks the row before tablet-width actions can overflow", async () => {
     await page.viewport(768, 900);
 
-    const screen = await render(<ExternalSourceList projectId="project-1" />);
+    const screen = await renderList(
+      <ExternalSourceList projectId="project-1" />,
+    );
     await vi.waitFor(() =>
       expect(mocks.listExternalSources).toHaveBeenCalledWith(
         "project-1",
         expect.any(AbortSignal),
       ),
+    );
+    await vi.waitFor(() =>
+      expect(
+        screen.container.querySelector(".project-external-source-row"),
+      ).not.toBeNull(),
     );
 
     const row = screen.container.querySelector(".project-external-source-row")!;
@@ -158,7 +188,9 @@ describe("ExternalSourceList", () => {
   });
 
   it("triggers run-now from the sync action", async () => {
-    const screen = await render(<ExternalSourceList projectId="project-1" />);
+    const screen = await renderList(
+      <ExternalSourceList projectId="project-1" />,
+    );
     await screen.getByRole("button", { name: "Đồng bộ ngay" }).click();
 
     await vi.waitFor(() =>
@@ -187,7 +219,7 @@ describe("ExternalSourceList", () => {
           updated_at: "2026-07-21T10:06:00Z",
         },
       ]);
-    const screen = await render(
+    const screen = await renderList(
       <ExternalSourceList
         projectId="project-1"
         variant="single-page"
@@ -212,7 +244,7 @@ describe("ExternalSourceList", () => {
     await vi.advanceTimersByTimeAsync(4000);
 
     expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(3);
-    expect(onSynchronized).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(onSynchronized).toHaveBeenCalledTimes(1));
   });
 
   it("polls a slow create until a changed terminal row appears", async () => {
@@ -232,7 +264,7 @@ describe("ExternalSourceList", () => {
       .mockResolvedValueOnce([pendingRow])
       .mockResolvedValueOnce([pendingRow])
       .mockResolvedValueOnce([completedRow]);
-    const screen = await render(
+    const screen = await renderList(
       <ExternalSourceList
         projectId="project-1"
         variant="single-page"
@@ -259,6 +291,47 @@ describe("ExternalSourceList", () => {
     expect(onSynchronized).toHaveBeenCalledTimes(1);
   });
 
+  it("stops polling a hidden tab and resumes when it is visible again", async () => {
+    const visibility = vi
+      .spyOn(document, "visibilityState", "get")
+      .mockReturnValue("visible");
+    mocks.listSinglePageExternalSources
+      .mockResolvedValueOnce([singlePageRow])
+      .mockResolvedValue([{ ...singlePageRow, last_status: "PROCESSING" }]);
+
+    const screen = await renderList(
+      <ExternalSourceList
+        projectId="project-1"
+        variant="single-page"
+        refreshSignal={0}
+      />,
+    );
+    await vi.waitFor(() =>
+      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(1),
+    );
+
+    vi.useFakeTimers();
+    await screen.rerender(
+      <ExternalSourceList
+        projectId="project-1"
+        variant="single-page"
+        refreshSignal={1}
+      />,
+    );
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(3);
+
+    visibility.mockReturnValue("hidden");
+    window.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(3);
+
+    visibility.mockReturnValue("visible");
+    window.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(4);
+  });
+
   it("ignores an older list response after a newer request wins", async () => {
     let resolveOlder!: (rows: (typeof singlePageRow)[]) => void;
     const older = new Promise<(typeof singlePageRow)[]>((resolve) => {
@@ -270,7 +343,7 @@ describe("ExternalSourceList", () => {
       .mockReturnValueOnce(older)
       .mockResolvedValueOnce([newerRow]);
 
-    const screen = await render(
+    const screen = await renderList(
       <ExternalSourceList
         projectId="project-1"
         variant="single-page"
@@ -304,7 +377,7 @@ describe("ExternalSourceList", () => {
         last_error: "sheet_not_public",
       },
     ]);
-    const screen = await render(
+    const screen = await renderList(
       <ExternalSourceList projectId="project-1" variant="single-page" />,
     );
 
@@ -317,7 +390,9 @@ describe("ExternalSourceList", () => {
   it("stacks source details and actions inside a phone-width row", async () => {
     await page.viewport(320, 844);
 
-    const screen = await render(<ExternalSourceList projectId="project-1" />);
+    const screen = await renderList(
+      <ExternalSourceList projectId="project-1" />,
+    );
     await vi.waitFor(() =>
       expect(mocks.listExternalSources).toHaveBeenCalledWith(
         "project-1",
@@ -349,7 +424,7 @@ describe("ExternalSourceList", () => {
   });
 
   it("renders single-page sync details and refreshes from the single-page endpoint", async () => {
-    const screen = await render(
+    const screen = await renderList(
       <ExternalSourceList
         projectId="project-1"
         variant="single-page"
@@ -383,7 +458,7 @@ describe("ExternalSourceList", () => {
 
   it("confirms and deletes a single-page source with the dedicated endpoint", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    const screen = await render(
+    const screen = await renderList(
       <ExternalSourceList projectId="project-1" variant="single-page" />,
     );
 
@@ -400,7 +475,7 @@ describe("ExternalSourceList", () => {
   });
 
   it("hides mutation controls in single-page read-only mode", async () => {
-    const screen = await render(
+    const screen = await renderList(
       <ExternalSourceList
         projectId="project-1"
         variant="single-page"

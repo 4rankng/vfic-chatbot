@@ -11,6 +11,7 @@ vi.mock("./useNeedsAttention", () => ({
 }));
 
 import { NotificationsPopover } from "./NotificationsPopover";
+import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
 
 const sampleRows = [
   {
@@ -29,9 +30,11 @@ const sampleRows = [
 
 const renderPopover = (count = 2) =>
   render(
-    <MemoryRouter>
-      <NotificationsPopover count={count} />
-    </MemoryRouter>,
+    <TestMessages>
+      <MemoryRouter>
+        <NotificationsPopover count={count} />
+      </MemoryRouter>
+    </TestMessages>,
   );
 
 afterEach(async () => {

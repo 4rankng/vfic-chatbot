@@ -1,6 +1,11 @@
 import { AlertTriangle, MessageCircle, PanelRight, Phone } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useDataProvider, useNotify } from "ra-core";
+import {
+  useDataProvider,
+  useNotify,
+  useTranslate,
+  type TranslateFunction,
+} from "ra-core";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { VList, WindowVirtualizer } from "virtua";
@@ -46,11 +51,16 @@ type RecruitingCommandCenterProps = {
 const normalizeText = (value: string | null | undefined): string =>
   value?.trim() ?? "";
 
-const candidateName = (row: AttentionItem): string => {
+const candidateName = (
+  row: AttentionItem,
+  translate: TranslateFunction,
+): string => {
   const name = normalizeText(row.name);
   if (name) return name;
   const phone = normalizeText(row.phone);
-  return phone ? `Ứng viên ${phone}` : "Ứng viên mới";
+  return phone
+    ? `Ứng viên ${phone}`
+    : translate("leads.fallback_new_candidate");
 };
 
 const formatClock = (value: string | null | undefined): string => {
@@ -92,6 +102,7 @@ export const RecruitingCommandCenter = ({
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const { canEdit } = useRoleActions();
+  const translate = useTranslate();
   // TanStack caching contract (Red-team Medium 14 — exact):
   //   - skeleton iff isPending && !data (first load only)
   //   - cached data + background-refetch indicator iff data && isFetching
@@ -127,7 +138,9 @@ export const RecruitingCommandCenter = ({
           data: { ...changes, version },
           previousData: lead,
         });
-        notify("Đã cập nhật hồ sơ ứng viên", { type: "success" });
+        notify(translate("dashboard.save_candidate_success"), {
+          type: "success",
+        });
         await refetchCandidates().catch(() => undefined);
       } catch (error) {
         // No refetch here: the write failed, so the cached list is still the
@@ -135,13 +148,13 @@ export const RecruitingCommandCenter = ({
         notify(
           error instanceof Error
             ? error.message
-            : "Không thể cập nhật hồ sơ ứng viên",
+            : translate("dashboard.save_candidate_failed"),
           { type: "error" },
         );
         throw error;
       }
     },
-    [dataProvider, notify, refetchCandidates],
+    [dataProvider, notify, refetchCandidates, translate],
   );
 
   const shellClass =
@@ -187,7 +200,7 @@ export const RecruitingCommandCenter = ({
     <div className={shellClass}>
       <header className="recruiting-hero recruiting-hero-minimal">
         <div className="recruiting-hero-copy">
-          <h1>Tổng quan</h1>
+          <h1>{translate("crm.navigation.overview")}</h1>
           <div className="recruiting-hero-meta">
             <span
               className="dashboard-live-dot is-success"
@@ -195,8 +208,8 @@ export const RecruitingCommandCenter = ({
             />
             <span>
               {latestUpdate
-                ? `Cập nhật lúc ${latestUpdate}`
-                : "Đang tải hàng đợi tuyển dụng"}
+                ? translate("dashboard.updated_at", { time: latestUpdate })
+                : translate("dashboard.queue_loading")}
             </span>
             {showRefetchIndicator ||
             (candidatesQuery.isFetching && candidatesQuery.data) ? (
@@ -205,7 +218,7 @@ export const RecruitingCommandCenter = ({
                 aria-live="polite"
                 role="status"
               >
-                Đang làm mới…
+                {translate("crm.common.refreshing")}
               </span>
             ) : null}
           </div>
@@ -217,9 +230,7 @@ export const RecruitingCommandCenter = ({
           className="dashboard-inline-error tt-alert tt-alert-error tt-alert-soft"
           role="status"
         >
-          <span>
-            Không thể làm mới hàng đợi. Danh sách hiện tại vẫn được giữ lại.
-          </span>
+          <span>{translate("dashboard.queue_refresh_failed")}</span>
           <button
             type="button"
             className="tt-btn tt-btn-sm tt-btn-error tt-btn-outline"
@@ -228,14 +239,14 @@ export const RecruitingCommandCenter = ({
               void refetchCandidates();
             }}
           >
-            Thử lại
+            {translate("crm.common.retry")}
           </button>
         </div>
       ) : null}
 
       <section
         className="recruiting-worklist"
-        aria-label="Các hàng đợi tuyển dụng"
+        aria-label={translate("dashboard.queues_label")}
       >
         <AttentionPanel
           rows={interventionRows}
@@ -285,20 +296,21 @@ const AttentionPanel = ({
   navigate,
   onRetry,
 }: AttentionPanelProps) => {
+  const translate = useTranslate();
   const isEmpty =
     !state.showSkeleton && !state.showInitialError && !state.hasRows;
   const countLabel = state.showSkeleton
-    ? "Đang tải số hội thoại cần xử lý"
+    ? translate("dashboard.todo_count_loading")
     : state.showInitialError
-      ? "Không tải được số hội thoại cần xử lý"
-      : `${rows.length} hội thoại cần xử lý`;
+      ? translate("dashboard.todo_count_failed")
+      : translate("dashboard.todo_count", { count: rows.length });
 
   return (
     <article className={`recruiting-panel${isEmpty ? " is-empty" : ""}`}>
       <div className="recruiting-panel-header">
         <div className="recruiting-panel-title">
           <MessageCircle aria-hidden="true" />
-          <h2>Cần xử lý</h2>
+          <h2>{translate("dashboard.todo_title")}</h2>
         </div>
         <strong
           className="dashboard-panel-count"
@@ -314,7 +326,7 @@ const AttentionPanel = ({
             <DashboardListSkeleton />
           ) : state.showInitialError ? (
             <DashboardQueueError
-              label="Không tải được hội thoại."
+              label={translate("dashboard.conversations_load_failed")}
               onRetry={onRetry}
             />
           ) : (
@@ -347,11 +359,12 @@ const CandidatePanel = ({
 }) => {
   const isEmpty =
     !state.showSkeleton && !state.showInitialError && !state.hasRows;
+  const translate = useTranslate();
   const countLabel = state.showSkeleton
-    ? "Đang tải số ứng viên mới"
+    ? translate("dashboard.candidates_count_loading")
     : state.showInitialError
-      ? "Không tải được số ứng viên mới"
-      : `${count} ứng viên mới`;
+      ? translate("dashboard.candidates_count_failed")
+      : translate("dashboard.candidates_count", { count });
 
   return (
     <article
@@ -362,7 +375,7 @@ const CandidatePanel = ({
       <div className="recruiting-panel-header">
         <div className="recruiting-panel-title">
           <Phone aria-hidden="true" />
-          <h2>Ứng viên mới</h2>
+          <h2>{translate("dashboard.candidates_title")}</h2>
         </div>
         <strong
           className="dashboard-panel-count"
@@ -378,7 +391,7 @@ const CandidatePanel = ({
             <DashboardListSkeleton />
           ) : state.showInitialError ? (
             <DashboardQueueError
-              label="Không tải được ứng viên."
+              label={translate("dashboard.candidates_load_failed")}
               onRetry={onRetry}
             />
           ) : (
@@ -508,7 +521,8 @@ const AttentionRow = ({
   row: AttentionItem;
   navigate: Navigate;
 }) => {
-  const name = candidateName(row);
+  const translate = useTranslate();
+  const name = candidateName(row, translate);
   const onClick = rowOnClick(row, navigate);
   const elapsed = formatElapsed(row.urgency_at);
   const desiredJob = normalizeText(row.desired_job);
@@ -590,7 +604,9 @@ const CandidateRow = ({
 }) => {
   const [isCandidateDataOpen, setIsCandidateDataOpen] = useState(false);
   const actionTriggerRef = useRef<HTMLButtonElement>(null);
-  const name = normalizeText(candidate.name) || "Ứng viên mới";
+  const translate = useTranslate();
+  const name =
+    normalizeText(candidate.name) || translate("leads.fallback_new_candidate");
   const phone = normalizeText(candidate.phone);
   const conversationId = candidate.conversation_id;
   const content = (
@@ -685,19 +701,22 @@ const DashboardQueueError = ({
 }: {
   label: string;
   onRetry: () => void;
-}) => (
-  <div className="dashboard-empty-list dashboard-queue-error" role="status">
-    <AlertTriangle className="size-4" aria-hidden="true" />
-    <span>{label}</span>
-    <button
-      className="tt-btn tt-btn-sm tt-btn-outline"
-      type="button"
-      onClick={() => void onRetry()}
-    >
-      Thử lại
-    </button>
-  </div>
-);
+}) => {
+  const translate = useTranslate();
+  return (
+    <div className="dashboard-empty-list dashboard-queue-error" role="status">
+      <AlertTriangle className="size-4" aria-hidden="true" />
+      <span>{label}</span>
+      <button
+        className="tt-btn tt-btn-sm tt-btn-outline"
+        type="button"
+        onClick={() => void onRetry()}
+      >
+        {translate("crm.common.retry")}
+      </button>
+    </div>
+  );
+};
 
 const DashboardListSkeleton = () => (
   <>

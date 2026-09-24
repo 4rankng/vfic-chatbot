@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { useDataProvider, useGetIdentity } from "ra-core";
+import { useDataProvider, useGetIdentity, useTranslate } from "ra-core";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
 import { ArrowLeft, Bot } from "lucide-react";
@@ -81,6 +81,7 @@ const BotRunShowPage = () => {
   const dataProvider = useDataProvider<CrmDataProvider>();
   const { identity } = useGetIdentity();
   const identityId = identity?.id ? String(identity.id) : "";
+  const translate = useTranslate();
   const detailQuery = useQuery({
     queryKey: [...DECISION_TRACE_QUERY_KEY, identityId, "run", runId],
     queryFn: () => dataProvider.getBotRunTrace(runId),
@@ -121,7 +122,7 @@ const BotRunShowPage = () => {
             size="sm"
             onClick={() => detailQuery.refetch()}
           >
-            Thử lại
+            {translate("crm.common.retry")}
           </Button>
         </div>
       ) : (

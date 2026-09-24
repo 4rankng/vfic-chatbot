@@ -8,6 +8,7 @@ import {
   useNotify,
   useRecordContext,
   useRedirect,
+  useTranslate,
 } from "ra-core";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
@@ -34,6 +35,7 @@ const UserEditContent = () => {
   const notify = useNotify();
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
+  const translate = useTranslate();
   const [submitting, setSubmitting] = useState(false);
   if (!user) return null;
 
@@ -127,7 +129,9 @@ const UserEditContent = () => {
               ) : (
                 <Check className="size-4" aria-hidden="true" />
               )}
-              {submitting ? "Đang lưu" : "Lưu thay đổi"}
+              {submitting
+                ? translate("crm.common.saving")
+                : translate("crm.common.save_changes")}
             </Button>
           </footer>
         </div>

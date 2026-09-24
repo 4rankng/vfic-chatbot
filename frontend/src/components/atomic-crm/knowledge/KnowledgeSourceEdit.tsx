@@ -5,6 +5,7 @@ import {
   useNotify,
   useRecordContext,
   useRedirect,
+  useTranslate,
 } from "ra-core";
 import { ArrowLeft, FileText, LoaderCircle } from "lucide-react";
 
@@ -24,6 +25,7 @@ const KnowledgeSourceEditContent = () => {
   const [submitting, setSubmitting] = useState(false);
   const [fileName, setFileName] = useState("");
   const [projectId, setProjectId] = useState("");
+  const translate = useTranslate();
 
   useEffect(() => {
     if (!source) return;
@@ -130,7 +132,7 @@ const KnowledgeSourceEditContent = () => {
             disabled={submitting}
             onClick={() => redirect("show", "knowledge_sources", source.id)}
           >
-            Hủy
+            {translate("ra.action.cancel")}
           </Button>
           <Button
             type="submit"
@@ -140,7 +142,9 @@ const KnowledgeSourceEditContent = () => {
             {submitting && (
               <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
             )}
-            {submitting ? "Đang lưu…" : "Lưu thay đổi"}
+            {submitting
+              ? translate("crm.common.saving")
+              : translate("crm.common.save_changes")}
           </Button>
         </footer>
       </form>

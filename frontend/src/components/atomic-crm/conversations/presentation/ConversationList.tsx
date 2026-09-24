@@ -13,6 +13,7 @@ import {
   useInfinitePaginationContext,
   useGetOne,
   useListContext,
+  useTranslate,
   RecordContextProvider,
 } from "ra-core";
 import { useSearchParams } from "react-router";
@@ -54,7 +55,10 @@ import conversationLoadErrorIllustration from "@/assets/empty-states/conversatio
 import { AlertTriangle, Inbox, RefreshCw, Reply, SearchX } from "lucide-react";
 import "../inbox.css";
 
-const CONVERSATION_LIST_SORT = { field: "last_message_at", order: "DESC" } as const;
+const CONVERSATION_LIST_SORT = {
+  field: "last_message_at",
+  order: "DESC",
+} as const;
 
 const getRelativeTimeString = (dateStr?: string) => {
   if (!dateStr) return "";
@@ -270,24 +274,25 @@ type ListEmptyStateProps = {
 };
 
 const ListEmptyState = ({ kind, onAction }: ListEmptyStateProps) => {
+  const translate = useTranslate();
   const content = {
     empty: {
       icon: Inbox,
-      title: "Chưa có cuộc trò chuyện",
-      description: "Các cuộc trò chuyện mới từ liên hệ sẽ xuất hiện tại đây.",
+      title: translate("conversations.list.empty_title"),
+      description: translate("conversations.list.empty_description"),
     },
     filtered: {
       icon: SearchX,
-      title: "Không tìm thấy hội thoại",
-      description: "Thử xoá từ khoá tìm kiếm hoặc bộ lọc để xem thêm.",
-      action: "Xoá tìm kiếm và bộ lọc",
+      title: translate("conversations.list.filtered_title"),
+      description: translate("conversations.list.filtered_description"),
+      action: translate("conversations.list.clear_search_and_filters"),
     },
     error: {
       icon: AlertTriangle,
       image: conversationLoadErrorIllustration,
-      title: "Không thể tải hội thoại",
-      description: "Kiểm tra kết nối và thử lại.",
-      action: "Thử lại",
+      title: translate("conversations.list.error_title"),
+      description: translate("conversations.list.error_description"),
+      action: translate("crm.common.retry"),
     },
   }[kind];
   const Icon = content.icon;
@@ -386,6 +391,7 @@ const ConversationListPanel = ({
   readIds: Set<string>;
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const translate = useTranslate();
   const {
     data: conversations,
     isPending,
@@ -536,7 +542,9 @@ const ConversationListPanel = ({
           <div className="inbox-toolbar">
             <label className="search">
               <span className="sr-only">
-                {slots.row ? "Tìm ứng viên hoặc số điện thoại" : "Tìm liên hệ"}
+                {slots.row
+                  ? translate("conversations.list.search_candidate")
+                  : translate("conversations.list.search_contact")}
               </span>
               <svg className="icon">
                 <use href="#i-search" />
@@ -544,9 +552,11 @@ const ConversationListPanel = ({
               <input
                 type="search"
                 className="tt-input"
-                placeholder="Tìm kiếm"
+                placeholder={translate("ra.action.search")}
                 aria-label={
-                  slots.row ? "Tìm ứng viên hoặc số điện thoại" : "Tìm liên hệ"
+                  slots.row
+                    ? translate("conversations.list.search_candidate")
+                    : translate("conversations.list.search_contact")
                 }
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}

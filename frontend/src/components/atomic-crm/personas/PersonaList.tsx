@@ -5,6 +5,8 @@ import {
   useNotify,
   useRedirect,
   useRefresh,
+  useTranslate,
+  type TranslateFunction,
 } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,32 +78,37 @@ const getPersonaDerivedStats = (persona: Persona): PersonaDerivedStats => ({
   sectionCount: getCompletedPersonaSectionCount(persona.body_md),
 });
 
-const getScopeLabel = (persona: Persona, stats: PersonaDerivedStats) => {
+const getScopeLabel = (
+  persona: Persona,
+  stats: PersonaDerivedStats,
+  translate: TranslateFunction,
+) => {
   if (stats.adapterCount > 0) {
     return `${stats.adapterCount} adapter`;
   }
   if (persona.is_active) {
-    return "Mặc định";
+    return translate("personas.status_default");
   }
-  return "Dự phòng";
+  return translate("personas.status_fallback");
 };
 
 const getAdapterScopeSummary = (
   persona: Persona,
   stats: PersonaDerivedStats,
+  translate: TranslateFunction,
 ) => {
   if (stats.adapterCount > 0) {
     return stats.adapterLabels.join(", ");
   }
   if (persona.is_active) {
-    return "Chưa có adapter gán riêng, sẽ kế thừa Agent mặc định này.";
+    return translate("personas.scope_inherits_default");
   }
-  return "Chưa adapter nào dùng Agent này.";
+  return translate("personas.scope_unused");
 };
 
-const formatDate = (value: string) => {
+const formatDate = (value: string, translate: TranslateFunction) => {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Chưa rõ";
+  if (Number.isNaN(date.getTime())) return translate("crm.common.unknown");
   return dateFormatter.format(date);
 };
 
@@ -166,8 +173,9 @@ type PersonaRowProps = {
 
 const PersonaBubble = memo(
   ({ persona, isSelected, onSelect }: PersonaRowProps) => {
+    const translate = useTranslate();
     const stats = getPersonaDerivedStats(persona);
-    const scopeLabel = getScopeLabel(persona, stats);
+    const scopeLabel = getScopeLabel(persona, stats, translate);
 
     return (
       <article
@@ -215,6 +223,8 @@ const PersonaStudioOverview = ({
   onActivate: (persona: Persona) => void;
   onEdit: (persona: Persona) => void;
 }) => {
+  const translate = useTranslate();
+
   if (!persona || !stats) {
     return null;
   }
@@ -224,10 +234,10 @@ const PersonaStudioOverview = ({
   const hasCompleteFollowups = stats.followupEnabledCount >= FOLLOWUP_TOTAL;
   const hasAssignedScope = persona.is_active || stats.adapterCount > 0;
   const hasAuthoredContent = stats.contentLength > 0;
-  const updatedAt = formatDate(persona.updated_at);
-  const createdAt = formatDate(persona.created_at);
+  const updatedAt = formatDate(persona.updated_at, translate);
+  const createdAt = formatDate(persona.created_at, translate);
   const sections = getPersonaSectionSummaries(persona.body_md);
-  const adapterScopeSummary = getAdapterScopeSummary(persona, stats);
+  const adapterScopeSummary = getAdapterScopeSummary(persona, stats, translate);
   const adapterModeLabel = persona.is_active
     ? "Mặc định toàn hệ thống"
     : stats.adapterCount > 0
@@ -262,10 +272,12 @@ const PersonaStudioOverview = ({
                 }
               >
                 {persona.is_active ? <CheckCircle2 className="size-3" /> : null}
-                {persona.is_active ? "Mặc định" : "Dự phòng"}
+                {persona.is_active
+                  ? translate("personas.status_default")
+                  : translate("personas.status_fallback")}
               </Badge>
               <Badge variant="outline" className="persona-studio-badge">
-                {getScopeLabel(persona, stats)}
+                {getScopeLabel(persona, stats, translate)}
               </Badge>
             </div>
           </div>
@@ -495,7 +507,7 @@ const PersonaStudioOverview = ({
                   <Clock3 className="size-3.5" />
                 </span>
                 <p>
-                  <strong>Tạo Agent</strong>
+                  <strong>{translate("personas.create_agent")}</strong>
                   <small>{createdAt}</small>
                 </p>
               </div>
@@ -529,62 +541,69 @@ const PersonaStudioOverview = ({
   );
 };
 
-const PersonaEmptyWorkspace = ({ onCreate }: { onCreate: () => void }) => (
-  <section className="persona-empty-workspace" aria-label="Tạo Agent đầu tiên">
-    <div className="persona-empty-primary">
-      <div className="persona-empty-copy">
-        <span className="persona-empty-icon" aria-hidden="true">
-          <BotMessageSquare className="size-5" />
-        </span>
-        <p className="persona-panel-eyebrow">Bắt đầu</p>
-        <h2>Tạo giọng Agent đầu tiên</h2>
-        <p>
-          Thiết lập một hồ sơ để chatbot biết cách chào hỏi, hỏi thông tin và
-          chuyển cuộc trò chuyện cho đội tuyển dụng khi cần.
-        </p>
-        <Button
-          type="button"
-          className="h-9 rounded-[8px] text-button"
-          onClick={onCreate}
-        >
-          <Plus className="size-4" />
-          Tạo Agent
-        </Button>
-      </div>
-    </div>
-    <div className="persona-empty-guide" aria-label="Quy trình thiết lập">
-      <div>
-        <span className="persona-empty-step-index">1</span>
-        <div>
-          <strong>Viết giọng tư vấn</strong>
-          <p>Vai trò, phạm vi trả lời, những điều Agent không được bịa.</p>
-        </div>
-      </div>
-      <div>
-        <span className="persona-empty-step-index">2</span>
-        <div>
-          <strong>Thiết lập adapter</strong>
+const PersonaEmptyWorkspace = ({ onCreate }: { onCreate: () => void }) => {
+  const translate = useTranslate();
+  return (
+    <section
+      className="persona-empty-workspace"
+      aria-label="Tạo Agent đầu tiên"
+    >
+      <div className="persona-empty-primary">
+        <div className="persona-empty-copy">
+          <span className="persona-empty-icon" aria-hidden="true">
+            <BotMessageSquare className="size-5" />
+          </span>
+          <p className="persona-panel-eyebrow">Bắt đầu</p>
+          <h2>Tạo giọng Agent đầu tiên</h2>
           <p>
-            Chọn adapter nào dùng Agent này hoặc để adapter kế thừa mặc định.
+            Thiết lập một hồ sơ để chatbot biết cách chào hỏi, hỏi thông tin và
+            chuyển cuộc trò chuyện cho đội tuyển dụng khi cần.
           </p>
+          <Button
+            type="button"
+            className="h-9 rounded-[8px] text-button"
+            onClick={onCreate}
+          >
+            <Plus className="size-4" />
+            {translate("personas.create_agent")}
+          </Button>
         </div>
       </div>
-      <div>
-        <span className="persona-empty-step-index">3</span>
+      <div className="persona-empty-guide" aria-label="Quy trình thiết lập">
         <div>
-          <strong>Bật follow-up</strong>
-          <p>Đặt lịch nhắc lại theo Hot, Warm hoặc Not interested.</p>
+          <span className="persona-empty-step-index">1</span>
+          <div>
+            <strong>Viết giọng tư vấn</strong>
+            <p>Vai trò, phạm vi trả lời, những điều Agent không được bịa.</p>
+          </div>
+        </div>
+        <div>
+          <span className="persona-empty-step-index">2</span>
+          <div>
+            <strong>Thiết lập adapter</strong>
+            <p>
+              Chọn adapter nào dùng Agent này hoặc để adapter kế thừa mặc định.
+            </p>
+          </div>
+        </div>
+        <div>
+          <span className="persona-empty-step-index">3</span>
+          <div>
+            <strong>Bật follow-up</strong>
+            <p>Đặt lịch nhắc lại theo Hot, Warm hoặc Not interested.</p>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
-);
+    </section>
+  );
+};
 
 const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
   const { data, isPending, total } = useListContext<Persona>();
   const redirect = useRedirect();
   const notify = useNotify();
   const refresh = useRefresh();
+  const translate = useTranslate();
   const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(
     null,
   );
@@ -675,7 +694,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                     onClick={() => redirect("create", "personas")}
                   >
                     <Plus className="size-4" />
-                    Tạo Agent
+                    {translate("personas.create_agent")}
                   </Button>
                 </div>
 

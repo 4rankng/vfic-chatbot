@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState, type RefObject } from "react";
+import { useTranslate, type TranslateFunction } from "ra-core";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -65,7 +66,10 @@ type ProfileField = {
 
 const textValue = (value: unknown): string => String(value ?? "").trim();
 
-const candidateFields = (lead: Lead): ProfileField[] => {
+const candidateFields = (
+  lead: Lead,
+  translate: TranslateFunction,
+): ProfileField[] => {
   const birthOrAge = lead.birth_year
     ? String(lead.birth_year)
     : lead.age
@@ -88,7 +92,7 @@ const candidateFields = (lead: Lead): ProfileField[] => {
     return {
       key,
       label,
-      value: value || "Chưa có dữ liệu",
+      value: value || translate("crm.common.no_data"),
       complete: Boolean(value),
       Icon,
       wide,
@@ -96,23 +100,44 @@ const candidateFields = (lead: Lead): ProfileField[] => {
   };
 
   return [
-    field("name", "Họ tên", lead.name, UserRound),
-    field("phone", "Số điện thoại", lead.phone, Phone),
-    field("birth", "Năm sinh / tuổi", birthOrAge, CalendarDays),
-    field("gender", "Giới tính", lead.gender, UserRound),
-    field("desired-job", "Công việc mong muốn", lead.desired_job, Handshake),
-    field("experience", "Kinh nghiệm", lead.years_experience, FileBadge),
+    field("name", translate("leads.fields.name"), lead.name, UserRound),
+    field("phone", translate("leads.fields.phone"), lead.phone, Phone),
+    field(
+      "birth",
+      translate("leads.fields.birth_year_and_age"),
+      birthOrAge,
+      CalendarDays,
+    ),
+    field("gender", translate("leads.fields.gender"), lead.gender, UserRound),
+    field(
+      "desired-job",
+      translate("leads.fields.desired_job"),
+      lead.desired_job,
+      Handshake,
+    ),
+    field(
+      "experience",
+      translate("leads.fields.experience"),
+      lead.years_experience,
+      FileBadge,
+    ),
     field(
       "salary",
-      "Mức lương mong muốn",
+      translate("leads.fields.expected_salary"),
       lead.expected_salary,
       CircleDollarSign,
     ),
-    field("area", "Khu vực", area, MapPin),
-    field("address", "Địa chỉ hiện tại", lead.address, Home, true),
+    field("area", translate("leads.fields.area"), area, MapPin),
+    field(
+      "address",
+      translate("leads.fields.address"),
+      lead.address,
+      Home,
+      true,
+    ),
     field(
       "notes",
-      "Ghi chú",
+      translate("leads.fields.notes"),
       notes.length > 0 ? notes.join(" · ") : "",
       NotepadText,
       true,
@@ -137,12 +162,15 @@ export const CandidateDataDialog = ({
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const fields = candidateFields(lead);
+  const translate = useTranslate();
+  const fields = candidateFields(lead, translate);
   const completedFields = fields.filter((field) => field.complete).length;
   const completionPercent = Math.round((completedFields / fields.length) * 100);
   const candidateName =
-    textValue(displayName) || textValue(lead.name) || "Ứng viên";
-  const candidatePhone = textValue(lead.phone) || "Chưa có số điện thoại";
+    textValue(displayName) ||
+    textValue(lead.name) ||
+    translate("leads.fallback_name");
+  const candidatePhone = textValue(lead.phone) || translate("leads.no_phone");
   const pendingChanges = editSession
     ? changedCandidateProfileValues(editSession.initial, editSession.draft)
     : {};
@@ -215,7 +243,7 @@ export const CandidateDataDialog = ({
             />
             <div className="min-w-0">
               <DialogTitle className="truncate text-left">
-                Thông tin ứng viên
+                {translate("leads.profile_title")}
               </DialogTitle>
               <DialogDescription className="mt-1 truncate text-left">
                 {candidateName} · {candidatePhone}
@@ -288,7 +316,9 @@ export const CandidateDataDialog = ({
                     const inputId = `dashboard-candidate-${lead.id}-${field.key}`;
                     return (
                       <div key={field.key} className="grid min-w-0 gap-1.5">
-                        <Label htmlFor={inputId}>{field.label}</Label>
+                        <Label htmlFor={inputId}>
+                          {translate(field.labelKey)}
+                        </Label>
                         <Input
                           id={inputId}
                           value={editSession.draft[field.key]}
@@ -320,7 +350,7 @@ export const CandidateDataDialog = ({
 
                 <div className="grid gap-1.5">
                   <Label htmlFor={`dashboard-candidate-${lead.id}-notes`}>
-                    Ghi chú
+                    {translate("leads.fields.notes")}
                   </Label>
                   <Textarea
                     id={`dashboard-candidate-${lead.id}-notes`}
@@ -361,7 +391,7 @@ export const CandidateDataDialog = ({
                     onClick={cancelEditing}
                   >
                     <X className="size-4" aria-hidden="true" />
-                    Hủy
+                    {translate("ra.action.cancel")}
                   </Button>
                   <Button type="submit" disabled={isSaving || !hasChanges}>
                     {isSaving ? (
@@ -372,7 +402,9 @@ export const CandidateDataDialog = ({
                     ) : (
                       <Save className="size-4" aria-hidden="true" />
                     )}
-                    {isSaving ? "Đang lưu…" : "Lưu thay đổi"}
+                    {isSaving
+                      ? translate("crm.common.saving")
+                      : translate("crm.common.save_changes")}
                   </Button>
                 </div>
               </form>

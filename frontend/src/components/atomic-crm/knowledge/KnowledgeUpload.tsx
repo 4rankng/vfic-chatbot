@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNotify, useRefresh } from "ra-core";
+import { useNotify, useRefresh, useTranslate } from "ra-core";
 import {
   CheckCircle2,
   ClipboardList,
@@ -51,6 +51,7 @@ export const KnowledgeUpload = ({
 }: KnowledgeUploadProps) => {
   const notify = useNotify();
   const refresh = useRefresh();
+  const translate = useTranslate();
   const [projectId, setProjectId] = useState<string>(initialProjectId ?? "");
   const [mode, setMode] = useState<"file" | "paste">("file");
   const [file, setFile] = useState<File | null>(null);
@@ -376,11 +377,13 @@ export const KnowledgeUpload = ({
             onClick={() => handleOpenChange(false)}
             disabled={busy}
           >
-            Hủy
+            {translate("ra.action.cancel")}
           </Button>
           <Button onClick={submit} disabled={!canSubmit}>
             {busy ? <RefreshCw className="size-4 animate-spin" /> : null}
-            {busy ? "Đang tải lên..." : "Tải lên"}
+            {busy
+              ? translate("crm.common.uploading")
+              : translate("crm.common.upload")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -37,6 +37,8 @@ vi.mock("../LeadAvatar", () => ({
 }));
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   InfiniteListBase: ({ children }: { children?: ReactNode }) => <>{children}</>,
   useListContext: () => ({
     data: listState.conversations,
@@ -80,6 +82,7 @@ vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 vi.mock("./ConversationShow", () => ({ ConversationShowContent: () => null }));
 
 import { ConversationList } from "./ConversationList";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 // --- Helpers -----------------------------------------------------------
 
@@ -200,7 +203,9 @@ describe("ConversationList — row memo boundary", () => {
     });
 
     // Positive control: the opened row re-rendered.
-    expect(rendersOf(rowNames[0])).toBeGreaterThan(before.get(rowNames[0]) ?? 0);
+    expect(rendersOf(rowNames[0])).toBeGreaterThan(
+      before.get(rowNames[0]) ?? 0,
+    );
     // The read-id Set changed and the list re-sorted, but no other row's own
     // inputs did — so they must not have re-rendered.
     expect(rendersOf(rowNames[1])).toBe(before.get(rowNames[1]));

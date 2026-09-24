@@ -101,10 +101,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   useNotify: () => mocks.notify,
   usePermissions: () => ({ permissions: "admin", isPending: false }),
-  useTranslate: () => (key: string, options?: { _: string }) =>
-    options?._ ?? key,
   // The Facebook section of the settings page pulls the Projects list.
   useGetList: () => ({ data: [], total: 0 }),
 }));
@@ -143,6 +143,7 @@ vi.mock("../personas/PersonaList", () => ({ PersonaList: () => null }));
 vi.mock("../users/UserList", () => ({ UserList: () => null }));
 
 import { ZaloIntegrationPage } from "./ZaloIntegrationPage";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 afterEach(async () => {
   await cleanup();

@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   ShowBase: ({ children }: { children: ReactNode }) => children,
   useGetList: () => ({ data: [] }),
   useNotify: () => mocks.notify,
@@ -44,6 +46,7 @@ vi.mock("../kit", () => ({
 }));
 
 import { KnowledgeBaseShow } from "./KnowledgeBaseShow";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 const owner = {
   id: "project-rorze",

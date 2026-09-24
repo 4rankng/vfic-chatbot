@@ -4,6 +4,7 @@ import {
   useNotify,
   useRecordContext,
   useRefresh,
+  useTranslate,
 } from "ra-core";
 import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -84,6 +85,7 @@ export const KnowledgeBaseShowContent = () => {
   const kb = useRecordContext<KnowledgeBase>();
   const notify = useNotify();
   const refresh = useRefresh();
+  const translate = useTranslate();
   const { data: personas = [] } = useGetList<Persona>("personas", {
     pagination: { page: 1, perPage: 100 },
     sort: { field: "name", order: "ASC" },
@@ -272,7 +274,7 @@ export const KnowledgeBaseShowContent = () => {
             size="sm"
             onClick={() => setReloadKey((value) => value + 1)}
           >
-            Thử lại
+            {translate("crm.common.retry")}
           </Button>
         </div>
       ) : null}
@@ -393,7 +395,7 @@ export const KnowledgeBaseShowContent = () => {
                     aria-hidden="true"
                   />
                 ) : null}
-                {savingFile ? "Đang lưu…" : "Lưu tệp"}
+                {savingFile ? translate("crm.common.saving") : "Lưu tệp"}
               </Button>
             </div>
           </KnowledgeSection>

@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState, type ComponentType } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslate } from "ra-core";
 import {
   Activity,
   AlertCircle,
@@ -101,6 +102,7 @@ const PerformanceLoading = () => (
 
 const PerformanceError = ({ onRetry }: { onRetry: () => void }) => {
   const navigate = useNavigate();
+  const translate = useTranslate();
   return (
     <section
       className="performance-state tt-alert"
@@ -108,15 +110,15 @@ const PerformanceError = ({ onRetry }: { onRetry: () => void }) => {
       aria-live="polite"
     >
       <AlertCircle aria-hidden="true" />
-      <h2>Không tải được số liệu hiệu suất</h2>
-      <p>Kiểm tra kết nối rồi thử lại.</p>
+      <h2>{translate("performance.error_title")}</h2>
+      <p>{translate("crm.common.retry_hint")}</p>
       <div>
         <Button onClick={onRetry}>
           <RefreshCw className="size-4" />
-          Thử lại
+          {translate("crm.common.retry")}
         </Button>
         <Button variant="outline" onClick={() => navigate("/")}>
-          Về Tổng quan
+          {translate("crm.common.back_to_overview")}
         </Button>
       </div>
     </section>

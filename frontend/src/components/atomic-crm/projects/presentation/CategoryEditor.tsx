@@ -7,6 +7,7 @@ import {
   Download,
   Upload,
 } from "lucide-react";
+import { useTranslate } from "ra-core";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export const CategoryEditor = ({
   canManageSources,
   onSourceCreated,
 }: Props) => {
+  const translate = useTranslate();
   const label = category?.label_vi ?? selectedKey;
   const {
     cancelEditing,
@@ -87,10 +89,10 @@ export const CategoryEditor = ({
                 }
               >
                 {processing
-                  ? "Đang kiểm tra"
+                  ? translate("crm.common.testing")
                   : hasCurrentSource
                     ? `Đang dùng v${category?.active_revision_no ?? 1}`
-                    : "Chưa có dữ liệu"}
+                    : translate("crm.common.no_data")}
               </Badge>
             )}
           </div>
@@ -125,7 +127,7 @@ export const CategoryEditor = ({
                 onClick={cancelEditing}
                 disabled={saving}
               >
-                Hủy
+                {translate("ra.action.cancel")}
               </Button>
               <Button
                 size="sm"
@@ -144,7 +146,7 @@ export const CategoryEditor = ({
                 ) : (
                   <Save className="size-4" />
                 )}
-                Lưu thay đổi
+                {translate("crm.common.save_changes")}
               </Button>
             </>
           )}

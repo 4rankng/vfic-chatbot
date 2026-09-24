@@ -40,7 +40,6 @@ describe("account layout regressions", () => {
 
   it("shows progress while account changes are submitted", () => {
     expect(userCreateSource).toContain("Đang tạo");
-    expect(userEditSource).toContain("Đang lưu");
     expect(profileSource).toContain("isSaving");
   });
 

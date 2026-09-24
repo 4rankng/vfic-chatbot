@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslate } from "ra-core";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +34,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-const display = (value: unknown, fallback = "Chưa có dữ liệu") => {
+const display = (value: unknown, fallback: string) => {
   if (value === undefined || value === null) return fallback;
   const text = String(value).trim();
   return text || fallback;
@@ -48,8 +49,7 @@ type CandidateInfoItem = {
   Icon: LucideIcon;
 };
 
-const hasMeaningfulValue = (value: unknown) =>
-  display(value) !== "Chưa có dữ liệu";
+const hasMeaningfulValue = (value: unknown) => display(value, "") !== "";
 
 const notesInclude = (notes: string | null | undefined, terms: string[]) => {
   const normalized = notes?.toLocaleLowerCase("vi-VN") ?? "";
@@ -77,7 +77,9 @@ export const ConversationContextPanel = ({
   onCloseAutoFocus?: (event: Event) => void;
 }) => {
   const isMobile = useIsMobile();
+  const translate = useTranslate();
   const candidateInfoItems = useMemo<CandidateInfoItem[]>(() => {
+    const noData = translate("crm.common.no_data");
     const notes = lead?.notes;
     const noteItems = formatCandidateNotes(notes);
     const dateOfBirth = lead?.birth_year
@@ -111,91 +113,98 @@ export const ConversationContextPanel = ({
     return [
       {
         key: "name",
-        label: "Họ tên",
-        value: display(lead?.name),
+        label: translate("leads.fields.name"),
+        value: display(lead?.name, noData),
         complete: hasMeaningfulValue(lead?.name),
         Icon: UserRound,
       },
       {
         key: "phone",
-        label: "Số điện thoại",
-        value: display(lead?.phone),
+        label: translate("leads.fields.phone"),
+        value: display(lead?.phone, noData),
         complete: hasMeaningfulValue(lead?.phone),
         Icon: Phone,
       },
       {
         key: "birth",
-        label: "Ngày sinh / tuổi",
-        value: display(dateOfBirth),
+        label: translate("leads.fields.date_of_birth"),
+        value: display(dateOfBirth, noData),
         complete: Boolean(dateOfBirth),
         Icon: CalendarDays,
       },
       {
         key: "citizen-id",
-        label: "CCCD",
-        value: hasCitizenId ? "Đã ghi trong ghi chú" : "Cần hỏi thêm",
+        label: translate("leads.fields.citizen_id"),
+        value: hasCitizenId
+          ? translate("leads.recorded_in_notes")
+          : translate("leads.needs_follow_up"),
         complete: hasCitizenId,
         Icon: FileBadge,
       },
       {
         key: "experience",
-        label: "Kinh nghiệm",
-        value: display(lead?.years_experience),
+        label: translate("leads.fields.experience"),
+        value: display(lead?.years_experience, noData),
         complete: hasMeaningfulValue(lead?.years_experience),
         Icon: FileBadge,
       },
       {
         key: "expectation",
-        label: "Mong muốn",
-        value: display(lead?.desired_job),
+        label: translate("leads.fields.expectation"),
+        value: display(lead?.desired_job, noData),
         complete: hasMeaningfulValue(lead?.desired_job),
         Icon: Handshake,
       },
       {
         key: "salary",
-        label: "Mức lương",
-        value: display(lead?.expected_salary),
+        label: translate("leads.fields.salary"),
+        value: display(lead?.expected_salary, noData),
         complete: hasMeaningfulValue(lead?.expected_salary),
         Icon: CircleDollarSign,
       },
       {
         key: "housing",
-        label: "Chỗ ở",
-        value: hasHousing ? "Đã ghi trong ghi chú" : "Cần hỏi thêm",
+        label: translate("leads.fields.housing"),
+        value: hasHousing
+          ? translate("leads.recorded_in_notes")
+          : translate("leads.needs_follow_up"),
         complete: hasHousing,
         Icon: Home,
       },
       {
         key: "pickup",
-        label: "Xe đưa đón",
-        value: hasPickup ? "Đã ghi trong ghi chú" : "Cần hỏi thêm",
+        label: translate("leads.fields.pickup"),
+        value: hasPickup
+          ? translate("leads.recorded_in_notes")
+          : translate("leads.needs_follow_up"),
         complete: hasPickup,
         Icon: BusFront,
       },
       {
         key: "area",
-        label: "Khu vực",
-        value: display(area),
+        label: translate("leads.fields.area"),
+        value: display(area, noData),
         complete: Boolean(area),
         Icon: MapPin,
       },
       {
         key: "address",
-        label: "Địa chỉ hiện tại",
-        value: display(lead?.address),
+        label: translate("leads.fields.address"),
+        value: display(lead?.address, noData),
         complete: hasMeaningfulValue(lead?.address),
         Icon: Home,
       },
       {
         key: "notes",
-        label: "Ghi chú",
-        value: noteItems.length > 0 ? noteItems.join("\n") : display(null),
+        label: translate("leads.fields.notes"),
+        value:
+          noteItems.length > 0 ? noteItems.join("\n") : display(null, noData),
         noteItems: noteItems.length > 0 ? noteItems : undefined,
         complete: noteItems.length > 0,
         Icon: NotepadText,
       },
     ];
-  }, [lead]);
+  }, [lead, translate]);
   const completedInfoCount = candidateInfoItems.filter(
     (item) => item.complete,
   ).length;
@@ -227,7 +236,9 @@ export const ConversationContextPanel = ({
           aria-describedby={undefined}
           onCloseAutoFocus={onCloseAutoFocus}
         >
-          <SheetTitle className="sr-only">Thông tin ứng viên</SheetTitle>
+          <SheetTitle className="sr-only">
+            {translate("leads.profile_title")}
+          </SheetTitle>
           <div className="inbox-bg-container conversation-context-sheet-body">
             {content}
           </div>
@@ -240,7 +251,7 @@ export const ConversationContextPanel = ({
     <aside
       id="conversation-context-panel"
       className={`panel right-panel ${open ? "context-open" : ""} ${persistent ? "context-persistent" : ""}`}
-      aria-label="Thông tin ứng viên"
+      aria-label={translate("leads.profile_title")}
       aria-hidden={!open}
     >
       {content}
@@ -276,6 +287,7 @@ const CandidateContextBody = ({
     version: number;
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const translate = useTranslate();
 
   const cancelEditing = () => {
     if (isSaving) return;
@@ -309,8 +321,8 @@ const CandidateContextBody = ({
         <div className="profile-title">
           <UserRound className="icon" aria-hidden="true" />
           <span className="profile-title-copy">
-            <span>{display(lead?.name, "Ứng viên")}</span>
-            <small>{display(lead?.phone, "Chưa có số điện thoại")}</small>
+            <span>{display(lead?.name, translate("leads.fallback_name"))}</span>
+            <small>{display(lead?.phone, translate("leads.no_phone"))}</small>
           </span>
         </div>
         {showClose ? (
@@ -350,7 +362,7 @@ const CandidateContextBody = ({
         </section>
         <section className="context-card tt-card tt-card-sm">
           <div className="section-head">
-            <h3>Thông tin ứng viên</h3>
+            <h3>{translate("leads.profile_title")}</h3>
             {canEdit &&
             lead &&
             lead.version != null &&
@@ -388,7 +400,9 @@ const CandidateContextBody = ({
                   const inputId = `candidate-profile-${field.key}`;
                   return (
                     <div key={field.key} className="grid min-w-0 gap-1.5">
-                      <Label htmlFor={inputId}>{field.label}</Label>
+                      <Label htmlFor={inputId}>
+                        {translate(field.labelKey)}
+                      </Label>
                       <Input
                         id={inputId}
                         value={editSession.draft[field.key]}
@@ -447,7 +461,7 @@ const CandidateContextBody = ({
                   onClick={cancelEditing}
                 >
                   <X className="size-4" aria-hidden="true" />
-                  Hủy
+                  {translate("ra.action.cancel")}
                 </Button>
                 <Button type="submit" disabled={isSaving}>
                   {isSaving ? (
@@ -458,7 +472,9 @@ const CandidateContextBody = ({
                   ) : (
                     <Save className="size-4" aria-hidden="true" />
                   )}
-                  {isSaving ? "Đang lưu…" : "Lưu thay đổi"}
+                  {isSaving
+                    ? translate("crm.common.saving")
+                    : translate("crm.common.save_changes")}
                 </Button>
               </div>
             </form>

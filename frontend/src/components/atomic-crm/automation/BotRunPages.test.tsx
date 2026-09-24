@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   ListBase: ({ children }: { children: ReactNode }) => children,
   useDataProvider: () => ({}),
   useGetIdentity: () => ({ identity: { id: "admin-1" } }),
@@ -30,6 +32,7 @@ vi.mock("@/components/admin/list-pagination", () => ({
 
 import { BotRunListContent } from "./BotRunList";
 import { BotRunShowContent } from "./BotRunShow";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 const run: BotRun = {
   id: 42,

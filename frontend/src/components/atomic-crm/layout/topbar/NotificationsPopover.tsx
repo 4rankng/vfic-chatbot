@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bell, Reply, RefreshCw, AlertCircle } from "lucide-react";
 import { Link } from "react-router";
+import { useTranslate } from "ra-core";
 
 import {
   Popover,
@@ -42,6 +43,7 @@ export type NotificationsPopoverProps = {
 export const NotificationsPopover = ({ count }: NotificationsPopoverProps) => {
   const [open, setOpen] = useState(false);
   const { rows, total, isLoading, isError, refetch } = useNeedsAttention(open);
+  const translate = useTranslate();
 
   const triggerLabel =
     count > 0 ? `${count} cuộc trò chuyện cần chú ý` : "Không có thông báo mới";
@@ -107,7 +109,7 @@ export const NotificationsPopover = ({ count }: NotificationsPopoverProps) => {
                 onClick={() => void refetch()}
               >
                 <RefreshCw aria-hidden="true" />
-                Thử lại
+                {translate("crm.common.retry")}
               </button>
             </div>
           ) : isLoading ? (

@@ -12,7 +12,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useGetList, useNotify } from "ra-core";
+import { useGetList, useNotify, useTranslate } from "ra-core";
 import { ApiError } from "@/lib/apiClient";
 
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ const EMPTY_CREDENTIALS_FORM: CredentialsFormState = {
 export const FacebookMessengerIntegrationPage = () => {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const translate = useTranslate();
   const [pendingFlowId, setPendingFlowId] = useState<string | null>(null);
   const [flowIdDraft, setFlowIdDraft] = useState("");
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
@@ -408,7 +409,9 @@ export const FacebookMessengerIntegrationPage = () => {
               disabled={saveCredentials.isPending}
               aria-busy={saveCredentials.isPending}
             >
-              {saveCredentials.isPending ? "Đang lưu…" : "Lưu thông tin"}
+              {saveCredentials.isPending
+                ? translate("crm.common.saving")
+                : "Lưu thông tin"}
             </Button>
           </div>
         </div>

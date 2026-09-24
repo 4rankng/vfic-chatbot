@@ -1,5 +1,5 @@
 import { MessageCircle, PlugZap, Wifi } from "lucide-react";
-import { useNotify } from "ra-core";
+import { useNotify, useTranslate } from "ra-core";
 
 import { Button } from "@/components/ui/button";
 
@@ -49,6 +49,7 @@ export const ZaloChannelSection = ({
   onTestChannel: (scope: ZaloChannelScope) => void;
 }) => {
   const notify = useNotify();
+  const translate = useTranslate();
   const webhookHealth = describeOaSignatureHealth(
     settings?.zalo_oa_webhook_signature ?? null,
   );
@@ -111,7 +112,9 @@ export const ZaloChannelSection = ({
               aria-busy={channelTesting.bot}
             >
               <Wifi className="size-4" />
-              {channelTesting.bot ? "Đang kiểm tra" : "Lưu & kiểm tra"}
+              {channelTesting.bot
+                ? translate("crm.common.testing")
+                : "Lưu & kiểm tra"}
             </Button>
           </div>
         </SettingsGroup>
@@ -182,7 +185,9 @@ export const ZaloChannelSection = ({
                 aria-busy={channelTesting.oa}
               >
                 <Wifi className="size-4" />
-                {channelTesting.oa ? "Đang kiểm tra" : "Lưu & kiểm tra"}
+                {channelTesting.oa
+                  ? translate("crm.common.testing")
+                  : "Lưu & kiểm tra"}
               </Button>
             </div>
             <details className="settings-advanced settings-webhook-health tt-collapse tt-collapse-arrow">

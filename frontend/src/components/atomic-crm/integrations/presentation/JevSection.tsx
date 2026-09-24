@@ -1,4 +1,4 @@
-import { useNotify } from "ra-core";
+import { useNotify, useTranslate } from "ra-core";
 
 import { Button } from "@/components/ui/button";
 
@@ -31,6 +31,7 @@ export const JevSection = ({
   statusState: SettingsStatusState;
 }) => {
   const notify = useNotify();
+  const translate = useTranslate();
   const descriptor = PROVIDER_PANELS_BY_ID.jev;
   const JevIcon = descriptor.icon;
   const ready = descriptor.readEnabled(bundle) !== null;
@@ -104,7 +105,9 @@ export const JevSection = ({
               disabled={panels.providerTesting.jev || !ready}
               aria-busy={panels.providerTesting.jev}
             >
-              {panels.providerTesting.jev ? "Đang kiểm tra" : "Kiểm tra"}
+              {panels.providerTesting.jev
+                ? translate("crm.common.testing")
+                : translate("crm.common.test")}
             </Button>
           </div>
         </SettingsGroup>
@@ -125,11 +128,13 @@ export const JevSection = ({
             !panels.dirty.standalone || panels.providerSaving.standalone
           }
         >
-          {panels.providerSaving.standalone ? "Đang lưu" : "Lưu thay đổi"}
+          {panels.providerSaving.standalone
+            ? translate("crm.common.saving")
+            : translate("crm.common.save_changes")}
         </Button>
         <span className="settings-llm-footer-note">
           {panels.dirty.standalone
-            ? "Có thay đổi chưa lưu."
+            ? translate("crm.common.unsaved_changes")
             : "Token được mã hoá, không hiển thị lại."}
         </span>
       </div>

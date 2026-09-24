@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useDataProvider, useGetIdentity } from "ra-core";
+import { useDataProvider, useGetIdentity, useTranslate } from "ra-core";
 import {
   AlertTriangle,
   Brain,
@@ -200,6 +200,7 @@ const BotRunTraceDetailContent = ({
   expanded: boolean;
 }) => {
   const dataProvider = useDataProvider<CrmDataProvider>();
+  const translate = useTranslate();
   const detailQuery = useQuery<BotRunTraceDetail>({
     queryKey: [...DECISION_TRACE_QUERY_KEY, identityId, "run", run.id],
     queryFn: () => dataProvider.getBotRunTrace(run.id),
@@ -237,7 +238,7 @@ const BotRunTraceDetailContent = ({
           onClick={() => void detailQuery.refetch()}
         >
           <RefreshCw className="size-4" aria-hidden="true" />
-          Thử lại
+          {translate("crm.common.retry")}
         </Button>
       </TraceStatus>
     );
@@ -281,6 +282,7 @@ export const DecisionTracePanel = ({
   const queryClient = useQueryClient();
   const { identity } = useGetIdentity();
   const identityId = identity?.id ? String(identity.id) : "";
+  const translate = useTranslate();
   const summariesQuery = useQuery({
     queryKey: [
       ...DECISION_TRACE_QUERY_KEY,
@@ -376,7 +378,7 @@ export const DecisionTracePanel = ({
                 onClick={() => void summariesQuery.refetch()}
               >
                 <RefreshCw className="size-4" aria-hidden="true" />
-                Thử lại
+                {translate("crm.common.retry")}
               </Button>
             </TraceStatus>
           ) : runs.length === 0 ? (

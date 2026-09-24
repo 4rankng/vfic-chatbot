@@ -21,28 +21,34 @@ export type CandidateProfileDraft = {
 
 export const candidateProfileFields: Array<{
   key: Exclude<keyof CandidateProfileUpdate, "notes">;
-  label: string;
+  labelKey: string;
   inputMode?: "numeric" | "tel";
   min?: number;
   max?: number;
 }> = [
-  { key: "name", label: "Họ tên" },
-  { key: "phone", label: "Số điện thoại", inputMode: "tel" },
+  { key: "name", labelKey: "leads.fields.name" },
+  { key: "phone", labelKey: "leads.fields.phone", inputMode: "tel" },
   {
     key: "birth_year",
-    label: "Năm sinh",
+    labelKey: "leads.fields.birth_year",
     inputMode: "numeric",
     min: 1900,
     max: new Date().getFullYear(),
   },
-  { key: "age", label: "Tuổi", inputMode: "numeric", min: 15, max: 80 },
-  { key: "gender", label: "Giới tính" },
-  { key: "region", label: "Khu vực muốn làm" },
-  { key: "living_area", label: "Khu vực đang sống" },
-  { key: "address", label: "Địa chỉ hiện tại" },
-  { key: "desired_job", label: "Công việc mong muốn" },
-  { key: "years_experience", label: "Kinh nghiệm" },
-  { key: "expected_salary", label: "Mức lương mong muốn" },
+  {
+    key: "age",
+    labelKey: "leads.fields.age",
+    inputMode: "numeric",
+    min: 15,
+    max: 80,
+  },
+  { key: "gender", labelKey: "leads.fields.gender" },
+  { key: "region", labelKey: "leads.fields.region" },
+  { key: "living_area", labelKey: "leads.fields.living_area" },
+  { key: "address", labelKey: "leads.fields.address" },
+  { key: "desired_job", labelKey: "leads.fields.desired_job" },
+  { key: "years_experience", labelKey: "leads.fields.experience" },
+  { key: "expected_salary", labelKey: "leads.fields.expected_salary" },
 ];
 
 const nullableText = (value: unknown): string | null => {

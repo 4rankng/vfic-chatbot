@@ -11,7 +11,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNotify } from "ra-core";
+import { useNotify, useTranslate } from "ra-core";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Project } from "../types";
@@ -70,6 +70,7 @@ const FacebookPageProjectsEditor = ({
   saving,
   onCommit,
 }: FacebookPageProjectsEditorProps) => {
+  const translate = useTranslate();
   const [draft, setDraft] = useState<string[]>(assignedProjectIds);
   const lastServerKeyRef = useRef(assignedProjectIds.join(","));
   useEffect(() => {
@@ -107,7 +108,7 @@ const FacebookPageProjectsEditor = ({
           disabled={saving || !dirty}
           aria-busy={saving}
         >
-          {saving ? "Đang lưu…" : "Lưu dự án"}
+          {saving ? translate("crm.common.saving") : "Lưu dự án"}
         </Button>
       </div>
       <FacebookProjectCheckboxList

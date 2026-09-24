@@ -6,6 +6,7 @@ import "@/index.css";
 import "../conversations/inbox.css";
 import "../integrations/settings.css";
 import "../layout/mobile-workspace.css";
+import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
 
 describe("PersonaList mobile layout", () => {
   afterEach(async () => {
@@ -18,34 +19,36 @@ describe("PersonaList mobile layout", () => {
     await page.viewport(390, 844);
 
     const screen = await render(
-      <div className="workspace-frame">
-        <main className="workspace-frame-content tailkit-workspace-content">
-          <div className="settings-workspace-content">
-            <section className="settings-embedded-resource">
-              <div className="persona-workspace-content">
-                <div
-                  style={{
-                    display: "flex",
-                    height: "1800px",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  Nội dung Agent dài
-                  <span data-testid="persona-content-end">
-                    Kết thúc nội dung Agent
-                  </span>
+      <TestMessages>
+        <div className="workspace-frame">
+          <main className="workspace-frame-content tailkit-workspace-content">
+            <div className="settings-workspace-content">
+              <section className="settings-embedded-resource">
+                <div className="persona-workspace-content">
+                  <div
+                    style={{
+                      display: "flex",
+                      height: "1800px",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    Nội dung Agent dài
+                    <span data-testid="persona-content-end">
+                      Kết thúc nội dung Agent
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </section>
-          </div>
-        </main>
-        <nav className="workspace-navigation-mobile">
-          <div className="workspace-navigation-items">
-            <span>Điều hướng</span>
-          </div>
-        </nav>
-      </div>,
+              </section>
+            </div>
+          </main>
+          <nav className="workspace-navigation-mobile">
+            <div className="workspace-navigation-items">
+              <span>Điều hướng</span>
+            </div>
+          </nav>
+        </div>
+      </TestMessages>,
     );
 
     const content = screen.container.querySelector(

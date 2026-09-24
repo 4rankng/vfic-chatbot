@@ -14,6 +14,8 @@ vi.mock("./knowledge-service", () => ({
 }));
 
 vi.mock("ra-core", () => ({
+  // The component under test reads its labels from the Vietnamese catalog.
+  useTranslate: () => testI18nProvider.translate,
   useNotify: () => mocks.notify,
   useRefresh: () => mocks.refresh,
 }));
@@ -23,6 +25,7 @@ vi.mock("./ProjectPicker", () => ({
 }));
 
 import { KnowledgeUpload } from "./KnowledgeUpload";
+import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 describe("KnowledgeUpload", () => {
   it("stages pasted recruitment knowledge in a KB release", async () => {

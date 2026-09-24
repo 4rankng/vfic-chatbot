@@ -1,4 +1,10 @@
-import { CreateBase, useDataProvider, useNotify, useRedirect } from "ra-core";
+import {
+  CreateBase,
+  useDataProvider,
+  useNotify,
+  useRedirect,
+  useTranslate,
+} from "ra-core";
 import { useNavigate } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +14,7 @@ import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
 
 export const PersonaCreate = () => {
   const notify = useNotify();
+  const translate = useTranslate();
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const navigate = useNavigate();
@@ -58,7 +65,7 @@ export const PersonaCreate = () => {
                 knowledge_base_id: "",
                 followup_rules: undefined,
               }}
-              submitLabel="Tạo Agent"
+              submitLabel={translate("personas.create_agent")}
               onSubmit={onSubmit}
               onImported={() => redirect("/personas")}
             />
