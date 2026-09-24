@@ -206,7 +206,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0054_channel_account_projects` (08 Sep 2026).
+- **HEAD:** `0055_memories_match_halfvec` (24 Sep 2026).
 - **Baseline `0001`** is ~58 KB of raw `op.execute` SQL; later revisions are
   normal Alembic. `app/models/` mirrors schema but does **not** generate
   migrations.

@@ -398,6 +398,10 @@ async def test_downgrade_restores_zalo_only_state_when_no_messenger_rows(
     finally:
         await engine.dispose()
 
+    # Restore head: this session database is shared by every later test, and
+    # leaving it at 0046 makes every test that expects the current schema fail.
+    _alembic_strict(integration_database, "upgrade", "head")
+
 
 async def test_downgrade_fails_closed_when_messenger_rows_present(
     integration_database: IntegrationDatabase,
@@ -429,3 +433,8 @@ async def test_downgrade_fails_closed_when_messenger_rows_present(
     assert "REFUSE 0047 downgrade" in combined or "non-Zalo rows present" in combined, (
         f"downgrade error must explain the refusal; got:\n{combined}"
     )
+
+    # The refusal is expected, but it still ran the 0047..head downgrade chain
+    # up to the point it refused: put the shared session database back at head
+    # so the next test sees the current schema.
+    _alembic_strict(integration_database, "upgrade", "head")
