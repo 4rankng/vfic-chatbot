@@ -6,7 +6,9 @@
 // reconnect gap-fill, optimistic insert), not holding arrays.
 //
 // Rocket.Chat pattern: store = Map<id, msg>, sorted array derived at the
-// selector boundary, optimistic temps tracked for sweep-on-echo.
+// selector boundary, optimistic temps tracked for sweep-on-echo. The cache is
+// LRU-bounded: opening a conversation evicts the least recently used one past
+// MAX_CACHED_CONVERSATIONS (see touchConversation in the store).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Message } from "../../types";
@@ -66,6 +68,7 @@ export const useConversationRealtime = (conversationId?: string) => {
     setLoadingMore,
     setInitialError,
     setHistoryError,
+    touchConversation,
   } = getConversationMessageState().getState();
   const messages = useConversationMessages(conversationId);
   const flags = useConversationFlags(conversationId);
@@ -95,13 +98,22 @@ export const useConversationRealtime = (conversationId?: string) => {
     // cached (e.g. returning from A→B→A), setMessages below will refresh them;
     // but we mark loading so the UI shows a spinner briefly only if the cache
     // is empty. To avoid wiping a warm cache on rapid switches, only reset when
-    // the conversation has no cached messages yet.
+    // the conversation has no cached messages yet — which is also the case when
+    // the conversation was evicted by the cache bound.
     const existing = getConversationMessageState()
       .getState()
       .conversations.get(activeConversationId);
     if (!existing || existing.byId.size === 0) {
       resetMessages(activeConversationId);
     }
+
+    // Bound the store: mark this conversation most recently used and evict the
+    // least recently used conversations past MAX_CACHED_CONVERSATIONS. Runs
+    // after the reset above so a freshly opened conversation is in the cache
+    // (and therefore in the recency order) before the bound is enforced; the
+    // active conversation is never a victim, so its in-flight optimistic
+    // messages survive the pass.
+    touchConversation(activeConversationId);
 
     let cancelled = false;
     const initialFetchAbort = new AbortController();
@@ -230,6 +242,7 @@ export const useConversationRealtime = (conversationId?: string) => {
     resetMessages,
     setMessages,
     setInitialError,
+    touchConversation,
     upsertMessages,
     initialRetry,
   ]);

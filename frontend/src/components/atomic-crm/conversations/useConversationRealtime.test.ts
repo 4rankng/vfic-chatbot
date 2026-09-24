@@ -29,10 +29,14 @@ import {
 import { useMessageStore } from "./infrastructure/message-store";
 import {
   bindConversationApplication,
+  getConversationMessageState,
   type ConversationMessageStatePort,
 } from "./application/conversation-runtime";
 import type { ConversationMessageRepository } from "./application/ports";
-import { conversationMessageStatePort } from "./infrastructure/message-store";
+import {
+  conversationMessageStatePort,
+  MAX_CACHED_CONVERSATIONS,
+} from "./infrastructure/message-store";
 
 const msg = (id: number, conversationId = "c1"): Message => ({
   id: String(id),
@@ -566,5 +570,99 @@ describe("useConversationRealtime", () => {
       "conv-c message 30",
       "conv-c message 31",
     ]);
+  });
+
+  it("evicts the least recently used conversation once the cache bound is exceeded", async () => {
+    mockChatRepository.getConversationMessages.mockImplementation(
+      (conversationId: string) =>
+        Promise.resolve({
+          messages: [msg(1, conversationId)],
+          hasMore: false,
+        }),
+    );
+
+    const hook = await renderHook(
+      (props?: { conversationId: string }) =>
+        useConversationRealtime(props?.conversationId),
+      { initialProps: { conversationId: "conv-0" } },
+    );
+
+    for (let index = 1; index <= MAX_CACHED_CONVERSATIONS; index += 1) {
+      const conversationId = `conv-${index}`;
+      await hook.rerender({ conversationId });
+      await vi.waitFor(() => {
+        expect(
+          useMessageStore.getState().conversations.get(conversationId)
+            ?.isLoading,
+        ).toBe(false);
+      });
+    }
+
+    const cachedIds = Array.from(
+      useMessageStore.getState().conversations.keys(),
+    );
+    expect(cachedIds).toHaveLength(MAX_CACHED_CONVERSATIONS);
+    expect(cachedIds).not.toContain("conv-0");
+    expect(cachedIds.at(-1)).toBe(`conv-${MAX_CACHED_CONVERSATIONS}`);
+
+    // The evicted conversation is cold again, so returning to it refetches.
+    const callsBeforeReopen =
+      mockChatRepository.getConversationMessages.mock.calls.length;
+    await hook.rerender({ conversationId: "conv-0" });
+    expect(mockChatRepository.getConversationMessages.mock.calls.length).toBe(
+      callsBeforeReopen + 1,
+    );
+  });
+});
+
+describe("message store cache bound", () => {
+  const seedConversation = (conversationId: string) => {
+    useMessageStore.getState().reset(conversationId);
+    useMessageStore
+      .getState()
+      .setMessages(conversationId, [msg(1, conversationId)], false);
+  };
+
+  it("keeps the conversation being opened — with its in-flight optimistic message — and clears the least recently used one", () => {
+    for (let index = 0; index <= MAX_CACHED_CONVERSATIONS; index += 1) {
+      seedConversation(`c${index}`);
+    }
+    const active = "c0"; // seeded first, so it is the least recently used
+    const optimisticId = "optimistic-in-flight";
+    useMessageStore.getState().addPendingOptimistic(active, optimisticId);
+    useMessageStore
+      .getState()
+      .upsert(active, [{ ...msg(99, active), id: optimisticId }]);
+
+    useMessageStore.getState().touchConversation(active);
+
+    const state = useMessageStore.getState();
+    expect(Array.from(state.conversations.keys())).toHaveLength(
+      MAX_CACHED_CONVERSATIONS,
+    );
+    expect(state.conversations.get(active)?.byId.has(optimisticId)).toBe(true);
+    expect(state.pendingOptimistic.get(active)?.has(optimisticId)).toBe(true);
+    // The victim is the entry that was least recently used, not the active one.
+    expect(state.conversations.has("c1")).toBe(false);
+    expect(state.pendingOptimistic.has("c1")).toBe(false);
+  });
+
+  it("notifies a subscriber only for the conversation slice it selected", () => {
+    seedConversation("c-a");
+    seedConversation("c-b");
+    const listener = vi.fn();
+    const unsubscribe = getConversationMessageState().subscribeTo(
+      (state) => state.conversations.get("c-b")?.sortedCache,
+      listener,
+    );
+
+    useMessageStore.getState().reset("c-a");
+    useMessageStore.getState().setLoading("c-b", true);
+    expect(listener).not.toHaveBeenCalled();
+
+    useMessageStore.getState().upsert("c-b", [msg(2, "c-b")]);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
   });
 });

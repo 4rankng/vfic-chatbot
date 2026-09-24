@@ -36,13 +36,21 @@ export type ConversationMessageStore = {
   setLoadingMore(convId: string, value: boolean): void;
   setInitialError(convId: string, value: string | null): void;
   setHistoryError(convId: string, value: string | null): void;
+  /** Mark a conversation most recently used and `clear` the entries past the
+   * store's cache bound. Called whenever a conversation is opened. */
+  touchConversation(convId: string): void;
   clear(convId: string): void;
   resetAll(): void;
 };
 
 export interface ConversationMessageStatePort {
   getState(): ConversationMessageStore;
-  subscribe(listener: () => void): () => void;
+  /** Subscribe to a slice of the store. The store itself selects, so a change
+   * to one conversation never notifies another conversation's subscribers. */
+  subscribeTo<T>(
+    selector: (state: ConversationMessageStore) => T,
+    listener: (value: T, previous: T) => void,
+  ): () => void;
 }
 
 let repository: ConversationMessageRepository | null = null;
