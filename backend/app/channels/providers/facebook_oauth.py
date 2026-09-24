@@ -34,17 +34,18 @@ _FACEBOOK_OAUTH_DIALOG_ORIGIN = "https://www.facebook.com"
 
 # Required permissions for Messenger Platform (revalidated 2026-07-17).
 #
-# ``pages_user_gender`` backs the Vietnamese address form (anh / chị). It is a
-# separate App Review permission on top of the Business Asset User Profile
-# Access feature that the User Profile API itself requires, and it must also be
-# granted per-Page under Page Settings > Advanced Messaging > "Info About
-# People". Until all three are in place the API omits the field and callers
-# fall back to the neutral "anh/chị".
+# ``pages_user_gender`` — the Messenger User Profile API field that backs the
+# Vietnamese address form (anh / chị) — is deliberately NOT requested here. It
+# needs the Business Asset User Profile Access feature plus App Review, and
+# until the app has both, Facebook rejects the WHOLE dialog with
+# "Invalid Scope: pages_user_gender", which blocks Page linking entirely.
+# Candidate gender is now inferred per turn by Jev (graph/decisions.py), so the
+# address form no longer depends on this scope. Re-add it once the app is
+# approved for Business Asset User Profile Access.
 MESSENGER_PERMISSIONS = (
     "pages_show_list",
     "pages_manage_metadata",
     "pages_messaging",
-    "pages_user_gender",
     "public_profile",
 )
 

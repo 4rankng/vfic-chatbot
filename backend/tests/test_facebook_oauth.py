@@ -102,6 +102,11 @@ def test_oauth_client_permission_set_matches_messenger_requirements():
         "pages_messaging",
         "public_profile",
     }
+    # pages_user_gender is intentionally NOT requested: without the Business
+    # Asset User Profile Access feature Facebook rejects the whole dialog with
+    # "Invalid Scope: pages_user_gender", blocking Page linking. Gender is
+    # inferred per turn by Jev instead.
+    assert "pages_user_gender" not in MESSENGER_PERMISSIONS
 
 
 def test_build_authorization_url_includes_state_scope_and_config():
