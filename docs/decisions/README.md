@@ -65,5 +65,5 @@ Write an ADR when you make a decision that:
 
 **Do not** write an ADR for:
 - Feature implementations (use `plans/`).
-- Bug fixes (use `lessons/`).
+- Bug fixes (use `docs/journals/`).
 - Code style preferences (use `standards/coding-style.md`).

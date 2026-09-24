@@ -1,51 +1,48 @@
-# Ting Ting chatbot (VFIC recruitment platform)
+# TingHire
 
-Candidate conversations over Zalo (Bot Platform + Official Account) and
-Facebook Messenger, with an admin/recruiter console: leads, knowledge base,
-personas, bot runs, dashboards. Answers come from a LangGraph agent with
-retrieval grounding and provider failover.
+TingHire (formerly Ting Ting / VFIC miniCRM) is a Vietnamese recruiting
+chatbot + recruiter console built on Zalo. Candidates chat with an LLM agent
+about job openings; recruiters take over conversations and manage the job
+board from a web console. Production: `bot.tingting.vip` (DigitalOcean,
+2 vCPU / 4 GB).
 
-## One-command bootstrap
+## Repository layout
+
+- `backend/` — Python 3.12 / FastAPI, LangGraph-style bot-turn pipeline,
+  PostgreSQL 16 + pgvector, Redis, RQ workers. See [`TECH.md`](TECH.md) for
+  the stack map and [`docs/system-architecture.md`](docs/system-architecture.md)
+  for the request lifecycle and queue model.
+- `frontend/` — React 19 + ra-core (react-admin headless) + Vite +
+  TypeScript strict, Tailwind v4 + shadcn/ui. Product code lives in
+  `frontend/src/components/atomic-crm/`.
+- `docs/` — architecture, standards, deployment guide, troubleshooting.
+- `standards/` — coding style, security/performance baselines, and the
+  agent completion checklist.
+- `plans/reports/` — per-change completion records.
+- `kanban/` — the team's ticket board.
+
+## Quickstart (local dev)
+
+Prerequisites: Python ≥ 3.12,< 3.13 and Node 22 (see `frontend/.nvmrc`).
 
 ```bash
-make dev
+make bootstrap   # one-time: backend venv + frontend install
+make dev         # Postgres + Redis + Adminer + backend + workers + Zalo mock + frontend
+make seed        # load Vietnamese dev fixture data (make dev does NOT seed)
 ```
 
-`make dev` first runs `make bootstrap`, which is idempotent: it creates
-`backend/.env` from `backend/.env.example` (first run only), creates
-`backend/.venv` and installs `backend[dev]` into it, and runs `npm ci` in
-`frontend/` if `node_modules` is missing. Python 3.12 is what production and CI
-run (`backend/.python-version`); the bootstrap warns if your default `python3`
-differs.
+Then open `http://localhost:5173` and log in with `admin@vfic.dev` /
+`admin123` (dev seed credentials).
 
-First run also seeds the dev database (`backend/scripts/seed_dev.py` via
-`make seed`). Console login after seeding: `admin@vfic.dev` / `admin123`.
+## Verification and deployment
 
-## Layout
+- `make release-check` — the pre-deploy gate (lint, tests, integration
+  suite, frontend build + Playwright, golden correctness check).
+- `make deploy` — blue/green cutover, smoke-gated; `make rollback` flips
+  back in ~1s. Read [`docs/deployment-guide.md`](docs/deployment-guide.md)
+  in full before any deploy.
 
-| Path | What lives there |
-|---|---|
-| `backend/app/` | FastAPI app: `api/` (transport) → `services/` (logic) → `models/` (hand-written Alembic schema), `graph/` behind `graph/ports.py` |
-| `backend/alembic/` | 56 migrations; models never generate them |
-| `frontend/src/` | React + Vite console (`components/atomic-crm/`) |
-| `docs/` | Architecture, deployment, testing, runbooks |
-| `kanban/` | Tech-debt board: four column folders, one card per file |
-| `scripts/kanban/` | Board generator + ticket data (`python3 scripts/kanban/build.py`) |
-| `standards/` | Review/definition-of-done checklists, completion checklist |
+## For coding agents
 
-## Commands
-
-- `make dev` — local stack (backend :8000, frontend :5173, Postgres/Redis/Adminer in Docker)
-- `make seed` — seed dev data; `make adminer` — DB UI
-- `make release-check` — the gate every release must pass (clean tree, lockfile, single alembic head, both test lanes, frontend build + e2e, golden pass rate)
-- `make deploy` / `make rollback` — blue/green, smoke-gated, reversible
-- `make backup` / `make backup-full` / `make restore` / `make restore-prod` — DB and full-droplet backup/restore (`docs/DROPLET-BACKUP-RESTORE.md` is the runbook)
-- `cd backend && .venv/bin/pytest -m "not integration"` — backend unit lane
-
-## Docs worth reading first
-
-- `TECH.md` — system map and stack
-- `docs/deployment-guide.md` — deploy, knobs, rollback (read it in full before deploying)
-- `docs/testing.md` — the lanes and what each one is responsible for
-- `docs/codebase-summary.md` — repository map
-- `AGENTS.md` — the contract coding agents work under
+Read [`AGENTS.md`](AGENTS.md) first — it is the always-loaded constitution
+with the non-negotiable boundaries, approval gates, and the scoped workflow.
