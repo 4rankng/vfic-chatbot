@@ -282,7 +282,7 @@ TICKETS = [
         evidence=[
             "`backend/app/graph/clients.py:142-160` `_record_llm_latency` (sync pipeline), called at `:1103` and `:1371` inside the async agent loop; `:163-175` `_record_llm_429`.",
             "`backend/app/graph/usage.py:113-147` `record_token_usage` — sync pipeline per LLM response.",
-            "`backend/app/graph/llm_semaphore.py:61-105` `_ensure_tokens` (sync `llen`/`rpush`) from `__aenter__`, and `:143-156` `__aexit__` sync `rpush`+`llen` — while acquire at `:124-126` correctly uses `run_in_executor`. The class is internally inconsistent.",
+            "`backend/app/graph/llm_semaphore.py:61-104` `_ensure_tokens` (sync `llen`/`rpush`) from `__aenter__`, and `:106-125,178-181` `__aexit__` sync `rpush`+`llen` — while acquire at `:159` correctly uses `run_in_executor`. The class is internally inconsistent.",
             "Same class elsewhere: `backend/app/services/dashboard/service.py:274-280,304-331` (sync Redis from `async def`), `backend/app/workers/chatbot_worker.py:508-523` (queue-depth read per turn).",
             "Correct pattern already in-repo: `backend/app/core/ops_health.py:12-13`, `backend/app/main.py:270-280`.",
         ],
@@ -297,7 +297,7 @@ TICKETS = [
             "Move the counters and the semaphore release onto the async client "
             "(`app/core/redis.py:get_redis()`) — they are fire-and-forget, so this is a drop-in — or "
             "wrap in `asyncio.to_thread`. Use `asyncio.to_thread` for the dashboard's sync-only reads. "
-            "Also replace the deprecated `asyncio.get_event_loop()` at `backend/app/graph/llm_semaphore.py:124-126` with "
+            "Also replace the deprecated `asyncio.get_event_loop()` at `backend/app/graph/llm_semaphore.py:159` with "
             "`asyncio.get_running_loop()`."
         ),
     ),
