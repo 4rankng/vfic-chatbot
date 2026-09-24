@@ -89,7 +89,10 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # gender so replies can address them as anh / chị:
     # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
     # -> persistence_worker.enqueue_enrich_messenger_profile -> enqueue_job.
-    "queue_producer": 41,
+    # +1: a turn that held the per-chat mutex hands the conversation to a newer
+    # inbound the ingress guard dropped, via chatbot_worker._handoff_to_newer_inbound
+    # -> enqueue_latest_unanswered_worker_message.
+    "queue_producer": 42,
     # -1: the custom provider stopped reading a stored context-window row (the
     # field left the settings UI), so resolve_custom_llm._load's `get` count
     # drops 7→6 at the same site.
@@ -99,7 +102,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "6a441fa35e5d8057b7d90bd11983129b836364458878bcb3ee9d7c6b2f4b2944"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "f312f25c9e12d8df973df61a9011e2377917c85604e8b762e12b488835586cf1"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
