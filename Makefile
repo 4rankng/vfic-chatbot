@@ -1,21 +1,39 @@
-.PHONY: dev deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod release-check
+.PHONY: dev bootstrap deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod release-check
 
-# Port shared by backend (uvicorn) and frontend (Vite) in local dev — both
-# bind to the same number. Override on the CLI, e.g. `make dev PORT=9000`.
-# The backend's `kill-port` target frees $(PORT) before binding so a stale
-# process from a previous run can never block startup.
-PORT ?= 5173
+# Ports are owned by backend/Makefile (BACKEND_PORT / FRONTEND_PORT /
+# ZALO_MOCK_PORT). This file only forwards the frontend one, so
+# `make dev PORT=9000` keeps working: backend/Makefile never read `PORT`, which
+# is why the old plumbing was dead (OPS-19). Forward all three to override:
+#   make dev BACKEND_PORT=9001 FRONTEND_PORT=9001 ZALO_MOCK_PORT=8799
+FRONTEND_PORT ?= 5173
+PORT ?= $(FRONTEND_PORT)
 
 # Local dev: frontend (vite) + backend (uvicorn --reload) on host, Postgres +
 # Redis + Adminer in docker. Delegates to backend/ (payroll pattern).
-dev:
-	@echo "=== Starting VFIC dev environment (port $(PORT)) ==="
-	$(MAKE) -C backend dev PORT=$(PORT)
+dev: bootstrap
+	@echo "=== Starting VFIC dev environment (frontend :$(PORT)) ==="
+	$(MAKE) -C backend dev FRONTEND_PORT=$(PORT)
+
+## bootstrap: one-command first run — .env, backend/.venv (Python 3.12 per
+## backend/.python-version) and frontend/node_modules. Guarded by `test -d`/`-f`,
+## so repeat runs are a no-op (OPS-18).
+bootstrap:
+	@test -f backend/.env || { echo "backend/.env: created from .env.example — set real secrets before any deploy"; cp backend/.env.example backend/.env; }
+	@if ! command -v python3.12 >/dev/null 2>&1; then \
+		echo "WARNING: python3.12 not found — falling back to $$(command -v python3)."; \
+		echo "         Production and CI run 3.12; install it (pyenv/mise) to match (OPS-13)."; \
+	fi
+	@test -d backend/.venv || { echo "Creating backend/.venv ..."; python3.12 -m venv backend/.venv 2>/dev/null || python3 -m venv backend/.venv; }
+	@backend/.venv/bin/python -m pip install --quiet --upgrade pip
+	@backend/.venv/bin/python -m pip install --quiet -e "backend/[dev]"
+	@test -d frontend/node_modules || { echo "Installing frontend deps (npm ci) ..."; cd frontend && npm ci; }
+	@echo "bootstrap complete — run 'make dev'"
 
 # Release must be committed and validated before any image is pushed or production is touched.
 release-check:
 	@test -z "$$(git status --porcelain)" || { echo "Release blocked: commit or stash all local changes first."; exit 1; }
 	@git diff --check
+	@command -v uv >/dev/null 2>&1 && (cd backend && uv lock --check) || { echo "WARNING: uv not found — skipped uv lock --check"; }
 	@cd backend && test "$$(.venv/bin/python -m alembic heads | wc -l | tr -d ' ')" = 1
 	@docker compose -f backend/docker-compose.dev.yml up -d --wait postgres redis
 	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest -m "not integration" && .venv/bin/pytest -m integration tests/integration/test_harness_smoke.py
@@ -73,57 +91,79 @@ seed:
 PROD_SERVER := bot.tingting.vip
 BACKUP_DIR  := $(HOME)/Library/CloudStorage/OneDrive-Personal/backup/vfic_db_backup
 
-## backup: Dump production PostgreSQL DB → OneDrive (timestamped .sql.gz)
+## backup: pg_dump the prod DB (custom format) and pull /opt/vfic/.env with it.
+## The .env carries INTEGRATION_SETTINGS_ENCRYPTION_KEY: without it the dump
+## alone cannot be decrypted by a restore (OPS-03). Keeps the newest $(BACKUP_KEEP).
+BACKUP_KEEP := 10
 backup:
 	@echo "=== Starting database backup from production ===" && \
 	TIMESTAMP=$$(date +%Y-%m-%d_%H%M%S) && \
-	BACKUP_FILE="vfic_pg_backup_$${TIMESTAMP}.sql" && \
-	BACKUP_FILE_GZ="vfic_pg_backup_$${TIMESTAMP}.sql.gz" && \
+	BACKUP_FILE="vfic_pg_backup_$${TIMESTAMP}.dump" && \
+	ENV_FILE="vfic_env_$${TIMESTAMP}.env" && \
 	mkdir -p "$(BACKUP_DIR)" && \
-	echo "Dumping PostgreSQL (vfic@vfic-postgres-1)..." && \
+	echo "Dumping PostgreSQL (container resolved via compose, not a hardcoded name)..." && \
 	ssh root@$(PROD_SERVER) \
-		"docker exec vfic-postgres-1 pg_dump -U vfic vfic > /tmp/$${BACKUP_FILE}" && \
-	echo "Compressing..." && \
-	ssh root@$(PROD_SERVER) "gzip /tmp/$${BACKUP_FILE}" && \
+		'cd /opt/vfic && PG=$$(docker compose ps -q postgres) && \
+		 [ -n "$$PG" ] || { echo "ERROR: compose reports no postgres container"; exit 1; } && \
+		 docker exec "$$PG" pg_dump -U vfic -Fc -Z6 > /tmp/vfic_pg.dump' && \
 	ssh root@$(PROD_SERVER) \
-		"if [ ! -s /tmp/$${BACKUP_FILE_GZ} ]; then echo 'ERROR: Backup file is empty!'; exit 1; fi" && \
+		'test -s /tmp/vfic_pg.dump || { echo "ERROR: Backup file is empty!"; exit 1; }' && \
 	echo "Downloading to local machine..." && \
-	scp root@$(PROD_SERVER):/tmp/$${BACKUP_FILE_GZ} "$(BACKUP_DIR)/$${BACKUP_FILE_GZ}" && \
-	ssh root@$(PROD_SERVER) "rm -f /tmp/$${BACKUP_FILE_GZ}" && \
+	scp root@$(PROD_SERVER):/tmp/vfic_pg.dump "$(BACKUP_DIR)/$${BACKUP_FILE}" && \
+	ssh root@$(PROD_SERVER) "rm -f /tmp/vfic_pg.dump" && \
+	echo "Fetching /opt/vfic/.env (holds the integration-credential encryption key)..." && \
+	scp root@$(PROD_SERVER):/opt/vfic/.env "$(BACKUP_DIR)/$${ENV_FILE}" && \
+	ssh root@$(PROD_SERVER) "chmod 600 /opt/vfic/.env" && \
+	if ! grep -q "^INTEGRATION_SETTINGS_ENCRYPTION_KEY=..*" "$(BACKUP_DIR)/$${ENV_FILE}"; then \
+		echo "WARNING: the backed-up .env has no INTEGRATION_SETTINGS_ENCRYPTION_KEY —"; \
+		echo "         stored integration credentials will only decrypt while JWT_SECRET stays fixed." ; \
+	fi && \
+	echo "Pruning old dumps (keeping the newest $(BACKUP_KEEP))..." && \
+	ls -1t "$(BACKUP_DIR)"/vfic_pg_backup_*.dump 2>/dev/null | tail -n +$$(($(BACKUP_KEEP) + 1)) | xargs -r rm -f && \
 	echo "Backup complete!" && \
-	echo "  Saved to: $(BACKUP_DIR)/$${BACKUP_FILE_GZ}" && \
-	echo "  Size: $$(du -h "$(BACKUP_DIR)/$${BACKUP_FILE_GZ}" | cut -f1)"
+	echo "  Dump: $(BACKUP_DIR)/$${BACKUP_FILE}" && \
+	echo "  Env:  $(BACKUP_DIR)/$${ENV_FILE}" && \
+	echo "  Size: $$(du -h "$(BACKUP_DIR)/$${BACKUP_FILE}" | cut -f1)"
 
-## restore: Restore latest backup from OneDrive to local dev DB
+## restore: restore the newest bundle into the local dev DB, failing loudly.
+## psql runs with ON_ERROR_STOP=1 so a partial load can never report success,
+## and the password reset asks first (FORCE=1 skips the prompt) (OPS-20).
 restore:
-	@echo "=== Starting DB restore ===" && \
-	echo "Ensuring local Postgres is running..." && \
-	cd backend && docker compose -f docker-compose.dev.yml up -d --wait postgres 2>/dev/null || \
-		docker compose -f docker-compose.dev.yml up -d postgres && \
-	echo "Waiting for Postgres to be ready..." && \
-	until docker exec backend-postgres-1 pg_isready -U vfic >/dev/null 2>&1; do sleep 1; done && \
-	LATEST=$$(ls -t "$(BACKUP_DIR)"/vfic_pg_backup_*.sql.gz 2>/dev/null | head -1) && \
-	if [ -z "$$LATEST" ]; then echo "ERROR: No backup files found in $(BACKUP_DIR)"; exit 1; fi && \
-	echo "Using backup: $$LATEST" && \
-	echo "Size: $$(du -h "$$LATEST" | cut -f1)" && \
-	echo "Decompressing..." && \
-	gunzip -k -f "$$LATEST" && \
-	SQL_FILE="$${LATEST%.gz}" && \
+	@set -euo pipefail && \
+	echo "=== Starting DB restore ===" && \
+	cd backend && docker compose -f docker-compose.dev.yml up -d postgres && \
+	PG="$$(docker compose -f docker-compose.dev.yml ps -q postgres)" && \
+	[ -n "$$PG" ] || { echo "ERROR: compose reports no postgres container"; exit 1; } && \
+	until docker exec "$$PG" pg_isready -U vfic >/dev/null 2>&1; do sleep 1; done && \
+	LATEST_DUMP=$$(ls -t "$(BACKUP_DIR)"/vfic_pg_backup_*.dump 2>/dev/null | head -1) && \
+	LATEST_SQL=$$(ls -t "$(BACKUP_DIR)"/vfic_pg_backup_*.sql.gz 2>/dev/null | head -1) && \
+	if [ -n "$$LATEST_DUMP" ]; then SRC="$$LATEST_DUMP"; elif [ -n "$$LATEST_SQL" ]; then SRC="$$LATEST_SQL"; else echo "ERROR: No backup found in $(BACKUP_DIR)"; exit 1; fi && \
+	echo "Using backup: $$SRC ($$(du -h "$$SRC" | cut -f1))" && \
+	TMP="$$(mktemp -d -t vfic-restore.XXXXXX)" && \
+	trap 'rm -rf "$$TMP"' EXIT && \
 	echo "Terminating active connections and recreating database..." && \
-	docker exec backend-postgres-1 psql -U vfic -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'vfic' AND pid <> pg_backend_pid();" && \
-	docker exec backend-postgres-1 psql -U vfic -d postgres -c "DROP DATABASE IF EXISTS vfic;" && \
-	docker exec backend-postgres-1 psql -U vfic -d postgres -c "CREATE DATABASE vfic;" && \
+	docker exec "$$PG" psql -U vfic -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'vfic' AND pid <> pg_backend_pid();" && \
+	docker exec "$$PG" psql -U vfic -d postgres -c "DROP DATABASE IF EXISTS vfic;" && \
+	docker exec "$$PG" psql -U vfic -d postgres -c "CREATE DATABASE vfic;" && \
 	echo "Restoring backup into local database..." && \
-	docker exec -i backend-postgres-1 psql -U vfic -d vfic < "$$SQL_FILE" && \
-	rm -f "$$SQL_FILE" && \
+	case "$$SRC" in \
+		*.dump) docker exec -i "$$PG" pg_restore -U vfic -d vfic < "$$SRC" ;; \
+		*.gz)   gunzip -c "$$SRC" > "$$TMP/dump.sql" && \
+		        docker exec -i "$$PG" psql -v ON_ERROR_STOP=1 -U vfic -d vfic < "$$TMP/dump.sql" ;; \
+	esac && \
 	echo "Running Alembic stamp (mark DB as at head)..." && \
-	.venv/bin/python -m alembic stamp head 2>/dev/null || true && \
-	echo "Resetting all user passwords to admin123..." && \
-	.venv/bin/python -m scripts.reset_passwords --password admin123 && \
-	echo "Creating admin user if missing..." && \
-	( .venv/bin/python -m scripts.create_admin --only-if-no-admins --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin 2>/dev/null || true ) && \
-	echo "Restore complete!" && \
-	echo "  All users reset to password: admin123"
+	.venv/bin/python -m alembic stamp head && \
+	if [ "$${FORCE:-0}" = "1" ]; then RESET=1; else \
+		printf "Reset ALL local user passwords to admin123? [y/N] "; read -r answer; \
+		case "$$answer" in y|Y|yes|YES) RESET=1 ;; *) RESET=0 ;; esac; \
+	fi && \
+	if [ "$$RESET" = "1" ]; then \
+		echo "Resetting all user passwords to admin123..." && \
+		.venv/bin/python -m scripts.reset_passwords --password admin123 && \
+		.venv/bin/python -m scripts.create_admin --only-if-no-admins --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin && \
+		echo "  All users reset to password: admin123"; \
+	else echo "Password reset skipped (FORCE=1 to skip this prompt)."; fi && \
+	echo "Restore complete!"
 
 # ─── Full droplet backup / restore (delete + spin up later) ────────────────────
 # docs/DROPLET-BACKUP-RESTORE.md has the full runbook. Redis is intentionally
