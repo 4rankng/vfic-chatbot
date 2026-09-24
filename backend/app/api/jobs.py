@@ -23,6 +23,7 @@ from app.schemas.job import (
 )
 from app.services.job_service import JobService
 from app.shared.domain.errors import ConflictError, NotFoundError
+from app.shared.infrastructure.rate_limits import enforce_jobs_search_rate_limit
 
 router = APIRouter(
     prefix="/jobs",
@@ -99,5 +100,7 @@ async def search_jobs(
     _user: Any = Depends(get_current_user),
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> list[JobSearchResult]:
+    # SEC-04: one embedding call per request, so cap it per user.
+    await enforce_jobs_search_rate_limit(_user.id)
     rows = await JobService(db).search(embedder, body.query, body.top_k)
     return [JobSearchResult(content=r["content"], similarity=r["similarity"]) for r in rows]

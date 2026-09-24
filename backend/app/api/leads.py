@@ -29,6 +29,10 @@ from app.schemas.lead import (
     StageRequest,
 )
 from app.shared.domain.errors import BadRequestError, ConflictError, NotFoundError
+from app.shared.infrastructure.rate_limits import (
+    enforce_lead_assist_rate_limit,
+    enforce_lead_chatops_action_rate_limit,
+)
 from app.services.lead import LeadService
 from app.services.memory_repository import MemoryRepository
 from app.shared.infrastructure.db import get_request_db as get_db
@@ -243,6 +247,8 @@ async def get_chatops_assist(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> LeadAssistOut:
+    # SEC-04: chatops assist is an LLM call; budget it per recruiter.
+    await enforce_lead_assist_rate_limit(user.id)
     lead = await _load(lead_id, db, user)
     return LeadAssistOut.model_validate(await LeadService(db).build_chatops_assist(lead))
 
@@ -254,6 +260,8 @@ async def run_chatops_action(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> LeadChatOpsActionResult:
+    # SEC-04: a chatops action can spend an LLM call plus a send.
+    await enforce_lead_chatops_action_rate_limit(user.id)
     lead = await _load(lead_id, db, user)
     service = LeadService(db)
     try:

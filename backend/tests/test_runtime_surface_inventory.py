@@ -40,7 +40,7 @@ DIRECT_ROUTE_CLASSIFICATION = {
 EXPECTED_ROUTE_COUNTS = {
     # Endpoint-level snapshot: adding a decorator inside an existing module must
     # fail this gate and force an explicit authority-classification review.
-    "auth": 6,
+    "auth": 7,  # +1 server-side logout (SEC-03)
     "bot_runs": 2,
     "conversations": 19,
     "dashboard": 2,
@@ -59,7 +59,7 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "271f5809341b58aef3089515fc4230a51da9b08f360033cfff08c67f42c00454"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "eac0876be7c2b10f1b9952e33456fbc6b05e6167916895a981fb768781beee50"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

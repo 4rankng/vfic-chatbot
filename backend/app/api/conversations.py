@@ -33,6 +33,7 @@ from app.schemas.conversation import (
 from app.schemas.dashboard import AttentionReason
 from app.shared.domain.errors import ConflictError, NotFoundError, ValidationError
 from app.shared.infrastructure.db import get_request_db
+from app.shared.infrastructure.rate_limits import enforce_web_chat_turn_rate_limit
 from app.services.bot_run_service import BotRunService
 from app.services.conversation import ConversationConflict, ConversationService
 
@@ -433,6 +434,8 @@ async def web_chat_turn(
     a different architecture (WebSocket-first, not HTTP).
     """
     conv = await _load(conv_id, db, user)
+    # SEC-04: this runs a full bot turn inline, so it has to be budgeted per user.
+    await enforce_web_chat_turn_rate_limit(user.id)
     return await run_inline_web_chat_turn(
         db=db,
         conversation=conv,

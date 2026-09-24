@@ -116,7 +116,7 @@
     "category": "provider_boundary",
     "count": 1,
     "file": "app/services/outbox_service.py",
-    "scope": "dispatch_outbox"
+    "scope": "_dispatch_claimed_command"
   },
   {
     "call": "send_chat_action",
