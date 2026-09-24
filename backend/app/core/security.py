@@ -34,8 +34,9 @@ class TokenPayload(TypedDict):
     """The JWT claims this app issues and reads back (see ``_encode``).
 
     Only the claims the auth layer actually reads are declared — ``iat``/``exp``
-    travel in the token too but are not accessed, so they stay runtime-only to
-    avoid pinning PyJWT's decoded timestamp type.
+    travel in the token too (and ``iss``/``aud`` are verified by PyJWT at decode
+    time) but are not accessed here, so they stay runtime-only to avoid pinning
+    PyJWT's decoded timestamp type.
     """
 
     sub: str
@@ -53,12 +54,21 @@ def verify_password_sync(plain: str, hashed: str) -> bool:
 
 
 def decode_token_sync(token: str) -> TokenPayload:
-    """Decode + verify a JWT synchronously. Raises ValueError on any PyJWT failure."""
+    """Decode + verify a JWT synchronously. Raises ValueError on any PyJWT failure.
+
+    Verification is complete, not just signature-only: the signature, ``exp``,
+    the issuer/audience pair, and the required claims must all match what
+    ``_encode`` mints. A token that merely carries a valid signature (e.g. one
+    minted for another service from the same secret) is rejected.
+    """
     try:
         payload = jwt.decode(
             token,
             _settings.jwt_secret,
             algorithms=[_settings.jwt_algorithm],
+            audience=_settings.jwt_audience,
+            issuer=_settings.jwt_issuer,
+            options={"require": ["exp", "sub", "type", "ver"]},
         )
     except InvalidTokenError as exc:
         raise ValueError("invalid or expired token") from exc
@@ -91,6 +101,8 @@ async def _encode(subject: str, expires_in: timedelta, token_type: str, *, ver: 
             "ver": ver,
             "iat": now,
             "exp": now + expires_in,
+            "iss": _settings.jwt_issuer,
+            "aud": _settings.jwt_audience,
         }
         return jwt.encode(
             payload,
