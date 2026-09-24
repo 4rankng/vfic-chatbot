@@ -87,9 +87,7 @@ async def test_stamped_turn_is_suppressed_before_agent_when_authority_is_stale(m
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv)
     deps = _deps(_FakeZalo(), conversation=svc)
-    deps.runtime_policy = SimpleNamespace(
-        runtime_stamp_is_current=lambda **_kwargs: _value(False),
-    )
+    deps.runtime_policy = SimpleNamespace(resolve_active_policy=lambda: _none())
     state = SimpleNamespace(
         conversation_id="00000000-0000-0000-0000-000000000001",
         version_at_start=1,
@@ -105,6 +103,51 @@ async def test_stamped_turn_is_suppressed_before_agent_when_authority_is_stale(m
         "outcome": "suppressed",
         "reason": "stale_runtime_authority",
     }
+
+
+async def test_stamped_turn_compares_the_stamp_against_one_policy_resolution(monkeypatch):
+    """A stamped turn derives the active policy once and stamps against it.
+
+    The fingerprint checksum covers the full authority payload, so a mismatch
+    on the single resolution is the stale-stamp verdict — no second derivation.
+    """
+    from app.graph import runner
+    from tests.test_graph_runner_turn import _FakeConv, _FakeZalo, _deps, _stub_svc
+
+    async def _must_not_run(*_args, **_kwargs):
+        raise AssertionError("stale work must not reach the agent")
+
+    monkeypatch.setattr(runner, "_agent_turn", _must_not_run)
+    active, persona = _active(capabilities=["conversation", "knowledge"])
+    policy = build_resolved_runtime_policy(active, persona_body=persona)
+    assert policy is not None
+    resolves: list[None] = []
+
+    async def _resolve_once():
+        resolves.append(None)
+        return policy
+
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv)
+    deps = _deps(_FakeZalo(), conversation=svc)
+    deps.runtime_policy = SimpleNamespace(resolve_active_policy=_resolve_once)
+    state = SimpleNamespace(
+        conversation_id="00000000-0000-0000-0000-000000000001",
+        version_at_start=1,
+        user_text="xin chào",
+        lock_owner="",
+        execution_source="queued",
+        # Same revision as the resolved policy, different fingerprint.
+        runtime_revision_id="00000000-0000-4000-8000-000000000001",
+        authority_generation=5,
+        runtime_fingerprint="b" * 64,
+    )
+
+    assert await runner.run_turn(state, deps) == {
+        "outcome": "suppressed",
+        "reason": "stale_runtime_authority",
+    }
+    assert len(resolves) == 1
 
 
 async def test_unstamped_turn_is_suppressed_after_runtime_activation():

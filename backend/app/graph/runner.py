@@ -1182,16 +1182,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         and state.authority_generation is not None
         and state.runtime_fingerprint
     )
-    if has_runtime_stamp:
-        is_current = (
-            deps.runtime_policy is not None
-            and await deps.runtime_policy.runtime_stamp_is_current(
-                revision_id=state.runtime_revision_id,
-                authority_generation=state.authority_generation,
-                runtime_fingerprint=state.runtime_fingerprint,
-            )
-        )
-        if not is_current:
+    manifest_policy = None
+    if deps.runtime_policy is None:
+        # Without a policy port a stamped turn cannot prove its authority
+        # against anything; the gate below is the fail-closed exit.
+        if has_runtime_stamp:
             return await _authority_gate(
                 state=state,
                 deps=deps,
@@ -1200,40 +1195,37 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 reason="stale_runtime_authority",
                 lock_owner=lock_owner,
             )
-    manifest_policy = None
-    if has_runtime_stamp:
-        if deps.runtime_policy is None:
-            return await _authority_gate(
-                state=state,
-                deps=deps,
-                conv=conv,
-                svc=svc,
-                reason="missing_runtime_policy",
-                lock_owner=lock_owner,
-            )
+    elif has_runtime_stamp:
+        # One resolution serves the whole turn. The fingerprint checksum
+        # covers the complete authority payload (revision, generation,
+        # pinned artifacts, KB vector), so matching it against the turn's
+        # stamp subsumes the stamp-currency check without a second full
+        # derivation of the installation.
         manifest_policy = await deps.runtime_policy.resolve_active_policy()
-        if manifest_policy is None:
+        if manifest_policy is None or not (
+            manifest_policy.revision_id == state.runtime_revision_id
+            and manifest_policy.fingerprint_checksum == state.runtime_fingerprint
+        ):
             return await _authority_gate(
                 state=state,
                 deps=deps,
                 conv=conv,
                 svc=svc,
-                reason="inactive_runtime_policy",
+                reason="stale_runtime_authority",
                 lock_owner=lock_owner,
             )
-    elif deps.runtime_policy is not None:
+    elif await deps.runtime_policy.resolve_active_policy() is not None:
         # A clean cutover never lets pre-authority jobs inherit today's
         # capabilities.  Tests and explicitly legacy deployments inject no
         # runtime policy and retain their existing behavior.
-        if await deps.runtime_policy.resolve_active_policy() is not None:
-            return await _authority_gate(
-                state=state,
-                deps=deps,
-                conv=conv,
-                svc=svc,
-                reason="missing_runtime_authority",
-                lock_owner=lock_owner,
-            )
+        return await _authority_gate(
+            state=state,
+            deps=deps,
+            conv=conv,
+            svc=svc,
+            reason="missing_runtime_authority",
+            lock_owner=lock_owner,
+        )
     if lock_owner:
         db_t0 = time.monotonic()
         await deps.db.refresh(conv, _OWNERSHIP_REFRESH_COLUMNS)
