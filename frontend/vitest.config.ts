@@ -18,7 +18,7 @@ export default defineConfig({
       // focused contract into a misleading whole-tree coverage claim.
       include: [
         "src/components/atomic-crm/capabilities/kernel/index.tsx",
-        "src/components/atomic-crm/integrations/CredentialSecretField.tsx",
+        "src/components/atomic-crm/integrations/presentation/SecretField.tsx",
         "src/components/atomic-crm/performance/PerformanceTrendChart.tsx",
       ],
       exclude: ["**/*.test.*", "**/.omc/**"],
@@ -34,6 +34,11 @@ export default defineConfig({
       {
         plugins: [react()],
         optimizeDeps: {
+          // Pre-bundle the message store's selector middleware: discovered
+          // mid-run it forced an optimizer reload that failed the file being
+          // imported (zustand itself arrives through the app graph, the
+          // /middleware entry does not).
+          include: ["zustand/middleware"],
           exclude: ["playwright", "playwright-core"],
         },
         resolve: {

@@ -181,22 +181,20 @@ const getFacebookOAuthPagesPath = (flowId: string): string =>
   `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook/oauth/pages?flow_id=${encodeURIComponent(flowId)}`;
 
 export const zaloIntegrationGateway = {
-  loadSettingsBundle: async (): Promise<{
-    zalo: ZaloSettings;
-    minimax: MinimaxSettings;
-    openRouter: OpenRouterSettings;
-    customLlm: CustomLlmSettings;
-    jev: JevSettings;
-  }> => {
-    const [zalo, minimax, openRouter, customLlm, jev] = await Promise.all([
-      apiJson<ZaloSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/zalo`),
-      apiJson<MinimaxSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/minimax`),
-      apiJson<OpenRouterSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/openrouter`),
-      apiJson<CustomLlmSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/custom-llm`),
-      apiJson<JevSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/jev`),
-    ]);
-    return { zalo, minimax, openRouter, customLlm, jev };
-  },
+  loadZaloSettings: async (): Promise<ZaloSettings> =>
+    apiJson<ZaloSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/zalo`),
+
+  loadMinimaxSettings: async (): Promise<MinimaxSettings> =>
+    apiJson<MinimaxSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/minimax`),
+
+  loadOpenRouterSettings: async (): Promise<OpenRouterSettings> =>
+    apiJson<OpenRouterSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/openrouter`),
+
+  loadCustomLlmSettings: async (): Promise<CustomLlmSettings> =>
+    apiJson<CustomLlmSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/custom-llm`),
+
+  loadJevSettings: async (): Promise<JevSettings> =>
+    apiJson<JevSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/jev`),
 
   saveZaloSettings: async (
     body: Partial<ZaloFormState>,

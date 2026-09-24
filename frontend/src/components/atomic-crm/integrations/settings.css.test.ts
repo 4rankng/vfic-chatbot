@@ -1,10 +1,33 @@
 import { describe, expect, it } from "vitest";
 
 import featureStyles from "../conversations/inbox/features.css?raw";
+import embeddedSectionsSource from "./presentation/EmbeddedSettingsSections.tsx?raw";
+import jevSource from "./presentation/JevSection.tsx?raw";
+import llmProvidersSource from "./presentation/LlmProvidersSection.tsx?raw";
+import providerFieldSource from "./presentation/ProviderField.tsx?raw";
+import secretFieldSource from "./presentation/SecretField.tsx?raw";
+import chromeSource from "./presentation/SettingsChrome.tsx?raw";
+import groupSource from "./presentation/SettingsGroup.tsx?raw";
+import zaloChannelSource from "./presentation/ZaloChannelSection.tsx?raw";
 import messengerSource from "./FacebookMessengerIntegrationPage.tsx?raw";
-import settingsSource from "./ZaloIntegrationPage.tsx?raw";
+import pageSource from "./ZaloIntegrationPage.tsx?raw";
 import stylesheet from "./settings.css?raw";
 import userStylesheet from "../users/users.css?raw";
+
+// Every module that renders the settings console, not just the resource entry
+// point: a class name is only unused if no section emits it.
+const settingsSource = [
+  pageSource,
+  messengerSource,
+  chromeSource,
+  groupSource,
+  secretFieldSource,
+  providerFieldSource,
+  zaloChannelSource,
+  llmProvidersSource,
+  jevSource,
+  embeddedSectionsSource,
+].join("\n");
 
 describe("flat settings workspace", () => {
   it("defines one scoped density scale for settings components", () => {

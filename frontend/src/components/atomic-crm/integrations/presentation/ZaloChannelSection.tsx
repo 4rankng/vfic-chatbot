@@ -1,0 +1,204 @@
+import { MessageCircle, PlugZap, Wifi } from "lucide-react";
+import { useNotify } from "ra-core";
+
+import { Button } from "@/components/ui/button";
+
+import type { ZaloOaSignatureHealth, ZaloSettings } from "../api";
+import type { SettingsStatusState } from "../SettingsFieldStatus";
+import { SettingsGroupStatus } from "../SettingsFieldStatus";
+import type { ZaloChannelScope } from "../application/useZaloForm";
+import type { ZaloFormState } from "../zaloUpdatePayload";
+import { PlainField, SecretField } from "./SecretField";
+import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
+import { formatRelativeEpoch } from "./statusCopy";
+
+const describeOaSignatureHealth = (health: ZaloOaSignatureHealth | null) => {
+  if (!health || !health.last_status) {
+    return {
+      message:
+        "Chưa có sự kiện webhook thực nào — trạng thái chữ ký sẽ cập nhật khi Zalo gửi tin nhắn đầu tiên.",
+      type: "info" as const,
+    };
+  }
+  if (health.last_status === "verified") {
+    return {
+      message: `Chữ ký webhook hợp lệ — cập nhật ${formatRelativeEpoch(health.last_ts)}.`,
+      type: "success" as const,
+    };
+  }
+  return {
+    message: `Chữ ký webhook bị từ chối — Webhook Secret có thể sai${health.consec_failures ? ` (×${health.consec_failures})` : ""}. Cập nhật ${formatRelativeEpoch(health.last_mismatch_ts ?? health.last_ts)}.`,
+    type: "warning" as const,
+  };
+};
+
+/** The Zalo channel view: Bot Platform and OA credentials, plus channel tests. */
+export const ZaloChannelSection = ({
+  settings,
+  statusState,
+  form,
+  onValueChange,
+  channelTesting,
+  onTestChannel,
+}: {
+  settings: ZaloSettings | null;
+  statusState: SettingsStatusState;
+  form: ZaloFormState;
+  onValueChange: (key: keyof ZaloFormState, value: string) => void;
+  channelTesting: Record<ZaloChannelScope, boolean>;
+  onTestChannel: (scope: ZaloChannelScope) => void;
+}) => {
+  const notify = useNotify();
+  const webhookHealth = describeOaSignatureHealth(
+    settings?.zalo_oa_webhook_signature ?? null,
+  );
+  const botConfigured = [
+    settings?.zalo_bot_token.configured,
+    settings?.zalo_bot_webhook_secret.configured,
+  ].filter(Boolean).length;
+  const oaConfigured = [
+    settings?.zalo_oa_app_id.configured,
+    settings?.zalo_oa_secret_key.configured,
+    settings?.zalo_oa_access_token.configured,
+    settings?.zalo_oa_refresh_token.configured,
+  ].filter(Boolean).length;
+
+  return (
+    <SettingsSectionPanel id="settings-zalo-channel">
+      <div className="settings-grid settings-grid-zalo">
+        <SettingsGroup
+          title="Zalo Chatbot"
+          icon={<PlugZap className="size-4" />}
+          meta={
+            <SettingsGroupStatus
+              configured={botConfigured}
+              total={2}
+              state={statusState}
+            />
+          }
+          defaultOpen
+        >
+          <SecretField
+            id="zalo_bot_token"
+            label="Bot Token"
+            placeholder="Nhập giá trị"
+            statusState={statusState}
+            configured={settings?.zalo_bot_token.configured ?? false}
+            preview={settings?.zalo_bot_token.preview ?? null}
+            value={form.zalo_bot_token}
+            onChange={(value) => onValueChange("zalo_bot_token", value)}
+            notify={notify}
+          />
+          <SecretField
+            id="zalo_bot_webhook_secret"
+            label="Bot Secret"
+            placeholder="Nhập giá trị"
+            statusState={statusState}
+            configured={settings?.zalo_bot_webhook_secret.configured ?? false}
+            preview={settings?.zalo_bot_webhook_secret.preview ?? null}
+            value={form.zalo_bot_webhook_secret}
+            onChange={(value) =>
+              onValueChange("zalo_bot_webhook_secret", value)
+            }
+            notify={notify}
+          />
+          <div className="settings-oa-actions">
+            <Button
+              type="button"
+              className="settings-test-button settings-primary-action tt-btn-touch"
+              onClick={() => onTestChannel("bot")}
+              disabled={channelTesting.bot || !settings}
+              aria-busy={channelTesting.bot}
+            >
+              <Wifi className="size-4" />
+              {channelTesting.bot ? "Đang kiểm tra" : "Lưu & kiểm tra"}
+            </Button>
+          </div>
+        </SettingsGroup>
+
+        <SettingsGroup
+          title="Zalo OA"
+          icon={<MessageCircle className="size-4" />}
+          meta={
+            <SettingsGroupStatus
+              configured={oaConfigured}
+              total={4}
+              state={statusState}
+            />
+          }
+        >
+          <div className="settings-oa-fields">
+            <PlainField
+              id="zalo_oa_app_id"
+              label="Zalo App ID"
+              configured={settings?.zalo_oa_app_id.configured ?? false}
+              statusState={statusState}
+              value={form.zalo_oa_app_id}
+              onChange={(value) => onValueChange("zalo_oa_app_id", value)}
+              notify={notify}
+            />
+
+            <SecretField
+              id="zalo_oa_secret_key"
+              label="Bot Secret"
+              placeholder="Nhập giá trị"
+              statusState={statusState}
+              configured={settings?.zalo_oa_secret_key.configured ?? false}
+              preview={settings?.zalo_oa_secret_key.preview ?? null}
+              value={form.zalo_oa_secret_key}
+              onChange={(value) => onValueChange("zalo_oa_secret_key", value)}
+              notify={notify}
+            />
+            <SecretField
+              id="zalo_oa_access_token"
+              label="OA Access Token"
+              placeholder="Nhập giá trị"
+              statusState={statusState}
+              configured={settings?.zalo_oa_access_token.configured ?? false}
+              preview={settings?.zalo_oa_access_token.preview ?? null}
+              value={form.zalo_oa_access_token}
+              onChange={(value) => onValueChange("zalo_oa_access_token", value)}
+              notify={notify}
+            />
+            <SecretField
+              id="zalo_oa_refresh_token"
+              label="OA Refresh Token"
+              placeholder="Nhập giá trị"
+              statusState={statusState}
+              configured={settings?.zalo_oa_refresh_token.configured ?? false}
+              preview={settings?.zalo_oa_refresh_token.preview ?? null}
+              value={form.zalo_oa_refresh_token}
+              onChange={(value) =>
+                onValueChange("zalo_oa_refresh_token", value)
+              }
+              notify={notify}
+            />
+            <div className="settings-oa-actions">
+              <Button
+                type="button"
+                className="settings-test-button settings-primary-action tt-btn-touch"
+                onClick={() => onTestChannel("oa")}
+                disabled={channelTesting.oa || !settings}
+                aria-busy={channelTesting.oa}
+              >
+                <Wifi className="size-4" />
+                {channelTesting.oa ? "Đang kiểm tra" : "Lưu & kiểm tra"}
+              </Button>
+            </div>
+            <details className="settings-advanced settings-webhook-health tt-collapse tt-collapse-arrow">
+              <summary className="settings-advanced-summary tt-collapse-title">
+                Webhook
+              </summary>
+              <p
+                className={`settings-webhook-message is-${webhookHealth.type}`}
+                role="status"
+              >
+                {webhookHealth.message}
+              </p>
+            </details>
+          </div>
+        </SettingsGroup>
+      </div>
+    </SettingsSectionPanel>
+  );
+};

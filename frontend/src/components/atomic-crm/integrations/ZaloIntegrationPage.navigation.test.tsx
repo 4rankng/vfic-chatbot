@@ -4,63 +4,71 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
-  loadSettingsBundle: vi.fn(() =>
+  loadZaloSettings: vi.fn(() =>
     Promise.resolve({
-      zalo: {
-        zalo_bot_token: { configured: true, preview: "dev-…oken" },
-        zalo_bot_webhook_secret: { configured: false },
-        zalo_oa_app_id: { configured: false, value: "" },
-        zalo_oa_secret_key: { configured: false },
-        zalo_oa_access_token: { configured: false },
-        zalo_oa_refresh_token: { configured: false },
-        zalo_bot_api_base: "",
-        zalo_oa_api_base: "",
-        zalo_oa_webhook_signature: {
-          last_status: "mismatched",
-          last_ts: 1_784_732_616,
-          last_mismatch_ts: 1_784_732_616,
-          consec_failures: 526,
-        },
-      },
-      minimax: {
-        minimax_api_key: { configured: false },
-        minimax_base_url: "",
-        minimax_agent_model: "minimax-model",
-        minimax_safety_model: "minimax-model",
-        minimax_enable: true,
-        llm_default_provider: "minimax" as const,
-        llm_failover_order: ["minimax", "openrouter", "custom"],
-      },
-      openRouter: {
-        openrouter_api_key: { configured: false },
-        openrouter_base_url: "",
-        openrouter_agent_model: "deepseek/deepseek-v4-flash",
-        openrouter_safety_model: "deepseek/deepseek-v4-flash",
-        openrouter_digest_model: "deepseek/deepseek-v4-flash",
-        openrouter_enable: false,
-        llm_default_provider: "minimax" as const,
-        llm_failover_order: ["minimax", "openrouter", "custom"],
-      },
-      customLlm: {
-        custom_llm_api_key: { configured: false },
-        custom_llm_base_url: "",
-        custom_llm_agent_model: "",
-        custom_llm_safety_model: "",
-        custom_llm_fast_model: "",
-        custom_llm_label: "Dự phòng",
-        custom_llm_enable: false,
-        custom_llm_usable: false,
-        llm_default_provider: "minimax" as const,
-        llm_failover_order: ["minimax", "openrouter", "custom"],
-      },
-      jev: {
-        jev_api_key: { configured: false },
-        jev_model: "",
-        jev_enable: false,
-        jev_usable: false,
+      zalo_bot_token: { configured: true, preview: "dev-…oken" },
+      zalo_bot_webhook_secret: { configured: false },
+      zalo_oa_app_id: { configured: false, value: "" },
+      zalo_oa_secret_key: { configured: false },
+      zalo_oa_access_token: { configured: false },
+      zalo_oa_refresh_token: { configured: false },
+      zalo_bot_api_base: "",
+      zalo_oa_api_base: "",
+      zalo_oa_webhook_signature: {
+        last_status: "mismatched",
+        last_ts: 1_784_732_616,
+        last_mismatch_ts: 1_784_732_616,
+        consec_failures: 526,
       },
     }),
   ),
+  loadMinimaxSettings: vi.fn(() =>
+    Promise.resolve({
+      minimax_api_key: { configured: false },
+      minimax_base_url: "",
+      minimax_agent_model: "minimax-model",
+      minimax_safety_model: "minimax-model",
+      minimax_enable: true,
+      llm_default_provider: "minimax" as const,
+      llm_failover_order: ["minimax", "openrouter", "custom"],
+    }),
+  ),
+  loadOpenRouterSettings: vi.fn(() =>
+    Promise.resolve({
+      openrouter_api_key: { configured: false },
+      openrouter_base_url: "",
+      openrouter_agent_model: "deepseek/deepseek-v4-flash",
+      openrouter_safety_model: "deepseek/deepseek-v4-flash",
+      openrouter_digest_model: "deepseek/deepseek-v4-flash",
+      openrouter_enable: false,
+      llm_default_provider: "minimax" as const,
+      llm_failover_order: ["minimax", "openrouter", "custom"],
+    }),
+  ),
+  loadCustomLlmSettings: vi.fn(() =>
+    Promise.resolve({
+      custom_llm_api_key: { configured: false },
+      custom_llm_base_url: "",
+      custom_llm_agent_model: "",
+      custom_llm_safety_model: "",
+      custom_llm_fast_model: "",
+      custom_llm_label: "Dự phòng",
+      custom_llm_enable: false,
+      custom_llm_usable: false,
+      llm_default_provider: "minimax" as const,
+      llm_failover_order: ["minimax", "openrouter", "custom"],
+    }),
+  ),
+  loadJevSettings: vi.fn(() =>
+    Promise.resolve({
+      jev_api_key: { configured: false },
+      jev_model: "",
+      jev_enable: false,
+      jev_usable: false,
+    }),
+  ),
+  saveMinimaxSettings: vi.fn(),
+  saveOpenRouterSettings: vi.fn(),
   testOaConnection: vi.fn(() =>
     Promise.resolve({
       configured: true,
@@ -103,10 +111,14 @@ vi.mock("ra-core", () => ({
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => mocks.isMobile }));
 vi.mock("./api", () => ({
   zaloIntegrationGateway: {
-    loadSettingsBundle: mocks.loadSettingsBundle,
+    loadZaloSettings: mocks.loadZaloSettings,
+    loadMinimaxSettings: mocks.loadMinimaxSettings,
+    loadOpenRouterSettings: mocks.loadOpenRouterSettings,
+    loadCustomLlmSettings: mocks.loadCustomLlmSettings,
+    loadJevSettings: mocks.loadJevSettings,
     saveZaloSettings: vi.fn(),
-    saveMinimaxSettings: vi.fn(),
-    saveOpenRouterSettings: vi.fn(),
+    saveMinimaxSettings: mocks.saveMinimaxSettings,
+    saveOpenRouterSettings: mocks.saveOpenRouterSettings,
     saveCustomLlmSettings: vi.fn(),
     testBotConnection: vi.fn(),
     testOaConnection: mocks.testOaConnection,
@@ -134,7 +146,13 @@ import { ZaloIntegrationPage } from "./ZaloIntegrationPage";
 
 afterEach(async () => {
   await cleanup();
-  mocks.loadSettingsBundle.mockClear();
+  mocks.loadZaloSettings.mockClear();
+  mocks.loadMinimaxSettings.mockClear();
+  mocks.loadOpenRouterSettings.mockClear();
+  mocks.loadCustomLlmSettings.mockClear();
+  mocks.loadJevSettings.mockClear();
+  mocks.saveMinimaxSettings.mockClear();
+  mocks.saveOpenRouterSettings.mockClear();
   mocks.testOaConnection.mockClear();
   mocks.loadFacebookStatus.mockClear();
   mocks.loadFacebookCredentials.mockClear();
@@ -256,6 +274,34 @@ describe("ZaloIntegrationPage navigation", () => {
       .toEqual([["Không thể sao chép Bot Token.", { type: "error" }]]);
   });
 
+  it("keeps the Zalo App ID copy action on the channel section", async () => {
+    mocks.isMobile = false;
+    const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    const appIdInput = screen.getByRole("textbox", { name: "Zalo App ID" });
+    await appIdInput.fill("1234567890");
+    await screen.getByRole("button", { name: "Sao chép Zalo App ID" }).click();
+
+    await expect
+      .poll(() => clipboardWrite.mock.calls)
+      .toEqual([["1234567890"]]);
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toEqual([["Đã sao chép Zalo App ID.", { type: "success" }]]);
+  });
+
   it("uses one flat desktop workspace without a second navigation rail", async () => {
     mocks.isMobile = false;
     const queryClient = new QueryClient({
@@ -301,6 +347,19 @@ describe("ZaloIntegrationPage navigation", () => {
         <ZaloIntegrationPage />
       </QueryClientProvider>,
     );
+
+    // Settings load through TanStack Query now, so the first paint is the
+    // loading state; wait for the data to settle before reading the badges.
+    const statusOf = (fieldId: string) =>
+      screen.container
+        .querySelector(`label[for="${fieldId}"]`)
+        ?.closest(".settings-field-label-row")
+        ?.querySelector(".settings-field-status");
+    await vi.waitFor(() => {
+      expect(statusOf("zalo_bot_token")?.getAttribute("aria-label")).toBe(
+        "Đã lưu",
+      );
+    });
 
     const configuredLabel = screen.container.querySelector(
       'label[for="zalo_bot_token"]',
@@ -601,5 +660,112 @@ describe("ZaloIntegrationPage provider sections", () => {
     await vi.waitFor(() => {
       expect(chainOrder().join("|")).toBe("1Xiaomi|2OpenRouter");
     });
+  });
+
+  it("opens the Jev panel as a standalone card outside the failover chain", async () => {
+    mocks.isMobile = false;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    await expect
+      .element(screen.getByRole("button", { name: "Zalo", exact: true }))
+      .toBeVisible();
+    const jevButton = Array.from(
+      screen.container.querySelectorAll<HTMLButtonElement>(
+        ".settings-side-nav-link",
+      ),
+    ).find((button) => button.textContent?.includes("Jev"));
+    expect(jevButton).toBeDefined();
+    jevButton?.click();
+
+    await expect
+      .element(screen.getByRole("heading", { name: "Jev", exact: true }))
+      .toBeVisible();
+    await vi.waitFor(() => {
+      expect(
+        screen.container.querySelectorAll(".settings-llm-card").length,
+      ).toBe(1);
+    });
+    // Standalone: no failover ranking strip, its own switch and footer.
+    expect(screen.container.querySelector(".settings-llm-chain")).toBeNull();
+    expect(screen.container.querySelector("#jev_enable")).not.toBeNull();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Model" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("textbox", { name: "API Key" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
+      .toBeDisabled();
+  });
+
+  it("saves the chain's pending provider edits through the gateway", async () => {
+    mocks.isMobile = false;
+    // The PUT echoes the saved settings; the panel re-syncs from that response.
+    mocks.saveOpenRouterSettings.mockResolvedValueOnce({
+      openrouter_api_key: { configured: false },
+      openrouter_base_url: "",
+      openrouter_agent_model: "deepseek/deepseek-v4-flash",
+      openrouter_safety_model: "deepseek/deepseek-v4-flash",
+      openrouter_digest_model: "deepseek/deepseek-v4-flash",
+      openrouter_enable: true,
+      llm_default_provider: "minimax",
+      llm_failover_order: ["minimax", "openrouter", "custom"],
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    await expect
+      .element(screen.getByRole("button", { name: "Zalo", exact: true }))
+      .toBeVisible();
+    const providersButton = Array.from(
+      screen.container.querySelectorAll<HTMLButtonElement>(
+        ".settings-side-nav-link",
+      ),
+    ).find((button) => button.textContent?.includes("AI Providers"));
+    providersButton?.click();
+    await expect
+      .element(
+        screen.getByRole("heading", { name: "AI Providers", exact: true }),
+      )
+      .toBeVisible();
+
+    screen.container
+      .querySelector<HTMLButtonElement>("#openrouter_enable")
+      ?.click();
+    await expect
+      .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
+      .not.toBeDisabled();
+
+    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+
+    await expect
+      .poll(() => mocks.saveOpenRouterSettings.mock.calls)
+      .toEqual([[{ openrouter_enable: true }]]);
+    // Only the provider that actually changed is written.
+    expect(mocks.saveMinimaxSettings).not.toHaveBeenCalled();
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toEqual([["Đã lưu thay đổi", { type: "success" }]]);
+    // The saved response is the panel's new truth: no pending edit remains.
+    await expect
+      .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
+      .toBeDisabled();
   });
 });

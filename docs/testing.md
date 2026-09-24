@@ -97,7 +97,7 @@ docker compose -f docker-compose.dev.yml up -d postgres
 ### Setup
 - **Framework:** Vitest 4 + Playwright browser mode
 - **Config:** `frontend/vitest.config.ts` — two projects:
-  - **`app`** project: Headless Chromium environment. React/DOM unit tests. The enforced 80% coverage threshold applies only to the changed/high-risk surface: `src/components/atomic-crm/capabilities/kernel/index.tsx`, `src/components/atomic-crm/integrations/CredentialSecretField.tsx`, and `src/components/atomic-crm/performance/PerformanceTrendChart.tsx`. The full `npm run test:unit:app` suite runs separately and currently contains 551 tests.
+  - **`app`** project: Headless Chromium environment. React/DOM unit tests. The enforced 80% coverage threshold applies only to the changed/high-risk surface: `src/components/atomic-crm/capabilities/kernel/index.tsx`, `src/components/atomic-crm/integrations/presentation/SecretField.tsx`, and `src/components/atomic-crm/performance/PerformanceTrendChart.tsx`.
   - **`claude`** project: Node.js environment. Claude Code hook integration tests in `.claude/hooks/test/`.
 
 ### Test Organization (representative app-project files)

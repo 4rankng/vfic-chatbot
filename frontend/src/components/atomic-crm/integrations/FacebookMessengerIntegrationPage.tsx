@@ -13,12 +13,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useGetList, useNotify } from "ra-core";
-import { Eye, EyeOff } from "lucide-react";
 import { ApiError } from "@/lib/apiClient";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import type { Project } from "../types";
 import "../conversations/inbox.css";
 import "./settings.css";
@@ -39,10 +37,10 @@ import {
   FacebookProjectCheckboxList,
 } from "./FacebookMessengerPageCard";
 import {
-  SettingsFieldStatus,
   SettingsGroupStatus,
   type SettingsStatusState,
 } from "./SettingsFieldStatus";
+import { PlainField, SecretField } from "./presentation/SecretField";
 
 type CredentialsFormState = {
   facebook_app_id: string;
@@ -65,130 +63,6 @@ const EMPTY_CREDENTIALS_FORM: CredentialsFormState = {
 // `.env`. Stored DB-first with env fallback on the backend; secrets are
 // AES-GCM encrypted at rest. Until app_id is configured, the "Connect"
 // button is disabled because Facebook rejects an empty client_id.
-
-type MetaAppFieldProps = {
-  id: keyof CredentialsFormState;
-  label: string;
-  hint?: string;
-  configured: boolean;
-  showMissingStatus?: boolean;
-  statusState?: SettingsStatusState;
-  value: string;
-  onChange: (key: keyof CredentialsFormState, value: string) => void;
-};
-
-const MetaAppPlainField = ({
-  id,
-  label,
-  hint,
-  configured,
-  showMissingStatus = true,
-  statusState = "ready",
-  value,
-  onChange,
-}: MetaAppFieldProps) => (
-  <div className="settings-field">
-    <div className="settings-field-label-row">
-      <Label htmlFor={id}>{label}</Label>
-      {showMissingStatus || configured || statusState !== "ready" ? (
-        <SettingsFieldStatus configured={configured} state={statusState} />
-      ) : null}
-    </div>
-    <Input
-      id={id}
-      type="text"
-      autoComplete="off"
-      spellCheck={false}
-      value={value}
-      onChange={(event) => onChange(id, event.target.value)}
-      className="settings-input"
-    />
-    {hint ? <span className="settings-field-hint">{hint}</span> : null}
-  </div>
-);
-
-const MetaAppSecretField = ({
-  id,
-  label,
-  hint,
-  configured,
-  statusState = "ready",
-  preview,
-  value,
-  onChange,
-  onReveal,
-}: MetaAppFieldProps & {
-  configured: boolean;
-  preview: string | null;
-  statusState?: SettingsStatusState;
-  onReveal?: () => Promise<string | null>;
-}) => {
-  const [isVisible, setIsVisible] = useState(false);
-  // Stored secrets are not part of the form state: they are fetched on demand
-  // so an unopened field never holds plaintext, and shown read-only so
-  // revealing cannot accidentally rewrite the saved value.
-  const [revealed, setRevealed] = useState<string | null>(null);
-  const [isRevealing, setIsRevealing] = useState(false);
-  const canReveal = Boolean(onReveal) && configured && !value;
-
-  const toggleReveal = async () => {
-    if (revealed !== null) {
-      setRevealed(null);
-      return;
-    }
-    setIsRevealing(true);
-    try {
-      setRevealed((await onReveal?.()) ?? null);
-    } finally {
-      setIsRevealing(false);
-    }
-  };
-
-  return (
-    <div className="settings-field">
-      <div className="settings-field-label-row">
-        <Label htmlFor={id}>{label}</Label>
-        <SettingsFieldStatus configured={configured} state={statusState} />
-      </div>
-      <div className="settings-sensitive-input">
-        <Input
-          id={id}
-          type={isVisible || revealed !== null ? "text" : "password"}
-          autoComplete="off"
-          spellCheck={false}
-          readOnly={revealed !== null}
-          value={revealed ?? value}
-          placeholder={preview ? `Hiện tại: ${preview}` : "Nhập giá trị mới"}
-          className="settings-input"
-          onChange={(event) => onChange(id, event.target.value)}
-        />
-        {/* Typing a new value toggles masking locally; an empty but configured
-            field fetches the stored secret instead, since the plaintext is not
-            part of the credentials payload. */}
-        {value || canReveal ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="settings-input-action"
-            disabled={isRevealing}
-            aria-label={
-              (value ? isVisible : revealed !== null)
-                ? `Ẩn ${label}`
-                : `Hiện ${label}`
-            }
-            onClick={() =>
-              value ? setIsVisible((visible) => !visible) : void toggleReveal()
-            }
-          >
-            {(value ? isVisible : revealed !== null) ? <EyeOff /> : <Eye />}
-          </Button>
-        ) : null}
-      </div>
-      {hint ? <span className="settings-field-hint">{hint}</span> : null}
-    </div>
-  );
-};
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
@@ -473,15 +347,15 @@ export const FacebookMessengerIntegrationPage = () => {
         </div>
         <div className="settings-group-content settings-messenger-group-content">
           <div className="settings-messenger-credentials-grid">
-            <MetaAppPlainField
+            <PlainField
               id="facebook_app_id"
               label="App ID"
               configured={credentials?.facebook_app_id.configured ?? false}
               statusState={credentialsStatusState}
               value={credentialsForm.facebook_app_id}
-              onChange={onCredentialChange}
+              onChange={(value) => onCredentialChange("facebook_app_id", value)}
             />
-            <MetaAppPlainField
+            <PlainField
               id="facebook_login_config_id"
               label="Configuration ID"
               hint="Không bắt buộc"
@@ -491,21 +365,27 @@ export const FacebookMessengerIntegrationPage = () => {
               showMissingStatus={false}
               statusState={credentialsStatusState}
               value={credentialsForm.facebook_login_config_id}
-              onChange={onCredentialChange}
+              onChange={(value) =>
+                onCredentialChange("facebook_login_config_id", value)
+              }
             />
-            <MetaAppSecretField
+            <SecretField
               id="facebook_app_secret"
               label="App Secret"
+              placeholder="Nhập giá trị mới"
               configured={credentials?.facebook_app_secret.configured ?? false}
               statusState={credentialsStatusState}
               preview={credentials?.facebook_app_secret.preview ?? null}
               value={credentialsForm.facebook_app_secret}
-              onChange={onCredentialChange}
-              onReveal={revealAppSecret}
+              onChange={(value) =>
+                onCredentialChange("facebook_app_secret", value)
+              }
+              reveal={revealAppSecret}
             />
-            <MetaAppSecretField
+            <SecretField
               id="facebook_webhook_verify_token"
               label="Verify Token"
+              placeholder="Nhập giá trị mới"
               hint="Đổi token? Đăng ký lại webhook trên Meta."
               configured={
                 credentials?.facebook_webhook_verify_token.configured ?? false
@@ -515,8 +395,10 @@ export const FacebookMessengerIntegrationPage = () => {
                 credentials?.facebook_webhook_verify_token.preview ?? null
               }
               value={credentialsForm.facebook_webhook_verify_token}
-              onChange={onCredentialChange}
-              onReveal={revealVerifyToken}
+              onChange={(value) =>
+                onCredentialChange("facebook_webhook_verify_token", value)
+              }
+              reveal={revealVerifyToken}
             />
           </div>
           <div className="settings-oa-actions settings-messenger-actions">
