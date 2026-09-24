@@ -164,7 +164,10 @@ def test_profile_backfill_has_an_observable_dedicated_service() -> None:
     assert service["profiles"] == ["maintenance"]
     assert service["restart"] == "no"
     assert "scripts.backfill_oa_profiles" in service["command"]
-    assert service["image"].endswith("${IMAGE_TAG:-latest}")
+    # IMAGE_TAG is a required variable on every app service: the mutable
+    # :-latest default was exactly the unattended-latest-pull hazard, so the
+    # interpolation must fail loudly when the tag is forgotten.
+    assert "${IMAGE_TAG:?IMAGE_TAG is required" in service["image"]
 
 
 def test_profile_backfill_make_targets_are_observable() -> None:
