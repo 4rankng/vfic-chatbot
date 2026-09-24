@@ -71,7 +71,9 @@ build + push both images → blue/green cutover.
 
 ### Full deploy (`make deploy`)
 1. `release-check` — clean committed worktree, exactly one Alembic head, then
-   backend lint/tests + integration smoke, frontend lint/typecheck/scoped
+   backend lint/tests + the full integration suite (harness smoke first as a
+   fast-fail canary, then every `-m integration` file with `--durations=25`),
+   frontend lint/typecheck/scoped
    coverage/build + desktop/mobile Playwright, and the offline golden correctness
    check. Stops before any image is pushed if a check fails.
 2. `cd frontend && make push` — buildx AMD64, tag `:latest` + `:<git-sha>`, push.

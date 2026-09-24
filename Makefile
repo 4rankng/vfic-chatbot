@@ -36,7 +36,7 @@ release-check:
 	@command -v uv >/dev/null 2>&1 && (cd backend && uv lock --check) || { echo "WARNING: uv not found — skipped uv lock --check"; }
 	@cd backend && test "$$(.venv/bin/python -m alembic heads | wc -l | tr -d ' ')" = 1
 	@docker compose -f backend/docker-compose.dev.yml up -d --wait postgres redis
-	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest -m "not integration" && .venv/bin/pytest -m integration tests/integration/test_harness_smoke.py
+	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest -m "not integration" && .venv/bin/pytest -m integration tests/integration/test_harness_smoke.py && .venv/bin/pytest -m integration --durations=25
 	@cd frontend && npm run lint && npm run typecheck && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build && npm run test:e2e:desktop && npm run test:e2e:mobile
 	@tmp_raw="$$(mktemp -t release-gate-raw.XXXXXX.json)"; \
 		tmp_gold="$$(mktemp -t release-gate-golden.XXXXXX.json)"; \
