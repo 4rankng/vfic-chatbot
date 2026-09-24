@@ -6,12 +6,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.project_knowledge.application.categories import CategoryUseCases
 from app.project_knowledge.application.providers import KnowledgeProviderFactory
-from app.project_knowledge.application.ingestion import KnowledgeIngestionUseCases
-from app.project_knowledge.infrastructure.categories import SqlAlchemyCategoryAdapter
-from app.project_knowledge.infrastructure.cache import RedisProjectKnowledgeCacheRepair
-from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
 from app.project_knowledge.infrastructure.ingestion import SqlAlchemyKnowledgeIngestionAdapter
 
 
@@ -47,29 +42,16 @@ def build_knowledge_provider_factory() -> KnowledgeProviderFactory:
     return GraphKnowledgeProviderFactory()
 
 
-def build_category_use_cases(db: AsyncSession) -> CategoryUseCases:
-    return CategoryUseCases(
-        SqlAlchemyCategoryAdapter(
-            db,
-            jobs=build_project_knowledge_jobs(),
-            cache_repair=RedisProjectKnowledgeCacheRepair(),
-        )
-    )
-
-
-def build_knowledge_ingestion_use_cases(db: AsyncSession) -> KnowledgeIngestionUseCases:
-    return KnowledgeIngestionUseCases(
-        SqlAlchemyKnowledgeIngestionAdapter(
-            db,
-            providers=build_knowledge_provider_factory(),
-        )
+def build_knowledge_ingestion(db: AsyncSession) -> SqlAlchemyKnowledgeIngestionAdapter:
+    return SqlAlchemyKnowledgeIngestionAdapter(
+        db,
+        providers=build_knowledge_provider_factory(),
     )
 
 
 __all__ = [
     "GraphKnowledgeProviderFactory",
     "build_default_embedder",
-    "build_category_use_cases",
-    "build_knowledge_ingestion_use_cases",
+    "build_knowledge_ingestion",
     "build_knowledge_provider_factory",
 ]

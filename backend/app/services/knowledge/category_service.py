@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from time import monotonic
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,7 +44,6 @@ from app.project_knowledge.application.jobs import (
     EnqueueReceiptUnknown,
     ProjectKnowledgeJobs,
 )
-from app.project_knowledge.application.cache import ProjectKnowledgeCacheRepairPort
 
 
 class CategoryEmbedder(Protocol):
@@ -69,12 +68,11 @@ class KnowledgeCategoryService:
         db: AsyncSession,
         *,
         jobs: ProjectKnowledgeJobs | None = None,
-        cache_repair: ProjectKnowledgeCacheRepairPort | None = None,
         projection_writer: CategoryProjectionWriter | None = None,
     ) -> None:
         self.db = db
         self._jobs = jobs
-        self._cache_repair = cache_repair
+        self._cache_repair = None
         self._projection_writer = (
             projection_writer or SqlAlchemyCategoryProjectionWriter(db)
         )
@@ -86,7 +84,7 @@ class KnowledgeCategoryService:
             self._jobs = build_project_knowledge_jobs()
         return self._jobs
 
-    def _cache_repairer(self) -> ProjectKnowledgeCacheRepairPort:
+    def _cache_repairer(self) -> Any:
         if self._cache_repair is None:
             from app.project_knowledge.infrastructure.cache import (
                 RedisProjectKnowledgeCacheRepair,

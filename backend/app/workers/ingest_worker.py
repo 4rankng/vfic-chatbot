@@ -79,11 +79,11 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
     # heavy LLM/Google deps — those are only needed for a real run. ``_embed``/``_llm``
     # are injectable so the cross-loop regression test can run the pipeline with fakes.
-    from app.composition.project_knowledge import build_knowledge_ingestion_use_cases
+    from app.composition.project_knowledge import build_knowledge_ingestion
     from app.workers._db import worker_session
 
     async with worker_session() as db:
-        await build_knowledge_ingestion_use_cases(db).ingest_document(
+        await build_knowledge_ingestion(db).ingest_document(
             uuid.UUID(doc_id),
             embedder=_embed,
             json_extractor=_llm,
@@ -91,11 +91,11 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
 
 
 async def _run_version_job_async(version_id: str, *, _embed=None, _llm=None) -> None:
-    from app.composition.project_knowledge import build_knowledge_ingestion_use_cases
+    from app.composition.project_knowledge import build_knowledge_ingestion
     from app.workers._db import worker_session
 
     async with worker_session() as db:
-        await build_knowledge_ingestion_use_cases(db).ingest_version(
+        await build_knowledge_ingestion(db).ingest_version(
             uuid.UUID(version_id),
             embedder=_embed,
             json_extractor=_llm,

@@ -21,7 +21,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.channels.accounts import ChannelAccountStatus, InMemoryAccountResolver
+from app.channels.accounts import ChannelAccountStatus
+from tests.helpers.channel_accounts import InMemoryAccountResolver
 from app.channels.ports import (
     ChannelAccountResolver,
     ReceiptCapability,

@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.channels import types as ct
-from app.channels.accounts import InMemoryAccountResolver
+from tests.helpers.channel_accounts import InMemoryAccountResolver
 from app.channels.dispatch import ChannelDispatchService, build_zalo_registry_from_config
 from app.channels.registry import ChannelAdapterRegistry
 from app.services.zalo_bot_service import SendResult

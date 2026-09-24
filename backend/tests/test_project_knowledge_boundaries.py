@@ -15,8 +15,6 @@ from app.project_knowledge.application.jobs import (
     ProjectKnowledgeJobRequest,
     ProjectKnowledgeJobs,
 )
-from app.project_knowledge.application.categories import CategoryUseCases
-from app.project_knowledge.application.ingestion import KnowledgeIngestionUseCases
 from app.project_knowledge.domain.category import (
     category_payload_checksum,
     category_record_limit_exceeded,
@@ -153,115 +151,6 @@ def test_project_activation_policy_is_framework_free_and_preserves_errors(
     expected: str | None,
 ) -> None:
     assert project_activation_error(facts) == expected
-
-
-class _CategoryPort:
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
-
-    async def list_catalog(self, *args: object, **kwargs: object) -> str:
-        self.calls.append(("list", args, kwargs))
-        return "catalog"
-
-    async def get_active_source(self, *args: object, **kwargs: object) -> str:
-        self.calls.append(("source", args, kwargs))
-        return "source"
-
-    async def stage_replacement(self, *args: object, **kwargs: object) -> str:
-        self.calls.append(("stage", args, kwargs))
-        return "staged"
-
-    async def activate_revision(self, *args: object, **kwargs: object) -> str:
-        self.calls.append(("activate", args, kwargs))
-        return "active"
-
-    async def clear(self, *args: object, **kwargs: object) -> str:
-        self.calls.append(("clear", args, kwargs))
-        return "cleared"
-
-    async def cutover_category_authority(self, *args: object, **kwargs: object) -> str:
-        self.calls.append(("cutover", args, kwargs))
-        return "cutover"
-
-    async def rollback_category_authority(self, *args: object, **kwargs: object) -> str:
-        self.calls.append(("rollback", args, kwargs))
-        return "rollback"
-
-
-async def test_category_use_cases_preserve_lifecycle_arguments() -> None:
-    port = _CategoryPort()
-    use_cases = CategoryUseCases(port)
-
-    assert await use_cases.list_catalog("project") == "catalog"
-    assert await use_cases.get_active_source("project", "jobs") == "source"
-    assert (
-        await use_cases.stage_replacement(
-            project_id="project",
-            category_key="jobs",
-            filename="jobs.yaml",
-            source_yaml="jobs: []",
-            actor="admin",
-        )
-        == "staged"
-    )
-    assert await use_cases.activate_revision("revision", "embed", claim_token="token") == "active"
-    assert (
-        await use_cases.clear(project_id="project", category_key="jobs", actor="admin")
-        == "cleared"
-    )
-    assert (
-        await use_cases.cutover_category_authority(project_id="project", actor="admin")
-        == "cutover"
-    )
-    assert (
-        await use_cases.rollback_category_authority(project_id="project", actor="admin")
-        == "rollback"
-    )
-    assert [name for name, _args, _kwargs in port.calls] == [
-        "list",
-        "source",
-        "stage",
-        "activate",
-        "clear",
-        "cutover",
-        "rollback",
-    ]
-
-
-class _IngestionPort:
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, object, object | None, object | None]] = []
-
-    async def ingest_document(
-        self,
-        aggregate_id: object,
-        *,
-        embedder: object | None = None,
-        json_extractor: object | None = None,
-    ) -> None:
-        self.calls.append(("document", aggregate_id, embedder, json_extractor))
-
-    async def ingest_version(
-        self,
-        aggregate_id: object,
-        *,
-        embedder: object | None = None,
-        json_extractor: object | None = None,
-    ) -> None:
-        self.calls.append(("version", aggregate_id, embedder, json_extractor))
-
-
-async def test_ingestion_use_cases_preserve_injected_provider_overrides() -> None:
-    port = _IngestionPort()
-    use_cases = KnowledgeIngestionUseCases(port)
-
-    await use_cases.ingest_document("document", embedder="embed", json_extractor="json")
-    await use_cases.ingest_version("version", embedder="embed-v", json_extractor="json-v")
-
-    assert port.calls == [
-        ("document", "document", "embed", "json"),
-        ("version", "version", "embed-v", "json-v"),
-    ]
 
 
 async def test_cache_repair_preserves_knowledge_then_jobs_order(

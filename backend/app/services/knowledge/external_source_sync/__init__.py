@@ -46,7 +46,6 @@ from app.services.knowledge.category_contracts import (
     category_checksum,
     parse_category_yaml,
 )
-from app.project_knowledge.application.categories import CategoryUseCases
 from app.services.knowledge.category_service import KnowledgeCategoryService
 from app.services.knowledge.external_source_sync.parsers import PARSERS
 
@@ -352,9 +351,7 @@ async def _sync_locked(
     # Stage only — activation is enqueued async by stage_replacement (Finding 4).
     filename = f"{state.source_kind}_sync_{state.category_key}.yaml"
     try:
-        revision, job_id = await CategoryUseCases(
-            KnowledgeCategoryService(db)
-        ).stage_replacement(
+        revision, job_id = await KnowledgeCategoryService(db).stage_replacement(
             project_id=state.project_id,
             category_key=category_key,
             source_yaml=source_yaml,
