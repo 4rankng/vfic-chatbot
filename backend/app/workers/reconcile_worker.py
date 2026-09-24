@@ -1,7 +1,7 @@
 """RQ worker: reactive reconciliation sweep for lost bot turns.
 
 The ``scheduler`` container periodically enqueues ``run_reconcile_tick`` onto
-the ``followup`` queue.  ``worker-followup`` consumes it and scans for
+the ``maintenance`` queue.  ``worker-maintenance`` consumes it and scans for
 conversations whose newest message is unanswered or stuck-PENDING, then
 re-enqueues a fresh chat turn through the ``enqueue_recovery_chat_run`` path
 (low-priority ``recovery`` queue, consumed after ``webhook_high``).
@@ -68,11 +68,13 @@ def _within_failed_send_backoff(newest, *, now: datetime) -> bool:
 
 
 def enqueue_reconcile_tick_now() -> bool:
-    """One-shot helper: enqueue a reconcile tick onto the ``followup`` queue.
-    Useful for ops manual-trigger + tests."""
+    """One-shot helper: enqueue a reconcile tick onto the ``maintenance`` queue.
+    Useful for ops manual-trigger + tests. Must match the queue the scheduler
+    registers the tick on, so a manual run lands on the maintenance worker
+    instead of head-of-line-blocking proactive nudges."""
     from app.workers.utils import enqueue_job
 
-    return enqueue_job("followup", run_reconcile_tick)
+    return enqueue_job("maintenance", run_reconcile_tick)
 
 
 def run_reconcile_tick() -> None:

@@ -170,6 +170,28 @@ def test_recovered_turns_use_their_own_queue(monkeypatch: pytest.MonkeyPatch) ->
     assert seen == ["webhook_high", "recovery"]
 
 
+def test_reconcile_manual_trigger_uses_the_maintenance_queue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ops manual trigger must land where the scheduler registers the tick.
+
+    Pointing it at followup would run the sweep on the nudge worker and
+    reintroduce the head-of-line blocking the maintenance split removed.
+    """
+    from app.workers import reconcile_worker
+
+    seen: list[str] = []
+
+    def fake_enqueue(queue_name, *_args, **_kwargs):
+        seen.append(queue_name)
+        return True
+
+    monkeypatch.setattr("app.workers.utils.enqueue_job", fake_enqueue)
+
+    assert reconcile_worker.enqueue_reconcile_tick_now() is True
+    assert seen == ["maintenance"]
+
+
 def _patch_depth_settings(monkeypatch: pytest.MonkeyPatch, **depths: int) -> None:
     monkeypatch.setattr(
         "app.core.config.get_settings",

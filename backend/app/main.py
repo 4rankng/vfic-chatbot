@@ -231,7 +231,14 @@ async def metrics() -> dict:
 
         conn = get_redis_sync()
         queues = {}
-        for name in ("webhook_high", "recovery", "persistence_low", "ingest", "followup"):
+        for name in (
+            "webhook_high",
+            "recovery",
+            "persistence_low",
+            "ingest",
+            "followup",
+            "maintenance",
+        ):
             queues[name] = Queue(name, connection=conn).count  # O(1) Redis LLEN
         queues["workers"] = Worker.count(connection=conn)  # O(1) Redis SCARD
         # Reconcile canary counters (written by reconcile_worker via Redis INCR/SET).
