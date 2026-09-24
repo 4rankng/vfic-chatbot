@@ -582,15 +582,7 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/conversations/conversation-list-filters.ts",
-          "type": "registry:component"
-        },
-        {
           "path": "src/components/atomic-crm/conversations/conversation-capability.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/candidateNotes.ts",
           "type": "registry:component"
         },
         {
@@ -671,6 +663,10 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/domain/conversation-display.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/domain/candidate-notes.ts",
           "type": "registry:component"
         },
         {
