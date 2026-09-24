@@ -166,14 +166,19 @@ class RetrievalRepository:
             filter_obj = {}
         chat_id = filter_obj.get("chat_id")
         if isinstance(chat_id, str) and set(filter_obj) <= {"chat_id"}:
+            # Cast to halfvec(3072) — not vector — so the query expression
+            # matches the memories_embedding_halfvec_hnsw_idx index expression
+            # and the HNSW index can actually serve this path.
             return (
                 await self.db.execute(
                     text(
                         "SELECT id, content, metadata, "
-                        "       1 - (embedding <=> CAST(:emb AS vector)) AS similarity "
+                        "       1 - (embedding::halfvec(3072) "
+                        "            <=> CAST(:emb AS halfvec(3072))) AS similarity "
                         "FROM memories "
                         "WHERE chat_id = :chat_id AND embedding IS NOT NULL "
-                        "ORDER BY embedding <=> CAST(:emb AS vector) "
+                        "ORDER BY embedding::halfvec(3072) "
+                        "         <=> CAST(:emb AS halfvec(3072)) "
                         "LIMIT :k"
                     ),
                     {"emb": emb, "k": top_k, "chat_id": chat_id},
@@ -212,6 +217,17 @@ class RetrievalRepository:
             params["pids"] = project_ids
         s = get_settings()
         if self._ann_enabled():
+            # The exact vector distance is computed ONCE per candidate row (in
+            # the inner SELECT aliased ``dist``) and referenced by the floor
+            # predicate and the ORDER BY — previously the same 3072-dim
+            # expression ran three times per row. Candidate selection in
+            # ``ann_candidates`` keeps the halfvec cast that matches the 0016
+            # HNSW index expression.
+            # Filtering/ordering on ``dist`` is equivalent to the previous
+            # ``1 - dist >= floor`` / ``ORDER BY 1 - dist`` form: over the
+            # cosine distances here (0.5–1.0) the ``1 - dist`` subtraction is
+            # exact (Sterbenz lemma), so neither the floor compare nor the row
+            # order can change.
             vector_sql = (
                 "WITH ann_candidates AS ("
                 "  SELECT c.id "
@@ -222,19 +238,25 @@ class RetrievalRepository:
                 "  ORDER BY c.embedding::halfvec(3072) <=> CAST(:emb AS halfvec(3072)) "
                 "  LIMIT :candidate_k"
                 ") "
-                "SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
-                "       c.line_start, c.line_end, c.section_path, ktf.filename AS source_file, "
-                "       1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
-                "FROM ann_candidates ac "
-                "JOIN knowledge_chunks c ON c.id = ac.id "
-                "LEFT JOIN kb_text_files ktf ON ktf.id = c.file_id "
-                "WHERE 1 - (c.embedding <=> CAST(:emb AS vector)) >= :floor "
-                "ORDER BY c.embedding <=> CAST(:emb AS vector) "
+                "SELECT id, content, source_quote, summary, metadata, "
+                "       line_start, line_end, section_path, source_file, "
+                "       1 - dist AS similarity "
+                "FROM ("
+                "  SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
+                "         c.line_start, c.line_end, c.section_path, "
+                "         ktf.filename AS source_file, "
+                "         (c.embedding <=> CAST(:emb AS vector)) AS dist "
+                "  FROM ann_candidates ac "
+                "  JOIN knowledge_chunks c ON c.id = ac.id "
+                "  LEFT JOIN kb_text_files ktf ON ktf.id = c.file_id"
+                ") scored "
+                "WHERE dist <= :max_dist "
+                "ORDER BY dist "
                 "LIMIT :k"
             )
             params = {
                 **params,
-                "floor": self.SIMILARITY_FLOOR,
+                "max_dist": 1 - self.SIMILARITY_FLOOR,
                 "candidate_k": max(int(s.rag_ann_candidates), top_k),
             }
         else:
@@ -710,7 +732,8 @@ class RetrievalRepository:
         rows = await self.db.scalars(
             text(
                 "SELECT p.id::text FROM projects p "
-                "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL"
+                "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
+                "ORDER BY p.id"
             )
         )
         return list(rows)
