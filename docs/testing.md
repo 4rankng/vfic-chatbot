@@ -171,7 +171,7 @@ The GitHub Actions `quality-gates.yml` workflow runs on pull requests and pushes
 | `backend-integration` | `pytest -m integration tests/integration/test_harness_smoke.py` against local PostgreSQL 16 + pgvector and Redis. |
 | `frontend-quality` | `npm run lint`, `npm run typecheck`, `npm run test:unit:app:coverage -- --run`, and `npm run build` in `frontend/`. |
 | `functional-e2e` | Playwright on both `chromium` and `Mobile Chrome` projects. |
-| `release-gate` | Offline golden-result generation with `scripts/benchmark_rag.py --gold` and evaluation with `scripts/release_gate_check.py`. Fresh CI disables the latency SLO gate, so the release-gate job reports it as `not evaluated` rather than measuring it. |
+| `release-gate` | Offline golden-result generation with `scripts/benchmark_rag.py --gold`, evaluation with `scripts/release_gate_check.py`, then one real bot turn through `scripts/smoke_turn.py` against a migrated disposable database plus its `--inject-failure` fail-closed self-test. Fresh CI disables the latency SLO gate — CI has no production telemetry, so the job reports it as `not evaluated` rather than measuring it. |
 
 ## Regression Policy
 
