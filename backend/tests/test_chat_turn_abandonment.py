@@ -10,6 +10,7 @@ reconcile sweep then re-answers the same conversation every ~60s forever.
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -125,3 +126,94 @@ async def test_cancellation_still_propagates():
                     await _run_job_async(_job())
 
     svc.record_bot_outcome.assert_not_called()
+
+
+# ─── the dead turn's placeholder row ────────────────────────────────────────
+#
+# ``run_turn`` publishes the "Đang soạn trả lời..." row before the answer exists,
+# so a turn that dies between that row and its outcome would otherwise leave the
+# candidate with a bubble that never resolves — and the abandoned-turn record
+# would add a SECOND PENDING row beside it. The guard must resolve the turn's own
+# row instead. These tests drive the real worker body and the real
+# ``record_bot_outcome`` resolution against a live Message row, so the assertion
+# is the row's end state rather than the call wiring.
+
+
+class _RowSession:
+    """Minimal session stand-in that owns one live BOT/PENDING row."""
+
+    def __init__(self, row) -> None:
+        self.row = row
+        self.added: list = []
+
+    async def get(self, _model, ident, **_kwargs):
+        return self.row if ident == self.row.id else None
+
+    def add(self, obj) -> None:
+        self.added.append(obj)
+
+    async def flush(self) -> None:
+        for obj in self.added:
+            if hasattr(obj, "proposed_reply") and getattr(obj, "id", None) is None:
+                obj.id = 99
+
+    async def commit(self) -> None:
+        return None
+
+    async def refresh(self, _obj) -> None:
+        return None
+
+    async def execute(self, *_args, **_kwargs):
+        return SimpleNamespace(rowcount=0)
+
+    async def rollback(self) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_abandoned_turn_resolves_its_placeholder_row():
+    """A turn killed after creating its placeholder must not leave it behind.
+
+    The placeholder IS the turn's own BOT/PENDING row: the abandoned-turn record
+    has to resolve that row (body cleared, linked to the ERROR audit run, crash
+    reason attached) instead of inserting a second PENDING row and orphaning the
+    candidate's "Đang soạn trả lời..." bubble.
+    """
+    from app.models.conversation import Message, MessageSender
+    from app.services.conversation.state import ConversationState
+
+    conv = MagicMock(version=7)
+    conv.id = uuid.uuid4()
+    placeholder = Message(
+        conversation_id=conv.id,
+        sender=MessageSender.BOT,
+        body="Đang soạn trả lời...",
+        delivery_status=DeliveryStatus.PENDING,
+    )
+    placeholder.id = 4242
+
+    db = _RowSession(placeholder)
+    state = ConversationState(db, MagicMock(), AsyncMock())
+    svc = _mock_service()
+    svc.get = AsyncMock(return_value=conv)
+    svc.record_bot_outcome = state.record_bot_outcome  # the real resolution policy
+
+    async def _die_after_pending(state_, deps):  # noqa: ARG001
+        # Mirrors run_turn: the placeholder exists (record_bot_pending committed),
+        # then the job is killed mid-turn.
+        state_.pending_message_id = 4242
+        raise JobTimeoutException("slow")
+
+    with patch(_PATCH_SESSION, return_value=_mock_session()):
+        with patch("app.workers._db.worker_session_factory", return_value=MagicMock()):
+            with patch("app.graph.factories.build_deps", new_callable=AsyncMock):
+                with patch("app.graph.runner.run_turn", side_effect=_die_after_pending):
+                    with patch("app.core.redis.get_redis_sync", side_effect=RuntimeError("no redis")):
+                        with patch(_PATCH_SERVICE, return_value=svc):
+                            await _run_job_async(_job())
+
+    assert placeholder.body == "", "the placeholder text must not survive the dead turn"
+    assert placeholder.bot_run_id is not None, "the row must carry the audit run"
+    assert "timeout" in (placeholder.external_error or "")
+    # Resolved in place: no second PENDING bubble beside the dead turn's row.
+    assert not [obj for obj in db.added if isinstance(obj, Message)]

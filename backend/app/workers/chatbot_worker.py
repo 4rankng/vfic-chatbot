@@ -313,6 +313,79 @@ def _abandoned_turn_timings(job: dict) -> dict:
     return timings
 
 
+def _inbound_provider_id(message) -> str:
+    """Canonical provider id of a persisted inbound row (Zalo bot / OA / Messenger)."""
+    return str(
+        getattr(message, "provider_message_id", None)
+        or getattr(message, "zalo_message_id", None)
+        or ""
+    )
+
+
+async def _handoff_to_newer_inbound(state) -> None:
+    """Give a message that arrived mid-turn the turn the ingress guard refused it.
+
+    ``ZaloWebhookService.handle`` (and the Messenger ingress) persist an inbound
+    that arrives while the per-chat mutex is held and then drop it — no job is
+    enqueued for it. Nothing downstream recovers that message: the reconcile
+    sweep only looks at a conversation whose NEWEST message is a WORKER row or a
+    BOT PENDING/SENDING/FAILED row, and the turn that held the mutex writes its
+    own outcome row *after* the dropped message, masking the conversation from
+    the sweep for good (production: a candidate's second message never answered,
+    no BotRun recorded for it).
+
+    So the turn that held the mutex hands over: when the newest inbound is not
+    the one this turn answered, enqueue one turn for the newest unanswered
+    inbound once the mutex is free. Bounded by construction — the handed-over
+    turn answers the newest message, so its own hand-off sees the newest inbound
+    is the one it handled and stops; a turn that failed on its own message
+    (agent crash, provider throttle) leaves the newest inbound as the one it
+    handled and never re-enqueues itself. Best-effort: recovery plumbing must
+    never break the turn or the worker.
+    """
+    conversation_id = str(getattr(state, "conversation_id", "") or "")
+    answered = str(getattr(state, "reply_to_message_id", "") or "")
+    if not conversation_id or not answered:
+        # Web-chat/direct turns have no inbound provider id, and a job without one
+        # cannot say which inbound it answered: never guess.
+        return
+    try:
+        from app.services.conversation import ConversationService
+        from app.services.conversation.scheduler import (
+            enqueue_latest_unanswered_worker_message,
+        )
+        from app.workers._db import worker_session
+
+        async with worker_session() as db:
+            svc = ConversationService(db)
+            conv = await svc.get(uuid.UUID(conversation_id))
+            if conv is None:
+                return
+            if not svc.run_start_guard(conv):
+                # A human owns the conversation now (HUMAN, or an active
+                # SEMI_AUTO takeover): the bot must stay out of it.
+                return
+            newest = await svc.latest_worker_message(conv)
+            if newest is None or _inbound_provider_id(newest) == answered:
+                return  # the newest inbound is the one this turn handled
+            handed_over = await enqueue_latest_unanswered_worker_message(
+                svc,
+                conv,
+                enqueue=enqueue_recovery_chat_run,
+                execution_source="recovery",
+            )
+            if handed_over:
+                logger.info(
+                    "superseded turn handed the conversation to a newer inbound "
+                    "conversation=%s",
+                    conversation_id,
+                )
+    except Exception:  # noqa: BLE001 — a hand-off failure must not fail the turn
+        logger.warning(
+            "newest-inbound hand-off failed conversation=%s", conversation_id, exc_info=True
+        )
+
+
 async def _record_abandoned_turn(job: dict, *, exc: BaseException) -> None:
     """Record a turn that died before ``run_turn`` could log an outcome.
 
@@ -326,6 +399,11 @@ async def _record_abandoned_turn(job: dict, *, exc: BaseException) -> None:
     nobody (2026-09-21: zero bot_runs recorded for a full day of inbound
     traffic). One ERROR BotRun + FAILED BOT row makes the failure visible, puts
     the sender in the console's failed-reply view, and frees the lock.
+
+    ``pending_message_id`` (published by the turn body once its PENDING row
+    exists) resolves that row in place: a turn killed after creating the
+    candidate-visible "Đang soạn trả lời..." bubble must not leave the bubble
+    behind, nor add a second PENDING row beside it.
 
     Best-effort by design: the guard exists so a bad job cannot kill the worker,
     so a recording failure must never raise either.
@@ -374,6 +452,9 @@ async def _record_abandoned_turn(job: dict, *, exc: BaseException) -> None:
                 external_error=reason,
                 stage_timings=_abandoned_turn_timings(job),
                 lock_owner=job.get("lock_owner") or None,
+                # Resolve the dead turn's own placeholder row in place (None when
+                # it died before creating one).
+                pending_message_id=job.get("pending_message_id"),
                 trace_id=str(job.get("trace_id") or "") or None,
             )
         logger.error(
@@ -546,6 +627,16 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                         )
                 except Exception:  # noqa: BLE001
                     logger.error("failed to record degraded turn outcome", exc_info=True)
+            finally:
+                # Publish the turn's PENDING row onto the job so the crash guard
+                # above can resolve it when the turn dies after creating it.
+                job["pending_message_id"] = state.pending_message_id
+
+            # The ingress guard refuses an inbound that arrives while this turn
+            # holds the per-chat mutex; hand the conversation over to it so the
+            # newest message still gets answered (no-op when this turn already
+            # handled the newest inbound).
+            await _handoff_to_newer_inbound(state)
     finally:
         if heartbeat_task is not None:
             heartbeat_task.cancel()

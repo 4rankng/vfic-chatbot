@@ -14,6 +14,7 @@ async def enqueue_latest_unanswered_worker_message(
     conv,
     *,
     enqueue: Callable[[dict], bool],
+    execution_source: str = "queued",
 ) -> bool:
     """Enqueue a bot turn for the latest unanswered worker message, if any."""
     pending = await svc.latest_unanswered_worker_message(conv)
@@ -31,7 +32,7 @@ async def enqueue_latest_unanswered_worker_message(
             "user_name": "",
             "reply_to_message_id": pending.zalo_message_id or "",
             "lock_owner": str(lock_owner),
-            "execution_source": "queued",
+            "execution_source": execution_source,
             "received_at": pending.created_at.isoformat(),
             "received_at_epoch": time.time(),
         }

@@ -9,6 +9,7 @@ import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -341,6 +342,52 @@ async def test_record_bot_pending_does_not_bump_version():
     # webhook-ack / db_ms hot path). schedule_realtime is synchronous, so assert
     # the call rather than an await.
     events.schedule_realtime.assert_called_once_with(msg, conv)
+
+
+@pytest.mark.asyncio
+async def test_record_bot_pending_resolves_a_predecessor_placeholder():
+    """One live placeholder per conversation.
+
+    A turn killed without a terminal write (SIGKILL/OOM, worker shutdown) leaves
+    its "Đang soạn trả lời..." row open. The next turn owns the per-chat mutex, so
+    that row can never resolve itself: creating the new placeholder resolves it
+    to FAILED instead of stacking a second bubble beside it (production carried
+    conversations with two stranded PENDING rows for exactly this reason).
+    """
+    conv = _make_conv(version=7)
+    orphan = Message(
+        conversation_id=conv.id,
+        sender=MessageSender.BOT,
+        body="Đang soạn trả lời...",
+        delivery_status=DeliveryStatus.PENDING,
+    )
+    orphan.id = 41
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+
+    async def _execute(statement, *_args, **_kwargs):
+        # Test double for the one UPDATE this path issues: apply it to the
+        # in-memory row so the assertion is the row's end state.
+        values = statement.compile().params
+        if (
+            values.get("delivery_status") == DeliveryStatus.FAILED
+            and orphan.delivery_status == DeliveryStatus.PENDING
+        ):
+            orphan.delivery_status = DeliveryStatus.FAILED
+            return SimpleNamespace(rowcount=1)
+        return SimpleNamespace(rowcount=0)
+
+    db.execute = AsyncMock(side_effect=_execute)
+    state = ConversationState(db, MagicMock(), MagicMock())
+
+    msg = await state.record_bot_pending(conv)
+
+    assert orphan.delivery_status == DeliveryStatus.FAILED
+    assert msg.delivery_status == DeliveryStatus.PENDING  # the new turn's own row
+    assert msg.id != orphan.id
 
 
 @pytest.mark.asyncio

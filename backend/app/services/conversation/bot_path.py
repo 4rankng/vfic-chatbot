@@ -776,7 +776,17 @@ class BotConversationState:
         authority_generation: int | None = None,
         runtime_fingerprint: str | None = None,
     ) -> Message:
-        """Persist a visible pending BOT row without touching the version guard."""
+        """Persist a visible pending BOT row without touching the version guard.
+
+        Any BOT/PENDING row still open for this conversation belongs to a
+        predecessor that died without a terminal write (SIGKILL/OOM, worker
+        shutdown) — the caller reaches this only while holding the per-chat
+        mutex (``run_turn`` rechecks ownership first), so no live turn can own
+        one. Resolving it here keeps exactly one live placeholder per
+        conversation instead of leaving an orphaned "Đang soạn trả lời..." bubble
+        stranded behind the new one.
+        """
+        await self.mark_stale_pending_failed(conv.id)
         msg = Message(
             conversation_id=conv.id,
             sender=MessageSender.BOT,

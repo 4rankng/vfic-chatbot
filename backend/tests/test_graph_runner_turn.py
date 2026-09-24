@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -2462,3 +2463,145 @@ async def test_profile_name_falls_back_to_contact_display_name(monkeypatch):
         conv=conv,
     )
     assert deps.turn_decisions.calls[0]["profile_name"] == "Trần Văn Hùng"
+
+
+# ─── silent terminals never leave the placeholder row behind ────────────────
+#
+# "Đang soạn trả lời..." is persisted before the answer exists, so every path
+# that ends the turn without sending must resolve THAT row — the candidate must
+# never be left with a bubble that never resolves. These tests run the real
+# ``ConversationState.record_bot_outcome`` resolution against a live Message row
+# so the assertion is the row's end state, not the call wiring.
+
+_PLACEHOLDER_BODY = "Đang soạn trả lời..."
+
+
+class _PlaceholderSession:
+    """Minimal session stand-in that owns one live BOT/PENDING row."""
+
+    def __init__(self, row) -> None:
+        self.row = row
+        self.added: list = []
+
+    async def get(self, _model, ident, **_kwargs):
+        return self.row if ident == self.row.id else None
+
+    def add(self, obj) -> None:
+        self.added.append(obj)
+
+    async def flush(self) -> None:
+        for obj in self.added:
+            if hasattr(obj, "proposed_reply") and getattr(obj, "id", None) is None:
+                obj.id = 99
+
+    async def commit(self) -> None:
+        return None
+
+    async def refresh(self, _obj) -> None:
+        return None
+
+    async def execute(self, *_args, **_kwargs):
+        return SimpleNamespace(rowcount=0)
+
+    async def rollback(self) -> None:
+        return None
+
+
+def _pending_row(conv, *, message_id: int = 42):
+    from app.models.conversation import DeliveryStatus, Message, MessageSender
+
+    row = Message(
+        conversation_id=conv.id,
+        sender=MessageSender.BOT,
+        body=_PLACEHOLDER_BODY,
+        delivery_status=DeliveryStatus.PENDING,
+    )
+    row.id = message_id
+    return row
+
+
+def _pending_row_svc(*, conv, row, owned: bool = True):
+    """A ConversationPort stub whose record_bot_outcome is the real resolution."""
+    from unittest.mock import MagicMock
+
+    from app.services.conversation.state import ConversationState
+
+    db = _PlaceholderSession(row)
+    state = ConversationState(db, MagicMock(), AsyncMock())
+
+    class _Svc:
+        async def get(self, _id):
+            return conv
+
+        async def last_messages(self, c, limit):
+            return []
+
+        async def record_bot_pending(self, c, **_kwargs):
+            return row
+
+        async def recheck_ownership(self, c, version_at_start, lock_owner=None):
+            return owned
+
+        async def claim_send(
+            self, c, *, version_at_start, lock_owner, pending_message_id, reply, **_kwargs
+        ):
+            return owned and pending_message_id is not None
+
+        async def record_bot_outcome(self, c, **kwargs):
+            return await state.record_bot_outcome(c, **kwargs)
+
+    return _Svc(), db, row
+
+
+def _added_messages(db) -> list:
+    from app.models.conversation import Message
+
+    return [obj for obj in db.added if isinstance(obj, Message)]
+
+
+async def _run_silent_turn(monkeypatch, *, owned: bool, agent) -> tuple[dict, object, object]:
+    from app.models.conversation import DeliveryStatus
+
+    conv = _FakeConv()
+    conv.id = uuid.UUID(CONV_ID)
+    conv.conversation_seq = 1
+    row = _pending_row(conv)
+    svc, db, row = _pending_row_svc(conv=conv, row=row, owned=owned)
+    _stub_agent(monkeypatch, agent)
+    result = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, db=db))
+    assert row.delivery_status == DeliveryStatus.SUPPRESSED, (
+        "a silent terminal must resolve the placeholder to a terminal status"
+    )
+    assert row.body != _PLACEHOLDER_BODY
+    assert _added_messages(db) == [], "the placeholder is resolved in place, never duplicated"
+    return result, row, db
+
+
+@pytest.mark.asyncio
+async def test_claim_failure_suppression_resolves_the_placeholder_row(monkeypatch):
+    """A newer inbound (or takeover) bumped the version: the claim loses and the
+    drafted answer is never sent — the placeholder row must still resolve."""
+    result, row, _ = await _run_silent_turn(
+        monkeypatch, owned=False, agent="Dạ em chào anh/chị ạ"
+    )
+
+    assert result["outcome"] == "suppressed"
+    assert row.body == "Dạ em chào anh/chị ạ"  # the drafted answer is kept for audit
+
+
+@pytest.mark.asyncio
+async def test_agent_error_suppression_resolves_the_placeholder_row(monkeypatch):
+    result, row, _ = await _run_silent_turn(
+        monkeypatch, owned=True, agent=ValueError("agent blew up")
+    )
+
+    assert result["outcome"] == "error"
+    assert row.body == ""  # nothing was sent — no invented text
+
+
+@pytest.mark.asyncio
+async def test_empty_reply_suppression_resolves_the_placeholder_row(monkeypatch):
+    result, row, _ = await _run_silent_turn(monkeypatch, owned=True, agent="   ")
+
+    assert result["outcome"] == "suppressed"
+    assert row.body == ""

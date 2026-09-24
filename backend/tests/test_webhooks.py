@@ -372,6 +372,64 @@ async def test_failed_rq_enqueue_releases_webhook_lock(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_inbound_while_the_mutex_is_held_is_stored_but_not_queued(monkeypatch):
+    """The ingress guard refuses a second inbound for a locked conversation.
+
+    The message is durably stored — a later turn can still answer it, which is
+    what the worker's newest-inbound hand-off relies on — but no job is enqueued
+    for it: the turn holding the per-chat mutex is the only one that can hand the
+    conversation over to it.
+    """
+    import uuid
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(
+        id=uuid.uuid4(),
+        zalo_chat_id="bot-user-1",
+        zalo_channel="bot",
+        version=2,
+        mode="BOT",
+    )
+    service = MagicMock()
+    service.ensure = AsyncMock(return_value=conv)
+    service.record_inbound = AsyncMock()
+    service.get = AsyncMock(return_value=conv)
+    service.run_start_guard = MagicMock(return_value=True)
+    service.acquire_lock = AsyncMock(return_value=None)  # a turn is in flight
+    service.release_lock = AsyncMock()
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        AsyncMock(return_value=None),
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+    enqueue = MagicMock()
+
+    result = await ZaloWebhookService.handle(
+        db,
+        {
+            "message": {
+                "message_id": "msg-2",
+                "chat": {"id": "bot-user-1"},
+                "text": "Hello",
+            }
+        },
+        enqueue=enqueue,
+    )
+
+    assert result == {"status": "locked", "conversation_id": str(conv.id)}
+    service.record_inbound.assert_awaited_once()  # the message is not lost
+    enqueue.assert_not_called()  # ...but it gets no turn of its own
+    service.release_lock.assert_not_awaited()  # the in-flight turn still owns the lock
+
+
+@pytest.mark.asyncio
 async def test_webhook_persists_explicit_name_before_queuing_turn(monkeypatch):
     import uuid
 
