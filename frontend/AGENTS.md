@@ -130,7 +130,28 @@ registry and named Shadcn dependencies supply `components/admin`,
 `components/ui`, `hooks/use-mobile.ts`, and `lib/utils.ts`. PNG/WebP
 illustrations under `src/assets/` remain application static assets because the
 registry serializes file contents as UTF-8; they are path-checked but are not
-embedded in the registry payload.
+embedded in the registry payload. SVGs are text, so the ones product code
+imports (`facebook-messenger.svg`) are published.
+
+`npm run registry:gen` rebuilds the manifest from globs and must stay
+idempotent; `npm run registry:check` fails the `frontend-quality` CI job when a
+published file is missing, is test-only, or imports something unpublished.
+Regenerate and review the diff before committing — it should only add entries.
+
+### Feature CSS Scoping
+
+`.inbox-bg-container` is one shared container class carried by every workspace
+root — inbox, profile, project, persona, settings and knowledge. A rule nesting
+under it as a *descendant* (`.inbox-bg-container .x`) therefore reaches all six
+screens. The scoped form is the compound selector `projects.css` already uses:
+`.inbox-bg-container.project-workspace .x`.
+
+Scope a stylesheet under its own workspace class the next time you edit it, and
+lower `MAX_UNSCOPED_RULES` in `src/components/atomic-crm/css-scoping.test.ts` to
+match. That test fails when the count grows, so new rules must be scoped rather
+than added to the backlog. Do not batch-rewrite the remaining sheets: it needs
+visual QA per screen (TEST-10 — the CSS tests assert source text, not rendered
+layout).
 
 ### i18n
 
