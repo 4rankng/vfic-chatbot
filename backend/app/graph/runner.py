@@ -74,6 +74,24 @@ OA_PROFILE_LOOKUP_TIMEOUT_SECONDS = 2.0
 # an explicit "unknown") is left for the candidate's next message to re-judge.
 GENDER_INFERENCE_MIN_CONFIDENCE = 0.7
 _INFERRED_GENDERS = frozenset({"male", "female"})
+# The ownership bookkeeping columns a pre-send refresh must reload (recheck +
+# claim). A full ``db.refresh(conv)`` also re-fetches the ``contact`` and
+# ``channel_identity`` selectin relationships — 3–4 extra SELECTs per refresh,
+# twice per turn — while the ownership recheck (bot_path.recheck_ownership)
+# reads only these columns and the claim's authority is its server-side
+# ``WHERE EXISTS``. Keep the list exhaustive for everything the recheck reads
+# (``taken_over_at``/``updated_at`` feed the semi-auto guard) or a takeover
+# could again slip past a stale identity-map snapshot.
+_OWNERSHIP_REFRESH_COLUMNS = [
+    "version",
+    "mode",
+    "status",
+    "taken_over_at",
+    "updated_at",
+    "bot_lock_owner",
+    "bot_locked_until",
+    "bot_lock_heartbeat_at",
+]
 VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
     "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
 )
@@ -1031,9 +1049,10 @@ async def _claim_and_dispatch(
     # crash-window (a stale SENDING row left by a post-send crash is reconciled
     # as sent-but-unconfirmed, at-most-once) and the recheck→send TOCTOU (a
     # takeover or newer inbound bumping version before the claim yields rowcount
-    # 0 → suppress). refresh() keeps the bound conv on committed state. ---
+    # 0 → suppress). A column-scoped refresh() keeps the bound conv's ownership
+    # columns on committed state without re-fetching the selectin cascade. ---
     db_t0 = time.monotonic()
-    await deps.db.refresh(conv)
+    await deps.db.refresh(conv, _OWNERSHIP_REFRESH_COLUMNS)
     owned = await svc.claim_send(
         conv,
         version_at_start=state.version_at_start,
@@ -1071,11 +1090,18 @@ async def _claim_and_dispatch(
     # other failure stays FAILED (the reconciler may re-enqueue).
     send_suppressed = bool(getattr(send_result, "suppressed", False))
     send_error_class = send_result.error_class if not send_result.ok else None
+    # REL-01: a multi-bubble answer whose later bubble failed after an earlier
+    # one was accepted is partially delivered. The sender promotes it to an
+    # ambiguous class so it lands in SEND_UNKNOWN below; honour an explicit
+    # ``partial`` flag too (legacy senders return the concrete result directly).
+    # Either way it must never become a retryable FAILED — recovery would answer
+    # the candidate twice.
+    send_partial = bool(getattr(send_result, "partial", False))
     statuses = _delivery_statuses(deps)
     override_status: Any | None = None
     if send_suppressed:
         override_status = statuses.suppressed
-    elif send_error_class in AMBIGUOUS_SEND_CLASSES:
+    elif send_partial or send_error_class in AMBIGUOUS_SEND_CLASSES:
         override_status = statuses.send_unknown
     await svc.record_bot_outcome(
         conv,
@@ -1210,7 +1236,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             )
     if lock_owner:
         db_t0 = time.monotonic()
-        await deps.db.refresh(conv)
+        await deps.db.refresh(conv, _OWNERSHIP_REFRESH_COLUMNS)
         ok = await svc.recheck_ownership(conv, state.version_at_start, lock_owner=lock_owner)
         _stamp_db(timings, "recheck_ownership", db_t0)
         if not ok:

@@ -114,11 +114,13 @@ class _FakeDB:
 
     def __init__(self) -> None:
         self.rollbacks = 0
+        self.refresh_calls: list[tuple | None] = []
         self._poisoned = False
 
-    async def refresh(self, conv) -> None:
+    async def refresh(self, conv, attribute_names=None) -> None:
         if self._poisoned:
             raise RuntimeError("simulated PendingRollbackError: session needs rollback")
+        self.refresh_calls.append(tuple(attribute_names) if attribute_names else None)
         return None
 
     async def rollback(self) -> None:
@@ -945,6 +947,28 @@ async def test_lock_owner_lost_before_turn_suppresses_without_pending(monkeypatc
     assert svc.pending_calls == 0
     assert zalo.sent == []
     assert profile_calls == []
+
+
+@pytest.mark.asyncio
+async def test_ownership_refreshes_are_column_scoped(monkeypatch):
+    """The pre-recheck and pre-claim refreshes reload exactly the ownership
+    columns — never the full row with its contact/channel_identity selectin
+    cascade — while the takeover verdicts still flow through the port."""
+    conv = _FakeConv()
+    svc, _ = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")
+    db = _FakeDB()
+    state = _state()
+    state.lock_owner = "00000000-0000-0000-0000-0000000000aa"
+
+    res = await run_turn(state, _deps(_FakeZalo(), conversation=svc, db=db))
+
+    assert res["outcome"] == "sent"
+    # One column-scoped refresh before the ownership recheck, one before the
+    # claim; both carry the exhaustive ownership column set (dropping any of
+    # them would let a takeover slip past the stale identity-map snapshot).
+    expected = tuple(runner._OWNERSHIP_REFRESH_COLUMNS)
+    assert db.refresh_calls == [expected, expected]
 
 
 @pytest.mark.asyncio
@@ -2497,7 +2521,7 @@ class _PlaceholderSession:
     async def commit(self) -> None:
         return None
 
-    async def refresh(self, _obj) -> None:
+    async def refresh(self, _obj, attribute_names=None) -> None:  # noqa: ARG001
         return None
 
     async def execute(self, *_args, **_kwargs):

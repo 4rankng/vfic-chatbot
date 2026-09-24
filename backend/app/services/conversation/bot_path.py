@@ -506,6 +506,10 @@ class BotConversationState:
         sent-but-unconfirmed (at-most-once) with correct content rather than
         re-enqueuing a duplicate or persisting the placeholder. Returns True iff
         the row was claimed.
+
+        The command is written already-SENDING for the same reason (REL-06): the
+        dispatcher sweep must never see a claimable row for a send this
+        transaction is about to run inline.
         """
         if pending_message_id is None or lock_owner is None:
             # The atomic claim requires both a pending BOT row to flip and a lock
@@ -542,11 +546,19 @@ class BotConversationState:
             },
         )
         if res.rowcount == 1 and outbox_channel is not None and outbox_payload is not None:
+            from app.models.outbox import OutboxStatus
             from app.services.outbox_service import create_pending_outbox
 
             pending = await self.db.get(Message, pending_message_id)
             stamped = pending is not None and pending.runtime_revision_id is not None
 
+            # REL-06: write the command already SENDING. It is claimed by this
+            # very transaction (the message flip above is its claim), so a 60 s
+            # dispatcher tick can no longer win a row whose inline send is still
+            # running and record a false ERROR turn for a delivered message. The
+            # inline sender resumes it through ``dispatch_message_outbox``; a
+            # crash leaves SENDING, which the recovery sweep terminalizes
+            # at-most-once rather than re-sending.
             await create_pending_outbox(
                 self.db,
                 message_id=pending_message_id,
@@ -557,6 +569,7 @@ class BotConversationState:
                 runtime_fingerprint=pending.runtime_fingerprint if stamped else None,
                 origin_kind="BOT" if stamped else None,
                 fence_scope="RUNTIME" if stamped else None,
+                status=OutboxStatus.SENDING,
             )
         await self.db.commit()
         return res.rowcount == 1
