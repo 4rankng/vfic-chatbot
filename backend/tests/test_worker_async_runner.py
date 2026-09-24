@@ -154,7 +154,10 @@ def test_shutdown_repeats_drain_for_task_spawned_by_cancellation_finalizer():
         finally:
             child_finalized.set()
 
+    parent_started = asyncio.Event()
+
     async def parent() -> None:
+        parent_started.set()
         try:
             await asyncio.Event().wait()
         finally:
@@ -162,7 +165,7 @@ def test_shutdown_repeats_drain_for_task_spawned_by_cancellation_finalizer():
 
     async def start_parent() -> None:
         asyncio.create_task(parent())
-        await asyncio.sleep(0)
+        await parent_started.wait()
 
     async_runner.run_async(start_parent())
     async_runner._shutdown_loop()

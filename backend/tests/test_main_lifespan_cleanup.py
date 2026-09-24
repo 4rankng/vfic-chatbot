@@ -85,6 +85,8 @@ async def test_shutdown_cancellation_waits_for_real_direct_turn_before_resources
     assert chatbot_worker.start_direct_chat_turn({"conversation_id": "turn-shutdown"})
     await started.wait()
     shutdown = asyncio.create_task(main._shutdown_web_resources())
+    # One slice so the task exists; the cancellation is delivered at its first
+    # await point — a fixed asyncio semantic, not a wall-clock race.
     await asyncio.sleep(0)
     shutdown.cancel()
 

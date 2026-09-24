@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -1102,70 +1103,80 @@ def test_phase1_channel_string_is_bot_or_oa_only():
     assert {bot.zalo_channel, oa.zalo_channel} == {"bot", "oa"}
 
 
-def test_phase1_typing_difference_bot_fires_oa_does_not():
-    """Bot has a typing endpoint; OA does not. The neutral capability contract
-    (TypingCapability) must preserve this: the Bot wrapper will implement it,
-    the OA wrapper will not. This test freezes the *source* of that difference
-    by asserting the typing call site is *structurally nested* inside an
-    ``if norm.zalo_channel == "bot"`` guard — not merely textually after it.
-    """
-    import ast
-    import inspect
-    import textwrap
+async def test_typing_indicator_fires_for_bot_channel_and_not_for_oa(monkeypatch):
+    """Bot has a typing endpoint; OA does not.
 
+    Behavioral proof instead of the former AST pin: execute ``handle`` for both
+    channels and observe the typing side effect. The typing task is
+    fire-and-forget, so one event-loop slice is pumped afterwards to let the
+    recorder run — a created task always gets its first slice on the next
+    iteration, and the recorder appends synchronously on that slice.
+    """
+    import uuid
+
+    import app.services.webhook as webhook_module
     from app.services.webhook import ZaloWebhookService
 
-    src = textwrap.dedent(inspect.getsource(ZaloWebhookService.handle))
-    tree = ast.parse(src)
+    fired: list[str] = []
 
-    # Walk with parent tracking so we can assert structural dominance, not
-    # just textual ordering. A bare line-order check would pass even if the
-    # call were moved into an unrelated later branch.
-    parent_map: dict[int, ast.AST] = {}
-    for parent in ast.walk(tree):
-        for child in ast.iter_child_nodes(parent):
-            parent_map[id(child)] = parent
+    async def _record_typing(chat_id, bot_token=None):  # noqa: ARG001
+        fired.append(chat_id)
 
-    typing_calls = [
-        n
-        for n in ast.walk(tree)
-        if (
-            isinstance(n, ast.Call)
-            and isinstance(n.func, ast.Name)
-            and n.func.id == "_fire_typing"
-        )
-    ]
-    assert len(typing_calls) == 1, "exactly one _fire_typing call site in handle()"
-    call = typing_calls[0]
-
-    # Walk up the parent chain; the nearest enclosing If must test
-    # `norm.zalo_channel == "bot"` (or the reverse). This is the real gate.
-    def _is_bot_channel_test(node: ast.AST) -> bool:
-        if not isinstance(node, ast.If):
-            return False
-        test = node.test
-        # match `X == "bot"` or `"bot" == X`
-        if not isinstance(test, ast.Compare):
-            return False
-        if not (test.ops and isinstance(test.ops[0], ast.Eq)):
-            return False
-        for operand in (test.left, *test.comparators):
-            if isinstance(operand, ast.Constant) and operand.value == "bot":
-                return True
-        return False
-
-    node: ast.AST = call
-    found_gate = False
-    while id(node) in parent_map:
-        parent = parent_map[id(node)]
-        if _is_bot_channel_test(parent):
-            found_gate = True
-            break
-        node = parent
-    assert found_gate, (
-        "_fire_typing call must be nested inside an "
-        "`if norm.zalo_channel == \"bot\"` guard (OA has no typing endpoint)"
+    monkeypatch.setattr(webhook_module, "_fire_typing", _record_typing)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim",
+        AsyncMock(return_value=True),
     )
+    monkeypatch.setattr(
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        AsyncMock(return_value=None),
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+
+    async def _run_handle_for(channel: str) -> None:
+        conv = SimpleNamespace(
+            id=uuid.uuid4(),
+            zalo_chat_id="chat-user-1",
+            zalo_channel=channel,
+            version=1,
+            mode="BOT",
+        )
+        service = MagicMock()
+        service.ensure = AsyncMock(return_value=conv)
+        service.record_inbound = AsyncMock()
+        service.get = AsyncMock(return_value=conv)
+        service.run_start_guard = MagicMock(return_value=True)
+        service.acquire_lock = AsyncMock(
+            return_value=uuid.UUID("00000000-0000-0000-0000-000000000002")
+        )
+        monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+        jobs: list[dict] = []
+
+        if channel == "bot":
+            payload = {
+                "message": {"message_id": "msg-1", "chat": {"id": "chat-user-1"}, "text": "Xin chào"}
+            }
+            return await ZaloWebhookService.handle(
+                db, payload, enqueue=lambda job: jobs.append(job) or True
+            )
+        payload = {
+            "event_name": "user_send_text",
+            "sender": {"id": "chat-user-1"},
+            "message": {"msg_id": "msg-oa-1", "text": "Xin chào"},
+        }
+        return await ZaloWebhookService.handle(
+            db,
+            payload,
+            enqueue=lambda job: jobs.append(job) or True,
+            channel="oa",
+        )
+
+    await _run_handle_for("bot")
+    await _run_handle_for("oa")
+    await asyncio.sleep(0)  # one slice: the created typing task appends on its first run
+
+    assert fired == ["chat-user-1"]
 
 
 # ─── Phase 1 characterization: send-error classification taxonomy ────────────
