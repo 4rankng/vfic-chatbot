@@ -182,6 +182,26 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/presentation/SinglePageEditor.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/presentation/FaqAutoSyncSection.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/presentation/ExternalSourceRow.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/presentation/DiscoveryCardEditor.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/presentation/CategoryEditor.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/infrastructure/http-project-knowledge-adapter.ts",
           "type": "registry:component"
         },
@@ -195,6 +215,34 @@
         },
         {
           "path": "src/components/atomic-crm/projects/domain/google-sheet-policy.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/domain/externalSourceRow.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/domain/externalSourcePolling.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/application/use-single-page-draft.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/application/use-project-knowledge-catalog.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/application/use-faq-auto-sync-notice.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/application/use-discovery-card-draft.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/application/use-category-draft.ts",
           "type": "registry:component"
         },
         {
@@ -278,6 +326,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/performance/PerformanceTrendChart.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/performance/PerformancePage.tsx",
           "type": "registry:component"
         },
@@ -330,6 +382,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/leads/domain/candidateProfile.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/leads/application/ports.ts",
           "type": "registry:component"
         },
@@ -363,6 +419,14 @@
         },
         {
           "path": "src/components/atomic-crm/layout/topbar/useNeedsAttention.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/layout/topbar/useAttentionCounts.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/layout/topbar/attention-queries.ts",
           "type": "registry:component"
         },
         {
@@ -510,7 +574,75 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/SettingsFieldStatus.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/FacebookMessengerPageCard.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/integrations/FacebookMessengerIntegrationPage.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/statusCopy.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/settingsNav.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/credentialClipboard.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/ZaloChannelSection.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/SettingsGroup.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/SettingsChrome.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/SecretField.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/ProviderField.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/LlmProvidersSection.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/JevSection.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/presentation/EmbeddedSettingsSections.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/domain/providerDescriptors.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/application/useZaloForm.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/application/useSettingsBundle.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/application/useProviderPanels.ts",
           "type": "registry:component"
         },
         {
@@ -570,6 +702,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/dashboard/CandidateDataDialog.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/reset-runtime.ts",
           "type": "registry:component"
         },
@@ -610,6 +746,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/conversations/presentation/conversation-row-view-model.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/presentation/conversation-message-state.ts",
           "type": "registry:component"
         },
@@ -647,6 +787,10 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/domain/conversation-row-state.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/domain/conversation-navigation.ts",
           "type": "registry:component"
         },
         {
@@ -746,103 +890,7 @@
           "type": "registry:lib"
         },
         {
-          "path": "src/components/atomic-crm/conversations/inbox.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/base.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/chat.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/chatops.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/context-drawer.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/conversation-list.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/features.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/mobile-layout.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/mobile-persona-editor.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/mobile-recruiting.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/personas-context.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/personas-directory.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/personas-project.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/personas-responsive.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/personas-studio.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/tailkit-redesign.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/tokens.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/typography.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/untitledui-conversations.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/workspace-rail.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/dashboard/dashboard.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/settings.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/kit/tailkit-system.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/layout/mobile-workspace.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/performance.css",
+          "path": "src/components/atomic-crm/users/users.css",
           "type": "registry:style"
         },
         {
@@ -850,13 +898,113 @@
           "type": "registry:style"
         },
         {
-          "path": "src/components/atomic-crm/users/users.css",
+          "path": "src/components/atomic-crm/performance/performance.css",
           "type": "registry:style"
         },
         {
-          "path": "CHANGELOG.md",
+          "path": "src/components/atomic-crm/layout/mobile-workspace.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/layout/desktop-workspace.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/kit/tailkit-system.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/settings.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/dashboard/dashboard.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/workspace-rail.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/untitledui-conversations.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/typography.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/tokens.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/tailkit-redesign.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/personas-studio.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/personas-responsive.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/personas-project.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/personas-directory.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/personas-context.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/mobile-recruiting.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/mobile-persona-editor.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/mobile-layout.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/features.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/conversation-list.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/context-drawer.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/chatops.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/chat.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/inbox/base.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/assets/channel-adapters/facebook-messenger.svg",
           "type": "registry:file",
-          "target": "~/CHANGELOG.md"
+          "target": "~/src/assets/channel-adapters/facebook-messenger.svg"
         }
       ]
     }

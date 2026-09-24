@@ -132,6 +132,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Registry paths
+        run: npm run registry:check
+
       - name: App unit tests
         env:
           CI: "1"
