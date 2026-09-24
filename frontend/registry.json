@@ -478,14 +478,6 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/kit/stat-card.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/kit/sidebar.tsx",
-          "type": "registry:component"
-        },
-        {
           "path": "src/components/atomic-crm/kit/page-shell.tsx",
           "type": "registry:component"
         },
@@ -495,10 +487,6 @@
         },
         {
           "path": "src/components/atomic-crm/kit/index.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/kit/data-table-card.tsx",
           "type": "registry:component"
         },
         {

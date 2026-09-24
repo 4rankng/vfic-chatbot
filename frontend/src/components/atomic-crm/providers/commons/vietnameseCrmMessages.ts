@@ -76,26 +76,6 @@ export const vietnameseCrmMessages = {
       name: "Cài đặt |||| Cài đặt",
       forcedCaseName: "Cài đặt",
     },
-    companies: {
-      name: "Công ty |||| Công ty",
-      forcedCaseName: "Công ty",
-    },
-    deals: {
-      name: "Thỏa thuận |||| Thỏa thuận",
-      forcedCaseName: "Thỏa thuận",
-    },
-    notes: {
-      name: "Ghi chú |||| Ghi chú",
-      forcedCaseName: "Ghi chú",
-    },
-    tasks: {
-      name: "Nhiệm vụ |||| Nhiệm vụ",
-      forcedCaseName: "Nhiệm vụ",
-    },
-    tags: {
-      name: "Nhãn |||| Nhãn",
-      forcedCaseName: "Nhãn",
-    },
   },
   conversations: {
     takeover: {
@@ -117,26 +97,6 @@ export const vietnameseCrmMessages = {
       performance: "Hiệu suất",
       account: "Tài khoản",
     },
-    dashboard: {
-      title: "Tổng quan",
-      total_leads: "Tổng Ứng viên",
-      across_pipelines: "Trên tất cả các giai đoạn",
-      active_conversations: "Đoạn chat đang hoạt động",
-      engaged: "Ứng viên đang tương tác",
-      hired_candidates: "Ứng viên đã đăng ký",
-      success_placements: "Đã đăng ký thành công",
-      conversion_rate: "Tỷ lệ chuyển đổi",
-      lead_to_hired: "Tỷ lệ từ tiềm năng đến đăng ký",
-      pipeline: "Quy trình tuyển dụng",
-      pipeline_desc: "Phân bổ ứng viên hiện tại qua các giai đoạn",
-      system_activity: "Hoạt động Hệ thống",
-      snapshot: "Cập nhật nhanh tình hình hiện tại",
-      active_leads: "Ứng viên đang hoạt động",
-      drop_off: "Tỷ lệ rớt",
-    },
-    header: {
-      import_data: "Nhập dữ liệu",
-    },
     settings: {
       title: "Cài đặt",
       preferences: "Tùy chọn",
@@ -151,33 +111,6 @@ export const vietnameseCrmMessages = {
       sections: {
         branding: "Thương hiệu",
       },
-      companies: {
-        sectors: "Ngành nghề công ty",
-      },
-      deals: {
-        currency: "Tiền tệ",
-        stages: "Giai đoạn thỏa thuận",
-        pipeline_statuses: "Trạng thái quy trình",
-        pipeline_help:
-          "Chọn các giai đoạn sẽ hiển thị trên quy trình thỏa thuận.",
-        categories: "Danh mục thỏa thuận",
-      },
-      notes: {
-        statuses: "Trạng thái ghi chú",
-      },
-      tasks: {
-        types: "Loại nhiệm vụ",
-      },
-      validation: {
-        validating: "Đang kiểm tra…",
-        duplicate: "%{display_name} trùng lặp: %{items}",
-        in_use:
-          "Không thể xóa %{display_name} đang được sử dụng bởi thỏa thuận: %{items}",
-        entities: {
-          stages: "giai đoạn",
-          categories: "danh mục",
-        },
-      },
     },
     theme: {
       label: "Giao diện",
@@ -185,28 +118,11 @@ export const vietnameseCrmMessages = {
       light: "Sáng",
       dark: "Tối",
     },
-    image_editor: {
-      title: "Tải lên và chỉnh sửa ảnh",
-      drop_hint: "Kéo thả tệp để tải lên, hoặc nhấn để chọn tệp.",
-      update_image: "Cập nhật ảnh",
-      editable_content: "Nội dung có thể chỉnh sửa",
-      change: "Thay đổi",
-    },
     profile: {
       title: "Hồ sơ cá nhân",
       record_not_found: "Không tìm thấy bản ghi",
       updated: "Hồ sơ của bạn đã được cập nhật",
       update_error: "Đã xảy ra lỗi. Vui lòng thử lại",
-      inbound: {
-        title: "Email nhận",
-        description:
-          "Bạn có thể bắt đầu gửi email đến địa chỉ email nhận của máy chủ, ví dụ thêm vào trường Cc:. VFIC CRM sẽ xử lý email và thêm ghi chú vào liên hệ tương ứng.",
-      },
-      mcp: {
-        title: "Máy chủ MCP",
-        description:
-          "Sử dụng URL này để kết nối trợ lý AI với dữ liệu CRM qua Giao thức Ngữ cảnh Mô hình (MCP).",
-      },
     },
     common: {
       copy: "Sao chép",

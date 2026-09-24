@@ -9,8 +9,6 @@ import userStyles from "./users.css?raw";
 
 describe("account layout regressions", () => {
   it("keeps account forms on one flat content plane", () => {
-    expect(userCreateSource).not.toContain("AlternateCard");
-    expect(userEditSource).not.toContain("AlternateCard");
     expect(userEditSource).not.toContain("@/components/ui/card");
     expect(profileSource).not.toContain("@/components/ui/card");
     expect(userStyles).toMatch(

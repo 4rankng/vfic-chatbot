@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-react";
 import { describe, expect, it } from "vitest";
 
-import { AlternateCard, EmptyState, PageShell } from "./page-shell";
+import { EmptyState, PageShell } from "./page-shell";
 
 describe("PageShell", () => {
   it("renders the shared page canvas at the requested width", async () => {
@@ -29,26 +29,6 @@ describe("PageShell", () => {
 
     expect(shell).not.toBeNull();
     expect(shell).toHaveClass("h-full", "min-h-0", "overflow-y-auto");
-  });
-});
-
-describe("AlternateCard", () => {
-  it("renders its header, description, action and work surface", async () => {
-    const screen = await render(
-      <AlternateCard
-        title="Thông tin"
-        description="Mô tả"
-        icon={<span>i</span>}
-        action={<button type="button">Sửa</button>}
-      >
-        <p>Biểu mẫu</p>
-      </AlternateCard>,
-    );
-
-    expect(screen.getByRole("heading", { name: "Thông tin" })).toBeTruthy();
-    expect(screen.getByText("Mô tả")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Sửa" })).toBeTruthy();
-    expect(screen.getByText("Biểu mẫu")).toBeTruthy();
   });
 });
 

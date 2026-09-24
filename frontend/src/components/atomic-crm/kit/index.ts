@@ -9,15 +9,4 @@
  * See `plans/<timestamp>-tailkit-overhaul/` for the full design rationale.
  */
 export { PageHeading, default as PageHeadingDefault } from "./page-heading";
-export { AlternateCard, EmptyState, PageShell } from "./page-shell";
-export { StatCard, default as StatCardDefault } from "./stat-card";
-export {
-  KitSidebar,
-  default as KitSidebarDefault,
-  type KitSidebarDestination,
-  type KitSidebarSection,
-} from "./sidebar";
-export {
-  DataTableCard,
-  default as DataTableCardDefault,
-} from "./data-table-card";
+export { EmptyState, PageShell } from "./page-shell";
