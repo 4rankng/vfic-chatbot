@@ -3,12 +3,9 @@ import { defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import react from "@vitejs/plugin-react";
 
-// Two test projects (https://vitest.dev/guide/projects.html):
-//   - "app":    React/DOM unit tests, run in a real browser (Playwright/Chromium).
-//   - "claude": agent-harness hook tests, plain Node integration tests that spawn
-//               the .claude/hooks/*.mjs hooks as subprocesses. No DOM, no browser.
-// Run everything with `npm run test:unit:app`, or a single suite with
-// `npm run test:unit:claude` (neither boots a browser).
+// One test project (https://vitest.dev/guide/projects.html):
+//   - "app": React/DOM unit tests, run in a real browser (Playwright/Chromium).
+// Run it with `npm run test:unit:app`.
 export default defineConfig({
   test: {
     coverage: {
@@ -74,29 +71,12 @@ export default defineConfig({
               },
             },
           },
-          exclude: [
-            "**/node_modules/**",
-            "e2e/**/*.spec.{ts,tsx}",
-            // Harness hook tests are Node-only (they import node:fs / node:path
-            // and spawn subprocesses); they run under the "claude" project below.
-            ".claude/**",
-          ],
+          exclude: ["**/node_modules/**", "e2e/**/*.spec.{ts,tsx}", ".claude/**"],
           server: {
             deps: {
               external: [/playwright/],
             },
           },
-        },
-      },
-      {
-        test: {
-          name: "claude",
-          environment: "node",
-          include: [".claude/**/*.test.mjs"],
-          // These tests spawn `node` subprocesses and do real git/worktree work,
-          // so they need more headroom than the default 5s.
-          testTimeout: 30000,
-          hookTimeout: 30000,
         },
       },
     ],
