@@ -32,13 +32,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
-      - name: Create venv
-        run: python -m venv .venv
-
-      - name: Install backend dependencies
+      - name: Install locked backend toolchain
         run: |
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -e .[dev]
+          uv sync --all-extras --frozen
+          uv pip install --python .venv/bin/python -e .
+          git diff --exit-code -- uv.lock pyproject.toml || (echo 'uv.lock drifted from pyproject.toml' && exit 1)
 
       - name: Ruff
         run: .venv/bin/ruff check .
@@ -100,13 +98,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
-      - name: Create venv
-        run: python -m venv .venv
-
-      - name: Install backend dependencies
+      - name: Install locked backend toolchain
         run: |
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -e .[dev]
+          uv sync --all-extras --frozen
+          uv pip install --python .venv/bin/python -e .
+          git diff --exit-code -- uv.lock pyproject.toml || (echo 'uv.lock drifted from pyproject.toml' && exit 1)
 
       - name: Backend integration smoke (fast fail)
         run: .venv/bin/pytest -m integration tests/integration/test_harness_smoke.py
@@ -323,13 +319,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
-      - name: Create venv
-        run: python -m venv .venv
-
-      - name: Install backend dependencies
+      - name: Install locked backend toolchain
         run: |
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -e .[dev]
+          uv sync --all-extras --frozen
+          uv pip install --python .venv/bin/python -e .
+          git diff --exit-code -- uv.lock pyproject.toml || (echo 'uv.lock drifted from pyproject.toml' && exit 1)
 
       - name: Generate offline golden results
         run: |
@@ -399,13 +393,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
-      - name: Create venv
-        run: python -m venv .venv
-
-      - name: Install backend dependencies
+      - name: Install locked backend toolchain
         run: |
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -e .[dev] pip-audit
+          uv sync --all-extras --frozen
+          uv pip install --python .venv/bin/python -e .
+          git diff --exit-code -- uv.lock pyproject.toml || (echo 'uv.lock drifted from pyproject.toml' && exit 1) pip-audit
 
       - name: pip-audit (advisory)
         run: |
