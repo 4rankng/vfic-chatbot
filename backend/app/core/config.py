@@ -53,14 +53,20 @@ class Settings(BaseSettings):
     database_url_sync: str = "postgresql+psycopg://vfic:vfic@localhost:5432/vfic"
     # Async engine pool sizing. Connection budget: a deployment's peak DB
     # connections ≈ (# DB-touching processes) × (db_pool_size + db_max_overflow).
-    # With 2 web + 6 chatbot replicas + followup/ingest/persistence/reconcile/
-    # scheduler workers (~13 processes) at 10+10, raise Postgres max_connections
-    # to ≥150, or lower these via env on a small box. pool_recycle proactively
-    # refreshes connections before server-side idle timeouts stale them; paired
-    # with pool_pre_ping it removes intermittent "connection already closed".
+    # Resident DB-touching processes (docker-compose.yml): web-blue + web-green
+    # (one uvicorn each) and workers chatbot ×3, persistence, ingest, followup,
+    # maintenance — 9 total. Compose sets web services to 8+4 and each worker to
+    # 4+2, so the worst case is 2×12 + 7×6 = 66 of the Postgres
+    # max_connections=150 ceiling (~44%), leaving headroom for adminer/psql and
+    # the one-shot backfill profile. pool_recycle proactively refreshes
+    # connections before server-side idle timeouts stale them; paired with
+    # pool_pre_ping it removes intermittent "connection already closed".
     db_pool_size: int = 10
     db_max_overflow: int = 10
-    db_pool_timeout: int = 30  # seconds to wait for a free connection before raising
+    # Saturation must fail fast into the recovery path — a wait three times the
+    # perceived-responsiveness SLA (30s) only holds the per-chat lock past the
+    # point where the answer is useful.
+    db_pool_timeout: int = 5  # seconds to wait for a free connection before raising
     db_pool_recycle: int = 1800  # recycle connections every 30 min
 
     # Process-scoped httpx client pool (Tech-Lead Directive §4 "Reuse

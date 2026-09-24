@@ -45,6 +45,11 @@ services:
   web-blue:
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
+    environment:
+      # DB connection budget (see config.py): 2 web × (8+4) + 7 workers × (4+2)
+      # = 66 worst case of the max_connections=150 ceiling.
+      DB_POOL_SIZE: "8"
+      DB_MAX_OVERFLOW: "4"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -64,6 +69,9 @@ services:
   web-green:
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
+    environment:
+      DB_POOL_SIZE: "8"
+      DB_MAX_OVERFLOW: "4"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -82,6 +90,11 @@ services:
   worker-chatbot:
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
+    environment:
+      # Workers run one job at a time (SimpleWorker) — 4+2 is ample and keeps
+      # the deployment-wide worst case well under max_connections=150.
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "2"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -114,6 +127,9 @@ services:
   worker-persistence:
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
+    environment:
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "2"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -136,6 +152,9 @@ services:
   worker-ingest:
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
+    environment:
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "2"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -173,6 +192,9 @@ services:
   worker-followup:
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
+    environment:
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "2"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
