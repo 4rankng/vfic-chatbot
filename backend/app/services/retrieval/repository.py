@@ -343,7 +343,6 @@ class RetrievalRepository:
         *,
         project_ids: list[str] | None = None,
         query_text: str | None = None,
-        deadline=None,
     ) -> list:
         """Top-k usable knowledge rows directly from chunks + documents.
 
@@ -353,11 +352,11 @@ class RetrievalRepository:
 
         Retrieval arms run CONCURRENTLY (Tech-Lead Directive §4): vector + lexical
         execute via ``asyncio.gather`` so the wall-clock cost is max(vector, lexical),
-        not sum. If the vector arm raises or exceeds its budget, the turn degrades
-        gracefully to lexical-only (the directive's "if vector search times out, use
-        lexical + structured results"). ``deadline`` is an optional
-        ``app.services.chatbot.deadlines.TurnDeadline``; when None (tests / legacy callers) the
-        arms run unbounded, matching pre-existing behaviour.
+        not sum. If the vector arm raises, the turn degrades gracefully to
+        lexical-only (the directive's "if vector search times out, use lexical +
+        structured results"). The arms are not individually time-boxed here: turn
+        time-boxing is the queue-level deadline-at-epoch only (the per-stage
+        retrieval/rerank budgets were removed with ``app/services/chatbot/``).
 
         Degradation is observable: the caller can read ``self.last_match_degraded``
         after this returns to stamp the reason into ``stage_timings`` (see runner.py).
@@ -371,17 +370,27 @@ class RetrievalRepository:
 
         # No lexical terms → vector-only path (legacy fast exit, no gather overhead).
         if not terms:
-            vector_rows = await self._run_vector_arm(
-                emb, top_k, filter_json, project_clause, project_ids, deadline
+            vector_rows = await self._match_document_vector_rows(
+                emb=emb,
+                top_k=top_k,
+                filter_json=filter_json,
+                project_clause=project_clause,
+                project_ids=project_ids,
             )
             return self._finalize_retrieval([], vector_rows, top_k, query_text or "")
 
-        # Run both arms concurrently. Each arm is individually time-boxed against
-        # the retrieval budget so a slow vector arm doesn't gate the lexical arm.
-        # ``return_exceptions=True`` lets the surviving arm win on a single-arm
-        # failure rather than propagating the error up to abort the turn.
+        # Run both arms concurrently so a slow vector arm cannot gate the lexical
+        # arm. ``return_exceptions=True`` lets the surviving arm win on a
+        # single-arm failure rather than propagating the error up to abort the
+        # turn.
         vector_task = asyncio.ensure_future(
-            self._run_vector_arm(emb, top_k, filter_json, project_clause, project_ids, deadline)
+            self._match_document_vector_rows(
+                emb=emb,
+                top_k=top_k,
+                filter_json=filter_json,
+                project_clause=project_clause,
+                project_ids=project_ids,
+            )
         )
         lexical_task = asyncio.ensure_future(
             self._match_document_lexical_rows(
@@ -423,43 +432,6 @@ class RetrievalRepository:
             lexical_rows = lexical_result
 
         return self._finalize_retrieval(lexical_rows, vector_rows, top_k, query_text or "")
-
-    async def _run_vector_arm(
-        self, emb, top_k, filter_json, project_clause, project_ids, deadline
-    ) -> list:
-        """Vector arm, time-boxed against ``deadline.retrieval`` when set."""
-        if deadline is None or deadline.overall <= 0:
-            return await self._match_document_vector_rows(
-                emb=emb,
-                top_k=top_k,
-                filter_json=filter_json,
-                project_clause=project_clause,
-                project_ids=project_ids,
-            )
-        budget = deadline.budget_for("retrieval")
-        if budget is None:
-            return await self._match_document_vector_rows(
-                emb=emb,
-                top_k=top_k,
-                filter_json=filter_json,
-                project_clause=project_clause,
-                project_ids=project_ids,
-            )
-        try:
-            return await asyncio.wait_for(
-                self._match_document_vector_rows(
-                    emb=emb,
-                    top_k=top_k,
-                    filter_json=filter_json,
-                    project_clause=project_clause,
-                    project_ids=project_ids,
-                ),
-                timeout=budget,
-            )
-        except TimeoutError:
-            # Propagate as a generic exception so gather's return_exceptions
-            # buckets it with the error path; the caller degrades to lexical.
-            raise
 
     def _finalize_retrieval(
         self, lexical_rows: list, vector_rows: list, top_k: int, query_text: str
