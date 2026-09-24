@@ -143,12 +143,19 @@ async def create_pending_outbox(
     runtime_fingerprint: str | None = None,
     origin_kind: str | None = None,
     fence_scope: str | None = None,
+    status: OutboxStatus = OutboxStatus.PENDING,
 ) -> OutboundOutbox:
     """Persist a command before provider I/O in the caller's transaction.
 
     Unlike the legacy outcome recorder this deliberately does not swallow an
     insert error: acknowledging a reply without its durable command would make
     crash recovery impossible.
+
+    ``status`` defaults to PENDING (the dispatcher-claimable state). The inline
+    bot turn passes SENDING: it writes the command in the same transaction that
+    claims the message (``bot_path.claim_send``), so the row is already claimed
+    by the time it commits and no dispatcher tick can pick up a row whose inline
+    send is still running (REL-06).
     """
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -160,7 +167,11 @@ async def create_pending_outbox(
             message_id=message_id,
             channel=channel,
             payload=payload,
-            status=OutboxStatus.PENDING.value,
+            status=status.value,
+            # A row written already-SENDING carries the attempt its claim
+            # transaction is about to make, the same count
+            # ``claim_pending_outbox`` stamps on the dispatcher path.
+            attempts=1 if status is OutboxStatus.SENDING else 0,
             channel_account_generation=channel_account_generation,
             runtime_revision_id=runtime_revision_id,
             authority_generation=authority_generation,
@@ -227,68 +238,51 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
     activation window created when the durable claim releases its transaction
     lock; the second shared lock remains held through provider I/O and caller
     finalization.
+
+    Only a PENDING row is claimable here — ``claim_pending_outbox`` is the
+    single-sender guarantee, so a command another sender already claimed is
+    never sent from this entry point. A command the caller itself claimed is
+    sent through :func:`dispatch_message_outbox`.
     """
     outbox = await db.get(OutboundOutbox, outbox_id)
     if outbox is None or outbox.status != OutboxStatus.PENDING.value:
         return None
 
-    runtime_stamp = None
-    installation_repository = None
-    installation_service = None
-    if outbox.fence_scope == "RUNTIME":
-        from app.services.installation.authority import RuntimeAuthorityStamp
-        from app.services.installation.repository import InstallationRepository
-        from app.services.installation.service import InstallationService
-
-        installation_repository = InstallationRepository(db)
-        installation_service = InstallationService(db)
-        await installation_repository.acquire_runtime_dispatch_lock()
-        stamp_complete = (
-            outbox.runtime_revision_id is not None
-            and outbox.authority_generation is not None
-            and outbox.runtime_fingerprint is not None
-        )
-        if stamp_complete:
-            runtime_stamp = RuntimeAuthorityStamp(
-                revision_id=outbox.runtime_revision_id,
-                authority_generation=outbox.authority_generation,
-                fingerprint=outbox.runtime_fingerprint,
-            )
-        stamp_is_current = runtime_stamp is not None and await (
-            installation_service.runtime_stamp_is_current(runtime_stamp)
-        )
-        if not stamp_is_current:
-            candidate = await claim_pending_outbox(db, outbox_id=outbox_id)
-            if candidate is None:
-                return None
-            await db.commit()
-            return DispatchResult(
-                outbox_id=candidate.outbox_id,
-                message_id=candidate.message_id,
-                ok=False,
-                error="runtime authority changed before outbound dispatch",
-                error_class="policy_suppressed",
-                suppressed=True,
-            )
+    authority, authority_is_current = await _resolve_runtime_authority(db, outbox)
+    if not authority_is_current:
+        # Claim the row anyway so this attempt — not a later sweep — owns the
+        # terminal write; the suppression is the recorded outcome.
+        candidate = await claim_pending_outbox(db, outbox_id=outbox_id)
+        if candidate is None:
+            return None
+        await db.commit()
+        return _suppressed_dispatch_result(candidate)
 
     candidate = await claim_pending_outbox(db, outbox_id=outbox_id)
     if candidate is None:
         return None
     await db.commit()
+    return await _dispatch_claimed_command(
+        db, outbox=outbox, candidate=candidate, authority=authority
+    )
 
-    if runtime_stamp is not None:
-        assert installation_repository is not None
-        assert installation_service is not None
-        await installation_repository.acquire_runtime_dispatch_lock()
-        if not await installation_service.runtime_stamp_is_current(runtime_stamp):
-            return DispatchResult(
-                outbox_id=candidate.outbox_id,
-                message_id=candidate.message_id,
-                ok=False,
-                error="runtime authority changed before outbound dispatch",
-                error_class="policy_suppressed",
-                suppressed=True,
-            )
+
+async def _dispatch_claimed_command(
+    db: AsyncSession,
+    *,
+    outbox: OutboundOutbox,
+    candidate: DispatchCandidate,
+    authority: _RuntimeAuthority,
+) -> DispatchResult:
+    """Send an already-claimed command and project the provider result.
+
+    Shared by the dispatcher claim path and the inline bot turn that claims its
+    own command inside ``claim_send`` (REL-06). The runtime-authority fence is
+    re-verified here, under the shared lock, because the claim commit released
+    the transaction-scoped lock.
+    """
+    if not await authority.reacquire_and_verify():
+        return _suppressed_dispatch_result(candidate)
 
     from app.services.integration_settings import IntegrationSettingsService
     from app.services.zalo_sender import ZaloChannelSender
@@ -296,18 +290,10 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
     integration_settings = IntegrationSettingsService(db)
     cfg = await integration_settings.resolve_zalo()
 
-    async def revalidate_runtime_after_refresh() -> bool:
-        if runtime_stamp is None:
-            return True
-        assert installation_repository is not None
-        assert installation_service is not None
-        await installation_repository.acquire_runtime_dispatch_lock()
-        return await installation_service.runtime_stamp_is_current(runtime_stamp)
-
     async def refresh_oa_access_token() -> str | None:
         return await _refresh_oa_access_token_for_dispatch(
             integration_settings,
-            revalidate=revalidate_runtime_after_refresh,
+            revalidate=authority.reacquire_and_verify,
         )
 
     # Channel-neutral dispatch path (Phase 3): route through the registry when
@@ -332,13 +318,8 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
         )
         result = await sender.send_payload(candidate.channel, candidate.payload)
     except OutboundPolicySuppressedError:
-        return DispatchResult(
-            outbox_id=candidate.outbox_id,
-            message_id=candidate.message_id,
-            ok=False,
-            error="runtime authority changed during OA credential refresh",
-            error_class="policy_suppressed",
-            suppressed=True,
+        return _suppressed_dispatch_result(
+            candidate, error="runtime authority changed during OA credential refresh"
         )
     return DispatchResult(
         outbox_id=candidate.outbox_id,
@@ -348,6 +329,85 @@ async def dispatch_outbox(db: AsyncSession, *, outbox_id: int) -> DispatchResult
         error=result.error,
         error_class=result.error_class,
         telemetry=result.telemetry,
+    )
+
+
+@dataclass(frozen=True)
+class _RuntimeAuthority:
+    """Resolved installation-runtime authority fence for one outbound command.
+
+    ``stamp`` is None for commands that carry no runtime stamp (legacy rows and
+    non-runtime channels): there is nothing to verify, so every check passes.
+    """
+
+    stamp: Any | None = None
+    repository: Any | None = None
+    service: Any | None = None
+
+    async def reacquire_and_verify(self) -> bool:
+        """Re-check the stamp while holding the shared advisory lock.
+
+        Any commit in between (the durable claim, an OA token refresh) releases
+        the transaction-scoped lock, so authority must be re-verified
+        immediately before provider I/O resumes.
+        """
+        if self.stamp is None:
+            return True
+        assert self.repository is not None and self.service is not None
+        await self.repository.acquire_runtime_dispatch_lock()
+        return await self.service.runtime_stamp_is_current(self.stamp)
+
+
+async def _resolve_runtime_authority(
+    db: AsyncSession, outbox: OutboundOutbox
+) -> tuple[_RuntimeAuthority, bool]:
+    """Resolve the runtime fence for ``outbox``; return ``(authority, is_current)``.
+
+    ``is_current`` is False when the command is runtime-bound but its stamp is
+    incomplete or no longer the active installation revision — the caller
+    records a suppression instead of sending.
+    """
+    if outbox.fence_scope != "RUNTIME":
+        return _RuntimeAuthority(), True
+
+    from app.services.installation.authority import RuntimeAuthorityStamp
+    from app.services.installation.repository import InstallationRepository
+    from app.services.installation.service import InstallationService
+
+    repository = InstallationRepository(db)
+    service = InstallationService(db)
+    await repository.acquire_runtime_dispatch_lock()
+    stamp_complete = (
+        outbox.runtime_revision_id is not None
+        and outbox.authority_generation is not None
+        and outbox.runtime_fingerprint is not None
+    )
+    stamp = (
+        RuntimeAuthorityStamp(
+            revision_id=outbox.runtime_revision_id,
+            authority_generation=outbox.authority_generation,
+            fingerprint=outbox.runtime_fingerprint,
+        )
+        if stamp_complete
+        else None
+    )
+    is_current = stamp is not None and await service.runtime_stamp_is_current(stamp)
+    return _RuntimeAuthority(stamp=stamp, repository=repository, service=service), is_current
+
+
+def _suppressed_dispatch_result(
+    candidate: DispatchCandidate,
+    *,
+    error: str = "runtime authority changed before outbound dispatch",
+) -> DispatchResult:
+    """Project an authority suppression onto the shared dispatch result."""
+    return DispatchResult(
+        outbox_id=candidate.outbox_id,
+        message_id=candidate.message_id,
+        ok=False,
+        error=error,
+        error_class="policy_suppressed",
+        suppressed=True,
     )
 
 
@@ -594,13 +654,66 @@ def _provider_for_outbox_channel(channel: str) -> str | None:
 
 
 async def dispatch_message_outbox(db: AsyncSession, *, message_id: int) -> DispatchResult | None:
-    """Dispatch the single durable command belonging to ``message_id``."""
-    outbox_id = await db.scalar(
-        select(OutboundOutbox.id).where(OutboundOutbox.message_id == message_id)
+    """Dispatch the single durable command belonging to ``message_id``.
+
+    A PENDING row is claimed atomically here (the dispatcher path). A row that is
+    already SENDING while its message is SENDING too was claimed by *this*
+    caller's own claim transaction — ``bot_path.claim_send`` writes the command
+    already-SENDING so no dispatcher tick can pick up a row whose inline send is
+    still running (REL-06) — so it is resumed instead of re-claimed. Every other
+    status is not ours to send: ``claim_pending_outbox`` remains the only way a
+    row becomes sendable, so a command a concurrent sender owns is never sent
+    twice.
+    """
+    outbox = await db.scalar(
+        select(OutboundOutbox)
+        .where(OutboundOutbox.message_id == message_id)
+        # The status decides whether this caller may send, so read it from the
+        # row rather than from a possibly stale identity-mapped instance.
+        .execution_options(populate_existing=True)
     )
-    if outbox_id is None:
+    if outbox is None:
         return None
-    return await dispatch_outbox(db, outbox_id=int(outbox_id))
+    if outbox.status == OutboxStatus.SENDING.value:
+        return await _resume_claimed_outbox(db, outbox)
+    if outbox.status != OutboxStatus.PENDING.value:
+        return None
+    return await dispatch_outbox(db, outbox_id=int(outbox.id))
+
+
+async def _resume_claimed_outbox(
+    db: AsyncSession, outbox: OutboundOutbox
+) -> DispatchResult | None:
+    """Send a command this caller's own claim transaction already marked SENDING.
+
+    Ownership proof: ``claim_send`` flips the message to SENDING in the same
+    statement that claims its command, so the message is SENDING as well. A row
+    claimed by another sender (the dispatcher sweep claims the outbox alone and
+    leaves the message PENDING) belongs to that sender and is never sent from
+    here.
+    """
+    from app.models.conversation import DeliveryStatus, Message
+
+    # Read the status from the row itself: ``claim_send`` flips it with a raw
+    # UPDATE, so an identity-mapped Message instance in this session still holds
+    # the pre-claim PENDING value.
+    claimed_status = await db.scalar(
+        select(Message.delivery_status).where(Message.id == outbox.message_id)
+    )
+    if claimed_status != DeliveryStatus.SENDING:
+        return None
+    candidate = DispatchCandidate(
+        outbox_id=int(outbox.id),
+        message_id=int(outbox.message_id),
+        channel=outbox.channel,
+        payload=outbox.payload if isinstance(outbox.payload, dict) else {},
+    )
+    authority, authority_is_current = await _resolve_runtime_authority(db, outbox)
+    if not authority_is_current:
+        return _suppressed_dispatch_result(candidate)
+    return await _dispatch_claimed_command(
+        db, outbox=outbox, candidate=candidate, authority=authority
+    )
 
 
 async def pending_outbox_ids(db: AsyncSession, *, limit: int = 25) -> list[int]:

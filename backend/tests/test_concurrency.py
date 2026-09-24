@@ -727,6 +727,40 @@ async def test_claim_send_gates_on_version_and_lock_owner_in_one_statement():
 
 
 @pytest.mark.asyncio
+async def test_claim_send_writes_the_command_already_claimed():
+    """REL-06: the outbound command is inserted SENDING, not PENDING.
+
+    The claim transaction owns the send, so the dispatcher's PENDING sweep must
+    not be able to pick the row up while the inline provider call is still
+    running — that race recorded an ERROR turn for a delivered message.
+    """
+    from sqlalchemy.dialects import postgresql
+
+    conv = _make_conv(version=3)
+    owner = uuid.uuid4()
+    db = AsyncMock()
+    db.commit = AsyncMock()
+    db.execute = AsyncMock(return_value=FakeResult(rowcount=1))
+    state = ConversationState(db, MagicMock(), AsyncMock())
+
+    assert await state.claim_send(
+        conv,
+        version_at_start=3,
+        lock_owner=owner,
+        pending_message_id=42,
+        reply="Trả lời thật",
+        outbox_channel="zalo_bot",
+        outbox_payload={"chat_id": "c1", "text": "Trả lời thật"},
+    )
+
+    insert = db.execute.call_args_list[-1][0][0]
+    params = insert.compile(dialect=postgresql.dialect()).params
+    assert params["status"] == "SENDING"
+    assert params["message_id"] == 42
+    assert params["channel"] == "zalo_bot"
+
+
+@pytest.mark.asyncio
 async def test_break_stale_lock_reports_whether_a_stale_lock_broke():
     """break_stale_lock force-clears a mutex whose owner heartbeat is stale; the
     conditional WHERE means a live turn with a fresh heartbeat is never stolen.

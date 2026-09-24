@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 
 from app.models.outbox import OutboxStatus
@@ -81,6 +81,127 @@ async def test_create_pending_messenger_outbox_stamps_active_page_generation():
     assert captured.get("generation_query") is not None
     assert params["channel_account_generation"] == 7
     assert row is inserted
+
+
+async def test_create_pending_outbox_can_write_the_command_already_claimed():
+    """The inline bot turn writes its command already SENDING (REL-06).
+
+    ``claim_send`` owns the claim, so the row must never be visible to the
+    dispatcher's PENDING sweep while the inline send is still running.
+    """
+    from sqlalchemy.dialects import postgresql
+
+    from app.services import outbox_service
+
+    captured = {}
+
+    class _FakeResult:
+        def scalar_one_or_none(self):
+            return SimpleNamespace(channel_account_generation=None)
+
+    class _FakeDB:
+        async def scalar(self, stmt):
+            return None
+
+        async def execute(self, stmt):
+            captured["insert"] = stmt
+            return _FakeResult()
+
+    await outbox_service.create_pending_outbox(
+        _FakeDB(),
+        message_id=42,
+        channel="zalo_bot",
+        payload={"chat_id": "c1", "text": "hi"},
+        status=OutboxStatus.SENDING,
+    )
+
+    params = captured["insert"].compile(dialect=postgresql.dialect()).params
+    assert params["status"] == OutboxStatus.SENDING.value
+    # The claim this row already carries is the attempt the inline send makes.
+    assert params["attempts"] == 1
+
+
+async def test_dispatch_message_outbox_resumes_the_callers_own_claim(monkeypatch):
+    """A command the inline turn claimed itself is sent, not refused (REL-06).
+
+    Before this, the row stayed PENDING until the inline dispatch claimed it, so a
+    dispatcher tick landing in that window won the claim and the turn recorded a
+    false ERROR for a message the sweep had delivered.
+    """
+    from app.models.conversation import DeliveryStatus
+    from app.services import outbox_service
+
+    outbox = SimpleNamespace(
+        id=5,
+        message_id=42,
+        channel="zalo_bot",
+        payload={"chat_id": "c1", "text": "hi"},
+        status=OutboxStatus.SENDING.value,
+        fence_scope=None,
+    )
+    message = SimpleNamespace(delivery_status=DeliveryStatus.SENDING)
+    db = SimpleNamespace(
+        scalar=AsyncMock(side_effect=[outbox, DeliveryStatus.SENDING]),
+        get=AsyncMock(return_value=message),
+        commit=AsyncMock(),
+    )
+    provider = AsyncMock(
+        return_value=outbox_service.DispatchResult(
+            outbox_id=5, message_id=42, ok=True, provider_message_id="mid-1"
+        )
+    )
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.IntegrationSettingsService.resolve_zalo",
+        AsyncMock(return_value=SimpleNamespace()),
+    )
+    monkeypatch.setattr(outbox_service, "_try_neutral_dispatch", provider)
+    monkeypatch.setattr(
+        outbox_service, "claim_pending_outbox", AsyncMock(return_value=None)
+    )
+
+    result = await outbox_service.dispatch_message_outbox(db, message_id=42)
+
+    assert result is not None and result.ok
+    assert result.msg_id == "mid-1"
+    provider.assert_awaited_once()
+
+
+async def test_dispatch_message_outbox_never_sends_a_row_claimed_by_another_sender(monkeypatch):
+    """A SENDING command whose message is still PENDING belongs to the sweep.
+
+    ``claim_pending_outbox`` is the single-sender guarantee; the inline entry
+    point must not send a row another sender already owns.
+    """
+    from app.models.conversation import DeliveryStatus
+    from app.services import outbox_service
+
+    outbox = SimpleNamespace(
+        id=5,
+        message_id=42,
+        channel="zalo_bot",
+        payload={"chat_id": "c1", "text": "hi"},
+        status=OutboxStatus.SENDING.value,
+        fence_scope=None,
+    )
+    message = SimpleNamespace(delivery_status=DeliveryStatus.PENDING)
+    db = SimpleNamespace(
+        scalar=AsyncMock(side_effect=[outbox, DeliveryStatus.PENDING]),
+        get=AsyncMock(return_value=message),
+        commit=AsyncMock(),
+    )
+    provider = AsyncMock()
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.IntegrationSettingsService.resolve_zalo",
+        AsyncMock(return_value=SimpleNamespace()),
+    )
+    monkeypatch.setattr(outbox_service, "_try_neutral_dispatch", provider)
+
+    result = await outbox_service.dispatch_message_outbox(db, message_id=42)
+
+    assert result is None
+    provider.assert_not_awaited()
 
 
 async def test_enqueue_outbox_calls_insert_with_correct_fields(monkeypatch):
