@@ -560,3 +560,154 @@ def test_attention_reason_deep_links_share_human_unanswered_contract():
         "WAITING_REPLY",
     ):
         assert human_unanswered in repo._attention_reason_source(reason, str(UID))
+
+
+# --- metrics: 24h bot-run window + merged core counts -----------------------
+
+
+async def _captured_repo_sql(method: str, recruiter_id: str | None):
+    """Run a repository method against a mock session, return (sql_text, params).
+
+    Mirrors ``_captured_attention_sql`` above: only the SQL text and bound
+    parameters matter, so the mock result carries an empty row set. Works for
+    any repo method that reads through ``db.execute(...).mappings().one()``.
+    """
+    from app.services.dashboard.repository import DashboardRepository
+
+    repo = DashboardRepository(db=MagicMock())
+    empty_row = {key: 0 for key in (*DashboardRepository._CORE_COUNT_KEYS, "total", "sent", "suppressed", "errors", "avg_seconds")}
+    repo.db.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            mappings=lambda: SimpleNamespace(one=lambda: empty_row)
+        )
+    )
+    await getattr(repo, method)(recruiter_id)
+    call = repo.db.execute.await_args
+    params = call.args[1] if len(call.args) > 1 else {}
+    return call.args[0].text, params
+
+
+async def test_bot_run_summary_bounded_to_last_24h_global():
+    sql, params = await _captured_repo_sql("bot_run_summary", None)
+    assert "b.started_at > now() - interval '24 hours'" in sql
+    assert ":uid" not in sql
+    assert params == {}
+
+
+async def test_bot_run_summary_scoped_keeps_window_and_viewer_scope():
+    sql, params = await _captured_repo_sql("bot_run_summary", str(UID))
+    assert "b.started_at > now() - interval '24 hours'" in sql
+    assert "c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL" in sql
+    assert params == {"uid": str(UID)}
+
+
+async def test_core_counts_is_one_round_trip_with_exact_predicates():
+    from app.services.dashboard.repository import DashboardRepository
+
+    repo = DashboardRepository(db=MagicMock())
+    row = {
+        "open_conversations": 3,
+        "hot_leads": 2,
+        "pending_followups": 1,
+        "failed_sends": 1,
+        "bot_errors": 0,
+    }
+    repo.db.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            mappings=lambda: SimpleNamespace(one=lambda: row)
+        )
+    )
+    result = await repo.core_counts(None)
+
+    assert repo.db.execute.await_count == 1
+    assert result == row
+    sql = repo.db.execute.await_args.args[0].text
+    for fragment in (
+        "c.status = 'OPEN'",
+        "l.lead_score = 'hot'",
+        "f.status = 'PENDING'",
+        "m.delivery_status = 'FAILED'",
+        "b.outcome = 'ERROR'",
+    ):
+        assert fragment in sql
+    assert ":uid" not in sql
+
+
+async def test_core_counts_scoped_carries_viewer_scope_param():
+    sql, params = await _captured_repo_sql("core_counts", str(UID))
+    assert "c.assigned_recruiter_id = :uid OR c.assigned_recruiter_id IS NULL" in sql
+    assert "l.assigned_recruiter_id = :uid OR l.assigned_recruiter_id IS NULL" in sql
+    assert params == {"uid": str(UID)}
+
+
+async def _run_metrics(monkeypatch, app_env="development", cache_enabled=True):
+    """Drive ``DashboardService.metrics`` on a recruiter viewer with a fake repo.
+
+    Returns (repo double, cache-set mock, built DashboardMetrics). The
+    attention-side ``_patch_service`` helper is reused so cache/settings
+    wiring stays in one place.
+    """
+    repo = MagicMock()
+    repo.core_counts = AsyncMock(
+        return_value={
+            "open_conversations": 3,
+            "hot_leads": 2,
+            "pending_followups": 1,
+            "failed_sends": 1,
+            "bot_errors": 0,
+        }
+    )
+    repo.bot_run_summary = AsyncMock(
+        return_value={
+            "total": 10,
+            "sent": 8,
+            "suppressed": 1,
+            "errors": 1,
+            "avg_seconds": 2.5,
+        }
+    )
+    repo.bot_suppression_rate = AsyncMock(return_value=0.1)
+    repo.leads_by_stage = AsyncMock(return_value={"NEW": 3, "CONTACTING": 2, "REGISTERED": 1})
+    repo.count_human_conversations = AsyncMock(return_value=7)
+    repo.active_turns = AsyncMock(return_value=2)
+    repo.bot_run_p95_latency = AsyncMock(return_value=1.8)
+    repo.recent_turns_count = AsyncMock(return_value=4)
+
+    captured_repo, set_mock = _patch_service(
+        monkeypatch, repo=repo, app_env=app_env, cache_enabled=cache_enabled
+    )
+    monkeypatch.setattr(
+        service_mod.DashboardService, "_webhook_queue_depth", lambda self: 0
+    )
+    monkeypatch.setattr(
+        service_mod.DashboardService, "_rq_ingest_counts", lambda self: (0, 0, 0)
+    )
+    metrics = await service_mod.DashboardService(MagicMock()).metrics(_viewer(Role.recruiter))
+    return captured_repo, set_mock, metrics
+
+
+async def test_metrics_builds_all_tiles_from_merged_counts_and_24h_summary(monkeypatch):
+    repo, _, metrics = await _run_metrics(monkeypatch)
+
+    repo.core_counts.assert_awaited_once_with(str(UID))
+    repo.bot_run_summary.assert_awaited_once_with(str(UID))
+    assert metrics.bot_run_count == 10
+    assert metrics.bot_sent_count == 8
+    assert metrics.bot_suppressed_count == 1
+    assert metrics.bot_success_rate == 80.0
+    assert metrics.avg_bot_response_seconds == 2.5
+    assert metrics.open_conversations == 3
+    assert metrics.hot_leads == 2
+    assert metrics.bot_errors == 0
+    assert metrics.turns_last_5min == 4
+
+
+async def test_metrics_cache_write_uses_60s_ttl_floor(monkeypatch):
+    _, set_mock, _ = await _run_metrics(monkeypatch, app_env="production")
+    assert set_mock.await_args.args[2] == 60
+
+
+async def test_attention_cache_write_uses_60s_ttl_floor(monkeypatch):
+    _, set_mock = _patch_service(monkeypatch, app_env="production")
+    await service_mod.DashboardService(_fake_db()).attention(_viewer(Role.admin))
+    assert set_mock.await_args.args[2] == 60

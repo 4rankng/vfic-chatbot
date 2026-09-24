@@ -1,6 +1,13 @@
 """Dashboard metrics: open conversations, hot leads, pending follow-ups, bot
 suppression rate, failed sends, bot errors. Scoped to the viewer (admin = global,
-recruiter = assigned)."""
+recruiter = assigned).
+
+Bot-run aggregates (bot_run_count, bot_sent_count, bot_suppressed_count,
+bot_success_rate, avg_bot_response_seconds) cover the LAST 24 HOURS, not
+all-time: the ``bot_runs`` audit table is never pruned, so unbounded
+aggregates grow linearly forever. Lead, conversation, follow-up, and the
+bot_errors counters are current-state, not windowed.
+"""
 
 from __future__ import annotations
 
@@ -37,6 +44,13 @@ _LEAD_STAGE_ORDER = (
 
 logger = logging.getLogger(__name__)
 
+# The dashboard cache TTL has a 60 s floor: the frontend polls every 30 s, so at
+# the configured 30 s default every poll re-runs the whole multi-query aggregate
+# for marginal freshness. The floor still lets operators RAISE the TTL via
+# ``dashboard_cache_ttl_seconds``; it only removes the too-low default. Applies
+# to the metrics and attention dashboards alike — both are background telemetry.
+_DASHBOARD_CACHE_TTL_FLOOR_SECONDS = 60
+
 
 class DashboardService:
     def __init__(self, db: AsyncSession) -> None:
@@ -56,11 +70,12 @@ class DashboardService:
         # to them or unassigned. The repo takes ``recruiter_id=None`` for global.
         recruiter_id = None if viewer.role == Role.admin else str(viewer.id)
         repo = DashboardRepository(self.db)
-        open_convs = await repo.count_open_conversations(recruiter_id)
-        hot_leads = await repo.count_hot_leads(recruiter_id)
-        pending_fu = await repo.count_pending_followups(recruiter_id)
-        failed_sends = await repo.count_failed_sends(recruiter_id)
-        bot_errors = await repo.count_bot_errors(recruiter_id)
+        counts = await repo.core_counts(recruiter_id)
+        open_convs = counts["open_conversations"]
+        hot_leads = counts["hot_leads"]
+        pending_fu = counts["pending_followups"]
+        failed_sends = counts["failed_sends"]
+        bot_errors = counts["bot_errors"]
         suppression = await repo.bot_suppression_rate(recruiter_id)
         bot_summary = await repo.bot_run_summary(recruiter_id)
         counts_by_stage = await repo.leads_by_stage(recruiter_id)
@@ -117,7 +132,9 @@ class DashboardService:
         )
         if cache_enabled:
             await cache_set_json(
-                cache_key, metrics.model_dump(mode="json"), settings.dashboard_cache_ttl_seconds
+                cache_key,
+                metrics.model_dump(mode="json"),
+                max(_DASHBOARD_CACHE_TTL_FLOOR_SECONDS, settings.dashboard_cache_ttl_seconds),
             )
         return metrics
 
@@ -193,7 +210,9 @@ class DashboardService:
         )
         if cache_enabled:
             await cache_set_json(
-                cache_key, out.model_dump(mode="json"), settings.dashboard_cache_ttl_seconds
+                cache_key,
+                out.model_dump(mode="json"),
+                max(_DASHBOARD_CACHE_TTL_FLOOR_SECONDS, settings.dashboard_cache_ttl_seconds),
             )
         return out
 

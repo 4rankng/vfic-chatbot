@@ -42,51 +42,56 @@ class DashboardRepository:
             return await self.db.scalar(text(global_sql))
         return await self.db.scalar(text(scoped_sql), {"uid": recruiter_id})
 
-    async def count_open_conversations(self, recruiter_id: str | None = None) -> int | None:
-        return await self._scoped_scalar(
-            recruiter_id,
-            "SELECT count(*) FROM conversations WHERE status = 'OPEN'",
-            "SELECT count(*) FROM conversations c "
-            "WHERE c.status = 'OPEN' "
-            "AND " + viewer_scope_sql("c."),
-        )
+    # The five headline count keys, in the order core_counts returns them.
+    _CORE_COUNT_KEYS: tuple[str, ...] = (
+        "open_conversations",
+        "hot_leads",
+        "pending_followups",
+        "failed_sends",
+        "bot_errors",
+    )
 
-    async def count_hot_leads(self, recruiter_id: str | None = None) -> int | None:
-        return await self._scoped_scalar(
-            recruiter_id,
-            "SELECT count(*) FROM leads WHERE lead_score = 'hot'",
-            "SELECT count(*) FROM leads l WHERE l.lead_score = 'hot' AND " + viewer_scope_sql("l."),
-        )
+    async def core_counts(self, recruiter_id: str | None = None) -> dict[str, int]:
+        """The five headline dashboard counters in ONE round-trip / ONE snapshot.
 
-    async def count_pending_followups(self, recruiter_id: str | None = None) -> int | None:
-        return await self._scoped_scalar(
-            recruiter_id,
-            "SELECT count(*) FROM follow_up_tasks WHERE status = 'PENDING'",
-            "SELECT count(*) FROM follow_up_tasks f JOIN leads l ON l.id = f.lead_id "
-            "WHERE f.status = 'PENDING' "
-            "AND " + viewer_scope_sql("l."),
-        )
+        Each counter is a scalar subquery anchored on its own table (the same
+        shape ``attention_counters`` uses), so counts stay exact with no row
+        multiplication — every join here is 1:1 on a primary/unique key. Each
+        subquery carries its own viewer scope; for admin (``recruiter_id is
+        None``) the scope fragments are ``(TRUE)`` no-ops.
+        """
+        scoped = recruiter_id is not None
+        c_scope = viewer_scope_sql("c.") if scoped else "(TRUE)"
+        l_scope = viewer_scope_sql("l.") if scoped else "(TRUE)"
+        params: dict[str, str] = {}
+        if scoped:
+            params["uid"] = recruiter_id
 
-    async def count_failed_sends(self, recruiter_id: str | None = None) -> int | None:
-        return await self._scoped_scalar(
-            recruiter_id,
-            "SELECT count(*) FROM messages WHERE delivery_status = 'FAILED'",
-            "SELECT count(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id "
-            "WHERE m.delivery_status = 'FAILED' "
-            "AND " + viewer_scope_sql("c."),
+        sql = (
+            "SELECT "
+            "(SELECT count(*) FROM conversations c "
+            "WHERE c.status = 'OPEN' AND " + c_scope + ") AS open_conversations, "
+            "(SELECT count(*) FROM leads l "
+            "WHERE l.lead_score = 'hot' AND " + l_scope + ") AS hot_leads, "
+            "(SELECT count(*) FROM follow_up_tasks f JOIN leads l ON l.id = f.lead_id "
+            "WHERE f.status = 'PENDING' AND " + l_scope + ") AS pending_followups, "
+            "(SELECT count(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id "
+            "WHERE m.delivery_status = 'FAILED' AND " + c_scope + ") AS failed_sends, "
+            "(SELECT count(*) FROM bot_runs b JOIN conversations c ON c.id = b.conversation_id "
+            "WHERE b.outcome = 'ERROR' AND " + c_scope + ") AS bot_errors"
         )
-
-    async def count_bot_errors(self, recruiter_id: str | None = None) -> int | None:
-        return await self._scoped_scalar(
-            recruiter_id,
-            "SELECT count(*) FROM bot_runs WHERE outcome = 'ERROR'",
-            "SELECT count(*) FROM bot_runs b JOIN conversations c ON c.id = b.conversation_id "
-            "WHERE b.outcome = 'ERROR' "
-            "AND " + viewer_scope_sql("c."),
-        )
+        row = (await self.db.execute(text(sql), params)).mappings().one()
+        return {k: int(row[k] or 0) for k in self._CORE_COUNT_KEYS}
 
     async def bot_run_summary(self, recruiter_id: str | None = None) -> dict[str, float | int]:
-        """Aggregate bot-turn health without downloading the bot_run audit log."""
+        """Aggregate bot-turn health over the LAST 24 HOURS (not all-time).
+
+        Bounded on ``started_at`` so the aggregate rides the
+        ``bot_runs_started_at_idx`` index instead of scanning the whole,
+        never-pruned audit table; ``bot_runs`` rows persist forever, so an
+        unbounded version got slower every month. Callers must present these
+        numbers as 24-hour figures.
+        """
         sql = (
             "SELECT "
             "count(*)::int AS total, "
@@ -99,10 +104,11 @@ class DashboardRepository:
         )
         params = {}
         if recruiter_id is not None:
-            sql += " JOIN conversations c ON c.id = b.conversation_id WHERE " + viewer_scope_sql(
+            sql += " JOIN conversations c ON c.id = b.conversation_id AND " + viewer_scope_sql(
                 "c."
             )
             params["uid"] = recruiter_id
+        sql += " WHERE b.started_at > now() - interval '24 hours'"
         row = (await self.db.execute(text(sql), params)).mappings().one()
         return {
             "total": int(row["total"] or 0),
