@@ -193,6 +193,7 @@ def reset(*, email: str, password: str) -> None:
     contact_id = uuid.uuid4()
     channel_identity_id = uuid.uuid4()
     conversation_id = uuid.uuid4()
+    project_id = uuid.uuid4()
     with psycopg.connect(_plain_psycopg(sync_url)) as connection:
         _assert_database_owned(connection)
         tables = [
@@ -242,6 +243,24 @@ def reset(*, email: str, password: str) -> None:
             "VALUES (%s, 'WORKER', 'E2E inbound message', 'SENT', 'e2e-inbound'), "
             "(%s, 'BOT', 'E2E bot reply', 'SENT', 'e2e-outbound')",
             (conversation_id, conversation_id),
+        )
+        connection.execute(
+            "INSERT INTO projects (id, slug, name, is_active) "
+            "VALUES (%s, 'e2e-project', 'E2E Project', true)",
+            (project_id,),
+        )
+        # One terminal bot run with a schema-valid v2 decision trace so the
+        # bot-runs list and its trace detail have a row to render.
+        decision_trace = (
+            '{"version": 2, "events": [{"seq": 1, "kind": "model_turn", "turn": 1, '
+            '"phase": "final", "provider": "minimax", "model": "minimax-m2", '
+            '"reasoning_status": "not_returned", "tool_names": []}], "truncated": false}'
+        )
+        connection.execute(
+            "INSERT INTO bot_runs (conversation_id, started_at, ended_at, "
+            "version_at_start, proposed_reply, outcome, decision_trace) "
+            "VALUES (%s, now(), now(), 1, 'E2E bot reply', 'SENT', %s::jsonb)",
+            (conversation_id, decision_trace),
         )
         connection.commit()
     redis = _redis(require_owned=True)
