@@ -24,6 +24,10 @@ TICKETS = [
         area="security",
         labels=["security", "reliability"],
         effort="M",
+        evidence_log=[
+            'ee0e28e5 — by-id reads scoped to the viewer, 404 on out-of-scope ids',
+            'tests/test_lead_viewer_scope.py (61 tests) — 404 read+mutate, admin/own/unassigned 200, viewer threaded, bot_runs projection',
+        ],
         problem=(
             "`GET/PATCH /leads/{id}` and every lead sub-resource load the row by primary key with no "
             "ownership predicate, so any authenticated recruiter can read and mutate every other "
@@ -56,11 +60,16 @@ TICKETS = [
     ),
     dict(
         id="SEC-03",
+        column="DEV_COMPLETED",
         title="No server-side logout; refresh tokens are neither revoked nor truly rotated",
         sev="high",
         area="security",
         labels=["security"],
         effort="M",
+        evidence_log=[
+            'd117e086 — POST /auth/logout bumps token_version, refresh rejects a stale ver, email change bumps it',
+            'tests/test_auth_token_revocation.py — old refresh/access tokens die at logout, fresh login works, route contract',
+        ],
         problem=(
             "There is no `/auth/logout`. `POST /auth/refresh` re-issues a token pair without "
             "invalidating the token it consumed, so a stolen 14-day refresh token survives the "
@@ -88,11 +97,16 @@ TICKETS = [
     ),
     dict(
         id="SEC-04",
+        column="DEV_COMPLETED",
         title="Rate limiting covers only the four auth endpoints; webhooks and LLM routes are unbounded",
         sev="medium",
         area="security",
         labels=["security", "performance"],
         effort="M",
+        evidence_log=[
+            'aeb78362 — per-user buckets on the LLM routes, per-IP on the webhook POSTs, fail_open switch',
+            'tests/test_ratelimit.py — bucket isolation per route and per user, fail-open vs fail-closed',
+        ],
         problem=(
             "The only configured limits are on login / forgot-password / reset-password / refresh. "
             "Every LLM- or embedding-backed route and all webhook POSTs are unbounded, and the limiter "
@@ -117,11 +131,16 @@ TICKETS = [
     ),
     dict(
         id="SEC-05",
+        column="DEV_COMPLETED",
         title="Upload size caps exist but are dead code; request bodies are read unbounded",
         sev="medium",
         area="security",
         labels=["security", "reliability"],
         effort="S",
+        evidence_log=[
+            'c2b46788 — upload cap after every read, Content-Length pre-check and 1 MiB ceiling on webhook bodies (413)',
+            'tests/test_upload_size_guard.py, tests/test_webhook_ingress_limits.py',
+        ],
         problem=(
             "The intended 20 MiB upload cap and the zip-bomb guard have no production call site, and "
             "every upload and webhook handler reads the entire body into memory before any check."
@@ -144,11 +163,16 @@ TICKETS = [
     ),
     dict(
         id="SEC-06",
+        column="DEV_COMPLETED",
         title="No security headers and no CSP; JWTs live in localStorage",
         sev="medium",
         area="security",
         labels=["security"],
         effort="S",
+        evidence_log=[
+            '1be1b2d0 + 3cabb7b4 — CSP/X-Frame-Options/Permissions-Policy on the deploy-rendered template, TrustedHostMiddleware',
+            'tests/test_security_headers.py, tests/test_allowed_hosts_config.py',
+        ],
         problem=(
             "The application sets no HSTS / CSP / X-Frame-Options / X-Content-Type-Options / "
             "Referrer-Policy, and the only edge config that could set them is rendered on the host and "
@@ -176,11 +200,16 @@ TICKETS = [
     ),
     dict(
         id="SEC-07",
+        column="DEV_COMPLETED",
         title="Admin secret previews leak 8 characters of every credential; reveal endpoint has no step-up",
         sev="medium",
         area="security",
         labels=["security"],
         effort="S",
+        evidence_log=[
+            'a0f7d807 — secrets report configured+length only; reveal requires password step-up and is audited',
+            'tests/test_integration_settings.py, tests/test_integrations_api.py, tests/test_facebook_oauth.py',
+        ],
         problem=(
             "Every stored integration secret is returned to admin GETs as `first4...last4`, and the "
             "Facebook reveal endpoint returns the Meta app secret in plaintext with no "
@@ -203,11 +232,16 @@ TICKETS = [
     ),
     dict(
         id="SEC-08",
+        column="DEV_COMPLETED",
         title="JWT validation omits audience/issuer and required claims; algorithm is env-controlled",
         sev="medium",
         area="security",
         labels=["security"],
         effort="S",
+        evidence_log=[
+            '97db619e — iss/aud minted and verified, required claims, algorithm allowlist at boot',
+            'tests/test_security.py',
+        ],
         problem=(
             "Decode passes no `audience`, no `issuer`, and no `options={\"require\": [...]}`, and "
             "`jwt_algorithm` is an unvalidated environment string."
@@ -235,11 +269,16 @@ TICKETS = [
     ),
     dict(
         id="REL-01",
+        column="DEV_COMPLETED",
         title="A partially delivered multi-bubble answer is recorded FAILED, so recovery answers again",
         sev="high",
         area="reliability",
         labels=["reliability"],
         effort="M",
+        evidence_log=[
+            'fb344ee0 — partial delivery flagged, SEND_UNKNOWN instead of FAILED, provider-id rows excluded from recovery',
+            'tests/test_zalo_bot_service.py, tests/test_graph_runner_turn.py, tests/test_reconcile_worker.py; integration/test_reconcile_superseded_inbound.py',
+        ],
         problem=(
             "Answers longer than 420 characters are sent as N separate provider requests. When chunk N "
             "fails with a *definite* provider error, the aggregate result is `ok=False` carrying chunk "
@@ -270,11 +309,16 @@ TICKETS = [
     ),
     dict(
         id="REL-02",
+        column="DEV_COMPLETED",
         title="Blocking synchronous Redis runs on the event loop in LLM telemetry and the semaphore release",
         sev="high",
         area="reliability",
         labels=["reliability", "performance"],
         effort="S",
+        evidence_log=[
+            '7659a35c — telemetry on the async client, semaphore ops via to_thread, get_running_loop()',
+            'tests/test_llm_semaphore.py (token ops never on the loop), tests/test_usage.py',
+        ],
         problem=(
             "Per-LLM-call counters and the semaphore release use the synchronous Redis client inline in "
             "async code — exactly the pattern `backend/app/core/security.py` documents as forbidden and correctly "
@@ -304,11 +348,16 @@ TICKETS = [
     ),
     dict(
         id="REL-03",
+        column="DEV_COMPLETED",
         title="Redis locks released without an ownership check, with TTLs shorter than the work they guard",
         sev="medium",
         area="reliability",
         labels=["reliability"],
         effort="S",
+        evidence_log=[
+            '2da7723c (OA lock) + fb344ee0 (reconcile tick lock) — UUID owner, TTL above the guarded work, Lua CAS release',
+            'tests/test_zalo_oa_token_refresh.py; tests/test_reconcile_worker.py (_CasRedis)',
+        ],
         problem=(
             "Two locks delete their key blindly in `finally`, and one has a TTL that its own worst-case "
             "path exceeds — so a slow holder can delete a successor's lock and admit a third "
@@ -334,11 +383,16 @@ TICKETS = [
     ),
     dict(
         id="REL-04",
+        column="DEV_COMPLETED",
         title="Password-reset OTP is sent by an unreferenced fire-and-forget task",
         sev="medium",
         area="reliability",
         labels=["reliability"],
         effort="S",
+        evidence_log=[
+            '4f3e609b — module-level task set with done callback for the OTP send',
+            'tests/test_password_reset_task_retention.py',
+        ],
         problem=(
             "The only code that sends the OTP and writes the email audit rows runs in a task whose "
             "handle is discarded, so it can be garbage-collected or lost on reload — silently."
@@ -367,6 +421,10 @@ TICKETS = [
         area="reliability",
         labels=["reliability"],
         effort="S",
+        evidence_log=[
+            'ee0e28e5 — blank-only guard moved into the UPDATE (+updated_at, version on override)',
+            'tests/test_lead_gender_guard.py (8 tests) — guarded UPDATE, override wins, rowcount semantics',
+        ],
         problem=(
             "The \"only fill a blank gender\" rule lives in the adapter as a read-then-write, while the "
             "SQL update itself has no guard — so a concurrent provider enrichment can be overwritten."
@@ -391,11 +449,16 @@ TICKETS = [
     ),
     dict(
         id="REL-06",
+        column="DEV_COMPLETED",
         title="Outbox PENDING row is dispatcher-visible during the inline send, recording a false ERROR turn",
         sev="medium",
         area="reliability",
         labels=["reliability"],
         effort="S",
+        evidence_log=[
+            '7e4255b4 — claim_send writes its outbox command already SENDING; dispatch_message_outbox resumes only its own claim',
+            'tests/test_outbox.py, tests/test_concurrency.py; integration/test_inline_claim_outbox_visibility.py',
+        ],
         problem=(
             "`claim_send` inserts the outbox row as PENDING and only then sends inline, while the 60 s "
             "dispatcher tick selects *all* PENDING rows with no age gate — so the sweep can win the "
@@ -420,11 +483,16 @@ TICKETS = [
     ),
     dict(
         id="REL-07",
+        column="DEV_COMPLETED",
         title="Semantic cache scans all vectors in Python on the loop, and its scope guard has a hole",
         sev="medium",
         area="reliability",
         labels=["reliability", "performance"],
         effort="M",
+        evidence_log=[
+            'c3c70a5a — scope_key(project_ids, top_k), packed float16 vectors, scan via to_thread',
+            'tests/test_semantic_cache.py — cross-Page isolation end to end, off-loop scan, corrupt-entry miss',
+        ],
         problem=(
             "Every uncached lookup transfers and parses all stored vectors and compares them in pure "
             "Python on the event loop, and the scope guard keys on `project_slug`, which is `None` for "

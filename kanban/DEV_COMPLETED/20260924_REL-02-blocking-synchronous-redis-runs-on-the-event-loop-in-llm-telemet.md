@@ -5,8 +5,8 @@ severity: high
 area: reliability
 labels: [reliability, performance]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** reliability · **Effort:** S · **Labels:** reliability, performance
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -35,6 +35,11 @@ Per-LLM-call counters and the semaphore release use the synchronous Redis client
 ## Suggested fix
 
 Move the counters and the semaphore release onto the async client (`app/core/redis.py:get_redis()`) — they are fire-and-forget, so this is a drop-in — or wrap in `asyncio.to_thread`. Use `asyncio.to_thread` for the dashboard's sync-only reads. Also replace the deprecated `asyncio.get_event_loop()` at `backend/app/graph/llm_semaphore.py:159` with `asyncio.get_running_loop()`.
+
+## Evidence log
+
+- 7659a35c — telemetry on the async client, semaphore ops via to_thread, get_running_loop()
+- tests/test_llm_semaphore.py (token ops never on the loop), tests/test_usage.py
 
 ---
 

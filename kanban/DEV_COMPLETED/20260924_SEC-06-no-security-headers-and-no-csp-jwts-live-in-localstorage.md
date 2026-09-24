@@ -5,8 +5,8 @@ severity: medium
 area: security
 labels: [security]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** security · **Effort:** S · **Labels:** security
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -34,6 +34,11 @@ Any script execution is silent full account takeover, with a 60-minute access to
 ## Suggested fix
 
 Add to the deploy-rendered Caddy config: `Strict-Transport-Security`, `Content-Security-Policy: default-src 'self'; object-src 'none'; frame-ancestors 'none'` (verify whether Tailwind-injected styles need `style-src 'unsafe-inline'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`. Add `TrustedHostMiddleware` to `main.py`. Keep the declaration in the deploy template so a redeploy cannot lose it.
+
+## Evidence log
+
+- 1be1b2d0 + 3cabb7b4 — CSP/X-Frame-Options/Permissions-Policy on the deploy-rendered template, TrustedHostMiddleware
+- tests/test_security_headers.py, tests/test_allowed_hosts_config.py
 
 ---
 

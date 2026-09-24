@@ -5,8 +5,8 @@ severity: medium
 area: security
 labels: [security]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** security · **Effort:** S · **Labels:** security
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -33,6 +33,11 @@ Real exposure is misconfiguration and cross-boundary reuse: a smuggled algorithm
 ## Suggested fix
 
 Add `aud`/`iss` on issue and require them on decode; add `options={"require": ["exp", "sub", "type", "ver"]}`; add a `field_validator("jwt_algorithm")` allowlisting HS256/384/512 so a bad value fails at boot. Derive the cipher key from a labeled input (e.g. `sha256("secret-store-v1:" + key)`) instead of reusing `jwt_secret`.
+
+## Evidence log
+
+- 97db619e — iss/aud minted and verified, required claims, algorithm allowlist at boot
+- tests/test_security.py
 
 ---
 

@@ -5,8 +5,8 @@ severity: high
 area: reliability
 labels: [reliability]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** reliability · **Effort:** M · **Labels:** reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -34,6 +34,11 @@ On the Zalo Bot channel there are no receipts, so the FAILED row is permanent an
 ## Suggested fix
 
 Make `_aggregate_chunked_send` distinguish partial delivery: when `message_ids` is non-empty, return SEND_UNKNOWN (at-most-once) or a dedicated `partial` outcome — never a bare `ok=False` with a null error class. Persist one `Message` row per bubble (or a `provider_message_ids` list) so partial delivery is representable, and exclude `FAILED` rows with a non-null `zalo_message_id` from the `failed_send` recovery branch.
+
+## Evidence log
+
+- fb344ee0 — partial delivery flagged, SEND_UNKNOWN instead of FAILED, provider-id rows excluded from recovery
+- tests/test_zalo_bot_service.py, tests/test_graph_runner_turn.py, tests/test_reconcile_worker.py; integration/test_reconcile_superseded_inbound.py
 
 ---
 

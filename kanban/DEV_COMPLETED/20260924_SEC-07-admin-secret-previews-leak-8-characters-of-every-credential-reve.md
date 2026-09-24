@@ -5,8 +5,8 @@ severity: medium
 area: security
 labels: [security]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** security · **Effort:** S · **Labels:** security
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -32,6 +32,11 @@ Eight characters of every credential narrow brute force, and the Meta app secret
 ## Suggested fix
 
 Replace character previews with a `configured: true` / length-only status for authorizing secrets, keeping `_preview` only for non-authorizing identifiers. Require password re-entry or a short-lived single-use token on the reveal endpoint and audit-log the reveal.
+
+## Evidence log
+
+- a0f7d807 — secrets report configured+length only; reveal requires password step-up and is audited
+- tests/test_integration_settings.py, tests/test_integrations_api.py, tests/test_facebook_oauth.py
 
 ---
 

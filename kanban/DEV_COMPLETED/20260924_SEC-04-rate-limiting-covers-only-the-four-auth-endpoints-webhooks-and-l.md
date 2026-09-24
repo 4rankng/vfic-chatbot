@@ -5,8 +5,8 @@ severity: medium
 area: security
 labels: [security, performance]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** security · **Effort:** M · **Labels:** security, performance
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -33,6 +33,11 @@ An authenticated recruiter firing N parallel `/web-chat-turn` or `/jobs/search` 
 ## Suggested fix
 
 Add an IP limiter on the four webhook routes and a per-user limiter on `/jobs/search`, `/rag/test`, `/web-chat-turn`, `/assist`, `/chatops-actions/*`. Consider fail-closed for the LLM bucket while leaving auth fail-open.
+
+## Evidence log
+
+- aeb78362 — per-user buckets on the LLM routes, per-IP on the webhook POSTs, fail_open switch
+- tests/test_ratelimit.py — bucket isolation per route and per user, fail-open vs fail-closed
 
 ---
 

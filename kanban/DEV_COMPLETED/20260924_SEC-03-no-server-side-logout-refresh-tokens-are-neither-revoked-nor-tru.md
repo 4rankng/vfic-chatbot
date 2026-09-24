@@ -5,8 +5,8 @@ severity: high
 area: security
 labels: [security]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** security · **Effort:** M · **Labels:** security
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -34,6 +34,11 @@ An exfiltrated refresh token grants access for up to 14 days; logout is cosmetic
 ## Suggested fix
 
 Add `POST /api/v1/auth/logout` that bumps `user.token_version` — both token types already carry and check `ver` (`backend/app/identity/application/authentication.py:42-43`, `backend/app/identity/infrastructure/http.py:94`), making this the cheapest correct fix. For real rotation, store a per-user refresh generation and reject a stale one so a replay invalidates the family. Also bump `token_version` on email change (`backend/app/services/user_service.py:125-126,141`).
+
+## Evidence log
+
+- d117e086 — POST /auth/logout bumps token_version, refresh rejects a stale ver, email change bumps it
+- tests/test_auth_token_revocation.py — old refresh/access tokens die at logout, fresh login works, route contract
 
 ---
 

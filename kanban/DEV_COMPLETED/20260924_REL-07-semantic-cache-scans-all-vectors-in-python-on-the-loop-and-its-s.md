@@ -5,8 +5,8 @@ severity: medium
 area: reliability
 labels: [reliability, performance]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** reliability · **Effort:** M · **Labels:** reliability, performance
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -33,6 +33,11 @@ Dormant today because the feature is off, so this is latent cost plus an enabled
 ## Suggested fix
 
 Gate on `project_ids is None` rather than `project_slug` (or include the project scope in the key), store packed float16 with a lower capacity, and run the scan via `asyncio.to_thread`. If it will not be enabled, delete the call path rather than carrying an untested branch.
+
+## Evidence log
+
+- c3c70a5a — scope_key(project_ids, top_k), packed float16 vectors, scan via to_thread
+- tests/test_semantic_cache.py — cross-Page isolation end to end, off-loop scan, corrupt-entry miss
 
 ---
 

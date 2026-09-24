@@ -5,8 +5,8 @@ severity: medium
 area: reliability
 labels: [reliability]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** reliability · **Effort:** S · **Labels:** reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -33,6 +33,11 @@ For reconcile this is a load/telemetry defect — duplicate replies are still pr
 ## Suggested fix
 
 Use `singleflight.release(key, leader_id)` (or an equivalent Lua CAS-delete) for both locks, storing a UUID as the value, and size the OA refresh TTL above the sum of the request timeouts it wraps.
+
+## Evidence log
+
+- 2da7723c (OA lock) + fb344ee0 (reconcile tick lock) — UUID owner, TTL above the guarded work, Lua CAS release
+- tests/test_zalo_oa_token_refresh.py; tests/test_reconcile_worker.py (_CasRedis)
 
 ---
 

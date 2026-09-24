@@ -5,8 +5,8 @@ severity: medium
 area: reliability
 labels: [reliability]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** reliability · **Effort:** S · **Labels:** reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -34,6 +34,11 @@ The candidate receives exactly one copy, but the dashboard error tile, the `bot_
 ## Suggested fix
 
 Insert the outbox row already in SENDING inside the claim transaction (the stale-SENDING path terminalizes at-most-once, so this is safe), or add a minimum-age / `dispatch_claimed_at` gate to `pending_outbox_ids()`.
+
+## Evidence log
+
+- 7e4255b4 — claim_send writes its outbox command already SENDING; dispatch_message_outbox resumes only its own claim
+- tests/test_outbox.py, tests/test_concurrency.py; integration/test_inline_claim_outbox_visibility.py
 
 ---
 

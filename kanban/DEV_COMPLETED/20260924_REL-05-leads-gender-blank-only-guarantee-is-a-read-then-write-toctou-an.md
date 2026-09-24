@@ -34,6 +34,11 @@ If OA profile enrichment commits `male` between the adapter's read and its write
 
 Push the guard into the statement: pass `override` down and add `or_(Lead.gender.is_(None), func.btrim(Lead.gender) == "")` when not overriding, and bump `updated_at` (plus `version` for the override case) so the console reflects it.
 
+## Evidence log
+
+- ee0e28e5 — blank-only guard moved into the UPDATE (+updated_at, version on override)
+- tests/test_lead_gender_guard.py (8 tests) — guarded UPDATE, override wins, rowcount semantics
+
 ---
 
 _Opened 2026-09-24 from the read-only tech-debt audit (HEAD `923b1d3f`). No code was changed by the audit; every claim is grounded in the cited `path:line` locations._

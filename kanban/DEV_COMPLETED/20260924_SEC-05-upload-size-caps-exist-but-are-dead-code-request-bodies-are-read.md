@@ -5,8 +5,8 @@ severity: medium
 area: security
 labels: [security, reliability]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** security · **Effort:** S · **Labels:** security, reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -33,6 +33,11 @@ An admin-scoped session POSTs a multi-gigabyte body: the ASGI layer buffers it, 
 ## Suggested fix
 
 Call `assert_upload_size(len(data))` immediately after every `file.read()` and check `Content-Length` before `request.body()`; return 413. Enforce a hard `max_body_size` at Caddy/uvicorn as the outer bound, since FastAPI has none.
+
+## Evidence log
+
+- c2b46788 — upload cap after every read, Content-Length pre-check and 1 MiB ceiling on webhook bodies (413)
+- tests/test_upload_size_guard.py, tests/test_webhook_ingress_limits.py
 
 ---
 

@@ -37,6 +37,11 @@ Sequential integer ids make enumeration trivial: full candidate PII for the whol
 
 Thread the viewer through the lead read path as conversations do: add `LeadRepository.get_visible` mirroring `viewer_can_access_lead` (`backend/app/services/viewer_scope.py:70-77`), return **404** rather than 403 so ids are not probeable, and apply it to every by-id route plus `LeadService.update/assign/set_stage/create_followup/replace_manual_tags`. Validate `AssignRequest.recruiter_id` resolves to an enabled user. Scope the `/bot_runs` projection or drop `proposed_reply` from the list response.
 
+## Evidence log
+
+- ee0e28e5 — by-id reads scoped to the viewer, 404 on out-of-scope ids
+- tests/test_lead_viewer_scope.py (61 tests) — 404 read+mutate, admin/own/unassigned 200, viewer threaded, bot_runs projection
+
 ---
 
 _Opened 2026-09-24 from the read-only tech-debt audit (HEAD `923b1d3f`). No code was changed by the audit; every claim is grounded in the cited `path:line` locations._

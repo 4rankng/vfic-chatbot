@@ -5,8 +5,8 @@ severity: medium
 area: reliability
 labels: [reliability]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** reliability · **Effort:** S · **Labels:** reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -33,6 +33,11 @@ The API returns 200 ("check your email") while the mail never sends and no failu
 ## Suggested fix
 
 Keep a module-level `set[asyncio.Task]` with `add_done_callback`, or use FastAPI `BackgroundTasks`, or move the send onto the existing `persistence_low` queue where a failed job surfaces in `rq:failed`.
+
+## Evidence log
+
+- 4f3e609b — module-level task set with done callback for the OTP send
+- tests/test_password_reset_task_retention.py
 
 ---
 
