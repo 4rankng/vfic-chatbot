@@ -148,6 +148,26 @@ this commit.
    after the next scheduled CI run; consider triggering the workflow manually
    once, then reviewing the regenerated index.
 
+## Hand-off completed: DROPLET-BACKUP-RESTORE.md (post-report)
+
+After the board sweep closed, w3-ops handed over one more doc-drift item:
+`docs/DROPLET-BACKUP-RESTORE.md` had fallen behind `scripts/backup-droplet.sh`
+/ `restore-droplet.sh` (commits `98700969`/`750c0572`/`bc069298` — rendered
+Caddyfile + template in the config snapshot, colour/tag/alembic manifests,
+keyless-env refusal, tag pinning, dump-vs-image head assertion, sealed-rows
+decrypt probe), and the bundle embeds the doc as `README-RESTORE.md`, so the
+drift shipped to operators. Rewrote the doc against the current script text
+(line-by-line: bundle table, refusal gates, eight restore steps, sealing-key
+DR section, IMAGE_TAG/`vfic_vfic_*` gotchas), consistent with the
+deployment-guide rows `bc069298` added. Every claim read off the scripts; the
+one deviation (`ON_ERROR_STOP` semantics apply to the dev `make restore`, not
+this script) is deliberately not overstated. Commit `57b83cab`, explicit path.
+
+The lead's new team rules are followed: no staged entries were sitting when
+the rule landed (verified index clean), and every commit before and since is
+stage-and-commit in one motion with explicit paths. File-boundary note: the
+backup/restore scripts themselves are w3-ops's — I only touched the doc.
+
 ## Status: DONE
 
 Summary: all fourteen tickets (DOC-01…13, OPS-12) closed or verified complete;
