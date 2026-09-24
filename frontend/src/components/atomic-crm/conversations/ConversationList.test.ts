@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import componentSource from "./presentation/ConversationList.tsx?raw";
 import {
   getChannelProviderSearchParams,
   getConversationListKey,
@@ -9,19 +8,9 @@ import {
 } from "./domain/conversation-list-filters";
 
 describe("getConversationListServerFilter", () => {
-  it("keeps multi-line conversation rows out of the fixed-height button system", () => {
-    expect(componentSource).not.toContain("conversation tt-btn");
-  });
-
-  it("does not render a conversation-count badge in the inbox toolbar", () => {
-    expect(componentSource).not.toContain("workspace-conversation-count");
-  });
-
-  it("does not render the removed inbox queue-filter controls", () => {
-    expect(componentSource).not.toContain("conversation-filters");
-    expect(componentSource).not.toContain("conversation-filter");
-  });
-
+  // The former component-source pins (no count badge, no queue filters, no
+  // tt-btn rows) are guarded as rendered output by the e2e inbox journey in
+  // frontend/e2e/vfic.spec.ts, against the real backend.
   it("maps the Messages badge deep link to the authoritative reply queue", () => {
     expect(
       getConversationListServerFilter(
