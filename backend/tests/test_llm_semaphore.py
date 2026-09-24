@@ -73,6 +73,7 @@ def fake_redis():
     r.llen = MagicMock(side_effect=_llen)
     r.rpop = MagicMock(side_effect=_rpop)
     r.exists = MagicMock(side_effect=_exists)
+    r.persist = MagicMock(return_value=1)
     r.pipeline = MagicMock(return_value=MagicMock(execute=MagicMock(return_value=[None])))
     return r
 
@@ -278,6 +279,8 @@ class TestSemaphoreEvictionSelfHeal:
         with patch(_REDIS_PATCH, return_value=fake_redis):
             sem._ensure_tokens()
         fake_redis.rpush.assert_called_once_with("test_evict", 1, 1, 1)
+        # Registration strips any TTL: volatile-lru evicts only TTL'd keys.
+        fake_redis.persist.assert_called_once_with("test_evict")
 
     def test_ensure_tokens_keeps_present_but_short_list(self, fake_redis):
         """Saturation is not eviction: a present-but-short list is left alone."""

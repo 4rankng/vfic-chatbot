@@ -83,6 +83,11 @@ class RedisLlmSemaphore:
                 current = r.llen(self._key)
                 if current < self._limit:
                     r.rpush(self._key, *[1] * (self._limit - current))
+                # Token keys carry no TTL: the deployment's volatile-lru
+                # policy only ever evicts TTL'd keys, so PERSIST keeps the
+                # token list out of the eviction blast radius even if
+                # something else set a TTL on it.
+                r.persist(self._key)
                 self._initialized = True
                 logger.info(
                     "llm_semaphore initialized",
@@ -94,6 +99,7 @@ class RedisLlmSemaphore:
                 )
             elif not r.exists(self._key):
                 r.rpush(self._key, *[1] * self._limit)
+                r.persist(self._key)
                 logger.warning(
                     "llm_semaphore token list recreated after eviction",
                     extra={"key": self._key, "limit": self._limit},
