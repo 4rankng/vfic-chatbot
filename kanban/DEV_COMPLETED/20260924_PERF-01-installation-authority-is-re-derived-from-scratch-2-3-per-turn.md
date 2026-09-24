@@ -5,7 +5,7 @@ severity: high
 area: performance
 labels: [performance, reliability]
 effort: M
-status: todo
+status: dev_completed
 column: TODO
 opened: 2026-09-24
 ---
