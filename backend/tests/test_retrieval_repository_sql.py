@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.retrieval import repository
+from app.services.retrieval import document_repository, repository
 
 
 class _EmptyResult:
@@ -54,7 +54,7 @@ class _ScalarsDb:
 def _ann_settings() -> SimpleNamespace:
     return SimpleNamespace(
         rag_ann_enabled=True,
-        embedding_dim=repository.EMBEDDING_DIM,
+        embedding_dim=document_repository.EMBEDDING_DIM,
         rag_ann_candidates=200,
     )
 
@@ -62,9 +62,9 @@ def _ann_settings() -> SimpleNamespace:
 @pytest.mark.asyncio
 async def test_ann_query_computes_distance_once(monkeypatch):
     """The exact distance is computed once and reused by floor + ORDER BY."""
-    monkeypatch.setattr(repository, "get_settings", lambda: _ann_settings())
+    monkeypatch.setattr(document_repository, "get_settings", lambda: _ann_settings())
     db = _CaptureExecDb()
-    repo = repository.RetrievalRepository(db)
+    repo = document_repository.DocumentRepository(db)
     await repo._match_document_vector_rows(
         emb="e", top_k=5, filter_json="{}", project_clause="", project_ids=None
     )
@@ -74,7 +74,7 @@ async def test_ann_query_computes_distance_once(monkeypatch):
     # Floor + ORDER BY reference the single computed distance.
     assert "WHERE dist <= :max_dist" in sql
     assert "ORDER BY dist" in sql
-    assert params["max_dist"] == 1 - repository.RetrievalRepository.SIMILARITY_FLOOR
+    assert params["max_dist"] == 1 - document_repository.DocumentRepository.SIMILARITY_FLOOR
     assert "floor" not in params
     # Candidate selection keeps the halfvec cast that matches the HNSW index.
     assert (

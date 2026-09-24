@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from types import SimpleNamespace
 
-from app.services.retrieval import repository
+from app.services.retrieval import document_repository as repository
 
 
 def _settings(*, rag_ann_enabled: bool, embedding_dim: int) -> SimpleNamespace:
@@ -25,7 +25,7 @@ def test_ann_enabled_when_flag_on_and_dim_matches_schema(monkeypatch):
         "get_settings",
         lambda: _settings(rag_ann_enabled=True, embedding_dim=repository.EMBEDDING_DIM),
     )
-    assert repository.RetrievalRepository._ann_enabled() is True
+    assert repository.DocumentRepository._ann_enabled() is True
 
 
 def test_ann_disabled_and_warns_once_on_dim_mismatch(monkeypatch, caplog):
@@ -37,13 +37,13 @@ def test_ann_disabled_and_warns_once_on_dim_mismatch(monkeypatch, caplog):
     )
 
     with caplog.at_level(logging.WARNING, logger=repository.logger.name):
-        assert repository.RetrievalRepository._ann_enabled() is False
+        assert repository.DocumentRepository._ann_enabled() is False
     assert any("ANN retrieval disabled" in r.message for r in caplog.records)
 
     # The guard is one-shot: a second call must not re-warn.
     caplog.clear()
     with caplog.at_level(logging.WARNING, logger=repository.logger.name):
-        assert repository.RetrievalRepository._ann_enabled() is False
+        assert repository.DocumentRepository._ann_enabled() is False
     assert not any("ANN retrieval disabled" in r.message for r in caplog.records)
 
 
@@ -55,5 +55,5 @@ def test_ann_disabled_when_flag_off_regardless_of_dim(monkeypatch, caplog):
         lambda: _settings(rag_ann_enabled=False, embedding_dim=1536),
     )
     with caplog.at_level(logging.WARNING, logger=repository.logger.name):
-        assert repository.RetrievalRepository._ann_enabled() is False
+        assert repository.DocumentRepository._ann_enabled() is False
     assert not any("ANN retrieval disabled" in r.message for r in caplog.records)
