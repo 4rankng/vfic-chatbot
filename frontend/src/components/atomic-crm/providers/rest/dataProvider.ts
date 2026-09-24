@@ -1,23 +1,36 @@
 import {
   type DataProvider,
   type CreateParams,
+  type CreateResult,
   type DeleteManyParams,
+  type DeleteManyResult,
   type DeleteParams,
+  type DeleteResult,
   type GetListParams,
+  type GetListResult,
   type GetManyParams,
   type GetManyReferenceParams,
+  type GetManyReferenceResult,
+  type GetManyResult,
   type GetOneParams,
+  type GetOneResult,
   type Identifier,
+  type RaRecord,
   type UpdateManyParams,
+  type UpdateManyResult,
   type UpdateParams,
+  type UpdateResult,
 } from "ra-core";
 import { apiJson, ApiError } from "@/lib/apiClient";
-import { httpHumanReplyAdapter } from "../../conversations/infrastructure/http-human-reply-adapter";
+import type { ConversationModeWriter } from "../../conversations/application/conversation-actions";
 import type {
-  BotRunTraceDetail,
-  BotRunTraceSummary,
-  BotRunTraceSummaryList,
-} from "../../types";
+  MarkConversationReadPort,
+  RetryConversationReplyPort,
+  SendConversationReplyPort,
+} from "../../conversations/application/conversation-operations";
+import type { EditableConversationMode } from "../../conversations/domain/conversation-mode";
+import { httpHumanReplyAdapter } from "../../conversations/infrastructure/http-human-reply-adapter";
+import type { BotRunTraceDetail, BotRunTraceSummaryList } from "../../types";
 
 // REST dataProvider (replaces ra-supabase-core / PostgREST).
 //
@@ -47,7 +60,9 @@ const pathFor = (resource: string): string =>
 const onePath = (resource: string, id: Identifier): string =>
   `${pathFor(resource)}/${encodeURIComponent(String(id))}`;
 
-type ApiRecord = Record<string, unknown>;
+// A backend JSON row. react-admin records always carry an `id`; every other
+// field is resource-specific and untyped on the wire.
+type ApiRecord = Record<string, unknown> & { id: Identifier };
 interface ListEnvelope {
   data: ApiRecord[];
   total: number;
@@ -55,25 +70,30 @@ interface ListEnvelope {
 
 // Backend enums are uppercase; the CRM render layer reads lowercase mode values
 // (`=== "bot"` / `=== "human"`). Normalise conversation records so those checks
-// still hold. CLOSED maps to "closed" (falls through bot/human branches).
-const normalize = (resource: string, record: ApiRecord): ApiRecord => {
+// still hold. CLOSED maps to "closed" (falls through bot/human branches). The
+// record's own shape is preserved — this is a field normaliser, not a mapper.
+const normalize = <RecordType extends ApiRecord>(
+  resource: string,
+  record: RecordType,
+): RecordType => {
   if (resource === "conversations" && typeof record.mode === "string") {
-    return { ...record, mode: (record.mode as string).toLowerCase() };
+    return { ...record, mode: record.mode.toLowerCase() };
   }
   // bot_runs.outcome arrives uppercase from the backend enum; the CRM's
   // outcomeMeta table is keyed lowercase (sent/suppressed/error).
   if (resource === "bot_runs" && typeof record.outcome === "string") {
-    return { ...record, outcome: (record.outcome as string).toLowerCase() };
+    return { ...record, outcome: record.outcome.toLowerCase() };
   }
   return record;
 };
 
-// Marshals backend JSON into a react-admin record. Returned as `any` because
-// the DataProvider methods are generic over `RecordType extends RaRecord`, and a
-// concrete `RaRecord[]` is not assignable to an invariant `RecordType[]`. This
-// matches react-admin's own loosely-typed provider seam.
-const toRec = (resource: string, record: ApiRecord): any =>
-  normalize(resource, record);
+// Marshals backend JSON into a react-admin record. The wire format is untyped
+// JSON, so `toRec` is the single place where a parsed row is asserted into the
+// record type its caller asked for; every verb below stays typed around it.
+const toRec = <RecordType extends RaRecord>(
+  resource: string,
+  record: ApiRecord,
+): RecordType => normalize(resource, record) as RecordType;
 
 const buildListQuery = (
   params: GetListParams | GetManyReferenceParams,
@@ -108,23 +128,34 @@ const buildListQuery = (
   return sp.toString();
 };
 
-const restProvider: DataProvider = {
-  async getList(resource: string, params: GetListParams) {
+// Every verb mirrors react-admin's own generic signature so callers keep
+// `RecordType` inference and the provider is checked against `DataProvider`.
+const restProvider = {
+  async getList<RecordType extends RaRecord = RaRecord>(
+    resource: string,
+    params: GetListParams,
+  ): Promise<GetListResult<RecordType>> {
     const body = await apiJson<ListEnvelope>(
       `${pathFor(resource)}?${buildListQuery(params, resource)}`,
     );
     return {
-      data: body.data.map((r) => toRec(resource, r)),
+      data: body.data.map((r) => toRec<RecordType>(resource, r)),
       total: body.total,
     };
   },
 
-  async getOne(resource: string, params: GetOneParams) {
+  async getOne<RecordType extends RaRecord = RaRecord>(
+    resource: string,
+    params: GetOneParams,
+  ): Promise<GetOneResult<RecordType>> {
     const record = await apiJson<ApiRecord>(onePath(resource, params.id));
-    return { data: toRec(resource, record) };
+    return { data: toRec<RecordType>(resource, record) };
   },
 
-  async getMany(resource: string, params: GetManyParams) {
+  async getMany<RecordType extends RaRecord = RaRecord>(
+    resource: string,
+    params: GetManyParams,
+  ): Promise<GetManyResult<RecordType>> {
     // No batch-by-id endpoint; fan out getOne per id (bounded N, small).
     const rows = await Promise.all(
       params.ids.map((id) =>
@@ -134,11 +165,14 @@ const restProvider: DataProvider = {
     return {
       data: rows
         .filter((r): r is ApiRecord => r !== null)
-        .map((r) => toRec(resource, r)),
+        .map((r) => toRec<RecordType>(resource, r)),
     };
   },
 
-  async getManyReference(resource: string, params: GetManyReferenceParams) {
+  async getManyReference<RecordType extends RaRecord = RaRecord>(
+    resource: string,
+    params: GetManyReferenceParams,
+  ): Promise<GetManyReferenceResult<RecordType>> {
     // ReferenceManyField filters by { [target]: id }; fold it into the filter.
     const merged: GetManyReferenceParams = {
       ...params,
@@ -148,47 +182,70 @@ const restProvider: DataProvider = {
       `${pathFor(resource)}?${buildListQuery(merged, resource)}`,
     );
     return {
-      data: body.data.map((r) => toRec(resource, r)),
+      data: body.data.map((r) => toRec<RecordType>(resource, r)),
       total: body.total,
     };
   },
 
-  async create(resource: string, params: CreateParams) {
+  async create<
+    RecordType extends Omit<RaRecord, "id"> = Omit<RaRecord, "id">,
+    ResultRecordType extends RaRecord = RecordType & { id: Identifier },
+  >(
+    resource: string,
+    params: CreateParams<RecordType>,
+  ): Promise<CreateResult<ResultRecordType>> {
     const record = await apiJson<ApiRecord>(pathFor(resource), {
       method: "POST",
-      body: params.data as Record<string, unknown>,
+      body: params.data,
     });
-    return { data: toRec(resource, record) };
+    return { data: toRec<ResultRecordType>(resource, record) };
   },
 
-  async update(resource: string, params: UpdateParams) {
+  async update<RecordType extends RaRecord = RaRecord>(
+    resource: string,
+    params: UpdateParams<RecordType>,
+  ): Promise<UpdateResult<RecordType>> {
     const record = await apiJson<ApiRecord>(onePath(resource, params.id), {
       method: "PATCH",
-      body: params.data as Record<string, unknown>,
+      body: params.data,
     });
-    return { data: toRec(resource, record) };
+    return { data: toRec<RecordType>(resource, record) };
   },
 
-  async updateMany(resource: string, params: UpdateManyParams) {
+  async updateMany<RecordType extends RaRecord = RaRecord>(
+    resource: string,
+    params: UpdateManyParams,
+  ): Promise<UpdateManyResult<RecordType>> {
     const ids = await Promise.all(
       params.ids.map((id) =>
         apiJson<ApiRecord>(onePath(resource, id), {
           method: "PATCH",
-          body: params.data as Record<string, unknown>,
+          body: params.data,
         })
           .then(() => id)
           .catch(() => null),
       ),
     );
-    return { data: ids.filter((id): id is Identifier => id !== null) };
+    return { data: ids.filter((id): id is RecordType["id"] => id !== null) };
   },
 
-  async delete(resource: string, params: DeleteParams) {
+  async delete<RecordType extends RaRecord = RaRecord>(
+    resource: string,
+    params: DeleteParams<RecordType>,
+  ): Promise<DeleteResult<RecordType>> {
     await apiJson<void>(onePath(resource, params.id), { method: "DELETE" });
-    return { data: (params.previousData ?? { id: params.id }) as any };
+    // react-admin ignores this payload; the deleted record when the caller
+    // passed it, and otherwise a record carrying just the id.
+    return {
+      data:
+        params.previousData ?? toRec<RecordType>(resource, { id: params.id }),
+    };
   },
 
-  async deleteMany(resource: string, params: DeleteManyParams) {
+  async deleteMany<RecordType extends RaRecord = RaRecord>(
+    resource: string,
+    params: DeleteManyParams<RecordType>,
+  ): Promise<DeleteManyResult<RecordType>> {
     await Promise.all(
       params.ids.map((id) =>
         apiJson<void>(onePath(resource, id), { method: "DELETE" }).catch(
@@ -198,9 +255,57 @@ const restProvider: DataProvider = {
     );
     return { data: params.ids };
   },
-};
+} satisfies DataProvider;
 
-const getDataProviderWithCustomMethods = () => ({
+// The VFIC-specific surface of the provider — conversation mutations, bot-run
+// traces and admin user provisioning — which react-admin's own verbs don't
+// cover. Declared explicitly so the contract is readable here instead of being
+// inferred from the factory's object literal.
+export interface CrmDataProviderMethods {
+  /** Bot-run audit trail for one conversation (newest first, capped). */
+  getConversationBotRuns(
+    conversationId: string,
+  ): Promise<BotRunTraceSummaryList>;
+  /** Full decision trace for a single bot run. */
+  getBotRunTrace(runId: number): Promise<BotRunTraceDetail>;
+  /** Recruiter reply. Ownership is established by the Bearer JWT, not a body id. */
+  sendHumanReply(conversationId: string, message: string): Promise<void>;
+  retryHumanReply(conversationId: string, messageId: string): Promise<void>;
+  takeOverConversation(conversationId: string): Promise<ApiRecord>;
+  releaseConversation(conversationId: string): Promise<ApiRecord>;
+  setConversationMode(
+    conversationId: string,
+    mode: EditableConversationMode,
+  ): Promise<ApiRecord>;
+  clearConversationHistory(conversationId: string): Promise<void>;
+  markAsRead(conversationId: string): Promise<ApiRecord>;
+  createProfile(body: Record<string, unknown>): Promise<ApiRecord>;
+  disableUser(userId: string): Promise<ApiRecord>;
+  enableUser(userId: string): Promise<ApiRecord>;
+  resetUserPassword(userId: string, body: { password: string }): Promise<void>;
+  /** Sign-up is disabled; accounts are provisioned by an admin. */
+  signUp(body: {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+  }): Promise<{ user: null; session: null }>;
+}
+
+/**
+ * The type every consumer is typed against: react-admin's verbs, the
+ * VFIC-specific methods above, and the conversation ports the inbox dispatches
+ * through. Intersecting the ports keeps provider and port in lockstep — a
+ * rename or removal on either side breaks the build instead of a call site.
+ */
+export type CrmDataProvider = DataProvider &
+  CrmDataProviderMethods &
+  ConversationModeWriter &
+  MarkConversationReadPort &
+  SendConversationReplyPort &
+  RetryConversationReplyPort;
+
+const getDataProviderWithCustomMethods = (): CrmDataProvider => ({
   ...restProvider,
 
   async getConversationBotRuns(
@@ -210,9 +315,7 @@ const getDataProviderWithCustomMethods = () => ({
       `${BASE}/conversations/${encodeURIComponent(conversationId)}/bot-runs?page=1&per_page=10`,
     );
     return {
-      data: response.data.map((run) =>
-        normalize("bot_runs", run as unknown as ApiRecord),
-      ) as BotRunTraceSummary[],
+      data: response.data.map((run) => normalize("bot_runs", run)),
       total: response.total,
     };
   },
@@ -221,10 +324,7 @@ const getDataProviderWithCustomMethods = () => ({
     const response = await apiJson<BotRunTraceDetail>(
       `${BASE}/bot_runs/${encodeURIComponent(String(runId))}`,
     );
-    return normalize(
-      "bot_runs",
-      response as unknown as ApiRecord,
-    ) as BotRunTraceDetail;
+    return normalize("bot_runs", response);
   },
 
   // Recruiter reply: ownership is established by the Bearer JWT (the backend
@@ -255,7 +355,7 @@ const getDataProviderWithCustomMethods = () => ({
 
   async setConversationMode(
     conversationId: string,
-    mode: "bot" | "human" | "semi_auto",
+    mode: EditableConversationMode,
   ) {
     const action =
       mode === "human"
@@ -328,10 +428,6 @@ const getDataProviderWithCustomMethods = () => ({
     throw new ApiError(403, "Sign-up is disabled.");
   },
 });
-
-export type CrmDataProvider = ReturnType<
-  typeof getDataProviderWithCustomMethods
->;
 
 export const getDataProvider = (): CrmDataProvider =>
   getDataProviderWithCustomMethods();

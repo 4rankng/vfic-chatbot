@@ -53,18 +53,33 @@ export default tseslint.config(
     },
   },
   {
+    // One `no-any` standard for the product tree and the vendored dependency
+    // trees it builds on. Globs are recursive so nested subdirectories are
+    // covered too — the flat `dir/*` form silently skipped them.
     files: [
-      "src/components/admin/*.{ts,tsx}",
-      "src/hooks/*.{ts,tsx}",
-      "src/lib/*.{ts,tsx}",
+      "src/components/admin/**/*.{ts,tsx}",
+      "src/hooks/**/*.{ts,tsx}",
+      "src/lib/**/*.{ts,tsx}",
+      "src/components/atomic-crm/**/*.{ts,tsx}",
     ],
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
+    },
+  },
+  {
+    // Vendored shadcn-admin-kit re-exports value imports, so inline type
+    // imports are not required there.
+    files: [
+      "src/components/admin/**/*.{ts,tsx}",
+      "src/hooks/**/*.{ts,tsx}",
+      "src/lib/**/*.{ts,tsx}",
+    ],
+    rules: {
       "@typescript-eslint/consistent-type-imports": "off",
     },
   },
   {
-    files: ["src/components/ui/*.{ts,tsx}"],
+    files: ["src/components/ui/**/*.{ts,tsx}"],
     rules: {
       "react-refresh/only-export-components": "off",
       "@typescript-eslint/consistent-type-imports": "off",

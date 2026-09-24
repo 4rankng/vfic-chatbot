@@ -24,10 +24,8 @@ import {
   markConversationAsRead,
   retryConversationReply,
   sendConversationReply,
-  type MarkConversationReadPort,
-  type RetryConversationReplyPort,
-  type SendConversationReplyPort,
 } from "../application/conversation-operations";
+import type { CrmDataProvider } from "../../providers/rest/dataProvider";
 import { useConversationActions } from "./use-conversation-actions";
 import { useConversationRealtime } from "./use-conversation-realtime";
 import {
@@ -341,10 +339,6 @@ export interface ChatThreadProps {
   showComposerTakeoverNotice?: boolean;
 }
 
-type ConversationThreadDataProvider = MarkConversationReadPort &
-  SendConversationReplyPort &
-  RetryConversationReplyPort;
-
 export const ChatThread = ({
   conversationId,
   conversation,
@@ -367,8 +361,7 @@ export const ChatThread = ({
     retryInitial,
     retryHistory,
   } = useConversationRealtime(conversationId);
-  const operations =
-    useDataProvider() as unknown as ConversationThreadDataProvider;
+  const operations = useDataProvider<CrmDataProvider>();
   const { identity } = useGetIdentity();
   const notify = useNotify();
   const translate = useTranslate();

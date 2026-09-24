@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { useDataProvider, useNotify, useRefresh } from "ra-core";
 import type { Conversation } from "../../types";
-import {
-  changeConversationMode,
-  type ConversationModeWriter,
-} from "../application/conversation-actions";
+import type { CrmDataProvider } from "../../providers/rest/dataProvider";
+import { changeConversationMode } from "../application/conversation-actions";
 import {
   deriveConversationModeState,
   type ConversationMode,
@@ -22,7 +20,7 @@ export type { ConversationMode } from "../domain/conversation-mode";
  * converges across every consumer reading `record.mode`.
  */
 export const useConversationActions = (record?: Conversation) => {
-  const dataProvider = useDataProvider();
+  const modeWriter = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
   const [localMode, setLocalMode] = useState<ConversationMode | undefined>(
@@ -44,8 +42,6 @@ export const useConversationActions = (record?: Conversation) => {
       localMode,
       locallyClaimed,
     });
-
-  const modeWriter = dataProvider as unknown as ConversationModeWriter;
 
   const setConversationMode = async (nextMode: EditableConversationMode) => {
     const result = await changeConversationMode({
