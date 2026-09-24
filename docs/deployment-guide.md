@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-09-24
 **Production host:** `bot.tingting.vip` (DigitalOcean droplet, 2 vCPU / ~4 GB RAM)
-**Stack path:** `/opt/vfic` · **Git remote:** `git@github.com:4rankng/ChatBotN8N.git` (`main`)
+**Stack path:** `/opt/vfic` · **Git remote:** `git@github.com:4rankng/vfic-chatbot.git` (`main`)
 
 Deployment is **manual**, driven from a developer mac over SSH. There is **no
 CI deploy to production** — `make deploy` builds + pushes both images and runs a
@@ -195,7 +195,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0053_single_page_external_source_sync_state` (26 Jul 2026).
+- **HEAD:** `0054_channel_account_projects` (08 Sep 2026).
 - **Baseline `0001`** is ~58 KB of raw `op.execute` SQL; later revisions are
   normal Alembic. `app/models/` mirrors schema but does **not** generate
   migrations.
@@ -248,7 +248,7 @@ Sourced from `backend/.env.example` (committed template) and
 |---|---|
 | `APP_ENV` | `development` (default) or `production`. Gates boot-time safety checks. |
 | `CORS_ORIGINS` | Comma-separated explicit origins (no `*` — credentials enabled). |
-| `WEB_CONCURRENCY` | uvicorn worker count (default 2). |
+| `WEB_CONCURRENCY` | No longer read by the web entrypoint: the image pins a single uvicorn worker (Dockerfile CMD; a second worker doubled cold-boot RSS and widened the listener gap on the 1.9 GiB host). |
 
 ### Database
 | Name | Purpose |
