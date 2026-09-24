@@ -32,6 +32,8 @@ bootstrap:
 
 # Release must be committed and validated before any image is pushed or production is touched.
 release-check:
+	@command -v gh >/dev/null 2>&1 || { echo "Release blocked: gh CLI not found — the release requires a green quality-gates run for the exact commit under release."; exit 1; }
+	@test -n "$$(gh run list --workflow quality-gates.yml --commit "$$(git rev-parse HEAD)" --status success --limit 1)" || { echo "Release blocked: no green quality-gates run for $$(git rev-parse HEAD) — push and let CI finish before releasing."; exit 1; }
 	@test -z "$$(git status --porcelain)" || { echo "Release blocked: commit or stash all local changes first."; exit 1; }
 	@git diff --check
 	@if command -v uv >/dev/null 2>&1; then (cd backend && uv lock --check); else echo "WARNING: uv not found — skipped uv lock --check"; fi
