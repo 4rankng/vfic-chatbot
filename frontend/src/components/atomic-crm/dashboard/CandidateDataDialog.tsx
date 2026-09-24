@@ -29,7 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 
-import { formatCandidateNotes } from "../conversations/candidateNotes";
+import { formatCandidateNotes } from "../conversations/domain/candidate-notes";
 import { LeadAvatar } from "../conversations/LeadAvatar";
 import {
   candidateProfileDraft,

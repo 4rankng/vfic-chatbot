@@ -108,6 +108,14 @@ src/
 └── App.tsx                 # renders <CRM />
 ```
 
+### Feature Layering
+
+Features with non-trivial logic layer their files: `domain/` (pure logic, no
+React and no IO), `application/` (ports + orchestration), `infrastructure/`
+(adapters), `presentation/` (React components and hooks). Imports point along
+that direction, and each test lives beside the module it covers rather than at
+feature root. Simple features may stay flat.
+
 ### Mutable Dependencies
 
 Vendored framework code that may be modified directly (this is intentional —

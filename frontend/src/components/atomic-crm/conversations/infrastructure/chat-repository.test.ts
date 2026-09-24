@@ -13,7 +13,7 @@ const { mockSocket } = vi.hoisted(() => ({
     connect: vi.fn(),
   },
 }));
-vi.mock("../providers/realtime/realtime-socket", () => ({
+vi.mock("../../providers/realtime/realtime-socket", () => ({
   getRealtimeSocket: () => mockSocket,
   closeRealtimeSocket: vi.fn(),
 }));
@@ -21,8 +21,8 @@ vi.mock("../providers/realtime/realtime-socket", () => ({
 import {
   chatRepository,
   RuntimeEpochMismatchError,
-} from "./infrastructure/chat-repository";
-import { resetActiveRuntimeState } from "../root/reset-runtime-state";
+} from "./chat-repository";
+import { resetActiveRuntimeState } from "../../root/reset-runtime-state";
 
 /**
  * chatRepository (message history + inbox snippets + realtime subscribe) had

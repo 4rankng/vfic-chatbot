@@ -13,7 +13,7 @@ import {
   type CandidateProfileDraft,
   type CandidateProfileUpdate,
 } from "../leads/domain/candidateProfile";
-import { formatCandidateNotes } from "./candidateNotes";
+import { formatCandidateNotes } from "./domain/candidate-notes";
 import {
   BusFront,
   CalendarDays,

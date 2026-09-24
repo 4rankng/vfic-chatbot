@@ -12,7 +12,7 @@ import {
 import {
   type ConversationChannelProvider,
   getChannelProviderSearchParams,
-} from "./conversation-list-filters";
+} from "./domain/conversation-list-filters";
 
 type ChannelAdapterProvider = ConversationChannelProvider;
 

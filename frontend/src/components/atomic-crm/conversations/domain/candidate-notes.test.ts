@@ -1,4 +1,4 @@
-import { formatCandidateNotes } from "./candidateNotes";
+import { formatCandidateNotes } from "./candidate-notes";
 
 describe("formatCandidateNotes", () => {
   it("keeps separately stored observations as separate list items", () => {

@@ -6,7 +6,7 @@ import {
   getConversationListKey,
   getConversationListServerFilter,
   getEffectiveConversationChannelProvider,
-} from "./conversation-list-filters";
+} from "./domain/conversation-list-filters";
 
 describe("getConversationListServerFilter", () => {
   it("keeps multi-line conversation rows out of the fixed-height button system", () => {

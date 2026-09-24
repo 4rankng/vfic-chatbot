@@ -70,3 +70,13 @@ export const getConversationListKey = (
       : "all";
   return `${filter.channel_provider ?? "all"}:${context}`;
 };
+
+export const getChannelProviderSearchParams = (
+  searchParams: URLSearchParams,
+  provider: ConversationChannelProvider,
+): URLSearchParams => {
+  const next = new URLSearchParams(searchParams);
+  next.set("channel_provider", provider);
+  next.delete("id");
+  return next;
+};

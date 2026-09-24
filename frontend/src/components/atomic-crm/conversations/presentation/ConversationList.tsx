@@ -30,7 +30,7 @@ import {
   getConversationListServerFilter,
   getEffectiveConversationChannelProvider,
   isAttentionReason,
-} from "../conversation-list-filters";
+} from "../domain/conversation-list-filters";
 import { ChannelAdapterSelector } from "../ChannelAdapterSelector";
 import {
   botHasNotReplied,

@@ -4,7 +4,7 @@ import { apiJson } from "@/lib/apiClient";
 import {
   CONVERSATION_CHANNEL_PROVIDERS,
   type ConversationChannelProvider,
-} from "../../conversations/conversation-list-filters";
+} from "../../conversations/domain/conversation-list-filters";
 import {
   ATTENTION_COUNTS_QUERY_KEY,
   ATTENTION_REFRESH_INTERVAL_MS,

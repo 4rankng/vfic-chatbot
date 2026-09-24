@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getZaloUserId } from "./domain/conversation-display";
+import { getZaloUserId } from "./conversation-display";
 
 describe("getZaloUserId", () => {
   it("removes the internal OA namespace before showing the recipient ID", () => {

@@ -31,12 +31,6 @@ import {
   useConversationMessages,
 } from "./conversation-message-state";
 
-export {
-  compareMessages,
-  mergeChronological,
-  mergeRealtimePage,
-} from "../messageOrdering";
-
 export const CHAT_MESSAGES_PAGE_SIZE = 20;
 const findConfirmedOptimisticIdsInStore = (
   conversationId: string,

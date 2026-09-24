@@ -21,11 +21,8 @@ const { mockChatRepository } = vi.hoisted(() => ({
   },
 }));
 
-import {
-  mergeChronological,
-  mergeRealtimePage,
-  useConversationRealtime,
-} from "./presentation/use-conversation-realtime";
+import { mergeChronological, mergeRealtimePage } from "./messageOrdering";
+import { useConversationRealtime } from "./presentation/use-conversation-realtime";
 import { useMessageStore } from "./infrastructure/message-store";
 import {
   bindConversationApplication,
