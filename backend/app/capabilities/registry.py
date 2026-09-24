@@ -21,8 +21,19 @@ class CapabilityRegistry:
         capabilities: Iterable[CapabilityDefinition],
         packs: Iterable[IndustryPackDefinition],
     ) -> None:
+        # Construction is pure data-shape work (uniqueness). The dependency-graph,
+        # selection, and ownership checks live in verify_registry() so a pack
+        # defect surfaces as an explicit, ordered check — not as an
+        # import-order-dependent crash while something else imports the module.
         self._capabilities = self._unique_by_id(capabilities, "capability_id")
         self._packs = self._unique_by_id(packs, "key")
+
+    def verify_registry(self) -> None:
+        """Run the full pack-contract checks (dependency graph, selection, owners).
+
+        Called for the shipped registry by a dedicated test in CI; construct-time
+        callers of custom registries call it explicitly before use.
+        """
         self._validate_dependency_graph()
         for pack in self._packs.values():
             self.validate_selection(pack.key, pack.capability_ids)

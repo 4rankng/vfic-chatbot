@@ -222,7 +222,38 @@ def test_registry_rejects_duplicates_inside_one_capability(
                     kernel_abi="1",
                 ),
             ),
-        )
+        ).verify_registry()
+
+
+def test_verify_registry_checks_the_shipped_packs() -> None:
+    """The shipped registry passes the full pack-contract checks.
+
+    This is the CI startup check that replaced import-time validation: a pack
+    defect (dependency cycle, incomplete selection, duplicate owner) fails
+    here in an ordered, attributable way instead of crashing whatever import
+    happened to run first.
+    """
+    from app.capabilities.registry import get_capability_registry
+
+    get_capability_registry().verify_registry()
+
+
+def test_verify_registry_rejects_a_dependency_cycle() -> None:
+    with pytest.raises(ValueError, match="dependency cycle"):
+        _registry(
+            capabilities=(
+                CapabilityDefinition("conversation", ("knowledge",)),
+                CapabilityDefinition("knowledge", ("conversation",)),
+            ),
+            packs=(
+                IndustryPackDefinition(
+                    key="recruitment",
+                    version="1",
+                    capability_ids=("conversation", "knowledge"),
+                    kernel_abi="1",
+                ),
+            ),
+        ).verify_registry()
 
 
 def test_pack_hash_covers_contract_schema_envelope(monkeypatch) -> None:
