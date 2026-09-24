@@ -105,26 +105,100 @@ def test_estimate_cost_cached_tokens_are_free(monkeypatch):
 # --- record_token_usage (best-effort, non-fatal) ----------------------------
 
 
-def test_record_token_usage_zero_tokens_skips_redis(monkeypatch):
+class _FakeAsyncPipeline:
+    """Records the queued commands + whether execute() was awaited."""
+
+    def __init__(self) -> None:
+        self.ops: list[tuple] = []
+        self.executed = False
+
+    def incrby(self, key, amount):
+        self.ops.append(("incrby", key, amount))
+        return self
+
+    def expire(self, key, ttl):
+        self.ops.append(("expire", key, ttl))
+        return self
+
+    async def execute(self):
+        self.executed = True
+        return [None] * len(self.ops)
+
+
+class _FakeAsyncRedis:
+    def __init__(self) -> None:
+        self.pipe = _FakeAsyncPipeline()
+
+    def pipeline(self):
+        return self.pipe
+
+
+async def test_record_token_usage_zero_tokens_skips_redis(monkeypatch):
     """No tokens → no Redis call (early return)."""
     from app.core import redis as redis_mod
 
-    monkeypatch.setattr(redis_mod, "get_redis_sync", lambda: pytest.fail("must not touch redis"))
-    result = usage_mod.record_token_usage(None)
+    monkeypatch.setattr(redis_mod, "get_redis", lambda: pytest.fail("must not touch redis"))
+    result = await usage_mod.record_token_usage(None)
     assert result.total_tokens == 0
 
 
-def test_record_token_usage_swallows_redis_error(monkeypatch):
+async def test_record_token_usage_swallows_redis_error(monkeypatch):
     """A Redis failure must never propagate (best-effort contract)."""
     from app.core import redis as redis_mod
 
-    def _boom():
+    async def _boom():
         raise RuntimeError("down")
 
-    monkeypatch.setattr(redis_mod, "get_redis_sync", _boom)
+    monkeypatch.setattr(redis_mod, "get_redis", _boom)
     # Should not raise; returns the parsed usage.
-    result = usage_mod.record_token_usage({"prompt_tokens": 100, "completion_tokens": 50})
+    result = await usage_mod.record_token_usage({"prompt_tokens": 100, "completion_tokens": 50})
     assert result.prompt_tokens == 100
+
+
+async def test_record_token_usage_uses_async_client_and_keeps_key_names(monkeypatch):
+    """REL-02: the per-response counters must go through the async client.
+
+    The sync client is the blocking one; using it here put a Redis round trip on
+    the event loop of every turn. The key names + TTLs are the dashboard
+    contract, so they must survive the switch.
+    """
+    from app.core import redis as redis_mod
+
+    fake = _FakeAsyncRedis()
+
+    async def _get_redis():
+        return fake
+
+    monkeypatch.setattr(redis_mod, "get_redis", _get_redis)
+    monkeypatch.setattr(
+        redis_mod, "get_redis_sync", lambda: pytest.fail("blocking sync redis on the event loop")
+    )
+    # Cost rates off so the queued commands are exactly the three token counters
+    # (the cost counter is covered by the _estimate_cost tests).
+    from app.core import config as config_mod
+
+    monkeypatch.setattr(
+        config_mod,
+        "get_settings",
+        lambda: SimpleNamespace(llm_cost_per_mtok_input=0, llm_cost_per_mtok_output=0),
+    )
+
+    usage = await usage_mod.record_token_usage(
+        {"prompt_tokens": 120, "completion_tokens": 30, "cached_tokens": 20}
+    )
+
+    assert usage.total_tokens == 150
+    assert fake.pipe.executed
+    day = usage_mod._today_utc()
+    increments = {op[1]: op[2] for op in fake.pipe.ops if op[0] == "incrby"}
+    assert increments == {
+        f"llm:tokens:input:{day}": 120,
+        f"llm:tokens:output:{day}": 30,
+        f"llm:tokens:cached:{day}": 20,
+    }
+    expiring = {op[1] for op in fake.pipe.ops if op[0] == "expire"}
+    assert f"llm:tokens:input:{day}" in expiring
+    assert all(op[2] == usage_mod._TOKEN_TTL_SECONDS for op in fake.pipe.ops if op[0] == "expire")
 
 
 # --- collect_token_usage -----------------------------------------------------

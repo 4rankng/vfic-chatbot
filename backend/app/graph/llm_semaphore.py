@@ -8,6 +8,7 @@ concurrency control.  Instead, we use Redis BLPOP/RPUSH on a token list:
 * Acquire:   ``BLPOP <key> <timeout>`` — blocks until a token is free.
 * Release:   ``RPUSH <key> 1`` in a ``finally`` block.
 * Health:    ``LLEN <key>`` must equal N at rest; drift > 1 emits warning.
+* Self-heal: an acquire recreates the token list if Redis evicted the key.
 
 Two independent semaphores share the same ``RedisLlmSemaphore`` class with
 different Redis keys:
@@ -58,36 +59,94 @@ class RedisLlmSemaphore:
         self._acquired = False  # tracks whether __aenter__ got a token
 
     def _ensure_tokens(self) -> None:
-        """Lazily populate the token list (idempotent — safe to call multiple times)."""
-        if self._limit <= 0 or self._initialized:
+        """Populate the token list on first use; recreate it if Redis lost it.
+
+        ``allkeys-lru`` treats the token list like any other key: once evicted
+        with no in-flight holders, the list never regrows and every BLPOP
+        times out until process restart — a deployment-wide LLM outage. The
+        once-per-process registration is kept as the fast path; afterwards
+        every acquire pays one cheap EXISTS and recreates the list when it is
+        missing. A present-but-short list is NOT topped up: that shortage is
+        tokens legitimately checked out under load, and refilling then would
+        inflate the concurrency cap exactly when it must hold.
+
+        Blocking sync-client commands: ``__aenter__`` runs this on a worker
+        thread (REL-02), never inline on the event loop.
+        """
+        if self._limit <= 0:
             return
         try:
             from app.core.redis import get_redis_sync
 
             r = get_redis_sync()
-            current = r.llen(self._key)
-            if current < self._limit:
-                r.rpush(self._key, *[1] * (self._limit - current))
-            self._initialized = True
-            logger.info(
-                "llm_semaphore initialized",
-                extra={
-                    "key": self._key,
-                    "limit": self._limit,
-                    "tokens_added": self._limit - current,
-                },
-            )
+            if not self._initialized:
+                current = r.llen(self._key)
+                if current < self._limit:
+                    r.rpush(self._key, *[1] * (self._limit - current))
+                self._initialized = True
+                logger.info(
+                    "llm_semaphore initialized",
+                    extra={
+                        "key": self._key,
+                        "limit": self._limit,
+                        "tokens_added": self._limit - current,
+                    },
+                )
+            elif not r.exists(self._key):
+                r.rpush(self._key, *[1] * self._limit)
+                logger.warning(
+                    "llm_semaphore token list recreated after eviction",
+                    extra={"key": self._key, "limit": self._limit},
+                )
         except Exception:  # noqa: BLE001
             logger.warning(
-                "failed to initialize semaphore tokens for key=%s", self._key, exc_info=True
+                "failed to ensure semaphore tokens for key=%s", self._key, exc_info=True
             )
+
+    def _release_token(self) -> None:
+        """Push the token back and prune any excess. Blocking; call off the loop.
+
+        The async client is deliberately NOT used for the token list: the list
+        BLPOP reads must be the same store the bookkeeping writes, and this client
+        is shared with the acquire path (RQ workers run a fresh event loop per
+        job). ``__aexit__`` therefore dispatches this to a worker thread.
+        """
+        try:
+            from app.core.redis import get_redis_sync
+
+            r = get_redis_sync()
+            r.rpush(self._key, 1)
+            # Drift detection: LLEN should equal limit at rest. Counting
+            # ABOVE the limit is possible after a concurrent recreate of
+            # an evicted list; prune the excess (all tokens are identical)
+            # so the concurrency cap cannot stay inflated.
+            count = r.llen(self._key)
+            delta = count - self._limit
+            if abs(delta) > 1:
+                logger.warning(
+                    "llm_semaphore token drift",
+                    extra={
+                        "key": self._key,
+                        "expected": self._limit,
+                        "actual": count,
+                        "delta": delta,
+                    },
+                )
+            if delta > 0:
+                for _ in range(delta):
+                    r.rpop(self._key)
+        except Exception:  # noqa: BLE001
+            pass  # release must be best-effort
 
     async def __aenter__(self) -> "RedisLlmSemaphore":
         """Acquire a token (blocking with timeout)."""
         if self._limit <= 0:
             self._acquired = False
             return self
-        self._ensure_tokens()
+        # Every command this class issues is a blocking sync-client call, so all
+        # of them run on a worker thread: the token bookkeeping here and the BLPOP
+        # below (REL-02).
+        await asyncio.to_thread(self._ensure_tokens)
         try:
             from app.core.redis import get_redis_sync
 
@@ -97,7 +156,7 @@ class RedisLlmSemaphore:
             # already suppresses the turn + clears the per-chat mutex on
             # LLMThrottled, and a degraded parallel call would only compound the
             # overload that caused the timeout.
-            result = await asyncio.get_event_loop().run_in_executor(
+            result = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: r.blpop(self._key, timeout=self._acquire_timeout)
             )
         except Exception:  # noqa: BLE001 — Redis unavailable: degrade, don't hard-fail
@@ -117,28 +176,9 @@ class RedisLlmSemaphore:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
-        """Release the token back to the pool."""
+        """Release the token back to the pool (off the event loop)."""
         if self._limit > 0 and self._acquired:
-            try:
-                from app.core.redis import get_redis_sync
-
-                r = get_redis_sync()
-                r.rpush(self._key, 1)
-                # Drift detection: LLEN should equal limit at rest.
-                count = r.llen(self._key)
-                delta = count - self._limit
-                if abs(delta) > 1:
-                    logger.warning(
-                        "llm_semaphore token drift",
-                        extra={
-                            "key": self._key,
-                            "expected": self._limit,
-                            "actual": count,
-                            "delta": delta,
-                        },
-                    )
-            except Exception:  # noqa: BLE001
-                pass  # release must be best-effort
+            await asyncio.to_thread(self._release_token)
         self._acquired = False
         return False
 

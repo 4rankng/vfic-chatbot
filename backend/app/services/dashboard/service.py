@@ -11,6 +11,7 @@ bot_errors counters are current-state, not windowed.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -81,8 +82,10 @@ class DashboardService:
         counts_by_stage = await repo.leads_by_stage(recruiter_id)
         human_convs = await repo.count_human_conversations(recruiter_id)
 
-        # Concurrent-load monitoring (chatbot readiness)
-        queue_depth = self._webhook_queue_depth()
+        # Concurrent-load monitoring (chatbot readiness). The RQ queue depth is a
+        # sync-only read (RQ has no async client) → run it on a worker thread so
+        # the dashboard never blocks the event loop (REL-02).
+        queue_depth = await asyncio.to_thread(self._webhook_queue_depth)
         active_turns_count = await repo.active_turns()
         p95_latency = await repo.bot_run_p95_latency()
         recent_turns = await repo.recent_turns_count(5)
@@ -271,7 +274,10 @@ class DashboardService:
         processing_count = sum(counts.get(stage, 0) for stage in processing_stages)
         stuck_count = int(await repo.count_stuck_documents(list(processing_stages)) or 0)
         issue_rows = await repo.recent_ingest_issues(list(processing_stages))
-        queue_depth, failed_job_count, worker_count = self._rq_ingest_counts()
+        # Sync-only Redis reads → worker thread (REL-02), same as the webhook depth.
+        queue_depth, failed_job_count, worker_count = await asyncio.to_thread(
+            self._rq_ingest_counts
+        )
         return KnowledgeIngestHealth(
             queue_depth=queue_depth,
             failed_job_count=failed_job_count,
@@ -296,7 +302,11 @@ class DashboardService:
         )
 
     def _webhook_queue_depth(self) -> int:
-        """Current depth of the webhook_high RQ queue (messages waiting for a worker slot)."""
+        """Current depth of the webhook_high RQ queue (messages waiting for a worker slot).
+
+        Sync by design (RQ needs the blocking client) — callers run it via
+        ``asyncio.to_thread`` so it never occupies the event loop (REL-02).
+        """
         try:
             from rq import Queue
 
@@ -308,6 +318,7 @@ class DashboardService:
             return 0
 
     def _rq_ingest_counts(self) -> tuple[int, int, int]:
+        """Ingest-queue depth / failed jobs / live workers. Sync: call via ``to_thread``."""
         try:
             from app.core.redis import get_redis_sync
 

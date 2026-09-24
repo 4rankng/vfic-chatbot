@@ -110,20 +110,22 @@ def _estimate_cost(usage: TokenUsage) -> float:
         return 0.0
 
 
-def record_token_usage(usage_obj: object | None) -> TokenUsage:
+async def record_token_usage(usage_obj: object | None) -> TokenUsage:
     """Parse usage, accumulate tokens + cost in Redis (best-effort, non-fatal).
 
-    Called after every LLM response. Returns the parsed ``TokenUsage`` so the
-    caller (the agent loop) can log it inline if desired.
+    Called after every LLM response from inside the agent loop, so it uses the
+    async Redis client: the sync client here would block the event loop on every
+    turn (REL-02). Returns the parsed ``TokenUsage`` so the caller (the agent
+    loop) can log it inline if desired.
     """
     usage = parse_usage(usage_obj)
     if usage.total_tokens == 0:
         return usage
     try:
-        from app.core.redis import get_redis_sync
+        from app.core.redis import get_redis
 
         day = _today_utc()
-        r = get_redis_sync()
+        r = await get_redis()
         pipe = r.pipeline()
         pipe.incrby(_RKEY_TOKEN_INPUT.format(day=day), usage.prompt_tokens)
         pipe.incrby(_RKEY_TOKEN_OUTPUT.format(day=day), usage.completion_tokens)
@@ -140,7 +142,7 @@ def record_token_usage(usage_obj: object | None) -> TokenUsage:
             _RKEY_COST.format(day=day),
         ):
             pipe.expire(key, _TOKEN_TTL_SECONDS)
-        pipe.execute()
+        await pipe.execute()
     except Exception:  # noqa: BLE001
         logger.debug("failed to record token usage to redis", exc_info=True)
     return usage
@@ -151,6 +153,9 @@ def collect_token_usage(day: str | None = None) -> dict:
 
     Returns a dict with input/output/cached/total tokens, estimated USD cost,
     and the day string. Best-effort: missing keys read as 0.
+
+    Sync by design: its only caller (``core.ops_health.collect_queue_health``) is
+    a sync snapshot that the API runs via ``asyncio.to_thread``.
     """
     day = day or _today_utc()
     try:

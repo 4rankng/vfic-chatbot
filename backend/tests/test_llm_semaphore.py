@@ -28,6 +28,9 @@ _REDIS_PATCH = "app.core.redis.get_redis_sync"
 def fake_redis():
     """In-memory fake Redis with enough BLPOP/RPUSH/LLEN semantics.
 
+    Every token op records the thread it ran on (``op_threads``) so a test can
+    assert the semaphore keeps them off the event loop.
+
     Thread-safe via a lock (needed for concurrent acquire tests where
     run_in_executor dispatches BLPOP to a thread pool).
     """
@@ -35,13 +38,16 @@ def fake_redis():
     lock = threading.Lock()
 
     r = MagicMock()
+    r.op_threads: list[threading.Thread] = []
 
     def _rpush(key, *vals):
         with lock:
+            r.op_threads.append(threading.current_thread())
             store.setdefault(key, []).extend(vals)
 
     def _blpop(key, timeout=0):
         with lock:
+            r.op_threads.append(threading.current_thread())
             lst = store.get(key, [])
             if lst:
                 return (key, lst.pop(0))
@@ -51,9 +57,22 @@ def fake_redis():
         with lock:
             return len(store.get(key, []))
 
+    def _rpop(key):
+        with lock:
+            r.op_threads.append(threading.current_thread())
+            lst = store.get(key, [])
+            return lst.pop() if lst else None
+
+    def _exists(key):
+        with lock:
+            r.op_threads.append(threading.current_thread())
+            return 1 if key in store else 0
+
     r.rpush = MagicMock(side_effect=_rpush)
     r.blpop = MagicMock(side_effect=_blpop)
     r.llen = MagicMock(side_effect=_llen)
+    r.rpop = MagicMock(side_effect=_rpop)
+    r.exists = MagicMock(side_effect=_exists)
     r.pipeline = MagicMock(return_value=MagicMock(execute=MagicMock(return_value=[None])))
     return r
 
@@ -147,6 +166,24 @@ class TestSemaphoreAcquireRelease:
                     assert fake_redis.llen("test_invariant") == limit - 1
                 assert fake_redis.llen("test_invariant") == limit
 
+    @pytest.mark.asyncio
+    async def test_token_ops_never_run_on_the_event_loop(self, fake_redis):
+        """REL-02: every Redis command here is blocking, so none may run inline.
+
+        The token bookkeeping, the release, and BLPOP all have to be dispatched
+        off the loop — otherwise a slow Redis stalls webhook acks and every other
+        concurrent turn with it.
+        """
+        sem = RedisLlmSemaphore(limit=1, key="test_off_loop")
+        with patch(_REDIS_PATCH, return_value=fake_redis):
+            async with sem:
+                pass
+
+        assert fake_redis.op_threads, "no Redis command was recorded"
+        assert all(thread is not threading.main_thread() for thread in fake_redis.op_threads), (
+            "a semaphore Redis command ran on the event loop thread"
+        )
+
 
 class TestSemaphoreDriftDetection:
     """Drift > 1 emits warning; drift ≤ 1 is silent."""
@@ -186,6 +223,9 @@ class TestSemaphoreTimeout:
         worker suppresses the turn and clears the per-chat mutex."""
         sem = RedisLlmSemaphore(limit=1, key="test_timeout", acquire_timeout=0)
         sem._initialized = True  # skip token population → BLPOP returns None
+        # The list is present but exhausted (every token checked out), so the
+        # eviction self-heal must leave it alone and BLPOP must time out.
+        fake_redis.exists = MagicMock(return_value=1)
         with patch(_REDIS_PATCH, return_value=fake_redis):
             with pytest.raises(LLMThrottled):
                 async with sem:
@@ -222,6 +262,68 @@ class TestEmbedSemaphore:
             assert sem1._limit == 3
 
 
+class TestSemaphoreEvictionSelfHeal:
+    """allkeys-lru can evict the token list; the semaphore must self-heal.
+
+    An evicted list with no in-flight holders never regrows and every BLPOP
+    times out until restart (deployment-wide suppression). The recreate must
+    key on the MISSING key only: a present-but-short list is tokens checked
+    out under load, and topping it up would inflate the concurrency cap.
+    """
+
+    def test_ensure_tokens_recreates_evicted_list(self, fake_redis):
+        sem = RedisLlmSemaphore(limit=3, key="test_evict")
+        sem._initialized = True  # process registered before the eviction
+        fake_redis.exists = MagicMock(return_value=0)  # key evicted
+        with patch(_REDIS_PATCH, return_value=fake_redis):
+            sem._ensure_tokens()
+        fake_redis.rpush.assert_called_once_with("test_evict", 1, 1, 1)
+
+    def test_ensure_tokens_keeps_present_but_short_list(self, fake_redis):
+        """Saturation is not eviction: a present-but-short list is left alone."""
+        sem = RedisLlmSemaphore(limit=3, key="test_present")
+        sem._initialized = True
+        fake_redis.exists = MagicMock(return_value=1)
+        with patch(_REDIS_PATCH, return_value=fake_redis):
+            sem._ensure_tokens()
+        fake_redis.rpush.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_acquire_after_eviction_recreates_and_acquires(self, fake_redis):
+        sem = RedisLlmSemaphore(limit=2, key="test_heal", acquire_timeout=0.01)
+        sem._initialized = True
+        fake_redis.exists = MagicMock(return_value=0)
+        with patch(_REDIS_PATCH, return_value=fake_redis):
+            async with sem:
+                assert fake_redis.llen("test_heal") == 1
+            assert fake_redis.llen("test_heal") == 2
+
+    @pytest.mark.asyncio
+    async def test_saturated_list_still_throttles_without_refill(self, fake_redis):
+        """Key present but empty (all tokens checked out) raises LLMThrottled
+        with NO refill: refilling would lift the cap under load."""
+        sem = RedisLlmSemaphore(limit=2, key="test_sat_thr", acquire_timeout=0)
+        sem._initialized = True
+        fake_redis.exists = MagicMock(return_value=1)
+        with patch(_REDIS_PATCH, return_value=fake_redis):
+            with pytest.raises(LLMThrottled):
+                async with sem:
+                    pass
+        fake_redis.rpush.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_release_prunes_refill_race_excess(self, fake_redis):
+        """A concurrent recreate can leave more tokens than the limit; the
+        next release prunes the excess back to the cap."""
+        sem = RedisLlmSemaphore(limit=2, key="test_trim")
+        with patch(_REDIS_PATCH, return_value=fake_redis):
+            sem._ensure_tokens()  # registers 2 tokens
+            fake_redis.rpush("test_trim", 1, 1)  # simulate a refill race -> 4
+            async with sem:
+                pass
+            assert fake_redis.llen("test_trim") == 2
+
+
 # ── 429 retry in clients ────────────────────────────────────────────────────
 
 
@@ -234,7 +336,7 @@ class TestRetry429:
 
         bound = AsyncMock()
         bound.ainvoke = AsyncMock(return_value=MagicMock(content="ok"))
-        with patch("app.graph.clients._record_llm_429"):
+        with patch("app.graph.clients._record_llm_429", new_callable=AsyncMock):
             result, backoff_ms = await _llm_call_with_retry(bound, [])
         assert result.content == "ok"
         assert bound.ainvoke.call_count == 1
@@ -251,7 +353,7 @@ class TestRetry429:
                 MagicMock(content="retried ok"),
             ]
         )
-        with patch("app.graph.clients._record_llm_429") as mock_429:
+        with patch("app.graph.clients._record_llm_429", new_callable=AsyncMock) as mock_429:
             with patch("app.graph.clients.asyncio.sleep", new_callable=AsyncMock):
                 result, backoff_ms = await _llm_call_with_retry(bound, [])
         assert result.content == "retried ok"
@@ -270,7 +372,7 @@ class TestRetry429:
                 Exception("429 rate limit exceeded"),
             ]
         )
-        with patch("app.graph.clients._record_llm_429"):
+        with patch("app.graph.clients._record_llm_429", new_callable=AsyncMock):
             with patch("app.graph.clients.asyncio.sleep", new_callable=AsyncMock):
                 with pytest.raises(LLMThrottled):
                     await _llm_call_with_retry(bound, [])
@@ -303,11 +405,102 @@ class TestRetry429:
         async def _capture_sleep(delay):
             sleep_args.append(delay)
 
-        with patch("app.graph.clients._record_llm_429"):
+        with patch("app.graph.clients._record_llm_429", new_callable=AsyncMock):
             with patch("app.graph.clients.asyncio.sleep", side_effect=_capture_sleep):
                 await _llm_call_with_retry(bound, [])
         assert len(sleep_args) == 1
         assert sleep_args[0] == get_settings().llm_429_retry_sleep_seconds
+
+
+# ── LLM telemetry clients ───────────────────────────────────────────────────
+
+
+class TestLlmTelemetryUsesAsyncRedis:
+    """REL-02: the per-call counters must not run the blocking sync client.
+
+    Both are written from inside the agent loop, where a sync Redis round trip
+    blocks webhook acks and inline web-chat turns too. The key names + TTLs are
+    the dashboard contract, so they must survive the switch.
+    """
+
+    @pytest.mark.asyncio
+    async def test_429_counter_uses_async_client(self, monkeypatch):
+        from app.core import redis as redis_mod
+        from app.graph import clients as clients_mod
+
+        class _R:
+            def __init__(self):
+                self.incrs: list[str] = []
+                self.expires: list[tuple] = []
+
+            async def incr(self, key):
+                self.incrs.append(key)
+
+            async def expire(self, key, ttl):
+                self.expires.append((key, ttl))
+
+        r = _R()
+
+        async def _get_redis():
+            return r
+
+        monkeypatch.setattr(redis_mod, "get_redis", _get_redis)
+        monkeypatch.setattr(
+            redis_mod, "get_redis_sync", lambda: pytest.fail("blocking sync redis on the loop")
+        )
+
+        await clients_mod._record_llm_429()
+
+        assert r.incrs == [clients_mod._RKEY_429]
+        assert r.expires == [(clients_mod._RKEY_429, 60)]  # rolling 1-minute window
+
+    @pytest.mark.asyncio
+    async def test_latency_counters_use_async_pipeline(self, monkeypatch):
+        from app.core import redis as redis_mod
+        from app.graph import clients as clients_mod
+
+        class _Pipe:
+            def __init__(self):
+                self.ops: list[tuple] = []
+                self.executed = False
+
+            def incr(self, key):
+                self.ops.append(("incr", key))
+                return self
+
+            def incrby(self, key, amount):
+                self.ops.append(("incrby", key, amount))
+                return self
+
+            def expire(self, key, ttl):
+                self.ops.append(("expire", key, ttl))
+                return self
+
+            async def execute(self):
+                self.executed = True
+                return [None] * len(self.ops)
+
+        pipe = _Pipe()
+
+        class _R:
+            def pipeline(self):
+                return pipe
+
+        async def _get_redis():
+            return _R()
+
+        monkeypatch.setattr(redis_mod, "get_redis", _get_redis)
+        monkeypatch.setattr(
+            redis_mod, "get_redis_sync", lambda: pytest.fail("blocking sync redis on the loop")
+        )
+
+        await clients_mod._record_llm_latency(250)
+
+        assert pipe.executed
+        assert ("incr", clients_mod._RKEY_INVOKE_COUNT) in pipe.ops
+        assert ("incrby", clients_mod._RKEY_INVOKE_MS, 250) in pipe.ops
+        assert ("expire", clients_mod._RKEY_INVOKE_COUNT, 120) in pipe.ops
+        assert ("expire", clients_mod._RKEY_INVOKE_MS, 120) in pipe.ops
 
 
 # ── Degradation path in worker ──────────────────────────────────────────────

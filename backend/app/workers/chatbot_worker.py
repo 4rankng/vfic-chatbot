@@ -506,7 +506,9 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
     job_start_epoch = time.time()
 
     # RQ jobs retain a queue-depth snapshot. Direct turns do not touch
-    # the queue, so a missing value is meaningful telemetry.
+    # the queue, so a missing value is meaningful telemetry. The read is
+    # sync-only (RQ needs the blocking client) → worker thread, so this
+    # telemetry never blocks the turn's event loop (REL-02).
     queue_depth: int | None = None
     if source != "direct":
         try:
@@ -514,7 +516,9 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
 
             from app.core.redis import get_redis_sync
 
-            queue_depth = Queue("webhook_high", connection=get_redis_sync()).count
+            queue_depth = await asyncio.to_thread(
+                lambda: Queue("webhook_high", connection=get_redis_sync()).count
+            )
         except Exception:  # noqa: BLE001
             pass
 

@@ -139,30 +139,38 @@ _RKEY_INVOKE_COUNT = "llm:invoke_count"
 _RKEY_INVOKE_MS = "llm:invoke_total_ms"
 
 
-def _record_llm_latency(ms: int) -> None:
-    """Persist LLM call latency + count to Redis (best-effort, non-fatal)."""
-    try:
-        from app.core.redis import get_redis_sync
+async def _record_llm_latency(ms: int) -> None:
+    """Persist LLM call latency + count to Redis (best-effort, non-fatal).
 
-        r = get_redis_sync()
+    Called from inside the agent loop, so it uses the async client: a sync Redis
+    round trip here would block the event loop that also serves webhook acks and
+    inline web-chat turns (REL-02).
+    """
+    try:
+        from app.core.redis import get_redis
+
+        r = await get_redis()
         pipe = r.pipeline()
         pipe.incr(_RKEY_INVOKE_COUNT)
         pipe.incrby(_RKEY_INVOKE_MS, ms)
         pipe.expire(_RKEY_INVOKE_COUNT, 120)
         pipe.expire(_RKEY_INVOKE_MS, 120)
-        pipe.execute()
+        await pipe.execute()
     except Exception:  # noqa: BLE001
         logger.warning("failed to record llm latency to redis", exc_info=True)
 
 
-def _record_llm_429() -> None:
-    """Increment MiniMax 429 counter in Redis (best-effort, non-fatal)."""
-    try:
-        from app.core.redis import get_redis_sync
+async def _record_llm_429() -> None:
+    """Increment MiniMax 429 counter in Redis (best-effort, non-fatal).
 
-        r = get_redis_sync()
-        r.incr(_RKEY_429)
-        r.expire(_RKEY_429, 60)  # rolling 1-minute window
+    Async client for the same reason as :func:`_record_llm_latency`.
+    """
+    try:
+        from app.core.redis import get_redis
+
+        r = await get_redis()
+        await r.incr(_RKEY_429)
+        await r.expire(_RKEY_429, 60)  # rolling 1-minute window
     except Exception:  # noqa: BLE001
         logger.warning("failed to record llm 429 to redis", exc_info=True)
 
@@ -509,7 +517,7 @@ async def _llm_call_with_retry(
         if _is_quota_exhausted(exc):
             return await _failover("quota_exhausted", 0)
         if _is_429(exc):
-            _record_llm_429()
+            await _record_llm_429()
             logger.warning("llm_429_retry", exc_info=True)
             backoff_t0 = time.monotonic()
             await asyncio.sleep(get_settings().llm_429_retry_sleep_seconds)
@@ -522,7 +530,7 @@ async def _llm_call_with_retry(
                 if _is_quota_exhausted(exc2):
                     return await _failover("quota_exhausted", backoff_ms)
                 if _is_429(exc2):
-                    _record_llm_429()
+                    await _record_llm_429()
                     return await _failover("rate_limited", backoff_ms)
                 raise
         raise
@@ -1076,7 +1084,7 @@ class MiniMaxAgent:
                     return ""
                 # Track non-retry-path 429s for observability (Phase 0 metric).
                 if _is_429(exc):
-                    _record_llm_429()
+                    await _record_llm_429()
                     logger.error("llm_429", exc_info=True)
                 raise
             iter_total_ms = int((time.monotonic() - sem_t0) * 1000)
@@ -1092,9 +1100,9 @@ class MiniMaxAgent:
                 metrics["llm_call_ms"].append(model_ms - backoff_ms)
             # Live Redis counter tracks the full LLM path (queue + model) — the
             # right number for the "is the LLM path slow right now?" live tile.
-            _record_llm_latency(iter_total_ms)
+            await _record_llm_latency(iter_total_ms)
             # Phase 6: capture token usage + cost from the response.usage block.
-            usage = _record_token_usage(
+            usage = await _record_token_usage(
                 getattr(ai, "usage_metadata", None)
                 or getattr(ai, "response_metadata", {}).get("token_usage")
             )
@@ -1360,7 +1368,7 @@ class MiniMaxAgent:
             metrics["llm_invoke_ms"] = metrics.get("llm_invoke_ms", 0) + total_ms
             metrics["llm_queue_ms"] = metrics.get("llm_queue_ms", 0) + queue_ms
             metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + (model_ms - backoff_ms)
-        _record_llm_latency(total_ms)
+        await _record_llm_latency(total_ms)
         if trace_sink is not None:
             record_model_turn = getattr(trace_sink, "record_model_turn", None)
             if callable(record_model_turn):
