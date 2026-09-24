@@ -92,7 +92,14 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # integration_settings.refresh_oa_access_token contributes `eval` where it
     # used to contribute `delete` — one reviewed site either way, which is why
     # `eval` is in the scanned verb set.
-    "provider_boundary": 119,
+    "provider_boundary": 111,
+    # -8: the integration_settings decomposition split the single module into a
+    # package; the OA refresh transport (post + eval + its surrounding reads)
+    # moved into providers/zalo.py, which still carries the get_http_client
+    # marker, while the LLM/Facebook resolve `._load` dict reads and the
+    # storage-layer db.get upserts landed in modules that are not
+    # provider-transport files. The call sites themselves are unchanged, only
+    # their home module moved.
     # -3: the clients.py decomposition moved the routed-prefetch wrapper and the
     # job-authority readers (dict `.get` rows) into prefetch.py / grounding.py,
     # which are not provider-transport files; the call sites themselves are
@@ -114,7 +121,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "bc0c345871d1b5b4da9dd5256f9adfc29e45205645292f2afe81becb1a02f880"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "4ee2dccd7ad968edc49ad17d6edc73e19f473d3ed6e84aaaf6d1c3dc4c86315d"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

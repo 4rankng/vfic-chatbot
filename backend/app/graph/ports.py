@@ -87,7 +87,6 @@ class TurnDecisions:
     vacancy_listing: bool = False
     sort_by: str | None = None
     pleasantry: bool = False
-    pleasantry_kind: str = "none"
     recent_vacancy: bool = False
     contact_info: bool = False
     # Candidate gender judged from the profile display name plus the candidate's

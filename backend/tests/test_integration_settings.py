@@ -233,7 +233,7 @@ async def test_update_zalo_encrypts_refresh_token_and_audits_key_name(monkeypatc
         audits.append(kwargs)
 
     monkeypatch.setattr(
-        "app.services.integration_settings.record_audit",
+        "app.services.integration_settings.providers.zalo.record_audit",
         fake_record_audit,
     )
 
@@ -272,11 +272,11 @@ async def test_update_zalo_evicts_local_cache_when_redis_invalidation_fails(monk
         return False
 
     monkeypatch.setattr(
-        "app.services.integration_settings.record_audit",
+        "app.services.integration_settings.providers.zalo.record_audit",
         fake_record_audit,
     )
     monkeypatch.setattr(
-        "app.services.integration_settings.bump_cache_version",
+        "app.services.integration_settings.providers.zalo.bump_cache_version",
         fake_bump_cache_version,
     )
 
@@ -343,11 +343,11 @@ async def test_refresh_oa_access_token_persists_before_audit_and_evicts_local_ca
         return http_client
 
     monkeypatch.setattr(
-        "app.services.integration_settings.record_audit",
+        "app.services.integration_settings.providers.zalo.record_audit",
         fake_record_audit,
     )
     monkeypatch.setattr(
-        "app.services.integration_settings.bump_cache_version",
+        "app.services.integration_settings.providers.zalo.bump_cache_version",
         fake_bump_cache_version,
     )
     monkeypatch.setattr("app.core.preamble_cache.get_redis", lambda: redis)
@@ -434,7 +434,7 @@ async def test_update_minimax_stores_failover_order_as_csv(monkeypatch):
         return None
 
     monkeypatch.setattr(
-        "app.services.integration_settings.record_audit",
+        "app.services.integration_settings.providers.llm.record_audit",
         fake_record_audit,
     )
 
@@ -492,7 +492,7 @@ async def test_update_minimax_encrypts_token_and_audits_key_names(monkeypatch):
         audits.append(kwargs)
 
     monkeypatch.setattr(
-        "app.services.integration_settings.record_audit",
+        "app.services.integration_settings.providers.llm.record_audit",
         fake_record_audit,
     )
 
@@ -528,7 +528,7 @@ async def test_update_minimax_stores_enable_as_non_secret(monkeypatch):
         return None
 
     monkeypatch.setattr(
-        "app.services.integration_settings.record_audit",
+        "app.services.integration_settings.providers.llm.record_audit",
         fake_record_audit,
     )
 
@@ -576,7 +576,7 @@ async def test_update_openrouter_encrypts_token_and_audits_key_names(monkeypatch
         audits.append(kwargs)
 
     monkeypatch.setattr(
-        "app.services.integration_settings.record_audit",
+        "app.services.integration_settings.providers.llm.record_audit",
         fake_record_audit,
     )
 
@@ -704,7 +704,7 @@ async def test_update_custom_llm_encrypts_key_and_audits(monkeypatch):
         audits.append(kwargs)
 
     monkeypatch.setattr(
-        "app.services.integration_settings.record_audit",
+        "app.services.integration_settings.providers.llm.record_audit",
         fake_record_audit,
     )
 
@@ -830,7 +830,7 @@ async def test_update_facebook_oauth_encrypts_secrets_keeps_plaintext_ids(monkey
     async def fake_record_audit(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr("app.services.integration_settings.record_audit", fake_record_audit)
+    monkeypatch.setattr("app.services.integration_settings.providers.facebook.record_audit", fake_record_audit)
 
     db = _WriteDb()
     service = IntegrationSettingsService(db, settings=_Settings())
@@ -878,7 +878,7 @@ async def test_update_facebook_oauth_skips_blank_fields_leaving_them_unchanged(
     async def fake_record_audit(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr("app.services.integration_settings.record_audit", fake_record_audit)
+    monkeypatch.setattr("app.services.integration_settings.providers.facebook.record_audit", fake_record_audit)
 
     db = _WriteDb()
     service = IntegrationSettingsService(db, settings=_Settings())
@@ -980,7 +980,7 @@ async def test_reveal_facebook_oauth_requires_the_actors_password(monkeypatch):
     async def fake_record_audit(*_args, **kwargs):
         audits.append(kwargs)
 
-    monkeypatch.setattr("app.services.integration_settings.record_audit", fake_record_audit)
+    monkeypatch.setattr("app.services.integration_settings.providers.facebook.record_audit", fake_record_audit)
 
     db = _WriteDb()
     service = IntegrationSettingsService(db, settings=_Settings())

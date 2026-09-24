@@ -26,7 +26,6 @@ TurnIntent = Literal[
 ]
 
 TurnStrategy = Literal[
-    "template",
     "recommendation",
     "profile",
     "structured_lookup",
@@ -36,11 +35,11 @@ TurnStrategy = Literal[
 ]
 
 # Strategies eligible for the fast-tier model (Phase 5 model tiering). Only
-# social chitchat and gentle redirects qualify: they carry no evidence and no
-# conversion step. ``knowledge_lookup`` stays off the fast tier deliberately —
-# it serves the detail questions (pay, shifts, dorm) most likely to produce a
-# lead, where accuracy beats the seconds a faster model saves.
-FAST_MODEL_STRATEGIES: frozenset[str] = frozenset({"template", "safe_redirect"})
+# gentle redirects qualify: they carry no evidence and no conversion step.
+# ``knowledge_lookup`` stays off the fast tier deliberately — it serves the
+# detail questions (pay, shifts, dorm) most likely to produce a lead, where
+# accuracy beats the seconds a faster model saves.
+FAST_MODEL_STRATEGIES: frozenset[str] = frozenset({"safe_redirect"})
 
 
 def should_use_fast_model(route: "TurnRoute") -> bool:
@@ -72,10 +71,10 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
     """Map the raw Jev judgments onto the first retrieval strategy.
 
     Mirrors the keyword router it replaced: a pure pleasantry wins first
-    (template lane); ``vacancy_listing`` refines ``recommend``; contact-info
-    presence upgrades an otherwise-unrouted turn to profile capture. Reason
-    codes reuse the existing decision-trace literals (schemas/bot_run.py) so
-    the trace contract stays intact.
+    (small_talk intent, agent strategy); ``vacancy_listing`` refines
+    ``recommend``; contact-info presence upgrades an otherwise-unrouted turn to
+    profile capture. Reason codes reuse the existing decision-trace literals
+    (schemas/bot_run.py) so the trace contract stays intact.
     """
     text = (user_text or "").strip()
     if not text:
@@ -87,8 +86,8 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
     if decisions.pleasantry or decisions.intent == "small_talk":
         return TurnRoute(
             "small_talk",
-            "template",
-            reason="fast_lane_match",
+            "agent",
+            reason="small_talk_terms",
             confidence=max(decisions.intent_confidence, 0.9 if decisions.pleasantry else 0.0),
         )
 

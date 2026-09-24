@@ -1,7 +1,7 @@
 """Jev-backed turn decisions — the System One fan-out replacing the keyword router.
 
 One parallel ``systemone`` call per inbound turn classifies intent, sort
-direction, pleasantry kind, conversation-context flags, and the candidate's
+direction, pleasantry, conversation-context flags, and the candidate's
 gender — the last so the bot can address the candidate correctly ("anh"/"chị")
 instead of falling back to the neutral form. Policy (strategy mapping,
 confidence floors, fallbacks) stays in code (:mod:`app.graph.router`); Jev
@@ -73,14 +73,6 @@ _SORT_CRITERIA = {
     "salary_desc": "Sắp xếp việc làm theo lương từ cao xuống thấp",
     "salary_asc": "Sắp xếp việc làm theo lương từ thấp lên cao",
     "created_at": "Xem việc mới đăng / mới nhất trước",
-}
-
-_PLEASANTRY_KIND_CRITERIA = {
-    "greeting": "Lời chào (hi, chào bạn, xin chào…)",
-    "thanks": "Lời cảm ơn (cảm ơn, thanks…)",
-    "goodbye": "Lời tạm biệt (tạm biệt, bye…)",
-    "help": "Hỏi bot làm được gì / cần giúp gì",
-    "none": "Không thuộc nhóm nào",
 }
 
 _NOUL_CRITERIA = {"true": "Có", "false": "Không"}
@@ -160,11 +152,6 @@ def build_turn_questions(*, include_gender: bool = True) -> dict:
                 "hoàn toàn không chứa câu hỏi hay yêu cầu nội dung"
             ),
             "criteria": _NOUL_CRITERIA,
-        },
-        "pleasantry_kind": {
-            "type": "choice",
-            "instructions": "Loại lời xã giao của tin nhắn `message` là gì?",
-            "criteria": _PLEASANTRY_KIND_CRITERIA,
         },
         "recent_vacancy": {
             "type": "noul",
@@ -278,11 +265,6 @@ class JevDecisionClient:
         sort_by = str((answers.get("sort_by") or {}).get("choice") or "none")
         if sort_by not in _SORT_CRITERIA:
             sort_by = "none"
-        pleasantry_kind = str(
-            (answers.get("pleasantry_kind") or {}).get("choice") or "none"
-        )
-        if pleasantry_kind not in _PLEASANTRY_KIND_CRITERIA:
-            pleasantry_kind = "none"
         gender = str((answers.get("gender") or {}).get("choice") or "unknown").strip().lower()
         if gender not in _GENDER_CRITERIA:
             gender = "unknown"
@@ -293,7 +275,6 @@ class JevDecisionClient:
             vacancy_listing=self._noul(answers.get("vacancy_listing")),
             sort_by=None if sort_by == "none" else sort_by,
             pleasantry=self._noul(answers.get("pleasantry")),
-            pleasantry_kind=pleasantry_kind,
             gender=gender,
             gender_confidence=self._confidence(answers.get("gender")),
             gender_stated=self._noul(answers.get("gender_stated")),

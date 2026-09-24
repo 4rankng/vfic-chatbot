@@ -385,7 +385,7 @@ def test_reveal_endpoint_returns_secrets_after_correct_password(monkeypatch):
         audits.append(kwargs)
         return None
 
-    monkeypatch.setattr("app.services.integration_settings.record_audit", _record_audit)
+    monkeypatch.setattr("app.services.integration_settings.providers.facebook.record_audit", _record_audit)
     client = _reveal_app(monkeypatch, password_hash=hash_password_sync("s3cret-password"))
 
     response = client.post(

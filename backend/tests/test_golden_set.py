@@ -1,19 +1,21 @@
 """Golden set — the consolidated, labeled decision corpus for the routing lanes.
 
-Phase 1 of ``docs/chatbot-latency-improvement-plan.md`` calls for a golden set
-that codifies, *before* any threshold tuning or coverage expansion, exactly
-which candidate phrases must:
+The corpus codifies, *before* any threshold tuning or coverage expansion,
+exactly which candidate phrases must:
 
-  * HIT the template lane (greetings/thanks/goodbye/help — instant, no LLM);
-  * FALL THROUGH the template lane (factual, empty, or mixed-intent input);
-  * NEVER reuse a global/template reply — personalized recommendation intents
-    such as "tìm việc làm" depend on the lead profile, project, and current job
-    state, so they must reach the agent.
+  * be judged a pure pleasantry by the Jev fan-out (greetings/thanks/goodbye
+    — the small_talk intent);
+  * NOT be judged a pure pleasantry (factual, empty, or mixed-intent input);
+  * NEVER be templated — personalized recommendation intents such as
+    "tìm việc làm" depend on the lead profile, project, and current job
+    state, so they must reach the agent with that context.
 
-Since the keyword router was replaced by the Jev fan-out, the message-level
-corpus doubles as the expectation table for the opt-in live replay
-(``JEV_EVAL=1``) — the shadow-mode seed for gating automation on measured
-agreement. The FAQ-bypass gates remain pure-unit (no DB/Redis).
+The template fast lane these cases once pinned was removed: every message
+reaches the LLM so the reply can use the current project context and
+conversation history. The message-level corpus doubles as the expectation
+table for the opt-in live replay (``JEV_EVAL=1``) — the shadow-mode seed for
+gating automation on measured agreement. The FAQ-bypass gates remain
+pure-unit (no DB/Redis).
 """
 
 from __future__ import annotations
@@ -22,35 +24,34 @@ import os
 
 import pytest
 
-from app.graph.fast_lane import template_for
 from app.services.retrieval import faq_bypass as fb
 
 # ---------------------------------------------------------------------------
-# Template-lane golden cases
+# Pleasantry golden cases
 # ---------------------------------------------------------------------------
 
-# (phrase, pleasantry kind) — must route to a canned template, never the agent.
-FAST_LANE_HIT = [
-    ("hi", "greeting"),
-    ("Chào bạn!", "greeting"),
-    ("XIN CHÀO", "greeting"),
-    ("cảm ơn bạn nhe", "thanks"),
-    ("thanks ban", "thanks"),
-    ("tạm biệt", "goodbye"),
-    ("bye bye", "goodbye"),
+# Phrases the Jev fan-out must judge a pure pleasantry (small_talk intent).
+PLEASANTRY_HIT = [
+    "hi",
+    "Chào bạn!",
+    "XIN CHÀO",
+    "cảm ơn bạn nhe",
+    "thanks ban",
+    "tạm biệt",
+    "bye bye",
 ]
 
 # Help/meta questions ("bạn là ai", "bạn giúp gì được") were keyword-matched to
 # the canned menu under the old fast lane. Jev judges them substantive and
 # routes them to the agent, which answers from the persona — the better
 # outcome. Kept here as help-adjacent corpus with agent-path expectations.
-FAST_LANE_HELP_AGENT_OK = [
+PLEASANTRY_HELP_AGENT_OK = [
     "bạn giúp gì được",
     "bạn là ai",
 ]
 
 # Factual, empty, and mixed-intent phrases — must reach RAG + agent.
-FAST_LANE_FALLTHROUGH = [
+PLEASANTRY_FALLTHROUGH = [
     "lương bao nhiêu",
     "có xe đưa đón không",
     "địa điểm làm việc ở đâu",
@@ -73,42 +74,20 @@ PERSONALIZED_MUST_REACH_AGENT = [
     "tìm công việc gần nhà",
 ]
 
-# Expectation table for the opt-in live replay: (phrase, pleasantry, kind).
+# Expectation table for the opt-in live replay: (phrase, expect_pleasantry).
 # Empty and punctuation-only inputs are policy-level (no model call needed),
 # so they are excluded here.
 _JEV_EVAL_EMPTY_OR_PUNCTUATION = {"", "????", "!!!"}
 JEV_EVAL_EXPECTATIONS = (
-    [(phrase, True, kind) for phrase, kind in FAST_LANE_HIT]
+    [(phrase, True) for phrase in PLEASANTRY_HIT]
     + [
-        (phrase, False, "none")
-        for phrase in FAST_LANE_FALLTHROUGH
+        (phrase, False)
+        for phrase in PLEASANTRY_FALLTHROUGH
         if phrase not in _JEV_EVAL_EMPTY_OR_PUNCTUATION
     ]
-    + [(phrase, False, "none") for phrase in FAST_LANE_HELP_AGENT_OK]
-    + [(phrase, False, "none") for phrase in PERSONALIZED_MUST_REACH_AGENT]
+    + [(phrase, False) for phrase in PLEASANTRY_HELP_AGENT_OK]
+    + [(phrase, False) for phrase in PERSONALIZED_MUST_REACH_AGENT]
 )
-
-
-# ---------------------------------------------------------------------------
-# Template-lane pins (pure unit)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(("phrase", "kind"), FAST_LANE_HIT)
-def test_template_lane_kinds_are_templatable(phrase: str, kind: str) -> None:
-    """Every corpus kind maps to a real template with the neutral persona voice."""
-    hit = template_for(kind)
-    assert hit is not None, f"no template for corpus kind {kind!r} ({phrase!r})"
-    assert hit.intent == kind
-    assert "anh/chị" in hit.reply
-
-
-@pytest.mark.parametrize("phrase", PERSONALIZED_MUST_REACH_AGENT)
-def test_golden_personalized_never_uses_template(phrase: str) -> None:
-    """Personalized intents must not be judged pleasantry by the eval table."""
-    for candidate, pleasantry, _kind in JEV_EVAL_EXPECTATIONS:
-        if candidate == phrase:
-            assert pleasantry is False
 
 
 # ---------------------------------------------------------------------------
@@ -197,8 +176,8 @@ def test_golden_faq_abstains(label, query, scored, reason_prefix):
     os.environ.get("JEV_EVAL") != "1" or not os.environ.get("JEV_API_KEY"),
     reason="opt-in live Jev replay: set JEV_EVAL=1 + JEV_API_KEY",
 )
-@pytest.mark.parametrize(("phrase", "expect_pleasantry", "expect_kind"), JEV_EVAL_EXPECTATIONS)
-async def test_live_jev_golden_replay(phrase, expect_pleasantry, expect_kind) -> None:
+@pytest.mark.parametrize(("phrase", "expect_pleasantry"), JEV_EVAL_EXPECTATIONS)
+async def test_live_jev_golden_replay(phrase, expect_pleasantry) -> None:
     """Replay the golden corpus against the real Jev API.
 
     Run with ``JEV_EVAL=1`` to measure agreement before trusting automation.
@@ -208,8 +187,5 @@ async def test_live_jev_golden_replay(phrase, expect_pleasantry, expect_kind) ->
     client = JevDecisionClient(api_key=os.environ["JEV_API_KEY"])
     decisions = await client.decide_turn(user_text=phrase, recent_messages=[])
     assert decisions.pleasantry == expect_pleasantry, (
-        f"{phrase!r}: expected pleasantry={expect_pleasantry}, got "
-        f"{decisions.pleasantry} (kind={decisions.pleasantry_kind})"
+        f"{phrase!r}: expected pleasantry={expect_pleasantry}, got {decisions.pleasantry}"
     )
-    if expect_pleasantry:
-        assert decisions.pleasantry_kind == expect_kind

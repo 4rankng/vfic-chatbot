@@ -146,7 +146,7 @@ async def test_refresh_persists_new_token_and_rotates_refresh_token(monkeypatch)
     async def fake_record_audit(*_args, **kwargs):
         audits.append(kwargs)
 
-    monkeypatch.setattr("app.services.integration_settings.record_audit", fake_record_audit)
+    monkeypatch.setattr("app.services.integration_settings.providers.zalo.record_audit", fake_record_audit)
 
     service = IntegrationSettingsService(_RefreshDb([]), settings=_Settings())
     db = _RefreshDb(_seed(service))
@@ -179,7 +179,7 @@ async def test_refresh_lock_ttl_exceeds_the_guarded_timeout_budget(monkeypatch):
     TTL expires mid-flight, letting a second worker redeem the same single-use
     refresh token.
     """
-    monkeypatch.setattr("app.services.integration_settings.record_audit", AsyncMockNoop())
+    monkeypatch.setattr("app.services.integration_settings.providers.zalo.record_audit", AsyncMockNoop())
 
     service = IntegrationSettingsService(_RefreshDb([]), settings=_Settings())
     db = _RefreshDb(_seed(service))
@@ -210,7 +210,7 @@ async def test_refresh_release_never_deletes_a_lock_owned_by_another_worker(monk
     the successor's marker and admitted a third redeemer of the single-use
     refresh token.
     """
-    monkeypatch.setattr("app.services.integration_settings.record_audit", AsyncMockNoop())
+    monkeypatch.setattr("app.services.integration_settings.providers.zalo.record_audit", AsyncMockNoop())
 
     service = IntegrationSettingsService(_RefreshDb([]), settings=_Settings())
     db = _RefreshDb(_seed(service))
@@ -244,7 +244,7 @@ async def test_refresh_release_never_deletes_a_lock_owned_by_another_worker(monk
 @pytest.mark.asyncio
 async def test_refresh_returns_stored_token_when_lock_held(monkeypatch):
     monkeypatch.setattr(
-        "app.services.integration_settings.record_audit",
+        "app.services.integration_settings.providers.zalo.record_audit",
         AsyncMockNoop(),
     )
     service = IntegrationSettingsService(_RefreshDb([]), settings=_Settings())

@@ -1,9 +1,9 @@
 """Unit pins for the Jev-backed turn decision layer.
 
 Covers the question taxonomy contract, the route-mapping policy, client
-parsing (including degraded fallbacks), the template lane, and the Jev
-integration settings contract. No network access: the client's
-``_system_one`` is stubbed, mirroring how the graph tests fake the ports.
+parsing (including degraded fallbacks), and the Jev integration settings
+contract. No network access: the client's ``_system_one`` is stubbed,
+mirroring how the graph tests fake the ports.
 """
 
 from types import SimpleNamespace
@@ -21,7 +21,6 @@ from app.graph.decisions import (
     build_turn_questions,
     build_turn_state,
 )
-from app.graph.fast_lane import template_for
 from app.graph.ports import TurnDecisions
 from app.graph.router import route_from_decisions, should_use_fast_model
 from app.services.integration_settings import JevRuntimeConfig
@@ -53,7 +52,6 @@ def _answers(**overrides) -> dict:
         "vacancy_listing": _noul(0.02),
         "sort_by": _choice("none", 0.8),
         "pleasantry": _noul(0.01),
-        "pleasantry_kind": _choice("none", 0.6),
         "recent_vacancy": _noul(0.01),
         "contact_info": _noul(0.01),
     }
@@ -76,7 +74,6 @@ async def test_questions_match_contract() -> None:
         "vacancy_listing",
         "sort_by",
         "pleasantry",
-        "pleasantry_kind",
         "recent_vacancy",
         "contact_info",
         "gender",
@@ -87,7 +84,6 @@ async def test_questions_match_contract() -> None:
         "vacancy_listing",
         "sort_by",
         "pleasantry",
-        "pleasantry_kind",
         "recent_vacancy",
         "contact_info",
     }
@@ -112,8 +108,8 @@ async def test_questions_match_contract() -> None:
 async def test_route_pleasantry_wins_first() -> None:
     route = route_from_decisions("chào bạn", TurnDecisions(pleasantry=True, intent_confidence=0.95))
     assert route.intent == "small_talk"
-    assert route.strategy == "template"
-    assert route.reason == "fast_lane_match"
+    assert route.strategy == "agent"
+    assert route.reason == "small_talk_terms"
 
 
 async def test_route_vacancy_listing_refines_recommend() -> None:
@@ -156,7 +152,6 @@ async def test_client_parses_full_fan_out() -> None:
         return_value=_payload(
             _answers(
                 sort_by=_choice("salary_desc"),
-                pleasantry_kind=_choice("greeting"),
                 recent_vacancy=_noul(0.9),
             )
         )
@@ -166,7 +161,6 @@ async def test_client_parses_full_fan_out() -> None:
     assert decisions.intent_confidence == 0.97
     assert decisions.sort_by == "salary_desc"
     assert decisions.pleasantry is False
-    assert decisions.pleasantry_kind == "greeting"
     assert decisions.recent_vacancy is True
     assert decisions.degraded is False
     assert decisions.model == _MODEL
@@ -258,16 +252,6 @@ async def test_client_http_error_degrades() -> None:
     assert decisions.degraded is True
 
 
-async def test_template_for_kinds() -> None:
-    for kind in ("greeting", "thanks", "goodbye", "help"):
-        hit = template_for(kind)
-        assert hit is not None
-        assert hit.reply
-        assert "anh/chị" in hit.reply  # persona: neutral address on first contact
-    assert template_for("none") is None
-    assert template_for("junk") is None
-
-
 async def test_jev_runtime_config_usable_requires_enable_and_key() -> None:
     assert JevRuntimeConfig(api_key="k", model="jev-latest", enabled=True).usable is True
     assert JevRuntimeConfig(api_key="k", model="jev-latest", enabled=False).usable is False
@@ -282,7 +266,9 @@ async def test_resolve_jev_env_key_stays_disabled_by_default() -> None:
         return await loader()
 
     service = IntegrationSettingsService(db=object())
-    with patch("app.services.integration_settings.cached_jev_config", _passthrough), patch(
+    with patch(
+        "app.services.integration_settings.providers.llm.cached_jev_config", _passthrough
+    ), patch(
         "os.environ", {"JEV_API_KEY": "env-key"}
     ):
         config = await service.resolve_jev()

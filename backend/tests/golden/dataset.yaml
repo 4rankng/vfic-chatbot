@@ -82,15 +82,13 @@ turns:
       - kind: intent
         value: job_lookup
 
-  # ── greeting / fast lane ──
+  # ── greeting (social chitchat reaches the agent like every message) ──
   - id: greeting-1
     category: greeting
     input: "chào bạn"
     assertions:
-      - kind: route
-        value: fast_lane
-      - kind: latency_p95_below_ms
-        value: 500
+      - kind: intent
+        value: small_talk
 
   # ── edge: missing data ──
   - id: edge-missing-1
