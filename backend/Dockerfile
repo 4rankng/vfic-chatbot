@@ -1,5 +1,8 @@
 # VFIC backend image — shared by web + RQ workers + scheduler.
-FROM python:3.12-slim
+# Digest-pinned (OPS-10): the tag stays for readability, the digest is what
+# resolves, so an unattended rebuild cannot slide onto a different base. Bump
+# the digest deliberately (fetch: `docker manifest inspect python:3.12-slim`).
+FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

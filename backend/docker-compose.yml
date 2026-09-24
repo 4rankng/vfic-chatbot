@@ -22,8 +22,12 @@
 # unbounded-blast-radius outage). Revisit the ledger if the host size changes.
 #
 # App images are `${IMAGE_TAG:?…}`: a required variable, so no compose command
-# can silently resolve `:latest` (OPS-10). Base images are digest-pinned for the
-# same reason; .github/workflows/pin-refresh.yml opens a PR when a digest moves.
+# can silently resolve `:latest` (OPS-10) — including bare `docker compose run`
+# on the droplet, which now fails loudly until IMAGE_TAG is exported (read it
+# from the running container: `docker inspect -f '{{.Config.Image}}' $(docker
+# compose ps -q web-$(cat ACTIVE_COLOR))`). Base images are digest-pinned for
+# the same reason; there is no automated digest-refresh PR yet, so a base-image
+# bump is a deliberate edit of the pins below.
 
 # --- Log rotation (OPS-04) ---------------------------------------------------
 # Structured JSON logs to stdout are the only observability path by design, so
@@ -128,7 +132,7 @@ services:
 
   web-green:
     logging: *default-logging
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     environment:
       DB_POOL_SIZE: "8"
@@ -156,7 +160,7 @@ services:
   # post-send enrichment so a slow persistence job cannot delay a webhook.
   worker-chatbot:
     logging: *default-logging
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     environment:
       # Workers run one job at a time (SimpleWorker) — 4+2 is ample and keeps
@@ -194,7 +198,7 @@ services:
   # It deliberately does not warm the chatbot graph or consume webhook_high.
   worker-persistence:
     logging: *default-logging
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     environment:
       DB_POOL_SIZE: "4"
@@ -220,7 +224,7 @@ services:
   # RQ worker: knowledge ingest / reindex / bus rebuild (slow, Drive-bound).
   worker-ingest:
     logging: *default-logging
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     environment:
       DB_POOL_SIZE: "4"
@@ -249,7 +253,7 @@ services:
   # rq-scheduler: hourly Drive reconcile, 5-min outbound retry, 30-min proactive follow-up tick.
   scheduler:
     logging: *default-logging
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     depends_on:
       redis: { condition: service_healthy }
@@ -276,7 +280,7 @@ services:
   # so a backlog-driven reconcile cannot head-of-line-block the nudges.
   worker-followup:
     logging: *default-logging
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     environment:
       DB_POOL_SIZE: "4"
@@ -307,7 +311,7 @@ services:
   # skip; one worker keeps the two 60s ticks from competing with nudges.
   worker-maintenance:
     logging: *default-logging
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     environment:
       DB_POOL_SIZE: "4"
@@ -338,7 +342,7 @@ services:
   oa-profile-backfill:
     logging: *default-logging
     profiles: ["maintenance"]
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     command:
       ["python", "-m", "scripts.backfill_oa_profiles", "--apply", "--limit", "0"]
@@ -351,7 +355,7 @@ services:
   # SPA served by the frontend nginx image; Caddy reverse-proxies to it.
   frontend:
     logging: *default-logging
-    image: ghcr.io/4rankng/tinghire-fe:${IMAGE_TAG:-latest}
+    image: ghcr.io/4rankng/tinghire-fe:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     expose: ["80"]
     deploy:
       resources:
@@ -363,7 +367,7 @@ services:
   # DB UI — bound to loopback only. Reach via `make adminer` SSH tunnel.
   adminer:
     logging: *default-logging
-    image: adminer:4
+    image: adminer:4@sha256:c1c24d89d06fcb8fc0fb5a049240dc292ff4a121ae05d7e74d64b58c421d2921
     depends_on: [postgres]
     ports: ["127.0.0.1:8081:8080"]
     deploy:
@@ -375,7 +379,7 @@ services:
 
   caddy:
     logging: *default-logging
-    image: caddy:2
+    image: caddy:2@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
     depends_on:
       # Caddy proxies the ACTIVE web-<color> (tracked in /opt/vfic/ACTIVE_COLOR,
       # rendered into ./Caddyfile by flip_caddy.sh). It must NOT depend on a fixed
