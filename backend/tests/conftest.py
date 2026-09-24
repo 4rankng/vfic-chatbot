@@ -35,7 +35,7 @@ class _NoopRedis:
     async def get(self, key):
         return None
 
-    async def set(self, key, value, *, ex=None):
+    async def set(self, key, value, *, ex=None, nx=None):
         return "OK"
 
     async def incr(self, key):
