@@ -5,7 +5,6 @@ Pure unit tests with mocked DB sessions — no live database or Redis required.
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import timedelta
