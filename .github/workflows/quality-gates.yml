@@ -43,6 +43,12 @@ jobs:
       - name: Ruff
         run: .venv/bin/ruff check .
 
+      - name: Docs drift check (deployment guide names the current alembic head)
+        run: |
+          HEAD_REV="$(.venv/bin/python -m alembic heads | awk 'NR==1{print $1}')"
+          grep -qF "**HEAD:** \`$HEAD_REV" ../docs/deployment-guide.md \
+            || { echo "docs/deployment-guide.md's Alembic HEAD does not match alembic heads ($HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
+
       - name: Backend unit tests
         run: .venv/bin/pytest -m "not integration"
 
