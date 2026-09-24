@@ -5,8 +5,8 @@ severity: medium
 area: ops
 labels: [ops, documentation]
 effort: S
-status: in_progress
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** ops · **Effort:** S · **Labels:** ops, documentation
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -37,6 +37,11 @@ Delete `PORT` from `Makefile:3-13` and forward the three real variables (`BACKEN
 ## Notes
 
 Merge with OPS-18 — the same first-run path.
+
+## Evidence log
+
+- 29446018 — root PORT deleted as dead plumbing; dev forwards FRONTEND_PORT (the variable backend reads)
+- verified: make -n dev shows FRONTEND_PORT=$(PORT); backend/Makefile never references PORT
 
 ---
 

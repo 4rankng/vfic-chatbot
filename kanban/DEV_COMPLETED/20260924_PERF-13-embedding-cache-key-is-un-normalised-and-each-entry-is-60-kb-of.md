@@ -5,8 +5,8 @@ severity: low
 area: performance
 labels: [performance]
 effort: S
-status: dev_completed
-column: IN_PROGRESS
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** low · **Area:** performance · **Effort:** S · **Labels:** performance
 
-**Trạng thái:** IN_PROGRESS
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 

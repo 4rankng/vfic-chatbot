@@ -5,8 +5,8 @@ severity: critical
 area: ops
 labels: [ops, reliability]
 effort: S
-status: in_progress
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** critical · **Area:** ops · **Effort:** S · **Labels:** ops, reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -38,6 +38,12 @@ Add a compose `x-logging` anchor (`driver: json-file`, `max-size: 10m`, `max-fil
 ## Notes
 
 Merge with OPS-06 — the disk-full row of its detection table is this ticket.
+
+## Evidence log
+
+- 4825c714 — x-logging anchor attached to all 14 services (10 MB x 3 per container)
+- scripts/ops-alerts.sh — disk >80/>95%, reclaimable Docker, /metrics thresholds, /health
+- verified: yaml.safe_load parses; docker compose config -q clean with env set; bash -n
 
 ---
 

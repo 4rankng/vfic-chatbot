@@ -3,6 +3,7 @@
 TICKETS = [
     dict(
         id="FE-01",
+        column="DEV_COMPLETED",
         title="ZaloIntegrationPage is a 2072-LOC module whose one component owns four product domains",
         sev="high",
         area="frontend",
@@ -40,6 +41,7 @@ TICKETS = [
     ),
     dict(
         id="FE-02",
+        column="DEV_COMPLETED",
         title="ProjectKnowledgePanel mixes three data-access idioms across 1095 LOC and 21 useState",
         sev="high",
         area="frontend",
@@ -76,6 +78,7 @@ TICKETS = [
     ),
     dict(
         id="FE-03",
+        column="DEV_COMPLETED",
         title="The message store never evicts a conversation and three exported selectors are dead duplicates",
         sev="high",
         area="frontend",
@@ -112,6 +115,7 @@ TICKETS = [
     ),
     dict(
         id="FE-04",
+        column="DEV_COMPLETED",
         title="Four overlapping 30-second polls of the same needs-attention endpoint per open tab",
         sev="high",
         area="frontend",
@@ -146,6 +150,7 @@ TICKETS = [
     ),
     dict(
         id="FE-05",
+        column="DEV_COMPLETED",
         title="React.memo on the inbox row is structurally defeated by per-render row allocation",
         sev="high",
         area="frontend",
@@ -181,6 +186,7 @@ TICKETS = [
     ),
     dict(
         id="FE-06",
+        column="DEV_COMPLETED",
         title="Confirmed-dead i18n catalog blocks and four self-testing kit/ components",
         sev="medium",
         area="frontend",
@@ -225,6 +231,7 @@ TICKETS = [
     ),
     dict(
         id="FE-07",
+        column="DEV_COMPLETED",
         title="Product code hardcodes Vietnamese, bypassing a catalog served by two competing providers",
         sev="medium",
         area="frontend",
@@ -258,6 +265,7 @@ TICKETS = [
     ),
     dict(
         id="FE-08",
+        column="DEV_COMPLETED",
         title="The no-explicit-any rule is enforced only for flat globs and never for atomic-crm",
         sev="medium",
         area="frontend",
@@ -293,6 +301,7 @@ TICKETS = [
     ),
     dict(
         id="FE-09",
+        column="DEV_COMPLETED",
         title="ExternalSourceList hand-rolls a 466-poll, 3h40m polling state machine",
         sev="medium",
         area="frontend",
@@ -327,6 +336,7 @@ TICKETS = [
     ),
     dict(
         id="FE-10",
+        column="DEV_COMPLETED",
         title="A module-scope socket port pulls socket.io-client into the entry chunk and never re-auths after JWT rotation",
         sev="medium",
         area="frontend",
@@ -360,6 +370,7 @@ TICKETS = [
     ),
     dict(
         id="FE-11",
+        column="DEV_COMPLETED",
         title="Two virtualization libraries, and manualChunks still splits the legacy one",
         sev="medium",
         area="frontend",
@@ -392,6 +403,7 @@ TICKETS = [
     ),
     dict(
         id="FE-12",
+        column="DEV_COMPLETED",
         title="A 24-hour gcTime with no persister, plus offlineFirst mutations that can replay",
         sev="medium",
         area="frontend",
@@ -423,6 +435,7 @@ TICKETS = [
     ),
     dict(
         id="FE-13",
+        column="DEV_COMPLETED",
         title="The layered slice pattern covers 6 of ~22 features, and the two worst god files are unlayered",
         sev="medium",
         area="frontend",
@@ -463,6 +476,7 @@ TICKETS = [
     ),
     dict(
         id="FE-14",
+        column="DEV_COMPLETED",
         title="Duplicated credential-field machinery between the Zalo and Facebook pages",
         sev="medium",
         area="frontend",
@@ -495,6 +509,7 @@ TICKETS = [
     ),
     dict(
         id="FE-15",
+        column="DEV_COMPLETED",
         title="Dashboard derivations are recomputed on every render",
         sev="medium",
         area="frontend",
@@ -526,6 +541,7 @@ TICKETS = [
     ),
     dict(
         id="FE-16",
+        column="DEV_COMPLETED",
         title="Unreachable English i18n default, unused dependencies, and an unscoped global CSS surface",
         sev="low",
         area="frontend",
@@ -558,6 +574,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-01",
+        column="IN_PROGRESS",
         title="CI and the deploy gate run 1 of 29 backend integration test files",
         sev="critical",
         area="testing",
@@ -590,6 +607,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-02",
+        column="IN_PROGRESS",
         title="Knowledge-ingestion tests are marked skip, not integration, so they run nowhere",
         sev="critical",
         area="testing",
@@ -623,6 +641,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-03",
+        column="IN_PROGRESS",
         title="Backend coverage is never measured and the frontend 80% gate covers 3 of 425 files",
         sev="critical",
         area="testing",
@@ -655,6 +674,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-04",
+        column="IN_PROGRESS",
         title="The release gate is real but narrow, mislabelled correctness, and not wired to deploy",
         sev="high",
         area="testing",
@@ -698,6 +718,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-05",
+        column="IN_PROGRESS",
         title="No contract test links the frontend data provider to the backend routes",
         sev="high",
         area="testing",
@@ -727,6 +748,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-06",
+        column="IN_PROGRESS",
         title="No dependency or security scanning in CI",
         sev="high",
         area="testing",
@@ -756,6 +778,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-07",
+        column="IN_PROGRESS",
         title="The vitest claude project matches zero files and is never run",
         sev="high",
         area="testing",
@@ -785,6 +808,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-08",
+        column="IN_PROGRESS",
         title="Visual-regression baselines are darwin-only and the visual projects are excluded from CI",
         sev="high",
         area="testing",
@@ -815,6 +839,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-09",
+        column="IN_PROGRESS",
         title="Implementation is pinned by inspect.getsource substring assertions",
         sev="medium",
         area="testing",
@@ -848,6 +873,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-10",
+        column="IN_PROGRESS",
         title="~40 assertions test CSS and TSX source text instead of rendered layout",
         sev="medium",
         area="testing",
@@ -880,6 +906,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-11",
+        column="IN_PROGRESS",
         title="Wall-clock timing assertions in the unit lane will flake on a slow runner",
         sev="medium",
         area="testing",
@@ -911,6 +938,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-12",
+        column="IN_PROGRESS",
         title="The unit lane has no outbound-network guard although the integration lane does",
         sev="medium",
         area="testing",
@@ -946,6 +974,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-13",
+        column="IN_PROGRESS",
         title="56 migrations, ~8 with roundtrip coverage, and none of those run in CI",
         sev="medium",
         area="testing",
@@ -977,6 +1006,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-14",
+        column="IN_PROGRESS",
         title="E2E is a 2-test smoke and the highest-blast-radius journeys are mock-only",
         sev="medium",
         area="testing",
@@ -1008,6 +1038,7 @@ TICKETS = [
     ),
     dict(
         id="TEST-15",
+        column="IN_PROGRESS",
         title="Sleep-pumped synchronization, deploy-Makefile test fakes, and AST-structure pins",
         sev="low",
         area="testing",
@@ -1042,6 +1073,7 @@ TICKETS = [
     ),
     dict(
         id="FE-17",
+        column="IN_PROGRESS",
         title="registry.json is not the generator's output and registry:check already fails at HEAD",
         sev="medium",
         area="frontend",
@@ -1081,6 +1113,7 @@ TICKETS = [
     ),
     dict(
         id="FE-18",
+        column="DEV_COMPLETED",
         title="npm run lint never reaches src/components, so the CI lint step is vacuous",
         sev="high",
         area="testing",
@@ -1116,6 +1149,7 @@ TICKETS = [
     ),
     dict(
         id="FE-19",
+        column="IN_PROGRESS",
         title="Feature stylesheets are not scoped by module; selectors nest under one global container class",
         sev="low",
         area="frontend",

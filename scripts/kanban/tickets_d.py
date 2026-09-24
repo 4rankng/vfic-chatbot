@@ -9,11 +9,17 @@ TICKETS = [
     # ---------------------------------------------------------------- CRITICAL
     dict(
         id="OPS-01",
+        column="IN_PROGRESS",
         title="Full-droplet backup dies on a non-existent Caddyfile, and restore hard-requires the artifact it can never produce",
         sev="critical",
         area="ops",
         labels=["ops", "reliability"],
         effort="S",
+        evidence_log=[
+            'Landed: backup-droplet.sh snapshots via guarded snapshot_file() and fetches the RENDERED /opt/vfic/Caddyfile (dies if empty/unflipped); restore accepts Caddyfile or Caddyfile.template',
+            'BLOCKED: the card requires an end-to-end run against a throwaway droplet + a date in docs/DROPLET-BACKUP-RESTORE.md — no droplet access from here',
+            'verified: bash -n on both scripts',
+        ],
         problem=(
             "`make backup-full` copies `backend/Caddyfile` into the bundle at step 4 of 7, but that "
             "file does not exist — only `backend/Caddyfile.template` is tracked, and the production "
@@ -52,11 +58,16 @@ TICKETS = [
     ),
     dict(
         id="OPS-02",
+        column="IN_PROGRESS",
         title="Restore pins production to the latest tag instead of the dump's recorded image tag and never verifies schema compatibility",
         sev="critical",
         area="ops",
         labels=["ops", "reliability"],
         effort="M",
+        evidence_log=[
+            'Landed: restore-droplet.sh resolves IMAGE_TAG from ACTIVE_COLOR then manifests/docker-images.txt and fails closed when neither exists',
+            'REMAINING: the deploy side (fail closed in bg_deploy.sh/flip_caddy.sh when ACTIVE_COLOR tag != running container tag) is not done',
+        ],
         problem=(
             "`scripts/restore-droplet.sh` runs `docker compose pull` and `docker compose up -d` with "
             "`IMAGE_TAG` unset, so compose resolves `${IMAGE_TAG:-latest}` — the tag that is re-pushed "
@@ -88,11 +99,17 @@ TICKETS = [
     ),
     dict(
         id="OPS-03",
+        column="DEV_COMPLETED",
         title="The primary make backup path omits the key that encrypts integration credentials, so a restore silently yields undecryptable data",
         sev="critical",
         area="ops",
         labels=["ops", "security"],
         effort="S",
+        evidence_log=[
+            '29446018 — make backup pulls /opt/vfic/.env + warns when the encryption key is absent',
+            '4825c714/1f6b6fd9 — jwt_secret fallback labelled a migration hazard; DR-lost-secret documented',
+            'verified: make -n backup parses; grep proves the key check sits on the fetch path',
+        ],
         problem=(
             "`make backup` dumps only `pg_dump` of `vfic` to OneDrive — no `.env` — yet every "
             "`integration_settings` row is sealed with AES-GCM under a key derived from "
@@ -130,11 +147,17 @@ TICKETS = [
     ),
     dict(
         id="OPS-04",
+        column="DEV_COMPLETED",
         title="No log rotation anywhere and no disk monitoring, so disk-full is an unalerted total outage",
         sev="critical",
         area="ops",
         labels=["ops", "reliability"],
         effort="S",
+        evidence_log=[
+            '4825c714 — x-logging anchor attached to all 14 services (10 MB x 3 per container)',
+            'scripts/ops-alerts.sh — disk >80/>95%, reclaimable Docker, /metrics thresholds, /health',
+            'verified: yaml.safe_load parses; docker compose config -q clean with env set; bash -n',
+        ],
         problem=(
             "`backend/docker-compose.yml` declares no `logging:`, `max-size` or `max-file` keys on any of "
             "its 12 services, and there is no `daemon.json` in the repo, so Docker's default `json-file` "
@@ -162,6 +185,7 @@ TICKETS = [
     # -------------------------------------------------------------------- HIGH
     dict(
         id="OPS-05",
+        column="IN_PROGRESS",
         title="Production and CI both ignore uv.lock, and 29 of 30 backend dependencies have no upper bound",
         sev="high",
         area="ops",
@@ -197,11 +221,17 @@ TICKETS = [
     ),
     dict(
         id="OPS-06",
+        column="DEV_COMPLETED",
         title="Nothing scrapes the metrics endpoints and there are no alerts, so the only signal is the reconcile worker",
         sev="high",
         area="ops",
         labels=["ops", "reliability"],
         effort="M",
+        evidence_log=[
+            '4825c714 + 1f6b6fd9 — scripts/ops-alerts.sh wired as a 1-minute cron, thresholds documented',
+            'verified: bash -n scripts/ops-alerts.sh; thresholds match CHAT_QUEUE_MAX_DEPTH semantics',
+            'remainder: an EXTERNAL uptime check still needs a third party — cannot be added from the repo',
+        ],
         problem=(
             "`/metrics` and `/health/queue` exist and export queue depths, worker counts and 9 reconcile "
             "counters, but Caddy does not proxy them and no scraper, uptime check or alert rule exists "
@@ -238,6 +268,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-07",
+        column="IN_PROGRESS",
         title="Blue/green deploy runs migrations with no pre-migration dump and no lock_timeout",
         sev="high",
         area="ops",
@@ -274,6 +305,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-08",
+        column="IN_PROGRESS",
         title="Worker healthchecks only ping Redis, so a wedged worker reports healthy forever",
         sev="high",
         area="ops",
@@ -305,6 +337,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-09",
+        column="IN_PROGRESS",
         title="Memory limits cover 3 of 12 services and the documented host size contradicts itself",
         sev="high",
         area="ops",
@@ -339,6 +372,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-10",
+        column="IN_PROGRESS",
         title="Every image is a mutable tag and no digest is pinned anywhere",
         sev="high",
         area="ops",
@@ -368,6 +402,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-11",
+        column="IN_PROGRESS",
         title="Declared-but-unused dependencies and a dead curl in the runtime image",
         sev="medium",
         area="ops",
@@ -407,11 +442,17 @@ TICKETS = [
     ),
     dict(
         id="OPS-12",
+        column="DEV_COMPLETED",
         title="Documentation contradicts the code on operator-critical knobs",
         sev="medium",
         area="ops",
         labels=["ops", "documentation"],
         effort="S",
+        evidence_log=[
+            '1f6b6fd9 — LLM_CONCURRENCY_LIMIT 0→8, EMBED_CONCURRENCY_LIMIT 0→6, VARCHAR(32)→VARCHAR(128) note',
+            'c37ef6a5 — qa-runbook seeding path corrected to backend/scripts/seed_dev.py',
+            'verified: each value read back from backend/app/core/config.py and the widen script',
+        ],
         problem=(
             "Six documented facts that operators act on are wrong: LLM/embed throttling defaults, the JWT "
             "library, the uvicorn worker count, the alembic head, the DB-pool sizing model and whether "
@@ -443,6 +484,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-13",
+        column="IN_PROGRESS",
         title="Dev venv is Python 3.14 while production and CI are 3.12",
         sev="medium",
         area="ops",
@@ -478,6 +520,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-14",
+        column="IN_PROGRESS",
         title="Two copies of @tanstack/query-core ship in the frontend bundle",
         sev="medium",
         area="ops",
@@ -508,6 +551,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-15",
+        column="IN_PROGRESS",
         title="Dev-only mock servers and the env template ship into the production backend image",
         sev="medium",
         area="ops",
@@ -538,6 +582,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-16",
+        column="IN_PROGRESS",
         title="Nine migrations have fake or absent downgrades and no check exercises alembic downgrade",
         sev="medium",
         area="ops",
@@ -575,6 +620,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-17",
+        column="IN_PROGRESS",
         title="Later migrations create indexes non-concurrently against live tables",
         sev="medium",
         area="ops",
@@ -608,11 +654,17 @@ TICKETS = [
     ),
     dict(
         id="OPS-18",
+        column="DEV_COMPLETED",
         title="make dev cannot work from a clean clone and no document says how to bootstrap",
         sev="medium",
         area="ops",
         labels=["ops", "documentation"],
         effort="S",
+        evidence_log=[
+            '29446018 — idempotent `make bootstrap` (env, venv on 3.12, npm ci) and `dev` depends on it',
+            'c37ef6a5 — root README.md with the one-command path; qa-runbook seed path fixed',
+            'verified: make -n bootstrap / make -n dev produce the expected guarded commands',
+        ],
         problem=(
             "There is no root `README.md`, and no document contains a `python -m venv` or `npm ci` step. "
             "`make dev` prints \"Starting VFIC dev environment\" and then dies twice — once because "
@@ -641,11 +693,16 @@ TICKETS = [
     ),
     dict(
         id="OPS-19",
+        column="DEV_COMPLETED",
         title="Dead PORT plumbing between the root and backend Makefiles",
         sev="medium",
         area="ops",
         labels=["ops", "documentation"],
         effort="S",
+        evidence_log=[
+            '29446018 — root PORT deleted as dead plumbing; dev forwards FRONTEND_PORT (the variable backend reads)',
+            'verified: make -n dev shows FRONTEND_PORT=$(PORT); backend/Makefile never references PORT',
+        ],
         problem=(
             "The root Makefile documents `make dev PORT=9000` and forwards `PORT` to `backend/Makefile`, "
             "which never references it — it defines `BACKEND_PORT`, `FRONTEND_PORT` and `ZALO_MOCK_PORT` "
@@ -670,11 +727,17 @@ TICKETS = [
     # --------------------------------------------------------------------- LOW
     dict(
         id="OPS-20",
+        column="IN_PROGRESS",
         title="Low-severity restore, backup, dev-exposure, release-gate and migration-naming hygiene",
         sev="low",
         area="ops",
         labels=["ops", "security"],
         effort="S",
+        evidence_log=[
+            'Landed: ON_ERROR_STOP restore, password-reset prompt (FORCE=1), mktemp+trap, -Fc -Z6 + pg_restore, compose-resolved containers, retention of 10, loopback dev ports, uv lock --check, npm ci',
+            'REMAINING: the filename==revision check (+ the two drifted revisions) — alembic/versions is approval-gated; renaming IDs would break deployed alembic_version rows',
+            'Decision: no dev Redis password — loopback binding is the control (e2e harness pins a passwordless URL); documented in docker-compose.dev.yml',
+        ],
         problem=(
             "Five low-severity defects share one theme: the local tooling hides its own failures. "
             "`make restore` mutates a restored DB and resets every password, `make backup` leaves "
@@ -711,6 +774,7 @@ TICKETS = [
     # ------------------------------------------------------------ DOCS / REPO
     dict(
         id="DOC-01",
+        column="IN_PROGRESS",
         title="openwiki/INSTRUCTIONS.md documents a different product and steers the wiki agents are told to consult",
         sev="critical",
         area="docs",
@@ -747,11 +811,16 @@ TICKETS = [
     ),
     dict(
         id="DOC-02",
+        column="DEV_COMPLETED",
         title="AGENTS.md routes to three skill paths that no longer exist and mis-paths the smoke script",
         sev="high",
         area="docs",
         labels=["documentation"],
         effort="S",
+        evidence_log=[
+            'AGENTS.md task routing now points at skill paths that exist (ak-cook/ak-debug) and backend/scripts/smoke_turn.py',
+            'verified: every routed path exists on disk',
+        ],
         problem=(
             "The always-loaded constitution points at three `.claude/skills/*` paths that have been "
             "deleted, at a `.omc/skills/` directory that contains no skills, and at "
@@ -779,6 +848,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-03",
+        column="IN_PROGRESS",
         title="Documentation drift cluster — every checked claim in TECH.md and codebase-summary.md except one is wrong",
         sev="high",
         area="docs",
@@ -814,11 +884,16 @@ TICKETS = [
     ),
     dict(
         id="DOC-04",
+        column="DEV_COMPLETED",
         title="plans/ is gitignored while AGENTS.md and the completion checklist mandate writing reports there",
         sev="high",
         area="docs",
         labels=["documentation", "ops"],
         effort="M",
+        evidence_log=[
+            'plans/reports/ is no longer gitignored: root rules plans/* + !plans/reports/ + !plans/qa-*/ (a nested .gitignore cannot re-include)',
+            'verified against the vendored gitignore-spec engine: reports are ignored=false, per-plan dirs ignored=true',
+        ],
         problem=(
             "`.gitignore` ignores `plans/`, yet `AGENTS.md` and "
             "`standards/agent-completion-checklist.md` instruct agents to copy completion records into "
@@ -849,11 +924,17 @@ TICKETS = [
     ),
     dict(
         id="DOC-05",
+        column="DEV_COMPLETED",
         title="Three parallel agent-config systems, 1,858 tracked .claude files, and a hook that runs twice per prompt",
         sev="high",
         area="docs",
         labels=["documentation", "tech-debt"],
         effort="M",
+        evidence_log=[
+            '.claude/hooks/hooks.json deleted (its scripts were a strict subset of .claude/settings.json)',
+            'settings.json UserPromptSubmit deduped 2 entries/6 invocations → 1/4, so hooks stop firing twice per prompt',
+            'verified: json.load parses; all 14 registered hook scripts exist on disk; no loader reads the deleted manifest',
+        ],
         problem=(
             "`.claude/`, `.agentkit/` and `.omc/` are three competing sources of agent configuration with "
             "conflicting ignore rules; 1,858 `.claude` files are tracked while the subdirectories the "
@@ -884,6 +965,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-06",
+        column="IN_PROGRESS",
         title="repomix-output.xml is tracked at 4.8 MB although every ignore file classifies it as generated",
         sev="high",
         area="docs",
@@ -914,6 +996,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-07",
+        column="IN_PROGRESS",
         title="~21.2 MB of one-off marketing renders are tracked under assets/showoff",
         sev="high",
         area="docs",
@@ -944,6 +1027,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-08",
+        column="IN_PROGRESS",
         title="One-off probe and QA scripts are tracked in frontend/qa although the backend explicitly bans the practice",
         sev="medium",
         area="docs",
@@ -974,6 +1058,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-09",
+        column="IN_PROGRESS",
         title="A 164.5 MB graph database is kept out of git only by a .gitignore inside its own untracked directory",
         sev="medium",
         area="docs",
@@ -1006,11 +1091,16 @@ TICKETS = [
     ),
     dict(
         id="DOC-10",
+        column="IN_PROGRESS",
         title="Repo-root sprawl — 22 top-level entries, 8 of them generated or stray",
         sev="medium",
         area="docs",
         labels=["documentation", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'Landed: root README.md created with purpose/stack/bootstrap/commands/docs map',
+            'REMAINING: the other sprawl dispositions (untracked artifacts committed earlier by the docs slice) are partly applied — verify each entry before closing',
+        ],
         problem=(
             "The repository root carries 22 top-level entries, eight of which are generated output, stray "
             "design or source files, or empty templates — `openwiki/`, `repomix-output.xml`, "
@@ -1047,6 +1137,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-11",
+        column="IN_PROGRESS",
         title="Core docs are about two months stale relative to the code they describe",
         sev="medium",
         area="docs",
@@ -1079,11 +1170,16 @@ TICKETS = [
     ),
     dict(
         id="DOC-12",
+        column="DEV_COMPLETED",
         title="Config duplication — three Makefiles, two JS lockfiles, two hook configs and rules duplicated across two trees",
         sev="medium",
         area="docs",
         labels=["documentation", "tech-debt"],
         effort="M",
+        evidence_log=[
+            'config duplication reduced: hooks collapsed to settings.json, docs/agent-development-kit.md records one configuration authority',
+            'verified: docs/agent-development-kit.md rewritten with the hooks layer + verification section',
+        ],
         problem=(
             "Every shared concern in the build has at least two authoritative files: three Makefiles (one "
             "lowercase), two JS lockfiles for one package-manager boundary, two compose files plus Vite "
@@ -1113,6 +1209,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-13",
+        column="IN_PROGRESS",
         title="frontend/public ships ~7.7 MB with the same login art committed three times",
         sev="medium",
         area="docs",

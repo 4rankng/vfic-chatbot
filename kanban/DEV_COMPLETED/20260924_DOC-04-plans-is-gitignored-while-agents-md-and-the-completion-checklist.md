@@ -5,8 +5,8 @@ severity: high
 area: docs
 labels: [documentation, ops]
 effort: M
-status: in_progress
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** docs · **Effort:** M · **Labels:** documentation, ops
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -38,6 +38,11 @@ Decide the policy and encode it: either track `plans/` (remove `plans/` from `.g
 ## Notes
 
 Merge with DOC-11 and DOC-10 — `docs/journals/` is currently the only populated durable-record path because `plans/` is ignored and `lessons/` is empty.
+
+## Evidence log
+
+- plans/reports/ is no longer gitignored: root rules plans/* + !plans/reports/ + !plans/qa-*/ (a nested .gitignore cannot re-include)
+- verified against the vendored gitignore-spec engine: reports are ignored=false, per-plan dirs ignored=true
 
 ---
 

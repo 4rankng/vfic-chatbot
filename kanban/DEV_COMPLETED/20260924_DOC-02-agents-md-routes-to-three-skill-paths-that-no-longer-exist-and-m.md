@@ -5,8 +5,8 @@ severity: high
 area: docs
 labels: [documentation]
 effort: S
-status: in_progress
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** docs · **Effort:** S · **Labels:** documentation
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -39,6 +39,11 @@ Repoint `AGENTS.md:71-75` at real targets (`.claude/skills/ak-cook/`, an `ak-deb
 ## Notes
 
 Merge with DOC-05 — the same missing `project-guard.py` and the same `.claude` tree.
+
+## Evidence log
+
+- AGENTS.md task routing now points at skill paths that exist (ak-cook/ak-debug) and backend/scripts/smoke_turn.py
+- verified: every routed path exists on disk
 
 ---
 

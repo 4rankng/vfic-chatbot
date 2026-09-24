@@ -5,8 +5,8 @@ severity: high
 area: architecture
 labels: [tech-debt]
 effort: M
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** architecture · **Effort:** M · **Labels:** tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 

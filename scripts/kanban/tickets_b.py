@@ -4,6 +4,7 @@ TICKETS = [
     # ------------------------------------------------------------------ perf
     dict(
         id="PERF-01",
+        column="DEV_COMPLETED",
         title="Installation authority is re-derived from scratch 2–3× per turn",
         sev="high",
         area="performance",
@@ -162,6 +163,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-05",
+        column="DEV_COMPLETED",
         title="No provider prompt/prefix caching is exploited on any LLM call",
         sev="high",
         area="performance",
@@ -298,7 +300,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-08",
-        column="IN_PROGRESS",
+        column="DEV_COMPLETED",
         title="Retrieval computes the ANN distance three times per row and the memories halfvec index is unused",
         sev="medium",
         area="performance",
@@ -340,7 +342,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-09",
-        column="IN_PROGRESS",
+        column="DEV_COMPLETED",
         title="The retrieval cache key is non-deterministic because `active_project_ids()` has no ORDER BY",
         sev="medium",
         area="performance",
@@ -369,7 +371,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-10",
-        column="IN_PROGRESS",
+        column="DEV_COMPLETED",
         title="Single-flight coalescing can never engage, so the retrieval stampede is unmitigated",
         sev="medium",
         area="performance",
@@ -478,7 +480,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-13",
-        column="IN_PROGRESS",
+        column="DEV_COMPLETED",
         title="Embedding cache key is un-normalised and each entry is ~60 KB of JSON",
         sev="low",
         area="performance",
@@ -513,6 +515,7 @@ TICKETS = [
     # ---------------------------------------------------------- architecture
     dict(
         id="ARCH-01",
+        column="IN_PROGRESS",
         title="`app/services/ingestion/` is an 18-module subsystem with no production entry point",
         sev="high",
         area="architecture",
@@ -544,6 +547,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-02",
+        column="IN_PROGRESS",
         title="Structured-fact / provenance subsystem is write-only at runtime and the canonical FAQ read path is dead",
         sev="high",
         area="architecture",
@@ -582,6 +586,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-03",
+        column="IN_PROGRESS",
         title="`services/chatbot/{paths,budget,deadlines}.py` is a parallel turn-dispatch implementation that never runs",
         sev="high",
         area="architecture",
@@ -618,6 +623,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-04",
+        column="IN_PROGRESS",
         title="`graph/fast_lane.py` and the `template` route strategy are unreachable, so every pleasantry costs a full LLM turn",
         sev="high",
         area="architecture",
@@ -654,6 +660,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-05",
+        column="IN_PROGRESS",
         title="`graph/clients.py` (1626 LOC) holds seven responsibilities and duplicates `graph/grounding.py`",
         sev="medium",
         area="architecture",
@@ -687,6 +694,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-06",
+        column="IN_PROGRESS",
         title="`services/integration_settings.py` (1208 LOC) mixes crypto, six provider groups and cache invalidation",
         sev="medium",
         area="architecture",
@@ -718,6 +726,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-07",
+        column="IN_PROGRESS",
         title="`api/integrations.py` (1353 LOC) carries provider business logic, including a raw httpx OAuth POST",
         sev="medium",
         area="architecture",
@@ -751,6 +760,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-08",
+        column="IN_PROGRESS",
         title="`services/retrieval/repository.py` (992 LOC) implements the whole agent read surface and self-constructs its collaborators",
         sev="medium",
         area="architecture",
@@ -784,6 +794,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-09",
+        column="IN_PROGRESS",
         title="`graph/factories.py` (900 LOC) does five jobs and is grandfathered out of the import guard",
         sev="medium",
         area="architecture",
@@ -815,6 +826,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-10",
+        column="IN_PROGRESS",
         title="`api/knowledge.py` calls private service methods, so the cutover guard is enforced at four call sites",
         sev="medium",
         area="architecture",
@@ -844,6 +856,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-11",
+        column="IN_PROGRESS",
         title="Over-abstraction: single-implementation facades, a mis-declared Protocol and a test double in production code",
         sev="medium",
         area="architecture",
@@ -879,6 +892,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-12",
+        column="IN_PROGRESS",
         title="`services/conversation/bot_path.py` (1118 LOC) carries five responsibilities",
         sev="medium",
         area="architecture",
@@ -908,6 +922,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-13",
+        column="IN_PROGRESS",
         title="`@lru_cache get_settings()` plus seven import-time settings snapshots; `core/db.py` creates the engine at import",
         sev="medium",
         area="architecture",
@@ -937,6 +952,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-14",
+        column="IN_PROGRESS",
         title="`app/capabilities/` is a live registry with a dormant, hash-verified extension API",
         sev="medium",
         area="architecture",
@@ -968,6 +984,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-15",
+        column="IN_PROGRESS",
         title="`services/outbox_service.py` (842 LOC) mixes row lifecycle with three provider dispatch branches",
         sev="medium",
         area="architecture",
@@ -996,6 +1013,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-16",
+        column="IN_PROGRESS",
         title="`services/installation/service.py` (1055 LOC) interleaves validation, lifecycle, projection and checksums",
         sev="medium",
         area="architecture",
@@ -1026,6 +1044,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-17",
+        column="IN_PROGRESS",
         title="The enforced architecture rules miss the real import edges",
         sev="medium",
         area="architecture",
@@ -1064,6 +1083,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-19",
+        column="IN_PROGRESS",
         title="The flat services duplicate the bounded contexts in named pairs",
         sev="medium",
         area="architecture",
@@ -1096,6 +1116,7 @@ TICKETS = [
     ),
     dict(
         id="ARCH-18",
+        column="IN_PROGRESS",
         title="Import-time registry validation with failure semantics, and dormant `models/case.py` tables to record rather than drop",
         sev="low",
         area="architecture",

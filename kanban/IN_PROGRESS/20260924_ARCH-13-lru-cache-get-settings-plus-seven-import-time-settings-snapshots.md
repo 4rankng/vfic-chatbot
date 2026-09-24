@@ -5,8 +5,8 @@ severity: medium
 area: architecture
 labels: [tech-debt, testing]
 effort: S
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** architecture · **Effort:** S · **Labels:** tech-debt, testing
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 

@@ -5,8 +5,8 @@ severity: medium
 area: docs
 labels: [documentation, tech-debt]
 effort: M
-status: in_progress
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** docs · **Effort:** M · **Labels:** documentation, tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -39,6 +39,11 @@ Collapse each pair to one authoritative file with the other holding only a point
 ## Notes
 
 Merge with DOC-05 (hooks), OPS-05 (lockfile policy) and OPS-19 (Makefile variable forwarding).
+
+## Evidence log
+
+- config duplication reduced: hooks collapsed to settings.json, docs/agent-development-kit.md records one configuration authority
+- verified: docs/agent-development-kit.md rewritten with the hooks layer + verification section
 
 ---
 

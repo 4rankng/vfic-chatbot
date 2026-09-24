@@ -5,8 +5,8 @@ severity: medium
 area: ops
 labels: [ops, documentation]
 effort: S
-status: in_progress
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** ops · **Effort:** S · **Labels:** ops, documentation
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -39,6 +39,12 @@ Correct the six claims in `TECH.md`, `docs/deployment-guide.md` and `docs/qa-run
 ## Notes
 
 Merge with DOC-03 — same drift class, but this ticket is limited to operator-critical knobs. The seeding claim is also part of OPS-18, and the `VARCHAR(32)` claim is part of OPS-20.
+
+## Evidence log
+
+- 1f6b6fd9 — LLM_CONCURRENCY_LIMIT 0→8, EMBED_CONCURRENCY_LIMIT 0→6, VARCHAR(32)→VARCHAR(128) note
+- c37ef6a5 — qa-runbook seeding path corrected to backend/scripts/seed_dev.py
+- verified: each value read back from backend/app/core/config.py and the widen script
 
 ---
 

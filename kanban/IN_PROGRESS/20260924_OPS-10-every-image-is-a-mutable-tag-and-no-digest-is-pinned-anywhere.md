@@ -5,8 +5,8 @@ severity: high
 area: ops
 labels: [ops, reliability]
 effort: S
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** ops · **Effort:** S · **Labels:** ops, reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 

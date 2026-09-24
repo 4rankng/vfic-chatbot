@@ -5,8 +5,8 @@ severity: critical
 area: ops
 labels: [ops, security]
 effort: S
-status: in_progress
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** critical · **Area:** ops · **Effort:** S · **Labels:** ops, security
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -39,6 +39,12 @@ Treat `/opt/vfic/.env` as part of every backup — add it to `make backup` (`Mak
 ## Notes
 
 Merge with OPS-01/OPS-02 — all three live in the same backup/restore path and should be rehearsed together.
+
+## Evidence log
+
+- 29446018 — make backup pulls /opt/vfic/.env + warns when the encryption key is absent
+- 4825c714/1f6b6fd9 — jwt_secret fallback labelled a migration hazard; DR-lost-secret documented
+- verified: make -n backup parses; grep proves the key check sits on the fetch path
 
 ---
 

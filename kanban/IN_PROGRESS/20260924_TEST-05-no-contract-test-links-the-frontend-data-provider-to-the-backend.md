@@ -5,8 +5,8 @@ severity: high
 area: testing
 labels: [testing]
 effort: M
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** testing · **Effort:** M · **Labels:** testing
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 

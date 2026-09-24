@@ -5,8 +5,8 @@ severity: high
 area: ops
 labels: [ops, reliability]
 effort: M
-status: in_progress
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** ops · **Effort:** M · **Labels:** ops, reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -47,6 +47,12 @@ Nothing in the system pages a human. Detection times today:
 ## Notes
 
 Merge with OPS-04 (disk alert) and OPS-08 (wedged-worker signal).
+
+## Evidence log
+
+- 4825c714 + 1f6b6fd9 — scripts/ops-alerts.sh wired as a 1-minute cron, thresholds documented
+- verified: bash -n scripts/ops-alerts.sh; thresholds match CHAT_QUEUE_MAX_DEPTH semantics
+- remainder: an EXTERNAL uptime check still needs a third party — cannot be added from the repo
 
 ---
 

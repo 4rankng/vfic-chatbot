@@ -5,8 +5,8 @@ severity: low
 area: ops
 labels: [ops, security]
 effort: S
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** low · **Area:** ops · **Effort:** S · **Labels:** ops, security
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 
@@ -39,6 +39,12 @@ Warn before the password reset in `Makefile:113-125` and fail the target when ps
 ## Notes
 
 Merge with OPS-05 (lockfile policy), OPS-16 (`stamp head`) and OPS-03 (restore correctness) when touching the same targets.
+
+## Evidence log
+
+- Landed: ON_ERROR_STOP restore, password-reset prompt (FORCE=1), mktemp+trap, -Fc -Z6 + pg_restore, compose-resolved containers, retention of 10, loopback dev ports, uv lock --check, npm ci
+- REMAINING: the filename==revision check (+ the two drifted revisions) — alembic/versions is approval-gated; renaming IDs would break deployed alembic_version rows
+- Decision: no dev Redis password — loopback binding is the control (e2e harness pins a passwordless URL); documented in docker-compose.dev.yml
 
 ---
 

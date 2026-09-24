@@ -5,8 +5,8 @@ severity: high
 area: docs
 labels: [documentation, tech-debt]
 effort: M
-status: in_progress
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** docs · **Effort:** M · **Labels:** documentation, tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -39,6 +39,12 @@ Pick one policy and encode it in `.gitignore`: either keep the vendor kit out of
 ## Notes
 
 Merge with DOC-02 (same missing `project-guard.py`) and DOC-12 (the two hook configs are also a duplication finding).
+
+## Evidence log
+
+- .claude/hooks/hooks.json deleted (its scripts were a strict subset of .claude/settings.json)
+- settings.json UserPromptSubmit deduped 2 entries/6 invocations → 1/4, so hooks stop firing twice per prompt
+- verified: json.load parses; all 14 registered hook scripts exist on disk; no loader reads the deleted manifest
 
 ---
 

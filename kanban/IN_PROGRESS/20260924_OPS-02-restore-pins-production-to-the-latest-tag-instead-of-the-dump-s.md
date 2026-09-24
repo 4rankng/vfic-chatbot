@@ -5,8 +5,8 @@ severity: critical
 area: ops
 labels: [ops, reliability]
 effort: M
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** critical · **Area:** ops · **Effort:** M · **Labels:** ops, reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 
@@ -39,6 +39,11 @@ Have `scripts/restore-droplet.sh` read the tag from `manifests/docker-images.txt
 ## Notes
 
 Merge with OPS-10 — the same missing `IMAGE_TAG` guard is what lets the restore pull `latest`.
+
+## Evidence log
+
+- Landed: restore-droplet.sh resolves IMAGE_TAG from ACTIVE_COLOR then manifests/docker-images.txt and fails closed when neither exists
+- REMAINING: the deploy side (fail closed in bg_deploy.sh/flip_caddy.sh when ACTIVE_COLOR tag != running container tag) is not done
 
 ---
 

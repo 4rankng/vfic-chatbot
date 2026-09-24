@@ -5,8 +5,8 @@ severity: low
 area: testing
 labels: [testing, tech-debt]
 effort: S
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** low · **Area:** testing · **Effort:** S · **Labels:** testing, tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 

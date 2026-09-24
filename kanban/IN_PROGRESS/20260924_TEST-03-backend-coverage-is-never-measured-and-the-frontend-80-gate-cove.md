@@ -5,8 +5,8 @@ severity: critical
 area: testing
 labels: [testing, ops]
 effort: M
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** critical · **Area:** testing · **Effort:** M · **Labels:** testing, ops
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 

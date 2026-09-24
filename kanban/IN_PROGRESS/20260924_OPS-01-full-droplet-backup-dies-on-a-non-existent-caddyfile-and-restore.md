@@ -5,8 +5,8 @@ severity: critical
 area: ops
 labels: [ops, reliability]
 effort: S
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** critical · **Area:** ops · **Effort:** S · **Labels:** ops, reliability
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 
@@ -39,6 +39,12 @@ Capture the *rendered* `/opt/vfic/Caddyfile` from the droplet (it is the real ed
 ## Notes
 
 Merge with OPS-02 — both are defects in the same backup/restore pair, and the end-to-end rehearsal should close both at once.
+
+## Evidence log
+
+- Landed: backup-droplet.sh snapshots via guarded snapshot_file() and fetches the RENDERED /opt/vfic/Caddyfile (dies if empty/unflipped); restore accepts Caddyfile or Caddyfile.template
+- BLOCKED: the card requires an end-to-end run against a throwaway droplet + a date in docs/DROPLET-BACKUP-RESTORE.md — no droplet access from here
+- verified: bash -n on both scripts
 
 ---
 

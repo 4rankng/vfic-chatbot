@@ -5,8 +5,8 @@ severity: medium
 area: docs
 labels: [documentation, tech-debt]
 effort: S
-status: in_progress
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** docs · **Effort:** S · **Labels:** documentation, tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 
@@ -38,6 +38,11 @@ Keep the root to source + docs + ops: move `pencil/`→`design/`, `kb/`→`docs/
 ## Notes
 
 Also folds two low findings that need no ticket of their own. **F14 stale remote refs** — `.git/packed-refs` has `refs/remotes/origin/main` packed at the old `08621c4` while the loose ref and local `main` are `923b1d3`, plus 15 stale Dependabot branches, two of them majors (`react-router-8.3.0`, `vitest-4.1.11`); fix with `git remote prune origin` after deciding the two majors, then `git gc --prune=now` if the pack does not shrink. **F17 unmanaged journals** — `docs/journals/` holds 38 files with no index and `AGENTS.md` never routes to it, while `docs/brainstorms/` (2) and `docs/research/` (1) are unindexed too; add `docs/journals/README.md` with a date/topic/commit table, or fold journals into `docs/decisions/` and delete `lessons/`.
+
+## Evidence log
+
+- Landed: root README.md created with purpose/stack/bootstrap/commands/docs map
+- REMAINING: the other sprawl dispositions (untracked artifacts committed earlier by the docs slice) are partly applied — verify each entry before closing
 
 ---
 
