@@ -148,7 +148,22 @@ fi
 step "1/7" "copying compose + Caddyfile + .env -> /opt/vfic"
 rmt "mkdir -p /opt/vfic"
 put "$BUNDLE/config-snapshot/docker-compose.yml" /opt/vfic/docker-compose.yml
-put "$BUNDLE/config-snapshot/Caddyfile"          /opt/vfic/Caddyfile
+
+# Ship the template when the bundle carries one (flip_caddy.sh re-renders from
+# it on every later cutover), then install the active edge config: the rendered
+# Caddyfile the backup captured, or — for a template-only bundle — the template
+# rendered here with the same __WEB_UPSTREAM__ substitution flip_caddy.sh uses.
+if [ -f "$BUNDLE/config-snapshot/Caddyfile.template" ]; then
+  put "$BUNDLE/config-snapshot/Caddyfile.template" /opt/vfic/Caddyfile.template
+fi
+if [ "$CADDY_SOURCE" = rendered ]; then
+  put "$BUNDLE/config-snapshot/Caddyfile" /opt/vfic/Caddyfile
+else
+  RENDERED_TMP="$(mktemp)"
+  sed "s/__WEB_UPSTREAM__/web-${COLOR}/g" "$BUNDLE/config-snapshot/Caddyfile.template" > "$RENDERED_TMP"
+  printf '  rendered Caddyfile from template (upstream: web-%s)\n' "$COLOR" >&2
+  put "$RENDERED_TMP" /opt/vfic/Caddyfile
+fi
 printf '  restore /opt/vfic/.env (mode 600)\n' >&2
 if [ "$DRY_RUN" -eq 0 ]; then
   cat "$BUNDLE/env/opt-vfic.env" | ssh "${SSH_OPTS[@]}" "$HOST" 'umask 077; cat > /opt/vfic/.env && chmod 600 /opt/vfic/.env'
@@ -174,7 +189,9 @@ seed() {  # $1 = service  $2 = in-container mount  $3 = tarball
 }
 seed caddy /data            "$BUNDLE/caddy/caddy_data.tar.gz"
 seed caddy /config          "$BUNDLE/caddy/caddy_config.tar.gz"
-seed web   /data/kb_uploads "$BUNDLE/kb_uploads/kb_uploads.tar.gz"
+# worker-ingest, not `web`: the compose file has no plain web service, and the
+# ingest worker mounts vfic_kb_uploads whichever colour is active.
+seed worker-ingest /data/kb_uploads "$BUNDLE/kb_uploads/kb_uploads.tar.gz"
 
 # --- 4. start datastores ------------------------------------------------------
 step "4/7" "start postgres + redis (empty volumes init from restored .env)"

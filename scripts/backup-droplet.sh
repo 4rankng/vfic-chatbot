@@ -98,7 +98,10 @@ capture_volume() {  # $1 = service  $2 = in-container mount path  $3 = outfile
 }
 capture_volume caddy /data            "$BUNDLE/caddy/caddy_data.tar.gz"
 capture_volume caddy /config          "$BUNDLE/caddy/caddy_config.tar.gz"
-capture_volume web   /data/kb_uploads "$BUNDLE/kb_uploads/kb_uploads.tar.gz"
+# There is no plain `web` service — only web-blue/web-green. worker-ingest
+# mounts vfic_kb_uploads and exists regardless of the active colour, so the
+# capture cannot depend on which colour happens to serve.
+capture_volume worker-ingest /data/kb_uploads "$BUNDLE/kb_uploads/kb_uploads.tar.gz"
 
 # --- 4. config snapshot (the deploy files, for self-containment) --------------
 # The edge config is RENDERED on the droplet: `backend/Caddyfile.template` is the
