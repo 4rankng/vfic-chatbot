@@ -42,6 +42,7 @@ Change the globs to `**` form (`src/components/admin/**/*.{ts,tsx}`) and move th
 - The 31 vendored `admin/` files keep their explicit file-level disables by decision — they are a copy-paste dependency and rewriting their type signatures is not worth the regression risk.
 - The two `as unknown as` casts at the conversation-mutation seam are replaced by one real `CrmDataProvider` type, so dropping a provider method is now a compile error.
 - Verified: `npm run lint` 0 errors, `npm run typecheck` clean, provider/chat tests 28 pass.
+- QA BLOCKED 2026-09-24: test_no_new_layer_boundary_violations reports the provider seam this card introduced — conversations/presentation/ChatThread.tsx and use-conversation-actions.ts import providers/rest/dataProvider (commit f81c1042). Move to QA_TESTED once presentation reaches the provider through an application-layer port.
 
 ---
 

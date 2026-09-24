@@ -5,8 +5,8 @@ severity: low
 area: frontend
 labels: [tech-debt, documentation]
 effort: S
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** low · **Area:** frontend · **Effort:** S · **Labels:** tech-debt, documentation
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -42,6 +42,7 @@ Delete `frontend/src/lib/i18nProvider.ts` (or make the admin default Vietnamese)
 - 3ca1ee78 — six unused dependencies removed (each grep-verified at zero importers): `react-virtuoso`, both `@tanstack` persister packages, `diacritic`, `qs`, `ra-language-english`. The vestigial `pnpm-lock.yaml` is deleted too — the repo is npm (`npm ci` in CI and the Dockerfile) and the second lockfile was already pinning `react-virtuoso` at a different version.
 - The CSS-scoping third of this card is split out as FE-19 and deliberately deferred: it needs browser QA per screen and the audit advised against a big-bang rewrite.
 - Verified: `npm run build` succeeds (2.55s) and the full unit suite passes after the removals.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

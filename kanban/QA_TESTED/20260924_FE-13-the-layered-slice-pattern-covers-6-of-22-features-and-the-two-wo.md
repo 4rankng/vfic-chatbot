@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [tech-debt]
 effort: L
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** L · **Labels:** tech-debt
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -46,6 +46,7 @@ Layering in the direction that was audited is verified clean and is **not** a ti
 - The layering rule is now recorded in `frontend/AGENTS.md`. Deliberately not applied to `integrations/`/`dashboard/` here — the god files were split along these seams and `dashboard/` stays flat.
 - 01000395 keeps `registry.json` in step with the moved modules.
 - Verified: conversations suite 21 files / 121 tests pass.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

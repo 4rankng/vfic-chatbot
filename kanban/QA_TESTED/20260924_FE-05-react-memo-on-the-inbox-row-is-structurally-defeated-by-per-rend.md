@@ -5,8 +5,8 @@ severity: high
 area: frontend
 labels: [performance]
 effort: M
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** frontend · **Effort:** M · **Labels:** performance
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -40,6 +40,7 @@ Split the row view-model: keep `rows` as the raw `conversations` array and pass 
 
 - ff2fbfc3 — rows keep the raw `conversations` array for identity; `presentation`/`snippet` resolve through a per-id view-model cache (`conversation-row-view-model.ts`) that reuses the previous object while inputs are unchanged. The row takes its own `isRead` boolean instead of the shared `Set`, and `onSelect` is stabilised via a ref.
 - Verified by falsifiable render tests: a search keystroke and a read-toggle each leave sibling rows un-rendered, each with a positive control. Both tests fail if the view-model reuse or the stable `onSelect` is reverted.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

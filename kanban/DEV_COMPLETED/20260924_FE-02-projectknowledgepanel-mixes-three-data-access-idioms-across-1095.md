@@ -42,6 +42,7 @@ Introduce `useProjectKnowledgeCatalog(projectId)` (query + mutations, owns `poll
 - One write path: the `project-knowledge-service` facade. `DiscoveryCardEditor`'s react-admin write became the port operation `updateProjectDiscoveryCard` (`PATCH /api/v1/knowledge/projects/{id}`, matching the backend `ProjectUpdate` schema). The two surviving `useRefresh()` calls are cache invalidation for the react-admin-cached project record, not a second write path.
 - The `exhaustive-deps` disable and both hand-rolled generation guards are gone.
 - Verified: `ProjectKnowledgePanel.test.tsx` 13/13 (harness-only change), `projects` suite 66 tests pass; a canary that broke one Vietnamese string flipped exactly the dependent test.
+- QA BLOCKED 2026-09-24: test_no_new_layer_boundary_violations reports 16 edges from the five projects/application hooks this split created (outward imports of react, ra-core, project-knowledge-service and lib/apiClient) and test_frontend_domain_and_application_layers_do_not_use_browser_io_globals reports File/window in the same files. Move to QA_TESTED once the application layer no longer reaches outward.
 
 ---
 

@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [tech-debt]
 effort: M
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** M · **Labels:** tech-debt
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -41,6 +41,7 @@ Add the ~40 missing micro-copy keys to `vietnameseCrmMessages` (`common.save_cha
 - 7f28d2a8 — 91 catalog keys added (235 → 326), 26 components migrated onto `useTranslate`, one ellipsis form used consistently, and the `ra.saved_queries.*`/adjacent `ra.*` gaps filled so no English leaks into the Vietnamese UI.
 - `leads/domain/candidateProfile.ts` moved from `label: string` to `labelKey: string`, so one field definition feeds both the candidate dialog and the conversation context panel.
 - Verified: the component tests assert Vietnamese output, so their passing is the evidence wording survived; full suite 595 tests green.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [reliability, performance]
 effort: S
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** reliability, performance
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -41,6 +41,7 @@ Drop `gcTime` to the 5-minute default unless persistence is actually implemented
 - `gcTime` dropped from 24h to the TanStack default 5 minutes (nothing persists across reloads, so the 24h window only grew in-tab memory), and mutations moved from `offlineFirst` to `online` so a write reported as failed cannot land later.
 - Queries keep `offlineFirst`, and the deliberate `staleTime 25s < refetchInterval 30s` pairing in the dashboard is untouched.
 - Verified by a regression test written red-first: restoring the old config makes it fail at `expect(mutation.state.isPaused).toBe(true)` and the retention assertion.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

@@ -5,8 +5,8 @@ severity: high
 area: frontend
 labels: [performance, reliability]
 effort: S
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** frontend · **Effort:** S · **Labels:** performance, reliability
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -42,6 +42,7 @@ Consolidate into one `useAttentionCounts()` returning `{total, byProvider}` from
 - Per-provider fetches were kept deliberately: the backend returns only `{"count": n}` per provider filter and has no breakdown endpoint, and `contact_channel_identities.provider` is an unconstrained string column, so a derived total could undercount the bell.
 - Socket-driven invalidation was evaluated and rejected: `message.created` is routed only to the `conv:<id>` room a client joins by opening that conversation.
 - Verified: topbar + `ChannelAdapterSelector` tests pass (8 tests) under the new contract.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

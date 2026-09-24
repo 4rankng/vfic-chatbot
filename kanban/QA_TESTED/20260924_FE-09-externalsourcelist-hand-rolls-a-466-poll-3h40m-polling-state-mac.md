@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [performance, reliability]
 effort: M
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** M · **Labels:** performance, reliability
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -41,6 +41,7 @@ Replace with `useQuery({queryKey: ["external-sources", projectId, variant], refe
 - `ExternalSourceList.tsx` 568 → 286 lines: the 466-poll state machine is now `useQuery({refetchInterval: (q) => nextPollDelay(q.state.data, watch, Date.now())})` with `refetchIntervalInBackground: false`; 15 state holders → 7.
 - The follow-up policy moved to `projects/domain/externalSourcePolling.ts` (pure, with 5 boundary tests) and row rendering to `projects/presentation/ExternalSourceRow.tsx`.
 - Verified: `externalSourcePolling.test.ts` covers the 4s/30s boundary and budget expiry; a new test proves a hidden tab stops polling and resumes.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

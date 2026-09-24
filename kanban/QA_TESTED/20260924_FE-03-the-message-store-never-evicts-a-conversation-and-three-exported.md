@@ -5,8 +5,8 @@ severity: high
 area: frontend
 labels: [performance, tech-debt]
 effort: S
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** frontend · **Effort:** S · **Labels:** performance, tech-debt
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -42,6 +42,7 @@ Call `clear(convId)` when the active conversation changes past a small LRU bound
 - The port's unselected `subscribe` became `subscribeTo(selector, listener)` over `subscribeWithSelector`; a write to one conversation no longer wakes subscribers of another.
 - Deleted the three dead exports (`useConversationMessages`, `useConversationFlags`, `getNewestRealMessageId`).
 - Verified: 16 tests in `useConversationRealtime.test.ts` cover the bound, the optimistic-survival guarantee and the fan-out isolation.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

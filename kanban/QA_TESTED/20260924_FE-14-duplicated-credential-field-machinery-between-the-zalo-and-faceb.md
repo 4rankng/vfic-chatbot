@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [tech-debt]
 effort: M
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** M · **Labels:** tech-debt
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -40,6 +40,7 @@ Generalise `CredentialSecretField` into an `admin/`-level `SecretField` + `Plain
 - decb8b63 — one `SecretField` + `PlainField` pair over a shared `FieldShell` replaces `CredentialSecretField` and the inline `MetaAppSecretField`/`MetaAppPlainField`. The two pages' real differences became props: supplying `notify` adds the copy action (Zalo), supplying `reveal` makes the eye fetch the stored secret and render read-only while revealed (Facebook).
 - The Zalo page's load/save/test moved onto TanStack Query with the same key conventions the Facebook page already used. `FacebookMessengerIntegrationPage` 794 → 676 LOC.
 - Verified: `CredentialSecretField.test.tsx` moved to `presentation/SecretField.test.tsx` with assertions preserved and extended; integrations suite 48 tests pass.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [performance, tech-debt]
 effort: M
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** M · **Labels:** performance, tech-debt
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -42,6 +42,7 @@ Pick one list virtualizer — `virtua` is already the hot path, so migrate `Recr
 - `manualChunks` now names `virtua` and `zod` instead of the legacy library. Verified in the build output: `virtua-vendor` and `zod-vendor` exist, `virtuoso-vendor` is gone, and react-virtuoso appears in no chunk.
 - `react-virtuoso` removed from `package.json` in 3ca1ee78 once nothing imported it.
 - Verified: the render test now exercises the real virtualizer instead of mocking react-virtuoso, and asserts the day-group heading still renders.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [performance]
 effort: S
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** performance
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -39,6 +39,7 @@ O(n) grouping plus filter plus sort is re-executed for unrelated UI events; with
 
 - 21221d2c — `filterHumanInterventions`, `groupCandidatesByDay` and the reduce-count are memoized on their real inputs, and `saveCandidateProfile` no longer refetches on the failure path (a failed edit used to double list traffic).
 - Verified: dashboard suite 5 files / 59 tests pass.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

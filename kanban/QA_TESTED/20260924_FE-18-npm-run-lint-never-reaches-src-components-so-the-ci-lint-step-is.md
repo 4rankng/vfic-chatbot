@@ -5,8 +5,8 @@ severity: high
 area: testing
 labels: [testing, tech-debt]
 effort: S
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** testing · **Effort:** S · **Labels:** testing, tech-debt
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -39,6 +39,7 @@ Quote the glob: `eslint "**/*.{mjs,ts,tsx}" --no-warn-ignored`. Measured at the 
 
 - 8d8740d1 — `npm run lint` glob quoted (also on `lint:apply`). It previously lints 11 top-level files and never reached `src/components/**`, so the script exited 0 regardless of the code and the CI Lint step enforced nothing. It now lints 457 files with 0 errors.
 - The gate is proven real, not assumed: the newly-live rule immediately caught a genuine `react-hooks/rules-of-hooks` violation (a conditional `useTranslate` introduced during FE-07), which was fixed.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

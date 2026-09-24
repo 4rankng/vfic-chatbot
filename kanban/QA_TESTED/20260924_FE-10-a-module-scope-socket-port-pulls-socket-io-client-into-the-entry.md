@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [performance, reliability]
 effort: S
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** performance, reliability
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -42,6 +42,7 @@ Convert `leadRealtimePort` into a lazily-created getter inside `RecruitmentConve
 - `apiClient` gained an `onAccessTokenRotated` seam and the socket re-handshakes on it, so a long-lived connection re-presents a rotated JWT instead of silently going dead.
 - Fixed a pre-existing bug found on the way: `leadRealtime` did not re-emit `join lead` on reconnect, so `lead.updated` silently stopped after any network blip. It now rejoins through one shared `join()` helper.
 - Verified by mutation: re-adding the module-scope construction fails the suite at import with a thrown sentinel; the re-auth test reproduces the real library's auth-callback contract.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

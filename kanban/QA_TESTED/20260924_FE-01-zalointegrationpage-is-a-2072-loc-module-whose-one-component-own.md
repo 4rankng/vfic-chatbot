@@ -5,8 +5,8 @@ severity: high
 area: frontend
 labels: [tech-debt]
 effort: L
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** high · **Area:** frontend · **Effort:** L · **Labels:** tech-debt
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -41,6 +41,7 @@ Extract along the seams the audit names: `integrations/domain/providerDescriptor
 - decb8b63 — `ZaloIntegrationPage.tsx` 2072 → 98 LOC: descriptor table to `domain/providerDescriptors.ts`, state owners to `application/{useSettingsBundle,useZaloForm,useProviderPanels}.ts`, chrome/sections to `presentation/*`; the three save/dirty mechanisms collapse onto one.
 - Deliberate deviation: the settings navigation is unchanged. The embedded `PersonaList`, `UserList` and `FacebookMessengerIntegrationPage` render from thin section components instead of moving to their own routes, because that would be a user-visible navigation change.
 - Verified: `npx vitest --run src/components/atomic-crm/integrations` — 5 files / 48 tests pass; `npm run typecheck` clean.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 

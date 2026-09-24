@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [tech-debt, documentation]
 effort: S
-status: dev-completed
-column: DEV_COMPLETED
+status: qa-tested
+column: QA_TESTED
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** tech-debt, documentation
 
-**Trạng thái:** DEV_COMPLETED
+**Trạng thái:** QA_TESTED
 
 ## Problem
 
@@ -46,6 +46,7 @@ The `contacts/`, `cases/`, `workflows/`, `deals/`, `companies/`, `notes/` and `t
 - Removed 12 unreferenced catalog blocks from `vietnameseCrmMessages.ts`; every deleted key grep-verified to have zero references, all eight live resources kept.
 - Removed the three dangling `registry.json` entries so no manifest path points at a deleted file.
 - Verified: kit/users/commons suites 7 files / 23 tests pass.
+- QA 2026-09-24 (orchestrator, first-hand): unit lane 2299 passed + ruff clean; integration lane 130 passed on a disposable Postgres 16 at alembic head; frontend tsc, eslint and vitest 593 all green; e2e chromium 4 and Mobile Chrome 4 green against the real backend
 
 ---
 
