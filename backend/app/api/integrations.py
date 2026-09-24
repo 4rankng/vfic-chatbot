@@ -1,25 +1,21 @@
-"""Admin integration settings routes."""
+"""Admin integration settings routes.
+
+Transport only: each handler parses the request, calls the owning service
+(``services/integrations`` for the channel diagnostics and OAuth flows,
+``services/integration_settings`` for credential persistence), maps the domain
+error, and returns the response model.
+"""
 
 import json
 import logging
-import secrets
-import time
 from urllib.parse import urlencode
 
-import httpx
 from fastapi import APIRouter, Body, Depends, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin
 from app.identity.application.http import AuthenticatedUser as User
-from app.integrations.admin_runtime import (
-    ZALO_BOT_WEBHOOK_URL,
-    get_integration_http_client,
-    get_integration_redis,
-    get_integration_settings,
-    load_enabled_admin,
-)
 from app.schemas.integrations import (
     FacebookAccountStatusOut,
     FacebookChannelTestOut,
@@ -30,7 +26,6 @@ from app.schemas.integrations import (
     FacebookOAuthCompleteRequest,
     FacebookOAuthStartOut,
     FacebookPageListOut,
-    FacebookPageOut,
     FacebookPageProjectAdd,
     FacebookPageProjectAssignmentOut,
     FacebookPageProjectsOut,
@@ -54,71 +49,35 @@ from app.schemas.integrations import (
     ZaloOaSignatureVerifyOut,
     ZaloOaSignatureVerifyRequest,
 )
-from app.services.integration_settings import (
-    IntegrationSettingsService,
-    ZALO_BOT_TOKEN,
-    ZALO_BOT_WEBHOOK_SECRET,
+from app.services.integration_settings import IntegrationSettingsService
+from app.services.integrations.facebook_oauth_flow import (
+    FacebookOAuthCallbackOutcome,
+    complete_page_selection,
+    disconnect_page,
+    facebook_callback_origin,
+    list_oauth_pages,
+    probe_facebook_connection,
+    run_oauth_callback,
+    start_oauth_flow,
 )
-from app.services.zalo_bot_service import ZaloBotAdminClient, SendResult
-from app.services.zalo_oa_service import ZaloOASender
+from app.services.integrations.llm_diagnostics import (
+    probe_custom_llm,
+    probe_jev,
+    probe_minimax,
+    probe_openrouter,
+)
+from app.services.integrations.zalo_diagnostics import (
+    probe_zalo_bot_channel,
+    probe_zalo_oa_channel,
+    sync_bot_webhook,
+)
 from app.services.zalo_oa_signature import verify_signature
-from app.shared.domain.errors import (
-    BadRequestError,
-    ConflictError,
-    GoneError,
-    NotFoundError,
-    UpstreamError,
-    ValidationError,
-)
+from app.shared.domain.errors import NotFoundError, ValidationError
 from app.shared.infrastructure.db import get_request_db as get_db
 
 router = APIRouter(prefix="/admin/integrations", tags=["integrations"])
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_probe_error(prefix: str, result: SendResult, secrets: list[str]) -> str:
-    message = result.error or "unknown error"
-    for secret in secrets:
-        if secret:
-            message = message.replace(secret, "[redacted]")
-    if len(message) > 240:
-        message = f"{message[:237]}..."
-    return f"{prefix}: {message}"
-
-
-def _bot_admin_client(settings_service, cfg) -> ZaloBotAdminClient:
-    """Build an admin client using the resolved (DB-precedence) bot token."""
-    bot_settings = settings_service.settings.model_copy(update={"zalo_bot_token": cfg.bot_token})
-    return ZaloBotAdminClient(settings=bot_settings)
-
-
-async def _sync_bot_webhook(
-    settings_service: IntegrationSettingsService, changed: list[str]
-) -> dict:
-    """Best-effort: push the saved Bot webhook secret to Zalo via setWebhook.
-
-    Saving the webhook secret in the CRM updates only the app side; Zalo keeps
-    sending the old secret_token until ``setWebhook`` re-registers it, and a
-    mismatch silently 401-drops every inbound. Re-running on every save would
-    be needless Zalo traffic, so this only fires when the bot token or webhook
-    secret was just changed. Non-blocking: a failure is surfaced as an error
-    status and never raises — the DB save has already committed.
-    """
-    if not (set(changed) & {ZALO_BOT_TOKEN, ZALO_BOT_WEBHOOK_SECRET}):
-        return {"synced": False, "skipped": "no bot token or webhook secret change"}
-    cfg = await settings_service.resolve_zalo()
-    if not cfg.bot_token or not cfg.bot_webhook_secret:
-        return {"synced": False, "skipped": "bot token or webhook secret not configured"}
-    url = ZALO_BOT_WEBHOOK_URL
-    result = await _bot_admin_client(settings_service, cfg).set_webhook(url, cfg.bot_webhook_secret)
-    if result.ok:
-        return {"synced": True, "url": url}
-    return {
-        "synced": False,
-        "url": url,
-        "error": _safe_probe_error("setWebhook", result, [cfg.bot_token]),
-    }
 
 
 @router.get("/zalo", response_model=ZaloIntegrationSettingsOut)
@@ -146,7 +105,7 @@ async def update_zalo_integration_settings(
     # Push the just-saved webhook secret to Zalo so both sides match. Saving
     # alone updates only the app side; a mismatch silently 401-drops all
     # inbound. Best-effort: the DB write is already committed.
-    view["zalo_bot_webhook_sync"] = await _sync_bot_webhook(settings_service, changed)
+    view["zalo_bot_webhook_sync"] = await sync_bot_webhook(settings_service, changed)
     return ZaloIntegrationSettingsOut.model_validate(view)
 
 
@@ -162,35 +121,7 @@ async def test_zalo_bot(
     the OA channel. Zalo never returns the registered secret_token, so a
     registered URL does not prove the secret matches — only a real inbound does.
     """
-    settings_service = IntegrationSettingsService(db)
-    cfg = await settings_service.resolve_zalo()
-    missing = [] if cfg.bot_token else ["zalo_bot_token"]
-    configured = bool(cfg.bot_token)
-    connected = False
-    errors: list[str] = []
-    webhook_registered: bool | None = None
-    webhook_url: str | None = None
-    if configured:
-        client = _bot_admin_client(settings_service, cfg)
-        result = await client.get_me()
-        connected = result.ok
-        if not result.ok:
-            errors.append(_safe_probe_error("zalo_bot", result, [cfg.bot_token]))
-        else:
-            info = await client.get_webhook_info()
-            if info.ok and isinstance(info.raw, dict):
-                webhook_url = (info.raw.get("result") or {}).get("url") or None
-            else:
-                errors.append(_safe_probe_error("getWebhookInfo", info, [cfg.bot_token]))
-            webhook_registered = bool(webhook_url)
-    return ZaloChannelTestOut(
-        configured=configured,
-        connected=connected,
-        missing=missing,
-        errors=errors,
-        webhook_registered=webhook_registered,
-        webhook_url=webhook_url,
-    )
+    return await probe_zalo_bot_channel(db)
 
 
 @router.post("/zalo/oa/test", response_model=ZaloChannelTestOut)
@@ -208,116 +139,7 @@ async def test_zalo_oa(
     Returns granular diagnostics so the admin knows exactly which credential
     is broken, instead of a generic "not connected" with no actionable info.
     """
-    settings_service = IntegrationSettingsService(db)
-    cfg = await settings_service.resolve_zalo()
-    missing = [
-        key
-        for key, value in (
-            ("zalo_oa_app_id", cfg.oa_app_id),
-            ("zalo_oa_secret_key", cfg.oa_secret_key),
-            ("zalo_oa_access_token", cfg.oa_access_token),
-            ("zalo_oa_refresh_token", cfg.oa_refresh_token),
-        )
-        if not value
-    ]
-    configured = not missing
-    connected = False
-    errors: list[str] = []
-    oa_secret_valid: bool | None = None
-    oa_refresh_ok: bool | None = None
-    oa_token_expired: bool | None = None
-
-    if configured:
-        # Layer 1: probe access token
-        result = await ZaloOASender(
-            settings=settings_service.settings,
-            access_token=cfg.oa_access_token,
-            refresh=settings_service.refresh_oa_access_token,
-        ).get_oa_info()
-        connected = result.ok
-
-        if result.ok:
-            # Access token works — but also check if the secret key is valid
-            # (it's needed for refresh, which will be needed when the token expires)
-            oa_token_expired = False
-        else:
-            # Access token failed — check if it's expired
-            err_text = _safe_probe_error(
-                "zalo_oa",
-                result,
-                [cfg.oa_access_token, cfg.oa_refresh_token, cfg.oa_secret_key],
-            )
-            is_expired = "expired" in err_text.lower() or "-216" in err_text
-            oa_token_expired = is_expired
-
-            if is_expired:
-                # Layer 2: try the refresh flow
-                new_token = await settings_service.refresh_oa_access_token()
-                if new_token:
-                    oa_refresh_ok = True
-                    # Re-probe with the refreshed token
-                    result2 = await ZaloOASender(
-                        settings=settings_service.settings,
-                        access_token=new_token,
-                        refresh=settings_service.refresh_oa_access_token,
-                    ).get_oa_info()
-                    connected = result2.ok
-                    if not result2.ok:
-                        errors.append(
-                            "Token refreshed but still fails: "
-                            + _safe_probe_error("zalo_oa", result2, [new_token])
-                        )
-                else:
-                    oa_refresh_ok = False
-                    # Layer 3: diagnose WHY refresh failed — test the secret key directly.
-                    # Reuse the process-scoped OA-token diagnostic client (Tech-Lead
-                    # Directive §4) — a different oauth host from the runtime refresh,
-                    # so a distinct name. Per-request secret_key header (admin-entered).
-                    try:
-                        client = await get_integration_http_client(
-                            "zalo_oa_oauth_diag", timeout=10
-                        )
-                        resp = await client.post(
-                            "https://oauth.zaloapp.com/v4/oa/access_token",
-                            data={
-                                "grant_type": "refresh_token",
-                                "refresh_token": cfg.oa_refresh_token,
-                                "app_id": cfg.oa_app_id,
-                            },
-                            headers={"secret_key": cfg.oa_secret_key} if cfg.oa_secret_key else {},
-                        )
-                        data = resp.json()
-                        if isinstance(data, dict) and "access_token" in data:
-                            oa_secret_valid = True
-                            errors.append(
-                                "Secret key valid but refresh returned no token — check app_id"
-                            )
-                        elif isinstance(data, dict) and data.get("error") == -14004:
-                            oa_secret_valid = False
-                            errors.append(
-                                "❌ OA Secret Key is INVALID — refresh cannot work. Update it from the Zalo OA dashboard."
-                            )
-                        else:
-                            oa_secret_valid = False
-                            errors.append(
-                                f"Refresh failed: {data.get('error_name', 'unknown')} "
-                                f"({data.get('error', '?')}) — {data.get('error_description', '')}"
-                            )
-                    except Exception as exc:
-                        oa_secret_valid = None
-                        errors.append(f"Refresh check failed: {exc}")
-            else:
-                errors.append(err_text)
-
-    return ZaloChannelTestOut(
-        configured=configured,
-        connected=connected,
-        missing=missing,
-        errors=errors,
-        oa_secret_valid=oa_secret_valid,
-        oa_refresh_ok=oa_refresh_ok,
-        oa_token_expired=oa_token_expired,
-    )
+    return await probe_zalo_oa_channel(db)
 
 
 @router.post("/zalo/oa/verify-signature", response_model=ZaloOaSignatureVerifyOut)
@@ -403,82 +225,12 @@ async def update_minimax_integration_settings(
     )
 
 
-async def _probe_and_record(
-    db: AsyncSession,
-    *,
-    provider: str,
-    api_key: str,
-    base_url: str,
-    model: str,
-    missing: list[str],
-    persist: bool,
-) -> dict:
-    """Run ONE real chat completion against a provider and persist the outcome.
-
-    Replaces the old key-presence checks: "configured" and "actually works"
-    become distinct facts. Both pass and fail are persisted (a dead provider
-    must keep showing its error), so the settings page can render
-    "tested 2 minutes ago | 412 ms" across reloads. persist=False probes
-    operator-typed values that are not saved yet.
-    """
-    if missing:
-        return {
-            "ok": False,
-            "configured": False,
-            "missing": missing,
-            "latency_ms": None,
-            "sample": None,
-            "error": None,
-        }
-    from app.services.llm_probe import probe_openai_compatible_chat
-
-    probe = await probe_openai_compatible_chat(
-        api_key=api_key, base_url=base_url, model=model
-    )
-    if persist:
-        await IntegrationSettingsService(db).record_provider_test_result(
-            provider,
-            {
-                "ok": probe.ok,
-                "latency_ms": probe.latency_ms,
-                "tested_at": int(time.time()),
-                "error": probe.error,
-            },
-        )
-    return {
-        "ok": probe.ok,
-        "configured": True,
-        "missing": [],
-        "latency_ms": probe.latency_ms,
-        "sample": probe.sample,
-        "error": probe.error,
-    }
-
-
 @router.post("/minimax/test", response_model=MinimaxIntegrationTestOut)
 async def test_minimax_integration_settings(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> MinimaxIntegrationTestOut:
-    cfg = await IntegrationSettingsService(db).resolve_minimax()
-    missing = [] if cfg.api_key else ["minimax_api_key"]
-    result = await _probe_and_record(
-        db,
-        provider="minimax",
-        api_key=cfg.api_key,
-        base_url=cfg.base_url,
-        model=cfg.agent_model,
-        missing=missing,
-        persist=True,
-    )
-    return MinimaxIntegrationTestOut(
-        configured=result["configured"],
-        missing=result["missing"],
-        ok=result["ok"],
-        latency_ms=result["latency_ms"],
-        sample=result["sample"],
-        error=result["error"],
-    )
+    return await probe_minimax(db)
 
 
 @router.get("/openrouter", response_model=OpenRouterIntegrationSettingsOut)
@@ -511,25 +263,7 @@ async def test_openrouter_integration_settings(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> OpenRouterIntegrationTestOut:
-    cfg = await IntegrationSettingsService(db).resolve_openrouter()
-    missing = [] if cfg.api_key else ["openrouter_api_key"]
-    result = await _probe_and_record(
-        db,
-        provider="openrouter",
-        api_key=cfg.api_key,
-        base_url=cfg.base_url,
-        model=cfg.agent_model,
-        missing=missing,
-        persist=True,
-    )
-    return OpenRouterIntegrationTestOut(
-        configured=result["configured"],
-        missing=result["missing"],
-        ok=result["ok"],
-        latency_ms=result["latency_ms"],
-        sample=result["sample"],
-        error=result["error"],
-    )
+    return await probe_openrouter(db)
 
 
 @router.get("/custom-llm", response_model=CustomLlmIntegrationSettingsOut)
@@ -593,30 +327,7 @@ async def test_jev_integration_settings(
     Credentials may be supplied in the body so they can be validated BEFORE
     being saved; anything omitted falls back to the stored configuration.
     """
-    from app.services.llm_probe import probe_typesafe_systemone
-
-    stored = await IntegrationSettingsService(db).resolve_jev()
-    supplied = body.model_dump(exclude_unset=True) if body is not None else {}
-    api_key = supplied.get("jev_api_key") or stored.api_key
-    model = supplied.get("jev_model") or stored.model
-
-    missing = [
-        name
-        for name, value in (("jev_api_key", api_key), ("jev_model", model))
-        if not value
-    ]
-    if missing:
-        return JevIntegrationTestOut(ok=False, configured=False, missing=missing)
-
-    result = await probe_typesafe_systemone(api_key=api_key, model=model)
-    return JevIntegrationTestOut(
-        ok=result["ok"],
-        configured=True,
-        missing=[],
-        latency_ms=result["latency_ms"],
-        sample=result["sample"],
-        error=result["error"],
-    )
+    return await probe_jev(body, db)
 
 
 @router.post("/custom-llm/test", response_model=CustomLlmIntegrationTestOut)
@@ -635,53 +346,7 @@ async def test_custom_llm_integration_settings(
     Credentials may be supplied in the body so they can be validated BEFORE
     being saved; anything omitted falls back to the stored configuration.
     """
-    stored = await IntegrationSettingsService(db).resolve_custom_llm()
-    supplied = body.model_dump(exclude_unset=True) if body is not None else {}
-    api_key = supplied.get("custom_llm_api_key") or stored.api_key
-    base_url = supplied.get("custom_llm_base_url") or stored.base_url
-    model = supplied.get("custom_llm_agent_model") or stored.agent_model
-
-    missing = [
-        name
-        for name, value in (
-            ("custom_llm_api_key", api_key),
-            ("custom_llm_base_url", base_url),
-            ("custom_llm_agent_model", model),
-        )
-        if not value
-    ]
-    if missing:
-        return CustomLlmIntegrationTestOut(ok=False, configured=False, missing=missing)
-
-    # Transparence: when the probe runs on the STORED token (nothing typed),
-    # a failure must say which token was used - a silent stored-junk key was
-    # exactly the confusion this endpoint could not explain before.
-    used_stored_key = not supplied.get("custom_llm_api_key")
-    persist = not supplied  # probing saved config records history; typed values are not config yet
-    result = await _probe_and_record(
-        db,
-        provider="custom",
-        api_key=api_key,
-        base_url=base_url,
-        model=model,
-        missing=[],
-        persist=persist,
-    )
-    error = result["error"]
-    if used_stored_key and not result["ok"]:
-        error = (
-            f"{error or 'Kiểm tra thất bại'}"
-            " — Access Token đã lưu bị từ chối. Nhập lại Access Token rồi bấm Lưu thay đổi."
-        )
-
-    return CustomLlmIntegrationTestOut(
-        ok=result["ok"],
-        configured=True,
-        missing=[],
-        latency_ms=result["latency_ms"],
-        sample=result["sample"],
-        error=error,
-    )
+    return await probe_custom_llm(body, db)
 
 
 # ─── Facebook / Messenger OAuth lifecycle (Phase 4) ─────────────────────────
@@ -691,7 +356,9 @@ async def test_custom_llm_integration_settings(
 # carry the app's Bearer header. Responses carry no tokens, app secrets, or raw
 # PSIDs. OAuth state/flow records are Redis-backed, single-use, short-TTL, and
 # bound to the initiating admin's id + JWT version. Transient Page-credential
-# capsules are encrypted at rest in Redis (never plaintext).
+# capsules are encrypted at rest in Redis (never plaintext). Flow orchestration
+# lives in ``services/integrations/facebook_oauth_flow.py``; this section maps
+# outcomes onto redirects and response models.
 #
 # The five-step flow:
 #   1. start      → returns the official authorization URL
@@ -699,25 +366,6 @@ async def test_custom_llm_integration_settings(
 #   3. pages      → returns safe Page summaries for selection
 #   4. complete   → selects one Page, probes identity, subscribes, persists
 #   5. test/disconnect/GET → status, health probe, disconnect
-
-
-_FB_OAUTH_STATE_PREFIX = "fb_oauth_state:"
-_FB_OAUTH_TTL_SECONDS = 300  # 5 minutes — single-use, short-lived
-
-
-async def _redis():
-    return get_integration_redis()
-
-
-def _fb_callback_origin() -> str:
-    """Return the deployment-owned first allowlisted OAuth origin."""
-    settings = get_integration_settings()
-    return next(iter(settings.facebook_callback_allowlist or ["http://localhost:5173"])).rstrip("/")
-
-
-def _fb_callback_url() -> str:
-    """The server-side OAuth callback URI. Allowlisted in config."""
-    return f"{_fb_callback_origin()}/api/v1/admin/integrations/facebook/oauth/callback"
 
 
 def _fb_frontend_redirect_url(
@@ -729,7 +377,7 @@ def _fb_frontend_redirect_url(
         query["facebook_oauth_flow_id"] = flow_id
     if error:
         query["facebook_oauth_error"] = error
-    return f"{_fb_callback_origin()}/#/settings?{urlencode(query)}"
+    return f"{facebook_callback_origin()}/#/settings?{urlencode(query)}"
 
 
 _FB_REDIRECT_HEADERS = {
@@ -738,49 +386,14 @@ _FB_REDIRECT_HEADERS = {
 }
 
 
-def _fb_oauth_redirect_error(code: str) -> RedirectResponse:
+def _fb_oauth_redirect(outcome: FacebookOAuthCallbackOutcome) -> RedirectResponse:
     return RedirectResponse(
-        _fb_frontend_redirect_url(status="error", error=code),
+        _fb_frontend_redirect_url(
+            status=outcome.status, flow_id=outcome.flow_id, error=outcome.error
+        ),
         status_code=302,
         headers=_FB_REDIRECT_HEADERS,
     )
-
-
-async def _facebook_oauth_coordinator():
-    from app.integrations.facebook_oauth import (
-        FacebookOAuthCoordinator,
-        RedisFacebookOAuthFlowStore,
-        RedisFacebookOAuthStateStore,
-    )
-
-    redis = await _redis()
-    return FacebookOAuthCoordinator(
-        state_store=RedisFacebookOAuthStateStore(
-            redis=redis,
-            key_prefix=_FB_OAUTH_STATE_PREFIX,
-        ),
-        flow_store=RedisFacebookOAuthFlowStore(redis=redis),
-        ttl_seconds=_FB_OAUTH_TTL_SECONDS,
-        state_factory=lambda: secrets.token_urlsafe(32),
-        flow_id_factory=lambda: secrets.token_urlsafe(16),
-    )
-
-
-async def _load_facebook_oauth_flow(*, flow_id: str, admin: User, consume: bool = False):
-    """Load a valid OAuth flow owned by this exact authenticated session."""
-    from app.integrations.facebook_oauth import FacebookOAuthFlowUnavailable
-
-    coordinator = await _facebook_oauth_coordinator()
-    try:
-        return await coordinator.load_flow(
-            flow_id=flow_id,
-            admin_id=admin.id,
-            token_version=int(admin.token_version),
-            consume=consume,
-        )
-    except FacebookOAuthFlowUnavailable:
-        pass
-    raise GoneError("Phiên chọn Trang không hợp lệ hoặc đã hết hạn. Vui lòng kết nối lại.")
 
 
 @router.post("/facebook/oauth/start", response_model=FacebookOAuthStartOut)
@@ -789,29 +402,7 @@ async def start_facebook_oauth(
     db: AsyncSession = Depends(get_db),
 ) -> FacebookOAuthStartOut:
     """Begin Facebook Login for Business. Stores single-use state in Redis."""
-    from app.channels.providers.facebook_oauth import build_authorization_url
-
-    # Resolve app credentials DB-first (env fallback). A missing app_id would
-    # otherwise build an OAuth URL with an empty client_id, which Facebook
-    # rejects with a generic "Invalid app ID" page. Surface a clear Vietnamese
-    # 400 here so the admin knows to configure credentials first.
-    settings_service = IntegrationSettingsService(db)
-    oauth_cfg = await settings_service.resolve_facebook_oauth()
-    if not oauth_cfg.app_id:
-        raise BadRequestError(
-            "Chưa cấu hình Meta App ID. Vào Cài đặt → Facebook Messenger để "
-            "cấu hình thông tin ứng dụng Meta trước khi kết nối."
-        )
-    coordinator = await _facebook_oauth_coordinator()
-    state = await coordinator.issue_state(
-        admin_id=admin.id,
-        token_version=int(admin.token_version),
-    )
-    return FacebookOAuthStartOut(
-        authorization_url=build_authorization_url(
-            state=state, redirect_uri=_fb_callback_url(), config=oauth_cfg
-        )
-    )
+    return await start_oauth_flow(db, admin)
 
 
 @router.get("/facebook/oauth/callback")
@@ -827,59 +418,7 @@ async def facebook_oauth_callback(
     encrypted Page summaries + the user access token (encrypted with the
     integration cipher, never plaintext in Redis).
     """
-    from app.channels.providers.facebook_oauth import (
-        FacebookOAuthError,
-        exchange_code_for_user_token,
-        list_pages,
-    )
-    from app.integrations.facebook_oauth import FacebookOAuthInvalidState, FacebookOAuthPage
-
-    coordinator = await _facebook_oauth_coordinator()
-    try:
-        bound_session = await coordinator.consume_state(state=state)
-    except FacebookOAuthInvalidState:
-        return _fb_oauth_redirect_error("invalid_state")
-
-    admin = await load_enabled_admin(db, bound_session.admin_id)
-    if admin is None:
-        return _fb_oauth_redirect_error("invalid_admin")
-    if admin.token_version != bound_session.token_version:
-        return _fb_oauth_redirect_error("session_changed")
-    if not code:
-        return _fb_oauth_redirect_error("missing_code")
-
-    try:
-        # Resolve app credentials DB-first (env fallback) just before the
-        # exchange — the callback may have spent seconds in invalid-state /
-        # invalid-admin branches above where the config is not yet needed.
-        oauth_cfg = await IntegrationSettingsService(db).resolve_facebook_oauth()
-        user_token = await exchange_code_for_user_token(
-            code=code, redirect_uri=_fb_callback_url(), config=oauth_cfg
-        )
-        pages = await list_pages(user_token)
-    except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
-        logger.warning(
-            "facebook oauth code exchange failed: admin=%s error=%s: %s",
-            admin.id,
-            type(exc).__name__,
-            exc,
-        )
-        return _fb_oauth_redirect_error("exchange_failed")
-
-    if not pages:
-        return _fb_oauth_redirect_error("no_pages")
-
-    flow_id = await coordinator.store_flow(
-        admin_id=admin.id,
-        token_version=int(admin.token_version),
-        user_token=user_token,
-        pages=[FacebookOAuthPage(id=p.id, name=p.name) for p in pages],
-    )
-    return RedirectResponse(
-        _fb_frontend_redirect_url(status="pending_selection", flow_id=flow_id),
-        status_code=302,
-        headers=_FB_REDIRECT_HEADERS,
-    )
+    return _fb_oauth_redirect(await run_oauth_callback(state=state, code=code, db=db))
 
 
 @router.get("/facebook/oauth/pages", response_model=FacebookPageListOut)
@@ -889,21 +428,7 @@ async def list_facebook_pages(
     db: AsyncSession = Depends(get_db),
 ) -> FacebookPageListOut:
     """Return the safe Page list stored in the flow record."""
-    from app.channels.providers.facebook_account import FacebookAccountResolver
-
-    payload = await _load_facebook_oauth_flow(
-        flow_id=flow_id,
-        admin=admin,
-    )
-    pages = [FacebookPageOut(id=page.id, name=page.name) for page in payload.pages]
-    resolver = FacebookAccountResolver(db)
-    # Multi-Page: report every currently-active Page, not just one.
-    active_page_ids = [
-        ref.account_key
-        for ref in await resolver.list_facebook_accounts()
-        if ref.is_active
-    ]
-    return FacebookPageListOut(pages=pages, active_page_ids=active_page_ids)
+    return await list_oauth_pages(flow_id=flow_id, admin=admin, db=db)
 
 
 @router.post("/facebook/oauth/complete", response_model=FacebookAccountStatusOut)
@@ -919,96 +444,7 @@ async def complete_facebook_oauth(
     already subscribed to the Page. The assignment then commits atomically with
     activation (see ``FacebookPageLifecycle.activate_or_reactivate``).
     """
-    from app.channels.providers.facebook_account import (
-        FacebookPageAssignments,
-        FacebookPageAssignmentInvalidError,
-        FacebookPageLifecycle,
-        FacebookPageUnassignedError,
-    )
-    from app.channels.providers.facebook_oauth import (
-        FacebookOAuthError,
-        get_page_access_token,
-        subscribe_app_to_page,
-        unsubscribe_app_from_page,
-    )
-
-    project_ids: list[str] | None = None
-    if payload.project_ids is not None:
-        assignments_service = FacebookPageAssignments(db)
-        try:
-            validated = await assignments_service.validate_project_ids(
-                payload.project_ids
-            )
-        except FacebookPageAssignmentInvalidError as exc:
-            raise ValidationError(str(exc)) from None
-        project_ids = [str(pid) for pid in validated]
-
-    flow = await _load_facebook_oauth_flow(
-        flow_id=payload.flow_id,
-        admin=admin,
-        consume=True,
-    )
-    user_token = flow.user_token
-    page_name = next(
-        (page.name for page in flow.pages if page.id == payload.page_id),
-        payload.page_id,
-    )
-
-    try:
-        # No separate identity probe: the token is read from the /me/accounts
-        # entry whose id equals page_id, so it is bound to this Page by
-        # construction. Probing it via GET /me would additionally require
-        # pages_read_engagement, which this integration does not request.
-        # subscribe_app_to_page below still fails closed on an unusable token.
-        page_token = await get_page_access_token(user_token, payload.page_id)
-        await subscribe_app_to_page(payload.page_id, page_token)
-    except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
-        # Generic Vietnamese error to the client — never echo the Graph
-        # response body (it can contain the access token in some malformed-
-        # token error shapes). The real cause is logged server-side only.
-        logger.warning(
-            "facebook page activation failed: admin=%s page_id=%s error=%s: %s",
-            admin.id,
-            payload.page_id,
-            type(exc).__name__,
-            exc,
-        )
-        raise UpstreamError("Kích hoạt Trang thất bại. Vui lòng kết nối lại.")
-
-    try:
-        lifecycle = FacebookPageLifecycle(db)
-        account = await lifecycle.activate_or_reactivate(
-            page_id=payload.page_id,
-            page_name=page_name,
-            page_access_token=page_token,
-            admin_id=admin.id,
-            project_ids=project_ids,
-        )
-    except FacebookPageUnassignedError:
-        # D1 gate: activation refuses a Page with zero mappings to currently-
-        # ACTIVE Projects. The Meta-side subscription DID succeed, so compensate
-        # it (best-effort — the 409 must survive a flaky unsubscribe) before
-        # surfacing the gate to the operator.
-        try:
-            await unsubscribe_app_from_page(payload.page_id, page_token)
-        except Exception:  # noqa: BLE001 — compensation is best-effort
-            pass
-        raise ConflictError(
-            "Trang chưa được gán dự án nào đang hoạt động. "
-            "Hãy chọn ít nhất một dự án rồi thử lại."
-        ) from None
-    except Exception:
-        # The Meta-side subscription succeeded but the DB activation failed
-        # (e.g. concurrent activation). Best-effort unsubscribe so we don't
-        # leave a Meta-side subscription with no DB counterpart, then re-raise.
-        await unsubscribe_app_from_page(payload.page_id, page_token)
-        raise
-    return FacebookAccountStatusOut(
-        page_id=payload.page_id,
-        page_id_suffix=payload.page_id[-4:],
-        label=page_name,
-        status=account.status,
-    )
+    return await complete_page_selection(payload, admin, db)
 
 
 @router.get("/facebook", response_model=FacebookIntegrationOut)
@@ -1047,59 +483,7 @@ async def test_facebook_connection(
 ) -> FacebookChannelTestOut:
     """Health probe: resolve the active Page, probe its identity, and verify
     the Meta app is subscribed to the Page for webhook events."""
-    from app.channels.providers.facebook_account import FacebookAccountResolver
-    from app.channels.providers.facebook_oauth import (
-        FacebookOAuthError,
-        page_is_app_subscribed,
-    )
-    from app.services.integration_settings import IntegrationSettingsService
-
-    resolver = FacebookAccountResolver(db)
-    active = await resolver.active_facebook_page()
-    if active is None or not active.is_active:
-        return FacebookChannelTestOut(
-            healthy=False, error="Chưa có Trang Facebook nào được kết nối."
-        )
-    settings_service = IntegrationSettingsService(db)
-    cfg = await settings_service.resolve_facebook(active.account_key)
-    if cfg is None:
-        return FacebookChannelTestOut(
-            healthy=False, error="Không giải mã được token Trang. Vui lòng kết nối lại."
-        )
-    # The subscription lookup below doubles as the token check: it is made with
-    # the Page token and fails closed when that token is invalid or revoked.
-    # A dedicated GET /me identity probe would additionally require
-    # pages_read_engagement, which this integration does not request.
-    #
-    # A valid Page token alone does not prove webhook events arrive: the app
-    # must also be subscribed to the Page (Meta or a competing integration on
-    # the same Page can drop it). Fail the probe when it is not.
-    try:
-        subscribed = await page_is_app_subscribed(
-            active.account_key, cfg.page_access_token, str(cfg.app_id or "").strip()
-        )
-    except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
-        logger.warning(
-            "facebook page subscription check failed: page_id=%s error=%s: %s",
-            active.account_key,
-            type(exc).__name__,
-            exc,
-        )
-        return FacebookChannelTestOut(
-            healthy=False,
-            app_subscribed=None,
-            error="Không kiểm tra được đăng ký webhook của ứng dụng trên Trang.",
-        )
-    if not subscribed:
-        return FacebookChannelTestOut(
-            healthy=False,
-            app_subscribed=False,
-            error=(
-                "Ứng dụng chưa nhận sự kiện webhook từ Trang này. "
-                "Hãy ngắt kết nối rồi kết nối lại Trang."
-            ),
-        )
-    return FacebookChannelTestOut(healthy=True, app_subscribed=True)
+    return await probe_facebook_connection(db)
 
 
 @router.get("/facebook/credentials", response_model=FacebookCredentialsOut)
@@ -1180,56 +564,7 @@ async def disconnect_facebook(
     the caller must pick a Page explicitly. Assignment rows are kept either
     way (decision D6): reconnecting restores the catalog as configured.
     """
-    from app.channels.providers.facebook_account import (
-        FacebookAccountResolver,
-        FacebookPageLifecycle,
-    )
-    from app.channels.providers.facebook_oauth import (
-        FacebookOAuthError,
-        unsubscribe_app_from_page,
-    )
-
-    resolver = FacebookAccountResolver(db)
-    if page_id:
-        target_key = page_id
-    else:
-        active_refs = [ref for ref in await resolver.list_facebook_accounts() if ref.is_active]
-        if not active_refs:
-            raise NotFoundError("Không tìm thấy Trang Facebook.")
-        if len(active_refs) > 1:
-            raise ConflictError(
-                "Nhiều Trang đang hoạt động — hãy chọn Trang cụ thể "
-                "để ngắt kết nối."
-            )
-        target_key = active_refs[0].account_key
-
-    # Best-effort remote unsubscribe happens immediately before local
-    # deactivation. Meta availability must never keep the local channel active.
-    settings_service = IntegrationSettingsService(db)
-    cfg = await settings_service.resolve_facebook(target_key)
-    if cfg is not None:
-        try:
-            await unsubscribe_app_from_page(target_key, cfg.page_access_token)
-        except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
-            # Best-effort: local disconnect must proceed either way. Logged so
-            # a leftover Meta-side subscription is at least visible, not silent.
-            logger.info(
-                "facebook page unsubscribe failed on disconnect: page_id=%s error=%s: %s",
-                target_key,
-                type(exc).__name__,
-                exc,
-            )
-
-    lifecycle = FacebookPageLifecycle(db)
-    account = await lifecycle.disconnect(page_id=target_key, admin_id=admin.id)
-    if account is None:
-        raise NotFoundError("Không tìm thấy Trang Facebook.")
-    return FacebookAccountStatusOut(
-        page_id=target_key,
-        page_id_suffix=target_key[-4:],
-        label=account.label,
-        status=account.status,
-    )
+    return await disconnect_page(page_id, admin, db)
 
 
 # ─── Facebook Page↔Project assignment CRUD (multi-Page) ─────────────────────

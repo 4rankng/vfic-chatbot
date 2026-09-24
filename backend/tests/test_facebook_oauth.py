@@ -24,6 +24,8 @@ from uuid import UUID
 import httpx
 import pytest
 
+import app.services.integrations.facebook_oauth_flow as flow
+
 
 def _oauth_flow_capsule(
     *, admin_id: UUID, token_version: int, pages: list[dict[str, str]] | None = None
@@ -264,7 +266,7 @@ async def test_oauth_start_returns_400_when_app_id_not_configured(monkeypatch):
             # credentials via the UI and has no META_APP_ID env var either.
             return FacebookOAuthConfig(app_id="")
 
-    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+    monkeypatch.setattr(flow, "IntegrationSettingsService", _SettingsService)
 
     with pytest.raises(BadRequestError) as exc_info:
         await api.start_facebook_oauth(
@@ -457,7 +459,7 @@ async def test_oauth_state_is_single_use_and_admin_bound(monkeypatch):
         async def getdel(self, key):
             return state_store.pop(key, None)
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
     # Stub the Graph exchange so no HTTP is made.
     monkeypatch.setattr(
         "app.channels.providers.facebook_oauth.exchange_code_for_user_token",
@@ -492,7 +494,7 @@ async def test_oauth_state_is_single_use_and_admin_bound(monkeypatch):
         async def resolve_facebook_oauth(self):
             return _oauth_cfg
 
-    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+    monkeypatch.setattr(flow, "IntegrationSettingsService", _SettingsService)
 
     # 1. start — stores state bound to admin-A
     start = await api.start_facebook_oauth(admin=admin, db=db)
@@ -537,7 +539,7 @@ async def test_oauth_callback_rejects_changed_admin_session(monkeypatch):
         async def getdel(self, key):
             return state_store.pop(key, None)
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
     db = MagicMock()
     db.get = AsyncMock(
         return_value=SimpleNamespace(
@@ -578,7 +580,7 @@ async def test_oauth_callback_safely_redirects_expected_provider_failures(
             return state_store.pop(key, None)
 
     list_pages = AsyncMock()
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
     monkeypatch.setattr(
         "app.channels.providers.facebook_oauth.exchange_code_for_user_token",
         AsyncMock(side_effect=provider_error),
@@ -607,7 +609,7 @@ async def test_oauth_callback_safely_redirects_expected_provider_failures(
                 verify_token="verify",
             )
 
-    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+    monkeypatch.setattr(flow, "IntegrationSettingsService", _SettingsService)
 
     response = await api.facebook_oauth_callback(
         state="provider-failure", code="secret-provider-code", db=db
@@ -644,7 +646,7 @@ async def test_oauth_callback_reloads_and_validates_admin(monkeypatch, admin, er
         async def getdel(self, key):
             return state_store.pop(key, None)
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
     db = MagicMock()
     db.get = AsyncMock(return_value=admin)
 
@@ -672,10 +674,10 @@ async def test_oauth_callback_redirect_is_allowlisted_and_opaque(monkeypatch):
         async def set(self, key, value, ex=None):
             state_store[key] = value
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
     monkeypatch.setattr(
-        api,
-        "_fb_callback_url",
+        flow,
+        "facebook_callback_url",
         lambda: "https://app.example.com/api/v1/admin/integrations/facebook/oauth/callback",
     )
     monkeypatch.setattr(
@@ -717,7 +719,7 @@ async def test_oauth_callback_redirect_is_allowlisted_and_opaque(monkeypatch):
                 verify_token="verify",
             )
 
-    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+    monkeypatch.setattr(flow, "IntegrationSettingsService", _SettingsService)
 
     response = await api.facebook_oauth_callback(
         state="valid", code="provider-secret-code", db=db
@@ -743,9 +745,9 @@ async def test_oauth_callback_redirect_is_allowlisted_and_opaque(monkeypatch):
 
     flow_key = next(key for key in state_store if key.startswith("fb_oauth_flow:"))
     assert flow_key.startswith(f"fb_oauth_flow:{admin_id}:")
-    flow = json.loads(IntegrationSettingsCipher().decrypt(state_store[flow_key]))
-    assert flow["admin_id"] == str(admin_id)
-    assert flow["token_version"] == 3
+    capsule = json.loads(IntegrationSettingsCipher().decrypt(state_store[flow_key]))
+    assert capsule["admin_id"] == str(admin_id)
+    assert capsule["token_version"] == 3
 
 
 @pytest.mark.asyncio
@@ -762,7 +764,7 @@ async def test_oauth_pages_accepts_only_own_current_session(monkeypatch):
             requested_keys.append(key)
             return capsule
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
     monkeypatch.setattr(
         "app.channels.providers.facebook_account.FacebookAccountResolver.list_facebook_accounts",
         AsyncMock(return_value=[]),
@@ -803,9 +805,9 @@ async def test_oauth_pages_rejects_other_admin_or_changed_session(monkeypatch, a
         async def get(self, key):
             return capsule
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.GoneError) as exc_info:
+    with pytest.raises(flow.GoneError) as exc_info:
         await api.list_facebook_pages(
             flow_id="not-owned", admin=admin, db=MagicMock()
         )
@@ -839,9 +841,9 @@ async def test_oauth_pages_missing_or_invalid_flow_returns_410(monkeypatch, caps
         async def get(self, key):
             return capsule
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.GoneError) as exc_info:
+    with pytest.raises(flow.GoneError) as exc_info:
         await api.list_facebook_pages(
             flow_id="expired-flow",
             admin=SimpleNamespace(
@@ -870,9 +872,9 @@ async def test_oauth_complete_wrong_admin_does_not_consume_owner_flow(monkeypatc
         async def getdel(self, key):
             return store.pop(key, None)
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.GoneError) as exc_info:
+    with pytest.raises(flow.GoneError) as exc_info:
         await api.complete_facebook_oauth(
             payload=FacebookOAuthCompleteRequest(
                 flow_id="owned-flow", page_id="page-1"
@@ -900,9 +902,9 @@ async def test_oauth_complete_changed_session_consumes_and_rejects_flow(monkeypa
         async def getdel(self, key):
             return store.pop(key, None)
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.GoneError) as exc_info:
+    with pytest.raises(flow.GoneError) as exc_info:
         await api.complete_facebook_oauth(
             payload=FacebookOAuthCompleteRequest(
                 flow_id="stale-flow", page_id="page-1"
@@ -937,7 +939,7 @@ async def test_oauth_complete_atomically_consumes_before_side_effects(monkeypatc
     activate = AsyncMock(
         return_value=SimpleNamespace(status=ChannelAccountStatus.ACTIVE)
     )
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
     monkeypatch.setattr(
         "app.channels.providers.facebook_oauth.get_page_access_token", get_page_token
     )
@@ -956,7 +958,7 @@ async def test_oauth_complete_atomically_consumes_before_side_effects(monkeypatc
     )
     assert result.status == ChannelAccountStatus.ACTIVE
 
-    with pytest.raises(api.GoneError) as exc_info:
+    with pytest.raises(flow.GoneError) as exc_info:
         await api.complete_facebook_oauth(
             payload=request, admin=admin, db=MagicMock()
         )
@@ -993,7 +995,7 @@ async def test_oauth_complete_maps_expected_provider_failures_to_generic_502(
             return store.pop(key, None)
 
     activate = AsyncMock()
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
     monkeypatch.setattr(
         "app.channels.providers.facebook_oauth.get_page_access_token",
         AsyncMock(side_effect=provider_error),
@@ -1003,7 +1005,7 @@ async def test_oauth_complete_maps_expected_provider_failures_to_generic_502(
         activate,
     )
 
-    with pytest.raises(api.UpstreamError) as exc_info:
+    with pytest.raises(flow.UpstreamError) as exc_info:
         await api.complete_facebook_oauth(
             payload=FacebookOAuthCompleteRequest(
                 flow_id=flow_id, page_id="page-1"
@@ -1067,9 +1069,9 @@ async def test_oauth_pages_rejects_malformed_decrypted_capsules(monkeypatch, pay
         async def get(self, key):
             return capsule
 
-    monkeypatch.setattr(api, "_redis", AsyncMock(return_value=_FakeRedis()))
+    monkeypatch.setattr(flow, "_redis", AsyncMock(return_value=_FakeRedis()))
 
-    with pytest.raises(api.GoneError) as exc_info:
+    with pytest.raises(flow.GoneError) as exc_info:
         await api.list_facebook_pages(
             flow_id="malformed",
             admin=SimpleNamespace(
@@ -1094,7 +1096,7 @@ def test_oauth_redirect_uses_first_allowlisted_origin(monkeypatch):
         ),
     )
 
-    assert api._fb_callback_url() == (
+    assert flow.facebook_callback_url() == (
         "https://admin.example.com/api/v1/admin/integrations/facebook/oauth/callback"
     )
     assert api._fb_frontend_redirect_url(
@@ -1140,7 +1142,7 @@ async def test_facebook_health_maps_expected_provider_failures_to_unhealthy(
             )
 
     monkeypatch.setattr(
-        "app.services.integration_settings.IntegrationSettingsService",
+        "app.services.integrations.facebook_oauth_flow.IntegrationSettingsService",
         _SettingsService,
     )
     monkeypatch.setattr(
@@ -1196,7 +1198,7 @@ async def _health_probe_mocks(monkeypatch, *, subscribed) -> None:
             )
 
     monkeypatch.setattr(
-        "app.services.integration_settings.IntegrationSettingsService",
+        "app.services.integrations.facebook_oauth_flow.IntegrationSettingsService",
         _SettingsService,
     )
     monkeypatch.setattr(
@@ -1319,7 +1321,7 @@ async def test_disconnect_resolves_active_page_server_side(monkeypatch):
             assert page_id == "full-page-id-9876"
             return SimpleNamespace(page_access_token="secret-page-token")
 
-    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+    monkeypatch.setattr(flow, "IntegrationSettingsService", _SettingsService)
     monkeypatch.setattr(
         "app.channels.providers.facebook_account.FacebookAccountResolver.list_facebook_accounts",
         AsyncMock(return_value=[active]),
@@ -1373,7 +1375,7 @@ async def test_disconnect_deactivates_locally_when_meta_unsubscribe_fails(monkey
         async def resolve_facebook(self, page_id):
             return SimpleNamespace(page_access_token="secret-page-token")
 
-    monkeypatch.setattr(api, "IntegrationSettingsService", _SettingsService)
+    monkeypatch.setattr(flow, "IntegrationSettingsService", _SettingsService)
     monkeypatch.setattr(
         "app.channels.providers.facebook_account.FacebookAccountResolver.list_facebook_accounts",
         AsyncMock(return_value=[active]),

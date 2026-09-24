@@ -5,6 +5,7 @@ import uuid
 
 from app.api import integrations
 from app.core.config import ZALO_BOT_WEBHOOK_URL, Settings
+from app.services.integrations import llm_diagnostics, zalo_diagnostics
 from app.schemas.integrations import ZaloIntegrationSettingsUpdate
 from app.services.integration_settings import ZaloRuntimeConfig
 from app.services.zalo_bot_service import SendResult
@@ -37,8 +38,8 @@ async def test_zalo_bot_reports_missing_token_without_live_probe(monkeypatch):
             nonlocal called
             called = True
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
-    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    monkeypatch.setattr(zalo_diagnostics, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloBotAdminClient", _BotClient)
     _Service.config = ZaloRuntimeConfig()
 
     result = await integrations.test_zalo_bot(_admin=object(), db=object())
@@ -58,8 +59,8 @@ async def test_zalo_bot_redacts_token_in_error(monkeypatch):
         async def get_me(self) -> SendResult:
             return SendResult(ok=False, error="invalid bot-secret")
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
-    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    monkeypatch.setattr(zalo_diagnostics, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloBotAdminClient", _BotClient)
     _Service.config = ZaloRuntimeConfig(bot_token="bot-secret")
 
     result = await integrations.test_zalo_bot(_admin=object(), db=object())
@@ -81,8 +82,8 @@ async def test_zalo_bot_reports_connected_after_successful_probe(monkeypatch):
         async def get_webhook_info(self) -> SendResult:
             return SendResult(ok=True, raw={"result": {"url": "https://x/webhooks/zalo/chatbot"}})
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
-    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    monkeypatch.setattr(zalo_diagnostics, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloBotAdminClient", _BotClient)
     _Service.config = ZaloRuntimeConfig(bot_token="bot-secret")
 
     result = await integrations.test_zalo_bot(_admin=object(), db=object())
@@ -106,8 +107,8 @@ async def test_zalo_oa_reports_missing_fields_without_live_probe(monkeypatch):
             nonlocal called
             called = True
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
-    monkeypatch.setattr(integrations, "ZaloOASender", _OAClient)
+    monkeypatch.setattr(zalo_diagnostics, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloOASender", _OAClient)
     _Service.config = ZaloRuntimeConfig()
 
     result = await integrations.test_zalo_oa(_admin=object(), db=object())
@@ -136,8 +137,8 @@ async def test_zalo_oa_redacts_token_in_error(monkeypatch):
             # diagnostics are covered below and intentionally use an OAuth call.
             return SendResult(ok=False, error="invalid oa-token")
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
-    monkeypatch.setattr(integrations, "ZaloOASender", _OAClient)
+    monkeypatch.setattr(zalo_diagnostics, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloOASender", _OAClient)
     _Service.config = ZaloRuntimeConfig(
         oa_app_id="oa-app",
         oa_secret_key="oa-secret",
@@ -163,8 +164,8 @@ async def test_zalo_oa_reports_connected_after_successful_probe(monkeypatch):
         async def get_oa_info(self) -> SendResult:
             return SendResult(ok=True)
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
-    monkeypatch.setattr(integrations, "ZaloOASender", _OAClient)
+    monkeypatch.setattr(zalo_diagnostics, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloOASender", _OAClient)
     _Service.config = ZaloRuntimeConfig(
         oa_app_id="oa-app",
         oa_secret_key="oa-secret",
@@ -199,8 +200,8 @@ async def test_zalo_oa_refreshes_invalid_access_token_and_retries(monkeypatch):
             calls.append(f"get:{self._token}")
             return SendResult(ok=True)
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _RefreshService)
-    monkeypatch.setattr(integrations, "ZaloOASender", _OAClient)
+    monkeypatch.setattr(zalo_diagnostics, "IntegrationSettingsService", _RefreshService)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloOASender", _OAClient)
     _RefreshService.config = ZaloRuntimeConfig(
         oa_app_id="oa-app",
         oa_secret_key="oa-secret",
@@ -231,8 +232,8 @@ async def test_zalo_bot_reports_webhook_not_registered(monkeypatch):
         async def get_webhook_info(self) -> SendResult:
             return SendResult(ok=True, raw={"result": {"url": ""}})
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
-    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    monkeypatch.setattr(zalo_diagnostics, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloBotAdminClient", _BotClient)
     _Service.config = ZaloRuntimeConfig(bot_token="bot-secret")
 
     result = await integrations.test_zalo_bot(_admin=object(), db=object())
@@ -254,8 +255,8 @@ async def test_zalo_bot_surfaces_getWebhookInfo_error(monkeypatch):
         async def get_webhook_info(self) -> SendResult:
             return SendResult(ok=False, error="bad bot-secret")
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _Service)
-    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    monkeypatch.setattr(zalo_diagnostics, "IntegrationSettingsService", _Service)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloBotAdminClient", _BotClient)
     _Service.config = ZaloRuntimeConfig(bot_token="bot-secret")
 
     result = await integrations.test_zalo_bot(_admin=object(), db=object())
@@ -317,7 +318,7 @@ async def test_update_zalo_pushes_webhook_secret_to_zalo(monkeypatch):
             return SendResult(ok=True)
 
     monkeypatch.setattr(integrations, "IntegrationSettingsService", _PutService)
-    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloBotAdminClient", _BotClient)
     _PutService.changed = ["zalo_bot_webhook_secret"]
 
     body = ZaloIntegrationSettingsUpdate(zalo_bot_webhook_secret="supersecret")
@@ -342,7 +343,7 @@ async def test_update_zalo_does_not_sync_when_only_oa_changed(monkeypatch):
             constructed = True
 
     monkeypatch.setattr(integrations, "IntegrationSettingsService", _PutService)
-    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloBotAdminClient", _BotClient)
     _PutService.changed = ["zalo_oa_access_token"]
 
     body = ZaloIntegrationSettingsUpdate(zalo_oa_access_token="oa-token")
@@ -366,9 +367,9 @@ async def test_sync_bot_webhook_surfaces_failure_without_raising(monkeypatch):
         async def set_webhook(self, url: str, secret_token: str) -> SendResult:
             return SendResult(ok=False, error="rejected bot-secret")
 
-    monkeypatch.setattr(integrations, "ZaloBotAdminClient", _BotClient)
+    monkeypatch.setattr(zalo_diagnostics, "ZaloBotAdminClient", _BotClient)
 
-    status = await integrations._sync_bot_webhook(
+    status = await zalo_diagnostics.sync_bot_webhook(
         _PutService(object()), ["zalo_bot_webhook_secret"]
     )
 
@@ -467,7 +468,7 @@ async def test_custom_llm_test_reports_missing_fields_without_probe(monkeypatch)
 
             return CustomLlmRuntimeConfig()  # nothing stored, nothing supplied
 
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _EmptyService)
+    monkeypatch.setattr(llm_diagnostics, "IntegrationSettingsService", _EmptyService)
 
     called = False
 
@@ -494,7 +495,7 @@ async def test_custom_llm_test_reports_missing_fields_without_probe(monkeypatch)
 
 
 async def test_custom_llm_test_probes_supplied_credentials_before_save(monkeypatch):
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _CustomLlmService)
+    monkeypatch.setattr(llm_diagnostics, "IntegrationSettingsService", _CustomLlmService)
     seen: dict = {}
 
     async def _probe(**kwargs):
@@ -529,7 +530,7 @@ async def test_custom_llm_test_probes_supplied_credentials_before_save(monkeypat
 
 
 async def test_custom_llm_test_error_is_never_raised_only_reported(monkeypatch):
-    monkeypatch.setattr(integrations, "IntegrationSettingsService", _CustomLlmService)
+    monkeypatch.setattr(llm_diagnostics, "IntegrationSettingsService", _CustomLlmService)
 
     async def _probe(**_kwargs):
         from app.services.llm_probe import LlmProbeResult

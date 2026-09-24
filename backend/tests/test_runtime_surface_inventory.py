@@ -92,7 +92,16 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # integration_settings.refresh_oa_access_token contributes `eval` where it
     # used to contribute `delete` — one reviewed site either way, which is why
     # `eval` is in the scanned verb set.
-    "provider_boundary": 111,
+    "provider_boundary": 79,
+    # -32: the integrations router became transport-only. Its 30+ rows were
+    # mostly route-decorator artifacts of the forced by-path scan (every
+    # `@router.get` counted as a provider `get`); the real transport sites
+    # moved with their logic — the OA diagnostic OAuth POST and the bot probe
+    # reads into services/integrations/zalo_diagnostics.py (forced by path,
+    # same treatment the router had), while the LLM probe request-merging
+    # reads landed in llm_diagnostics.py, which is not a provider-transport
+    # file. The Graph calls of the Facebook flow were already inventoried at
+    # their channels/providers home and are unchanged.
     # -8: the integration_settings decomposition split the single module into a
     # package; the OA refresh transport (post + eval + its surrounding reads)
     # moved into providers/zalo.py, which still carries the get_http_client
@@ -121,7 +130,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "4ee2dccd7ad968edc49ad17d6edc73e19f473d3ed6e84aaaf6d1c3dc4c86315d"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "6b3538141950ce5d50120c531ccbcf30f6b514889a536dd714d43bda69e07b43"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
@@ -298,9 +307,13 @@ def _runtime_calls(*, broad: bool = False) -> list[dict]:
     for path in sorted(APP_DIR.rglob("*.py")):
         relative_path = path.relative_to(APP_DIR.parent).as_posix()
         source = path.read_text(encoding="utf-8")
+        # The Zalo diagnostics module issues the raw OA OAuth POST through the
+        # integration HTTP client without importing httpx itself, so it is
+        # forced into the reviewed surface by path — the same treatment the
+        # integrations router received before the probes moved out of it.
         provider_transport = any(
             marker in source for marker in ("get_http_client", "import httpx", "from httpx")
-        ) or relative_path.endswith("api/integrations.py")
+        ) or relative_path.endswith("services/integrations/zalo_diagnostics.py")
         visitor_type = _BroadCallInventory if broad else _CallInventory
         visitor = visitor_type(relative_path, provider_transport=provider_transport)
         visitor.visit(ast.parse(source))
