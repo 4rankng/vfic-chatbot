@@ -101,6 +101,27 @@ async def direct_context_capacity(
     )
 
 
+async def ensure_direct_context_fits(
+    db: AsyncSession,
+    direct_file: KnowledgeBaseDirectFile,
+    *,
+    agent_markdown: str = "",
+) -> DirectContextCapacity:
+    """Prove an already-fetched direct file fits the active answer model.
+
+    Per-turn callers fetch the file once — it is the system prompt text anyway —
+    and pass it here, so the capacity guard adds no extra SELECT and no second
+    transfer of the full text row. The token estimate itself is an O(1) ``len()``
+    on the in-hand text (see :func:`_estimate_tokens`).
+    """
+    capacity = await direct_context_capacity(db, direct_file, agent_markdown=agent_markdown)
+    if not capacity.fits:
+        raise ConflictError(
+            "The direct-context file does not fit the active model after conversation and answer reserves"
+        )
+    return capacity
+
+
 async def require_direct_context_ready(
     db: AsyncSession,
     knowledge_base: KnowledgeBase,
@@ -117,9 +138,4 @@ async def require_direct_context_ready(
     )
     if direct_file is None:
         raise ConflictError("A direct-context knowledge base needs one text file before use")
-    capacity = await direct_context_capacity(db, direct_file, agent_markdown=agent_markdown)
-    if not capacity.fits:
-        raise ConflictError(
-            "The direct-context file does not fit the active model after conversation and answer reserves"
-        )
-    return capacity
+    return await ensure_direct_context_fits(db, direct_file, agent_markdown=agent_markdown)

@@ -241,6 +241,46 @@ async def test_direct_context_readiness_rejects_missing_file() -> None:
 
 
 @pytest.mark.asyncio
+async def test_direct_context_readiness_accepts_present_file(monkeypatch) -> None:
+    """Admin callers keep the preserved path: the file row is fetched inside
+    the guard and the capacity is computed on it."""
+    kb = SimpleNamespace(id=uuid.uuid4(), mode=KnowledgeBaseMode.DIRECT_CONTEXT)
+    db = _Db(get_values={})
+    db.scalar_values.append(SimpleNamespace(normalized_text="x"))
+    async def active_model(_db):
+        return "minimax", "MiniMax-M2.7-highspeed", 1_024_000
+
+    monkeypatch.setattr(knowledge_base_capacity, "_active_model_context", active_model)
+
+    capacity = await knowledge_base_capacity.require_direct_context_ready(db, kb)
+    assert capacity.estimated_input_tokens == 1
+    assert capacity.fits
+
+
+@pytest.mark.asyncio
+async def test_ensure_direct_context_fits_returns_capacity_and_raises_over_limit(
+    monkeypatch,
+) -> None:
+    async def active_model(_db):
+        return "minimax", "MiniMax-M2.7-highspeed", 1_024_000
+
+    monkeypatch.setattr(knowledge_base_capacity, "_active_model_context", active_model)
+
+    fitting = SimpleNamespace(normalized_text="x" * 100)
+    capacity = await knowledge_base_capacity.ensure_direct_context_fits(
+        SimpleNamespace(), fitting, agent_markdown="a" * 10
+    )
+    assert capacity.estimated_input_tokens == 50
+    assert capacity.fits
+
+    oversized = SimpleNamespace(normalized_text="x" * 2_100_000)
+    with pytest.raises(ConflictError, match="does not fit"):
+        await knowledge_base_capacity.ensure_direct_context_fits(
+            SimpleNamespace(), oversized, agent_markdown="a" * 10
+        )
+
+
+@pytest.mark.asyncio
 async def test_active_model_context_uses_the_chatbot_window_for_every_provider(monkeypatch) -> None:
     """Every chatbot agent resolves the same fixed window, on any provider.
 

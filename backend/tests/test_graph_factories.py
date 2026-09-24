@@ -82,11 +82,23 @@ class _FakeResult:
 
 
 class _FakeDB:
-    def __init__(self, rows):
+    """Doubles the two reads the direct-context lane makes per turn.
+
+    ``execute`` serves the catalog query; ``scalar`` serves the targeted
+    direct-file fetch for the selected project.
+    """
+
+    def __init__(self, rows, *, scalar_value=None):
         self._rows = rows
+        self._scalar_value = scalar_value
+        self.scalar_calls = 0
 
     async def execute(self, _stmt):
         return _FakeResult(self._rows)
+
+    async def scalar(self, _stmt):
+        self.scalar_calls += 1
+        return self._scalar_value
 
     async def commit(self):
         return None
@@ -94,13 +106,15 @@ class _FakeDB:
 
 async def test_general_salary_question_not_locked_to_focused_project():
     """A factory-agnostic salary question must not be pinned to the focused
-    project's KB, even when ``focused_project_id`` is set and the message names
-    no factory. Regression for the LG-Display-vs-Rorze 20M inconsistency."""
+    project's KB, across two active projects, even when ``focused_project_id``
+    is set and the message names no factory. Regression for the
+    LG-Display-vs-Rorze 20M inconsistency."""
     from app.models.conversation import ConversationProjectState
 
+    kb = SimpleNamespace(id="kb", mode=SimpleNamespace(value="rag"))
     proj_a = SimpleNamespace(id="a", slug="lg-display", name="LG Display", aliases=[])
     proj_b = SimpleNamespace(id="b", slug="rorze", name="Rorze", aliases=[])
-    rows = [(proj_a, object(), None), (proj_b, object(), None)]
+    rows = [(proj_a, kb), (proj_b, kb)]
     conversation = SimpleNamespace(
         focused_project_id="a",
         project_context_state=ConversationProjectState.FOCUSED,
@@ -123,8 +137,8 @@ async def test_single_active_project_still_uses_focused_fallback():
     from app.models.conversation import ConversationProjectState
 
     proj_a = SimpleNamespace(id="a", slug="lg-display", name="LG Display", aliases=[])
-    kb = SimpleNamespace(mode=SimpleNamespace(value="rag"))
-    rows = [(proj_a, kb, None)]
+    kb = SimpleNamespace(id="kb", mode=SimpleNamespace(value="rag"))
+    rows = [(proj_a, kb)]
     conversation = SimpleNamespace(
         focused_project_id="a",
         project_context_state=ConversationProjectState.FOCUSED,
@@ -133,9 +147,151 @@ async def test_single_active_project_still_uses_focused_fallback():
         conversation,
         "minh lam luong 20 trieu mot thang co dc 20tr ko",
     )
-    # Falls through the general guard (len(rows) < 2) to the focused path.
+    # Falls through the general guard (len(entries) < 2) to the focused path.
     assert ctx.state == "FOCUSED"
     assert ctx.project_id == "a"
+
+
+@pytest.mark.asyncio
+async def test_direct_context_catalog_cache_hit_skips_database(monkeypatch):
+    """A warm preamble cache serves the routing catalog; no DB query runs."""
+    import app.core.cache as cache_mod
+    from app.models.conversation import ConversationProjectState
+
+    async def fake_cache_version(_namespace):
+        return "7"
+
+    async def fake_cache_get(_key):
+        return [
+            {
+                "project_id": "11111111-1111-1111-1111-111111111111",
+                "slug": "lg-display",
+                "name": "LG Display",
+                "aliases": ["LG"],
+                "kb_id": "22222222-2222-2222-2222-222222222222",
+                "mode": "RAG",
+            }
+        ]
+
+    async def fail_execute(_stmt):
+        raise AssertionError("catalog query must not run on a cache hit")
+
+    class _RefusingDB:
+        async def execute(self, _stmt):
+            await fail_execute(_stmt)
+
+        async def commit(self):
+            return None
+
+    monkeypatch.setattr(cache_mod, "cache_version", fake_cache_version)
+    monkeypatch.setattr(cache_mod, "cache_get_json", fake_cache_get)
+    monkeypatch.setattr(cache_mod, "cache_set_json", fake_cache_version)
+    adapter = _DirectContextAdapter(_RefusingDB())
+    conversation = SimpleNamespace(
+        focused_project_id=None,
+        project_context_state=ConversationProjectState.EXPLORE,
+    )
+    ctx = await adapter.resolve(conversation, "xin chao LG Display")
+    assert ctx.state == "FOCUSED"
+    assert ctx.project_slug == "lg-display"
+    assert ctx.project_id == "11111111-1111-1111-1111-111111111111"
+    assert ctx.direct_context is None  # RAG mode: no direct text is fetched
+
+
+@pytest.mark.asyncio
+async def test_direct_context_catalog_cold_path_writes_cache(monkeypatch):
+    """On a cache miss the catalog is read from the DB and written back once."""
+    import app.core.cache as cache_mod
+    from app.models.conversation import ConversationProjectState
+
+    async def fake_cache_version(_namespace):
+        return "3"
+
+    captured: dict = {}
+
+    async def fake_cache_get(_key):
+        return None
+
+    async def fake_cache_set(key, value, *, ttl_seconds):
+        captured["key"] = key
+        captured["value"] = value
+        captured["ttl"] = ttl_seconds
+
+    proj = SimpleNamespace(id="p1", slug="rorze", name="Rorze", aliases=["RZ"])
+    kb = SimpleNamespace(id="kb1", mode=SimpleNamespace(value="RAG"))
+    db = _FakeDB([(proj, kb)])
+    monkeypatch.setattr(cache_mod, "cache_version", fake_cache_version)
+    monkeypatch.setattr(cache_mod, "cache_get_json", fake_cache_get)
+    monkeypatch.setattr(cache_mod, "cache_set_json", fake_cache_set)
+
+    conversation = SimpleNamespace(
+        focused_project_id=None,
+        project_context_state=ConversationProjectState.EXPLORE,
+    )
+    ctx = await _DirectContextAdapter(db).resolve(conversation, "thong tin Rorze")
+    assert ctx.state == "FOCUSED"
+    assert captured["key"] == "preamble:direct_context_catalog:v3"
+    assert captured["ttl"] == 600
+    assert captured["value"] == [
+        {
+            "project_id": "p1",
+            "slug": "rorze",
+            "name": "Rorze",
+            "aliases": ["RZ"],
+            "kb_id": "kb1",
+            "mode": "RAG",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_focused_direct_context_turn_fetches_only_the_selected_file(monkeypatch):
+    """Only the selected project's direct text is fetched, once, and the
+    capacity guard runs on that pre-fetched file (no re-SELECT)."""
+    import app.core.cache as cache_mod
+    from app.models.conversation import ConversationProjectState
+    from app.services import knowledge_base_capacity
+    from app.services.personas.repository import PersonaRepository
+
+    async def fake_cache_version(_namespace):
+        return "1"
+
+    async def fake_cache_get(_key):
+        return None
+
+    async def noop_cache_set(_key, _value, *, ttl_seconds):
+        return None
+
+    proj = SimpleNamespace(id="p1", slug="lg-display", name="LG Display", aliases=[])
+    kb = SimpleNamespace(id="kb1", mode=SimpleNamespace(value="DIRECT_CONTEXT"))
+    db = _FakeDB(
+        [(proj, kb)],
+        scalar_value=SimpleNamespace(normalized_text="KB TEXT"),
+    )
+    monkeypatch.setattr(cache_mod, "cache_version", fake_cache_version)
+    monkeypatch.setattr(cache_mod, "cache_get_json", fake_cache_get)
+    monkeypatch.setattr(cache_mod, "cache_set_json", noop_cache_set)
+
+    async def fake_active_model(_db):
+        return "minimax", "MiniMax-M2.7-highspeed", 1_024_000
+
+    async def fake_persona_body(_self, _provider):
+        return "PERSONA BODY"
+
+    monkeypatch.setattr(
+        knowledge_base_capacity, "_active_model_context", fake_active_model
+    )
+    monkeypatch.setattr(PersonaRepository, "active_persona_body", fake_persona_body)
+    conversation = SimpleNamespace(
+        focused_project_id=None,
+        project_context_state=ConversationProjectState.EXPLORE,
+    )
+    ctx = await _DirectContextAdapter(db).resolve(conversation, "xin chao LG Display")
+    assert ctx.state == "FOCUSED"
+    assert ctx.knowledge_mode == "DIRECT_CONTEXT"
+    assert ctx.direct_context is not None
+    assert ctx.direct_context.knowledge_text == "KB TEXT"
+    assert db.scalar_calls == 1
 
 
 class _Settings:
