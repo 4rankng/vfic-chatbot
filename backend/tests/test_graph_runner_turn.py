@@ -33,6 +33,10 @@ from app.graph.runner import run_turn
 from app.graph.safety import DeterministicReplyPolicy
 from app.graph.types import BotRunState, GraphDeps
 
+# These tests observe scheduling directly, not wall-clock budgets; the timeout
+# only guards against an event-loop hang.
+pytestmark = pytest.mark.timeout(30)
+
 CONV_ID = "00000000-0000-0000-0000-000000000001"
 
 

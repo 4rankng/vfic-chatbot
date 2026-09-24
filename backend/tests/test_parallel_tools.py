@@ -19,6 +19,10 @@ from contextlib import asynccontextmanager
 
 import pytest
 
+# The assertions observe scheduling directly, not wall-clock budgets; this
+# timeout only guards against an event-loop hang.
+pytestmark = pytest.mark.timeout(30)
+
 
 # ---------------------------------------------------------------------------
 # Fakes
