@@ -4,7 +4,9 @@ Replaces the Supabase schema. Clean tables with real FKs, typed messages with
 created_at, BOT/HUMAN/CLOSED modes, HNSW vector indexes, own users+JWT (no RLS,
 no Supabase Auth). The bus-timetable knowledge graph + SQL functions and the
 match_memories/match_documents RAG functions are ported VERBATIM from the live
-Supabase catalog so chatbot behaviour is identical. A `documents` VIEW shims the
+Supabase catalog so chatbot behaviour is identical — except match_memories,
+which casts to halfvec(3072) (mirroring its 0016 HNSW index) instead of the
+original vector operand. A `documents` VIEW shims the
 old documents table over knowledge_documents/knowledge_chunks so the verbatim
 bus-rebuild function works unmodified.
 
@@ -390,7 +392,7 @@ def upgrade() -> None:
         """
     )
 
-    # --- memories (faithful to live: metadata jsonb + generated cols; match_memories verbatim) ---
+    # --- memories (faithful to live: metadata jsonb + generated cols; match_memories with halfvec(3072) cast per 0016) ---
     op.execute(
         """
         CREATE TABLE public.memories (
@@ -555,7 +557,7 @@ def upgrade() -> None:
 
     op.execute(
         """
-        CREATE OR REPLACE FUNCTION public.match_memories(query_embedding vector, match_count integer DEFAULT 10, filter jsonb DEFAULT '{}'::jsonb)
+        CREATE OR REPLACE FUNCTION public.match_memories(query_embedding halfvec(3072), match_count integer DEFAULT 10, filter jsonb DEFAULT '{}'::jsonb)
         RETURNS TABLE(id uuid, content text, metadata jsonb, similarity double precision)
         LANGUAGE sql
         STABLE
@@ -565,11 +567,11 @@ def upgrade() -> None:
             memories.id,
             memories.content,
             memories.metadata,
-            1 - (memories.embedding <=> query_embedding) as similarity
+            1 - (memories.embedding::halfvec(3072) <=> query_embedding) as similarity
           from public.memories
           where memories.embedding is not null
             and memories.metadata @> filter
-          order by memories.embedding <=> query_embedding
+          order by memories.embedding::halfvec(3072) <=> query_embedding
           limit match_count;
         $function$;
         """
