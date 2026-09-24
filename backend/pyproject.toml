@@ -9,45 +9,49 @@ description = "VFIC recruitment platform backend — FastAPI + LangGraph (replac
 requires-python = ">=3.12,<3.13"
 # Exact versions come from uv.lock: the image and CI install from it via
 # `uv export --frozen`, so add a dependency here and run `uv lock` in backend/.
+# Every entry also carries an upper bound at the next major above the resolved
+# version: unlocked installs (`pip install -e .[dev]` in dev venvs) then get a
+# bounded range too, and an upstream major can never land without an explicit
+# pyproject edit riding through review.
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
-    "sqlalchemy[asyncio]>=2.0.36",
-    "asyncpg>=0.30",
-    "psycopg[binary]>=3.2",
-    "alembic>=1.14",
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.32,<1.0",
+    "sqlalchemy[asyncio]>=2.0.36,<3.0",
+    "asyncpg>=0.30,<1.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "alembic>=1.14,<2.0",
     # No pgvector Python package: embedding columns are raw SQL (vector(3072) /
     # halfvec HNSW) and the extension comes from the pgvector/pgvector:pg16 image.
-    "pydantic>=2.10",
-    "pydantic-settings>=2.6",
-    "email-validator>=2.2",
-    "pyjwt[crypto]>=2.9.0",
-    "cryptography>=42",
-    "passlib[argon2]>=1.7.4",
+    "pydantic>=2.10,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    "email-validator>=2.2,<3.0",
+    "pyjwt[crypto]>=2.9.0,<3.0",
+    "cryptography>=42,<51",
+    "passlib[argon2]>=1.7.4,<2.0",
     "redis>=5.2,<8.0.0",
-    "rq>=2.0",
-    "rq-scheduler>=0.14",
-    "httpx>=0.28",
+    "rq>=2.0,<3.0",
+    "rq-scheduler>=0.14,<1.0",
+    "httpx>=0.28,<1.0",
     # Realtime: Socket.IO server + cross-process emit bridge — the whole realtime
     # path since the SSE firehose was removed (no sse-starlette).
     # Async support is built in (no extra needed as of 5.x).
-    "python-socketio>=5.11",
-    "python-multipart>=0.0.17",
-    "PyYAML>=6.0.2",
+    "python-socketio>=5.11,<6.0",
+    "python-multipart>=0.0.17,<1.0",
+    "PyYAML>=6.0.2,<7.0",
     # LLM layer: langchain-core/-openai only. The turn pipeline is a manual node
     # topology (app/graph/runner.py), not the LangGraph engine — no langgraph.
-    "langchain-core>=0.3",
-    "langchain-openai>=0.2",
+    "langchain-core>=0.3,<2.0",
+    "langchain-openai>=0.2,<2.0",
     # Gemini embeddings + LLM probe only (`from google import genai`). No Drive
     # API client and no OAuth flow library are imported anywhere in backend/.
-    "google-genai>=0.3",
+    "google-genai>=0.3,<3.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3",
-    "pytest-asyncio>=0.24",
-    "ruff>=0.8",
+    "pytest>=8.3,<10.0",
+    "pytest-asyncio>=0.24,<2.0",
+    "ruff>=0.8,<1.0",
 ]
 
 [build-system]
