@@ -95,11 +95,10 @@ def _roundtrip_database():
 
 
 # Downgrades proven broken by this walk live here, with the failing step, until
-# the ops lane's migration fixes land. When a fix arrives, the walk fails with
-# "no longer fails" until the entry is removed — a ratchet, not a skip.
-#  - "0003": alembic downgrade 0003 -> 0002 raises
-#    psycopg.errors.InvalidTableDefinition: cannot drop columns from view
-KNOWN_BROKEN_DOWNGRADES: set[str] = {"0003"}
+# a migration fix lands. When a fix arrives, the walk fails with "no longer
+# fails" until the entry is removed — a ratchet, not a skip. Keep this empty
+# unless a new walk failure is deliberately parked with its error text below.
+KNOWN_BROKEN_DOWNGRADES: set[str] = set()
 
 
 def test_every_migration_roundtrips_in_sequence():

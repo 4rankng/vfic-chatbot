@@ -194,7 +194,12 @@ def downgrade() -> None:
         end;
         $function$;
 
-        CREATE OR REPLACE VIEW public.documents AS
+        -- A view's column list can only grow, so CREATE OR REPLACE VIEW cannot
+        -- remove the project_id column that upgrade() appended — restore the
+        -- project-less shape by dropping and recreating the view.
+        DROP VIEW IF EXISTS public.documents;
+
+        CREATE VIEW public.documents AS
         SELECT
           kd.id            AS id,
           kc.content       AS content,
