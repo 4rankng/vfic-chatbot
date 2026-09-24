@@ -262,7 +262,8 @@ Sourced from `backend/.env.example` (committed template) and
 | Name | Purpose |
 |---|---|
 | `JWT_SECRET` | HS256 signing secret. Must differ from the committed dev default outside dev. |
-| `JWT_ALGORITHM` | `HS256`. |
+| `JWT_ALGORITHM` | `HS256` (allowlisted: HS256/384/512 — any other value refuses to boot). |
+| `JWT_ISSUER` / `JWT_AUDIENCE` | `tingting-api`. Minted on issue and required on decode. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | 60. |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | 14 (rotated on each refresh). |
 | `PASSWORD_RESET_OTP_TTL_MINUTES` | 10. |
@@ -280,6 +281,14 @@ Sourced from `backend/.env.example` (committed template) and
 | `ZALO_BOT_REQUEST_TIMEOUT` | 30s default. |
 | `ZALO_BOT_WEBHOOK_URL` | Registered webhook URL (self-tests / status). |
 | `ZALO_OA_APP_ID` / `ZALO_OA_SECRET_KEY` / `ZALO_OA_ACCESS_TOKEN` | Official Account bootstrap/dev fallbacks. Runtime prefers admin-managed values. |
+
+### Request limits and hosts
+| Name | Purpose |
+|---|---|
+| `ALLOWED_HOSTS` | Comma-separated `Host` allowlist enforced by `TrustedHostMiddleware`. Default `bot.tingting.vip,localhost,127.0.0.1`. `*` refuses to boot. |
+| `RATELIMIT_WEBHOOK_LIMIT` / `RATELIMIT_WEBHOOK_WINDOW_SECONDS` | Per-client-IP cap on the inbound webhook POSTs (default 120 / 60s). Fail-open: a Redis hiccup never drops candidate messages. |
+| `RATELIMIT_LLM_LIMIT` / `RATELIMIT_LLM_WINDOW_SECONDS` | Per-user cap on `/jobs/search`, `/rag/test`, `/web-chat-turn`, `/assist` and `/chatops-actions/*` (default 30 / 60s). |
+| `RATELIMIT_LLM_FAIL_CLOSED` | `false` by default; `true` denies the LLM routes with 429 when Redis cannot verify the budget instead of admitting them. |
 
 ### LLM providers
 | Name | Purpose |
