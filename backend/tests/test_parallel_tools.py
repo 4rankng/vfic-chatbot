@@ -500,7 +500,7 @@ async def test_compare_income_valid_model_retry_returns_deterministic_evidence(m
         "Với mốc 20.5 triệu/tháng, dữ liệu thu nhập đã xác minh là:\n"
         "- Rorze:\n"
         "  • Thu nhập: 20.5-21 triệu/tháng bình quân năm gồm thưởng.\n"
-        "Bạn muốn tôi tư vấn kỹ dự án nào ạ?"
+        "Anh/chị muốn em tư vấn kỹ dự án nào ạ?"
     )
     payload = (
         'COMPARE_INCOME_JSON={"status":"matched","target_monthly_vnd":20500000,'

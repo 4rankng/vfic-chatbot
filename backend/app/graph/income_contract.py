@@ -64,7 +64,7 @@ def _render_safe_reply(
             else "Tôi đã tổng hợp dữ liệu thu nhập đang có theo từng dự án:"
         )
     ]
-    footer = "Bạn muốn tôi tư vấn kỹ dự án nào ạ?"
+    footer = "Anh/chị muốn em tư vấn kỹ dự án nào ạ?"
     omitted = 0
     for index, project in enumerate(projects):
         project_lines = [f"- {project['project_name']}:"]

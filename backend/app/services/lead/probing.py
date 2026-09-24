@@ -76,12 +76,12 @@ def oa_profile_name_guidance(
 # Askable fields: (db_key, question). Order = probing priority.
 # ``notes`` is passive capture (never probed — no natural "what are your notes?" question).
 ASKABLE_FIELDS: list[tuple[str, str]] = [
-    ("name", "Bạn cho tôi xin tên để tiện hỗ trợ nhé?"),
-    ("phone", "Bạn cho tôi xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"),
-    ("desired_job", "Bạn muốn ứng tuyển vị trí công việc nào?"),
-    ("region", "Bạn muốn làm việc ở tỉnh/thành nào?"),
-    ("living_area", "Bạn đang sinh sống ở khu vực nào?"),
-    ("expected_salary", "Bạn mong muốn mức lương khoảng bao nhiêu?"),
+    ("name", "Anh/chị cho em xin tên để tiện hỗ trợ nhé?"),
+    ("phone", "Anh/chị cho em xin số điện thoại để VFIC liên hệ hỗ trợ ứng tuyển nhé?"),
+    ("desired_job", "Anh/chị muốn ứng tuyển vị trí công việc nào?"),
+    ("region", "Anh/chị muốn làm việc ở tỉnh/thành nào?"),
+    ("living_area", "Anh/chị đang sinh sống ở khu vực nào?"),
+    ("expected_salary", "Anh/chị mong muốn mức lương khoảng bao nhiêu?"),
 ]
 
 

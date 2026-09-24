@@ -94,7 +94,7 @@ def _active_jobs_safe_reply(jobs: list[dict[str, object]]) -> str:
         suffix = "; ".join(details)
         title = str(job.get("title") or "Vị trí đang tuyển")
         lines.append(f"- {title}" + (f": {suffix}" if suffix else ""))
-    lines.append("Bạn muốn tìm hiểu vị trí nào ạ?")
+    lines.append("Anh/chị muốn tìm hiểu vị trí nào ạ?")
     return "\n".join(lines)
 
 
@@ -210,7 +210,7 @@ async def _no_match_safe_reply(
     return (
         (
             f"{head} Hiện đang tuyển các vị trí sau:\n{digest}\n"
-            "Bạn muốn tìm hiểu vị trí nào ạ?"
+            "Anh/chị muốn tìm hiểu vị trí nào ạ?"
         ),
         alt_payload,
     )
@@ -335,7 +335,7 @@ async def recommend_jobs(
         return "Hiện chưa thể tra cứu việc làm phù hợp. Bạn vui lòng thử lại sau nhé."
     status = getattr(recommendation, "status", "")
     if status == "insufficient_profile":
-        return "Chưa đủ thông tin hồ sơ để gợi ý việc phù hợp. Bạn cho tôi biết vị trí hoặc khu vực mong muốn nhé."
+        return "Chưa đủ thông tin hồ sơ để gợi ý việc phù hợp. Anh/chị cho em biết vị trí hoặc khu vực mong muốn nhé."
     if status == "no_match":
         return "Hiện chưa có việc làm đang tuyển phù hợp với hồ sơ này."
     scored = tuple(getattr(recommendation, "jobs", ()) or ())

@@ -532,7 +532,7 @@ async def test_list_active_jobs_renders_vietnamese_status_without_duplicate_comp
         "VFIC hiện có các vị trí đang tuyển sau:\n"
         "- Nhân viên lắp ráp / Nhân viên vận hành máy CNC: "
         "Rorze; KCN Nhật Bản (Nomura), Hồng An, Hải Phòng\n"
-        "Bạn muốn tìm hiểu vị trí nào ạ?"
+        "Anh/chị muốn tìm hiểu vị trí nào ạ?"
     )
 
 

@@ -179,8 +179,8 @@ def suggested_reply(lead: LeadPolicy, missing: list[str]) -> str:
         )
     if missing:
         fields = " và ".join(missing[:2])
-        return f"Mình hỗ trợ bạn nhanh hơn nếu bạn cho mình {fields} nhé."
-    return "Mình đã có đủ thông tin chính. Bạn muốn tư vấn viên gọi xác nhận hồ sơ không?"
+        return f"Em hỗ trợ anh/chị nhanh hơn nếu anh/chị cho em {fields} nhé."
+    return "Em đã có đủ thông tin chính. Anh/chị muốn tư vấn viên gọi xác nhận hồ sơ không?"
 
 
 def next_action(lead: LeadPolicy) -> str:
