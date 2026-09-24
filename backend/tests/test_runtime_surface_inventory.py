@@ -107,7 +107,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "17931237cfcbf95de0f6aef80e7749dfa94cc01566a96b2ae27f14fc9858293c"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "2e00fa00f0bd7dc7b57aedb2128b392ed8f5f95ec95bbd6424eb10f6598d46a3"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

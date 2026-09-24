@@ -1,345 +1,345 @@
 [
-  {
-    "call": "dispatch_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/conversation_messaging/infrastructure/outbound_recovery.py",
-    "scope": "dispatch_pending"
-  },
-  {
-    "call": "dispatch_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/conversation/__init__.py",
-    "scope": "deliver_recruiter_message"
-  },
-  {
-    "call": "dispatch_message_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/conversation/__init__.py",
-    "scope": "dispatch_outbound_message"
-  },
-  {
-    "call": "dispatch_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/conversation/__init__.py",
-    "scope": "retry_recruiter_message"
-  },
-  {
-    "call": "create_pending_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/conversation/bot_path.py",
-    "scope": "claim_send"
-  },
-  {
-    "call": "create_pending_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/conversation/bot_path.py",
-    "scope": "prepare_proactive_message"
-  },
-  {
-    "call": "enqueue_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/conversation/bot_path.py",
-    "scope": "record_bot_outcome"
-  },
-  {
-    "call": "enqueue_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/conversation/bot_path.py",
-    "scope": "record_proactive_outcome"
-  },
-  {
-    "call": "create_pending_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/conversation/recruiter_path.py",
-    "scope": "prepare_recruiter_message"
-  },
-  {
-    "call": "dispatch_outbox",
-    "category": "outbox_boundary",
-    "count": 1,
-    "file": "app/services/outbox_service.py",
-    "scope": "dispatch_message_outbox"
-  },
-  {
-    "call": "send_message",
-    "category": "provider_boundary",
-    "count": 1,
-    "file": "app/channels/providers/zalo_bot.py",
-    "scope": "send_text"
-  },
-  {
-    "call": "send_chat_action",
-    "category": "provider_boundary",
-    "count": 1,
-    "file": "app/channels/providers/zalo_bot.py",
-    "scope": "send_typing"
-  },
-  {
-    "call": "send_message",
-    "category": "provider_boundary",
-    "count": 1,
-    "file": "app/channels/providers/zalo_oa.py",
-    "scope": "send_text"
-  },
-  {
-    "call": "send_message",
-    "category": "provider_boundary",
-    "count": 1,
-    "file": "app/graph/proactive.py",
-    "scope": "run_proactive_turn"
-  },
-  {
-    "call": "send_message",
-    "category": "provider_boundary",
-    "count": 2,
-    "file": "app/graph/runner.py",
-    "scope": "_dispatch_claimed_message"
-  },
-  {
-    "call": "send_chat_action",
-    "category": "provider_boundary",
-    "count": 1,
-    "file": "app/graph/runner.py",
-    "scope": "_status_heartbeat"
-  },
-  {
-    "call": "send_payload",
-    "category": "provider_boundary",
-    "count": 1,
-    "file": "app/services/outbox_service.py",
-    "scope": "_dispatch_claimed_command"
-  },
-  {
-    "call": "send_chat_action",
-    "category": "provider_boundary",
-    "count": 1,
-    "file": "app/services/zalo_sender.py",
-    "scope": "send_chat_action"
-  },
-  {
-    "call": "send_message",
-    "category": "provider_boundary",
-    "count": 1,
-    "file": "app/services/zalo_sender.py",
-    "scope": "send_message"
-  },
-  {
-    "call": "send_message",
-    "category": "provider_boundary",
-    "count": 2,
-    "file": "app/services/zalo_sender.py",
-    "scope": "send_payload"
-  },
-  {
-    "call": "enqueue_chat_run",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/composition/conversation_messaging.py",
-    "scope": "enqueue_chat_turn"
-  },
-  {
-    "call": "enqueue_ingest",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/composition/project_knowledge_jobs.py",
-    "scope": "enqueue"
-  },
-  {
-    "call": "enqueue_ingest_version",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/composition/project_knowledge_jobs.py",
-    "scope": "enqueue"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/conversation_messaging/infrastructure/webhook_delivery.py",
-    "scope": "enqueue_facebook_turn"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/project_knowledge/application/jobs.py",
-    "scope": "index_direct_context"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/project_knowledge/application/jobs.py",
-    "scope": "ingest_document"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/project_knowledge/application/jobs.py",
-    "scope": "ingest_version"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/project_knowledge/application/jobs.py",
-    "scope": "process_category_revision"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/project_knowledge/application/jobs.py",
-    "scope": "sync_external_source"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/project_knowledge/application/jobs.py",
-    "scope": "sync_single_page_source"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/services/conversation/scheduler.py",
-    "scope": "enqueue_latest_unanswered_worker_message"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/services/webhook.py",
-    "scope": "handle"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/category_worker.py",
-    "scope": "enqueue_category_revision"
-  },
-  {
-    "call": "enqueue_persist_candidate",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/chatbot_worker.py",
-    "scope": "_enqueue_persist"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/chatbot_worker.py",
-    "scope": "enqueue_chat_run"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/chatbot_worker.py",
-    "scope": "enqueue_recovery_chat_run"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/direct_context_worker.py",
-    "scope": "enqueue_direct_context_index"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/external_source_sync_worker.py",
-    "scope": "enqueue_one_shot"
-  },
-  {
-    "call": "enqueue_followup",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/followup_worker.py",
-    "scope": "_run_tick_async"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/followup_worker.py",
-    "scope": "enqueue_followup"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/ingest_worker.py",
-    "scope": "enqueue_ingest"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/ingest_worker.py",
-    "scope": "enqueue_ingest_version"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/persistence_worker.py",
-    "scope": "enqueue_enrich_messenger_profile"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/persistence_worker.py",
-    "scope": "enqueue_enrich_oa_profile"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/persistence_worker.py",
-    "scope": "enqueue_persist_candidate"
-  },
-  {
-    "call": "enqueue_recovery_chat_run",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/reconcile_worker.py",
-    "scope": "_sweep"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/reconcile_worker.py",
-    "scope": "enqueue_reconcile_tick_now"
-  },
-  {
-    "call": "enqueue_job",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/single_page_external_source_sync_worker.py",
-    "scope": "enqueue_one_shot"
-  },
-  {
-    "call": "enqueue",
-    "category": "queue_producer",
-    "count": 1,
-    "file": "app/workers/utils.py",
-    "scope": "enqueue_job"
-  }
+ {
+  "call": "dispatch_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/conversation_messaging/infrastructure/outbound_recovery.py",
+  "scope": "dispatch_pending"
+ },
+ {
+  "call": "dispatch_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/services/conversation/__init__.py",
+  "scope": "deliver_recruiter_message"
+ },
+ {
+  "call": "dispatch_message_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/services/conversation/__init__.py",
+  "scope": "dispatch_outbound_message"
+ },
+ {
+  "call": "dispatch_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/services/conversation/__init__.py",
+  "scope": "retry_recruiter_message"
+ },
+ {
+  "call": "create_pending_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/services/conversation/bot_path.py",
+  "scope": "claim_send"
+ },
+ {
+  "call": "create_pending_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/services/conversation/bot_path.py",
+  "scope": "prepare_proactive_message"
+ },
+ {
+  "call": "enqueue_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/services/conversation/bot_path.py",
+  "scope": "record_bot_outcome"
+ },
+ {
+  "call": "enqueue_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/services/conversation/bot_path.py",
+  "scope": "record_proactive_outcome"
+ },
+ {
+  "call": "create_pending_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/services/conversation/recruiter_path.py",
+  "scope": "prepare_recruiter_message"
+ },
+ {
+  "call": "dispatch_outbox",
+  "category": "outbox_boundary",
+  "count": 1,
+  "file": "app/services/outbox/repository.py",
+  "scope": "dispatch_message_outbox"
+ },
+ {
+  "call": "send_message",
+  "category": "provider_boundary",
+  "count": 1,
+  "file": "app/channels/providers/zalo_bot.py",
+  "scope": "send_text"
+ },
+ {
+  "call": "send_chat_action",
+  "category": "provider_boundary",
+  "count": 1,
+  "file": "app/channels/providers/zalo_bot.py",
+  "scope": "send_typing"
+ },
+ {
+  "call": "send_message",
+  "category": "provider_boundary",
+  "count": 1,
+  "file": "app/channels/providers/zalo_oa.py",
+  "scope": "send_text"
+ },
+ {
+  "call": "send_message",
+  "category": "provider_boundary",
+  "count": 1,
+  "file": "app/graph/proactive.py",
+  "scope": "run_proactive_turn"
+ },
+ {
+  "call": "send_message",
+  "category": "provider_boundary",
+  "count": 2,
+  "file": "app/graph/runner.py",
+  "scope": "_dispatch_claimed_message"
+ },
+ {
+  "call": "send_chat_action",
+  "category": "provider_boundary",
+  "count": 1,
+  "file": "app/graph/runner.py",
+  "scope": "_status_heartbeat"
+ },
+ {
+  "call": "send_payload",
+  "category": "provider_boundary",
+  "count": 1,
+  "file": "app/services/outbox/dispatcher.py",
+  "scope": "_dispatch_claimed_command"
+ },
+ {
+  "call": "send_chat_action",
+  "category": "provider_boundary",
+  "count": 1,
+  "file": "app/services/zalo_sender.py",
+  "scope": "send_chat_action"
+ },
+ {
+  "call": "send_message",
+  "category": "provider_boundary",
+  "count": 1,
+  "file": "app/services/zalo_sender.py",
+  "scope": "send_message"
+ },
+ {
+  "call": "send_message",
+  "category": "provider_boundary",
+  "count": 2,
+  "file": "app/services/zalo_sender.py",
+  "scope": "send_payload"
+ },
+ {
+  "call": "enqueue_chat_run",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/composition/conversation_messaging.py",
+  "scope": "enqueue_chat_turn"
+ },
+ {
+  "call": "enqueue_ingest",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/composition/project_knowledge_jobs.py",
+  "scope": "enqueue"
+ },
+ {
+  "call": "enqueue_ingest_version",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/composition/project_knowledge_jobs.py",
+  "scope": "enqueue"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/conversation_messaging/infrastructure/webhook_delivery.py",
+  "scope": "enqueue_facebook_turn"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/project_knowledge/application/jobs.py",
+  "scope": "index_direct_context"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/project_knowledge/application/jobs.py",
+  "scope": "ingest_document"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/project_knowledge/application/jobs.py",
+  "scope": "ingest_version"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/project_knowledge/application/jobs.py",
+  "scope": "process_category_revision"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/project_knowledge/application/jobs.py",
+  "scope": "sync_external_source"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/project_knowledge/application/jobs.py",
+  "scope": "sync_single_page_source"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/services/conversation/scheduler.py",
+  "scope": "enqueue_latest_unanswered_worker_message"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/services/webhook.py",
+  "scope": "handle"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/category_worker.py",
+  "scope": "enqueue_category_revision"
+ },
+ {
+  "call": "enqueue_persist_candidate",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/chatbot_worker.py",
+  "scope": "_enqueue_persist"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/chatbot_worker.py",
+  "scope": "enqueue_chat_run"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/chatbot_worker.py",
+  "scope": "enqueue_recovery_chat_run"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/direct_context_worker.py",
+  "scope": "enqueue_direct_context_index"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/external_source_sync_worker.py",
+  "scope": "enqueue_one_shot"
+ },
+ {
+  "call": "enqueue_followup",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/followup_worker.py",
+  "scope": "_run_tick_async"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/followup_worker.py",
+  "scope": "enqueue_followup"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/ingest_worker.py",
+  "scope": "enqueue_ingest"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/ingest_worker.py",
+  "scope": "enqueue_ingest_version"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/persistence_worker.py",
+  "scope": "enqueue_enrich_messenger_profile"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/persistence_worker.py",
+  "scope": "enqueue_enrich_oa_profile"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/persistence_worker.py",
+  "scope": "enqueue_persist_candidate"
+ },
+ {
+  "call": "enqueue_recovery_chat_run",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/reconcile_worker.py",
+  "scope": "_sweep"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/reconcile_worker.py",
+  "scope": "enqueue_reconcile_tick_now"
+ },
+ {
+  "call": "enqueue_job",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/single_page_external_source_sync_worker.py",
+  "scope": "enqueue_one_shot"
+ },
+ {
+  "call": "enqueue",
+  "category": "queue_producer",
+  "count": 1,
+  "file": "app/workers/utils.py",
+  "scope": "enqueue_job"
+ }
 ]
