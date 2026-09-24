@@ -206,8 +206,11 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
   cd backend && .venv/bin/python -m alembic upgrade head
   ```
 
-> Alembic stores revision IDs in `VARCHAR(32)`. Revision identifiers must stay
-> within that limit; filenames may be longer.
+> Alembic creates `alembic_version.version_num` as `VARCHAR(32)`; this repo
+> widens it to `VARCHAR(128)` (idempotently, via
+> `backend/scripts/widen_alembic_version.py` before `alembic upgrade head`, and
+> by migration `0001` on fresh databases) so the descriptive revision IDs fit.
+> Keep IDs under 128 characters; filenames may be longer.
 
 ---
 
@@ -329,9 +332,9 @@ Sourced from `backend/.env.example` (committed template) and
 | `BOT_LOCK_TTL_SECONDS` | 180 | Per-chat mutex TTL (must exceed worst-case turn). |
 | `CHAT_TURN_JOB_TIMEOUT` | 60 | RQ job timeout (must be < lock TTL and reconcile grace). |
 | `CHAT_QUEUE_MAX_DEPTH` | 40 | Backpressure ceiling on `webhook_high` and on the `recovery` queue. |
-| `LLM_CONCURRENCY_LIMIT` | 0 (disabled) | Redis cross-process semaphore token count. |
+| `LLM_CONCURRENCY_LIMIT` | 8 | Redis cross-process semaphore token count. |
 | `MAX_LLM_CALLS_PER_TURN` | 6 | Agent tool-loop ceiling. |
-| `EMBED_CONCURRENCY_LIMIT` | 0 (disabled) | Separate embed semaphore. |
+| `EMBED_CONCURRENCY_LIMIT` | 6 | Separate embed semaphore. |
 | `RECONCILE_INTERVAL_SECONDS` / `RECONCILE_GRACE_SECONDS` / `RECONCILE_MAX_AGE_SECONDS` / `RECONCILE_BATCH_SIZE` | 60 / 120 / 86400 / 50 | Reconcile sweep tuning. |
 | `RAG_ANN_ENABLED` / `RAG_ANN_CANDIDATES` | True / 200 | HNSW candidate generation. |
 | `RAG_CACHE_ENABLED` / `RAG_RESULT_CACHE_TTL_SECONDS` | True / 300 | Retrieval result cache. |
@@ -453,3 +456,24 @@ starts a fresh Redis.
 ### No external APM
 No Sentry/Datadog/OpenTelemetry. Observability = structured JSON logs to
 stdout + `/metrics` + `/health/queue` + Caddy access logs.
+
+## Ops alerting (OPS-04, OPS-06)
+
+Nothing external scrapes this deployment, so the droplet tells itself when it is
+about to hurt: `scripts/ops-alerts.sh` checks disk usage (warn >80%, fail >95%),
+reclaimable Docker space, the live container's `/metrics` (queue depth vs
+`CHAT_QUEUE_MAX_DEPTH`, every worker busy, the two reconcile counters that only
+rise) and `GET /health` on the edge.
+
+```cron
+* * * * * root /opt/vfic/scripts/ops-alerts.sh 2>> /var/log/vfic-alerts.log
+```
+
+Ship the script with the config snapshot the deploy pushes to `/opt/vfic/`, and
+read `/var/log/vfic-alerts.log` (or forward it wherever you already read logs).
+Container logs are also bounded now: every service carries the compose
+`x-logging` anchor (`json-file`, 10 MB × 3 files), so a chatty container cannot
+fill the volume and stop Postgres writing WAL.
+
+An external uptime check on `https://bot.tingting.vip/health` is still worth
+adding — it is the one thing this script cannot see from inside the droplet.
