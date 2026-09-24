@@ -7,6 +7,11 @@ const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default async function globalTeardown(): Promise<void> {
+  // Visual-only runs never start the backend and never create an e2e database,
+  // so there is nothing to drop.
+  if (process.env.VFIC_VISUAL_ONLY) {
+    return;
+  }
   const python =
     process.env.VFIC_BACKEND_PYTHON ??
     path.resolve(__dirname, "../../backend/.venv/bin/python");

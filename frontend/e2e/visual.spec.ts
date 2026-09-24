@@ -69,25 +69,33 @@ test.beforeEach(async ({ page }) => {
 
 for (const mode of ["light", "dark"] as const) {
   for (const route of UNAUTH_ROUTES) {
-    test(`${route.name} renders (${mode})`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme: mode });
-      await page.goto(route.path);
-      await setTheme(page, mode);
+    test(
+      `${route.name} renders (${mode})`,
+      {
+        // Zero-backend visual guard: see the resetDb fixture in fixtures.ts and
+        // the VFIC_VISUAL_ONLY webServer gate in playwright.config.ts.
+        tag: "@visual-only",
+      },
+      async ({ page }) => {
+        await page.emulateMedia({ colorScheme: mode });
+        await page.goto(route.path);
+        await setTheme(page, mode);
 
-      // The login form is the anchor that tells us StartPage resolved to LoginPage.
-      const email = page.locator('input[type="email"]').first();
-      await expect(email).toBeVisible({ timeout: 15_000 });
+        // The login form is the anchor that tells us StartPage resolved to LoginPage.
+        const email = page.locator('input[type="email"]').first();
+        await expect(email).toBeVisible({ timeout: 15_000 });
 
-      await stabilize(page);
+        await stabilize(page);
 
-      // Playwright appends `-<projectName>-<platform>` to the name, so desktop
-      // and mobile baselines never collide.
-      await expect(page).toHaveScreenshot(`${route.name}-${mode}.png`, {
-        fullPage: true,
-        maxDiffPixelRatio: 0.1,
-        animations: "disabled",
-        caret: "hide",
-      });
-    });
+        // Playwright appends `-<projectName>-<platform>` to the name, so desktop
+        // and mobile baselines never collide.
+        await expect(page).toHaveScreenshot(`${route.name}-${mode}.png`, {
+          fullPage: true,
+          maxDiffPixelRatio: 0.1,
+          animations: "disabled",
+          caret: "hide",
+        });
+      },
+    );
   }
 }

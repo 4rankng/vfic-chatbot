@@ -24,6 +24,34 @@ process.env.VFIC_E2E_DATABASE_URL ??= `postgresql+asyncpg://vfic:vfic@127.0.0.1:
 process.env.VFIC_E2E_DATABASE_URL_SYNC ??= `postgresql+psycopg://vfic:vfic@127.0.0.1:5432/vfic_${E2E_RUN_ID}_e2e`;
 
 /**
+ * The visual projects render unauthenticated zero-backend pages only. Set
+ * VFIC_VISUAL_ONLY=1 to skip the disposable backend webServer (and its
+ * PostgreSQL/Redis dependencies) for a visual-only run.
+ */
+const WEB_SERVERS: ReturnType<typeof defineConfig>["webServer"] = [
+  ...(process.env.VFIC_VISUAL_ONLY
+    ? []
+    : [
+        {
+          command: `${JSON.stringify(BACKEND_PYTHON)} ${JSON.stringify(E2E_HARNESS)} serve --port 8000`,
+          url: `${API_URL}/health`,
+          reuseExistingServer: false,
+          timeout: 120_000,
+        },
+      ]),
+  {
+    command: "npx vite --mode e2e --host 127.0.0.1 --port 4173 --strictPort",
+    url: APP_URL,
+    reuseExistingServer: false,
+    timeout: 120_000,
+    env: {
+      VITE_API_BASE: API_URL,
+      VITE_SOCKET_URL: API_URL,
+    },
+  },
+];
+
+/**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
@@ -49,24 +77,7 @@ export default defineConfig({
     actionTimeout: 5000,
   },
 
-  webServer: [
-    {
-      command: `${JSON.stringify(BACKEND_PYTHON)} ${JSON.stringify(E2E_HARNESS)} serve --port 8000`,
-      url: `${API_URL}/health`,
-      reuseExistingServer: false,
-      timeout: 120_000,
-    },
-    {
-      command: "npx vite --mode e2e --host 127.0.0.1 --port 4173 --strictPort",
-      url: APP_URL,
-      reuseExistingServer: false,
-      timeout: 120_000,
-      env: {
-        VITE_API_BASE: API_URL,
-        VITE_SOCKET_URL: API_URL,
-      },
-    },
-  ],
+  webServer: WEB_SERVERS,
 
   /* Configure projects for major browsers */
   projects: [

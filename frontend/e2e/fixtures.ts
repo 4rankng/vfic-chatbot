@@ -58,7 +58,13 @@ export const test = base.extend<{
     // Playwright requires object destructuring for fixture dependency analysis.
     // eslint-disable-next-line no-empty-pattern
     async ({}, provide) => {
-      await resetDatabase();
+      // The visual projects render unauthenticated zero-backend pages only; the
+      // database state cannot affect those pixels. Tests tagged @visual-only
+      // skip the harness reset so the visual guard can run without the
+      // disposable backend stack.
+      if (!test.info().tags.includes("@visual-only")) {
+        await resetDatabase();
+      }
       await provide();
     },
     { auto: true },
