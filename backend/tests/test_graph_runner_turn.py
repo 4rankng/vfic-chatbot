@@ -136,12 +136,14 @@ class _SendResult:
         msg_id: str = "mid-1",
         error_class: str | None = None,
         telemetry=None,
+        partial: bool = False,
     ) -> None:
         self.ok = ok
         self.error = error
         self.msg_id = msg_id
         self.error_class = error_class
         self.telemetry = telemetry
+        self.partial = partial
 
 
 class _FakeZalo:
@@ -216,6 +218,7 @@ def _stub_agent(monkeypatch, *replies) -> None:
         contact_id=None,
         timings=None,
         decisions=None,
+        lead_row=None,
     ):  # noqa: ARG001
         r = seq.pop(0) if seq else ""
         if isinstance(r, Exception):
@@ -1011,6 +1014,39 @@ async def test_zalo_ambiguous_send_timeout_is_send_unknown(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_partial_multi_bubble_send_is_send_unknown(monkeypatch):
+    """REL-01: a partially delivered answer is at-most-once, never retryable FAILED.
+
+    The sender flags a chunked send whose later bubble failed after an earlier one
+    was accepted (``partial``). Recovery would re-answer the candidate, who already
+    saw the delivered bubble, so the row must be recorded SEND_UNKNOWN — the
+    non-retriable state the sweep never re-enqueues.
+    """
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, owned=True)
+    _stub_agent(monkeypatch, "Chào bạn!")
+    zalo = _FakeZalo(
+        results=[
+            _SendResult(
+                ok=False,
+                error="chunk 2/3 failed: upstream rejected",
+                msg_id="mid-1",  # bubble 1 was delivered
+                partial=True,
+            )
+        ]
+    )
+
+    res = await run_turn(_state(), _deps(zalo, conversation=svc))
+
+    assert res["outcome"] == "send_unknown"
+    assert res["reply"] == "Chào bạn!"
+    from app.models.conversation import DeliveryStatus
+
+    assert recorded[0]["delivery_status"] is DeliveryStatus.SEND_UNKNOWN
+    assert recorded[0]["zalo_message_id"] == "mid-1"
+
+
+@pytest.mark.asyncio
 async def test_zalo_connect_error_stays_retryable_failed(monkeypatch):
     """A pre-send connection failure (definitely not sent) stays retryable FAILED."""
     conv = _FakeConv()
@@ -1591,6 +1627,7 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
         contact_id=None,
         timings=None,
         decisions=None,
+        lead_row=None,
     ):  # noqa: ARG001
         # Emulate the real _agent_turn stamping into the shared timings dict.
         # The LLM stage is now the split llm_queue_ms + llm_model_ms pair
@@ -2487,6 +2524,96 @@ async def test_profile_name_falls_back_to_contact_display_name(monkeypatch):
         conv=conv,
     )
     assert deps.turn_decisions.calls[0]["profile_name"] == "Trần Văn Hùng"
+
+
+class _ResolvingLeadGenderStub:
+    """The real adapter's seam: one resolve_lead, every call reuses the row."""
+
+    def __init__(self, lead: dict | None) -> None:
+        self.lead = lead
+        self.resolutions = 0
+        self.reads: list[dict | None] = []
+        self.writes: list[dict] = []
+
+    async def resolve_lead(self, chat_id: str, contact_id: str | None = None):  # noqa: ARG002
+        self.resolutions += 1
+        return self.lead
+
+    async def stored_gender(
+        self, chat_id: str, contact_id: str | None = None, *, lead=None
+    ) -> str:
+        self.reads.append(lead)
+        return str((lead or {}).get("gender") or "").strip().lower()
+
+    async def record_inferred_gender(
+        self, chat_id, gender, *, contact_id=None, override=False, lead=None
+    ):  # noqa: ARG001
+        self.writes.append({"gender": gender, "override": override, "lead": lead})
+        return True
+
+
+@pytest.mark.asyncio
+async def test_lead_row_resolved_once_and_reused_across_calls(monkeypatch):
+    """A port exposing the resolve seam is asked for the lead exactly once per
+    turn; the stored read and the inference write receive the same row."""
+    lead = {"id": 5, "zalo_id": "z1", "gender": ""}
+    stub = _ResolvingLeadGenderStub(lead)
+    result, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="female", gender_confidence=0.9),
+        gender_stub=stub,
+    )
+    assert result["outcome"] == "sent"
+    assert stub.resolutions == 1
+    assert stub.reads == [lead]
+    assert stub.writes == [{"gender": "female", "override": False, "lead": lead}]
+
+
+@pytest.mark.asyncio
+async def test_agent_turn_passes_the_resolved_lead_row_to_context(monkeypatch):
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str, object] = {}
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeLead:
+        async def context(
+            self, chat_id, current_user_text, recent_messages, contact_id=None, lead=None
+        ):  # noqa: ARG001
+            captured["lead"] = lead
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG001
+            return ""
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG001
+            return "Dạ em chào anh ạ."
+
+    monkeypatch.setattr(
+        "app.graph.context.build_system_prompt", _fake_build_system_prompt
+    )
+    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kw: kw["current_user_text"])
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    lead_row = {"id": 5, "zalo_id": "z1", "gender": "female"}
+    await _agent_turn(
+        _state(),
+        deps,
+        "chào bạn",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        decisions=TurnDecisions(degraded=True),
+        lead_row=lead_row,
+    )
+
+    assert captured["lead"] is lead_row
 
 
 # ─── silent terminals never leave the placeholder row behind ────────────────

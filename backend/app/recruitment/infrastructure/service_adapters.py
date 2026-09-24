@@ -135,11 +135,14 @@ class ServiceLeadGenderAdapter:
         lead = lead if lead is not None else await _resolve_lead(self._db, chat_id, contact_id)
         if lead is None or lead.get("id") is None:
             return False
-        if not override and str(lead.get("gender") or "").strip():
-            return False
         from app.services.lead.repository import LeadRepository
 
-        return await LeadRepository(self._db).set_gender_by_id(lead["id"], gender)
+        # Blank-only unless ``override`` is enforced inside the UPDATE itself
+        # (``LeadRepository.set_gender_by_id``), so a provider or recruiter write
+        # that lands between this call's read and its write is never replaced.
+        return await LeadRepository(self._db).set_gender_by_id(
+            lead["id"], gender, override=override
+        )
 
 
 class ServiceFollowupEligibilityAdapter:

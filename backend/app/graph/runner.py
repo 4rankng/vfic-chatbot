@@ -254,6 +254,7 @@ async def _agent_turn(
     manifest_policy=None,
     project_context=None,
     decisions: TurnDecisions | None = None,
+    lead_row: dict | None = None,
 ) -> str:
     route = route_from_decisions(user_text, decisions or TurnDecisions(degraded=True))
     focused_project = bool(
@@ -454,8 +455,11 @@ async def _agent_turn(
     )
     if allow_lead_context:
         try:
+            # The runner's once-per-turn lead row (None for ports without the
+            # resolve seam — those keep their own lookup inside context()).
+            lead_ctx_kwargs = {"lead": lead_row} if lead_row is not None else {}
             lead_profile, lead_collection_question = await deps.lead.context(
-                chat_id, user_text, recent_messages, contact_id=contact_id
+                chat_id, user_text, recent_messages, contact_id=contact_id, **lead_ctx_kwargs
             )
             if lead_collection_question:
                 lead_collection_instruction = deps.lead.instruction(lead_collection_question)
@@ -883,6 +887,7 @@ async def _resolve_lane(
     lock_owner: str | None,
     status_task,
     t0: float,
+    lead_row: dict | None = None,
 ) -> _LaneResolution:
     """Select and run the turn's answer lane: clarification → direct → agent.
 
@@ -957,6 +962,8 @@ async def _resolve_lane(
             agent_kwargs["project_context"] = project_context
         if manifest_policy is not None:
             agent_kwargs["manifest_policy"] = manifest_policy
+        if lead_row is not None:
+            agent_kwargs["lead_row"] = lead_row
         raw = await _agent_turn(
             state,
             deps,
@@ -1352,6 +1359,24 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     # Messenger leads are contact-keyed (NULL zalo_id), so the recipient id alone
     # would miss them; the contact id is the fallback key.
     contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
+
+    # Resolve the candidate's lead row once and hand it to every adapter call
+    # below (stored gender, inference write, prompt context); the adapters keep
+    # their own by-zalo/by-contact lookup as the fallback for ports without
+    # this seam (tests inject those).
+    lead_row: dict | None = None
+    lead_prefetch: dict[str, object] = {}
+    if deps.lead_gender is not None and (recipient_id or contact_id):
+        resolver = getattr(deps.lead_gender, "resolve_lead", None)
+        if resolver is not None:
+            gender_t0 = time.monotonic()
+            try:
+                lead_row = await resolver(recipient_id or "", contact_id)
+                lead_prefetch = {"lead": lead_row}
+            except Exception:  # noqa: BLE001 — an addressing hint must never break a turn
+                logger.warning("lead resolution failed for %s", recipient_id, exc_info=True)
+            _stamp_db(timings, "lead_gender", gender_t0)
+
     # Read the stored value so the write stays blank-only, and so a stated
     # self-reference in this message can be told apart from an earlier inference.
     stored_gender = ""
@@ -1359,7 +1384,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         gender_t0 = time.monotonic()
         try:
             stored_gender = await deps.lead_gender.stored_gender(
-                recipient_id or "", contact_id
+                recipient_id or "", contact_id, **lead_prefetch
             )
         except Exception:  # noqa: BLE001 — an addressing hint must never break a turn
             logger.warning("lead gender lookup failed for %s", recipient_id, exc_info=True)
@@ -1397,6 +1422,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 decisions.gender,
                 contact_id=contact_id,
                 override=decisions.gender_stated,
+                **lead_prefetch,
             ):
                 # The value itself is candidate data and is deliberately not logged.
                 logger.info("candidate gender inferred conversation=%s", state.conversation_id)
@@ -1466,6 +1492,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             lock_owner=lock_owner,
             status_task=status_task,
             t0=t0,
+            lead_row=lead_row,
         )
         if lane.terminal is not None:
             return lane.terminal
