@@ -1,12 +1,17 @@
 """Source-level migration hygiene checks (no database required).
 
-Guards the regression class found by the audit: a downgrade whose body is a
-bare ``pass`` (or a refusing ``raise``) with no documented reason silently
-reads as unfinished work, and a future engineer facing a bad deploy has to
-reconstruct intent from git. Every downgrade that intentionally does nothing
-must carry a greppable ``# downgrade: INTENTIONAL_NOOP`` or
-``# downgrade: FORWARD_ONLY`` marker stating why, in the migration file
-itself. Migrations with real inverse DDL are exempt (they explain themselves).
+Guards two regression classes found by the audit:
+
+1. A downgrade whose body is a bare ``pass`` (or a refusing ``raise``) with no
+   documented reason silently reads as unfinished work, and a future engineer
+   facing a bad deploy has to reconstruct intent from git. Every downgrade
+   that intentionally does nothing must carry a greppable
+   ``# downgrade: INTENTIONAL_NOOP`` or ``# downgrade: FORWARD_ONLY`` marker
+   stating why, in the migration file itself. Migrations with real inverse
+   DDL are exempt (they explain themselves).
+2. Filename/revision drift — ``alembic_version`` rows and migration files must
+   stay correlatable, so each file's stem must equal its revision id (or
+   start with ``<revision>_``, which the generated merge nodes do).
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ from pathlib import Path
 
 VERSIONS_DIR = Path(__file__).resolve().parents[1] / "alembic" / "versions"
 MARKER_RE = re.compile(r"#\s*downgrade:\s*(INTENTIONAL_NOOP|FORWARD_ONLY)")
+REVISION_RE = re.compile(r'^revision(?::\s*str)?\s*=\s*["\']([^"\']+)["\']', re.M)
 
 
 def _functions(module: ast.Module, name: str) -> list[ast.FunctionDef]:
@@ -63,3 +69,19 @@ def test_every_noop_or_refusing_downgrade_documents_its_reason() -> None:
     )
     # Sanity: the rule must actually be exercised, not vacuously pass.
     assert checked >= 9, f"expected at least 9 no-op/refusing downgrades, saw {checked}"
+
+
+def test_every_migration_filename_matches_its_revision() -> None:
+    offenders: list[str] = []
+    for path in sorted(VERSIONS_DIR.glob("*.py")):
+        source = path.read_text()
+        match = REVISION_RE.search(source)
+        assert match, f"{path.name}: no revision id found"
+        revision = match.group(1)
+        if path.stem != revision and not path.stem.startswith(revision + "_"):
+            offenders.append(f"{path.name} declares revision {revision!r}")
+    assert not offenders, (
+        "filename does not match its revision id (rename the FILE to the "
+        "revision — renaming the id instead would strand deployed "
+        "alembic_version rows): " + "; ".join(offenders)
+    )
