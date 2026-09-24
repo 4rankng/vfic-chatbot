@@ -9,23 +9,33 @@ class ServiceLeadContextAdapter:
     def __init__(self, db) -> None:
         self._db = db
 
-    async def profile_text(self, chat_id: str) -> str:
+    async def profile_text(self, chat_id: str, contact_id: str | None = None) -> str:
         from app.services.lead import lead_profile_text
-        from app.services.lead.repository import LeadRepository
 
-        lead = await LeadRepository(self._db).by_zalo_id(chat_id)
+        lead = await self._resolve_lead(chat_id, contact_id)
         return lead_profile_text(lead)
 
-    async def context(self, chat_id, current_user_text, recent_messages):
+    async def _resolve_lead(self, chat_id: str, contact_id: str | None) -> dict | None:
+        """The lead by chat id, else by contact (Messenger rows are contact-keyed)."""
+        from app.services.lead.repository import LeadRepository
+
+        repo = LeadRepository(self._db)
+        lead = await repo.by_zalo_id(chat_id) if chat_id else None
+        if lead is None and contact_id:
+            lead = await repo.by_contact_id(contact_id)
+        return lead
+
+    async def context(
+        self, chat_id, current_user_text, recent_messages, contact_id=None
+    ):
         from app.services.conversation import ConversationService
         from app.services.lead import high_confidence_profile_name, lead_profile_text
         from app.services.lead.probing import (
             lead_collection_question,
             oa_profile_name_guidance,
         )
-        from app.services.lead.repository import LeadRepository
 
-        lead = await LeadRepository(self._db).by_zalo_id(chat_id)
+        lead = await self._resolve_lead(chat_id, contact_id)
         oa_profile_display_name = None
         if chat_id.startswith("oa:"):
             conversation = await ConversationService(self._db).get_by_zalo(chat_id)
@@ -86,18 +96,38 @@ class ServiceLeadGenderAdapter:
     def __init__(self, db) -> None:
         self._db = db
 
-    async def stored_gender(self, chat_id: str) -> str:
+    async def _resolve_lead(self, chat_id: str, contact_id: str | None) -> dict | None:
+        """The lead by chat id, else by contact (Messenger rows are contact-keyed)."""
         from app.services.lead.repository import LeadRepository
 
-        lead = await LeadRepository(self._db).by_zalo_id(chat_id)
+        repo = LeadRepository(self._db)
+        lead = await repo.by_zalo_id(chat_id) if chat_id else None
+        if lead is None and contact_id:
+            lead = await repo.by_contact_id(contact_id)
+        return lead
+
+    async def stored_gender(self, chat_id: str, contact_id: str | None = None) -> str:
+        lead = await self._resolve_lead(chat_id, contact_id)
         return str((lead or {}).get("gender") or "").strip().lower()
 
-    async def record_inferred_gender(self, chat_id: str, gender: str) -> bool:
+    async def record_inferred_gender(
+        self,
+        chat_id: str,
+        gender: str,
+        *,
+        contact_id: str | None = None,
+        override: bool = False,
+    ) -> bool:
         if gender not in _ADDRESSABLE_GENDERS:
+            return False
+        lead = await self._resolve_lead(chat_id, contact_id)
+        if lead is None or lead.get("id") is None:
+            return False
+        if not override and str(lead.get("gender") or "").strip():
             return False
         from app.services.lead.repository import LeadRepository
 
-        return await LeadRepository(self._db).set_gender_if_blank(chat_id, gender)
+        return await LeadRepository(self._db).set_gender_by_id(lead["id"], gender)
 
 
 class ServiceFollowupEligibilityAdapter:

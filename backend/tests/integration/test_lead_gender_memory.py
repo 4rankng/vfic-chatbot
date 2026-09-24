@@ -1,9 +1,10 @@
 """PostgreSQL coverage for inferred candidate-gender memory on the lead record.
 
 The per-turn decision hop reads ``leads.gender`` before judging and writes a
-confident ``male``/``female`` back only when the column is blank. These tests
-exercise the real adapter against the disposable database, including the
-migration-0047 trigger that supplies the stub lead keyed by ``zalo_chat_id``.
+confident ``male``/``female`` back, blank-only unless the candidate explicitly
+self-refers. These tests exercise the real adapter against the disposable
+database, including the migration-0047 trigger that supplies the stub lead
+keyed by ``zalo_chat_id``, and the contact-keyed Messenger fallback.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from sqlalchemy import select, update
 
 from app.models.lead import Lead
 from app.recruitment.infrastructure.service_adapters import ServiceLeadGenderAdapter
-from tests.integration._conv_factory import make_zalo_conversation
+from tests.integration._conv_factory import make_conversation, make_zalo_conversation
 
 pytestmark = pytest.mark.integration
 
@@ -77,3 +78,38 @@ async def test_stored_gender_reads_committed_row(integration_session) -> None:
     assert await ServiceLeadGenderAdapter(integration_session).stored_gender(chat_id) == "female"
     lead = await integration_session.scalar(select(Lead).where(Lead.zalo_id == chat_id))
     assert lead.gender == "female"
+
+
+async def test_messenger_contact_keyed_lead_resolves_by_contact(integration_session) -> None:
+    """A Messenger lead has a NULL zalo_id, so only the contact key finds it."""
+    conv = await make_conversation(
+        integration_session,
+        provider="facebook_messenger",
+        account_key="page-1",
+        external_id="psid-1",
+        zalo_chat_id=None,
+        zalo_channel="facebook_messenger",
+    )
+    await integration_session.flush()
+    contact_id = str(conv.contact_id)
+    adapter = ServiceLeadGenderAdapter(integration_session)
+
+    assert await adapter.stored_gender("", contact_id) == ""
+    assert await adapter.record_inferred_gender("", "female", contact_id=contact_id) is True
+    assert await adapter.stored_gender("", contact_id) == "female"
+
+
+async def test_override_replaces_a_stale_value(integration_session) -> None:
+    """A bare inference is refused; an explicit self-reference overrides."""
+    chat_id = await _blank_lead_chat_id(integration_session, "gender-override-1")
+    await integration_session.execute(
+        update(Lead).where(Lead.zalo_id == chat_id).values(gender="male")
+    )
+    await integration_session.flush()
+    adapter = ServiceLeadGenderAdapter(integration_session)
+
+    assert await adapter.record_inferred_gender(chat_id, "female") is False
+    assert await adapter.stored_gender(chat_id) == "male"
+
+    assert await adapter.record_inferred_gender(chat_id, "female", override=True) is True
+    assert await adapter.stored_gender(chat_id) == "female"

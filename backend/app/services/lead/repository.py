@@ -87,13 +87,27 @@ _UPSQL = text(
     """
 )
 
-_SET_GENDER_IF_BLANK_SQL = text(
+_SET_GENDER_BY_ID_SQL = text(
     """
     UPDATE leads
     SET gender = :gender
-    WHERE zalo_id = :zalo_id
-      AND (gender IS NULL OR btrim(gender) = '')
+    WHERE id = :lead_id
     RETURNING id
+    """
+)
+
+# Messenger rows are keyed by ``contact_id`` with a NULL ``zalo_id`` (migration
+# 0047), so a chat-id lookup never finds them. The latest lead for the contact
+# wins — multiple leads may share a contact, and the stub trigger only dedups
+# NEW-stage rows.
+_BY_CONTACT_SQL = text(
+    """
+    SELECT id, zalo_id, name, phone, birth_year, age, living_area, address, gender,
+           region, desired_job, years_experience, expected_salary, avatar_url,
+           lead_score, lead_stage, notes, version
+    FROM leads WHERE contact_id = CAST(:contact_id AS uuid)
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 1
     """
 )
 
@@ -118,19 +132,25 @@ class LeadRepository:
         result = row.mappings().first()
         return dict(result) if result else None
 
-    async def set_gender_if_blank(self, zalo_id: str, gender: str) -> bool:
-        """Write a gender onto a lead that has none; True when a row was updated.
+    async def set_gender_by_id(self, lead_id: int, gender: str) -> bool:
+        """Write a gender onto a lead by primary key; True when a row was updated.
 
-        Blank-only by design, mirroring ProfileEnrichmentService: a value the
-        candidate stated, the provider profile supplied, or a recruiter typed is
-        stronger evidence than an inference and is never overwritten. ``version``
-        and ``updated_at`` are deliberately untouched — this is background
-        enrichment, not a user-visible edit.
+        The blank-only guard lives in the adapter, which reads the row first, so
+        a stated/provider/CRM value is preserved unless the caller explicitly
+        overrides it (a candidate self-referring in the current message).
+        ``version`` and ``updated_at`` are deliberately untouched — this is
+        background enrichment, not a user-visible edit.
         """
         result = await self.db.execute(
-            _SET_GENDER_IF_BLANK_SQL, {"zalo_id": zalo_id, "gender": gender}
+            _SET_GENDER_BY_ID_SQL, {"lead_id": lead_id, "gender": gender}
         )
         return result.scalar_one_or_none() is not None
+
+    async def by_contact_id(self, contact_id: str) -> dict | None:
+        """Latest lead for a contact; None when the contact has no lead."""
+        row = await self.db.execute(_BY_CONTACT_SQL, {"contact_id": str(contact_id)})
+        result = row.mappings().first()
+        return dict(result) if result else None
 
     async def optimistic_apply(self, lead_id: int, current_version: int, **values) -> bool:
         """Execute optimistic-concurrency update + commit. Returns True if row was updated.

@@ -80,6 +80,7 @@ async def test_questions_match_contract() -> None:
         "recent_vacancy",
         "contact_info",
         "gender",
+        "gender_stated",
     }
     assert set(build_turn_questions(include_gender=False)) == {
         "intent",
@@ -175,11 +176,12 @@ async def test_client_parses_full_fan_out() -> None:
 async def test_client_parses_gender_answer() -> None:
     client = _client()
     client._system_one = AsyncMock(  # noqa: SLF001 — test seam
-        return_value=_payload(_answers(gender=_choice("female", 0.9)))
+        return_value=_payload(_answers(gender=_choice("female", 0.9), gender_stated=_noul(0.9)))
     )
     decisions = await client.decide_turn(user_text="x", recent_messages=[])
     assert decisions.gender == "female"
     assert decisions.gender_confidence == 0.9
+    assert decisions.gender_stated is True
     assert decisions.degraded is False
 
 

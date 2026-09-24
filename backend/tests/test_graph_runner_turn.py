@@ -91,10 +91,12 @@ class _FakeConv:
         version: int = 1,
         zalo_channel: str = "bot",
         channel_identity=None,
+        contact_id=None,
     ) -> None:
         self.zalo_chat_id = zalo_chat_id
         self.zalo_channel = zalo_channel
         self.channel_identity = channel_identity
+        self.contact_id = contact_id
         self.version = version
         self.bot_lock_owner = None
         self.bot_locked_until = None
@@ -201,7 +203,16 @@ def _stub_agent(monkeypatch, *replies) -> None:
     seq = list(replies)
 
     async def _fake(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state,
+        deps,
+        user_text,
+        *,
+        provider=None,
+        chat_id,
+        recent_messages,
+        contact_id=None,
+        timings=None,
+        decisions=None,
     ):  # noqa: ARG001
         r = seq.pop(0) if seq else ""
         if isinstance(r, Exception):
@@ -622,7 +633,7 @@ async def test_owned_oa_turn_enriches_profile_before_agent(monkeypatch):
         return True
 
     async def agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, contact_id=None, timings=None, decisions=None
     ):  # noqa: ARG001
         events.append("agent")
         return "Chào bạn!"
@@ -727,7 +738,7 @@ async def test_direct_vacancy_question_reaches_agent_when_faq_bypass_misses(monk
     captured: dict[str, object] = {}
 
     async def _grounded_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, contact_id=None, timings=None, decisions=None
     ):  # noqa: ARG001
         captured["user_text"] = user_text
         captured["chat_id"] = chat_id
@@ -807,7 +818,7 @@ async def test_vacancy_prompts_reach_agent_when_faq_bypass_misses(monkeypatch, u
     captured: dict[str, object] = {}
 
     async def _grounded_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, contact_id=None, timings=None, decisions=None
     ):  # noqa: ARG001
         captured["user_text"] = user_text
         captured["chat_id"] = chat_id
@@ -843,7 +854,7 @@ async def test_vacancy_followup_reaches_agent_with_scoped_query_when_faq_bypass_
     captured: dict[str, object] = {}
 
     async def _grounded_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, contact_id=None, timings=None, decisions=None
     ):  # noqa: ARG001
         captured["user_text"] = user_text
         captured["recent_messages"] = list(recent_messages)
@@ -909,7 +920,7 @@ async def test_lock_owner_lost_before_turn_suppresses_without_pending(monkeypatc
             raise AssertionError("stale owner must not record outcome")
 
     async def _must_not_run(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, contact_id=None, timings=None, decisions=None
     ):  # noqa: ARG001
         raise AssertionError("agent must not run after owner loss")
 
@@ -1156,7 +1167,7 @@ async def test_agent_runs_to_completion_past_deadline(monkeypatch):
     svc, _ = _stub_svc(conv=conv, owned=True)
 
     async def _slow_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, contact_id=None, timings=None, decisions=None
     ):  # noqa: ARG001
         await asyncio.sleep(0.3)  # well past the 0.1s former cap
         return "Câu trả lời thật của tôi."
@@ -1191,7 +1202,7 @@ async def test_slow_turn_pulses_typing_but_sends_no_filler(monkeypatch):
     svc, _ = _stub_svc(conv=conv, owned=True)
 
     async def _slow_agent(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, contact_id=None, timings=None, decisions=None
     ):  # noqa: ARG001
         # Long enough for the heartbeat's ~0.5s tick to pulse typing several times
         # while the turn is in flight, well before the real answer lands.
@@ -1515,7 +1526,7 @@ async def test_agent_error_rolls_back_session_before_silent_record(monkeypatch):
     db = _FakeDB()
 
     async def _boom(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state, deps, user_text, *, provider=None, chat_id, recent_messages, contact_id=None, timings=None, decisions=None
     ):  # noqa: ARG001
         db._poisoned = True  # agent's lead / system-prompt read failed
         raise RuntimeError("agent DB error")
@@ -1545,7 +1556,16 @@ async def test_stage_timings_records_agent_lane_send_and_total(monkeypatch):
     svc, recorded = _stub_svc(conv=conv, owned=True)
 
     async def _fake(
-        state, deps, user_text, *, provider=None, chat_id, recent_messages, timings=None, decisions=None
+        state,
+        deps,
+        user_text,
+        *,
+        provider=None,
+        chat_id,
+        recent_messages,
+        contact_id=None,
+        timings=None,
+        decisions=None,
     ):  # noqa: ARG001
         # Emulate the real _agent_turn stamping into the shared timings dict.
         # The LLM stage is now the split llm_queue_ms + llm_model_ms pair
@@ -2256,21 +2276,33 @@ async def test_whitespace_agent_candidate_stays_silent(monkeypatch, blank):
 
 
 class _LeadGenderStub:
-    """Capture gender reads/writes the runner performs against the lead record."""
+    """Capture gender reads/writes; honour blank-only vs override like the adapter."""
 
     def __init__(self, stored: str = "", *, raises: bool = False) -> None:
         self.stored = stored
         self.raises = raises
-        self.recorded: list[tuple[str, str]] = []
+        self.calls: list[dict] = []
 
-    async def stored_gender(self, chat_id: str) -> str:
+    async def stored_gender(self, chat_id: str, contact_id: str | None = None) -> str:
         if self.raises:
             raise RuntimeError("gender lookup boom")
         return self.stored
 
-    async def record_inferred_gender(self, chat_id: str, gender: str) -> bool:
-        self.recorded.append((chat_id, gender))
-        return True
+    async def record_inferred_gender(
+        self,
+        chat_id: str,
+        gender: str,
+        *,
+        contact_id: str | None = None,
+        override: bool = False,
+    ) -> bool:
+        self.calls.append(
+            {"chat_id": chat_id, "gender": gender, "contact_id": contact_id, "override": override}
+        )
+        wrote = not self.stored or override
+        if wrote:
+            self.stored = gender
+        return wrote
 
 
 def _decisions_port(decisions: TurnDecisions):
@@ -2285,8 +2317,10 @@ def _decisions_port(decisions: TurnDecisions):
     return port
 
 
-async def _run_gender_turn(monkeypatch, *, decisions, gender_stub, state=None, conv=None):
-    _stub_agent(monkeypatch, "Em chào bạn, mình tư vấn ngay.")
+async def _run_gender_turn(
+    monkeypatch, *, decisions, gender_stub, state=None, conv=None, reply="Dạ em chào Anh/chị ạ"
+):
+    _stub_agent(monkeypatch, reply)
     conv = conv or _FakeConv()
     svc, _ = _stub_svc(conv=conv)
     deps = _deps(_FakeZalo(), conversation=svc)
@@ -2299,14 +2333,16 @@ async def _run_gender_turn(monkeypatch, *, decisions, gender_stub, state=None, c
 @pytest.mark.asyncio
 async def test_confident_gender_is_recorded_on_blank_lead(monkeypatch):
     stub = _LeadGenderStub(stored="")
-    result, deps = await _run_gender_turn(
+    result, _ = await _run_gender_turn(
         monkeypatch,
         decisions=TurnDecisions(gender="female", gender_confidence=0.9),
         gender_stub=stub,
     )
     assert result["outcome"] == "sent"
-    assert stub.recorded == [("z1", "female")]
-    assert deps.turn_decisions.calls[0]["include_gender"] is True
+    assert stub.calls == [
+        {"chat_id": "z1", "gender": "female", "contact_id": None, "override": False}
+    ]
+    assert stub.stored == "female"
 
 
 @pytest.mark.asyncio
@@ -2317,7 +2353,7 @@ async def test_unknown_gender_is_not_recorded(monkeypatch):
         decisions=TurnDecisions(gender="unknown", gender_confidence=0.99),
         gender_stub=stub,
     )
-    assert stub.recorded == []
+    assert stub.calls == []
 
 
 @pytest.mark.asyncio
@@ -2328,7 +2364,7 @@ async def test_low_confidence_gender_is_not_recorded(monkeypatch):
         decisions=TurnDecisions(gender="female", gender_confidence=0.5),
         gender_stub=stub,
     )
-    assert stub.recorded == []
+    assert stub.calls == []
 
 
 @pytest.mark.asyncio
@@ -2339,32 +2375,63 @@ async def test_degraded_turn_never_records_gender(monkeypatch):
         decisions=TurnDecisions(gender="female", gender_confidence=0.9, degraded=True),
         gender_stub=stub,
     )
-    assert stub.recorded == []
+    assert stub.calls == []
 
 
 @pytest.mark.asyncio
-async def test_stored_gender_skips_the_question(monkeypatch):
+async def test_stored_gender_is_not_overwritten_by_a_bare_inference(monkeypatch):
     stub = _LeadGenderStub(stored="male")
-    _, deps = await _run_gender_turn(
+    _, _ = await _run_gender_turn(
         monkeypatch,
-        decisions=TurnDecisions(gender="unknown"),
+        decisions=TurnDecisions(gender="female", gender_confidence=0.95, gender_stated=False),
         gender_stub=stub,
     )
-    assert deps.turn_decisions.calls[0]["include_gender"] is False
-    assert stub.recorded == []
+    assert stub.calls == [
+        {"chat_id": "z1", "gender": "female", "contact_id": None, "override": False}
+    ]
+    assert stub.stored == "male"
+
+
+@pytest.mark.asyncio
+async def test_stated_self_reference_overrides_stored_gender(monkeypatch):
+    stub = _LeadGenderStub(stored="male")
+    result, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="female", gender_confidence=0.95, gender_stated=True),
+        gender_stub=stub,
+    )
+    assert stub.calls == [
+        {"chat_id": "z1", "gender": "female", "contact_id": None, "override": True}
+    ]
+    assert stub.stored == "female"
+    # The resolved address form reaches the reply, not the neutral token.
+    assert "chị" in result["reply"].lower()
+    assert "anh/chị" not in result["reply"].lower()
 
 
 @pytest.mark.asyncio
 async def test_stored_gender_lookup_failure_keeps_turn_working(monkeypatch):
     stub = _LeadGenderStub(raises=True)
-    result, deps = await _run_gender_turn(
+    result, _ = await _run_gender_turn(
         monkeypatch,
         decisions=TurnDecisions(gender="unknown"),
         gender_stub=stub,
     )
     assert result["outcome"] == "sent"
-    assert deps.turn_decisions.calls[0]["include_gender"] is True
-    assert stub.recorded == []
+    assert stub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_messenger_conv_passes_contact_id_to_gender_port(monkeypatch):
+    conv = _FakeConv(zalo_chat_id=None, zalo_channel="facebook_messenger", contact_id="ct-9")
+    stub = _LeadGenderStub(stored="")
+    _, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="female", gender_confidence=0.9),
+        gender_stub=stub,
+        conv=conv,
+    )
+    assert stub.calls[0]["contact_id"] == "ct-9"
 
 
 @pytest.mark.asyncio

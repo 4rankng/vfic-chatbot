@@ -194,6 +194,15 @@ def build_turn_questions(*, include_gender: bool = True) -> dict:
             ),
             "criteria": _GENDER_CRITERIA,
         }
+        questions["gender_stated"] = {
+            "type": "noul",
+            "instructions": (
+                "Trong tin nhắn `message`, ứng viên có tự xưng hoặc nói rõ giới tính "
+                "của chính mình không (ví dụ tự xưng 'anh'/'chị', hoặc nói 'tôi là "
+                "nam/nữ')?"
+            ),
+            "criteria": _NOUL_CRITERIA,
+        }
     return questions
 
 
@@ -287,6 +296,7 @@ class JevDecisionClient:
             pleasantry_kind=pleasantry_kind,
             gender=gender,
             gender_confidence=self._confidence(answers.get("gender")),
+            gender_stated=self._noul(answers.get("gender_stated")),
             recent_vacancy=self._noul(answers.get("recent_vacancy")),
             contact_info=self._noul(answers.get("contact_info")),
             model=str((payload or {}).get("model") or self._model),

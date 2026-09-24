@@ -95,6 +95,9 @@ class TurnDecisions:
     # the bot addresses the candidate (services/lead/normalizers.address_form).
     gender: str = "unknown"
     gender_confidence: float = 0.0
+    # True when the candidate explicitly self-refers or states their gender in
+    # the current message — that outranks an earlier inferred stored value.
+    gender_stated: bool = False
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0

@@ -230,6 +230,7 @@ async def _agent_turn(
     provider: str,
     chat_id: str,
     recent_messages: list[Any],
+    contact_id: str | None = None,
     timings: dict | None = None,
     trace_sink=None,
     manifest_policy=None,
@@ -436,7 +437,7 @@ async def _agent_turn(
     if allow_lead_context:
         try:
             lead_profile, lead_collection_question = await deps.lead.context(
-                chat_id, user_text, recent_messages
+                chat_id, user_text, recent_messages, contact_id=contact_id
             )
             if lead_collection_question:
                 lead_collection_instruction = deps.lead.instruction(lead_collection_question)
@@ -872,6 +873,9 @@ async def _resolve_lane(
     the agent lane can fail — a crash stands the turn down through
     ``_authority_gate`` and surfaces as ``terminal``.
     """
+    # Messenger leads are keyed by contact (NULL zalo_id), so the contact id is
+    # the fallback key for the agent's lead context.
+    contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
     if project_context is not None and project_context.clarification:
         trace_sink.record_decision("context_selected", "project_clarification")
         trace_sink.record_decision("lane_selected", "project_clarification")
@@ -926,6 +930,7 @@ async def _resolve_lane(
         agent_kwargs = {
             "provider": provider,
             "chat_id": recipient_id,
+            "contact_id": contact_id,
             "recent_messages": recent_messages,
             "timings": timings,
             "decisions": decisions,
@@ -1318,13 +1323,18 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     # (Zalo bot / OA sender), else the stored provider profile label (Messenger,
     # filled in out of band by profile enrichment).
     profile_name = state.user_name.strip() or _contact_display_name(conv)
-    # One indexed read so a candidate whose gender is already on the lead is never
-    # re-judged — the question is then left out of the fan-out entirely.
+    # Messenger leads are contact-keyed (NULL zalo_id), so the recipient id alone
+    # would miss them; the contact id is the fallback key.
+    contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
+    # Read the stored value so the write stays blank-only, and so a stated
+    # self-reference in this message can be told apart from an earlier inference.
     stored_gender = ""
-    if deps.lead_gender is not None and recipient_id:
+    if deps.lead_gender is not None and (recipient_id or contact_id):
         gender_t0 = time.monotonic()
         try:
-            stored_gender = await deps.lead_gender.stored_gender(recipient_id)
+            stored_gender = await deps.lead_gender.stored_gender(
+                recipient_id or "", contact_id
+            )
         except Exception:  # noqa: BLE001 — an addressing hint must never break a turn
             logger.warning("lead gender lookup failed for %s", recipient_id, exc_info=True)
         _stamp_db(timings, "lead_gender", gender_t0)
@@ -1337,7 +1347,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             user_text=state.user_text,
             recent_messages=recent_messages,
             profile_name=profile_name,
-            include_gender=not stored_gender,
         )
     else:
         decisions = TurnDecisions(degraded=True)
@@ -1346,17 +1355,26 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         timings["jev_degraded"] = True
     else:
         timings["jev_model"] = decisions.model
+    # A confident judgment fills a blank; a candidate who explicitly self-refers
+    # in this message overrides an earlier inference — the candidate's own word
+    # outranks it. Provider/CRM values are preserved unless the candidate states.
     if (
         deps.lead_gender is not None
-        and recipient_id
+        and (recipient_id or contact_id)
         and not decisions.degraded
         and decisions.gender in _INFERRED_GENDERS
         and decisions.gender_confidence >= GENDER_INFERENCE_MIN_CONFIDENCE
     ):
         try:
-            if await deps.lead_gender.record_inferred_gender(recipient_id, decisions.gender):
+            if await deps.lead_gender.record_inferred_gender(
+                recipient_id or "",
+                decisions.gender,
+                contact_id=contact_id,
+                override=decisions.gender_stated,
+            ):
                 # The value itself is candidate data and is deliberately not logged.
                 logger.info("candidate gender inferred conversation=%s", state.conversation_id)
+                stored_gender = decisions.gender
         except Exception:  # noqa: BLE001 — addressing is best-effort
             logger.warning(
                 "candidate gender write failed conversation=%s",
@@ -1442,6 +1460,18 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             timings=timings,
             trace_sink=trace_sink,
         )
+
+        # Deterministic replies (tool safe_reply, curated templates) carry the
+        # neutral address form; upgrade it to the resolved form so a known gender
+        # is honored there too, not only in LLM prose. Match the sentence-start
+        # capitalization too ("Anh/chị" as well as "anh/chị").
+        from app.shared.domain.addressing import NEUTRAL_ADDRESS_FORM, address_form
+
+        resolved_address = address_form(stored_gender)
+        if resolved_address != NEUTRAL_ADDRESS_FORM:
+            candidate = candidate.replace(
+                NEUTRAL_ADDRESS_FORM.capitalize(), resolved_address.capitalize()
+            ).replace(NEUTRAL_ADDRESS_FORM, resolved_address)
 
         # Defense-in-depth: every lane should already suppress empty output via
         # DeterministicReplyPolicy. An empty candidate here means the bot has

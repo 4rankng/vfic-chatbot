@@ -308,22 +308,12 @@ def normalize_lead(raw, chat_id: str) -> dict | None:
     }
 
 
-# Vietnamese second-person address forms. ``gender`` is deliberately NOT in
-# ``_PROFILE_FIELDS`` below: it is never probed for ("giới tính của bạn?" is a
-# rude opener), only received — from the candidate stating it, or from the
-# Facebook profile field when the Page has been granted access to it.
-_ADDRESS_FORMS = {"male": "anh", "female": "chị"}
-NEUTRAL_ADDRESS_FORM = "anh/chị"
-
-
-def address_form(gender: str | None) -> str:
-    """Return how the bot should address a candidate of this gender.
-
-    Unknown, blank, and unrecognised values all resolve to the neutral
-    "anh/chị", which is ordinary polite Vietnamese rather than a visible
-    fallback — guessing wrong reads far worse than staying neutral.
-    """
-    return _ADDRESS_FORMS.get(str(gender or "").strip().lower(), NEUTRAL_ADDRESS_FORM)
+# The address-form mapping lives in the neutral shared layer so the graph runner
+# can normalize deterministic replies without importing this services module.
+from app.shared.domain.addressing import (  # noqa: E402,F401  (re-export)
+    NEUTRAL_ADDRESS_FORM,
+    address_form,
+)
 
 
 # Fields shown to the agent so it can see what's known and what's missing.
