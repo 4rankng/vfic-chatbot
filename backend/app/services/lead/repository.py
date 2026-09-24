@@ -87,6 +87,16 @@ _UPSQL = text(
     """
 )
 
+_SET_GENDER_IF_BLANK_SQL = text(
+    """
+    UPDATE leads
+    SET gender = :gender
+    WHERE zalo_id = :zalo_id
+      AND (gender IS NULL OR btrim(gender) = '')
+    RETURNING id
+    """
+)
+
 # ── Repository ─────────────────────────────────────────────────────
 
 
@@ -107,6 +117,20 @@ class LeadRepository:
         row = await self.db.execute(_FETCH_SQL, {"zalo_id": zalo_id})
         result = row.mappings().first()
         return dict(result) if result else None
+
+    async def set_gender_if_blank(self, zalo_id: str, gender: str) -> bool:
+        """Write a gender onto a lead that has none; True when a row was updated.
+
+        Blank-only by design, mirroring ProfileEnrichmentService: a value the
+        candidate stated, the provider profile supplied, or a recruiter typed is
+        stronger evidence than an inference and is never overwritten. ``version``
+        and ``updated_at`` are deliberately untouched — this is background
+        enrichment, not a user-visible edit.
+        """
+        result = await self.db.execute(
+            _SET_GENDER_IF_BLANK_SQL, {"zalo_id": zalo_id, "gender": gender}
+        )
+        return result.scalar_one_or_none() is not None
 
     async def optimistic_apply(self, lead_id: int, current_version: int, **values) -> bool:
         """Execute optimistic-concurrency update + commit. Returns True if row was updated.

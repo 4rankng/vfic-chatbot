@@ -76,7 +76,14 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Same site again: the OA user-detail error branch reads envelope.message
     # to tell a dead follower (-201 naming user_id) from a request bug —
     # bumps get_user_detail's get count 3→4, no new site.
-    "provider_boundary": 121,
+    # +3: the gender judgment adds three dict `.get` lookups in
+    # decisions.decide_turn (answers.get("gender"), the nested .get("choice"),
+    # and the confidence read). decisions.py carries get_http_client, so the
+    # provider_transport heuristic counts every `.get` — dict reads included.
+    # +1: decisions._retry_after_seconds reads two Retry-After headers with
+    # `.get`; the heuristic counts the site once (rows are per (file, scope,
+    # call), not per occurrence).
+    "provider_boundary": 122,
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
     # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
@@ -91,7 +98,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "b89af3e1a3ebcf9862cfe5f60bf5a6ab703bdeca97fd5c86383ba4ac6e62066e"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "5fa355c165e316c45801638f48fb0e0ac5aed26ce08a5495d93ec2933bb6675a"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

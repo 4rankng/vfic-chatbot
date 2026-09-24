@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.recruitment.application.ports import (
     FollowupEligibilityPort,
     LeadContextQueryPort,
+    LeadGenderPort,
     ProactiveStatePort,
 )
 from app.recruitment.application.persistence import (
@@ -15,12 +16,17 @@ from app.recruitment.infrastructure.service_adapters import (
     ServiceCandidatePersistenceAdapter,
     ServiceFollowupEligibilityAdapter,
     ServiceLeadContextAdapter,
+    ServiceLeadGenderAdapter,
     ServiceProactiveStateAdapter,
 )
 
 
 def build_lead_context(db) -> LeadContextQueryPort:
     return ServiceLeadContextAdapter(db)
+
+
+def build_lead_gender(db) -> LeadGenderPort:
+    return ServiceLeadGenderAdapter(db)
 
 
 def build_followup_eligibility(db) -> FollowupEligibilityPort:
@@ -57,6 +63,7 @@ async def run_candidate_persistence(
 __all__ = [
     "build_followup_eligibility",
     "build_lead_context",
+    "build_lead_gender",
     "build_proactive_state",
     "run_candidate_persistence",
 ]

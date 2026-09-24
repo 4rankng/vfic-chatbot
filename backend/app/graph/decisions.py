@@ -1,9 +1,11 @@
 """Jev-backed turn decisions — the System One fan-out replacing the keyword router.
 
 One parallel ``systemone`` call per inbound turn classifies intent, sort
-direction, pleasantry kind, and conversation-context flags with calibrated
-probabilities. Policy (strategy mapping, confidence floors, fallbacks) stays
-in code (:mod:`app.graph.router`); Jev supplies only the meaning judgments.
+direction, pleasantry kind, conversation-context flags, and the candidate's
+gender — the last so the bot can address the candidate correctly ("anh"/"chị")
+instead of falling back to the neutral form. Policy (strategy mapping,
+confidence floors, fallbacks) stays in code (:mod:`app.graph.router`); Jev
+supplies only the meaning judgments.
 This follows the TypeSafe pattern: ask independent questions over the same
 state together — extra questions barely add latency and are priced by tokens.
 
@@ -23,15 +25,20 @@ import time
 from typing import Any
 
 from app.core.http import get_http_client
+from app.graph.message_values import sender_is
 from app.graph.ports import TurnDecisions
 
 logger = logging.getLogger(__name__)
 
 JEV_SYSTEMONE_URL = "https://api.typesafe.ai/v1/systemone"
-# Attempts share one per-call deadline: attempt 1 gets most of the budget, the
-# retry (429/529 per the API contract) gets what remains. Both are bounded.
-JEV_ATTEMPT_TIMEOUT_S = 3.5
-JEV_RETRY_HTTP_STATUSES = frozenset({429, 529})
+# One per-call deadline shared by every attempt: attempt 1 gets most of the
+# budget, the retry gets what remains (including any Retry-After wait). The
+# documented latency is 70-500 ms, so 3.5 s is already a wide safety margin.
+JEV_CALL_TIMEOUT_S = 3.5
+# Retry set mirrors the TypeSafe SDK default (408, 429, and 5xx). A rate-limit
+# 429 carries Retry-After / retry-after-ms, which the retry honours.
+JEV_RETRY_HTTP_STATUSES = frozenset({408, 429, *range(500, 600)})
+JEV_RETRY_BACKOFF_S = 0.25
 
 # Shared context so the model judges every question against the same product
 # frame. Kept short — irrelevant state degrades accuracy (context rot).
@@ -79,13 +86,46 @@ _PLEASANTRY_KIND_CRITERIA = {
 _NOUL_CRITERIA = {"true": "Có", "false": "Không"}
 
 
-def build_turn_questions() -> dict:
+def _retry_after_seconds(headers: Any) -> float | None:
+    """Wait seconds from a ``Retry-After`` / ``retry-after-ms`` header, or None.
+
+    A rate-limit 429 carries the header per the TypeSafe contract; the SDK
+    honours it and so do we. ``retry-after-ms`` (milliseconds) wins over the
+    second-granularity ``Retry-After``. An HTTP-date ``Retry-After`` is not
+    parsed — the caller falls back to the fixed backoff.
+    """
+    raw_ms = headers.get("retry-after-ms")
+    if raw_ms:
+        try:
+            return max(0.0, float(raw_ms) / 1000.0)
+        except (TypeError, ValueError):
+            pass
+    raw = headers.get("retry-after")
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        return None
+
+# Candidate-gender taxonomy. "unknown" is a first-class answer: a wrong "anh"/"chị"
+# reads worse to the candidate than staying neutral, so the runner stores only a
+# confident male/female and the next message re-judges anything else.
+_GENDER_CRITERIA = {"male": "Nam", "female": "Nữ", "unknown": "Không xác định"}
+
+# Display labels are short in practice; the cap stops a long profile label from
+# inflating every per-turn state payload (state is re-sent per call).
+_PROFILE_NAME_MAX_CHARS = 120
+
+
+def build_turn_questions(*, include_gender: bool = True) -> dict:
     """Return the turn fan-out questions (one narrow judgment per question).
 
-    Module-level so tests can pin the taxonomy against the TurnIntent
-    contract without any HTTP call.
+    ``include_gender=False`` omits the candidate-gender question when the lead
+    already carries a value. Module-level so tests can pin the taxonomy against
+    the TurnIntent contract without any HTTP call.
     """
-    return {
+    questions = {
         "intent": {
             "type": "choice",
             "instructions": "Ý định chính của tin nhắn `message` là gì?",
@@ -137,19 +177,40 @@ def build_turn_questions() -> dict:
             "criteria": _NOUL_CRITERIA,
         },
     }
+    if include_gender:
+        questions["gender"] = {
+            "type": "choice",
+            "instructions": (
+                "Ứng viên (người gửi tin nhắn `message`) là Nam hay Nữ? Chỉ dựa vào "
+                "tên hiển thị hồ sơ trong `profile_name` và cách ứng viên tự xưng "
+                "trong `message`/`recent`. Không đủ căn cứ thì chọn unknown, không đoán."
+            ),
+            "criteria": _GENDER_CRITERIA,
+        }
+    return questions
 
 
-def build_turn_state(user_text: str, recent_messages: list[Any] | None) -> dict:
-    """Shared state: product context + current message + recent candidate messages."""
+def build_turn_state(
+    user_text: str, recent_messages: list[Any] | None, profile_name: str = ""
+) -> dict:
+    """Shared state: product context + current message + recent candidate messages.
+
+    ``recent`` carries only the candidate's own messages (``sender == WORKER``):
+    bot and recruiter replies are excluded so the gender judgment reads the
+    candidate's self-reference, never the bot's neutral "anh/chị" phrasing.
+    """
     recent: list[str] = []
-    for message in (recent_messages or [])[-_RECENT_MESSAGE_LIMIT:]:
+    for message in recent_messages or []:
+        if not sender_is(message, "WORKER"):
+            continue
         body = str(getattr(message, "body", "") or "")
         if body:
             recent.append(body[:_RECENT_MESSAGE_MAX_CHARS])
     return {
         "context": _BOT_CONTEXT,
         "message": user_text or "",
-        "recent": recent,
+        "recent": recent[-_RECENT_MESSAGE_LIMIT:],
+        "profile_name": str(profile_name or "")[:_PROFILE_NAME_MAX_CHARS],
     }
 
 
@@ -174,13 +235,17 @@ class JevDecisionClient:
         *,
         user_text: str,
         recent_messages: list[Any] | None = None,
+        profile_name: str = "",
+        include_gender: bool = True,
     ) -> TurnDecisions:
         if not self.usable:
             return TurnDecisions(degraded=True)
-        state = build_turn_state(user_text, recent_messages)
+        state = build_turn_state(user_text, recent_messages, profile_name=profile_name)
         started = time.perf_counter()
         try:
-            payload = await self._system_one(state, build_turn_questions())
+            payload = await self._system_one(
+                state, build_turn_questions(include_gender=include_gender)
+            )
         except Exception:  # noqa: BLE001 — decisions must never break a turn
             logger.warning("jev decide_turn failed; using neutral route", exc_info=True)
             return TurnDecisions(degraded=True)
@@ -202,6 +267,9 @@ class JevDecisionClient:
         )
         if pleasantry_kind not in _PLEASANTRY_KIND_CRITERIA:
             pleasantry_kind = "none"
+        gender = str((answers.get("gender") or {}).get("choice") or "unknown").strip().lower()
+        if gender not in _GENDER_CRITERIA:
+            gender = "unknown"
 
         return TurnDecisions(
             intent=intent,
@@ -210,6 +278,8 @@ class JevDecisionClient:
             sort_by=None if sort_by == "none" else sort_by,
             pleasantry=self._noul(answers.get("pleasantry")),
             pleasantry_kind=pleasantry_kind,
+            gender=gender,
+            gender_confidence=self._confidence(answers.get("gender")),
             recent_vacancy=self._noul(answers.get("recent_vacancy")),
             contact_info=self._noul(answers.get("contact_info")),
             model=str((payload or {}).get("model") or self._model),
@@ -219,7 +289,15 @@ class JevDecisionClient:
         )
 
     async def _system_one(self, state: dict, questions: dict) -> dict:
-        """One bounded systemone call with a single 429/529 retry."""
+        """One bounded systemone call with a single retry.
+
+        Attempts share one per-call deadline (``JEV_CALL_TIMEOUT_S``): the retry
+        gets only the time left after the first attempt and any honoured
+        ``Retry-After`` wait. The per-request ``timeout=`` is passed to the httpx
+        METHOD — ``get_http_client`` builds the process-scoped client once and
+        ignores a later construction timeout, so passing it there would not
+        bound anything.
+        """
         from app.core.config import get_settings
 
         body = {"model": self._model, "state": state, "questions": questions}
@@ -227,22 +305,29 @@ class JevDecisionClient:
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
+        deadline = time.monotonic() + JEV_CALL_TIMEOUT_S
         last_status: int | None = None
         for attempt in (1, 2):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             try:
-                client = await get_http_client(
-                    "jev_decisions",
-                    timeout=JEV_ATTEMPT_TIMEOUT_S,
-                    settings=get_settings(),
+                client = await get_http_client("jev_decisions", settings=get_settings())
+                response = await client.post(
+                    JEV_SYSTEMONE_URL, json=body, headers=headers, timeout=remaining
                 )
-                response = await client.post(JEV_SYSTEMONE_URL, json=body, headers=headers)
             except Exception as exc:  # noqa: BLE001 — transport: no retry (deadline)
                 raise RuntimeError(f"jev transport error: {exc}") from exc
             if response.status_code == 200:
                 return response.json()
             last_status = response.status_code
             if response.status_code in JEV_RETRY_HTTP_STATUSES and attempt == 1:
-                await asyncio.sleep(0.25)
+                wait = _retry_after_seconds(response.headers)
+                if wait is None:
+                    wait = JEV_RETRY_BACKOFF_S
+                if wait >= deadline - time.monotonic():
+                    break  # no budget left for a second attempt
+                await asyncio.sleep(wait)
                 continue
             break
         raise RuntimeError(f"jev http status={last_status}")

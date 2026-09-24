@@ -69,6 +69,20 @@ class FollowupEligibilityPort(Protocol):
     async def allowed(self, conversation: Any) -> tuple[bool, str]: ...
 
 
+class LeadGenderPort(Protocol):
+    """Candidate gender memory shared by the decision hop and the lead record.
+
+    ``stored_gender`` returns whatever non-blank value the lead carries (canonical
+    or not) so a turn never re-judges a value a human or a provider already set.
+    ``record_inferred_gender`` fills a blank only, so an inference can never
+    overwrite a stated/provider/CRM value.
+    """
+
+    async def stored_gender(self, chat_id: str) -> str: ...
+
+    async def record_inferred_gender(self, chat_id: str, gender: str) -> bool: ...
+
+
 class ProactiveStatePort(Protocol):
     """Persistence seam used by graph proactive orchestration."""
 
@@ -93,6 +107,7 @@ __all__ = [
     "ConversationAdapterProviderResolver",
     "FollowupEligibilityPort",
     "LeadContextQueryPort",
+    "LeadGenderPort",
     "PersonaBodyResolver",
     "PersonaFollowupRulesResolver",
     "ProactiveStatePort",

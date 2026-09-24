@@ -69,6 +69,11 @@ logger = logging.getLogger(__name__)
 RECENT_HISTORY_LIMIT = 16
 DIRECT_HISTORY_TOKEN_BUDGET = 12_000
 OA_PROFILE_LOOKUP_TIMEOUT_SECONDS = 2.0
+# A wrong "anh"/"chị" reads worse to the candidate than staying neutral, so an
+# inferred gender is stored only at or above this confidence; anything lower (and
+# an explicit "unknown") is left for the candidate's next message to re-judge.
+GENDER_INFERENCE_MIN_CONFIDENCE = 0.7
+_INFERRED_GENDERS = frozenset({"male", "female"})
 VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
     "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
 )
@@ -124,6 +129,12 @@ def _channel_for_conversation(conv) -> str:
 def _recipient_for_conversation(conv) -> str | None:
     """Return the immutable provider recipient used by the outbound command."""
     return recipient_from_conversation(conv)
+
+
+def _contact_display_name(conv) -> str:
+    """Stored provider profile label for the candidate (Messenger/OA), "" when absent."""
+    contact = getattr(conv, "contact", None)
+    return str(getattr(contact, "display_name", "") or "").strip()
 
 
 def _build_outbox_payload(
@@ -1303,6 +1314,20 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         )
     t0 = time.monotonic()
     trace_sink = DecisionTraceBuilder()
+    # The account label Jev judges the name against: the channel payload name
+    # (Zalo bot / OA sender), else the stored provider profile label (Messenger,
+    # filled in out of band by profile enrichment).
+    profile_name = state.user_name.strip() or _contact_display_name(conv)
+    # One indexed read so a candidate whose gender is already on the lead is never
+    # re-judged — the question is then left out of the fan-out entirely.
+    stored_gender = ""
+    if deps.lead_gender is not None and recipient_id:
+        gender_t0 = time.monotonic()
+        try:
+            stored_gender = await deps.lead_gender.stored_gender(recipient_id)
+        except Exception:  # noqa: BLE001 — an addressing hint must never break a turn
+            logger.warning("lead gender lookup failed for %s", recipient_id, exc_info=True)
+        _stamp_db(timings, "lead_gender", gender_t0)
     # Jev fan-out: one parallel decision call per turn. Absent port (tests /
     # disabled) or any failure inside the client degrades to the neutral
     # general/agent route — the bot keeps working without Jev.
@@ -1311,6 +1336,8 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         decisions = await deps.turn_decisions.decide_turn(
             user_text=state.user_text,
             recent_messages=recent_messages,
+            profile_name=profile_name,
+            include_gender=not stored_gender,
         )
     else:
         decisions = TurnDecisions(degraded=True)
@@ -1319,6 +1346,23 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         timings["jev_degraded"] = True
     else:
         timings["jev_model"] = decisions.model
+    if (
+        deps.lead_gender is not None
+        and recipient_id
+        and not decisions.degraded
+        and decisions.gender in _INFERRED_GENDERS
+        and decisions.gender_confidence >= GENDER_INFERENCE_MIN_CONFIDENCE
+    ):
+        try:
+            if await deps.lead_gender.record_inferred_gender(recipient_id, decisions.gender):
+                # The value itself is candidate data and is deliberately not logged.
+                logger.info("candidate gender inferred conversation=%s", state.conversation_id)
+        except Exception:  # noqa: BLE001 — addressing is best-effort
+            logger.warning(
+                "candidate gender write failed conversation=%s",
+                state.conversation_id,
+                exc_info=True,
+            )
     turn_route = route_from_decisions(state.user_text, decisions)
     trace_sink.record_decision("route_selected", turn_route.reason)
 

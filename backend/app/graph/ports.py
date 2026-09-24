@@ -20,6 +20,7 @@ from app.conversation_messaging.application.ports import DeliveryResultPort
 from app.project_knowledge.application.retrieval import ProjectKnowledgeQueryPort
 from app.recruitment.application.ports import (
     LeadContextQueryPort,
+    LeadGenderPort,
     PersonaBodyResolver,
     RecommendationQueryPort,
 )
@@ -66,6 +67,8 @@ class TurnDecisionsPort(Protocol):
         *,
         user_text: str,
         recent_messages: list[Any],
+        profile_name: str = "",
+        include_gender: bool = True,
     ) -> TurnDecisions: ...
 
 
@@ -87,6 +90,11 @@ class TurnDecisions:
     pleasantry_kind: str = "none"
     recent_vacancy: bool = False
     contact_info: bool = False
+    # Candidate gender judged from the profile display name plus the candidate's
+    # own messages: "male" | "female" | "unknown". Only a stored value changes how
+    # the bot addresses the candidate (services/lead/normalizers.address_form).
+    gender: str = "unknown"
+    gender_confidence: float = 0.0
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
@@ -262,6 +270,7 @@ __all__ = [
     "ConversationPort",
     "ConversationStatePort",
     "LeadContextPort",
+    "LeadGenderPort",
     "DirectContextPort",
     "GraphRetrievalPort",
 ]

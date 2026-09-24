@@ -2248,3 +2248,150 @@ async def test_whitespace_agent_candidate_stays_silent(monkeypatch, blank):
     assert res["outcome"] == "suppressed"
     assert res["reply"] == ""
     assert zalo.sent == []
+
+
+# ---------------------------------------------------------------------------
+# Candidate gender inference (Jev judgment -> blank lead.gender)
+# ---------------------------------------------------------------------------
+
+
+class _LeadGenderStub:
+    """Capture gender reads/writes the runner performs against the lead record."""
+
+    def __init__(self, stored: str = "", *, raises: bool = False) -> None:
+        self.stored = stored
+        self.raises = raises
+        self.recorded: list[tuple[str, str]] = []
+
+    async def stored_gender(self, chat_id: str) -> str:
+        if self.raises:
+            raise RuntimeError("gender lookup boom")
+        return self.stored
+
+    async def record_inferred_gender(self, chat_id: str, gender: str) -> bool:
+        self.recorded.append((chat_id, gender))
+        return True
+
+
+def _decisions_port(decisions: TurnDecisions):
+    """A TurnDecisionsPort stub that records the kwargs the runner sent."""
+    port = SimpleNamespace(calls=[])
+
+    async def decide_turn(**kwargs):
+        port.calls.append(kwargs)
+        return decisions
+
+    port.decide_turn = decide_turn
+    return port
+
+
+async def _run_gender_turn(monkeypatch, *, decisions, gender_stub, state=None, conv=None):
+    _stub_agent(monkeypatch, "Em chào bạn, mình tư vấn ngay.")
+    conv = conv or _FakeConv()
+    svc, _ = _stub_svc(conv=conv)
+    deps = _deps(_FakeZalo(), conversation=svc)
+    deps.turn_decisions = _decisions_port(decisions)
+    deps.lead_gender = gender_stub
+    result = await run_turn(state or _state(), deps)
+    return result, deps
+
+
+@pytest.mark.asyncio
+async def test_confident_gender_is_recorded_on_blank_lead(monkeypatch):
+    stub = _LeadGenderStub(stored="")
+    result, deps = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="female", gender_confidence=0.9),
+        gender_stub=stub,
+    )
+    assert result["outcome"] == "sent"
+    assert stub.recorded == [("z1", "female")]
+    assert deps.turn_decisions.calls[0]["include_gender"] is True
+
+
+@pytest.mark.asyncio
+async def test_unknown_gender_is_not_recorded(monkeypatch):
+    stub = _LeadGenderStub(stored="")
+    _, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="unknown", gender_confidence=0.99),
+        gender_stub=stub,
+    )
+    assert stub.recorded == []
+
+
+@pytest.mark.asyncio
+async def test_low_confidence_gender_is_not_recorded(monkeypatch):
+    stub = _LeadGenderStub(stored="")
+    _, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="female", gender_confidence=0.5),
+        gender_stub=stub,
+    )
+    assert stub.recorded == []
+
+
+@pytest.mark.asyncio
+async def test_degraded_turn_never_records_gender(monkeypatch):
+    stub = _LeadGenderStub(stored="")
+    _, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="female", gender_confidence=0.9, degraded=True),
+        gender_stub=stub,
+    )
+    assert stub.recorded == []
+
+
+@pytest.mark.asyncio
+async def test_stored_gender_skips_the_question(monkeypatch):
+    stub = _LeadGenderStub(stored="male")
+    _, deps = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="unknown"),
+        gender_stub=stub,
+    )
+    assert deps.turn_decisions.calls[0]["include_gender"] is False
+    assert stub.recorded == []
+
+
+@pytest.mark.asyncio
+async def test_stored_gender_lookup_failure_keeps_turn_working(monkeypatch):
+    stub = _LeadGenderStub(raises=True)
+    result, deps = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="unknown"),
+        gender_stub=stub,
+    )
+    assert result["outcome"] == "sent"
+    assert deps.turn_decisions.calls[0]["include_gender"] is True
+    assert stub.recorded == []
+
+
+@pytest.mark.asyncio
+async def test_profile_name_from_state_user_name(monkeypatch):
+    state = BotRunState(
+        conversation_id=CONV_ID,
+        version_at_start=1,
+        user_text="tôi muốn tìm việc lái xe",
+        user_name="Nguyễn Thị Hoa",
+    )
+    _, deps = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="unknown"),
+        gender_stub=_LeadGenderStub(),
+        state=state,
+    )
+    assert deps.turn_decisions.calls[0]["profile_name"] == "Nguyễn Thị Hoa"
+
+
+@pytest.mark.asyncio
+async def test_profile_name_falls_back_to_contact_display_name(monkeypatch):
+    conv = _FakeConv()
+    conv.contact = SimpleNamespace(display_name="Trần Văn Hùng")
+    _, deps = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(gender="unknown"),
+        gender_stub=_LeadGenderStub(),
+        conv=conv,
+    )
+    assert deps.turn_decisions.calls[0]["profile_name"] == "Trần Văn Hùng"

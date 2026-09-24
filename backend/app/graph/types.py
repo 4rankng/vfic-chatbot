@@ -15,6 +15,7 @@ from app.graph.ports import (
     DirectContextPort,
     FaqBypassPort,
     LeadContextPort,
+    LeadGenderPort,
     ReplyPolicyPort,
     GraphRetrievalPort,
     RuntimePolicyPort,
@@ -127,6 +128,9 @@ class GraphDeps:
     safety: SafetyModel | None = None
     # Lead-profile context for the agent prompt. None in tests that stub the turn.
     lead: LeadContextPort | None = None
+    # Candidate gender memory for the decision hop: reads the stored value and
+    # fills a blank one from a confident Jev judgment. None in tests.
+    lead_gender: LeadGenderPort | None = None
     # Factory that yields a fresh GraphRetrievalPort on its own DB session, enabling
     # parallel tool dispatch (each concurrent tool call gets an isolated session).
     # None → tools run sequentially on the shared ``retrieval`` (tests, legacy).

@@ -805,7 +805,8 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
     # Jev turn-decision fan-out (one systemone call per turn). The resolve is
     # Redis-cached like the other integrations, so the enable toggle or a
     # rotated key takes effect on the next turn. None when disabled or
-    # unconfigured: the runner then routes on the neutral agent fallback.
+    # unconfigured: the runner then routes on the neutral agent fallback. The
+    # same call also judges the candidate's gender for addressing.
     from app.graph.decisions import JevDecisionClient
 
     jev_config = await integration_settings.resolve_jev()
@@ -856,6 +857,7 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
         reply_policy=DeterministicReplyPolicy(),
         make_retrieval=make_retrieval,
         lead=_build_lead_context(db),
+        lead_gender=_build_lead_gender(db),
         faq_bypass=_FaqBypassAdapter(db, clients.embedder, page_project_ids=page_project_ids),
         followup_allowed=_make_followup_allowed(db),
         enrich_oa_profile=_enrich_oa_profile,
@@ -878,6 +880,12 @@ def _build_lead_context(db):
     from app.composition.recruitment import build_lead_context
 
     return build_lead_context(db)
+
+
+def _build_lead_gender(db):
+    from app.composition.recruitment import build_lead_gender
+
+    return build_lead_gender(db)
 
 
 def _build_proactive_state(db):

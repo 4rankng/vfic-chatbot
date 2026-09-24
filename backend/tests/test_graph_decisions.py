@@ -6,12 +6,20 @@ integration settings contract. No network access: the client's
 ``_system_one`` is stubbed, mirroring how the graph tests fake the ports.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
+import app.graph.decisions as decisions_module
 from app.graph.decisions import (
+    _GENDER_CRITERIA,
     _INTENT_CRITERIA,
+    JEV_RETRY_BACKOFF_S,
     JevDecisionClient,
+    _retry_after_seconds,
     build_turn_questions,
+    build_turn_state,
 )
 from app.graph.fast_lane import template_for
 from app.graph.ports import TurnDecisions
@@ -71,7 +79,18 @@ async def test_questions_match_contract() -> None:
         "pleasantry_kind",
         "recent_vacancy",
         "contact_info",
+        "gender",
     }
+    assert set(build_turn_questions(include_gender=False)) == {
+        "intent",
+        "vacancy_listing",
+        "sort_by",
+        "pleasantry",
+        "pleasantry_kind",
+        "recent_vacancy",
+        "contact_info",
+    }
+    assert set(_GENDER_CRITERIA) == {"male", "female", "unknown"}
     assert set(_INTENT_CRITERIA) == {
         "small_talk",
         "recommend",
@@ -153,6 +172,68 @@ async def test_client_parses_full_fan_out() -> None:
     assert decisions.input_tokens == 650
 
 
+async def test_client_parses_gender_answer() -> None:
+    client = _client()
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(gender=_choice("female", 0.9)))
+    )
+    decisions = await client.decide_turn(user_text="x", recent_messages=[])
+    assert decisions.gender == "female"
+    assert decisions.gender_confidence == 0.9
+    assert decisions.degraded is False
+
+
+async def test_client_non_canonical_gender_reads_unknown() -> None:
+    client = _client()
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(gender=_choice("nam", 0.9)))
+    )
+    decisions = await client.decide_turn(user_text="x", recent_messages=[])
+    assert decisions.gender == "unknown"
+
+
+async def test_client_missing_gender_answer_is_unknown_not_degraded() -> None:
+    client = _client()
+    client._system_one = AsyncMock(return_value=_payload(_answers()))  # noqa: SLF001
+    decisions = await client.decide_turn(user_text="x", recent_messages=[])
+    assert decisions.gender == "unknown"
+    assert decisions.gender_confidence == 0.0
+    assert decisions.degraded is False
+
+
+async def test_client_skips_gender_question_when_disabled() -> None:
+    client = _client()
+    sent: dict = {}
+
+    async def _capture(state, questions):
+        sent["questions"] = questions
+        return _payload(_answers())
+
+    client._system_one = _capture  # noqa: SLF001 — test seam
+    await client.decide_turn(user_text="x", recent_messages=[], include_gender=False)
+    assert "gender" not in sent["questions"]
+
+
+def test_turn_state_carries_and_caps_profile_name() -> None:
+    state = build_turn_state("x", [], profile_name="Nguyễn Thị Hoa")
+    assert state["profile_name"] == "Nguyễn Thị Hoa"
+    assert build_turn_state("x", [], profile_name="a" * 200)["profile_name"] == "a" * 120
+    assert build_turn_state("x", [])["profile_name"] == ""
+
+
+def test_turn_state_recent_excludes_bot_and_recruiter_messages() -> None:
+    from types import SimpleNamespace
+
+    history = [
+        SimpleNamespace(sender="WORKER", body="em tên Hoa"),
+        SimpleNamespace(sender="BOT", body="Dạ em chào anh/chị"),
+        SimpleNamespace(sender="RECRUITER", body="Chị cho em xin số điện thoại"),
+        SimpleNamespace(sender="WORKER", body="chị muốn hỏi lương"),
+    ]
+    state = build_turn_state("x", history)
+    assert state["recent"] == ["em tên Hoa", "chị muốn hỏi lương"]
+
+
 async def test_client_unusable_intent_degrades() -> None:
     client = _client()
     client._system_one = AsyncMock(return_value=_payload(_answers(intent=_choice("junk", 0.5))))
@@ -206,3 +287,94 @@ async def test_resolve_jev_env_key_stays_disabled_by_default() -> None:
     assert config.api_key == "env-key"
     assert config.enabled is False
     assert config.usable is False
+
+
+# ---------------------------------------------------------------------------
+# HTTP client behavior: shared deadline, Retry-After, SDK-parity retry set
+# ---------------------------------------------------------------------------
+
+
+class _FakeResponse:
+    def __init__(self, status: int, *, payload: dict | None = None, headers: dict | None = None):
+        self.status_code = status
+        self._payload = payload or {}
+        self.headers = headers or {}
+
+    def json(self) -> dict:
+        return self._payload
+
+
+def _http_stub(responses):
+    client = SimpleNamespace(post=AsyncMock(side_effect=responses))
+    return client
+
+
+def _install_http(monkeypatch, client):
+    monkeypatch.setattr(decisions_module, "get_http_client", AsyncMock(return_value=client))
+    sleeps: list[float] = []
+
+    async def _sleep(seconds):
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(decisions_module.asyncio, "sleep", _sleep)
+    return sleeps
+
+
+def test_retry_after_seconds_parsing() -> None:
+    assert _retry_after_seconds({"retry-after-ms": "1500"}) == 1.5
+    assert _retry_after_seconds({"retry-after": "2"}) == 2.0
+    # retry-after-ms wins when both are present.
+    assert _retry_after_seconds({"retry-after-ms": "x", "retry-after": "3"}) == 3.0
+    # HTTP-date form is not parsed; caller falls back to the fixed backoff.
+    assert _retry_after_seconds({"retry-after": "Wed, 21 Oct 2026 07:28:00 GMT"}) is None
+    assert _retry_after_seconds({}) is None
+
+
+async def test_system_one_honors_retry_after_and_bounds_timeout(monkeypatch) -> None:
+    client = _http_stub(
+        [
+            _FakeResponse(429, headers={"retry-after-ms": "1200"}),
+            _FakeResponse(200, payload={"model": "m", "answers": {}, "usage": {}}),
+        ]
+    )
+    sleeps = _install_http(monkeypatch, client)
+
+    out = await _client()._system_one({"a": 1}, {"q": {"type": "noul", "instructions": "x"}})
+
+    assert out["model"] == "m"
+    assert sleeps == [1.2]
+    # The per-request timeout is passed to the httpx method (not client construction).
+    assert client.post.await_args.kwargs["timeout"] > 0
+
+
+async def test_system_one_retries_transient_5xx(monkeypatch) -> None:
+    client = _http_stub(
+        [
+            _FakeResponse(503),
+            _FakeResponse(200, payload={"model": "m", "answers": {}, "usage": {}}),
+        ]
+    )
+    sleeps = _install_http(monkeypatch, client)
+
+    out = await _client()._system_one({}, {"q": {"type": "noul", "instructions": "x"}})
+
+    assert out["model"] == "m"
+    assert sleeps == [JEV_RETRY_BACKOFF_S]
+
+
+async def test_system_one_does_not_retry_non_retryable_status(monkeypatch) -> None:
+    client = _http_stub([_FakeResponse(400)])
+    _install_http(monkeypatch, client)
+
+    with pytest.raises(RuntimeError, match="status=400"):
+        await _client()._system_one({}, {"q": {"type": "noul", "instructions": "x"}})
+    assert client.post.await_count == 1
+
+
+async def test_system_one_skips_retry_when_wait_exceeds_budget(monkeypatch) -> None:
+    client = _http_stub([_FakeResponse(429, headers={"retry-after": "9999"})])
+    _install_http(monkeypatch, client)
+
+    with pytest.raises(RuntimeError, match="status=429"):
+        await _client()._system_one({}, {"q": {"type": "noul", "instructions": "x"}})
+    assert client.post.await_count == 1

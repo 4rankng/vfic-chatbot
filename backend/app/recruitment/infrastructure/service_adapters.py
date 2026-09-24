@@ -74,6 +74,32 @@ class ServiceLeadContextAdapter:
         return lead_collection_instruction(question=question)
 
 
+# Canonical address-form values. Anything else (including Vietnamese spellings a
+# model may emit) is not usable by address_form() and is left untouched: a
+# non-blank value is only ever read, never replaced.
+_ADDRESSABLE_GENDERS = frozenset({"male", "female"})
+
+
+class ServiceLeadGenderAdapter:
+    """Lead-record gender memory for the per-turn decision hop."""
+
+    def __init__(self, db) -> None:
+        self._db = db
+
+    async def stored_gender(self, chat_id: str) -> str:
+        from app.services.lead.repository import LeadRepository
+
+        lead = await LeadRepository(self._db).by_zalo_id(chat_id)
+        return str((lead or {}).get("gender") or "").strip().lower()
+
+    async def record_inferred_gender(self, chat_id: str, gender: str) -> bool:
+        if gender not in _ADDRESSABLE_GENDERS:
+            return False
+        from app.services.lead.repository import LeadRepository
+
+        return await LeadRepository(self._db).set_gender_if_blank(chat_id, gender)
+
+
 class ServiceFollowupEligibilityAdapter:
     """Follow-up decision adapter preserving provider rules and reason codes."""
 
@@ -152,5 +178,6 @@ __all__ = [
     "ServiceCandidatePersistenceAdapter",
     "ServiceFollowupEligibilityAdapter",
     "ServiceLeadContextAdapter",
+    "ServiceLeadGenderAdapter",
     "ServiceProactiveStateAdapter",
 ]
