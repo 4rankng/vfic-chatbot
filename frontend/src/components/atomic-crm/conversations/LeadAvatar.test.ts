@@ -9,7 +9,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { LeadAvatar, resolveAvatarSrc } from "./LeadAvatar";
+import { resolveAvatarSrc } from "./domain/avatar-src";
+import { LeadAvatar } from "./LeadAvatar";
 
 describe("resolveAvatarSrc", () => {
   it("returns the src when present and the image has not failed", () => {

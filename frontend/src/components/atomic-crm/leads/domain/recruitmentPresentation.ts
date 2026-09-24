@@ -94,7 +94,7 @@ export const buildRecruitmentRowPresentation = (
 // the candidate is shown as they present themselves on that channel, with the
 // recruiter-confirmed name demoted to the subtitle when the two differ. The
 // avatar follows whichever name leads, so name and photo always describe the
-// same identity. The rationale lives in capabilities/recruitment/index.tsx and
+// same identity. The rationale lives in capabilities/recruitment/components.tsx and
 // the divergence is pinned by recruitmentPresentation.test.ts — the two
 // surfaces are not meant to agree, so do not "tidy" them into consistency.
 export const buildRecruitmentContextIdentity = (

@@ -99,7 +99,7 @@ export const Notification = (props: ToasterProps) => {
         });
       }
     }
-  }, [notifications, takeMutation, takeNotification, translate]);
+  }, [notifications, takeMutation, takeNotification, translate, props.position]);
 
   const handleRequestClose = useCallback(() => {
     // Dismiss all toasts

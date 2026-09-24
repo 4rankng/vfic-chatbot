@@ -1,6 +1,6 @@
 import type { ConversationRowPresentation } from "../../capabilities/types";
 import type { Conversation } from "../../types";
-import { getGenericConversationPresentation } from "../conversation-capability";
+import { getGenericConversationPresentation } from "../domain/conversation-presentation";
 
 /**
  * Everything an inbox row renders beyond the conversation record itself.

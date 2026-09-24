@@ -4,7 +4,7 @@ import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import "@/index.css";
-import { RuntimeCapabilityProvider } from "../runtime-context";
+import { RuntimeCapabilityProvider } from "../RuntimeCapabilityProvider";
 import { buildStaticRecruitmentRuntime } from "../static-recruitment-runtime";
 import { WorkspaceFrame } from "../../layout/workspace-frame";
 

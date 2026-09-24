@@ -25,7 +25,7 @@ import { loadConversationSnippets } from "../application/conversation-runtime";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { LeadAvatar } from "../LeadAvatar";
-import { useConversationCapabilitySlots } from "../conversation-capability";
+import { useConversationCapabilitySlots } from "../useConversationCapabilitySlots";
 import {
   getConversationListKey,
   getConversationListServerFilter,

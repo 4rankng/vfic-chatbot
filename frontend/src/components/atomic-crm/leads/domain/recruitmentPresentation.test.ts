@@ -55,7 +55,7 @@ const messengerConversation: ProfileSource = {
 // ON PURPOSE. The list leads with the recruiter-confirmed identity because
 // recruiters scan it to find a candidate; the header leads with the identity
 // the candidate presents on that channel and demotes the confirmed name to the
-// subtitle. The rationale is recorded in capabilities/recruitment/index.tsx.
+// subtitle. The rationale is recorded in capabilities/recruitment/components.tsx.
 // These tests exist so the mismatch reads as a decision rather than a defect,
 // and so nobody collapses the two into "consistency" by accident.
 describe("list and thread-header identity precedence diverge deliberately", () => {

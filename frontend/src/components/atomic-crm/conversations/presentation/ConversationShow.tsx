@@ -38,10 +38,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useIsMobile, useIsWideDesktop } from "@/hooks/use-mobile";
-import {
-  ConversationContextAdapter,
-  useConversationCapabilitySlots,
-} from "../conversation-capability";
+import { ConversationContextAdapter } from "../conversation-capability";
+import { useConversationCapabilitySlots } from "../useConversationCapabilitySlots";
 import { DecisionTracePanel } from "../../automation/DecisionTracePanel";
 
 type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;

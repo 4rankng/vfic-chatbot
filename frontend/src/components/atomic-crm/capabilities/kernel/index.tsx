@@ -1,12 +1,4 @@
-import {
-  Component,
-  lazy,
-  Suspense,
-  type ComponentType,
-  type ReactNode,
-} from "react";
 import { Navigate } from "react-router";
-import { usePermissions } from "ra-core";
 import {
   Briefcase,
   Gauge,
@@ -29,72 +21,12 @@ import type {
   CompiledRoute,
   ExecutableCapabilityModule,
 } from "../types";
-
-const ProfilePage = lazy(async () => {
-  const module = await import("../../settings/ProfilePage");
-  return { default: module.ProfilePage as ComponentType };
-});
-const ForgotPasswordPage = lazy(async () => {
-  const module = await import("../../login/ForgotPasswordPage");
-  return { default: module.ForgotPasswordPage as ComponentType };
-});
-const PerformancePage = lazy(async () => {
-  const module = await import("../../performance/PerformancePage");
-  return { default: module.PerformancePage as ComponentType };
-});
-
-const RouteLoadingState = () => (
-  <div
-    role="status"
-    aria-live="polite"
-    className="p-6 text-sm text-muted-foreground"
-  >
-    Đang tải trang...
-  </div>
-);
-
-class RouteErrorBoundary extends Component<
-  { children: ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  render() {
-    if (!this.state.hasError) return this.props.children;
-    return (
-      <div role="alert" className="p-8 text-center text-muted-foreground">
-        <p className="mb-3">Không thể tải trang. Vui lòng tải lại.</p>
-        <button
-          type="button"
-          className="rounded-md border px-4 py-2"
-          onClick={() => window.location.reload()}
-        >
-          Tải lại trang
-        </button>
-      </div>
-    );
-  }
-}
-
-const RouteBoundary = ({ children }: { children: ReactNode }) => (
-  <RouteErrorBoundary>
-    <Suspense fallback={<RouteLoadingState />}>{children}</Suspense>
-  </RouteErrorBoundary>
-);
-
-const AdminPerformanceRoute = () => {
-  const { permissions, isPending } = usePermissions();
-  if (isPending) return <RouteLoadingState />;
-  return permissions === "admin" ? (
-    <PerformancePage />
-  ) : (
-    <Navigate to="/" replace />
-  );
-};
+import {
+  AdminPerformanceRoute,
+  ForgotPasswordPage,
+  ProfilePage,
+  RouteBoundary,
+} from "./components";
 
 const pathStartsWith = (prefix: string) => (path: string) =>
   path === prefix || path.startsWith(`${prefix}/`);

@@ -38,10 +38,8 @@ import {
   sourceStage,
 } from "./knowledgePipelineUtils";
 import { PipelineMiniProgress, SourceStamp } from "./KnowledgeSourceRow";
-import {
-  localizeKnowledgeText,
-  StoredKnowledgePanel,
-} from "./StoredKnowledgePanel";
+import { StoredKnowledgePanel } from "./StoredKnowledgePanel";
+import { localizeKnowledgeText } from "./domain/knowledge-text";
 import { PipelineTimeline } from "./PipelineTimeline";
 export const KnowledgeDetailPanel = ({
   source,

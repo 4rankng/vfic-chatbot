@@ -16,18 +16,7 @@ import * as React from "react";
 
 import { UserRound } from "lucide-react";
 
-/**
- * Pure derivation of which src the avatar should actually render.
- * Returns null when there is no src OR the image previously failed to load,
- * so the icon fallback branch (derived from this value) becomes visible.
- * Exported for unit testing of the fallback state machine.
- */
-export function resolveAvatarSrc(
-  src: string | null | undefined,
-  imgFailed: boolean,
-): string | null {
-  return src && !imgFailed ? src : null;
-}
+import { resolveAvatarSrc } from "./domain/avatar-src";
 
 export type LeadAvatarProps = {
   /** Remote Zalo avatar URL. When empty/null, the icon fallback is shown. */

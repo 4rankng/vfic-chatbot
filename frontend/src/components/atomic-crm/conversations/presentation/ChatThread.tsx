@@ -25,6 +25,7 @@ import {
   retryConversationReply,
   sendConversationReply,
 } from "../application/conversation-operations";
+import { isUnseenWorthyArrival } from "../domain/conversation-thread";
 import type { CrmDataProvider } from "../../providers/rest/dataProvider";
 import { useConversationActions } from "./use-conversation-actions";
 import { useConversationRealtime } from "./use-conversation-realtime";
@@ -50,30 +51,6 @@ const classify = (
   if (msg.type === "inbound") return "user";
   if (msg.data?.recruiter_id) return "agent";
   return "bot";
-};
-
-/**
- * Phase-02 unseen-content contract. The strong "Tin nhắn mới" emphasis applies
- * only to arrivals a reader can't anticipate: candidate inbound, bot replies,
- * and replies from *other* recruiters. The current recruiter's own optimistic
- * send (intent to go to latest), its server echo, system events, and history
- * prepends never qualify. Author/type is the discriminator — not id change.
- *
- * Exported for focused unit testing of the contract.
- */
-export const isUnseenWorthyArrival = (
-  msg: Message,
-  currentRecruiterId: string | number | null | undefined,
-): boolean => {
-  if (msg.id.startsWith("optimistic-")) return false;
-  if (msg.type === "system") return false;
-  if (msg.type === "inbound") return true;
-  // Outbound with a recruiter_id authored by someone else qualifies; authored
-  // by the current recruiter (server echo of their own send) does not.
-  const authorId = msg.data?.recruiter_id;
-  if (!authorId) return true; // bot reply
-  if (currentRecruiterId == null) return true;
-  return String(authorId) !== String(currentRecruiterId);
 };
 
 const formatTime = (iso?: string) => {

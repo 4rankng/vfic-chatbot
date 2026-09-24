@@ -66,7 +66,7 @@ vi.mock("../ChannelAdapterSelector", () => ({
   ChannelAdapterSelector: () => <div data-testid="channel-adapter-selector" />,
 }));
 
-vi.mock("../conversation-capability", async (importOriginal) => {
+vi.mock("../useConversationCapabilitySlots", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,

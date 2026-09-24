@@ -4,7 +4,7 @@ import { useLayoutEffect, useMemo, useState } from "react";
 import { Route } from "react-router";
 
 import { Admin } from "@/components/admin/admin";
-import { RuntimeCapabilityProvider } from "../capabilities/runtime-context";
+import { RuntimeCapabilityProvider } from "../capabilities/RuntimeCapabilityProvider";
 import type { RuntimeGenerationBundle } from "../capabilities/types";
 import { Layout } from "../layout/Layout";
 import { StartPage } from "../login/StartPage";

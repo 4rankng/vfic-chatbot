@@ -61,6 +61,15 @@ export const findConfirmedOptimisticIds = ({
   return Array.from(matchedTempIds);
 };
 
+/**
+ * Phase-02 unseen-content contract. The strong "Tin nhắn mới" emphasis applies
+ * only to arrivals a reader can't anticipate: candidate inbound, bot replies,
+ * and replies from *other* recruiters. The current recruiter's own optimistic
+ * send (intent to go to latest), its server echo, system events, and history
+ * prepends never qualify. Author/type is the discriminator — not id change.
+ *
+ * Consumed by ChatThread; exported for focused unit testing of the contract.
+ */
 export const isUnseenWorthyArrival = (
   message: ConversationMessage,
   currentRecruiterId: string | number | null | undefined,

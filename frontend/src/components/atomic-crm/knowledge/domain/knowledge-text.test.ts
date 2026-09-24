@@ -4,7 +4,7 @@ import {
   areEquivalentKnowledgeTexts,
   getKnowledgeUnitPreview,
   localizeKnowledgeText,
-} from "./StoredKnowledgePanel";
+} from "./knowledge-text";
 
 describe("localizeKnowledgeText", () => {
   it("renders escaped and platform newlines as readable content", () => {

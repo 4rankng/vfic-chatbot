@@ -93,6 +93,9 @@ vi.mock("./conversation-capability", () => ({
       })}
     </>
   ),
+}));
+
+vi.mock("./useConversationCapabilitySlots", () => ({
   useConversationCapabilitySlots: () => ({ actions: null }),
 }));
 

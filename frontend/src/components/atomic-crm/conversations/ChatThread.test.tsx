@@ -106,7 +106,8 @@ vi.mock("ra-core", () => ({
   useNotify: vi.fn(),
 }));
 
-import { ChatThread, isUnseenWorthyArrival } from "./presentation/ChatThread";
+import { ChatThread } from "./presentation/ChatThread";
+import { isUnseenWorthyArrival } from "./domain/conversation-thread";
 import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 // --- Helpers -----------------------------------------------------------
@@ -310,7 +311,8 @@ describe("ChatThread — transcript scroll ownership", () => {
 describe("isUnseenWorthyArrival — unseen-content contract", () => {
   // Pure unit coverage of the author/type discriminator that decides whether a
   // new arrival escalates the latest control to "Tin nhắn mới" while the reader
-  // is away. Exported from ChatThread so the contract is locked in CI.
+  // is away. Lives in the conversation-thread domain module so the contract is
+  // locked in CI.
 
   const inbound = (id: string): Message => ({
     id,

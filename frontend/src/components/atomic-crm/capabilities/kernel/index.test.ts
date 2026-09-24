@@ -51,7 +51,7 @@ vi.mock("../../performance/PerformancePage", () => ({
   },
 }));
 
-import kernelSource from "./index.tsx?raw";
+import componentsSource from "./components.tsx?raw";
 import { contributions } from "./index";
 
 afterEach(async () => {
@@ -74,11 +74,11 @@ describe("kernel capability routes", () => {
   });
 
   it("lazy-loads the Performance page behind a non-blank suspense fallback", () => {
-    expect(kernelSource).not.toContain(
+    expect(componentsSource).not.toContain(
       'import { PerformancePage } from "../../performance/PerformancePage";',
     );
-    expect(kernelSource).not.toContain("<Suspense fallback={null}>");
-    expect(kernelSource).toContain('role="status"');
+    expect(componentsSource).not.toContain("<Suspense fallback={null}>");
+    expect(componentsSource).toContain('role="status"');
   });
 
   it("shows the live route fallback while the lazy Performance route is deferred, then resolves", async () => {
