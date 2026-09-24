@@ -640,7 +640,7 @@ async def test_core_counts_scoped_carries_viewer_scope_param():
     assert params == {"uid": str(UID)}
 
 
-async def _run_metrics(monkeypatch, app_env="development", cache_enabled=True):
+async def _run_metrics(monkeypatch, app_env="development", cache_enabled=True, bot_summary=None):
     """Drive ``DashboardService.metrics`` on a recruiter viewer with a fake repo.
 
     Returns (repo double, cache-set mock, built DashboardMetrics). The
@@ -658,7 +658,8 @@ async def _run_metrics(monkeypatch, app_env="development", cache_enabled=True):
         }
     )
     repo.bot_run_summary = AsyncMock(
-        return_value={
+        return_value=bot_summary
+        or {
             "total": 10,
             "sent": 8,
             "suppressed": 1,
@@ -666,7 +667,6 @@ async def _run_metrics(monkeypatch, app_env="development", cache_enabled=True):
             "avg_seconds": 2.5,
         }
     )
-    repo.bot_suppression_rate = AsyncMock(return_value=0.1)
     repo.leads_by_stage = AsyncMock(return_value={"NEW": 3, "CONTACTING": 2, "REGISTERED": 1})
     repo.count_human_conversations = AsyncMock(return_value=7)
     repo.active_turns = AsyncMock(return_value=2)
@@ -695,11 +695,20 @@ async def test_metrics_builds_all_tiles_from_merged_counts_and_24h_summary(monke
     assert metrics.bot_sent_count == 8
     assert metrics.bot_suppressed_count == 1
     assert metrics.bot_success_rate == 80.0
+    assert metrics.bot_suppression_rate == pytest.approx(1 / 9)
     assert metrics.avg_bot_response_seconds == 2.5
     assert metrics.open_conversations == 3
     assert metrics.hot_leads == 2
     assert metrics.bot_errors == 0
     assert metrics.turns_last_5min == 4
+
+
+async def test_metrics_suppression_rate_zero_denominator_is_zero(monkeypatch):
+    _, _, metrics = await _run_metrics(
+        monkeypatch,
+        bot_summary={"total": 3, "sent": 0, "suppressed": 0, "errors": 3, "avg_seconds": 0.0},
+    )
+    assert metrics.bot_suppression_rate == 0.0
 
 
 async def test_metrics_cache_write_uses_60s_ttl_floor(monkeypatch):

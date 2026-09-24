@@ -21,8 +21,9 @@ async def metrics(
     """Viewer-scoped dashboard counters (admin = global, recruiter = assigned).
 
     Window semantics: bot-run aggregates (``bot_run_count``, ``bot_sent_count``,
-    ``bot_suppressed_count``, ``bot_success_rate``, ``avg_bot_response_seconds``)
-    cover the LAST 24 HOURS; ``p95_bot_response_seconds`` covers the last 7 days.
+    ``bot_suppressed_count``, ``bot_success_rate``, ``bot_suppression_rate``,
+    ``avg_bot_response_seconds``) cover the LAST 24 HOURS;
+    ``p95_bot_response_seconds`` covers the last 7 days.
     Lead/conversation/follow-up counters are current-state, not windowed. Field
     names intentionally unchanged — see the schema for the full contract.
     """

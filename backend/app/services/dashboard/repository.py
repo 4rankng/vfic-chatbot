@@ -118,17 +118,6 @@ class DashboardRepository:
             "avg_seconds": float(row["avg_seconds"] or 0.0),
         }
 
-    async def bot_suppression_rate(self, recruiter_id: str | None = None) -> float | None:
-        return await self._scoped_scalar(
-            recruiter_id,
-            "SELECT count(*) FILTER (WHERE outcome='SUPPRESSED')::float / NULLIF(count(*),0) AS rate "
-            "FROM bot_runs WHERE outcome IN ('SENT','SUPPRESSED')",
-            "SELECT count(*) FILTER (WHERE b.outcome='SUPPRESSED')::float / NULLIF(count(*),0) AS rate "
-            "FROM bot_runs b JOIN conversations c ON c.id = b.conversation_id "
-            "WHERE b.outcome IN ('SENT','SUPPRESSED') "
-            "AND " + viewer_scope_sql("c."),
-        )
-
     async def leads_by_stage(self, recruiter_id: str | None = None) -> dict[str, int]:
         if recruiter_id is None:
             rows = (

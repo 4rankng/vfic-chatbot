@@ -3,10 +3,10 @@ suppression rate, failed sends, bot errors. Scoped to the viewer (admin = global
 recruiter = assigned).
 
 Bot-run aggregates (bot_run_count, bot_sent_count, bot_suppressed_count,
-bot_success_rate, avg_bot_response_seconds) cover the LAST 24 HOURS, not
-all-time: the ``bot_runs`` audit table is never pruned, so unbounded
-aggregates grow linearly forever. Lead, conversation, follow-up, and the
-bot_errors counters are current-state, not windowed.
+bot_success_rate, bot_suppression_rate, avg_bot_response_seconds) cover the
+LAST 24 HOURS, not all-time: the ``bot_runs`` audit table is never pruned, so
+unbounded aggregates grow linearly forever. Lead, conversation, follow-up,
+and the bot_errors counters are current-state, not windowed.
 """
 
 from __future__ import annotations
@@ -77,10 +77,21 @@ class DashboardService:
         pending_fu = counts["pending_followups"]
         failed_sends = counts["failed_sends"]
         bot_errors = counts["bot_errors"]
-        suppression = await repo.bot_suppression_rate(recruiter_id)
         bot_summary = await repo.bot_run_summary(recruiter_id)
         counts_by_stage = await repo.leads_by_stage(recruiter_id)
         human_convs = await repo.count_human_conversations(recruiter_id)
+
+        # Same 24h window as bot_run_summary: the suppression rate is DERIVED
+        # from the summary's counts (over terminal non-error outcomes — the
+        # formula this rate has always used) so the success and suppression
+        # tiles can never disagree about the window again.
+        sent_count = int(bot_summary["sent"] or 0)
+        suppressed_count = int(bot_summary["suppressed"] or 0)
+        suppression = (
+            suppressed_count / (sent_count + suppressed_count)
+            if (sent_count + suppressed_count)
+            else 0.0
+        )
 
         # Concurrent-load monitoring (chatbot readiness). The RQ queue depth is a
         # sync-only read (RQ has no async client) → run it on a worker thread so
@@ -111,7 +122,7 @@ class DashboardService:
             open_conversations=int(open_convs or 0),
             hot_leads=int(hot_leads or 0),
             pending_followups=int(pending_fu or 0),
-            bot_suppression_rate=float(suppression or 0.0),
+            bot_suppression_rate=float(suppression),
             failed_zalo_sends=int(failed_sends or 0),
             bot_errors=int(bot_errors or 0),
             bot_run_count=bot_run_count,
