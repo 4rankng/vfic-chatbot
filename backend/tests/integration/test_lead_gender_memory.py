@@ -113,3 +113,37 @@ async def test_override_replaces_a_stale_value(integration_session) -> None:
 
     assert await adapter.record_inferred_gender(chat_id, "female", override=True) is True
     assert await adapter.stored_gender(chat_id) == "female"
+
+
+async def test_runner_prefetched_lead_row_answers_reads_and_writes(integration_session) -> None:
+    """The once-per-turn row from resolve_lead answers stored_gender and the
+    inference write without a second by-zalo/by-contact lookup."""
+    chat_id = await _blank_lead_chat_id(integration_session, "gender-prefetch-1")
+    adapter = ServiceLeadGenderAdapter(integration_session)
+    lead = await adapter.resolve_lead(chat_id)
+
+    assert lead is not None and lead.get("id") is not None
+    # The prefetched snapshot answers the read and the blank-only write.
+    assert await adapter.stored_gender(chat_id, lead=lead) == ""
+    assert await adapter.record_inferred_gender(chat_id, "female", lead=lead) is True
+    # The write landed on the resolved row's lead id.
+    assert await adapter.stored_gender(chat_id) == "female"
+    # A non-blank prefetched row keeps refusing a bare inference.
+    refreshed = await adapter.resolve_lead(chat_id)
+    assert await adapter.record_inferred_gender(chat_id, "male", lead=refreshed) is False
+
+
+async def test_context_uses_the_prefetched_lead_row(integration_session) -> None:
+    """context() with the runner's row produces the same prompt pair as its
+    own lookup."""
+    from app.recruitment.infrastructure.service_adapters import ServiceLeadContextAdapter
+
+    chat_id = await _blank_lead_chat_id(integration_session, "gender-prefetch-ctx-1")
+    lead = await ServiceLeadGenderAdapter(integration_session).resolve_lead(chat_id)
+    assert lead is not None
+
+    adapter = ServiceLeadContextAdapter(integration_session)
+    prefetched = await adapter.context(chat_id, "tôi muốn tìm việc", [], lead=lead)
+    resolved = await adapter.context(chat_id, "tôi muốn tìm việc", [])
+
+    assert prefetched == resolved

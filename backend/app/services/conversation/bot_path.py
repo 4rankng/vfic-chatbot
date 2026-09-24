@@ -457,10 +457,14 @@ class BotConversationState:
     ) -> bool:
         """Pre-send guard: bot may send only if eligible and version unchanged.
 
-        IMPORTANT: the caller **must** run ``db.refresh(conv)`` immediately
-        before calling this method (``expire_on_commit=False`` means the
-        identity map hides concurrent takeovers).  Failing to refresh reads a
-        stale in-memory ``version`` and may approve a send after a takeover.
+        IMPORTANT: the caller **must** refresh the conversation's ownership
+        columns immediately before calling this method (``expire_on_commit=False``
+        means the identity map hides concurrent takeovers).  The runner does a
+        column-scoped ``db.refresh(conv, _OWNERSHIP_REFRESH_COLUMNS)`` covering
+        everything this guard reads (``version``, ``mode``, ``status``,
+        ``taken_over_at``/``updated_at`` for the semi-auto branch, and the
+        ``bot_lock_*`` trio); a plain attribute read after a stale snapshot may
+        approve a send after a takeover.
         """
         if not self.run_start_guard(conv) or conv.version != version_at_start:
             return False

@@ -3,6 +3,17 @@
 from __future__ import annotations
 
 
+async def _resolve_lead(db, chat_id: str, contact_id: str | None) -> dict | None:
+    """The lead by chat id, else by contact (Messenger rows are contact-keyed)."""
+    from app.services.lead.repository import LeadRepository
+
+    repo = LeadRepository(db)
+    lead = await repo.by_zalo_id(chat_id) if chat_id else None
+    if lead is None and contact_id:
+        lead = await repo.by_contact_id(contact_id)
+    return lead
+
+
 class ServiceLeadContextAdapter:
     """Lead-context query adapter preserving the established prompt behavior."""
 
@@ -12,21 +23,11 @@ class ServiceLeadContextAdapter:
     async def profile_text(self, chat_id: str, contact_id: str | None = None) -> str:
         from app.services.lead import lead_profile_text
 
-        lead = await self._resolve_lead(chat_id, contact_id)
+        lead = await _resolve_lead(self._db, chat_id, contact_id)
         return lead_profile_text(lead)
 
-    async def _resolve_lead(self, chat_id: str, contact_id: str | None) -> dict | None:
-        """The lead by chat id, else by contact (Messenger rows are contact-keyed)."""
-        from app.services.lead.repository import LeadRepository
-
-        repo = LeadRepository(self._db)
-        lead = await repo.by_zalo_id(chat_id) if chat_id else None
-        if lead is None and contact_id:
-            lead = await repo.by_contact_id(contact_id)
-        return lead
-
     async def context(
-        self, chat_id, current_user_text, recent_messages, contact_id=None
+        self, chat_id, current_user_text, recent_messages, contact_id=None, lead=None
     ):
         from app.services.conversation import ConversationService
         from app.services.lead import high_confidence_profile_name, lead_profile_text
@@ -35,7 +36,9 @@ class ServiceLeadContextAdapter:
             oa_profile_name_guidance,
         )
 
-        lead = await self._resolve_lead(chat_id, contact_id)
+        # ``lead`` is the runner's once-per-turn row; None keeps the adapter's
+        # own lookup (ports without the resolve seam, e.g. test doubles).
+        lead = lead if lead is not None else await _resolve_lead(self._db, chat_id, contact_id)
         oa_profile_display_name = None
         if chat_id.startswith("oa:"):
             conversation = await ConversationService(self._db).get_by_zalo(chat_id)
@@ -96,18 +99,26 @@ class ServiceLeadGenderAdapter:
     def __init__(self, db) -> None:
         self._db = db
 
-    async def _resolve_lead(self, chat_id: str, contact_id: str | None) -> dict | None:
-        """The lead by chat id, else by contact (Messenger rows are contact-keyed)."""
-        from app.services.lead.repository import LeadRepository
+    async def resolve_lead(
+        self, chat_id: str, contact_id: str | None = None
+    ) -> dict | None:
+        """Resolve the turn's lead row once for the runner to hand back in.
 
-        repo = LeadRepository(self._db)
-        lead = await repo.by_zalo_id(chat_id) if chat_id else None
-        if lead is None and contact_id:
-            lead = await repo.by_contact_id(contact_id)
-        return lead
+        The runner calls this a single time per turn and passes the returned
+        row into ``stored_gender`` / ``record_inferred_gender`` (and the
+        lead-context adapter), so the by-zalo/by-contact lookup fires once
+        instead of once per call site.
+        """
+        return await _resolve_lead(self._db, chat_id, contact_id)
 
-    async def stored_gender(self, chat_id: str, contact_id: str | None = None) -> str:
-        lead = await self._resolve_lead(chat_id, contact_id)
+    async def stored_gender(
+        self,
+        chat_id: str,
+        contact_id: str | None = None,
+        *,
+        lead: dict | None = None,
+    ) -> str:
+        lead = lead if lead is not None else await _resolve_lead(self._db, chat_id, contact_id)
         return str((lead or {}).get("gender") or "").strip().lower()
 
     async def record_inferred_gender(
@@ -117,10 +128,11 @@ class ServiceLeadGenderAdapter:
         *,
         contact_id: str | None = None,
         override: bool = False,
+        lead: dict | None = None,
     ) -> bool:
         if gender not in _ADDRESSABLE_GENDERS:
             return False
-        lead = await self._resolve_lead(chat_id, contact_id)
+        lead = lead if lead is not None else await _resolve_lead(self._db, chat_id, contact_id)
         if lead is None or lead.get("id") is None:
             return False
         if not override and str(lead.get("gender") or "").strip():
