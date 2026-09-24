@@ -1230,9 +1230,11 @@ async def test_slow_turn_pulses_typing_but_sends_no_filler(monkeypatch):
     async def _slow_agent(
         state, deps, user_text, *, provider=None, chat_id, recent_messages, contact_id=None, timings=None, decisions=None
     ):  # noqa: ARG001
-        # Long enough for the heartbeat's ~0.5s tick to pulse typing several times
-        # while the turn is in flight, well before the real answer lands.
-        await asyncio.sleep(0.8)
+        # A single yield is enough: the heartbeat pulses typing immediately on its
+        # first slice (next_typing starts at 0), so ordering — pulse before the
+        # answer lands — is guaranteed by task scheduling, not by a wall-clock
+        # race against the ~0.5s loop tick.
+        await asyncio.sleep(0.05)
         return "Câu trả lời thật của tôi."
 
     monkeypatch.setattr(runner, "_agent_turn", _slow_agent)

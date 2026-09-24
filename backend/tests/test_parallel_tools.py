@@ -121,10 +121,12 @@ def _make_retrieval_factory(handler, identity_prefix="isolated"):
 
 
 async def test_parallel_dispatch_runs_tools_concurrently():
-    """Two tool calls must overlap in time — proving actual concurrency.
+    """Two tool calls must overlap — proving actual concurrency.
 
-    Tool A sleeps 0.3s, tool B sleeps 0.3s. If parallel, total wall-clock ≈ 0.3s.
-    If sequential, total ≈ 0.6s. We assert < 0.55s to give scheduler slack.
+    Deterministic overlap proof instead of a wall-clock budget: each handler
+    suspends once (a yield point, not a timing assumption), and the assertion is
+    that the second tool starts before the first finishes. A sequential dispatch
+    can never satisfy that ordering.
     """
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
@@ -134,7 +136,7 @@ async def test_parallel_dispatch_runs_tools_concurrently():
 
     async def handler(name, args):  # noqa: ARG001
         started.append(asyncio.get_event_loop().time())
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.01)
         finished.append(asyncio.get_event_loop().time())
         return f"result-{name}"
 
@@ -146,7 +148,6 @@ async def test_parallel_dispatch_runs_tools_concurrently():
     agent = MiniMaxAgent(llm, embedder=None, max_iters=5)
     make_retrieval = _make_retrieval_factory(handler)
 
-    t0 = asyncio.get_event_loop().time()
     reply = await agent.agent(
         "test",
         system="sys",
@@ -154,13 +155,14 @@ async def test_parallel_dispatch_runs_tools_concurrently():
         embedder=None,
         make_retrieval=make_retrieval,
     )
-    elapsed = asyncio.get_event_loop().time() - t0
 
     assert reply == "all done"
-    # Both tools ran
-    assert len(started) == 2
-    # Parallel: total time should be ~0.3s, not ~0.6s
-    assert elapsed < 0.55, f"Expected parallel (<0.55s), got {elapsed:.2f}s"
+    assert len(started) == 2 and len(finished) == 2
+    # The second tool STARTED before the first FINISHED — sequential dispatch
+    # cannot produce this ordering.
+    assert max(started) < min(finished), (
+        f"tool executions did not overlap: started={started} finished={finished}"
+    )
 
 
 async def test_sequential_fallback_when_no_factory():
@@ -591,14 +593,20 @@ async def test_faq_detail_focused_prefetches_both_knowledge_and_product_features
 
 
 async def test_faq_detail_focused_dual_prefetch_runs_concurrently(monkeypatch):
-    """Focused FAQ prefetch is parallel when isolated retrieval sessions exist."""
+    """Focused FAQ prefetch overlaps the two dispatches when isolated retrieval
+    sessions exist — proven by observed in-flight overlap, not a wall-clock budget."""
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
 
+    active = 0
+    max_active = 0
+
     async def fake_dispatch(retrieval, embedder, name, args, **_kwargs):  # noqa: ARG001
-        # A 50ms delay per dispatch makes sequential execution ~100ms and
-        # parallel execution ~50ms. Asserting < 90ms proves gather() is used.
-        await asyncio.sleep(0.05)
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)  # yield point so the overlap can actually happen
+        active -= 1
         if name == "get_product_features":
             return "Đặc điểm sản phẩm — dự án 'lg-display': housing available."
         return "KB evidence for the query."
@@ -612,9 +620,6 @@ async def test_faq_detail_focused_dual_prefetch_runs_concurrently(monkeypatch):
     async def make_retrieval():
         yield _FakeRetrieval(identity="isolated")
 
-    import time as _time
-
-    t0 = _time.monotonic()
     await agent.agent(
         "context",
         system="sys",
@@ -626,11 +631,11 @@ async def test_faq_detail_focused_dual_prefetch_runs_concurrently(monkeypatch):
         forced_project_slug="lg-display",
         make_retrieval=make_retrieval,
     )
-    elapsed_ms = (_time.monotonic() - t0) * 1000
 
-    # Sequential would be >= 100ms (two 50ms sleeps). Parallel is ~50ms.
-    # Allow slack for scheduling/sleep granularity without masking serialization.
-    assert elapsed_ms < 90, f"prefetch was sequential ({elapsed_ms:.0f}ms >= 90ms)"
+    # Both dispatches were in flight at the same time — sequential prefetch can
+    # never reach max_active == 2.
+    assert max_active == 2
+    assert metrics["prefetch_hit"] is True
 
 
 async def test_faq_detail_focused_prefetch_is_sequential_without_session_factory(monkeypatch):
