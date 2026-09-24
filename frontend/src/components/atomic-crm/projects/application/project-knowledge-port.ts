@@ -2,6 +2,7 @@ import type {
   BusTimetableList,
   ProductFeature,
   ProductFeatureList,
+  Project,
 } from "../../types";
 import type {
   ExternalSourceCreatePayload,
@@ -28,6 +29,22 @@ export type UploadFile = Readonly<{
   name: string;
   type: string;
   bytes: ArrayBuffer;
+}>;
+
+/**
+ * The recruiter-authored half of a project record: the discovery card the
+ * agent matches candidates against, plus the aliases used to recognise the
+ * project in a conversation.
+ */
+export type ProjectDiscoveryCardPatch = Readonly<{
+  aliases: string[];
+  discovery_card: Readonly<{
+    summary: string;
+    location: string;
+    roles: string[];
+    eligibility: never[];
+    highlights: string[];
+  }>;
 }>;
 
 export type ProjectKnowledgePort = Readonly<{
@@ -57,6 +74,10 @@ export type ProjectKnowledgePort = Readonly<{
     filename: string,
     text: string,
   ) => Promise<Omit<SinglePageKnowledge, "text"> & { text?: string }>;
+  updateProjectDiscoveryCard: (
+    projectId: string,
+    patch: ProjectDiscoveryCardPatch,
+  ) => Promise<Project>;
   getFeatures: (projectId: string) => Promise<ProductFeatureList>;
   extractFeatures: (projectId: string) => Promise<ProductFeatureList>;
   updateFeature: (

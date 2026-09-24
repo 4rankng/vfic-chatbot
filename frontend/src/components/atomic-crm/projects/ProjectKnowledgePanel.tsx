@@ -1,44 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useDataProvider, useNotify, useRefresh } from "ra-core";
-import { ApiError } from "@/lib/apiClient";
-import {
-  AlertCircle,
-  ArrowRight,
-  ChevronDown,
-  ChevronRight,
-  Database,
-  Download,
-  FileText,
-  Link2,
-  Pencil,
-  Save,
-  Upload,
-} from "lucide-react";
+import { useRef, useState } from "react";
+import { AlertCircle, ChevronRight, Database, Link2 } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
-import type { CrmDataProvider } from "../providers/rest/dataProvider";
-import type { Project } from "../types";
-import { BusTimetableSection } from "./ProjectBusTimetable";
-import {
-  getProjectKnowledgeCategories,
-  getProjectKnowledgeCategorySource,
-  getProjectKnowledgeCategoryTemplate,
-  getProjectSinglePage,
-  listSinglePageExternalSources,
-  listExternalSources,
-  replaceProjectKnowledgeCategory,
-  replaceProjectSinglePage,
-  uploadProjectKnowledgeCategory,
-  type KnowledgeCategoryKey,
-  type KnowledgeCategoryStatus,
-} from "./project-knowledge-service";
 import { cn } from "@/lib/utils";
-import { ExternalSourceLinkForm } from "./ExternalSourceLinkForm";
+import type { Project } from "../types";
+import { useCategoryDraft } from "./application/use-category-draft";
+import { useFaqAutoSyncNotice } from "./application/use-faq-auto-sync-notice";
+import { useProjectKnowledgeCatalog } from "./application/use-project-knowledge-catalog";
+import { useSinglePageDraft } from "./application/use-single-page-draft";
 import { ExternalSourceList } from "./ExternalSourceList";
+import { CategoryEditor } from "./presentation/CategoryEditor";
+import { DiscoveryCardEditor } from "./presentation/DiscoveryCardEditor";
+import { FaqAutoSyncSection } from "./presentation/FaqAutoSyncSection";
+import { SinglePageEditor } from "./presentation/SinglePageEditor";
+import { BusTimetableSection } from "./ProjectBusTimetable";
+import type { KnowledgeCategoryKey } from "./project-knowledge-service";
 
 type Props = {
   project: Project;
@@ -46,6 +23,12 @@ type Props = {
   canManageSources?: boolean;
 };
 
+/**
+ * Knowledge workspace of one project: either the single LLM-fed page
+ * (DIRECT_CONTEXT) or the reviewed per-category YAML catalog (RAG).
+ * Composition only — the application hooks own data access, the presentation
+ * modules own the markup.
+ */
 export const ProjectKnowledgePanel = ({
   project,
   editable = false,
@@ -63,549 +46,68 @@ export const ProjectKnowledgePanel = ({
   );
 };
 
-const SinglePagePanel = ({ project, editable }: Props) => {
-  const notify = useNotify();
-  const refresh = useRefresh();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [filename, setFilename] = useState("single-page.md");
-  const [text, setText] = useState("");
-  const [hasCurrentPage, setHasCurrentPage] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [refreshingPage, setRefreshingPage] = useState(false);
-  const [singlePageSyncRefreshKey, setSinglePageSyncRefreshKey] = useState(0);
-  const [singlePageAutoSyncOn, setSinglePageAutoSyncOn] = useState(false);
-  const loadRequestRef = useRef(0);
-
-  const loadPage = useCallback(
-    async ({ background = false }: { background?: boolean } = {}) => {
-      const requestId = ++loadRequestRef.current;
-      if (background) {
-        setRefreshingPage(true);
-      } else {
-        setLoading(true);
-      }
-      try {
-        const page = await getProjectSinglePage(String(project.id));
-        if (requestId !== loadRequestRef.current) return;
-        setFilename(page.filename);
-        setText(page.text);
-        setHasCurrentPage(true);
-        setLoadFailed(false);
-      } catch (error: unknown) {
-        if (requestId !== loadRequestRef.current) return;
-        if (error instanceof ApiError && error.status === 404) {
-          setFilename("single-page.md");
-          setText("");
-          setHasCurrentPage(false);
-          setLoadFailed(false);
-          return;
-        }
-        setLoadFailed(true);
-        notify((error as Error).message, { type: "error" });
-      } finally {
-        if (requestId === loadRequestRef.current) {
-          if (background) {
-            setRefreshingPage(false);
-          } else {
-            setLoading(false);
-          }
-        }
-      }
-    },
-    [notify, project.id],
-  );
-
-  const loadSinglePageSyncState = useCallback(async () => {
-    if (!editable) return;
-    try {
-      const rows = await listSinglePageExternalSources(String(project.id));
-      setSinglePageAutoSyncOn(rows.some((row) => row.auto_sync_enabled));
-    } catch {
-      setSinglePageAutoSyncOn(false);
-    }
-  }, [editable, project.id]);
-
-  const handleSinglePageSourceChange = useCallback(() => {
-    void loadSinglePageSyncState();
-    setSinglePageSyncRefreshKey((value) => value + 1);
-  }, [loadSinglePageSyncState]);
-
-  const handleSinglePageSynchronized = useCallback(() => {
-    void loadPage({ background: true });
-    void loadSinglePageSyncState();
-  }, [loadPage, loadSinglePageSyncState]);
-
-  useEffect(() => {
-    void loadPage();
-    void loadSinglePageSyncState();
-    return () => {
-      loadRequestRef.current += 1;
-    };
-  }, [loadPage, loadSinglePageSyncState]);
-
-  const save = async () => {
-    if (loadFailed) {
-      notify(
-        "Chưa tải được nội dung hiện tại. Vui lòng tải lại trang trước khi lưu.",
-        {
-          type: "warning",
-        },
-      );
-      return;
-    }
-    if (!text.trim()) {
-      notify("Vui lòng nhập nội dung kiến thức.", { type: "warning" });
-      return;
-    }
-    if (
-      hasCurrentPage &&
-      !window.confirm(
-        project.is_active
-          ? "Nội dung mới sẽ thay thế toàn bộ trang hiện tại. Tiếp tục?"
-          : "Nội dung mới sẽ thay thế toàn bộ trang hiện tại và bật dự án để Agent sử dụng. Tiếp tục?",
-      )
-    ) {
-      return;
-    }
-    setSaving(true);
-    try {
-      await replaceProjectSinglePage(String(project.id), filename, text);
-      setHasCurrentPage(true);
-      notify(
-        project.is_active
-          ? "Đã thay thế trang kiến thức của dự án."
-          : "Đã lưu trang kiến thức và bật dự án.",
-        { type: "success" },
-      );
-      refresh();
-      void loadSinglePageSyncState();
-    } catch (error) {
-      notify((error as Error).message, { type: "error" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const readFile = async (file?: File) => {
-    if (!file) return;
-    if (!/\.(txt|md)$/i.test(file.name)) {
-      notify("Trang kiến thức chỉ nhận file .txt hoặc .md.", {
-        type: "warning",
-      });
-      return;
-    }
-    setFilename(file.name);
-    setText(await file.text());
-  };
+const SinglePagePanel = ({
+  project,
+  editable,
+}: {
+  project: Project;
+  editable: boolean;
+}) => {
+  const draft = useSinglePageDraft(String(project.id), {
+    isActive: project.is_active,
+    canManageSources: editable,
+  });
 
   return (
     <div className="space-y-4">
-      <Card className="project-single-page-card">
-        <CardHeader className="project-single-page-header">
-          <CardTitle className="project-single-page-title text-section-title">
-            <span className="project-single-page-title-label">
-              <FileText className="size-5 shrink-0" aria-hidden="true" />
-              <span>Trang kiến thức duy nhất</span>
-            </span>
-            <Badge variant="outline">Gửi toàn bộ cho Agent</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="project-single-page-content space-y-4">
-          <p className="text-body text-muted-foreground">
-            Agent dùng toàn bộ trang này mỗi cuộc trò chuyện. Lưu sẽ thay thế
-            nội dung cũ.
-          </p>
-          {loading ? (
-            <Skeleton className="h-72 w-full" />
-          ) : (
-            <>
-              <div className="project-single-page-file-row">
-                <Input
-                  value={filename}
-                  onChange={(event) => setFilename(event.target.value)}
-                  className="project-single-page-filename"
-                  disabled={!editable}
-                  aria-label="Tên file trang kiến thức"
-                />
-                {editable && (
-                  <Button
-                    variant="outline"
-                    className="project-single-page-file-button"
-                    asChild
-                  >
-                    <label>
-                      <Upload className="size-4" />
-                      Chọn file
-                      <input
-                        type="file"
-                        accept=".txt,.md,text/plain,text/markdown"
-                        className="sr-only"
-                        onChange={(event) =>
-                          void readFile(event.target.files?.[0])
-                        }
-                      />
-                    </label>
-                  </Button>
-                )}
-              </div>
-              <Textarea
-                value={text}
-                onChange={(event) => setText(event.target.value)}
-                rows={18}
-                readOnly={!editable}
-                placeholder="Dán toàn bộ kiến thức của dự án tại đây..."
-                aria-label="Nội dung trang kiến thức"
-                className="project-single-page-textarea font-mono text-body"
-              />
-              {editable && (
-                <Button
-                  className="project-single-page-save"
-                  onClick={() => void save()}
-                  disabled={saving || loadFailed}
-                >
-                  {saving ? (
-                    <span
-                      className="tt-loading tt-loading-spinner tt-loading-sm"
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                  {hasCurrentPage
-                    ? "Thay thế trang hiện tại"
-                    : "Lưu trang kiến thức"}
-                </Button>
-              )}
-              {editable && (
-                <section
-                  className="space-y-3 border-t border-border/60 pt-4"
-                  aria-labelledby="single-page-sync-heading"
-                >
-                  <header className="project-single-page-sync-header flex flex-wrap items-center gap-x-2 gap-y-1 text-label font-semibold">
-                    <div className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
-                      <Link2
-                        className="size-4 shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      <h3
-                        id="single-page-sync-heading"
-                        className="flex min-w-0 items-center gap-1.5"
-                      >
-                        <span>Google Sheet</span>
-                        <ArrowRight
-                          className="size-3.5 shrink-0 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                        <span>Trang kiến thức</span>
-                      </h3>
-                    </div>
-                    {refreshingPage && (
-                      <span
-                        className="text-body-sm font-normal text-muted-foreground"
-                        aria-live="polite"
-                      >
-                        · Đang nạp nội dung mới nhất…
-                      </span>
-                    )}
-                  </header>
-
-                  <div className="space-y-3">
-                    {singlePageAutoSyncOn && (
-                      <details className="group rounded-md border border-warning/30 bg-warning/10 text-foreground">
-                        <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 px-3 py-1.5 text-label font-medium outline-none transition-colors hover:bg-warning/10 focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-                          <AlertCircle
-                            className="size-4 shrink-0 text-warning"
-                            aria-hidden="true"
-                          />
-                          <span className="flex-1">
-                            Sheet sẽ ghi đè nội dung sửa tay
-                          </span>
-                          <ChevronDown
-                            className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
-                            aria-hidden="true"
-                          />
-                        </summary>
-                        <div className="border-t border-warning/20 px-9 py-2 text-body-sm text-muted-foreground">
-                          Khi lịch hàng ngày đang bật, dữ liệu mới từ Google
-                          Sheet sẽ thay thế nội dung sửa thủ công ở lần đồng bộ
-                          tiếp theo.
-                        </div>
-                      </details>
-                    )}
-                    <ExternalSourceLinkForm
-                      projectId={String(project.id)}
-                      variant="single-page"
-                      onCreated={handleSinglePageSourceChange}
-                    />
-                    <ExternalSourceList
-                      projectId={String(project.id)}
-                      variant="single-page"
-                      refreshSignal={singlePageSyncRefreshKey}
-                      onChange={handleSinglePageSourceChange}
-                      onSynchronized={handleSinglePageSynchronized}
-                    />
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <SinglePageEditor
+        projectId={String(project.id)}
+        draft={draft}
+        editable={editable}
+      />
       {editable && <DiscoveryCardEditor project={project} />}
     </div>
   );
 };
 
-const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
-  const notify = useNotify();
-  const [categories, setCategories] = useState<
-    KnowledgeCategoryStatus[] | null
-  >(null);
+const RagCategoriesPanel = ({
+  project,
+  editable,
+  canManageSources,
+}: {
+  project: Project;
+  editable: boolean;
+  canManageSources: boolean;
+}) => {
+  const projectId = String(project.id);
   const [selected, setSelected] = useState<KnowledgeCategoryKey>("jobs");
-  const [editorContent, setEditorContent] = useState("");
-  const [savedContent, setSavedContent] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [blankTemplate, setBlankTemplate] = useState("");
-  const [templateFilename, setTemplateFilename] = useState("jobs.yaml");
-  const [filename, setFilename] = useState("jobs.yaml");
-  const [hasCurrentSource, setHasCurrentSource] = useState(false);
-  const [loadingCategory, setLoadingCategory] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [processingKey, setProcessingKey] =
-    useState<KnowledgeCategoryKey | null>(null);
-  const pollRef = useRef<number | null>(null);
-  const [faqAutoSyncOn, setFaqAutoSyncOn] = useState(false);
-  const [extSrcRefreshKey, setExtSrcRefreshKey] = useState(0);
+  const [externalSourceSignal, setExternalSourceSignal] = useState(0);
   const categoryDetailRef = useRef<HTMLElement>(null);
+  const catalog = useProjectKnowledgeCatalog(projectId);
+  const draft = useCategoryDraft(projectId, selected, catalog);
+  const faqAutoSyncOn = useFaqAutoSyncNotice(projectId, {
+    enabled: canManageSources,
+    refreshSignal: externalSourceSignal,
+  });
 
-  useEffect(() => {
-    if (!canManageSources) {
-      setFaqAutoSyncOn(false);
-      return;
-    }
-    let active = true;
-    listExternalSources(String(project.id))
-      .then((rows) => {
-        if (!active) return;
-        setFaqAutoSyncOn(
-          rows.some(
-            (row) => row.category_key === "faq" && row.auto_sync_enabled,
-          ),
-        );
-      })
-      .catch(() => {
-        /* external-source list is optional; never block the panel */
-      });
-    return () => {
-      active = false;
-    };
-  }, [canManageSources, project.id, extSrcRefreshKey]);
-
-  const loadCatalog = async () => {
-    const catalog = await getProjectKnowledgeCategories(String(project.id));
-    setCategories(catalog.data);
-    return catalog.data;
-  };
-
-  useEffect(() => {
-    void loadCatalog().catch((error) =>
-      notify((error as Error).message, { type: "error" }),
-    );
-    return () => {
-      if (pollRef.current !== null) window.clearTimeout(pollRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.id]);
-
-  useEffect(() => {
-    let active = true;
-    setLoadingCategory(true);
-    setEditorContent("");
-    setSavedContent("");
-    setIsEditing(false);
-    setBlankTemplate("");
-    setFilename(`${selected}.yaml`);
-    setHasCurrentSource(false);
-
-    void Promise.allSettled([
-      getProjectKnowledgeCategorySource(String(project.id), selected),
-      getProjectKnowledgeCategoryTemplate(String(project.id), selected),
-    ]).then(([sourceResult, templateResult]) => {
-      if (!active) return;
-
-      if (sourceResult.status === "fulfilled") {
-        setEditorContent(sourceResult.value.content);
-        setSavedContent(sourceResult.value.content);
-        setFilename(sourceResult.value.filename);
-        setHasCurrentSource(true);
-      } else if (
-        !(sourceResult.reason instanceof ApiError) ||
-        sourceResult.reason.status !== 404
-      ) {
-        notify((sourceResult.reason as Error).message, { type: "error" });
-      }
-
-      if (templateResult.status === "fulfilled") {
-        setBlankTemplate(templateResult.value.content);
-        setTemplateFilename(templateResult.value.filename);
-        if (sourceResult.status !== "fulfilled") {
-          setFilename(templateResult.value.filename);
-        }
-      } else {
-        notify((templateResult.reason as Error).message, { type: "error" });
-      }
-
-      setLoadingCategory(false);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [notify, project.id, selected]);
-
-  const pollUntilActive = (revisionId: string, attempts = 0) => {
-    pollRef.current = window.setTimeout(() => {
-      void loadCatalog()
-        .then((rows) => {
-          if (rows.some((row) => row.active_revision_id === revisionId)) {
-            setProcessingKey(null);
-            notify("Dữ liệu mới đã sẵn sàng cho Agent.", { type: "success" });
-          } else if (
-            rows.some(
-              (row) =>
-                row.latest_revision_id === revisionId &&
-                row.status === "FAILED",
-            )
-          ) {
-            setProcessingKey(null);
-            notify("Nội dung mới có lỗi. Dữ liệu đang dùng không thay đổi.", {
-              type: "error",
-            });
-          } else if (attempts < 20) {
-            pollUntilActive(revisionId, attempts + 1);
-          } else {
-            setProcessingKey(null);
-            notify(
-              "Dữ liệu đang được xử lý. Bạn có thể quay lại kiểm tra sau.",
-              {
-                type: "info",
-              },
-            );
-          }
-        })
-        .catch(() => setProcessingKey(null));
-    }, 2000);
-  };
-
-  const upload = async (file?: File) => {
-    if (!file) return;
-    const content = await file.text();
-    if (
-      !window.confirm(
-        "File này sẽ thay thế toàn bộ dữ liệu của mục đang chọn. Tiếp tục?",
-      )
-    ) {
-      return;
-    }
-    setFilename(file.name);
-    setEditorContent(content);
-    setSaving(true);
-    try {
-      const result = await uploadProjectKnowledgeCategory(
-        String(project.id),
-        selected,
-        file,
-      );
-      setSavedContent(content);
-      setProcessingKey(selected);
-      notify("Đã tải file. Hệ thống đang kiểm tra và chuẩn bị cho Agent.", {
-        type: "info",
-      });
-      pollUntilActive(result.revision.id);
-    } catch (error) {
-      notify((error as Error).message, { type: "error" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const startEditing = () => {
-    if (!hasCurrentSource && !editorContent.trim() && blankTemplate) {
-      setEditorContent(blankTemplate);
-    }
-    setIsEditing(true);
-  };
-
-  const cancelEditing = () => {
-    setEditorContent(savedContent);
-    setIsEditing(false);
-  };
-
-  const saveManualEdit = async () => {
-    if (!editorContent.trim()) {
-      notify("Vui lòng nhập nội dung YAML.", { type: "warning" });
-      return;
-    }
-    if (
-      hasCurrentSource &&
-      !window.confirm(
-        "Nội dung đã sửa sẽ tạo phiên bản mới và thay thế dữ liệu đang dùng sau khi kiểm tra. Tiếp tục?",
-      )
-    ) {
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const result = await replaceProjectKnowledgeCategory(
-        String(project.id),
-        selected,
-        filename,
-        editorContent,
-      );
-      setSavedContent(editorContent);
-      setIsEditing(false);
-      setProcessingKey(selected);
-      notify("Đã lưu thay đổi. Hệ thống đang kiểm tra cho Agent.", {
-        type: "info",
-      });
-      pollUntilActive(result.revision.id);
-    } catch (error) {
-      notify((error as Error).message, { type: "error" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const downloadTemplate = () => {
-    const url = URL.createObjectURL(
-      new Blob([blankTemplate], { type: "application/yaml" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = templateFilename;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
+  const { categories } = catalog;
   const selectedCategory = categories?.find((item) => item.key === selected);
   const selectedIsProcessing =
-    processingKey === selected ||
+    catalog.processingKey === selected ||
     selectedCategory?.status === "STAGED" ||
     selectedCategory?.status === "PROCESSING";
-
   const activeCategoryCount =
     categories?.filter((item) => item.active_revision_id).length ?? 0;
-  const hasUnsavedChanges = editorContent !== savedContent;
 
   const selectCategory = (key: KnowledgeCategoryKey) => {
     if (
-      isEditing &&
-      hasUnsavedChanges &&
+      draft.isEditing &&
+      draft.hasUnsavedChanges &&
       !window.confirm("Bạn có thay đổi chưa lưu. Chuyển sang mục khác?")
     ) {
       return;
     }
-    setIsEditing(false);
+    draft.cancelEditing();
     setSelected(key);
 
     if (!window.matchMedia("(max-width: 767px)").matches) return;
@@ -679,7 +181,7 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
             ) : (
               <div className="project-category-grid">
                 {categories.map((category) => {
-                  const isProcessing = processingKey === category.key;
+                  const isProcessing = catalog.processingKey === category.key;
                   const hasPendingRevision =
                     category.status === "STAGED" ||
                     category.status === "PROCESSING";
@@ -760,196 +262,23 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
             )}
           </nav>
 
-          <section
+          <CategoryEditor
             ref={categoryDetailRef}
-            id="project-category-detail"
-            className="project-category-editor"
-            tabIndex={-1}
-            aria-labelledby="project-category-detail-title"
-            aria-busy={loadingCategory}
-          >
-            <div className="project-category-editor-header">
-              <div className="project-category-editor-heading">
-                <div className="project-category-editor-title-row">
-                  <h3
-                    id="project-category-detail-title"
-                    className="project-category-editor-title"
-                  >
-                    {selectedCategory?.label_vi ?? selected}
-                  </h3>
-                  {!loadingCategory && (
-                    <Badge
-                      variant={
-                        hasCurrentSource || selectedIsProcessing
-                          ? "secondary"
-                          : "outline"
-                      }
-                    >
-                      {selectedIsProcessing
-                        ? "Đang kiểm tra"
-                        : hasCurrentSource
-                          ? `Đang dùng v${selectedCategory?.active_revision_no ?? 1}`
-                          : "Chưa có dữ liệu"}
-                    </Badge>
-                  )}
-                </div>
-                <p
-                  className="project-category-editor-description"
-                  aria-live="polite"
-                >
-                  {isEditing
-                    ? "Chỉnh sửa YAML trực tiếp, sau đó lưu để hệ thống kiểm tra."
-                    : selectedIsProcessing
-                      ? `Phiên bản mới đang được kiểm tra · ${filename}`
-                      : hasCurrentSource
-                        ? `Dữ liệu hiện tại Agent đang sử dụng · ${filename}`
-                        : "Danh mục này chưa có dữ liệu đang dùng. Tải mẫu để chuẩn bị nội dung mới."}
-                </p>
-              </div>
-              <div className="project-category-editor-actions">
-                {editable && !isEditing && (
-                  <Button
-                    size="sm"
-                    className="tt-btn-touch"
-                    onClick={startEditing}
-                    disabled={saving || loadingCategory || selectedIsProcessing}
-                  >
-                    <Pencil className="size-4" />
-                    Sửa nội dung
-                  </Button>
-                )}
-                {editable && isEditing && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="tt-btn-touch"
-                      onClick={cancelEditing}
-                      disabled={saving}
-                    >
-                      Hủy
-                    </Button>
-                    <Button
-                      size="sm"
-                      className={cn(
-                        "project-category-save-button tt-btn-touch",
-                        !hasUnsavedChanges && "text-[var(--muted-foreground)]!",
-                      )}
-                      onClick={() => void saveManualEdit()}
-                      disabled={saving || !hasUnsavedChanges}
-                    >
-                      {saving ? (
-                        <span
-                          className="tt-loading tt-loading-spinner tt-loading-sm"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <Save className="size-4" />
-                      )}
-                      Lưu thay đổi
-                    </Button>
-                  </>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="tt-btn-touch"
-                  onClick={downloadTemplate}
-                  disabled={!blankTemplate || loadingCategory}
-                >
-                  <Download className="size-4" /> Tải mẫu
-                </Button>
-                {canManageSources && !isEditing && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="tt-btn-touch"
-                    asChild
-                    disabled={saving || loadingCategory}
-                  >
-                    <label>
-                      {saving ? (
-                        <span
-                          className="tt-loading tt-loading-spinner tt-loading-sm"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <Upload className="size-4" />
-                      )}
-                      Tải file YAML
-                      <input
-                        type="file"
-                        accept=".yaml,.yml,application/yaml,text/yaml"
-                        className="sr-only"
-                        disabled={saving || loadingCategory}
-                        onChange={(event) =>
-                          void upload(event.target.files?.[0])
-                        }
-                      />
-                    </label>
-                  </Button>
-                )}
-                {canManageSources && !isEditing && (
-                  <ExternalSourceLinkForm
-                    projectId={String(project.id)}
-                    defaultCategory={selected}
-                    onCreated={() => setExtSrcRefreshKey((value) => value + 1)}
-                  />
-                )}
-              </div>
-            </div>
-            {loadingCategory ? (
-              <Skeleton className="project-category-editor-skeleton" />
-            ) : isEditing ? (
-              <Textarea
-                value={editorContent}
-                onChange={(event) => setEditorContent(event.target.value)}
-                rows={20}
-                className="project-category-textarea border-primary font-mono ring-3 ring-primary/10"
-                aria-label={`Dữ liệu hiện tại của danh mục ${selectedCategory?.label_vi ?? selected}`}
-                placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
-              />
-            ) : hasCurrentSource ? (
-              <details className="group border-y border-border">
-                <summary
-                  aria-label={`Xem dữ liệu danh mục ${selectedCategory?.label_vi ?? selected}`}
-                  className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-1 py-2 text-body font-semibold outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
-                >
-                  <Database
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0 flex-1 truncate">
-                    Xem dữ liệu đang dùng
-                  </span>
-                  <ChevronDown
-                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-                    aria-hidden="true"
-                  />
-                </summary>
-                <div className="pb-3 pt-1">
-                  <Textarea
-                    value={editorContent}
-                    readOnly
-                    rows={14}
-                    className="project-category-textarea font-mono"
-                    aria-label={`Dữ liệu hiện tại của danh mục ${selectedCategory?.label_vi ?? selected}`}
-                    placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
-                  />
-                </div>
-              </details>
-            ) : null}
-          </section>
+            projectId={projectId}
+            selectedKey={selected}
+            category={selectedCategory}
+            draft={draft}
+            processing={selectedIsProcessing}
+            editable={editable}
+            canManageSources={canManageSources}
+            onSourceCreated={() =>
+              setExternalSourceSignal((value) => value + 1)
+            }
+          />
         </div>
 
-        {selected === "faq" && faqAutoSyncOn && (
-          <p
-            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-body-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
-            role="status"
-          >
-            FAQ đang được đồng bộ tự động từ Google Sheet. Các thay đổi thủ công
-            sẽ bị ghi đè ở lần đồng bộ tiếp theo.
-          </p>
+        {selected === "faq" && (
+          <FaqAutoSyncSection autoSyncOn={faqAutoSyncOn} />
         )}
 
         {canManageSources && (
@@ -959,9 +288,9 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
               Google Sheet
             </h3>
             <ExternalSourceList
-              projectId={String(project.id)}
-              refreshSignal={extSrcRefreshKey}
-              onChange={() => setExtSrcRefreshKey((value) => value + 1)}
+              projectId={projectId}
+              refreshSignal={externalSourceSignal}
+              onChange={() => setExternalSourceSignal((value) => value + 1)}
             />
           </section>
         )}
@@ -971,121 +300,13 @@ const RagCategoriesPanel = ({ project, editable, canManageSources }: Props) => {
             <p className="project-transport-description">
               Lịch xe Agent tra cứu khi ứng viên hỏi tuyến, điểm đón, giờ đón.
             </p>
-            <BusTimetableSection projectId={String(project.id)} />
+            <BusTimetableSection projectId={projectId} />
           </section>
         )}
       </div>
     </section>
   );
 };
-
-const DiscoveryCardEditor = ({ project }: { project: Project }) => {
-  const notify = useNotify();
-  const refresh = useRefresh();
-  const dataProvider = useDataProvider<CrmDataProvider>();
-  const card = project.index_card ?? {};
-  const [summary, setSummary] = useState(card.summary ?? project.summary ?? "");
-  const [location, setLocation] = useState(card.location ?? "");
-  const [roles, setRoles] = useState(
-    (card.roles ?? card.key_roles ?? []).join(", "),
-  );
-  const [highlights, setHighlights] = useState(
-    (card.highlights ?? []).join(", "),
-  );
-  const [aliases, setAliases] = useState((project.aliases ?? []).join(", "));
-  const [saving, setSaving] = useState(false);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await dataProvider.update("projects", {
-        id: project.id,
-        previousData: project,
-        data: {
-          aliases: splitList(aliases),
-          discovery_card: {
-            summary: summary.trim(),
-            location: location.trim(),
-            roles: splitList(roles),
-            eligibility: [],
-            highlights: splitList(highlights),
-          },
-        },
-      });
-      notify("Đã cập nhật thẻ giúp ứng viên tìm thấy dự án.", {
-        type: "success",
-      });
-      refresh();
-    } catch (error) {
-      notify((error as Error).message, { type: "error" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Card className="project-discovery-card">
-      <CardHeader className="project-discovery-header">
-        <CardTitle className="text-section-title">
-          Thông tin dùng khi gợi ý dự án
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="project-discovery-content grid gap-3 sm:grid-cols-2">
-        <Input
-          value={summary}
-          onChange={(event) => setSummary(event.target.value)}
-          placeholder="Tóm tắt"
-          aria-label="Tóm tắt dự án"
-        />
-        <Input
-          value={location}
-          onChange={(event) => setLocation(event.target.value)}
-          placeholder="Địa điểm"
-          aria-label="Địa điểm dự án"
-        />
-        <Input
-          value={roles}
-          onChange={(event) => setRoles(event.target.value)}
-          placeholder="Vị trí, cách nhau bằng dấu phẩy"
-          aria-label="Vị trí tuyển dụng"
-        />
-        <Input
-          value={highlights}
-          onChange={(event) => setHighlights(event.target.value)}
-          placeholder="Điểm nổi bật, cách nhau bằng dấu phẩy"
-          aria-label="Điểm nổi bật"
-        />
-        <Input
-          value={aliases}
-          onChange={(event) => setAliases(event.target.value)}
-          placeholder="Tên gọi khác: LG, LGD..."
-          aria-label="Tên gọi khác"
-        />
-        <div>
-          <Button
-            className="project-discovery-save"
-            onClick={() => void save()}
-            disabled={saving}
-          >
-            {saving ? (
-              <span
-                className="tt-loading tt-loading-spinner tt-loading-sm"
-                aria-hidden="true"
-              />
-            ) : null}
-            Lưu thông tin gợi ý
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
-
-const splitList = (value: string) =>
-  value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat("vi-VN", {

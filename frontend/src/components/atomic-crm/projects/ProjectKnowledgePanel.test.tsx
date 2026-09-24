@@ -1,3 +1,5 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement, ReactNode } from "react";
 import { render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +8,16 @@ import type { KnowledgeCategoryStatus } from "./project-knowledge-service";
 import type * as KnowledgeServiceModule from "./project-knowledge-service";
 import type { Project } from "../types";
 import "./projects.css";
+
+let queryClient: QueryClient;
+
+/** The panel's external-source rows read their query from the app's client. */
+const QueryClientWrapper = ({ children }: { children: ReactNode }) => (
+  <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+);
+
+const renderPanel = (ui: ReactElement) =>
+  render(ui, { wrapper: QueryClientWrapper });
 
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
@@ -104,6 +116,9 @@ describe("ProjectKnowledgePanel", () => {
 
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     mocks.getProjectKnowledgeCategories.mockResolvedValue({
       data: categories,
       total: categories.length,
@@ -130,7 +145,7 @@ describe("ProjectKnowledgePanel", () => {
       filename: "single-page.md",
     });
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={singlePageProject} editable />,
     );
     const editor = screen.getByLabelText("Nội dung trang kiến thức");
@@ -161,7 +176,7 @@ describe("ProjectKnowledgePanel", () => {
       updated_at: "2026-07-18T00:00:00Z",
     });
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={singlePageProject} editable />,
     );
     const editor = screen.getByLabelText("Nội dung trang kiến thức");
@@ -204,7 +219,7 @@ describe("ProjectKnowledgePanel", () => {
     });
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={singlePageProject} editable />,
     );
     await expect
@@ -248,7 +263,7 @@ describe("ProjectKnowledgePanel", () => {
       },
     ]);
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={singlePageProject} editable />,
     );
 
@@ -350,7 +365,7 @@ describe("ProjectKnowledgePanel", () => {
       // onSynchronized #2 → the newer in-flight request
       .mockImplementationOnce(() => secondRefresh.promise);
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={singlePageProject} editable />,
     );
 
@@ -431,7 +446,7 @@ describe("ProjectKnowledgePanel", () => {
       },
     ]);
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={singlePageProject} editable={false} />,
     );
 
@@ -459,7 +474,7 @@ describe("ProjectKnowledgePanel", () => {
       content_sha256: "sha",
       updated_at: "2026-07-22T00:00:00Z",
     });
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={singlePageProject} editable />,
     );
     await vi.waitFor(() =>
@@ -494,7 +509,7 @@ describe("ProjectKnowledgePanel", () => {
       },
     );
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={project} editable />,
     );
 
@@ -566,7 +581,7 @@ describe("ProjectKnowledgePanel", () => {
     });
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel
         project={project}
         editable
@@ -619,7 +634,7 @@ describe("ProjectKnowledgePanel", () => {
       updated_at: "2026-07-18T00:00:00Z",
     });
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel
         project={project}
         editable
@@ -652,7 +667,7 @@ describe("ProjectKnowledgePanel", () => {
       updated_at: "2026-07-18T00:00:00Z",
     });
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={project} editable />,
     );
     await expect
@@ -723,7 +738,7 @@ describe("ProjectKnowledgePanel", () => {
       },
     );
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={project} editable />,
     );
     await screen.getByRole("button", { name: "Lương & thu nhập" }).click();
@@ -785,7 +800,7 @@ describe("ProjectKnowledgePanel", () => {
       .spyOn(HTMLElement.prototype, "scrollIntoView")
       .mockImplementation(() => undefined);
 
-    const screen = await render(
+    const screen = await renderPanel(
       <ProjectKnowledgePanel project={project} editable />,
     );
     await screen.getByRole("button", { name: "Lương & thu nhập" }).click();

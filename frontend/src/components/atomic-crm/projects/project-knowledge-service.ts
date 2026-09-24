@@ -45,6 +45,7 @@ export const getProjectKnowledgeCategorySource = operations.getCategorySource;
 export const replaceProjectKnowledgeCategory = operations.replaceCategory;
 export const getProjectSinglePage = operations.getSinglePage;
 export const replaceProjectSinglePage = operations.replaceSinglePage;
+export const updateProjectDiscoveryCard = operations.updateProjectDiscoveryCard;
 export const getProjectFeatures = operations.getFeatures;
 export const extractProjectFeatures = operations.extractFeatures;
 export const updateProjectFeature = operations.updateFeature;

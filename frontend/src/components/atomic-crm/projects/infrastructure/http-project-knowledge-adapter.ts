@@ -61,6 +61,9 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       body: { filename, text },
     }),
 
+  updateProjectDiscoveryCard: (projectId, patch) =>
+    apiJson(projectPath(projectId), { method: "PATCH", body: patch }),
+
   getFeatures: (projectId) => apiJson(`${projectPath(projectId)}/features`),
 
   extractFeatures: (projectId) =>

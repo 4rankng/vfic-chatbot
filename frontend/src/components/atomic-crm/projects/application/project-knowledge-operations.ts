@@ -7,6 +7,7 @@ import type {
 import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-policy";
 import type {
   CancellationSignal,
+  ProjectDiscoveryCardPatch,
   ProjectKnowledgePort,
   UploadFile,
 } from "./project-knowledge-port";
@@ -32,6 +33,10 @@ export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
     getSinglePage: (projectId: string) => port.getSinglePage(projectId),
     replaceSinglePage: (projectId: string, filename: string, text: string) =>
       port.replaceSinglePage(projectId, filename, text),
+    updateProjectDiscoveryCard: (
+      projectId: string,
+      patch: ProjectDiscoveryCardPatch,
+    ) => port.updateProjectDiscoveryCard(projectId, patch),
     getFeatures: (projectId: string) => port.getFeatures(projectId),
     extractFeatures: (projectId: string) => port.extractFeatures(projectId),
     updateFeature: (

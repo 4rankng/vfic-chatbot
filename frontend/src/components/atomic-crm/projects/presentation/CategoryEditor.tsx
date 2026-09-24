@@ -1,0 +1,240 @@
+import type { Ref } from "react";
+import {
+  ChevronDown,
+  Database,
+  Save,
+  Pencil,
+  Download,
+  Upload,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import type { CategoryDraft } from "../application/use-category-draft";
+import type { KnowledgeCategoryStatus } from "../domain/project-knowledge-contracts";
+import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-policy";
+import { ExternalSourceLinkForm } from "../ExternalSourceLinkForm";
+
+type Props = {
+  ref?: Ref<HTMLElement>;
+  projectId: string;
+  /** Selected key, used as the label fallback until the catalog lands. */
+  selectedKey: ProjectKnowledgeCategory;
+  category?: KnowledgeCategoryStatus;
+  draft: CategoryDraft;
+  /** The selected category has a revision under review. */
+  processing: boolean;
+  editable: boolean;
+  canManageSources: boolean;
+  onSourceCreated: () => void;
+};
+
+/** Detail pane of the selected knowledge category: review state, actions, YAML. */
+export const CategoryEditor = ({
+  ref,
+  projectId,
+  selectedKey,
+  category,
+  draft,
+  processing,
+  editable,
+  canManageSources,
+  onSourceCreated,
+}: Props) => {
+  const label = category?.label_vi ?? selectedKey;
+  const {
+    cancelEditing,
+    content,
+    downloadTemplate,
+    filename,
+    hasCurrentSource,
+    hasUnsavedChanges,
+    isEditing,
+    loading,
+    save,
+    saving,
+    setContent,
+    startEditing,
+    template,
+    upload,
+  } = draft;
+
+  return (
+    <section
+      ref={ref}
+      id="project-category-detail"
+      className="project-category-editor"
+      tabIndex={-1}
+      aria-labelledby="project-category-detail-title"
+      aria-busy={loading}
+    >
+      <div className="project-category-editor-header">
+        <div className="project-category-editor-heading">
+          <div className="project-category-editor-title-row">
+            <h3
+              id="project-category-detail-title"
+              className="project-category-editor-title"
+            >
+              {label}
+            </h3>
+            {!loading && (
+              <Badge
+                variant={
+                  hasCurrentSource || processing ? "secondary" : "outline"
+                }
+              >
+                {processing
+                  ? "Đang kiểm tra"
+                  : hasCurrentSource
+                    ? `Đang dùng v${category?.active_revision_no ?? 1}`
+                    : "Chưa có dữ liệu"}
+              </Badge>
+            )}
+          </div>
+          <p className="project-category-editor-description" aria-live="polite">
+            {isEditing
+              ? "Chỉnh sửa YAML trực tiếp, sau đó lưu để hệ thống kiểm tra."
+              : processing
+                ? `Phiên bản mới đang được kiểm tra · ${filename}`
+                : hasCurrentSource
+                  ? `Dữ liệu hiện tại Agent đang sử dụng · ${filename}`
+                  : "Danh mục này chưa có dữ liệu đang dùng. Tải mẫu để chuẩn bị nội dung mới."}
+          </p>
+        </div>
+        <div className="project-category-editor-actions">
+          {editable && !isEditing && (
+            <Button
+              size="sm"
+              className="tt-btn-touch"
+              onClick={startEditing}
+              disabled={saving || loading || processing}
+            >
+              <Pencil className="size-4" />
+              Sửa nội dung
+            </Button>
+          )}
+          {editable && isEditing && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="tt-btn-touch"
+                onClick={cancelEditing}
+                disabled={saving}
+              >
+                Hủy
+              </Button>
+              <Button
+                size="sm"
+                className={cn(
+                  "project-category-save-button tt-btn-touch",
+                  !hasUnsavedChanges && "text-[var(--muted-foreground)]!",
+                )}
+                onClick={() => void save()}
+                disabled={saving || !hasUnsavedChanges}
+              >
+                {saving ? (
+                  <span
+                    className="tt-loading tt-loading-spinner tt-loading-sm"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Save className="size-4" />
+                )}
+                Lưu thay đổi
+              </Button>
+            </>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="tt-btn-touch"
+            onClick={downloadTemplate}
+            disabled={!template || loading}
+          >
+            <Download className="size-4" /> Tải mẫu
+          </Button>
+          {canManageSources && !isEditing && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="tt-btn-touch"
+              asChild
+              disabled={saving || loading}
+            >
+              <label>
+                {saving ? (
+                  <span
+                    className="tt-loading tt-loading-spinner tt-loading-sm"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Upload className="size-4" />
+                )}
+                Tải file YAML
+                <input
+                  type="file"
+                  accept=".yaml,.yml,application/yaml,text/yaml"
+                  className="sr-only"
+                  disabled={saving || loading}
+                  onChange={(event) => void upload(event.target.files?.[0])}
+                />
+              </label>
+            </Button>
+          )}
+          {canManageSources && !isEditing && (
+            <ExternalSourceLinkForm
+              projectId={projectId}
+              defaultCategory={selectedKey}
+              onCreated={onSourceCreated}
+            />
+          )}
+        </div>
+      </div>
+      {loading ? (
+        <Skeleton className="project-category-editor-skeleton" />
+      ) : isEditing ? (
+        <Textarea
+          value={content}
+          onChange={(event) => setContent(event.target.value)}
+          rows={20}
+          className="project-category-textarea border-primary font-mono ring-3 ring-primary/10"
+          aria-label={`Dữ liệu hiện tại của danh mục ${label}`}
+          placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
+        />
+      ) : hasCurrentSource ? (
+        <details className="group border-y border-border">
+          <summary
+            aria-label={`Xem dữ liệu danh mục ${label}`}
+            className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-1 py-2 text-body font-semibold outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+          >
+            <Database
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <span className="min-w-0 flex-1 truncate">
+              Xem dữ liệu đang dùng
+            </span>
+            <ChevronDown
+              className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+              aria-hidden="true"
+            />
+          </summary>
+          <div className="pb-3 pt-1">
+            <Textarea
+              value={content}
+              readOnly
+              rows={14}
+              className="project-category-textarea font-mono"
+              aria-label={`Dữ liệu hiện tại của danh mục ${label}`}
+              placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
+            />
+          </div>
+        </details>
+      ) : null}
+    </section>
+  );
+};
