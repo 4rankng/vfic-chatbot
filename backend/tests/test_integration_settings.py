@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import pytest
@@ -18,9 +19,10 @@ from app.services.integration_settings import (
     LLM_FAILOVER_ORDER,
     normalize_llm_failover_order,
     OPENROUTER_API_KEY,
-    ZALO_OA_REFRESH_TOKEN,
     ZALO_OA_ACCESS_TOKEN,
     ZALO_OA_APP_ID,
+    ZALO_OA_REFRESH_LOCK_KEY,
+    ZALO_OA_REFRESH_TOKEN,
     ZALO_OA_SECRET_KEY,
 )
 
@@ -158,9 +160,18 @@ class _FakeRedis:
         self.deleted.append(key)
         return 1 if self._store.pop(key, None) is not None else 0
 
+    async def eval(self, _script: str, _numkeys: int, *args: str) -> int:
+        """Only the lock-release CAS script is exercised: delete iff owned."""
+        key, owner = args[0], args[1]
+        if self._store.get(key) != owner:
+            return 0
+        self.deleted.append(key)
+        self._store.pop(key, None)
+        return 1
+
 
 @pytest.mark.asyncio
-async def test_zalo_admin_view_masks_stored_refresh_token():
+async def test_zalo_admin_view_reports_status_only_for_stored_refresh_token():
     seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
     encrypted = seed.cipher.encrypt("refresh-token-for-zalo-oa")
     service = IntegrationSettingsService(
@@ -172,7 +183,7 @@ async def test_zalo_admin_view_masks_stored_refresh_token():
 
     assert view["zalo_oa_refresh_token"] == {
         "configured": True,
-        "preview": "refr...o-oa",
+        "preview": "25 ký tự",
     }
 
 
@@ -390,11 +401,11 @@ async def test_refresh_oa_access_token_persists_before_audit_and_evicts_local_ca
             {"secret_key": "oa-secret-key"},
         )
     ]
-    assert redis.deleted == ["zalo:oa:token:refresh"]
+    assert redis.deleted == [ZALO_OA_REFRESH_LOCK_KEY]
 
 
 @pytest.mark.asyncio
-async def test_minimax_admin_view_masks_stored_token():
+async def test_minimax_admin_view_reports_status_only_for_stored_token():
     seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
     encrypted = seed.cipher.encrypt("sk-minimax-secret-token")
     service = IntegrationSettingsService(
@@ -406,7 +417,7 @@ async def test_minimax_admin_view_masks_stored_token():
 
     assert view["minimax_api_key"] == {
         "configured": True,
-        "preview": "sk-m...oken",
+        "preview": "23 ký tự",
     }
     assert view["minimax_base_url"] == "https://api.minimax.io/v1"
     assert view["minimax_agent_model"] == "MiniMax-M2.7-highspeed"
@@ -535,7 +546,7 @@ async def test_update_minimax_stores_enable_as_non_secret(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_openrouter_admin_view_masks_stored_token():
+async def test_openrouter_admin_view_reports_status_only_for_stored_token():
     seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
     encrypted = seed.cipher.encrypt("sk-or-v1-openrouter-secret-token")
     service = IntegrationSettingsService(
@@ -547,7 +558,7 @@ async def test_openrouter_admin_view_masks_stored_token():
 
     assert view["openrouter_api_key"] == {
         "configured": True,
-        "preview": "sk-o...oken",
+        "preview": "32 ký tự",
     }
     assert view["openrouter_base_url"] == "https://openrouter.ai/api/v1"
     assert view["openrouter_digest_model"] == "deepseek/deepseek-v4-flash"
@@ -649,7 +660,7 @@ async def test_custom_llm_admin_view_env_fallback_and_usable():
 
     view = await service.admin_custom_llm_view()
 
-    assert view["custom_llm_api_key"] == {"configured": True, "preview": "sk-m...oken"}
+    assert view["custom_llm_api_key"] == {"configured": True, "preview": "20 ký tự"}
     assert view["custom_llm_base_url"] == "https://api.xiaomi.example/v1"
     assert view["custom_llm_agent_model"] == "mimo-7b"
     # Blank safety/fast models inherit the agent model: one model id is enough.
@@ -760,7 +771,7 @@ async def test_facebook_oauth_admin_view_marks_unconfigured_when_empty():
 
 
 @pytest.mark.asyncio
-async def test_facebook_oauth_admin_view_masks_secrets_and_surfaces_plaintext():
+async def test_facebook_oauth_admin_view_reports_status_only_for_secrets_and_surfaces_plaintext():
     seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
     encrypted_secret = seed.cipher.encrypt("1234567890abcdef")
     encrypted_verify = seed.cipher.encrypt("my-verify-token-1234")
@@ -785,14 +796,14 @@ async def test_facebook_oauth_admin_view_masks_secrets_and_surfaces_plaintext():
         "configured": True,
         "value": "login-cfg-9",
     }
-    # Secrets are masked.
+    # Authorizing secrets report status only — never characters of the value.
     assert view["facebook_app_secret"] == {
         "configured": True,
-        "preview": "1234...cdef",
+        "preview": "16 ký tự",
     }
     assert view["facebook_webhook_verify_token"] == {
         "configured": True,
-        "preview": "my-v...1234",
+        "preview": "20 ký tự",
     }
 
 
@@ -882,3 +893,138 @@ async def test_update_facebook_oauth_skips_blank_fields_leaving_them_unchanged(
     assert FB_APP_ID not in db.rows
     assert FB_APP_SECRET not in db.rows
     assert db.rows[FB_LOGIN_CONFIG_ID].encrypted_value == "cfg-9"
+
+
+# ─── SEC-07: admin views must not leak any character of a stored secret ─────
+
+# Every authorizing secret seeded with a distinct 24-char hex value: a leaked
+# character window is unmistakable against the surrounding JSON.
+_SECRET_PROBES = {
+    "zalo_bot_token": "a1b2c3d4e5f60718293a4b5c",
+    "zalo_bot_webhook_secret": "7f6e5d4c3b2a1908f7e6d5c4",
+    "zalo_oa_secret_key": "2c4d6e8fa0b1c2d3e4f50617",
+    "zalo_oa_access_token": "93b7c1d5e9f3072b4a6c8e0d",
+    "zalo_oa_refresh_token": "5e1f7a3c9b2d4f6082a4c6e8",
+    "minimax_api_key": "c8d0e2f4a6b8c0d2e4f6a8b0",
+    "openrouter_api_key": "3a5c7e9b1d3f5072a4c6e8b0",
+    "custom_llm_api_key": "f1e2d3c4b5a69788796a5b4c",
+    "jev_api_key": "0d1e2f3a4b5c6d7e8f901234",
+    "facebook_app_secret": "4b8a2c6e0f1d3b5a7c9e0d2f",
+    "facebook_webhook_verify_token": "6a4c2e0f8b6d4a2c0e8f6d4b",
+}
+
+
+@pytest.mark.asyncio
+async def test_admin_views_leak_no_character_of_a_stored_secret():
+    """SEC-07: an admin GET may say a secret is configured, never leak it.
+
+    The old ``first4...last4`` preview leaked eight characters of every
+    credential. Every authorizing secret is seeded and every admin view is
+    scanned for ANY 4-character window of those values, so a partial-preview
+    regression fails here rather than shipping.
+    """
+    seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+    rows = [_Row(key, seed.cipher.encrypt(value)) for key, value in _SECRET_PROBES.items()]
+    service = IntegrationSettingsService(_ReadDb(rows), settings=_Settings())
+    empty_service = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+
+    async def _all_views(source) -> dict:
+        return {
+            "zalo": await source.admin_view(),
+            "minimax": await source.admin_minimax_view(),
+            "openrouter": await source.admin_openrouter_view(),
+            "custom_llm": await source.admin_custom_llm_view(),
+            "jev": await source.admin_jev_view(),
+            "facebook": await source.admin_facebook_oauth_view(),
+        }
+
+    views = await _all_views(service)
+    # The same views with nothing configured: any window that also appears here
+    # is the view's own fixed text (base URLs, model ids, 3072), not a leak.
+    baseline = json.dumps(await _all_views(empty_service), ensure_ascii=False, default=str)
+
+    for name, view in views.items():
+        payload = json.dumps(view, ensure_ascii=False, default=str)
+        for key, value in _SECRET_PROBES.items():
+            assert value not in payload, f"{name} leaked the whole value of {key}"
+            for start in range(len(value) - 3):
+                window = value[start : start + 4]
+                if window in baseline:
+                    continue
+                assert window not in payload, f"{name} leaked {window!r} of {key}"
+
+    # The projection is status-only: configured + length, same field name the
+    # admin UI renders as the field placeholder.
+    status_only = {"configured": True, "preview": "24 ký tự"}
+    assert views["zalo"]["zalo_bot_token"] == status_only
+    assert views["zalo"]["zalo_bot_webhook_secret"] == status_only
+    assert views["zalo"]["zalo_oa_secret_key"] == status_only
+    assert views["zalo"]["zalo_oa_access_token"] == status_only
+    assert views["zalo"]["zalo_oa_refresh_token"] == status_only
+    assert views["minimax"]["minimax_api_key"] == status_only
+    assert views["openrouter"]["openrouter_api_key"] == status_only
+    assert views["custom_llm"]["custom_llm_api_key"] == status_only
+    assert views["jev"]["jev_api_key"] == status_only
+    assert views["facebook"]["facebook_app_secret"] == status_only
+    assert views["facebook"]["facebook_webhook_verify_token"] == status_only
+
+
+@pytest.mark.asyncio
+async def test_reveal_facebook_oauth_requires_the_actors_password(monkeypatch):
+    """SEC-07: reveal is step-up gated and audited; a bad password reveals nothing."""
+    from app.core.security import hash_password_sync
+    from app.shared.domain.errors import BadRequestError
+
+    audits: list[dict] = []
+
+    async def fake_record_audit(*_args, **kwargs):
+        audits.append(kwargs)
+
+    monkeypatch.setattr("app.services.integration_settings.record_audit", fake_record_audit)
+
+    db = _WriteDb()
+    service = IntegrationSettingsService(db, settings=_Settings())
+    actor_id = uuid.uuid4()
+    password_hash = hash_password_sync("correct horse battery staple")
+
+    with pytest.raises(BadRequestError):
+        await service.reveal_facebook_oauth(
+            actor_id=actor_id,
+            password="wrong password",
+            password_hash=password_hash,
+        )
+    assert audits == []
+    assert db.committed is False
+
+    cfg = await service.reveal_facebook_oauth(
+        actor_id=actor_id,
+        password="correct horse battery staple",
+        password_hash=password_hash,
+    )
+
+    assert cfg.app_secret == ""
+    assert db.committed is True
+    assert audits == [
+        {
+            "action": "reveal_facebook_credentials",
+            "actor_id": actor_id,
+            "target_type": "integration_settings",
+            "target_id": "facebook",
+            "payload": {"revealed": []},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_reveal_facebook_oauth_rejects_a_missing_password_hash(monkeypatch):
+    """An admin principal without a password hash (never a real login) fails closed."""
+    from app.shared.domain.errors import BadRequestError
+
+    service = IntegrationSettingsService(_WriteDb(), settings=_Settings())
+
+    with pytest.raises(BadRequestError):
+        await service.reveal_facebook_oauth(
+            actor_id=uuid.uuid4(),
+            password="anything",
+            password_hash="",
+        )

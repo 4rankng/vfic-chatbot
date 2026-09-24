@@ -278,19 +278,26 @@ async def test_oauth_start_returns_400_when_app_id_not_configured(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_reveal_returns_plaintext_secrets_and_forbids_caching(monkeypatch):
-    """Reveal hands an admin the stored secrets verbatim, uncached.
+    """Reveal hands a re-authenticated admin the stored secrets verbatim, uncached.
 
     The masked GET view cannot serve re-registering a webhook on Meta, which
     needs the verify token exactly. The response must not be cached anywhere.
+    SEC-07: the request carries the admin's password again; the endpoint passes
+    it (with the actor's stored hash) to the step-up-gated service call.
     """
     import app.api.integrations as api
     from fastapi import Response
+
+    calls: list[dict] = []
 
     class _SettingsService:
         def __init__(self, db):
             pass
 
-        async def resolve_facebook_oauth(self):
+        async def reveal_facebook_oauth(self, *, actor_id, password, password_hash):
+            calls.append(
+                {"actor_id": actor_id, "password": password, "password_hash": password_hash}
+            )
             return SimpleNamespace(
                 app_secret="super-secret-value",
                 verify_token="verify-token-value",
@@ -300,13 +307,99 @@ async def test_reveal_returns_plaintext_secrets_and_forbids_caching(monkeypatch)
     response = Response()
     result = await api.reveal_facebook_credentials(
         response=response,
-        admin=SimpleNamespace(id="admin-id"),
+        password="re-entered-password",
+        admin=SimpleNamespace(id="admin-id", password_hash="stored-hash"),
         db=MagicMock(),
     )
 
     assert result.facebook_app_secret == "super-secret-value"
     assert result.facebook_webhook_verify_token == "verify-token-value"
     assert response.headers["Cache-Control"] == "no-store"
+    assert calls == [
+        {
+            "actor_id": "admin-id",
+            "password": "re-entered-password",
+            "password_hash": "stored-hash",
+        }
+    ]
+
+
+def _reveal_app(monkeypatch, *, password_hash: str):
+    """Real integrations router + real step-up service over a stub session."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api import integrations as api
+    from app.api.auth_dependencies import require_admin
+    from app.core.config import Settings
+    from app.core.errors import register_domain_exception_handlers
+    from app.services.integration_settings import IntegrationSettingsService
+    from app.shared.infrastructure.db import get_request_db
+
+    class _Service(IntegrationSettingsService):
+        def __init__(self, db) -> None:
+            super().__init__(
+                db,
+                settings=Settings(
+                    app_env="development",
+                    meta_app_secret="meta-secret-value",
+                    meta_webhook_verify_token="verify-token-value",
+                ),
+            )
+
+    db = MagicMock()
+    db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: []))
+    db.flush = AsyncMock()
+    db.commit = AsyncMock()
+
+    app = FastAPI()
+    register_domain_exception_handlers(app)
+    app.include_router(api.router, prefix="/api/v1")
+    app.dependency_overrides[require_admin] = lambda: SimpleNamespace(
+        id=UUID(int=7), password_hash=password_hash
+    )
+    app.dependency_overrides[get_request_db] = lambda: db
+    monkeypatch.setattr(api, "IntegrationSettingsService", _Service)
+    return TestClient(app)
+
+
+def test_reveal_endpoint_rejects_a_request_without_step_up(monkeypatch):
+    """SEC-07: no password re-entry → the handler never runs, nothing is revealed."""
+    from app.core.security import hash_password_sync
+
+    client = _reveal_app(monkeypatch, password_hash=hash_password_sync("s3cret-password"))
+    path = "/api/v1/admin/integrations/facebook/credentials/reveal"
+
+    assert client.post(path).status_code == 422
+    assert client.post(path, json={"password": ""}).status_code == 422
+    assert client.post(path, json={"password": "wrong-password"}).status_code == 400
+
+
+def test_reveal_endpoint_returns_secrets_after_correct_password(monkeypatch):
+    """SEC-07: the correct re-entry reveals the secrets, uncached and audited."""
+    from app.core.security import hash_password_sync
+
+    audits: list = []
+
+    async def _record_audit(db, **kwargs):
+        audits.append(kwargs)
+        return None
+
+    monkeypatch.setattr("app.services.integration_settings.record_audit", _record_audit)
+    client = _reveal_app(monkeypatch, password_hash=hash_password_sync("s3cret-password"))
+
+    response = client.post(
+        "/api/v1/admin/integrations/facebook/credentials/reveal",
+        json={"password": "s3cret-password"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {
+        "facebook_app_secret": "meta-secret-value",
+        "facebook_webhook_verify_token": "verify-token-value",
+    }
+    assert [a["action"] for a in audits] == ["reveal_facebook_credentials"]
 
 
 @pytest.mark.asyncio

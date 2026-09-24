@@ -7,7 +7,7 @@ import time
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Body, Depends, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1107,7 +1107,7 @@ async def get_facebook_credentials(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> FacebookCredentialsOut:
-    """Safe status of the app-level Meta credentials (configured flag + preview)."""
+    """Safe status of the app-level Meta credentials (configured flag + status, no secret characters)."""
     return FacebookCredentialsOut.model_validate(
         await IntegrationSettingsService(db).admin_facebook_oauth_view()
     )
@@ -1116,17 +1116,27 @@ async def get_facebook_credentials(
 @router.post("/facebook/credentials/reveal", response_model=FacebookCredentialsReveal)
 async def reveal_facebook_credentials(
     response: Response,
+    password: str = Body(..., embed=True, min_length=1, max_length=256),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> FacebookCredentialsReveal:
-    """Return the stored Meta secrets in plaintext to an admin.
+    """Return the stored Meta secrets in plaintext to a re-authenticated admin.
 
     Re-registering the webhook on Meta needs the verify token verbatim. POST
     rather than GET so the response is never cached, prefetched, or replayed
-    from browser history; ``no-store`` closes the same gap at the proxy. The
-    reveal is audited by actor; the values themselves are never logged.
+    from browser history; ``no-store`` closes the same gap at the proxy.
+
+    SEC-07: the body must carry the admin's password again (step-up), so a
+    hijacked admin session on its own cannot read the Meta app secret — the HMAC
+    key that authenticates every inbound Messenger webhook. The reveal is
+    audit-logged by actor; the values themselves are never logged.
     """
-    cfg = await IntegrationSettingsService(db).resolve_facebook_oauth()
+    settings_service = IntegrationSettingsService(db)
+    cfg = await settings_service.reveal_facebook_oauth(
+        actor_id=admin.id,
+        password=password,
+        password_hash=admin.password_hash,
+    )
     logger.warning("facebook credentials revealed: admin=%s", admin.id)
     response.headers["Cache-Control"] = "no-store"
     return FacebookCredentialsReveal(

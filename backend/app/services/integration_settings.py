@@ -40,8 +40,10 @@ from app.core.preamble_cache import (
     cached_jev_config,
     evict_local_namespace,
 )
+from app.core.security import verify_password
 from app.models.integration import IntegrationSetting
 from app.services.audit_service import record_audit
+from app.shared.domain.errors import BadRequestError
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +160,9 @@ FB_SETTING_KEYS = (FB_APP_ID, FB_APP_SECRET, FB_LOGIN_CONFIG_ID, FB_WEBHOOK_VERI
 # Secrets are AES-GCM encrypted at rest; app_id and login_config_id are not
 # sensitive (they appear in the browser OAuth URL) and stored as plaintext.
 FB_SECRET_KEYS = (FB_APP_SECRET, FB_WEBHOOK_VERIFY_TOKEN)
+
+# Step-up re-authentication failure message for the plaintext reveal (SEC-07).
+_FB_REVEAL_STEP_UP_FAILED = "Mật khẩu xác nhận không đúng"
 
 # The failover order rides the minimax panel (same PUT as the default radio),
 # so it lives in the minimax key set and its cache namespace.
@@ -342,13 +347,23 @@ class IntegrationSettingsCipher:
         return AESGCM(self._key).decrypt(nonce, sealed, aad).decode("utf-8")
 
 
-def _preview(value: str) -> str | None:
+def _secret_status(value: str) -> dict:
+    """Status-only projection for an authorizing secret (SEC-07).
+
+    Admin GETs used to answer with ``first4...last4`` for every credential,
+    which leaked eight characters of each and narrowed brute force on the Meta
+    app secret — the HMAC key that authenticates every Messenger webhook. An
+    authorizing secret now reports only whether it is configured and how long it
+    is; no character derived from the value leaves the process.
+
+    The field name stays ``preview`` because the admin UI renders it as the
+    field placeholder (``SecretStatus.preview``); only the content changed from
+    a character preview to a status string.
+    """
     value = (value or "").strip()
     if not value:
-        return None
-    if len(value) <= 8:
-        return "*" * len(value)
-    return f"{value[:4]}...{value[-4:]}"
+        return {"configured": False, "preview": None}
+    return {"configured": True, "preview": f"{len(value)} ký tự"}
 
 
 def _bool_value(value: str | None, fallback: bool) -> bool:
@@ -447,30 +462,15 @@ class IntegrationSettingsService:
     async def admin_view(self) -> dict:
         cfg = await self.resolve_zalo()
         return {
-            "zalo_bot_token": {
-                "configured": bool(cfg.bot_token),
-                "preview": _preview(cfg.bot_token),
-            },
-            "zalo_bot_webhook_secret": {
-                "configured": bool(cfg.bot_webhook_secret),
-                "preview": _preview(cfg.bot_webhook_secret),
-            },
+            "zalo_bot_token": _secret_status(cfg.bot_token),
+            "zalo_bot_webhook_secret": _secret_status(cfg.bot_webhook_secret),
             "zalo_oa_app_id": {
                 "configured": bool(cfg.oa_app_id),
                 "value": cfg.oa_app_id or None,
             },
-            "zalo_oa_secret_key": {
-                "configured": bool(cfg.oa_secret_key),
-                "preview": _preview(cfg.oa_secret_key),
-            },
-            "zalo_oa_access_token": {
-                "configured": bool(cfg.oa_access_token),
-                "preview": _preview(cfg.oa_access_token),
-            },
-            "zalo_oa_refresh_token": {
-                "configured": bool(cfg.oa_refresh_token),
-                "preview": _preview(cfg.oa_refresh_token),
-            },
+            "zalo_oa_secret_key": _secret_status(cfg.oa_secret_key),
+            "zalo_oa_access_token": _secret_status(cfg.oa_access_token),
+            "zalo_oa_refresh_token": _secret_status(cfg.oa_refresh_token),
             "zalo_bot_api_base": ZALO_BOT_API_BASE,
             "zalo_oa_api_base": ZALO_OA_API_BASE,
             # Inbound OA signature verification is retired (see app/api/webhooks.py).
@@ -498,10 +498,7 @@ class IntegrationSettingsService:
     async def admin_minimax_view(self) -> dict:
         cfg = await self.resolve_minimax()
         return {
-            "minimax_api_key": {
-                "configured": bool(cfg.api_key),
-                "preview": _preview(cfg.api_key),
-            },
+            "minimax_api_key": _secret_status(cfg.api_key),
             "minimax_base_url": cfg.base_url,
             "minimax_agent_model": cfg.agent_model,
             "minimax_safety_model": cfg.safety_model,
@@ -540,10 +537,7 @@ class IntegrationSettingsService:
     async def admin_openrouter_view(self) -> dict:
         cfg = await self.resolve_openrouter()
         return {
-            "openrouter_api_key": {
-                "configured": bool(cfg.api_key),
-                "preview": _preview(cfg.api_key),
-            },
+            "openrouter_api_key": _secret_status(cfg.api_key),
             "openrouter_base_url": cfg.base_url,
             "openrouter_agent_model": cfg.agent_model,
             "openrouter_safety_model": cfg.safety_model,
@@ -594,10 +588,7 @@ class IntegrationSettingsService:
     async def admin_custom_llm_view(self) -> dict:
         cfg = await self.resolve_custom_llm()
         return {
-            "custom_llm_api_key": {
-                "configured": bool(cfg.api_key),
-                "preview": _preview(cfg.api_key),
-            },
+            "custom_llm_api_key": _secret_status(cfg.api_key),
             "custom_llm_base_url": cfg.base_url,
             "custom_llm_agent_model": cfg.agent_model,
             "custom_llm_safety_model": cfg.safety_model,
@@ -635,10 +626,7 @@ class IntegrationSettingsService:
     async def admin_jev_view(self) -> dict:
         cfg = await self.resolve_jev()
         return {
-            "jev_api_key": {
-                "configured": bool(cfg.api_key),
-                "preview": _preview(cfg.api_key),
-            },
+            "jev_api_key": _secret_status(cfg.api_key),
             "jev_model": cfg.model,
             "jev_enable": cfg.enabled,
             "jev_usable": cfg.usable,
@@ -1094,11 +1082,13 @@ class IntegrationSettingsService:
         return FacebookOAuthConfig(**cached)
 
     async def admin_facebook_oauth_view(self) -> dict:
-        """Safe status view for the admin UI (configured flag + masked preview).
+        """Safe status view for the admin UI (configured flag + status, no secret characters).
 
         ``app_id`` and ``login_config_id`` are not secret (they appear in the
         browser OAuth URL), so the actual value is surfaced. ``app_secret`` and
-        ``verify_token`` show only a masked preview like other secrets.
+        ``verify_token`` are authorizing secrets and report status only — a
+        character preview here would leak the HMAC key that authenticates every
+        inbound Messenger webhook (SEC-07).
         """
         cfg = await self.resolve_facebook_oauth()
         return {
@@ -1106,19 +1096,49 @@ class IntegrationSettingsService:
                 "configured": bool(cfg.app_id),
                 "value": cfg.app_id or None,
             },
-            "facebook_app_secret": {
-                "configured": bool(cfg.app_secret),
-                "preview": _preview(cfg.app_secret),
-            },
+            "facebook_app_secret": _secret_status(cfg.app_secret),
             "facebook_login_config_id": {
                 "configured": bool(cfg.login_config_id),
                 "value": cfg.login_config_id or None,
             },
-            "facebook_webhook_verify_token": {
-                "configured": bool(cfg.verify_token),
-                "preview": _preview(cfg.verify_token),
-            },
+            "facebook_webhook_verify_token": _secret_status(cfg.verify_token),
         }
+
+    async def reveal_facebook_oauth(
+        self, *, actor_id, password: str, password_hash: str
+    ) -> FacebookOAuthConfig:
+        """Resolve the app-level Meta secrets for one audited, step-up reveal.
+
+        SEC-07: the plaintext leaves this process only after the actor re-proves
+        possession of their password. A hijacked admin session — a token lifted
+        from localStorage — must not be enough on its own to read the Meta app
+        secret, the HMAC key that authenticates every inbound Messenger webhook.
+        The reveal is audit-logged with its actor; the values themselves are
+        never logged. Raises ``BadRequestError`` when the re-entry fails.
+        """
+        if not password_hash or not await verify_password(password, password_hash):
+            raise BadRequestError(_FB_REVEAL_STEP_UP_FAILED)
+
+        cfg = await self.resolve_facebook_oauth()
+        await record_audit(
+            self.db,
+            action="reveal_facebook_credentials",
+            actor_id=actor_id,
+            target_type="integration_settings",
+            target_id="facebook",
+            payload={
+                "revealed": [
+                    key
+                    for key, value in (
+                        (FB_APP_SECRET, cfg.app_secret),
+                        (FB_WEBHOOK_VERIFY_TOKEN, cfg.verify_token),
+                    )
+                    if value
+                ]
+            },
+        )
+        await self.db.commit()
+        return cfg
 
     async def update_facebook_oauth(self, values: dict[str, str | None], *, actor_id) -> list[str]:
         """Persist app-level Facebook credentials. Returns the changed keys.

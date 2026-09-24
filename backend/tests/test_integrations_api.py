@@ -272,8 +272,8 @@ async def test_zalo_bot_surfaces_getWebhookInfo_error(monkeypatch):
 
 def _admin_view_dict() -> dict:
     return {
-        "zalo_bot_token": {"configured": True, "preview": "abcd...1234"},
-        "zalo_bot_webhook_secret": {"configured": True, "preview": "wxyz...9876"},
+        "zalo_bot_token": {"configured": True, "preview": "20 ký tự"},
+        "zalo_bot_webhook_secret": {"configured": True, "preview": "24 ký tự"},
         "zalo_oa_app_id": {"configured": False, "value": None},
         "zalo_oa_secret_key": {"configured": False, "preview": None},
         "zalo_oa_access_token": {"configured": False, "preview": None},
@@ -408,7 +408,7 @@ class _CustomLlmService:
 
     async def admin_custom_llm_view(self) -> dict:
         return {
-            "custom_llm_api_key": {"configured": True, "preview": "sk-s...cret"},
+            "custom_llm_api_key": {"configured": True, "preview": "20 ký tự"},
             "custom_llm_base_url": "https://api.xiaomi.example/v1",
             "custom_llm_agent_model": "mimo-7b",
             "custom_llm_safety_model": "mimo-7b",
@@ -433,7 +433,7 @@ class _PutTrackingService(_CustomLlmService):
         return list(values.keys())
 
 
-async def test_custom_llm_get_returns_masked_admin_view(monkeypatch):
+async def test_custom_llm_get_returns_status_only_admin_view(monkeypatch):
     monkeypatch.setattr(integrations, "IntegrationSettingsService", _CustomLlmService)
 
     view = await integrations.get_custom_llm_integration_settings(
@@ -441,7 +441,7 @@ async def test_custom_llm_get_returns_masked_admin_view(monkeypatch):
     )
 
     assert view.custom_llm_api_key.configured is True
-    assert view.custom_llm_api_key.preview == "sk-s...cret"
+    assert view.custom_llm_api_key.preview == "20 ký tự"
     assert view.custom_llm_usable is True
     assert view.custom_llm_enable is True
 
