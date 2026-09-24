@@ -74,6 +74,19 @@ def fake_redis():
     r.rpop = MagicMock(side_effect=_rpop)
     r.exists = MagicMock(side_effect=_exists)
     r.persist = MagicMock(return_value=1)
+
+    def _eval(script, numkeys, key, *args):
+        # Emulates the release script under the fixture lock: push one
+        # token, trim excess above the limit, return the resulting length.
+        with lock:
+            limit = int(args[0])
+            lst = store.setdefault(key, [])
+            lst.append(1)
+            while len(lst) > limit:
+                lst.pop()
+            return len(lst)
+
+    r.eval = MagicMock(side_effect=_eval)
     r.pipeline = MagicMock(return_value=MagicMock(execute=MagicMock(return_value=[None])))
     return r
 
@@ -200,18 +213,21 @@ class TestSemaphoreDriftDetection:
             assert fake_redis.llen("test_drift_ok") == 3
 
     @pytest.mark.asyncio
-    async def test_drift_above_one_warns(self, fake_redis):
-        """If drift exceeds 1, warning is logged."""
-        sem = RedisLlmSemaphore(limit=2, key="test_drift_bad")
+    async def test_drift_shortfall_warns(self, fake_redis):
+        """Excess above the limit is trimmed atomically by the release
+        script, so after a release the warning fires only on a genuine
+        shortfall: the count sitting more than one below the limit means
+        tokens are held in flight (or leaked)."""
+        sem = RedisLlmSemaphore(limit=3, key="test_drift_bad")
         with patch(_REDIS_PATCH, return_value=fake_redis):
             sem._ensure_tokens()
-            # Inject 2 extra tokens to get drift=2 (need abs(delta) > 1)
-            fake_redis.rpush("test_drift_bad", 1)
-            fake_redis.rpush("test_drift_bad", 1)
+            # Drain the list so the release lands with a shortfall of 2.
+            for _ in range(3):
+                fake_redis.blpop("test_drift_bad", timeout=0)
             with patch("app.graph.llm_semaphore.logger") as mock_logger:
-                async with sem:
-                    pass
-                # Should have warned about drift
+                sem._acquired = True
+                sem._release_token()
+                # Should have warned about drift (count 1 vs limit 3)
                 mock_logger.warning.assert_called()
 
 
@@ -325,6 +341,9 @@ class TestSemaphoreEvictionSelfHeal:
             async with sem:
                 pass
             assert fake_redis.llen("test_trim") == 2
+            # Release must go through the atomic Lua script, not three
+            # racing round trips.
+            fake_redis.eval.assert_called_once()
 
 
 # ── 429 retry in clients ────────────────────────────────────────────────────

@@ -42,6 +42,25 @@ class LLMThrottled(Exception):
     pass
 
 
+# Release + excess prune in ONE atomic step: push the returned token, count,
+# and trim anything above the limit. Doing this in three round trips allowed
+# a racing release/eviction-recreate to prune tokens another release had
+# already counted, permanently shrinking the cap below the limit; inside a
+# script Redis executes the block without interleaving.
+_RELEASE_TOKEN_LUA = """\
+redis.call('RPUSH', KEYS[1], 1)
+local n = redis.call('LLEN', KEYS[1])
+local excess = n - tonumber(ARGV[1])
+if excess > 0 then
+  for _ = 1, excess do
+    redis.call('RPOP', KEYS[1])
+  end
+  n = tonumber(ARGV[1])
+end
+return n
+"""
+
+
 class RedisLlmSemaphore:
     """Cross-process concurrency guard backed by a Redis token list."""
 
@@ -121,12 +140,11 @@ class RedisLlmSemaphore:
             from app.core.redis import get_redis_sync
 
             r = get_redis_sync()
-            r.rpush(self._key, 1)
-            # Drift detection: LLEN should equal limit at rest. Counting
-            # ABOVE the limit is possible after a concurrent recreate of
-            # an evicted list; prune the excess (all tokens are identical)
-            # so the concurrency cap cannot stay inflated.
-            count = r.llen(self._key)
+            count = int(r.eval(_RELEASE_TOKEN_LUA, 1, self._key, self._limit) or 0)
+            # The script trims excess above the limit atomically, so the
+            # count can only sit at or below the limit afterwards; a
+            # shortfall reflects tokens legitimately held in flight (or a
+            # genuine leak, which the drift warning still surfaces).
             delta = count - self._limit
             if abs(delta) > 1:
                 logger.warning(
