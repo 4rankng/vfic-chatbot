@@ -20,9 +20,12 @@ every branch in isolation. The wiring into the agent loop is in :mod:`clients`.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import unicodedata
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 # Job IDs surface in tool results as "id=uuid" (from recommend_jobs) or bare UUIDs.
 # We match both the tagged form and standalone UUIDs to catch loose citations.
@@ -37,6 +40,7 @@ _BARE_UUID_RE = re.compile(
 # (not from free-text KB chunks) so the authoritative set matches exactly what the
 # tools returned. Kept in sync with app/graph/tools.py rendering.
 _ACTIVE_JOB_LOOKUP_PREFIX = "ACTIVE_JOB_LOOKUP_JSON="
+_ACTIVE_JOB_LOOKUP_STATUSES = frozenset({"matched", "no_match", "catalog_empty", "unavailable"})
 _PRODUCT_FEATURES_HEADER_RE = re.compile(
     r"Đặc điểm sản phẩm\s*—\s*dự án\s*'([^']+)'\s*:", re.IGNORECASE
 )
@@ -346,3 +350,142 @@ def validate_entity_grounding(
         entity for entity in asserted if _canonical_entity(entity) not in surfaced_canonical
     )
     return unsupported, reply
+
+
+# ── Active-job authority replies ─────────────────────────────────────────────
+# The single owner of reply authority for ``list_active_jobs`` turns: trusted
+# payload validation plus the fail-closed renderers the agent loop calls. Moved
+# here from ``clients.py`` so grounding has one owner instead of two.
+
+
+def active_job_safe_reply(tool_result: object) -> str | None:
+    """Validate one active-job tool payload and return its trusted renderer output."""
+    first_line = str(tool_result).partition("\n")[0]
+    if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+        return None
+    try:
+        payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    status = payload["status"] if "status" in payload else None
+    jobs = payload["jobs"] if "jobs" in payload else None
+    safe_reply = payload["safe_reply"] if "safe_reply" in payload else None
+    if status not in _ACTIVE_JOB_LOOKUP_STATUSES or not isinstance(jobs, list):
+        return None
+    if status == "matched":
+        if not jobs or any(
+            not isinstance(job, dict)
+            or not isinstance(job["id"] if "id" in job else None, str)
+            or not isinstance(job["title"] if "title" in job else None, str)
+            for job in jobs
+        ):
+            return None
+    elif jobs:
+        return None
+    if not isinstance(safe_reply, str) or not safe_reply.strip():
+        return None
+    return safe_reply.strip()
+
+
+def ground_reply(reply: str, tool_results: list[str], *, trace_sink=None) -> str:
+    """Validate LLM prose against surfaced evidence without replacing it.
+
+    Structured job payloads inform the model but never become a separately
+    rendered final answer. This keeps every normal recruitment answer on the
+    LLM route while retaining the job-ID hallucination guard.
+    """
+    for tool_result in reversed(tool_results or []):
+        first_line = str(tool_result).partition("\n")[0]
+        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+            continue
+        if active_job_safe_reply(tool_result) is None:
+            logger.warning("active-job tool returned malformed grounding payload")
+
+    try:
+        from app.core.config import get_settings
+
+        if not getattr(get_settings(), "grounding_check_enabled", True):
+            if trace_sink is not None:
+                trace_sink.record_decision("grounding_verdict", "skipped")
+            return reply
+        surfaced = extract_surfaced_job_ids(tool_results)
+        surfaced_entities = extract_surfaced_entities(tool_results)
+        result = validate_grounding(reply, surfaced, surfaced_entities)
+        if not result.is_grounded:
+            if trace_sink is not None:
+                trace_sink.record_decision("grounding_verdict", "sanitized")
+            logger.warning(
+                "grounding_hallucination_stripped: %s cited ids, %s unsupported entities",
+                len(result.hallucinated_ids),
+                len(result.unsupported_entities),
+            )
+            return result.sanitized_reply
+        if trace_sink is not None:
+            trace_sink.record_decision("grounding_verdict", "grounded")
+        return reply
+    except Exception:  # noqa: BLE001
+        if trace_sink is not None:
+            trace_sink.record_decision("grounding_verdict", "skipped")
+        logger.debug("grounding check skipped (non-fatal)", exc_info=True)
+        return reply
+
+
+def negative_job_authority(tool_results: list[str]) -> str | None:
+    """Return the trusted abstention text for a negative active-job lookup.
+
+    Retained for the test-suite invariant that documents the authority-extraction
+    contract. The reply-consistency regex gates that consumed this output were
+    removed (they over-fired and each firing cost a full LLM round-trip); the
+    trusted abstention text is still surfaced through the tool payload and used
+    as the deterministic final reply for an actual authority-tool dispatch.
+    """
+    for tool_result in reversed(tool_results or []):
+        first_line = str(tool_result).partition("\n")[0]
+        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+            continue
+        try:
+            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict) or payload.get("status") == "matched":
+            return None
+        safe_reply = active_job_safe_reply(tool_result)
+        return safe_reply
+    return None
+
+
+def matched_job_authority(tool_results: list[str]) -> tuple[str, str] | None:
+    """Return the matched payload row and its trusted renderer output."""
+    for tool_result in reversed(tool_results or []):
+        first_line = str(tool_result).partition("\n")[0]
+        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+            continue
+        try:
+            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict) or payload.get("status") != "matched":
+            return None
+        safe_reply = active_job_safe_reply(tool_result)
+        if safe_reply is None:
+            return None
+        return first_line, safe_reply
+    return None
+
+
+def ground_active_job_reply(reply: str, tool_results: list[str]) -> str:
+    """Fail closed to trusted tool text without spending a third LLM call.
+
+    Active-job results carry a complete candidate-facing ``safe_reply`` rendered
+    from structured evidence. Returning it for an actual ``list_active_jobs``
+    dispatch avoids both the old third model rewrite and partial claim parsers
+    that can miss invented titles, locations, vacancy counts, or salary formats.
+
+    ``reply`` remains the fallback for malformed or non-authority tool output.
+    """
+    matched = matched_job_authority(tool_results)
+    if matched is not None:
+        return matched[1]
+    return negative_job_authority(tool_results) or reply

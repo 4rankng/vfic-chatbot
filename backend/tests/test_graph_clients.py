@@ -9,17 +9,21 @@ from app.graph.clients import (
     OpenRouterEmbedder,
     _active_llm_provider,
     _chat_for_role,
-    _ground_reply,
-    _extract_returned_reasoning,
-    _ground_active_job_reply,
-    _negative_job_authority,
     _minimax_chat,
     _openrouter_chat,
-    _reasoning_chat_class,
-    _scope_project_tool_args,
     build_embedder,
 )
+from app.graph.grounding import (
+    ground_active_job_reply as _ground_active_job_reply,
+    ground_reply as _ground_reply,
+    negative_job_authority as _negative_job_authority,
+)
 from app.graph.income_contract import IncomeVerdict, build_income_verdict, safe_reply_from
+from app.graph.prefetch import _scope_project_tool_args
+from app.graph.reasoning_compat import (
+    _extract_returned_reasoning,
+    _reasoning_chat_class,
+)
 from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
 
 

@@ -89,7 +89,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # integration_settings.refresh_oa_access_token contributes `eval` where it
     # used to contribute `delete` — one reviewed site either way, which is why
     # `eval` is in the scanned verb set.
-    "provider_boundary": 122,
+    "provider_boundary": 119,
+    # -3: the clients.py decomposition moved the routed-prefetch wrapper and the
+    # job-authority readers (dict `.get` rows) into prefetch.py / grounding.py,
+    # which are not provider-transport files; the call sites themselves are
+    # unchanged, only their home module moved.
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
     # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
@@ -107,7 +111,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "2e00fa00f0bd7dc7b57aedb2128b392ed8f5f95ec95bbd6424eb10f6598d46a3"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "e9d34a6f409abe168d3d9ff33dcb8bb6945db215566514d39fa1183174f67b7b"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

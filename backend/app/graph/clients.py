@@ -2,568 +2,57 @@
 
 Heavy SDKs (google-genai, langchain-openai / langchain-core) are imported LAZILY inside
 methods so importing this module stays cheap and free of optional-dependency failures at
-import time. Tool schemas + dispatch live in ``schemas.py``.
+import time. Tool schemas + dispatch live in ``schemas.py``. The former inline
+helper families now live beside their single concern: reasoning-field wire
+compatibility in ``reasoning_compat.py``, Redis observability counters in
+``llm_observability.py``, routed pre-lookup heuristics in ``prefetch.py``,
+retry/quota failover in ``provider_failover.py``, and reply grounding +
+active-job authority rendering in ``grounding.py``.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import re
 import time
-import unicodedata
-from functools import lru_cache
 from typing import Literal
 
 from app.core.config import get_settings
+from app.graph.grounding import (
+    active_job_safe_reply as _active_job_safe_reply,
+    ground_active_job_reply as _ground_active_job_reply,
+    ground_reply as _ground_reply,
+)
 from app.graph.income_contract import safe_reply_from
+from app.graph.llm_observability import _record_llm_429, _record_llm_latency
+from app.graph.llm_observability import (
+    _RKEY_429 as _RKEY_429,
+    _RKEY_INVOKE_COUNT as _RKEY_INVOKE_COUNT,
+    _RKEY_INVOKE_MS as _RKEY_INVOKE_MS,
+)
+from app.graph.prefetch import (
+    _prefetch_tool,
+    _scope_project_tool_args,
+    _should_prefetch_knowledge,
+)
+from app.graph.provider_failover import (
+    _bind_like,
+    _is_429,
+    _llm_call_with_retry,
+)
+from app.graph.reasoning_compat import (
+    _extract_returned_reasoning,
+    _reasoning_chat_class,
+)
 from app.graph.schemas import _dispatch_tool
 from app.graph.usage import record_token_usage as _record_token_usage
 
 logger = logging.getLogger(__name__)
 
-_VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
-    "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
-)
-_ACTIVE_JOB_LOOKUP_PREFIX = "ACTIVE_JOB_LOOKUP_JSON="
-_ACTIVE_JOB_LOOKUP_STATUSES = frozenset({"matched", "no_match", "catalog_empty", "unavailable"})
-_REASONING_RESPONSE_FIELDS = ("reasoning_details", "reasoning_content", "reasoning")
-_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>(.*?)</think\s*>", re.IGNORECASE | re.DOTALL)
-
-
-def _reasoning_text_from_value(value: object) -> str:
-    if isinstance(value, str):
-        return value.strip()
-    if isinstance(value, list):
-        return "\n\n".join(
-            part for item in value if (part := _reasoning_text_from_value(item))
-        ).strip()
-    if isinstance(value, dict):
-        for key in ("text", "reasoning", "summary"):
-            if key in value and (text := _reasoning_text_from_value(value[key])):
-                return text
-    return ""
-
-
-def _extract_returned_reasoning(ai: object) -> str | None:
-    """Extract provider-returned reasoning without including the final answer."""
-    additional_kwargs = getattr(ai, "additional_kwargs", {})
-    if isinstance(additional_kwargs, dict):
-        for key in _REASONING_RESPONSE_FIELDS:
-            if key in additional_kwargs and (
-                text := _reasoning_text_from_value(additional_kwargs[key])
-            ):
-                return text
-
-    try:
-        content_blocks = getattr(ai, "content_blocks", [])
-    except Exception:  # noqa: BLE001 - provider message compatibility is best-effort
-        content_blocks = []
-    if isinstance(content_blocks, list):
-        reasoning_blocks = [
-            block
-            for block in content_blocks
-            if isinstance(block, dict)
-            and (block["type"] if "type" in block else None) in {"reasoning", "thinking"}
-        ]
-        if text := _reasoning_text_from_value(reasoning_blocks):
-            return text
-
-    content = getattr(ai, "content", "")
-    if isinstance(content, str):
-        blocks = [match.strip() for match in _THINK_BLOCK_RE.findall(content) if match.strip()]
-        if blocks:
-            return "\n\n".join(blocks)
-        opening = re.search(r"<think\b[^>]*>", content, re.IGNORECASE)
-        if opening and (unfinished := content[opening.end() :].strip()):
-            return unfinished
-    return None
-
-
-@lru_cache(maxsize=1)
-def _reasoning_chat_class():
-    """ChatOpenAI variant that preserves third-party reasoning fields.
-
-    LangChain's generic OpenAI adapter intentionally drops fields such as
-    ``reasoning_content`` and ``reasoning_details``. The subclass keeps those
-    fields on AIMessage.additional_kwargs and forwards them unchanged on later
-    tool-loop requests, as required by MiniMax/OpenRouter interleaved thinking.
-    """
-    from langchain_core.messages import AIMessage
-    from langchain_openai import ChatOpenAI
-
-    class ReasoningPreservingChatOpenAI(ChatOpenAI):
-        trace_provider: str = "unknown"
-        # Wire-level cache marker attached to the leading system message. Set
-        # only where the provider documents an explicit marker for this
-        # endpoint: OpenRouter's prompt caching takes an Anthropic-style
-        # ``cache_control`` on a content block (openrouter.ai/docs/features/
-        # prompt-caching). MiniMax's OpenAI-compatible API caches the prefix
-        # automatically and documents no marker for it, and the operator-
-        # configured custom provider is an unknown vendor — sending it an
-        # undocumented marker could reject every request on that lane.
-        system_prefix_cache_control: dict = {}
-
-        def _create_chat_result(self, response, generation_info=None):
-            response_dict = (
-                response
-                if isinstance(response, dict)
-                else response.model_dump(warnings=False)
-            )
-            result = super()._create_chat_result(response, generation_info)
-            choices = response_dict["choices"] if "choices" in response_dict else []
-            for generation, choice in zip(
-                result.generations,
-                choices or [],
-                strict=False,
-            ):
-                raw_message = choice["message"] if "message" in choice else {}
-                if not isinstance(generation.message, AIMessage):
-                    continue
-                for key in _REASONING_RESPONSE_FIELDS:
-                    if key in raw_message and raw_message[key] is not None:
-                        generation.message.additional_kwargs[key] = raw_message[key]
-            return result
-
-        def _get_request_payload(self, input_, *, stop=None, **kwargs):
-            source_messages = self._convert_input(input_).to_messages()
-            payload = super()._get_request_payload(input_, stop=stop, **kwargs)
-            wire_messages = payload["messages"] if "messages" in payload else None
-            if not isinstance(wire_messages, list):
-                return payload
-            if self.system_prefix_cache_control and wire_messages:
-                # Cache breakpoint on the stable prefix boundary: everything
-                # before and including the first system message. The text is
-                # rewrapped as a single content block — identical bytes, plus
-                # the marker — so the prompt itself is untouched.
-                first = wire_messages[0]
-                if (
-                    isinstance(first, dict)
-                    and "role" in first
-                    and first["role"] == "system"
-                    and "content" in first
-                    and isinstance(first["content"], str)
-                    and first["content"]
-                ):
-                    first["content"] = [
-                        {
-                            "type": "text",
-                            "text": first["content"],
-                            "cache_control": self.system_prefix_cache_control,
-                        }
-                    ]
-            for source, wire in zip(source_messages, wire_messages, strict=False):
-                if not isinstance(source, AIMessage) or not isinstance(wire, dict):
-                    continue
-                for key in _REASONING_RESPONSE_FIELDS:
-                    if key in source.additional_kwargs and source.additional_kwargs[key] is not None:
-                        wire[key] = source.additional_kwargs[key]
-            return payload
-
-    return ReasoningPreservingChatOpenAI
-
-# ── LLM observability helpers (Redis-backed, process-agnostic) ──────────────
-_RKEY_429 = "llm:minimax_429s"  # INCR on 429, EXPIRE 60 (rolling minute)
-_RKEY_INVOKE_COUNT = "llm:invoke_count"
-_RKEY_INVOKE_MS = "llm:invoke_total_ms"
-
-
-async def _record_llm_latency(ms: int) -> None:
-    """Persist LLM call latency + count to Redis (best-effort, non-fatal).
-
-    Called from inside the agent loop, so it uses the async client: a sync Redis
-    round trip here would block the event loop that also serves webhook acks and
-    inline web-chat turns (REL-02).
-    """
-    try:
-        from app.core.redis import get_redis
-
-        r = await get_redis()
-        pipe = r.pipeline()
-        pipe.incr(_RKEY_INVOKE_COUNT)
-        pipe.incrby(_RKEY_INVOKE_MS, ms)
-        pipe.expire(_RKEY_INVOKE_COUNT, 120)
-        pipe.expire(_RKEY_INVOKE_MS, 120)
-        await pipe.execute()
-    except Exception:  # noqa: BLE001
-        logger.warning("failed to record llm latency to redis", exc_info=True)
-
-
-async def _record_llm_429() -> None:
-    """Increment MiniMax 429 counter in Redis (best-effort, non-fatal).
-
-    Async client for the same reason as :func:`_record_llm_latency`.
-    """
-    try:
-        from app.core.redis import get_redis
-
-        r = await get_redis()
-        await r.incr(_RKEY_429)
-        await r.expire(_RKEY_429, 60)  # rolling 1-minute window
-    except Exception:  # noqa: BLE001
-        logger.warning("failed to record llm 429 to redis", exc_info=True)
-
-
 ModelRole = Literal["agent", "safety", "digest"]
 # The three configurable providers. "custom" is any OpenAI-compatible endpoint
 # the operator supplies (base URL + model ids), e.g. Xiaomi MiMo.
 LlmProvider = Literal["minimax", "openrouter", "custom"]
-
-
-def _normalize_query_hint(text: str) -> str:
-    normalized = unicodedata.normalize("NFKD", text or "")
-    ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    return ascii_text.replace("đ", "d").replace("Đ", "D").lower()
-
-
-def _should_prefetch_knowledge(user_text: str) -> bool:
-    """Detect queries where skipping KB retrieval causes false "I don't know" replies.
-
-    Contact/admin/phone questions should see KB facts before the model answers.
-    """
-    text = _normalize_query_hint(user_text)
-    contact_terms = (
-        "lien he",
-        "admin",
-        "so dien thoai",
-        "sdt",
-        "phone",
-        "hotline",
-        "zalo",
-        "den cong ty",
-    )
-    return any(term in text for term in contact_terms)
-
-
-def _usable_retrieval_prefetch(result: object) -> bool:
-    """Whether a routed retrieval result is authoritative enough to inject."""
-    text = str(result or "").strip()
-    if not text:
-        return False
-    return not text.startswith(("Không tìm thấy", "Lỗi khi gọi tool", "unknown tool"))
-
-
-def _scope_project_tool_args(name: str, args: dict, project_slug: str | None) -> dict:
-    """Force project-aware tools to the conversation's focused Project."""
-    scoped = dict(args)
-    if not project_slug:
-        return scoped
-    if name in {"search_knowledge", "list_active_jobs", "get_product_features"}:
-        scoped["project_slug"] = project_slug
-    return scoped
-
-
-async def _prefetch_tool(
-    retrieval,
-    embedder,
-    name: str,
-    args: dict,
-    metrics: dict | None,
-    resolved_registry: frozenset[str] | None = None,
-) -> tuple[object, bool]:
-    """Run one routed lookup with shared timing and fail-open semantics."""
-    started = time.monotonic()
-    if metrics is not None:
-        metrics["prefetch_calls"] = metrics.get("prefetch_calls", 0) + 1
-    try:
-        result = await _dispatch_tool(
-            retrieval,
-            embedder,
-            name,
-            args,
-            metrics=metrics,
-            resolved_registry=resolved_registry,
-        )
-    except Exception:  # noqa: BLE001 — caller retains the normal tool loop
-        logger.warning("%s prefetch failed", name, exc_info=True)
-        result = ""
-    finally:
-        if metrics is not None:
-            metrics["prefetch_ms"] = metrics.get("prefetch_ms", 0) + int(
-                (time.monotonic() - started) * 1000
-            )
-    hit = _usable_retrieval_prefetch(result)
-    if metrics is not None:
-        metrics["prefetch_hit"] = hit
-    return result, hit
-
-
-def _is_429(exc: Exception) -> bool:
-    """Check if an exception represents an HTTP 429 (rate limit)."""
-    return "429" in str(exc) or "rate" in str(exc).lower()
-
-
-# Quota exhaustion is not a rate limit: a spent token plan does not recover by
-# waiting, so retrying the same provider only burns the turn deadline. Providers
-# signal it out-of-band from 429 (MiniMax returns "insufficient balance", others
-# use 402 / "quota"), hence a separate predicate that routes straight to the
-# failover provider instead of through the backoff path.
-_QUOTA_MARKERS = (
-    "insufficient balance",
-    "insufficient_quota",
-    "insufficient credit",
-    "quota exceeded",
-    "quota_exceeded",
-    "exceeded your current quota",
-    "out of credits",
-    "payment required",
-    "402",
-)
-
-
-def _is_quota_exhausted(exc: Exception) -> bool:
-    """True when the provider says the plan is spent, not merely throttled."""
-    text = str(exc).lower()
-    return any(marker in text for marker in _QUOTA_MARKERS)
-
-
-def _active_job_safe_reply(tool_result: object) -> str | None:
-    """Validate one active-job tool payload and return its trusted renderer output."""
-    first_line = str(tool_result).partition("\n")[0]
-    if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
-        return None
-    try:
-        payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
-    except (TypeError, ValueError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    status = payload["status"] if "status" in payload else None
-    jobs = payload["jobs"] if "jobs" in payload else None
-    safe_reply = payload["safe_reply"] if "safe_reply" in payload else None
-    if status not in _ACTIVE_JOB_LOOKUP_STATUSES or not isinstance(jobs, list):
-        return None
-    if status == "matched":
-        if not jobs or any(
-            not isinstance(job, dict)
-            or not isinstance(job["id"] if "id" in job else None, str)
-            or not isinstance(job["title"] if "title" in job else None, str)
-            for job in jobs
-        ):
-            return None
-    elif jobs:
-        return None
-    if not isinstance(safe_reply, str) or not safe_reply.strip():
-        return None
-    return safe_reply.strip()
-
-
-def _ground_reply(reply: str, tool_results: list[str], *, trace_sink=None) -> str:
-    """Validate LLM prose against surfaced evidence without replacing it.
-
-    Structured job payloads inform the model but never become a separately
-    rendered final answer. This keeps every normal recruitment answer on the
-    LLM route while retaining the job-ID hallucination guard.
-    """
-    for tool_result in reversed(tool_results or []):
-        first_line = str(tool_result).partition("\n")[0]
-        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
-            continue
-        if _active_job_safe_reply(tool_result) is None:
-            logger.warning("active-job tool returned malformed grounding payload")
-
-    try:
-        from app.core.config import get_settings
-
-        if not getattr(get_settings(), "grounding_check_enabled", True):
-            if trace_sink is not None:
-                trace_sink.record_decision("grounding_verdict", "skipped")
-            return reply
-        from app.graph.grounding import (
-            extract_surfaced_entities,
-            extract_surfaced_job_ids,
-            validate_grounding,
-        )
-
-        surfaced = extract_surfaced_job_ids(tool_results)
-        surfaced_entities = extract_surfaced_entities(tool_results)
-        result = validate_grounding(reply, surfaced, surfaced_entities)
-        if not result.is_grounded:
-            if trace_sink is not None:
-                trace_sink.record_decision("grounding_verdict", "sanitized")
-            logger.warning(
-                "grounding_hallucination_stripped: %s cited ids, %s unsupported entities",
-                len(result.hallucinated_ids),
-                len(result.unsupported_entities),
-            )
-            return result.sanitized_reply
-        if trace_sink is not None:
-            trace_sink.record_decision("grounding_verdict", "grounded")
-        return reply
-    except Exception:  # noqa: BLE001
-        if trace_sink is not None:
-            trace_sink.record_decision("grounding_verdict", "skipped")
-        logger.debug("grounding check skipped (non-fatal)", exc_info=True)
-        return reply
-
-
-def _negative_job_authority(tool_results: list[str]) -> str | None:
-    """Return the trusted abstention text for a negative active-job lookup.
-
-    Retained for the test-suite invariant that documents the authority-extraction
-    contract. The reply-consistency regex gates that consumed this output were
-    removed (they over-fired and each firing cost a full LLM round-trip); the
-    trusted abstention text is still surfaced through the tool payload and used
-    as the deterministic final reply for an actual authority-tool dispatch.
-    """
-    for tool_result in reversed(tool_results or []):
-        first_line = str(tool_result).partition("\n")[0]
-        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
-            continue
-        try:
-            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
-        except (TypeError, ValueError):
-            return None
-        if not isinstance(payload, dict) or payload.get("status") == "matched":
-            return None
-        safe_reply = _active_job_safe_reply(tool_result)
-        return safe_reply
-    return None
-
-
-def _matched_job_authority(tool_results: list[str]) -> tuple[str, str] | None:
-    """Return the matched payload row and its trusted renderer output."""
-    for tool_result in reversed(tool_results or []):
-        first_line = str(tool_result).partition("\n")[0]
-        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
-            continue
-        try:
-            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
-        except (TypeError, ValueError):
-            return None
-        if not isinstance(payload, dict) or payload.get("status") != "matched":
-            return None
-        safe_reply = _active_job_safe_reply(tool_result)
-        if safe_reply is None:
-            return None
-        return first_line, safe_reply
-    return None
-
-
-def _ground_active_job_reply(reply: str, tool_results: list[str]) -> str:
-    """Fail closed to trusted tool text without spending a third LLM call.
-
-    Active-job results carry a complete candidate-facing ``safe_reply`` rendered
-    from structured evidence. Returning it for an actual ``list_active_jobs``
-    dispatch avoids both the old third model rewrite and partial claim parsers
-    that can miss invented titles, locations, vacancy counts, or salary formats.
-
-    ``reply`` remains the fallback for malformed or non-authority tool output.
-    """
-    matched = _matched_job_authority(tool_results)
-    if matched is not None:
-        return matched[1]
-    return _negative_job_authority(tool_results) or reply
-
-
-def _bind_like(llm, schemas, *, bound_primary: bool):
-    """Mirror the primary's tool binding onto the failover client.
-
-    A failover mid-loop must expose the same tools, otherwise the model loses
-    the capability the conversation is already relying on. Returns ``None`` when
-    no failover provider is configured, which disables failover for that call.
-    """
-    if llm is None:
-        return None
-    if not bound_primary or not schemas:
-        return llm
-    bind_tools = getattr(llm, "bind_tools", None)
-    if bind_tools is None:
-        return llm
-    try:
-        return bind_tools(schemas)
-    except Exception:  # noqa: BLE001 — an unbindable failover is better than none
-        logger.warning("failover client could not bind tools; using it unbound", exc_info=True)
-        return llm
-
-
-async def _llm_call_with_retry(
-    bound,
-    messages,
-    *,
-    metrics: dict | None = None,
-    fallback_bounds: list | None = None,
-):
-    """Call bound.ainvoke with 1 retry on 429 (settings.llm_429_retry_sleep_seconds backoff).
-
-    ``fallback_bounds`` (optional) is an ordered list of equivalently-bound
-    clients on the OTHER configured providers — every provider the operator has
-    enabled with a usable credential, not one designated spare. They are tried
-    in order when the primary is out of capacity:
-
-    * quota exhausted — the plan is spent and will not recover by waiting, so
-      the next provider runs immediately with no backoff sleep;
-    * rate limited twice — one backoff retry first, then the next provider.
-
-    A provider that is itself out of capacity is skipped and the walk continues,
-    so one spent plan does not strand the turn. Only when every provider is
-    exhausted does this raise LLMThrottled, and the worker then sends the static
-    degradation reply — a candidate never sees a provider error.
-
-    When ``metrics`` is provided, sets ``retried_429`` on the backoff path and
-    ``llm_failover`` / ``llm_failover_reason`` / ``llm_failover_index`` when the
-    reply came from a failover provider, so a turn that silently changed
-    provider is visible in the turn record.
-
-    Returns ``(result, backoff_ms)`` where ``backoff_ms`` is the wall-clock time
-    spent sleeping during a rate-limit backoff (0 on the happy path). The caller
-    uses this to exclude the sleep from ``llm_model_ms`` so the split stays
-    clean — model inference never includes the 429 backoff.
-    """
-    from app.core.config import get_settings
-    from app.graph.llm_semaphore import LLMThrottled
-
-    async def _failover(reason: str, backoff_ms: int):
-        """Walk the remaining providers in order until one answers."""
-        candidates = [client for client in (fallback_bounds or []) if client is not None]
-        if not candidates:
-            raise LLMThrottled(f"LLM unavailable ({reason}) and no failover provider configured")
-        for index, client in enumerate(candidates):
-            try:
-                result = await client.ainvoke(messages)
-            except Exception:  # noqa: BLE001 — try the next provider, whatever failed
-                logger.warning(
-                    "llm_failover provider %d/%d failed; trying next",
-                    index + 1,
-                    len(candidates),
-                    exc_info=True,
-                )
-                continue
-            logger.warning(
-                "llm_failover_engaged reason=%s provider_index=%d", reason, index + 1
-            )
-            if metrics is not None:
-                metrics["llm_failover"] = True
-                metrics["llm_failover_reason"] = reason
-                metrics["llm_failover_index"] = index + 1
-            return result, backoff_ms
-        raise LLMThrottled(f"LLM unavailable ({reason}); all failover providers exhausted")
-
-    try:
-        return await bound.ainvoke(messages), 0
-    except Exception as exc:
-        # A spent plan does not recover by sleeping — skip the backoff entirely.
-        if _is_quota_exhausted(exc):
-            return await _failover("quota_exhausted", 0)
-        if _is_429(exc):
-            await _record_llm_429()
-            logger.warning("llm_429_retry", exc_info=True)
-            backoff_t0 = time.monotonic()
-            await asyncio.sleep(get_settings().llm_429_retry_sleep_seconds)
-            backoff_ms = int((time.monotonic() - backoff_t0) * 1000)
-            if metrics is not None:
-                metrics["retried_429"] = True
-            try:
-                return await bound.ainvoke(messages), backoff_ms
-            except Exception as exc2:
-                if _is_quota_exhausted(exc2):
-                    return await _failover("quota_exhausted", backoff_ms)
-                if _is_429(exc2):
-                    await _record_llm_429()
-                    return await _failover("rate_limited", backoff_ms)
-                raise
-        raise
 
 
 class GeminiEmbedder:
@@ -840,6 +329,7 @@ class MiniMaxAgent:
                 scoped_args("search_knowledge", {"query": effective_query}),
                 metrics,
                 resolved_tool_registry,
+                dispatch=_dispatch_tool,
             )
             tool_results.append(str(prefetched))
             messages.append(
@@ -871,6 +361,7 @@ class MiniMaxAgent:
                 ),
                 metrics,
                 resolved_tool_registry,
+                dispatch=_dispatch_tool,
             )
             if prefetch_hit:
                 tool_results.append(str(prefetched))
@@ -898,6 +389,7 @@ class MiniMaxAgent:
                 dict(required_tool_args or {}),
                 metrics,
                 resolved_tool_registry,
+                dispatch=_dispatch_tool,
             )
             if prefetch_hit:
                 safe_reply = safe_reply_from(
@@ -935,6 +427,7 @@ class MiniMaxAgent:
                                 args,
                                 metrics,
                                 resolved_tool_registry,
+                                dispatch=_dispatch_tool,
                             )
                     except Exception:  # noqa: BLE001 — never reuse shared session concurrently
                         logger.warning("isolated prefetch retrieval for %s failed", name, exc_info=True)
@@ -968,6 +461,7 @@ class MiniMaxAgent:
                         knowledge_args,
                         metrics,
                         resolved_tool_registry,
+                        dispatch=_dispatch_tool,
                     )
                     features, features_hit = await _prefetch_tool(
                         retrieval,
@@ -976,6 +470,7 @@ class MiniMaxAgent:
                         features_args,
                         metrics,
                         resolved_tool_registry,
+                        dispatch=_dispatch_tool,
                     )
             else:
                 prefetched, prefetch_hit = await _prefetch_tool(
@@ -985,6 +480,7 @@ class MiniMaxAgent:
                     scoped_args("search_knowledge", {"query": effective_query}),
                     metrics,
                     resolved_tool_registry,
+                    dispatch=_dispatch_tool,
                 )
                 features = None
                 features_hit = False

@@ -354,11 +354,11 @@ class TestRetry429:
 
     @pytest.mark.asyncio
     async def test_no_retry_on_success(self):
-        from app.graph.clients import _llm_call_with_retry
+        from app.graph.provider_failover import _llm_call_with_retry
 
         bound = AsyncMock()
         bound.ainvoke = AsyncMock(return_value=MagicMock(content="ok"))
-        with patch("app.graph.clients._record_llm_429", new_callable=AsyncMock):
+        with patch("app.graph.provider_failover._record_llm_429", new_callable=AsyncMock):
             result, backoff_ms = await _llm_call_with_retry(bound, [])
         assert result.content == "ok"
         assert bound.ainvoke.call_count == 1
@@ -366,7 +366,7 @@ class TestRetry429:
 
     @pytest.mark.asyncio
     async def test_retries_on_429_then_succeeds(self):
-        from app.graph.clients import _llm_call_with_retry
+        from app.graph.provider_failover import _llm_call_with_retry
 
         bound = AsyncMock()
         bound.ainvoke = AsyncMock(
@@ -375,8 +375,8 @@ class TestRetry429:
                 MagicMock(content="retried ok"),
             ]
         )
-        with patch("app.graph.clients._record_llm_429", new_callable=AsyncMock) as mock_429:
-            with patch("app.graph.clients.asyncio.sleep", new_callable=AsyncMock):
+        with patch("app.graph.provider_failover._record_llm_429", new_callable=AsyncMock) as mock_429:
+            with patch("app.graph.provider_failover.asyncio.sleep", new_callable=AsyncMock):
                 result, backoff_ms = await _llm_call_with_retry(bound, [])
         assert result.content == "retried ok"
         assert bound.ainvoke.call_count == 2
@@ -385,7 +385,7 @@ class TestRetry429:
 
     @pytest.mark.asyncio
     async def test_raises_llm_throttled_on_double_429(self):
-        from app.graph.clients import _llm_call_with_retry
+        from app.graph.provider_failover import _llm_call_with_retry
 
         bound = AsyncMock()
         bound.ainvoke = AsyncMock(
@@ -394,14 +394,14 @@ class TestRetry429:
                 Exception("429 rate limit exceeded"),
             ]
         )
-        with patch("app.graph.clients._record_llm_429", new_callable=AsyncMock):
-            with patch("app.graph.clients.asyncio.sleep", new_callable=AsyncMock):
+        with patch("app.graph.provider_failover._record_llm_429", new_callable=AsyncMock):
+            with patch("app.graph.provider_failover.asyncio.sleep", new_callable=AsyncMock):
                 with pytest.raises(LLMThrottled):
                     await _llm_call_with_retry(bound, [])
 
     @pytest.mark.asyncio
     async def test_no_retry_on_non_429_error(self):
-        from app.graph.clients import _llm_call_with_retry
+        from app.graph.provider_failover import _llm_call_with_retry
 
         bound = AsyncMock()
         bound.ainvoke = AsyncMock(side_effect=ValueError("bad input"))
@@ -413,7 +413,7 @@ class TestRetry429:
     async def test_retry_sleep_uses_configured_setting(self):
         """Retry sleep is settings.llm_429_retry_sleep_seconds (no hardcoded jitter)."""
         from app.core.config import get_settings
-        from app.graph.clients import _llm_call_with_retry
+        from app.graph.provider_failover import _llm_call_with_retry
 
         bound = AsyncMock()
         bound.ainvoke = AsyncMock(
@@ -427,8 +427,8 @@ class TestRetry429:
         async def _capture_sleep(delay):
             sleep_args.append(delay)
 
-        with patch("app.graph.clients._record_llm_429", new_callable=AsyncMock):
-            with patch("app.graph.clients.asyncio.sleep", side_effect=_capture_sleep):
+        with patch("app.graph.provider_failover._record_llm_429", new_callable=AsyncMock):
+            with patch("app.graph.provider_failover.asyncio.sleep", side_effect=_capture_sleep):
                 await _llm_call_with_retry(bound, [])
         assert len(sleep_args) == 1
         assert sleep_args[0] == get_settings().llm_429_retry_sleep_seconds

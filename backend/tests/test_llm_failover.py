@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.graph.clients import _is_quota_exhausted, _llm_call_with_retry
 from app.graph.llm_semaphore import LLMThrottled
+from app.graph.provider_failover import _is_quota_exhausted, _llm_call_with_retry
 
 
 class _Boom:
