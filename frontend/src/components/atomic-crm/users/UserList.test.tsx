@@ -71,4 +71,35 @@ describe("UserList", () => {
     await expect.element(screen.getByText("Nguyễn Minh Anh")).toBeVisible();
     await expect.element(screen.getByText("Hoạt động")).toBeVisible();
   });
+
+  it("keeps mobile account rows compact with the metadata still visible", async () => {
+    // Rendered counterpart of the former users.css source-text pins: the
+    // computed styles prove the 760px rules actually apply to a rendered row,
+    // and the metadata children staying displayed proves nothing is hidden.
+    await page.viewport(390, 844);
+    const screen = await render(
+      <MemoryRouter>
+        <UserList />
+      </MemoryRouter>,
+    );
+
+    const row = screen.container.querySelector<HTMLElement>(
+      ".user-directory-row",
+    )!;
+    const rowStyles = getComputedStyle(row);
+    expect(rowStyles.minHeight).toBe("84px");
+    expect(rowStyles.rowGap).toBe("4px");
+    expect(rowStyles.paddingTop).toBe("8px");
+    expect(rowStyles.paddingBottom).toBe("8px");
+
+    const meta = row.querySelector<HTMLElement>(".user-directory-meta")!;
+    const metaStyles = getComputedStyle(meta);
+    expect(metaStyles.display).toBe("grid");
+    expect(meta.children.length).toBeGreaterThanOrEqual(3);
+    for (const child of Array.from(meta.children)) {
+      expect(getComputedStyle(child).display).not.toBe("none");
+    }
+
+    await page.viewport(1280, 720);
+  });
 });

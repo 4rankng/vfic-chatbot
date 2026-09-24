@@ -12,7 +12,6 @@ import zaloChannelSource from "./presentation/ZaloChannelSection.tsx?raw";
 import messengerSource from "./FacebookMessengerIntegrationPage.tsx?raw";
 import pageSource from "./ZaloIntegrationPage.tsx?raw";
 import stylesheet from "./settings.css?raw";
-import userStylesheet from "../users/users.css?raw";
 
 // Every module that renders the settings console, not just the resource entry
 // point: a class name is only unused if no section emits it.
@@ -75,14 +74,10 @@ describe("flat settings workspace", () => {
     );
   });
 
-  it("keeps embedded mobile user rows compact without hiding metadata", () => {
-    expect(userStylesheet).toMatch(
-      /@media \(max-width:\s*760px\)[\s\S]*\.user-directory-row\s*\{[\s\S]*row-gap:\s*4px;[\s\S]*min-height:\s*84px;[\s\S]*padding:\s*8px 0;/,
-    );
-    expect(userStylesheet).toMatch(
-      /\.user-directory-meta\s*\{[\s\S]*grid-template-columns:\s*auto auto minmax\(0, 1fr\);/,
-    );
-  });
+  // The embedded user-row sizing and visible-metadata guards moved to a
+  // rendered test in ../users/UserList.test.tsx (computed styles at 390px),
+  // which proves the rules apply to a real row instead of proving the text
+  // exists in users.css.
 
   it("renders configuration groups as elevated cards with tinted header bands", () => {
     expect(settingsSource).not.toContain("tt-card");
