@@ -45,7 +45,7 @@ Stop and ask before:
 
 Never edit secrets (`.env`, private keys, credentials). Protected paths include
 `backend/app/core/{config,security,ratelimit}.py`,
-`backend/app/api/{webhooks,dependencies}.py`, bot policy files,
+`backend/app/api/{webhooks,auth_dependencies}.py`, bot policy files,
 `frontend/src/index.css`, dependency manifests, deployment files, and root/backend/
 frontend `Makefile`s. See `docs/agent-development-kit.md` for hook behavior.
 
