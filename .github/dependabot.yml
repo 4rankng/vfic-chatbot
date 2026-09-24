@@ -1,0 +1,24 @@
+# Weekly dependency updates for both manifests, grouped so review is one PR
+# per ecosystem per week instead of a PR per package. Lockfiles in force:
+# backend uses uv.lock, frontend uses package-lock.json.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      javascript-dependencies:
+        patterns: ["*"]

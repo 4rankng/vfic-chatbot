@@ -289,3 +289,48 @@ jobs:
 
       - name: Evaluate release gate
         run: .venv/bin/python scripts/release_gate_check.py --golden-results "$GOLDEN_RESULTS"
+
+  dependency-audit:
+    name: Dependency audit (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Advisory by design: findings surface as red step logs without blocking
+    # merges, because a blocking gate on advisory databases halts releases over
+    # upstream CVEs with no fix available. To promote a finding to blocking,
+    # remove continue-on-error from that step; a risk that is deliberately
+    # accepted is recorded as an --ignore-vuln comment in the pip-audit step
+    # (or a documented override), never as silence.
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Create venv
+        run: python -m venv .venv
+
+      - name: Install backend dependencies
+        run: |
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e .[dev] pip-audit
+
+      - name: pip-audit (advisory)
+        run: |
+          # Deliberately accepted advisories are listed with a reason and the
+          # date of the decision, e.g.:
+          #   --ignore-vuln PYSEC-0000-0000  # accepted 2026-09-24: no fixed release yet
+          .venv/bin/pip-audit --strict
+        continue-on-error: true
+
+      - name: npm audit, production dependencies (advisory)
+        working-directory: frontend
+        run: npm audit --omit=dev
+        continue-on-error: true
