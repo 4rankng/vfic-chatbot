@@ -216,11 +216,17 @@ if [ "$DRY_RUN" -eq 0 ]; then
 fi
 
 # --- 5. load Postgres dump ----------------------------------------------------
+# Fail-fast load (ON_ERROR_STOP=1) — same semantics as make restore's SQL path
+# and the pg_restore --exit-on-error flag: a DR restore aborts at the FIRST bad
+# statement instead of continuing over known-bad data, because a partial load
+# that keeps going can still leave alembic_version set and look healthy to the
+# step-6 revision assertion. The rc-gate and log tail below remain as the
+# second net (transport failure, truncated gzip).
 step "5/8" "load Postgres dump"
 if [ "$DRY_RUN" -eq 0 ]; then
   set +e
   gzip -dc "$BUNDLE/postgres/vfic_pg_dump.sql.gz" \
-    | ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && IMAGE_TAG=$TAG docker compose exec -T postgres psql -v ON_ERROR_STOP=0 -U vfic -d vfic" \
+    | ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && IMAGE_TAG=$TAG docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U vfic -d vfic" \
     > "$BUNDLE/.restore-psql.log" 2>&1
   RC=$?
   set -e
