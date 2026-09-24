@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     cors_origins: str = "http://localhost:5173"
+    # TrustedHost allowlist for Starlette's TrustedHostMiddleware (SEC-06). Bare
+    # hostnames only (no scheme, no port); '*' is refused at boot because it turns
+    # the host allowlist into a no-op. bot.tingting.vip is the production console
+    # origin (same domain as the ZALO_BOT_WEBHOOK_URL code constant); localhost /
+    # 127.0.0.1 keep the compose healthchecks, the in-container post-flip probe,
+    # and local dev working.
+    allowed_hosts: str = "bot.tingting.vip,localhost,127.0.0.1"
 
     # Database
     database_url: str = "postgresql+asyncpg://vfic:vfic@localhost:5432/vfic"
@@ -85,6 +92,13 @@ class Settings(BaseSettings):
     # Auth (replaces Supabase Auth)
     jwt_secret: str = "dev-only-change-me-32-chars-minimum"
     jwt_algorithm: str = "HS256"
+    # SEC-08: every token this service mints carries `iss`/`aud` and every decode
+    # requires them, so a token minted for a sibling service that happens to share
+    # the same secret is not interchangeable across trust boundaries. Both are
+    # configurable so a future split (e.g. a separate admin audience) is a config
+    # change rather than a code change.
+    jwt_issuer: str = "tingting-api"
+    jwt_audience: str = "tingting-api"
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 14
     resend_api_key: str = ""
@@ -93,6 +107,24 @@ class Settings(BaseSettings):
     # Server-side key for encrypting admin-managed integration secrets at rest.
     # Dev may fall back to JWT_SECRET for local ergonomics; production must set it.
     integration_settings_encryption_key: str = ""
+
+    # Rate limiting (SEC-04). The four auth endpoints keep their dedicated,
+    # fail-open limits (app/identity/infrastructure/rate_limits.py). These cover
+    # the two previously unbounded surfaces: the inbound webhook POSTs (bucketed
+    # per client IP) and the LLM/embedding-backed routes the CRM can fire
+    # (`/jobs/search`, `/knowledge/projects/{id}/rag/test`, `/web-chat-turn`,
+    # `/leads/{id}/assist`, `/leads/{id}/chatops-actions/*` — bucketed per user,
+    # one bucket per route so a burst on a cheap route cannot consume an
+    # expensive route's budget). Redis fixed windows; see app/core/ratelimit.py.
+    ratelimit_webhook_limit: int = 120
+    ratelimit_webhook_window_seconds: int = 60
+    ratelimit_llm_limit: int = 30
+    ratelimit_llm_window_seconds: int = 60
+    # Webhook ingress stays fail-open on Redis errors (documented contract: a
+    # Redis hiccup must never drop candidate messages). The per-user bucket is
+    # the one place fail-closed is defensible — its whole purpose is protecting
+    # the deployment-wide LLM/embed token lists — so an operator can opt in.
+    ratelimit_llm_fail_closed: bool = False
 
     # Zalo Bot Platform (bot-api.zaloplatforms.com/bot{TOKEN}/...) — the single
     # Zalo integration for inbound + outbound. `zalo_bot_token` rides in the URL
@@ -341,6 +373,12 @@ class Settings(BaseSettings):
     # Backpressure: reject enqueue when webhook_high depth reaches this.
     # 0 = disabled.  Set to ~2x worker-chatbot replicas so Zalo retries later.
     chat_queue_max_depth: int = 40
+    # Same contract for the low-volume worker queues (enqueue_job applies these
+    # as the default bound for their queue; an explicit max_depth at a call site
+    # wins). followup bounds per-lead nudge fan-out (~5/30 min); maintenance
+    # bounds manual tick triggers — scheduler-enqueued ticks bypass enqueue_job.
+    followup_queue_max_depth: int = 50
+    maintenance_queue_max_depth: int = 20
 
     # Structured Job↔Lead recommendation engine weights (Phase 2).
     # MiniMax §7.2: "weights must be re-tuned against labeled hires after the

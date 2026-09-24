@@ -95,6 +95,10 @@ async def lifespan(app: FastAPI):
         from app.workers.reconcile_worker import run_reconcile_tick
 
         sched = Scheduler(connection=get_redis_sync(), queue_name="followup")
+        # Reconcile sweep + outbound dispatch moved to a dedicated `maintenance`
+        # queue: the backlog-driven reconcile used to share the single
+        # followup worker with proactive nudges and head-of-line-blocked them.
+        maintenance_sched = Scheduler(connection=get_redis_sync(), queue_name="maintenance")
         try:
             register_unique_tick(
                 sched, run_proactive_followup_tick, PROACTIVE_TICK_INTERVAL_SECONDS
@@ -105,18 +109,21 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001
             logger.exception("proactive scheduler registration failed (non-fatal)")
         try:
-            register_unique_tick(sched, run_reconcile_tick, settings.reconcile_interval_seconds)
+            register_unique_tick(
+                maintenance_sched, run_reconcile_tick, settings.reconcile_interval_seconds
+            )
             logger.info(
-                "reconcile sweep tick registered: interval=%ds", settings.reconcile_interval_seconds
+                "reconcile sweep tick registered: interval=%ds queue=maintenance",
+                settings.reconcile_interval_seconds,
             )
         except Exception:  # noqa: BLE001
             logger.exception("reconcile scheduler registration failed (non-fatal)")
         try:
             register_unique_tick(
-                sched, run_outbound_dispatch_tick, settings.reconcile_interval_seconds
+                maintenance_sched, run_outbound_dispatch_tick, settings.reconcile_interval_seconds
             )
             logger.info(
-                "outbound dispatcher tick registered: interval=%ds",
+                "outbound dispatcher tick registered: interval=%ds queue=maintenance",
                 settings.reconcile_interval_seconds,
             )
         except Exception:  # noqa: BLE001

@@ -21,6 +21,26 @@ class EnqueueStatusUnknown(RuntimeError):
         self.job_id = job_id
 
 
+# Default depth bounds applied when a call site passes no explicit max_depth.
+# webhook_high stays out of this map: its call sites pass
+# chat_queue_max_depth explicitly (chatbot_worker), and that remains the
+# reference pattern. 0 in settings disables a bound, mirroring
+# chat_queue_max_depth semantics.
+_QUEUE_MAX_DEPTH_SETTINGS_FIELDS = {
+    "followup": "followup_queue_max_depth",
+    "maintenance": "maintenance_queue_max_depth",
+}
+
+
+def _default_max_depth(queue_name: str) -> int | None:
+    field = _QUEUE_MAX_DEPTH_SETTINGS_FIELDS.get(queue_name)
+    if field is None:
+        return None
+    from app.core.config import get_settings
+
+    return getattr(get_settings(), field) or None
+
+
 @overload
 def enqueue_job(
     queue_name: str,
@@ -63,9 +83,11 @@ def enqueue_job(
     backpressure. Callers that set ``return_job_id=True`` receive the RQ job ID
     on success and ``None`` on failure.
 
-    When *max_depth* is ``None`` (the default) the depth check is skipped and the
-    behaviour is best-effort (logs but never raises), matching the original contract
-    for persistence / followup paths.
+    When *max_depth* is ``None`` the depth check is skipped for unmanaged queues
+    (best-effort, logs but never raises); the queues in
+    ``_QUEUE_MAX_DEPTH_SETTINGS_FIELDS`` fall back to their configured default
+    bound instead, so every enqueue site for them is backpressured without each
+    caller passing a limit explicitly.
     """
     connection = None
     try:
@@ -75,6 +97,8 @@ def enqueue_job(
 
         connection = get_redis_sync()
         q = Queue(queue_name, connection=connection)
+        if max_depth is None:
+            max_depth = _default_max_depth(queue_name)
         if max_depth is not None and q.count >= max_depth:
             logger.warning(
                 "queue %s depth %d >= max_depth %d, rejecting enqueue",

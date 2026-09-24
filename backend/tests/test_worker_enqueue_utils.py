@@ -168,3 +168,95 @@ def test_recovered_turns_use_their_own_queue(monkeypatch: pytest.MonkeyPatch) ->
     assert chatbot_worker.enqueue_chat_run({"conversation_id": "live"}) is True
     assert chatbot_worker.enqueue_recovery_chat_run({"conversation_id": "recovered"}) is True
     assert seen == ["webhook_high", "recovery"]
+
+
+def _patch_depth_settings(monkeypatch: pytest.MonkeyPatch, **depths: int) -> None:
+    monkeypatch.setattr(
+        "app.core.config.get_settings",
+        lambda: SimpleNamespace(**depths),
+    )
+
+
+def test_followup_enqueue_rejected_at_configured_depth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """followup enqueues without an explicit max_depth get the configured
+    default bound — a dead worker must not accumulate an unbounded backlog."""
+    _patch_depth_settings(monkeypatch, followup_queue_max_depth=2)
+
+    class DeepQueue:
+        count = 2  # already at the bound
+
+        def __init__(self, name, *, connection):
+            assert name == "followup"
+
+        def enqueue(self, _fn, *_args, **_kwargs):
+            raise AssertionError("enqueue must not run past the depth bound")
+
+    monkeypatch.setitem(sys.modules, "rq", SimpleNamespace(Queue=DeepQueue))
+    monkeypatch.setattr(redis, "get_redis_sync", object)
+
+    assert enqueue_job("followup", _job) is False
+    assert enqueue_job("followup", _job, return_job_id=True) is None
+
+
+def test_maintenance_enqueue_rejected_at_configured_depth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """maintenance (reconcile/outbound ticks) gets the same backpressure."""
+    _patch_depth_settings(monkeypatch, maintenance_queue_max_depth=1)
+
+    class DeepQueue:
+        count = 1
+
+        def __init__(self, name, *, connection):
+            assert name == "maintenance"
+
+        def enqueue(self, _fn, *_args, **_kwargs):
+            raise AssertionError("enqueue must not run past the depth bound")
+
+    monkeypatch.setitem(sys.modules, "rq", SimpleNamespace(Queue=DeepQueue))
+    monkeypatch.setattr(redis, "get_redis_sync", object)
+
+    assert enqueue_job("maintenance", _job) is False
+
+
+def test_explicit_max_depth_wins_over_queue_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A call site passing an explicit max_depth keeps full control even on a
+    queue with a configured default (the webhook_high call-site pattern)."""
+    _patch_depth_settings(monkeypatch, followup_queue_max_depth=2)
+
+    class BusyQueue:
+        count = 2  # above the default bound, below the explicit one
+
+        def __init__(self, name, *, connection):
+            assert name == "followup"
+
+        def enqueue(self, _fn, *_args, **_kwargs):
+            return SimpleNamespace(id="rq-job-2")
+
+    monkeypatch.setitem(sys.modules, "rq", SimpleNamespace(Queue=BusyQueue))
+    monkeypatch.setattr(redis, "get_redis_sync", object)
+
+    assert enqueue_job("followup", _job, max_depth=5) is True
+
+
+def test_depth_default_disabled_when_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """0 disables a queue's default bound, mirroring chat_queue_max_depth."""
+    _patch_depth_settings(monkeypatch, followup_queue_max_depth=0)
+
+    class DeepQueue:
+        count = 1000
+
+        def __init__(self, name, *, connection):
+            assert name == "followup"
+
+        def enqueue(self, _fn, *_args, **_kwargs):
+            return SimpleNamespace(id="rq-job-3")
+
+    monkeypatch.setitem(sys.modules, "rq", SimpleNamespace(Queue=DeepQueue))
+    monkeypatch.setattr(redis, "get_redis_sync", object)
+
+    assert enqueue_job("followup", _job) is True

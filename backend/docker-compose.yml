@@ -189,6 +189,8 @@ services:
 
   # RQ worker: proactive follow-up nudges (dedicated queue, isolated from reactive path).
   # Single replica — proactive volume is low (~5 candidates/tick, 30-min interval).
+  # The reconcile sweep and outbound-dispatch ticks moved to worker-maintenance
+  # so a backlog-driven reconcile cannot head-of-line-block the nudges.
   worker-followup:
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
     env_file: .env
@@ -199,6 +201,31 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     command: ["rq", "worker", "followup", "--url", "${REDIS_URL}"]
+    healthcheck:
+      # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
+      # redis-py is present transitively via rq; python is on PATH in the image.
+      test: ["CMD-SHELL", "python -c \"import os,redis; redis.from_url(os.environ['REDIS_URL'], socket_connect_timeout=3, socket_timeout=3).ping()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # RQ worker: reconcile sweep + outbound dispatch ticks (maintenance queue,
+  # split from followup). Single replica — the reconcile tick holds a Redis
+  # non-reentrancy lock (reconcile_tick_lock, 300s), so overlapping schedules
+  # skip; one worker keeps the two 60s ticks from competing with nudges.
+  worker-maintenance:
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:-latest}
+    env_file: .env
+    environment:
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "2"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: ["rq", "worker", "maintenance", "--url", "${REDIS_URL}"]
+    stop_grace_period: 180s  # let a mid-sweep reconcile finish on SIGTERM
     healthcheck:
       # Lightweight Redis ping (no full rq/app import, no broker URL in argv).
       # redis-py is present transitively via rq; python is on PATH in the image.
