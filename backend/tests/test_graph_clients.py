@@ -511,6 +511,58 @@ def test_openrouter_agent_client_requests_returned_reasoning(monkeypatch):
     }
 
 
+def test_openrouter_chat_marks_stable_system_block_as_cacheable_prefix(monkeypatch):
+    class _OpenRouter(_Settings):
+        openrouter_api_key = "test-key"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouter())
+
+    chat = _openrouter_chat("deepseek/deepseek-v4-flash", temperature=0.1)
+    langchain_core = pytest.importorskip("langchain_core.messages")
+    stable = "Bạn là trợ lý..."  # byte-stable preamble text
+    payload = chat._get_request_payload(
+        [
+            langchain_core.SystemMessage(content=stable),
+            langchain_core.HumanMessage(content="Câu hỏi của khách"),
+        ]
+    )
+
+    first = payload["messages"][0]
+    assert first["role"] == "system"
+    assert isinstance(first["content"], list)
+    assert first["content"] == [
+        {
+            "type": "text",
+            "text": stable,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    # The turn-varying message after the prefix stays unmarked plain text.
+    assert payload["messages"][1]["content"] == "Câu hỏi của khách"
+
+
+def test_minimax_chat_sends_no_cache_marker_on_openai_compatible_endpoint(monkeypatch):
+    class _MiniMax(_Settings):
+        minimax_api_key = "test-key"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _MiniMax())
+
+    chat = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
+    langchain_core = pytest.importorskip("langchain_core.messages")
+    payload = chat._get_request_payload(
+        [
+            langchain_core.SystemMessage(content="preamble"),
+            langchain_core.HumanMessage(content="hi"),
+        ]
+    )
+
+    # MiniMax's OpenAI-compatible API caches the prefix automatically and
+    # documents no marker for it — the request must carry none. Guarding this
+    # keeps any future marker an explicit, deliberate change.
+    assert chat.system_prefix_cache_control == {}
+    assert payload["messages"][0]["content"] == "preamble"
+
+
 # --- Authority-override regression -------------------------------------------
 # Production trace showed: model called search_knowledge, returned the correct
 # LG Display schedule in its `final` turn, then an authority-override branch

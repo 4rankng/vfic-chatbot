@@ -95,6 +95,15 @@ def _reasoning_chat_class():
 
     class ReasoningPreservingChatOpenAI(ChatOpenAI):
         trace_provider: str = "unknown"
+        # Wire-level cache marker attached to the leading system message. Set
+        # only where the provider documents an explicit marker for this
+        # endpoint: OpenRouter's prompt caching takes an Anthropic-style
+        # ``cache_control`` on a content block (openrouter.ai/docs/features/
+        # prompt-caching). MiniMax's OpenAI-compatible API caches the prefix
+        # automatically and documents no marker for it, and the operator-
+        # configured custom provider is an unknown vendor — sending it an
+        # undocumented marker could reject every request on that lane.
+        system_prefix_cache_control: dict = {}
 
         def _create_chat_result(self, response, generation_info=None):
             response_dict = (
@@ -123,6 +132,27 @@ def _reasoning_chat_class():
             wire_messages = payload["messages"] if "messages" in payload else None
             if not isinstance(wire_messages, list):
                 return payload
+            if self.system_prefix_cache_control and wire_messages:
+                # Cache breakpoint on the stable prefix boundary: everything
+                # before and including the first system message. The text is
+                # rewrapped as a single content block — identical bytes, plus
+                # the marker — so the prompt itself is untouched.
+                first = wire_messages[0]
+                if (
+                    isinstance(first, dict)
+                    and "role" in first
+                    and first["role"] == "system"
+                    and "content" in first
+                    and isinstance(first["content"], str)
+                    and first["content"]
+                ):
+                    first["content"] = [
+                        {
+                            "type": "text",
+                            "text": first["content"],
+                            "cache_control": self.system_prefix_cache_control,
+                        }
+                    ]
             for source, wire in zip(source_messages, wire_messages, strict=False):
                 if not isinstance(source, AIMessage) or not isinstance(wire, dict):
                     continue
@@ -1503,6 +1533,12 @@ def _openrouter_chat(
         temperature=temperature,
         max_retries=max_retries,
         trace_provider="openrouter",
+        # Stable system block as an explicit cache prefix (transport metadata
+        # only — the prompt text is unchanged). OpenRouter's docs accept the
+        # Anthropic-style breakpoint on a content block and translate it to
+        # the routed provider's own syntax; automatic-caching providers
+        # upstream simply don't need it.
+        system_prefix_cache_control={"type": "ephemeral"},
         **kwargs,
     )
 
