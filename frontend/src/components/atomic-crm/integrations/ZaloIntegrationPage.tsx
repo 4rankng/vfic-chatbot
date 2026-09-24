@@ -502,11 +502,12 @@ const PROVIDER_SETTINGS_BUNDLE_NULL: ProviderSettingsBundle = {
 };
 
 /**
- * Per-field reset values for the provider form: secrets and free text clear,
- * while select fields re-sync to their saved value — the same shape the load,
- * save, and discard flows produced before the panel refactor. Scoped to the
- * given panels so a chain save never wipes an in-progress Jev edit (and vice
- * versa), matching the pre-refactor behavior.
+ * Per-field reset values for the provider form: secret fields clear (they are
+ * masked), while text and select fields re-sync to their saved value so the
+ * operator sees what is stored — an empty text input both hides the saved value
+ * and invites browser autofill (a stray email), which then reads as a phantom
+ * edit. Scoped to the given panels so a chain save never wipes an in-progress
+ * Jev edit (and vice versa), matching the pre-refactor behavior.
  */
 const resetProviderForm = (
   bundle: ProviderSettingsBundle,
@@ -516,7 +517,7 @@ const resetProviderForm = (
   for (const descriptor of panels) {
     for (const field of descriptor.fields) {
       if (field.kind === "readonly") continue;
-      form[field.formKey] = field.kind === "select" ? field.saved(bundle) : "";
+      form[field.formKey] = field.kind === "secret" ? "" : field.saved(bundle);
     }
   }
   return form;
