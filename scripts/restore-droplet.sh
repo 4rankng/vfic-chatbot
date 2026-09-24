@@ -69,6 +69,7 @@ case "$COLOR" in
   blue|green) ;;
   *) echo "bundle manifests/active-color.txt holds '$COLOR' (expected blue|green)" >&2; exit 2 ;;
 esac
+if [ "$COLOR" = blue ]; then OTHER_COLOR=green; else OTHER_COLOR=blue; fi
 
 # Every prod compose command needs IMAGE_TAG (`${IMAGE_TAG:?}` interpolates the
 # whole file), and it must be the tag that produced this dump — NOT `latest`,
@@ -77,12 +78,13 @@ esac
 # rather than boot new code against the restored schema.
 TAG_SOURCE="--tag"
 if [ -z "$TAG" ]; then
-  TAG_SOURCE="manifests/image-tag.txt"
+  TAG_SOURCE="(no tag manifest in the bundle)"
   if [ -f "$BUNDLE/manifests/image-tag.txt" ]; then
+    TAG_SOURCE="manifests/image-tag.txt"
     TAG="$(tr -d '[:space:]' < "$BUNDLE/manifests/image-tag.txt")"
   elif [ -f "$BUNDLE/manifests/docker-images.txt" ]; then
     TAG_SOURCE="manifests/docker-images.txt"
-    TAG="$(awk '$2 ~ /tinghire-be/ && $3 != "" && $3 != "TAG" { print $3; exit }' "$BUNDLE/manifests/docker-images.txt")"
+    TAG="$(awk '$2 ~ /tinghire-be/ && $3 != "" && $3 != "TAG" && $3 != "<none>" { print $3; exit }' "$BUNDLE/manifests/docker-images.txt")"
   fi
 fi
 case "$TAG" in
@@ -145,7 +147,7 @@ else
 fi
 
 # --- 1. /opt/vfic + compose + Caddyfile + .env --------------------------------
-step "1/7" "copying compose + Caddyfile + .env -> /opt/vfic"
+step "1/8" "copying compose + Caddyfile + .env -> /opt/vfic"
 rmt "mkdir -p /opt/vfic"
 put "$BUNDLE/config-snapshot/docker-compose.yml" /opt/vfic/docker-compose.yml
 
@@ -169,18 +171,24 @@ if [ "$DRY_RUN" -eq 0 ]; then
   cat "$BUNDLE/env/opt-vfic.env" | ssh "${SSH_OPTS[@]}" "$HOST" 'umask 077; cat > /opt/vfic/.env && chmod 600 /opt/vfic/.env'
 fi
 
+# State files bg_deploy.sh maintains: the restored colour serves at the pinned
+# tag; the other colour is the trivial rollback target at that same tag.
+rmt "printf '%s\n' $COLOR > /opt/vfic/ACTIVE_COLOR"
+rmt "printf '%s\n' $OTHER_COLOR > /opt/vfic/PREV_COLOR"
+rmt "printf '%s\n' $TAG > /opt/vfic/PREV_TAG"
+
 # --- 2. pull images -----------------------------------------------------------
-step "2/7" "docker compose pull (re-pulls from DockerHub)"
-rmt "cd /opt/vfic && docker compose pull"
+step "2/8" "docker compose pull (ghcr.io, at the tag recorded in the bundle)"
+rmt "cd /opt/vfic && IMAGE_TAG=$TAG docker compose pull"
 
 # --- 3. seed Caddy TLS + KB uploads volumes (best-effort, BEFORE first up) -----
-step "3/7" "seed Caddy TLS + KB uploads volumes (best-effort)"
+step "3/8" "seed Caddy TLS + KB uploads volumes (best-effort)"
 seed() {  # $1 = service  $2 = in-container mount  $3 = tarball
   if [ -f "$3" ]; then
     printf '  seed %s:%s <- %s\n' "$1" "$2" "$3" >&2
     if [ "$DRY_RUN" -eq 0 ]; then
       gzip -dc "$3" | ssh "${SSH_OPTS[@]}" "$HOST" \
-        "cd /opt/vfic && docker compose run -T --rm --no-deps --entrypoint /bin/sh $1 -c 'tar xzf /dev/stdin -C $2'" \
+        "cd /opt/vfic && IMAGE_TAG=$TAG docker compose run -T --rm --no-deps --entrypoint /bin/sh $1 -c 'tar xzf /dev/stdin -C $2'" \
         || printf '  WARN: seed failed for %s:%s (continuing — Caddy auto-issues certs; KB originals are optional)\n' "$1" "$2" >&2
     fi
   else
@@ -194,24 +202,24 @@ seed caddy /config          "$BUNDLE/caddy/caddy_config.tar.gz"
 seed worker-ingest /data/kb_uploads "$BUNDLE/kb_uploads/kb_uploads.tar.gz"
 
 # --- 4. start datastores ------------------------------------------------------
-step "4/7" "start postgres + redis (empty volumes init from restored .env)"
-rmt "cd /opt/vfic && docker compose up -d postgres redis"
+step "4/8" "start postgres + redis (empty volumes init from restored .env)"
+rmt "cd /opt/vfic && IMAGE_TAG=$TAG docker compose up -d postgres redis"
 printf '  waiting for pg_isready ...\n' >&2
 if [ "$DRY_RUN" -eq 0 ]; then
   ok=0
   for _ in $(seq 1 30); do
-    if ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && docker compose exec -T postgres pg_isready -U vfic" >/dev/null 2>&1; then ok=1; break; fi
+    if ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && IMAGE_TAG=$TAG docker compose exec -T postgres pg_isready -U vfic" >/dev/null 2>&1; then ok=1; break; fi
     sleep 2
   done
   [ "$ok" -eq 1 ] || { echo "postgres never became ready" >&2; exit 1; }
 fi
 
 # --- 5. load Postgres dump ----------------------------------------------------
-step "5/7" "load Postgres dump"
+step "5/8" "load Postgres dump"
 if [ "$DRY_RUN" -eq 0 ]; then
   set +e
   gzip -dc "$BUNDLE/postgres/vfic_pg_dump.sql.gz" \
-    | ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && docker compose exec -T postgres psql -v ON_ERROR_STOP=0 -U vfic -d vfic" \
+    | ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && IMAGE_TAG=$TAG docker compose exec -T postgres psql -v ON_ERROR_STOP=0 -U vfic -d vfic" \
     > "$BUNDLE/.restore-psql.log" 2>&1
   RC=$?
   set -e
@@ -220,15 +228,58 @@ if [ "$DRY_RUN" -eq 0 ]; then
   printf '  dump loaded.\n' >&2
 fi
 
-# --- 6. bring up the full stack ------------------------------------------------
-step "6/7" "docker compose up -d (full stack)"
-rmt "cd /opt/vfic && docker compose up -d"
+# --- 6. migrate + assert schema compatibility ---------------------------------
+# `upgrade head` is a no-op when the dump already sits at the image's head,
+# forward-migrates when the image is slightly newer (the additive-migration
+# assumption every deploy already makes), and fails loudly when the dump's
+# revision is not one the pinned image knows — new code against old schema (or
+# old code against newer schema) must never boot silently. The assertion then
+# proves the restored DB sits at exactly the image's head.
+step "6/8" "alembic widen + upgrade head (dump ↔ image schema compatibility)"
+rmt "cd /opt/vfic && IMAGE_TAG=$TAG docker compose run -T --rm --no-deps web-$COLOR python -m scripts.widen_alembic_version"
+rmt "cd /opt/vfic && IMAGE_TAG=$TAG docker compose run -T --rm --no-deps web-$COLOR alembic upgrade head"
+if [ "$DRY_RUN" -eq 0 ]; then
+  DB_REV="$(ssh "${SSH_OPTS[@]}" "$HOST" \
+    "cd /opt/vfic && IMAGE_TAG=$TAG docker compose exec -T postgres psql -U vfic -d vfic -tAc 'select version_num from alembic_version'" \
+    | tr -d '[:space:]')"
+  IMG_HEAD="$(ssh "${SSH_OPTS[@]}" "$HOST" \
+    "cd /opt/vfic && IMAGE_TAG=$TAG docker compose run -T --rm --no-deps web-$COLOR alembic heads" \
+    | awk 'NF {print $1; exit}')"
+  [ -n "$DB_REV" ]  || { echo "could not read alembic_version from the restored DB" >&2; exit 1; }
+  [ -n "$IMG_HEAD" ] || { echo "could not read the pinned image's alembic head" >&2; exit 1; }
+  if [ "$DB_REV" != "$IMG_HEAD" ]; then
+    echo "restored schema revision $DB_REV does not match the pinned image's head $IMG_HEAD —" >&2
+    echo "refusing to bring up the stack on a schema the image does not expect." >&2
+    exit 1
+  fi
+  printf '  schema ok: %s\n' "$DB_REV" >&2
+fi
 
-# --- 7. verify + reminders ----------------------------------------------------
-step "7/7" "verify"
+# --- 7. bring up the full stack ------------------------------------------------
+step "7/8" "docker compose up -d (full stack, at the recorded tag)"
+rmt "cd /opt/vfic && IMAGE_TAG=$TAG docker compose up -d"
+
+# --- 8. verify + reminders ----------------------------------------------------
+step "8/8" "verify: running tag, health, containers"
 if [ "$DRY_RUN" -eq 0 ]; then
   printf '  (waiting 8s for healthchecks...)\n' >&2; sleep 8
-  ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && docker compose ps --format 'table {{.Name}}\t{{.Service}}\t{{.Status}}'" >&2 || true
+  ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && IMAGE_TAG=$TAG docker compose ps --format 'table {{.Name}}\t{{.Service}}\t{{.Status}}'" >&2 || true
+
+  # The serving container must run the tag this dump was taken at — the whole
+  # point of pinning IMAGE_TAG. A cached older image or a registry hiccup would
+  # otherwise boot whatever is local and still look healthy.
+  RUNNING_TAG="$(ssh "${SSH_OPTS[@]}" "$HOST" \
+    "cid=\$(docker ps -q --filter name=web-$COLOR | head -1); [ -n \"\$cid\" ] && docker inspect --format '{{.Config.Image}}' \"\$cid\" | sed 's/.*://'" \
+    | tr -d '[:space:]')"
+  if [ "$RUNNING_TAG" != "$TAG" ]; then
+    echo "web-$COLOR is running image tag '$RUNNING_TAG' but the bundle pinned '$TAG' — refusing to declare success." >&2
+    exit 1
+  fi
+  printf '  running tag ok: %s\n' "$TAG" >&2
+
+  ssh "${SSH_OPTS[@]}" "$HOST" "cd /opt/vfic && IMAGE_TAG=$TAG docker compose exec -T web-$COLOR python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5).status==200 else 1)\"" \
+    || { echo "web-$COLOR /health did not return 200" >&2; exit 1; }
+  printf '  web-%s /health ok\n' "$COLOR" >&2
 fi
 
 echo >&2

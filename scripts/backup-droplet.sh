@@ -43,11 +43,26 @@ ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" "test -f /opt/vfic/.env" \
 
 # The prod compose file requires IMAGE_TAG for EVERY subcommand — `${IMAGE_TAG:?}`
 # interpolates the whole file even for `ps`/`exec`/`run`, none of which use the
-# app images. Read the tag the active colour was deployed with once and pass it
-# to every compose call below (`unknown` is a read-only placeholder).
+# app images — and `compose run` PULLS whatever tag it interpolates if that tag
+# is not already on the droplet. So resolve the tag the active colour ACTUALLY
+# runs (plain docker — no compose call, so no interpolation chicken-and-egg),
+# falling back to PREV_TAG, then `unknown` (a placeholder that only satisfies
+# interpolation for read-only ps/exec).
+ACTIVE_COLOR_SNAPSHOT="$(ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
+  "cat /opt/vfic/ACTIVE_COLOR 2>/dev/null || echo blue" | tr -d '[:space:]' || true)"
+case "$ACTIVE_COLOR_SNAPSHOT" in
+  blue|green) ;;
+  *) die "unexpected /opt/vfic/ACTIVE_COLOR value '$ACTIVE_COLOR_SNAPSHOT' (expected blue|green)." ;;
+esac
+
 COMPOSE_TAG="$(ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
-  "cat /opt/vfic/ACTIVE_TAG 2>/dev/null || cat /opt/vfic/PREV_TAG 2>/dev/null || echo unknown" \
+  "cid=\$(docker ps -q --filter name=web-$ACTIVE_COLOR_SNAPSHOT | head -1); \
+   [ -n \"\$cid\" ] && docker inspect --format '{{.Config.Image}}' \"\$cid\" | sed 's/.*://'" \
   | tr -d '[:space:]' || true)"
+if [ -z "$COMPOSE_TAG" ]; then
+  COMPOSE_TAG="$(ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
+    "cat /opt/vfic/PREV_TAG 2>/dev/null" | tr -d '[:space:]' || true)"
+fi
 [ -n "$COMPOSE_TAG" ] || COMPOSE_TAG=unknown
 
 ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
@@ -136,28 +151,16 @@ ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
   "du -sh /var/lib/docker/volumes/vfic_* 2>/dev/null | sort -k2" \
   > "$BUNDLE/manifests/volume-sizes.txt" 2>&1 || true
 
-# Which colour Caddy routes to, and the tag that colour is RUNNING. Restore pins
-# IMAGE_TAG to this tag: a bare `docker compose up` resolves `${IMAGE_TAG:-latest}`,
-# and `latest` is re-pushed on every deploy — i.e. new code against the dumped schema.
-ACTIVE_COLOR_SNAPSHOT="$(ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
-  "cat /opt/vfic/ACTIVE_COLOR 2>/dev/null || echo blue" | tr -d '[:space:]' || true)"
-case "$ACTIVE_COLOR_SNAPSHOT" in
-  blue|green) ;;
-  *) die "unexpected /opt/vfic/ACTIVE_COLOR value '$ACTIVE_COLOR_SNAPSHOT' (expected blue|green)." ;;
-esac
+# Which colour Caddy routes to, and the tag that colour is RUNNING (both resolved
+# in preflight). Restore pins IMAGE_TAG to this tag: a bare `docker compose up`
+# resolves `${IMAGE_TAG:-latest}`, and `latest` is re-pushed on every deploy —
+# i.e. new code against the dumped schema.
 printf '%s\n' "$ACTIVE_COLOR_SNAPSHOT" > "$BUNDLE/manifests/active-color.txt"
-
-IMAGE_TAG_SNAPSHOT="$(ssh "${SSH_OPTS[@]}" "root@$PROD_SERVER" \
-  "cd /opt/vfic && cid=\$(docker compose ps -q web-$ACTIVE_COLOR_SNAPSHOT | head -1); [ -n \"\$cid\" ] && docker inspect --format '{{.Config.Image}}' \"\$cid\" | sed 's/.*://'" \
-  | tr -d '[:space:]' || true)"
-if [ -n "$IMAGE_TAG_SNAPSHOT" ]; then
-  printf '%s\n' "$IMAGE_TAG_SNAPSHOT" > "$BUNDLE/manifests/image-tag.txt"
-  log "  active colour: $ACTIVE_COLOR_SNAPSHOT   running image tag: $IMAGE_TAG_SNAPSHOT"
-  if [ "$COMPOSE_TAG" != "unknown" ] && [ "$COMPOSE_TAG" != "$IMAGE_TAG_SNAPSHOT" ]; then
-    log "warn: /opt/vfic/ACTIVE_TAG ($COMPOSE_TAG) disagrees with the running web-$ACTIVE_COLOR_SNAPSHOT image ($IMAGE_TAG_SNAPSHOT) — the bundle records the running image."
-  fi
+if [ "$COMPOSE_TAG" != "unknown" ]; then
+  printf '%s\n' "$COMPOSE_TAG" > "$BUNDLE/manifests/image-tag.txt"
+  log "  active colour: $ACTIVE_COLOR_SNAPSHOT   running image tag: $COMPOSE_TAG"
 else
-  log "warn: could not read web-$ACTIVE_COLOR_SNAPSHOT's image tag; restore will fall back to parsing manifests/docker-images.txt."
+  log "warn: could not read web-$ACTIVE_COLOR_SNAPSHOT's running image tag; restore will fall back to parsing manifests/docker-images.txt."
 fi
 
 # The revision the dump's schema sits at. Restore asserts the restored DB reaches
@@ -178,7 +181,7 @@ cat > "$BUNDLE/manifests/backup-metadata.json" <<EOF
   "git_head": "$(git -C "$REPO_ROOT" rev-parse HEAD)",
   "postgres_dump": "postgres/vfic_pg_dump.sql.gz",
   "active_color": "$ACTIVE_COLOR_SNAPSHOT",
-  "image_tag": "$IMAGE_TAG_SNAPSHOT",
+  "image_tag": "$COMPOSE_TAG",
   "alembic_revision": "$ALEMBIC_REV_SNAPSHOT",
   "integration_settings_key_present": $([ -n "$(env_value INTEGRATION_SETTINGS_ENCRYPTION_KEY)" ] && echo true || echo false),
   "volumes_captured": ["vfic_kb_uploads", "vfic_caddy_data", "vfic_caddy_config"],
