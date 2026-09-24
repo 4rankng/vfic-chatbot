@@ -15,8 +15,9 @@ dev: bootstrap
 	$(MAKE) -C backend dev FRONTEND_PORT=$(PORT)
 
 ## bootstrap: one-command first run — .env, backend/.venv (Python 3.12 per
-## backend/.python-version) and frontend/node_modules. Guarded by `test -d`/`-f`,
-## so repeat runs are a no-op (OPS-18).
+## backend/.python-version) and frontend/node_modules. The venv/npm installs are
+## `test -d`-guarded; repeat runs only re-sync the editable install, which is
+## idempotent and picks up dependency changes (OPS-18).
 bootstrap:
 	@test -f backend/.env || { echo "backend/.env: created from .env.example — set real secrets before any deploy"; cp backend/.env.example backend/.env; }
 	@if ! command -v python3.12 >/dev/null 2>&1; then \
@@ -33,7 +34,7 @@ bootstrap:
 release-check:
 	@test -z "$$(git status --porcelain)" || { echo "Release blocked: commit or stash all local changes first."; exit 1; }
 	@git diff --check
-	@command -v uv >/dev/null 2>&1 && (cd backend && uv lock --check) || { echo "WARNING: uv not found — skipped uv lock --check"; }
+	@if command -v uv >/dev/null 2>&1; then (cd backend && uv lock --check); else echo "WARNING: uv not found — skipped uv lock --check"; fi
 	@cd backend && test "$$(.venv/bin/python -m alembic heads | wc -l | tr -d ' ')" = 1
 	@docker compose -f backend/docker-compose.dev.yml up -d --wait postgres redis
 	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest -m "not integration" && .venv/bin/pytest -m integration tests/integration/test_harness_smoke.py && .venv/bin/pytest -m integration --durations=25
@@ -51,7 +52,7 @@ Path(sys.argv[2]).write_text(json.dumps({"golden_pass_rate_pct": passed / case_c
 		rm -f "$$tmp_raw" "$$tmp_gold"; \
 		exit "$$rc"
 
-# Build & push BOTH DockerHub images, then deploy to bot.tingting.vip.
+# Build & push BOTH GHCR images, then deploy to bot.tingting.vip.
 deploy: release-check
 	@echo "=== Building & pushing frontend ==="
 	cd frontend && make push
@@ -168,7 +169,7 @@ restore:
 	docker exec "$$PG" psql -U vfic -d postgres -c "CREATE DATABASE vfic;" && \
 	echo "Restoring backup into local database..." && \
 	case "$$SRC" in \
-		*.dump) docker exec -i "$$PG" pg_restore -U vfic -d vfic < "$$SRC" ;; \
+		*.dump) docker exec -i "$$PG" pg_restore --exit-on-error -U vfic -d vfic < "$$SRC" ;; \
 		*.gz)   gunzip -c "$$SRC" > "$$TMP/dump.sql" && \
 		        docker exec -i "$$PG" psql -v ON_ERROR_STOP=1 -U vfic -d vfic < "$$TMP/dump.sql" ;; \
 	esac && \
@@ -183,7 +184,7 @@ restore:
 		.venv/bin/python -m scripts.reset_passwords --password admin123 && \
 		.venv/bin/python -m scripts.create_admin --only-if-no-admins --email admin@vfic.dev --password admin123 --full-name "Dev Admin" --role admin && \
 		echo "  All users reset to password: admin123"; \
-	else echo "Password reset skipped (FORCE=1 to skip this prompt)."; fi && \
+	else echo "Password reset skipped (FORCE=1 resets without asking)."; fi && \
 	echo "Verifying sealed integration settings decrypt..." && \
 	if [ "$(ALLOW_KEY_MISMATCH)" = "1" ]; then echo "  skipped (ALLOW_KEY_MISMATCH=1)."; \
 	else .venv/bin/python -m scripts.verify_integration_secrets; fi && \
