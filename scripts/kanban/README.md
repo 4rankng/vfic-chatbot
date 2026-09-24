@@ -73,9 +73,9 @@ Confirmed findings deliberately **not** carded yet. Recorded so they are not
 lost or re-discovered from scratch.
 
 **Unauthenticated Zalo OA webhook.** `POST /webhooks/zalo/oa`
-(`backend/app/api/webhooks.py:107-165`) performs no authentication of any kind —
+(`backend/app/api/webhooks.py:148-188`) performs no authentication of any kind —
 signature verification was deliberately disabled because the stored credential is
-the wrong Zalo secret (`backend/app/api/webhooks.py:138-146`). Any unauthenticated
+the wrong Zalo secret (`backend/app/api/webhooks.py:171-176`). Any unauthenticated
 caller can create conversations, create and update leads, and enqueue real LLM
 turns: dedup is per `(sender, msg_id)`, so looping fresh sender ids yields
 unbounded cost against `llm_concurrency_limit = 8` on a 2 vCPU box. It is the only
@@ -87,3 +87,11 @@ checksum key, so the (correct) verifier at
 Fixing the code without fixing the credential would false-reject 100% of real
 events. Either obtain the checksum key and wire the verifier into the inbound
 route, or delete the route if the OA channel is not in production use.
+
+## Withdrawn ticket ids
+
+Ids are allocated once and never renumbered, so the security sequence starts at
+`SEC-02`. **SEC-01 was withdrawn by request before the board was published** and
+is deliberately not a card — it is the unauthenticated Zalo OA webhook recorded
+above. The tuple lives in `tickets_a.py` under `WITHDRAWN`; the gap is
+intentional, and no card is missing.

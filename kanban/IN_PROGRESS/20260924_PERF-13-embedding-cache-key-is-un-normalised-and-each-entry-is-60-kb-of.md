@@ -5,8 +5,8 @@ severity: low
 area: performance
 labels: [performance]
 effort: S
-status: todo
-column: TODO
+status: doing
+column: IN_PROGRESS
 opened: 2026-09-24
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-24
 
 **Severity:** low · **Area:** performance · **Effort:** S · **Labels:** performance
 
-**Trạng thái:** TODO
+**Trạng thái:** IN_PROGRESS
 
 ## Problem
 

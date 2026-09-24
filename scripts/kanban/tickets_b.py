@@ -43,6 +43,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-02",
+        column="DEV_COMPLETED",
         title="`allkeys-lru` Redis can evict the LLM semaphore token list and suppress every turn",
         sev="high",
         area="performance",
@@ -85,6 +86,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-03",
+        column="DEV_COMPLETED",
         title="Conversation state is re-loaded 3× per turn, each load cascading 3–4 SELECTs",
         sev="high",
         area="performance",
@@ -121,6 +123,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-04",
+        column="DEV_COMPLETED",
         title="Direct-context lane runs an uncached full-KB scan every turn and re-sends the whole KB as prompt",
         sev="high",
         area="performance",
@@ -192,6 +195,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-06",
+        column="DEV_COMPLETED",
         title="Turn preamble serialises four independent steps",
         sev="medium",
         area="performance",
@@ -227,6 +231,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-14",
+        column="DEV_COMPLETED",
         title="The lead row is re-resolved 2–3× per turn by every adapter that needs it",
         sev="medium",
         area="performance",
@@ -254,6 +259,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-07",
+        column="DEV_COMPLETED",
         title="Connection budget exceeds `max_connections=150` and `pool_timeout=30s` outlives the turn SLA",
         sev="medium",
         area="performance",
@@ -292,6 +298,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-08",
+        column="IN_PROGRESS",
         title="Retrieval computes the ANN distance three times per row and the memories halfvec index is unused",
         sev="medium",
         area="performance",
@@ -333,6 +340,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-09",
+        column="IN_PROGRESS",
         title="The retrieval cache key is non-deterministic because `active_project_ids()` has no ORDER BY",
         sev="medium",
         area="performance",
@@ -361,6 +369,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-10",
+        column="IN_PROGRESS",
         title="Single-flight coalescing can never engage, so the retrieval stampede is unmitigated",
         sev="medium",
         area="performance",
@@ -398,6 +407,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-11",
+        column="DEV_COMPLETED",
         title="Dashboard runs whole-history aggregates every 30 s over a never-pruned `bot_runs` table",
         sev="medium",
         area="performance",
@@ -431,6 +441,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-12",
+        column="DEV_COMPLETED",
         title="Three periodic ticks and the reconcile sweep share a single `followup` worker with no depth bound",
         sev="medium",
         area="performance",
@@ -467,6 +478,7 @@ TICKETS = [
     ),
     dict(
         id="PERF-13",
+        column="IN_PROGRESS",
         title="Embedding cache key is un-normalised and each entry is ~60 KB of JSON",
         sev="low",
         area="performance",

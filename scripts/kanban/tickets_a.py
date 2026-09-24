@@ -18,6 +18,7 @@ WITHDRAWN = [
 TICKETS = [
     dict(
         id="SEC-02",
+        column="DEV_COMPLETED",
         title="Lead by-id routes skip the viewer-scope invariant (IDOR on candidate PII)",
         sev="high",
         area="security",
@@ -360,6 +361,7 @@ TICKETS = [
     ),
     dict(
         id="REL-05",
+        column="DEV_COMPLETED",
         title="leads.gender blank-only guarantee is a read-then-write TOCTOU and the write is unconditional",
         sev="medium",
         area="reliability",
