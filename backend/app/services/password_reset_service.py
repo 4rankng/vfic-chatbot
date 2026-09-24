@@ -5,7 +5,9 @@ import hmac
 import logging
 import secrets
 import uuid
+from collections.abc import Coroutine
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,34 @@ from app.services.audit_service import record_audit
 from app.services.email_service import send_password_reset_otp
 
 logger = logging.getLogger(__name__)
+
+# The OTP send is fire-and-forget so the API can answer "check your email"
+# without waiting on Resend. An unreferenced task handle lets CPython garbage-
+# collect the task mid-flight, which silently loses both the mail and the
+# `password_reset_email_sent` / `_failed` audit row the task is the only writer
+# of (REL-04). Hold a module-level reference with a done callback so the send
+# always completes and its failure is observable — the same pattern as
+# app/workers/chatbot_worker.py and app/services/conversation/events.py.
+_send_tasks: set[asyncio.Task[None]] = set()
+
+
+def _release_send_task(task: asyncio.Task[None]) -> None:
+    _send_tasks.discard(task)
+    if task.cancelled():
+        logger.warning("password reset email task cancelled")
+        return
+    error = task.exception()
+    if error is not None:
+        # _send_reset_email records its own audit row, but a failure in that
+        # fallback path (or a BaseException) would otherwise vanish entirely.
+        logger.error("password reset email task failed error=%s", type(error).__name__)
+
+
+def _spawn_send_task(coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
+    task = asyncio.create_task(coro)
+    _send_tasks.add(task)
+    task.add_done_callback(_release_send_task)
+    return task
 
 
 class PasswordResetError(ValueError):
@@ -85,7 +115,7 @@ class PasswordResetService:
             payload={"email": normalized},
         )
         await self.db.commit()
-        asyncio.create_task(self._send_reset_email(user_id=user.id, email=normalized, otp=otp))
+        _spawn_send_task(self._send_reset_email(user_id=user.id, email=normalized, otp=otp))
 
     async def _send_reset_email(self, *, user_id: uuid.UUID, email: str, otp: str) -> None:
         from app.core.db import async_session
