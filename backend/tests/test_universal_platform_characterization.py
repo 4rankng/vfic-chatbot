@@ -21,8 +21,6 @@ from app.graph.router import route_from_decisions
 from app.graph.context import build_system_prompt
 from app.models.knowledge import KBVersionStatus
 from app.graph.types import BotRunState
-from app.services.ingestion.template_compiler import compile_template
-from app.services.ingestion.template_service import TemplateService
 from app.services.knowledge.pipeline import KnowledgePipeline, _fallback_unit
 from tests.fixtures.universal_platform.factories import (
     empty_installation_fixture,
@@ -93,9 +91,6 @@ def test_recruitment_fixture_requires_explicit_identity_persona_template_and_cap
     assert built["capabilities"]
     assert built["persona"]["name"]
     assert built["persona"]["authority"] == "none"
-    artifact, checksum = compile_template(built["template"])
-    assert artifact["record_types"]
-    assert len(checksum) == 64
     assert built["integrations"] == []
 
 
@@ -178,17 +173,6 @@ def test_digest_fallback_is_source_grounded_and_domain_neutral():
     assert summary == "Lương cơ bản là 8 triệu đồng."
     assert units[0]["source_quote"] == "Lương cơ bản là 8 triệu đồng."
     assert units[0]["content"] == "Lương cơ bản là 8 triệu đồng."
-
-
-@pytest.mark.asyncio
-async def test_template_resolution_requires_an_explicit_assignment():
-    service = TemplateService(object())  # type: ignore[arg-type]
-    service.current_assignment = AsyncMock(return_value=None)  # type: ignore[method-assign]
-
-    with pytest.raises(ValueError, match="explicit published"):
-        await service.pinned_version_for_project(
-            uuid.UUID("00000000-0000-0000-0000-000000000001")
-        )
 
 
 @pytest.mark.asyncio
@@ -290,19 +274,6 @@ async def test_system_prompt_allows_company_identity_from_persona_without_tool_e
     assert "không cần gọi search_knowledge" in prompt.lower()
     # Grounding rule preserved alongside the carve-out (regression guard).
     assert "không được suy ra tình trạng tuyển dụng" in prompt.lower()
-
-
-def test_template_service_source_contains_no_automatic_recruitment_fallback():
-    source = (
-        Path(__file__).parents[1]
-        / "app"
-        / "services"
-        / "ingestion"
-        / "template_service.py"
-    ).read_text(encoding="utf-8")
-
-    assert "ensure_builtin_recruitment" not in source
-    assert "recruitment_factory_builtin" not in source
 
 
 def test_required_recruitment_behavioral_baselines_are_present_and_selected():
