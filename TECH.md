@@ -16,7 +16,7 @@ together*. For deeper detail, follow the links in §5.
 |---|---|---|
 | Language | **Python ≥ 3.12, < 3.13** | `requires-python = ">=3.12,<3.13"` |
 | Framework | **FastAPI** `>=0.115` | async-first; mix of `async def` + thread-offloaded crypto |
-| ASGI server | **Uvicorn `[standard]`** `>=0.32` | 2 workers to use both vCPUs |
+| ASGI server | **Uvicorn `[standard]`** `>=0.32` | single worker by design (Dockerfile CMD) — a second doubled cold-boot RSS and widened the listener gap on the 1.9 GiB host |
 | ORM | **SQLAlchemy 2.x async** (`asyncpg` `>=0.30`) + sync `psycopg` for Alembic/RQ | `AsyncSession(expire_on_commit=False)` |
 | Migrations | **Alembic** `>=1.14` | hand-written (0001–0054, current head `0054_channel_account_projects`), ORM does **not** auto-generate |
 | Database | **PostgreSQL 16 + pgvector** (`>=0.3.6`) | HNSW ANN + exact re-rank; `halfvec` for 3072-d embeddings |
@@ -162,7 +162,7 @@ it doesn't sit inside it. Workers (`app/workers/`):
 Everything in the HLD is sized for one small droplet. The keep / change / defer:
 
 - **Keep now:** FastAPI, PG + pgvector, Redis, RQ, Docker Compose, Caddy, Socket.IO, recruiter console.
-- **Change now:** 2 Uvicorn workers; online path fully async; hybrid retrieval + rerank; semantic cache; structured bus-schedule tables; prompt-prefix caching; multilingual reranking.
+- **Change now:** online path fully async; hybrid retrieval + rerank; semantic cache; structured bus-schedule tables; prompt-prefix caching; multilingual reranking.
 - **Defer:** full LangGraph engine, horizontal scaling, external vector DB, cross-service event bus, local model serving, distributed tracing.
 
 ### 2.7 Latency budget (design target, not guarantee)
