@@ -8,6 +8,8 @@ from collections import defaultdict
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import bump_cache_version
+from app.core.preamble_cache import NS_PREAMBLE
 from app.models.company import Company, Project
 from app.models.job import Job, JobStatus
 from app.models.knowledge import (
@@ -449,5 +451,8 @@ class KnowledgeBaseService:
             },
         )
         await self.db.commit()
+        # The direct-context routing catalog keys off NS_PREAMBLE; a legacy
+        # project attaching to a KB must invalidate it like every project write.
+        await bump_cache_version(NS_PREAMBLE)
         await self.db.refresh(knowledge_base)
         return knowledge_base

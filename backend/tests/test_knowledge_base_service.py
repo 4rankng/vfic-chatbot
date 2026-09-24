@@ -125,7 +125,9 @@ async def test_project_attachment_is_disabled_for_project_owned_modes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references() -> None:
+async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references(
+    monkeypatch,
+) -> None:
     persona_id = uuid.uuid4()
     kb_id = uuid.uuid4()
     project_id = uuid.uuid4()
@@ -142,6 +144,13 @@ async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references() 
         scalars=[project],
     )
     db.scalar_values = [kb]
+
+    bumps: list[str] = []
+
+    async def record_bump(namespace):
+        bumps.append(namespace)
+
+    monkeypatch.setattr(knowledge_base_service, "bump_cache_version", record_bump)
 
     result = await KnowledgeBaseService(db).bootstrap_legacy(
         LegacyKnowledgeBootstrap(
@@ -162,6 +171,9 @@ async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references() 
     assert persona.name == "Default"
     assert persona.slug == "default"
     assert db.commits == 1
+    # The attach invalidates the direct-context routing catalog like any
+    # project write: one preamble bump, after the commit lands.
+    assert bumps == [knowledge_base_service.NS_PREAMBLE]
 
 
 def test_direct_context_file_requires_a_text_filename() -> None:
