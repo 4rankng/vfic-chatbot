@@ -10,21 +10,38 @@ export default defineConfig({
   test: {
     coverage: {
       provider: "v8",
-      // Enforced 80% gate for the changed/high-risk hardening surface only.
-      // The whole app test suite still runs separately without weakening this
-      // focused contract into a misleading whole-tree coverage claim.
-      include: [
-        "src/components/atomic-crm/capabilities/kernel/index.tsx",
-        "src/components/atomic-crm/integrations/presentation/SecretField.tsx",
-        "src/components/atomic-crm/performance/PerformanceTrendChart.tsx",
-      ],
+      // Whole-feature coverage so the number matches what it claims to measure:
+      // the full atomic-crm tree under a ratchet floor (never lower it), while
+      // the three changed/high-risk hardening files keep their own strict 80%
+      // gate below. Measured 2026-09-24: 68.7 stmts / 58.1 branches / 59.5
+      // funcs / 70.9 lines — floors sit a few points under to absorb runner
+      // variance; raise them as coverage grows.
+      include: ["src/components/atomic-crm/**/*.{ts,tsx}"],
       exclude: ["**/*.test.*", "**/.omc/**"],
       reporter: ["text", "json-summary"],
       thresholds: {
-        lines: 80,
-        functions: 80,
-        branches: 80,
-        statements: 80,
+        statements: 67,
+        branches: 55,
+        functions: 57,
+        lines: 68,
+        "src/components/atomic-crm/capabilities/kernel/index.tsx": {
+          statements: 80,
+          branches: 80,
+          functions: 80,
+          lines: 80,
+        },
+        "src/components/atomic-crm/integrations/presentation/SecretField.tsx": {
+          statements: 80,
+          branches: 80,
+          functions: 80,
+          lines: 80,
+        },
+        "src/components/atomic-crm/performance/PerformanceTrendChart.tsx": {
+          statements: 80,
+          branches: 80,
+          functions: 80,
+          lines: 80,
+        },
       },
     },
     projects: [
