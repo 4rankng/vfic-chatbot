@@ -25,6 +25,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies for the TS import scanner
+        run: npm ci
+        working-directory: frontend
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -397,7 +408,9 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install locked backend toolchain
-        run: uv sync --all-extras --frozen pip-audit
+        run: |
+          uv sync --all-extras --frozen
+          uv pip install --python .venv/bin/python pip-audit
 
       - name: pip-audit (advisory)
         run: |
