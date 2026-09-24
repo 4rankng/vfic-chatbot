@@ -63,7 +63,23 @@ def withdrawn():
     return out
 
 
-def render_ticket(t) -> str:
+def _existing_status(path: Path) -> str | None:
+    """Read the progress marker already recorded in a rendered ticket file.
+
+    ``status`` is mutable progress state, not audit data, and it is only ever
+    advanced by hand in the ticket file. Rebuilding must not silently reset a
+    ticket to ``todo``, so the renderer carries the on-disk value forward unless
+    the ticket data declares an explicit ``status``.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    match = re.search(r"^status: (\w+)$", text, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def render_ticket(t, status: str) -> str:
     lines = [
         "---",
         f"id: {t['id']}",
@@ -72,7 +88,7 @@ def render_ticket(t) -> str:
         f"area: {t['area']}",
         f"labels: [{', '.join(t['labels'])}]",
         f"effort: {t['effort']}",
-        "status: todo",
+        f"status: {status}",
         "found: 2026-09-24",
         "---",
         "",
@@ -107,7 +123,8 @@ def main() -> None:
     ts = tickets()
     for t in ts:
         path = ROOT / f"{t['id']}-{slugify(t['title'])}.md"
-        path.write_text(render_ticket(t), encoding="utf-8")
+        status = t.get("status") or _existing_status(path) or "todo"
+        path.write_text(render_ticket(t, status), encoding="utf-8")
 
     by_sev: dict[str, list] = {s: [] for s in SEV_ORDER}
     for t in ts:
@@ -128,6 +145,9 @@ def main() -> None:
         "concrete fix with an effort estimate (S ≈ hours, M ≈ a day, L ≈ multi-day).",
         "- Ticket front-matter carries `severity`, `area`, `labels`, `effort`, `status`. "
         "Move `status` through `todo` → `doing` → `done` as work proceeds.",
+        "- `status` is progress state and survives regeneration: the renderer carries the "
+        "value already in the ticket file forward, so rebuilding never resets a ticket to "
+        "`todo`. Add a `status` key to the ticket data only to force an initial value.",
         "- Several tickets are coupled by design; the `Notes` section names the ticket "
         "that must land first or alongside.",
         "- Regenerate from data with `python3 kanban/_build.py` after editing the "
@@ -200,9 +220,9 @@ def main() -> None:
         "Recorded here so they are not lost or re-discovered from scratch.",
         "",
         "**Unauthenticated Zalo OA webhook.** `POST /webhooks/zalo/oa` "
-        "(`backend/app/api/webhooks.py:107-165`) performs no authentication of any kind — "
+        "(`backend/app/api/webhooks.py:148-188`) performs no authentication of any kind — "
         "signature verification was deliberately disabled because the stored credential is "
-        "the wrong Zalo secret (`backend/app/api/webhooks.py:138-146`). Any unauthenticated "
+        "the wrong Zalo secret (`backend/app/api/webhooks.py:171-176`). Any unauthenticated "
         "caller can create conversations, create and update leads, and enqueue real LLM "
         "turns: dedup is per `(sender, msg_id)`, so looping fresh sender ids yields "
         "unbounded cost against `llm_concurrency_limit = 8` on a 2 vCPU box. It is the only "

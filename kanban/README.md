@@ -8,6 +8,7 @@ Backlog from the read-only codebase audit of **2026-09-24** (HEAD `923b1d3f`, `m
 
 - Each ticket is self-contained: problem, `path:line` evidence, impact, and a concrete fix with an effort estimate (S ≈ hours, M ≈ a day, L ≈ multi-day).
 - Ticket front-matter carries `severity`, `area`, `labels`, `effort`, `status`. Move `status` through `todo` → `doing` → `done` as work proceeds.
+- `status` is progress state and survives regeneration: the renderer carries the value already in the ticket file forward, so rebuilding never resets a ticket to `todo`. Add a `status` key to the ticket data only to force an initial value.
 - Several tickets are coupled by design; the `Notes` section names the ticket that must land first or alongside.
 - Regenerate from data with `python3 kanban/_build.py` after editing the `tickets_*.py` modules (they are the source of truth for the board).
 
@@ -187,7 +188,7 @@ Ordered by risk-per-hour, not by severity label:
 
 Findings the audit confirmed but which are **deliberately not ticketed yet**. Recorded here so they are not lost or re-discovered from scratch.
 
-**Unauthenticated Zalo OA webhook.** `POST /webhooks/zalo/oa` (`backend/app/api/webhooks.py:107-165`) performs no authentication of any kind — signature verification was deliberately disabled because the stored credential is the wrong Zalo secret (`backend/app/api/webhooks.py:138-146`). Any unauthenticated caller can create conversations, create and update leads, and enqueue real LLM turns: dedup is per `(sender, msg_id)`, so looping fresh sender ids yields unbounded cost against `llm_concurrency_limit = 8` on a 2 vCPU box. It is the only credential-free state-changing endpoint in the application.
+**Unauthenticated Zalo OA webhook.** `POST /webhooks/zalo/oa` (`backend/app/api/webhooks.py:148-188`) performs no authentication of any kind — signature verification was deliberately disabled because the stored credential is the wrong Zalo secret (`backend/app/api/webhooks.py:171-176`). Any unauthenticated caller can create conversations, create and update leads, and enqueue real LLM turns: dedup is per `(sender, msg_id)`, so looping fresh sender ids yields unbounded cost against `llm_concurrency_limit = 8` on a 2 vCPU box. It is the only credential-free state-changing endpoint in the application.
 
 Root cause: the app holds the OA *access-token* secret rather than Zalo's webhook checksum key, so the (correct) verifier at `backend/app/services/zalo_oa_signature.py:verify_signature` could never pass. Fixing the code without fixing the credential would false-reject 100% of real events. Either obtain the checksum key and wire the verifier into the inbound route, or delete the route if the OA channel is not in production use.
 
