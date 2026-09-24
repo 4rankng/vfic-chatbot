@@ -146,6 +146,8 @@ npx playwright test --project="Mobile Chrome"
 npx playwright test                         # All functional + visual projects
 ```
 
+The visual projects render zero-backend pages only: `VFIC_VISUAL_ONLY=1 npx playwright test --project=visual-desktop --project=visual-mobile` needs just the Vite server, and the committed `-linux` baselines are generated and verified inside `mcr.microsoft.com/playwright:v1.60.0-noble` — regenerate them in that same image after any intentional login-shell change.
+
 The controller prepares and resets its owned stores automatically and drops
 the E2E database during global teardown.
 
