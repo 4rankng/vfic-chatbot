@@ -20,8 +20,10 @@ already exists, and two assumptions were unsafe:
   project-, and job-dependent replies. `"tìm việc làm"` is a personalized recommendation
   intent and must never reuse another candidate's final answer.
 
-The highest-confidence next step is to deploy and measure the optimizations already in
-`plans/20260710-chatbot-performance/`, then increase correct zero-LLM coverage and reduce
+The highest-confidence next step is to deploy and measure the optimizations from
+the 2026-07-10 chatbot performance plan (shipped; the plan directory has since
+been removed from the tree and lives only in git history), then increase
+correct zero-LLM coverage and reduce
 model round trips for the remaining agent traffic. Provider prompt caching and additional
 context-fetch concurrency are conditional follow-ups, not assumed wins.
 
@@ -99,7 +101,7 @@ platform for this plan.
 - `backend/app/graph/clients.py`
 - `backend/app/graph/runner.py`
 - `backend/app/api/performance.py`
-- `plans/20260710-chatbot-performance/`
+- `plans/20260710-chatbot-performance/` (removed after the work shipped — see git history)
 
 ## Phase 1 — Increase correct zero-LLM coverage
 
@@ -327,10 +329,12 @@ configured credentials. Deployment also requires explicit approval.
 
 ## Plan relationship and references
 
-- `plans/20260710-chatbot-performance/` contains the verified production diagnosis and
-  already-implemented optimizations. Phase 0 of this document completes its rollout gate.
-- `plans/2026-07-12-performance-endpoint-latency/` optimizes the admin dashboard endpoint,
-  not candidate reply latency; it is related telemetry work but does not block this plan.
+- `plans/20260710-chatbot-performance/` contained the verified production diagnosis and
+  already-implemented optimizations (directory removed after the work shipped).
+  Phase 0 of this document completes its rollout gate.
+- `plans/2026-07-12-performance-endpoint-latency/` optimized the admin dashboard endpoint,
+  not candidate reply latency; it is related telemetry work but does not block this plan
+  (directory removed after the work shipped).
 - `docs/research/2026-07-13-llm-agent-latency-optimization.md` is research input only;
   code-backed findings in this plan override generic examples that assume missing features.
 - MiniMax prompt caching:

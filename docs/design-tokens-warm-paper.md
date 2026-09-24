@@ -221,5 +221,6 @@ explicitly** rather than `var(--primary)` to preserve their signal:
 - `frontend/src/components/atomic-crm/conversations/inbox/tokens.css` — inbox mirror.
 - `frontend/src/components/atomic-crm/performance/performance.css` — uses global tokens only.
 - Superseded plan: `plans/260710-1322-frontend-ui-ux-redesign/` (architecture,
-  contracts, responsive, a11y phases remain the source of truth for those concerns;
-  only its palette values are superseded by this document).
+  contracts, responsive, a11y phases were its source of truth; the directory has
+  been removed from the tree and survives only in git history; only its palette
+  values are superseded by this document).

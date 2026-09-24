@@ -41,4 +41,3 @@ the full trace at 128 KiB and 64 events, and trace JSON expires after 30 days.
 
 - [`../system-architecture.md`](../system-architecture.md)
 - [`../api.md`](../api.md)
-- [`../../plans/260718-1826-agent-decision-trace-observability/plan.md`](../../plans/260718-1826-agent-decision-trace-observability/plan.md)

@@ -7,7 +7,8 @@ scope: "backend/app/api/performance.py, alembic 0031-0033, tests/test_performanc
 
 # Performance endpoint — alembic double-head fork that the test suite cannot see
 
-Plan: `plans/2026-07-12-performance-endpoint-latency/plan.md`.
+Plan: `plans/2026-07-12-performance-endpoint-latency/plan.md` (directory removed
+after the work shipped — see git history).
 Commits: `c415e76c` (migration renumber, made outside the session) and `208c8ad3`
 (this session: `asyncio.gather` parallel reads + 30s Redis cache).
 

@@ -67,7 +67,7 @@ The existing viewer boundary is deliberately preserved: recruiters see records a
 themselves plus unassigned records, while admins retain global scope. Equal recruiter permissions
 mean shared attention rules, not visibility into another recruiter's assigned candidates.
 
-Implementation is blocked by `plans/260710-1322-frontend-ui-ux-redesign/plan.md` so the dashboard
+Implementation was blocked by `plans/260710-1322-frontend-ui-ux-redesign/plan.md` so the dashboard
 structure and visual baseline settle first. The additive endpoint and response schema also require
 explicit human approval before implementation. No implementation, API change, migration,
 verification run, or deployment occurred during planning.
