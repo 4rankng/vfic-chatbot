@@ -6,7 +6,6 @@ import {
   type CoreAdminProps,
   localStorageStore,
 } from "ra-core";
-import { i18nProvider as defaultI18nProvider } from "@/lib/i18nProvider";
 import { Layout } from "@/components/admin/layout";
 import { LoginPage } from "@/components/admin/login-page";
 import { NotFound } from "@/components/admin/not-found";
@@ -88,7 +87,9 @@ const AdminUI = (props: CoreAdminUIProps) => {
  *   <Resource name="posts" list={PostList} edit={PostEdit} />
  * </Admin>
  */
-export const Admin = (props: CoreAdminProps) => {
+export const Admin = (
+  props: CoreAdminProps & Required<Pick<CoreAdminProps, "i18nProvider">>,
+) => {
   const {
     accessDenied,
     authCallbackPage = AuthCallback,
@@ -101,7 +102,7 @@ export const Admin = (props: CoreAdminProps) => {
     dataProvider,
     disableTelemetry,
     error,
-    i18nProvider = defaultI18nProvider,
+    i18nProvider,
     layout = Layout,
     loading,
     loginPage = LoginPage,

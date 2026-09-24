@@ -22,7 +22,7 @@ export type CRMProps = {
   bundle: RuntimeGenerationBundle;
   dataProvider?: CrmDataProvider;
   authProvider?: AuthProvider;
-  i18nProvider: CoreAdminProps["i18nProvider"];
+  i18nProvider: NonNullable<CoreAdminProps["i18nProvider"]>;
   disableTelemetry?: boolean;
   layout?: LayoutComponent;
 };
