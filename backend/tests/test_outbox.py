@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+
+import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 
@@ -455,7 +457,81 @@ def test_dispatch_stale_age_covers_maximum_chunked_oa_attempt_window():
     assert outbound_dispatch_stale_after_seconds(settings) == 720
 
 
+class _ExplodingSession:
+    """AsyncSession stand-in whose execute() fails the way a dropped DB does."""
+
+    async def execute(self, _stmt):
+        raise RuntimeError("boom: insert failed")
+
+    async def scalar(self, _stmt):
+        raise RuntimeError("boom: insert failed")
+
+
+class _FakeResult:
+    def __init__(self, row):
+        self._row = row
+
+    def scalar_one_or_none(self):
+        return self._row
+
+
+class _NoRowSession:
+    """Insert returned no row AND the follow-up select finds no existing row."""
+
+    async def execute(self, _stmt):
+        return _FakeResult(None)
+
+    async def scalar(self, _stmt):
+        return None
+
+
+async def test_create_pending_outbox_propagates_a_failing_persist_instead_of_swallowing():
+    """create_pending_outbox must never swallow a DB failure: acknowledging a
+    reply without its durable command would make crash recovery impossible."""
+    from app.services.outbox_service import create_pending_outbox
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await create_pending_outbox(
+            _ExplodingSession(),
+            message_id=1,
+            channel="zalo_bot",
+            payload={"chat_id": "x", "text": "hi"},
+        )
+
+
+async def test_create_pending_outbox_fails_closed_when_no_row_could_be_written():
+    """Insert conflict with no surviving row must raise, not return garbage."""
+    from app.services.outbox_service import create_pending_outbox
+
+    with pytest.raises(RuntimeError, match="failed to persist outbound command"):
+        await create_pending_outbox(
+            _NoRowSession(),
+            message_id=1,
+            channel="zalo_conditional",
+            payload={"chat_id": "x", "text": "hi"},
+        )
+
+
+async def test_enqueue_outbox_swallows_a_failing_persist_and_returns_none():
+    """enqueue_outbox is best-effort: a DB failure must not block the turn."""
+    from app.services.outbox_service import enqueue_outbox
+
+    assert (
+        await enqueue_outbox(
+            _ExplodingSession(),
+            message_id=1,
+            channel="zalo_bot",
+            payload={"chat_id": "x", "text": "hi"},
+            status=OutboxStatus.SENT,
+        )
+        is None
+    )
+
+
 def test_dispatch_worker_uses_the_same_safe_age_for_selection_and_claim():
+    """Composition wiring pin: the recovery sweep's selection window and its
+    per-row claim window must come from the same settings-derived value. The
+    sweep itself is exercised against the DB by the integration lane."""
     import inspect
 
     from app.composition import conversation_messaging
@@ -469,103 +545,7 @@ def test_dispatch_worker_uses_the_same_safe_age_for_selection_and_claim():
     assert adapter_source.count("stale_after_seconds=self.stale_after_seconds") == 2
 
 
-def test_phase1_claim_stale_sending_unknown_never_reverts_to_pending():
-    """A stale SENDING row is terminalized to SEND_UNKNOWN, never reverted to
-    PENDING. Reverting would risk a duplicate send (Zalo may have accepted).
-
-    This freezes the behavior in executable code (not docstrings): the
-    conditional update matches status='SENDING' and writes status='SEND_UNKNOWN'.
-    """
-    import ast
-    import inspect
-
-    from app.services import outbox_service
-
-    src = inspect.getsource(outbox_service.claim_stale_sending_unknown)
-    # strip docstring, keep only executable code
-    tree = ast.parse(src)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
-            node.value = ast.Constant(value="")
-    code = ast.unparse(tree)
-
-    # matches only SENDING rows
-    assert "OutboxStatus.SENDING.value" in code
-    # writes SEND_UNKNOWN
-    assert "OutboxStatus.SEND_UNKNOWN.value" in code
-    # never writes PENDING (that would re-enable dispatch and risk a duplicate)
-    assert "OutboxStatus.PENDING.value" not in code
-    assert '"PENDING"' not in code
-    assert "'PENDING'" not in code
-
-
-def test_phase1_claim_stale_sending_filter_excludes_send_unknown():
-    """The re-dispatch sweep (claim_stale_sending) selects only SENDING rows;
-    SEND_UNKNOWN rows are deliberately excluded because Zalo may have accepted.
-    Executable code only (docstring mentions SEND_UNKNOWN as context).
-    """
-    import ast
-    import inspect
-
-    from app.services import outbox_service
-
-    src = inspect.getsource(outbox_service.claim_stale_sending)
-    tree = ast.parse(src)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
-            node.value = ast.Constant(value="")
-    code = ast.unparse(tree)
-
-    # the SELECT filters status = 'SENDING' only
-    assert "status = 'SENDING'" in code
-    # never selects SEND_UNKNOWN
-    assert "SEND_UNKNOWN" not in code
-
-
-def test_phase1_create_pending_outbox_persists_before_provider_io():
-    """The outbox row is the authoritative 'was this sent?' record, written in
-    the caller's transaction BEFORE any provider call. Phase 3's neutral
-    ChannelDispatchService must preserve this ordering.
-
-    This freezes the contract: create_pending_outbox raises on insert failure
-    (it does not swallow) so a crash cannot leave a reply without its command.
-    """
-    import inspect
-
-    from app.services import outbox_service
-
-    src = inspect.getsource(outbox_service.create_pending_outbox)
-    # unlike enqueue_outbox (best-effort), create_pending_outbox RAISES on failure
-    assert "raise RuntimeError" in src
-    # it writes PENDING (the pre-send state)
-    assert "OutboxStatus.PENDING" in src
-
-
-def test_phase1_enqueue_outbox_is_best_effort_never_blocks_turn():
-    """enqueue_outbox swallows DB errors — the outbox is observability/
-    reliability infra, not a turn-blocking dependency. Phase 3's neutral
-    dispatch preserves this distinction (persist-before-send uses
-    create_pending_outbox which raises; final-state recording uses
-    enqueue_outbox which does not).
-    """
-    import inspect
-
-    from app.services import outbox_service
-
-    src = inspect.getsource(outbox_service.enqueue_outbox)
-    assert "except Exception" in src
-    # returns None on failure rather than raising
-    assert "return None" in src
-
-
-def test_phase1_message_id_uniqueness_is_the_durable_dispatch_fence():
-    """The unique constraint on outbound_outbox.message_id is what prevents a
-    double-dispatch after a crash-and-retry. Phase 2 will add an analogous
-    uniqueness on inbound messages.provider_message_id for inbound idempotency;
-    this test freezes the outbound precedent.
-    """
-    from app.models.outbox import OutboundOutbox
-
-    msg_id_col = OutboundOutbox.__table__.columns["message_id"]
-    # unique=True at the column level (the migration also adds the index)
-    assert msg_id_col.unique is True
+# The stale-claim sweep behaviour (claim_stale_sending / claim_stale_sending_unknown)
+# needs Postgres (FOR UPDATE SKIP LOCKED, conditional UPDATE ... WHERE) and is
+# asserted against the disposable DB in
+# tests/integration/test_outbox_stale_claim.py.
