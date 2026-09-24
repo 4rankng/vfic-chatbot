@@ -5,7 +5,7 @@ severity: critical
 area: ops
 labels: [ops, reliability]
 effort: M
-status: todo
+status: in_progress
 column: TODO
 opened: 2026-09-24
 ---

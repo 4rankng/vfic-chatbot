@@ -5,7 +5,7 @@ severity: critical
 area: ops
 labels: [ops, security]
 effort: S
-status: todo
+status: in_progress
 column: TODO
 opened: 2026-09-24
 ---

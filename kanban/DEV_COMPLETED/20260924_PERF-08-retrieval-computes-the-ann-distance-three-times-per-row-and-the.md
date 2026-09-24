@@ -5,7 +5,7 @@ severity: medium
 area: performance
 labels: [performance]
 effort: M
-status: doing
+status: dev_completed
 column: IN_PROGRESS
 opened: 2026-09-24
 ---
