@@ -92,8 +92,17 @@ build + push both images → blue/green cutover.
 1. Pull the new backend image for the inactive web color and backend workers;
    the frontend is not part of a backend blue/green cutover.
 2. Ensure postgres + redis (never force-recreate the data stores).
-3. Alembic widen + `upgrade head` (additive migrations are safe for blue/green;
-   see `deploy-breaking` for non-additive ones).
+3. Pre-migration `pg_dump` (compressed custom format) to
+   `/opt/vfic/pre-migration-dumps/`, keeping the newest 5 — a dump is the only
+   rollback for one-directional migrations (0017's lead-stage collapse has no
+   downgrade). A failed or empty dump aborts the deploy before any migration
+   runs. Then Alembic widen + `upgrade head` (additive migrations are safe for
+   blue/green; see `deploy-breaking` for non-additive ones). The migration
+   connection is bounded — `lock_timeout=5s` fails fast when DDL queues behind a
+   long-running query instead of hanging the deploy indefinitely (old colour
+   keeps serving either way), and `statement_timeout` (15 min default) bounds
+   runaway statements; override via `ALEMBIC_LOCK_TIMEOUT_MS` /
+   `ALEMBIC_STATEMENT_TIMEOUT_MS` when a migration legitimately needs more.
 4. Bring up the **inactive** web color + all workers at the new tag.
 5. Wait for the new color's `/health` to go healthy.
 6. **Smoke gate**: run one real bot turn on the new color

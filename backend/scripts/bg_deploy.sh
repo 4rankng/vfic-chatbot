@@ -4,7 +4,9 @@
 # Flow (cd /opt/vfic, IMAGE_TAG=<git sha> in env):
 #   1. pull the new image
 #   2. ensure postgres + redis
-#   3. alembic widen + upgrade head (one-shot web-blue run)
+#   2b. pre-migration pg_dump (the rollback net for step 3)
+#   3. alembic widen + upgrade head (one-shot web-blue run; lock_timeout bounds
+#       DDL lock waits so a queued migration fails fast instead of hanging)
 #   4. bring up the INACTIVE web color + workers at the new tag
 #   5. wait for the new color healthy
 #   6. SMOKE GATE: run one real turn on the new color; abort if it fails
@@ -235,8 +237,36 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
+# 2b. Pre-migration safety dump. Some migrations are destructive in one
+#     direction (0017 collapses lead stages irrecoverably on upgrade) and a
+#     dump is their only rollback; the OneDrive backup that deploy-backend
+#     takes can be days old by then. Dump locally on the droplet in
+#     compressed custom format, keeping the newest PRE_MIGRATION_DUMP_KEEP.
+#     A failed or empty dump aborts BEFORE any migration runs — deploying
+#     without a rollback net is worse than not deploying.
+echo "==> [2b/10] pre-migration pg_dump (rollback net for step 3)..."
+mkdir -p /opt/vfic/pre-migration-dumps
+PRE_DUMP="/opt/vfic/pre-migration-dumps/vfic-pre-$(date +%Y%m%d-%H%M%S)-${IMAGE_TAG}.dump"
+if ! IMAGE_TAG="$IMAGE_TAG" docker compose exec -T postgres pg_dump -U vfic -Fc -Z6 vfic > "$PRE_DUMP"; then
+  rm -f "$PRE_DUMP"
+  echo "==> pre-migration pg_dump FAILED. ABORTING — ${ACTIVE:-<none>} keeps serving; no migration ran." >&2
+  exit 1
+fi
+if [ ! -s "$PRE_DUMP" ]; then
+  rm -f "$PRE_DUMP"
+  echo "==> pre-migration pg_dump produced an empty file. ABORTING — ${ACTIVE:-<none>} keeps serving; no migration ran." >&2
+  exit 1
+fi
+echo "    dump: $PRE_DUMP ($(du -h "$PRE_DUMP" | cut -f1))"
+ls -1t /opt/vfic/pre-migration-dumps/vfic-pre-*.dump 2>/dev/null \
+  | tail -n +$(( ${PRE_MIGRATION_DUMP_KEEP:-5} + 1 )) | xargs -r rm -f
+
 # 3. Migrations (widen alembic version column, then upgrade). Additive migrations
 #    are safe for blue/green (old color runs against the migrated schema too).
+#    alembic/env.py bounds the migration connection: lock_timeout fails fast
+#    when DDL queues behind a long-running query instead of hanging the deploy
+#    forever with the old color still serving; statement_timeout bounds each
+#    statement. A timeout aborts the deploy here, before anything flips.
 echo "==> [3/10] alembic widen + upgrade head..."
 IMAGE_TAG="$IMAGE_TAG" docker compose run --rm --no-deps web-blue \
   sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'
