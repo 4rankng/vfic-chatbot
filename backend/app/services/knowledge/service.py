@@ -142,7 +142,7 @@ class KnowledgeService:
         data: bytes,
         actor: User,
     ) -> KBTextFile:
-        version = await self._require_version(project_id, version_id)
+        version = await self.require_version(project_id, version_id)
         if version.status not in {KBVersionStatus.DRAFT, KBVersionStatus.FAILED}:
             raise ValueError("Only DRAFT or FAILED KB versions accept uploads.")
         raw, upload_format = _extract_kb_upload_text(file_name, content_type, data)
@@ -203,7 +203,7 @@ class KnowledgeService:
         *,
         llm_json: LLMJson,
     ) -> KBVersion:
-        await self._require_legacy_mutation_allowed(version.project_id)
+        await self.assert_mutable(version.project_id)
         files = await self.list_version_files(version.id)
         if not files:
             raise ValueError("KB version has no uploaded text files.")
@@ -251,7 +251,7 @@ class KnowledgeService:
         return version
 
     async def publish_version(self, project_id: uuid.UUID, version_id: uuid.UUID) -> KBVersion:
-        await self._require_legacy_mutation_allowed(project_id)
+        await self.assert_mutable(project_id)
         # Serialize concurrent publishes per project so the archive-others-then-
         # activate pair cannot race the unique partial index on ACTIVE versions.
         locked_project = await self.db.scalar(
@@ -259,7 +259,7 @@ class KnowledgeService:
         )
         if locked_project is None:
             raise NotFoundError("project not found")
-        version = await self._require_version(project_id, version_id)
+        version = await self.require_version(project_id, version_id)
         if version.status not in {KBVersionStatus.READY, KBVersionStatus.ACTIVE}:
             raise ValueError("Only READY KB versions can be published.")
         await self.db.execute(
@@ -337,7 +337,7 @@ class KnowledgeService:
         drive_file_id: str | None = None,
         project_id: uuid.UUID | None = None,
     ) -> KnowledgeDocument:
-        await self._require_legacy_mutation_allowed(project_id)
+        await self.assert_mutable(project_id)
         doc = KnowledgeDocument(
             file_name=file_name,
             drive_file_id=drive_file_id,
@@ -371,7 +371,7 @@ class KnowledgeService:
         canonical = parse_canonical_markdown(raw_text) if enforce_canonical else None
         if canonical is not None and project_id is None:
             project_id = await self._resolve_project_from_canonical(canonical)
-        await self._require_legacy_mutation_allowed(project_id)
+        await self.assert_mutable(project_id)
         metadata, version = self._build_canonical_metadata(
             canonical, raw_text, extracted_text, repair
         )
@@ -477,7 +477,7 @@ class KnowledgeService:
         With ``llm_json`` -> full LLM ``KnowledgePipeline`` (digest/embed/index).
         Without -> mechanical 1-chunk fallback (legacy/tests).
         """
-        await self._require_legacy_mutation_allowed(doc.project_id)
+        await self.assert_mutable(doc.project_id)
         if llm_json is not None:
             from app.services.knowledge import KnowledgePipeline
 
@@ -505,7 +505,7 @@ class KnowledgeService:
         return doc
 
     async def archive(self, doc: KnowledgeDocument, *, actor: User) -> KnowledgeDocument:
-        await self._require_legacy_mutation_allowed(doc.project_id)
+        await self.assert_mutable(doc.project_id)
         doc.status = KnowledgeStatus.ARCHIVED
         await record_audit(
             self.db,
@@ -522,13 +522,13 @@ class KnowledgeService:
     async def update(
         self, doc: KnowledgeDocument, body: KnowledgeDocumentUpdate, *, actor: User
     ) -> KnowledgeDocument:
-        await self._require_legacy_mutation_allowed(doc.project_id)
+        await self.assert_mutable(doc.project_id)
         if body.file_name is not None:
             doc.file_name = body.file_name.strip()
         if "project_id" in body.model_fields_set:
             if body.project_id is not None and await self.db.get(Project, body.project_id) is None:
                 raise NotFoundError("project not found")
-            await self._require_legacy_mutation_allowed(body.project_id)
+            await self.assert_mutable(body.project_id)
             doc.project_id = body.project_id
             await KnowledgeChunkRepo(self.db).reassign_project(doc.id, body.project_id)
         await record_audit(
@@ -543,7 +543,7 @@ class KnowledgeService:
         return doc
 
     async def delete(self, doc: KnowledgeDocument, *, actor: User) -> None:
-        await self._require_legacy_mutation_allowed(doc.project_id)
+        await self.assert_mutable(doc.project_id)
         target_id = str(doc.id)
         await record_audit(
             self.db,
@@ -647,18 +647,21 @@ class KnowledgeService:
         """Drop knowledge_documents whose drive_file_id is no longer in Drive (cascades chunks)."""
         return await KnowledgeDocumentRepo(self.db).delete_orphans_by_drive_ids(current_drive_ids)
 
-    async def _require_version(self, project_id: uuid.UUID, version_id: uuid.UUID) -> KBVersion:
+    async def require_version(self, project_id: uuid.UUID, version_id: uuid.UUID) -> KBVersion:
+        """Load a KB version owned by ``project_id`` or raise NotFoundError."""
         version = await self.db.get(KBVersion, version_id)
         if version is None or version.project_id != project_id:
             raise NotFoundError("KB version not found")
         return version
 
-    async def _require_legacy_mutation_allowed(self, project_id: uuid.UUID | None) -> None:
-        """Keep Project-owned knowledge exclusive to its selected mode.
+    async def assert_mutable(self, project_id: uuid.UUID | None) -> None:
+        """Precondition for every legacy knowledge mutation on ``project_id``.
 
-        Unowned legacy Projects remain readable/mutable during migration, while
-        an owned Project can only change knowledge through Single-page PUT or a
-        category YAML replacement.
+        Keep Project-owned knowledge exclusive to its selected mode: unowned
+        legacy Projects remain readable/mutable during migration, while an owned
+        Project can only change knowledge through Single-page PUT or a category
+        YAML replacement. Callers include the router (fail-fast before enqueueing
+        a background ingest) and every legacy mutation method below.
         """
         if project_id is None:
             return

@@ -147,7 +147,7 @@ async def list_kb_version_files(
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KBTextFileListResponse:
     service = KnowledgeService(db)
-    await service._require_version(project_id, version_id)
+    await service.require_version(project_id, version_id)
     files = await service.list_version_files(version_id)
     return KBTextFileListResponse(
         data=[KBTextFileOut.model_validate(file) for file in files],
@@ -194,8 +194,8 @@ async def ingest_kb_version(
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KBIngestResponse:
     service = KnowledgeService(db)
-    await service._require_legacy_mutation_allowed(project_id)
-    await service._require_version(project_id, version_id)
+    await service.assert_mutable(project_id)
+    await service.require_version(project_id, version_id)
     job_id = _project_knowledge_jobs.ingest_version(version_id)
     await record_audit(
         db,
@@ -420,7 +420,7 @@ async def process(
 ) -> KnowledgeDocumentOut:
     """(Re)run the async LLM training pipeline for a document."""
     doc = await _load(doc_id, db)
-    await KnowledgeService(db)._require_legacy_mutation_allowed(doc.project_id)
+    await KnowledgeService(db).assert_mutable(doc.project_id)
     _project_knowledge_jobs.ingest_document(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
 
@@ -443,7 +443,7 @@ async def reindex(
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     doc = await _load(doc_id, db)
-    await KnowledgeService(db)._require_legacy_mutation_allowed(doc.project_id)
+    await KnowledgeService(db).assert_mutable(doc.project_id)
     _project_knowledge_jobs.ingest_document(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
 
