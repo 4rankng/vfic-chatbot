@@ -36,6 +36,7 @@ from app.models.knowledge import (
 from app.models.user import User
 from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
+from app.services.ingestion.limits import assert_upload_size
 from app.shared.domain.errors import ConflictError, NotFoundError
 from app.services.knowledge import LLMJson
 from app.services.knowledge.canonical import (
@@ -361,6 +362,9 @@ class KnowledgeService:
         require_canonical: bool = False,
     ) -> KnowledgeDocument:
         """Multipart upload: extract text, persist the original, create doc."""
+        # SEC-05: the caller already checks Content-Length / the route guard, but
+        # the service is the single entry point both upload paths funnel through.
+        assert_upload_size(len(data))
         extracted_text, source_metadata = self._extract_upload_text(file_name, content_type, data)
         enforce_canonical = require_canonical and source_metadata["format"] != "docx"
         raw_text, repair = self._repair_if_canonical(extracted_text, enforce_canonical)

@@ -10,6 +10,11 @@ accept-unsigned behavior for ergonomics.
 
 Only request size and safe event metadata are logged. Candidate content, provider
 signatures, timestamps, and identifiers never enter application logs.
+
+Every webhook route is rate-limited per client IP (SEC-04) before the body is
+read, and a body over ``MAX_WEBHOOK_BODY_BYTES`` is rejected with 413 — the
+declared Content-Length is checked first so an oversized body is never buffered
+(SEC-05).
 """
 
 import hmac
@@ -17,7 +22,7 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +37,12 @@ from app.conversation_messaging.infrastructure.webhook_delivery import (
     enqueue_facebook_turn,
 )
 from app.shared.infrastructure.db import get_request_db
+from app.shared.infrastructure.rate_limits import enforce_webhook_rate_limit
+from app.services.ingestion.limits import (
+    MAX_WEBHOOK_BODY_BYTES,
+    IngestionLimitError,
+    assert_webhook_body_size,
+)
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.installation.service import InstallationService
 from app.services.slo_service import record_webhook_ack_ms
@@ -39,6 +50,8 @@ from app.services.slo_service import record_webhook_ack_ms
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 _APP_ENV = webhook_app_env()
+
+_BODY_TOO_LARGE = "request body too large"
 
 
 async def _stamp_ack(t0: float, status_code: int) -> None:
@@ -49,6 +62,32 @@ async def _stamp_ack(t0: float, status_code: int) -> None:
     """
     if 200 <= status_code < 300:
         await record_webhook_ack_ms((time.time() - t0) * 1000.0)
+
+
+async def _read_body_within_limit(request: Request) -> bytes:
+    """Read the raw body, rejecting anything over the webhook ceiling with 413.
+
+    Content-Length is checked first so a declared-oversized body is rejected
+    before the ASGI layer buffers it into memory; the post-read check catches a
+    chunked body (no Content-Length) that only reveals its size while being read.
+    Without this, an unauthenticated POST of any size was buffered whole (SEC-05).
+    """
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:
+            too_large = int(declared) > MAX_WEBHOOK_BODY_BYTES
+        except ValueError:
+            too_large = False  # malformed header -> the server's own framing applies
+        if too_large:
+            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, _BODY_TOO_LARGE)
+    raw = await request.body()
+    try:
+        assert_webhook_body_size(len(raw))
+    except IngestionLimitError as exc:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE, _BODY_TOO_LARGE
+        ) from exc
+    return raw
 
 
 async def _runtime_authority_or_inactive(db: AsyncSession, *, channel: str):
@@ -64,9 +103,12 @@ async def _runtime_authority_or_inactive(db: AsyncSession, *, channel: str):
 async def zalo_webhook(
     request: Request, db: AsyncSession = Depends(get_request_db)
 ) -> JSONResponse:
+    # Per-IP limit before anything is read or parsed: an unauthenticated loop
+    # must not reach the body read, the DB, or the enqueue (SEC-04).
+    await enforce_webhook_rate_limit(request)
     t0 = time.time()  # webhook_ack SLO (Directive §1) — sampled on success
     # Read the raw body once for JSON parsing and signature verification.
-    raw = await request.body()
+    raw = await _read_body_within_limit(request)
     logger.info("zalo webhook inbound bytes=%d", len(raw))
 
     try:
@@ -108,8 +150,9 @@ async def zalo_webhook(
 async def zalo_oa_webhook(
     request: Request, db: AsyncSession = Depends(get_request_db)
 ) -> JSONResponse:
+    await enforce_webhook_rate_limit(request)
     t0 = time.time()  # webhook_ack SLO (Directive §1) — sampled on success
-    raw = await request.body()
+    raw = await _read_body_within_limit(request)
     logger.info("zalo oa webhook inbound bytes=%d", len(raw))
 
     try:
@@ -179,9 +222,14 @@ async def facebook_webhook_verify(
     Constant-time compare against ``meta_webhook_verify_token``; respond with
     the challenge only on exact match. No DB mutation. A missing configured
     verify token in non-dev refuses (503) rather than accepting blind.
+
+    Rate-limited like the POSTs: this route does a DB read and a token compare
+    for an unauthenticated caller. Meta sends the challenge once per
+    subscribe/unsubscribe, so the per-IP budget never affects a real handshake.
     """
     from app.channels.providers.facebook_signature import constant_time_verify_token
 
+    await enforce_webhook_rate_limit(request)
     mode = request.query_params.get("hub.mode") or ""
     sent_token = request.query_params.get("hub.verify_token") or ""
     challenge = request.query_params.get("hub.challenge") or ""
@@ -210,11 +258,12 @@ async def facebook_webhook(
     replayed request; ack-and-drop is the documented pattern. The body is never
     logged (it can contain candidate text).
     """
+    await enforce_webhook_rate_limit(request)
     from app.channels.providers.facebook_messenger import FacebookMessengerNormalizer
     from app.channels.providers.facebook_signature import verify_messenger_signature
 
     t0 = time.time()
-    raw = await request.body()
+    raw = await _read_body_within_limit(request)
     logger.info("facebook webhook inbound bytes=%d", len(raw))
 
     # 1. Signature verification over RAW bytes BEFORE any JSON parse / write.

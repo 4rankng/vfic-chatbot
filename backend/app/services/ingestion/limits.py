@@ -11,6 +11,10 @@ from collections.abc import Iterable, Iterator
 from typing import TypeVar
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+# Inbound webhook bodies are provider event envelopes (a few KB); 1 MiB is
+# generous headroom. The cap exists so a hostile/unauthenticated POST cannot make
+# the ASGI layer buffer an arbitrarily large body before any check runs (SEC-05).
+MAX_WEBHOOK_BODY_BYTES = 1 * 1024 * 1024
 MAX_EXPANDED_ARCHIVE_BYTES = 200 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 2_000
 MAX_ARCHIVE_COMPRESSION_RATIO = 100
@@ -42,6 +46,10 @@ def _assert_at_most(value: int, limit: int, label: str) -> None:
 
 def assert_upload_size(size_bytes: int) -> None:
     _assert_at_most(size_bytes, MAX_UPLOAD_BYTES, "upload")
+
+
+def assert_webhook_body_size(size_bytes: int) -> None:
+    _assert_at_most(size_bytes, MAX_WEBHOOK_BODY_BYTES, "webhook body")
 
 
 def assert_archive_metadata(*, expanded_bytes: int, members: int, compression_ratio: int) -> None:
