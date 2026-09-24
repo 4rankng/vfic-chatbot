@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last updated:** 2026-07-23
+**Last updated:** 2026-09-24
 **Production:** `bot.tingting.vip` (DigitalOcean, 2 vCPU / ~4 GB RAM), Docker
 Compose at `/opt/vfic`, Caddy edge.
 
@@ -49,9 +49,12 @@ Compose at `/opt/vfic`, Caddy edge.
 ┌────────────────────────────────────────────────────────────────────┐
 │  RQ workers (sync RQ → persistent async loop via async_runner.py)  │
 │                                                                    │
-│  worker-chatbot (×1) │ worker-ingest │ worker-followup │ scheduler  │
-│ chat turns + persist │   ingest      │   followup      │ rqscheduler│
-│   persistence_low    │               │                 │            │
+│  worker-chatbot (×3) │ worker-persistence │ worker-ingest        │
+│  chat turns          │ durable writes     │ KB ingestion,        │
+│  webhook_high first, │ off the hot path   │ re-embedding         │
+│  recovery second     │ persistence_low    │                      │
+│  worker-followup     │ scheduler          │ worker-maintenance   │
+│  proactive digests   │ rqscheduler        │ reconcile + dispatch │
 └────────────────────────────────────────────────────────────────────┘
           │                                            ▲
           ▼                                            │

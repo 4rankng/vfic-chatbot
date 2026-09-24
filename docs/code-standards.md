@@ -1,6 +1,6 @@
 # Code Standards
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-09-24
 
 Conventions for the Ting Ting / VFIC miniCRM codebase. Follow these unless a
 nearby module has a stronger local pattern; when in doubt, match the
@@ -136,9 +136,10 @@ surrounding code.
 - Run `npm run typecheck` (`tsc --noEmit --project tsconfig.app.json`).
 
 ### React Admin resource conventions
-- Resources are registered in `components/atomic-crm/root/CRM.tsx` (8 total:
-  leads, conversations, bot_runs, knowledge_sources, projects, personas,
-  settings/integrations, users).
+- `CRM.tsx` renders resources from `runtime.resources`, built by
+  `capabilities/static-recruitment-runtime.ts` from its fixed `RESOURCE_IDS`
+  (8 total: conversations, bot-runs, knowledge-sources, knowledge-bases,
+  projects, personas, settings, users).
 - **Hash-based routing** (no browser history router).
 - `RESOURCE_PATH` aliases (in `dataProvider.ts`): `knowledge_sources` →
   `knowledge/documents`, `projects` → `knowledge/projects`, `personas` →
