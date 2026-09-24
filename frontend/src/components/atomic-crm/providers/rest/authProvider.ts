@@ -96,6 +96,16 @@ export const getAuthProvider = (
 
     logout: async () => {
       await clearSensitiveQueryState();
+      try {
+        // Server-side logout: the backend bumps the user's token_version, which
+        // invalidates the access token in flight AND the 14-day refresh token —
+        // without it, an exfiltrated refresh token survives the logout (SEC-03).
+        // Best-effort: if the call fails (offline, expired session, 5xx) the user
+        // is still logged out locally, which is the previous behavior.
+        await apiJson("/api/v1/auth/logout", { method: "POST" });
+      } catch {
+        /* local logout below is the fallback */
+      }
       clearTokens();
       clearIdentity();
       closeRealtimeSocket();

@@ -88,9 +88,29 @@ class SqlAlchemyAuthHttpService:
         user = await self._db.get(User, user_id)
         if user is None or user.disabled:
             raise InvalidRefreshTokenError
+        # A refresh token minted before a logout (or any other security-state
+        # change) carries a stale `ver` and is rejected here — the presented
+        # token cannot outlive the session it was issued for (SEC-03).
         if payload.get("ver", 0) != user.token_version:
             raise InvalidRefreshTokenError
         return await self._tokens_for(user)
+
+    async def logout(self, *, current: AuthenticatedUser) -> None:
+        """Invalidate every token already issued to ``current`` (SEC-03).
+
+        Both token types carry ``ver`` and both verifiers compare it against
+        ``user.token_version``, so one bump kills the access token in flight and
+        the 14-day refresh token with it — logout is no longer cosmetic.
+        """
+        current.token_version += 1
+        await record_audit(
+            self._db,
+            action="logout",
+            actor_id=current.id,
+            target_type="user",
+            target_id=str(current.id),
+        )
+        await self._db.commit()
 
     async def me(self, *, current: AuthenticatedUser) -> UserOut:
         return UserOut.model_validate(current)

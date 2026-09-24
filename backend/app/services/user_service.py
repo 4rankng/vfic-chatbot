@@ -123,11 +123,16 @@ class UserProvisioningService:
         )
         security_state_changed = False
         if changes.get("email") is not None:
-            user.email = changes["email"].strip().lower()
+            next_email = changes["email"].strip().lower()
+            # The email is the login identifier and the password-reset target:
+            # an admin rewriting it (or an account takeover changing it) must
+            # invalidate every token already issued for the old identity (SEC-03).
+            security_state_changed = next_email != user.email
+            user.email = next_email
         if "full_name" in changes:
             user.full_name = changes["full_name"]
         if changes.get("role") is not None:
-            security_state_changed = user.role != changes["role"]
+            security_state_changed = security_state_changed or user.role != changes["role"]
             user.role = changes["role"]
         if "disabled" in changes:
             security_state_changed = security_state_changed or user.disabled != changes["disabled"]

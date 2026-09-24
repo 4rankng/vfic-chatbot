@@ -1,7 +1,8 @@
-"""Auth routes: login / refresh / me / change-password.
+"""Auth routes: login / refresh / logout / me / change-password.
 
 JWT replaces Supabase Auth. Access tokens are short-lived; refresh tokens are
 rotated on each /refresh and rejected if the user has since been disabled/deleted.
+/logout bumps the user's token_version, which invalidates both token types at once.
 """
 
 from fastapi import APIRouter, Depends, Request, status
@@ -94,6 +95,21 @@ async def refresh(
         return await build_auth_http_service(db).refresh(refresh_token=body.refresh_token)
     except InvalidRefreshTokenError as exc:
         raise _INVALID_REFRESH from exc
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    current: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
+) -> None:
+    """Server-side logout: bump the user's token version (SEC-03).
+
+    Clearing localStorage alone left a stolen refresh token usable for its full
+    14-day life. The bump invalidates the access token in flight and the refresh
+    token together, because both are minted with — and verified against — the
+    user's ``token_version``.
+    """
+    await build_auth_http_service(db).logout(current=current)
 
 
 @router.get("/me", response_model=UserOut)
