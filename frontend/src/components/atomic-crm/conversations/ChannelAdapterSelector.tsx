@@ -1,15 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 
 import messengerIcon from "@/assets/channel-adapters/facebook-messenger.svg";
 import zaloChatbotIcon from "@/assets/channel-adapters/zalo-chatbot.png";
 import zaloOaIcon from "@/assets/channel-adapters/zalo-oa.png";
+import { useAttentionCounts } from "@/components/atomic-crm/layout/topbar/useAttentionCounts";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { apiJson } from "@/lib/apiClient";
 import {
   type ConversationChannelProvider,
   getChannelProviderSearchParams,
@@ -32,21 +31,6 @@ const ADAPTERS: readonly AdapterDefinition[] = [
     icon: messengerIcon,
   },
 ];
-
-type NeedsAttentionResponse = { count: number };
-
-const useScopedAttentionCount = (provider: ConversationChannelProvider) => {
-  const { data } = useQuery<NeedsAttentionResponse>({
-    queryKey: ["conversations-needs-attention", provider],
-    queryFn: () =>
-      apiJson<NeedsAttentionResponse>(
-        `/api/v1/conversations/needs-attention?channel_provider=${encodeURIComponent(provider)}`,
-      ),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  });
-  return data?.count ?? 0;
-};
 
 const formatAdapterAttentionCount = (count: number): string =>
   count > 99 ? "99+" : String(count);
@@ -123,20 +107,15 @@ export const ChannelAdapterSelector = ({
   searchParams: URLSearchParams;
   onSearchParamsChange: (next: URLSearchParams) => void;
 }) => {
-  // Keep every displayed adapter query mounted regardless of selection so
-  // badges stay warm and switching never briefly shows a stale count.
-  const zaloBotCount = useScopedAttentionCount("zalo_bot");
-  const zaloOaCount = useScopedAttentionCount("zalo_oa");
-  const messengerCount = useScopedAttentionCount("facebook_messenger");
+  // One shared counts query feeds every displayed adapter (and the topbar
+  // bell), so switching scope never briefly shows a stale badge and the panel
+  // never runs its own pollers.
+  const { byProvider } = useAttentionCounts();
 
   return (
     <ChannelAdapterSelectorView
       provider={provider}
-      counts={{
-        zalo_bot: zaloBotCount,
-        zalo_oa: zaloOaCount,
-        facebook_messenger: messengerCount,
-      }}
+      counts={byProvider}
       onProviderChange={(nextProvider) => {
         if (nextProvider) {
           onSearchParamsChange(

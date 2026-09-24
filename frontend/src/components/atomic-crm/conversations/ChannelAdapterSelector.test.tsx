@@ -15,7 +15,14 @@ import {
   ChannelAdapterSelector,
   ChannelAdapterSelectorView,
 } from "./ChannelAdapterSelector";
+import { useNotifications } from "@/components/atomic-crm/layout/topbar/useNotifications";
 import "./inbox.css";
+
+/** The workspace shell's real bell accessor, mounted beside the panel. */
+const TopbarBellProbe = () => {
+  const { count } = useNotifications();
+  return <span data-testid="bell">{count}</span>;
+};
 
 afterEach(async () => {
   await cleanup();
@@ -117,10 +124,13 @@ describe("ChannelAdapterSelector", () => {
     expect(onProviderChange).toHaveBeenLastCalledWith(undefined);
   });
 
-  it("mounts distinct scoped count queries and clears only the conversation id", async () => {
-    mockApiJson.mockImplementation(async (url: string) => ({
-      count: url.includes("zalo_bot") ? 2 : 4,
-    }));
+  it("reads every badge from the one shared counts query and clears only the conversation id", async () => {
+    mockApiJson.mockImplementation(async (url: string) => {
+      if (!url.includes("channel_provider")) return { count: 9 };
+      if (url.includes("zalo_bot")) return { count: 2 };
+      if (url.includes("zalo_oa")) return { count: 4 };
+      return { count: 6 };
+    });
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -139,24 +149,43 @@ describe("ChannelAdapterSelector", () => {
       </QueryClientProvider>,
     );
 
-    await expect.poll(() => mockApiJson.mock.calls.length).toBe(3);
+    const oaRadio = screen.getByRole("radio", {
+      name: "Zalo OA — 4 hội thoại cần phản hồi",
+    });
+    await expect.element(oaRadio).toBeVisible();
+    // Messenger is scoped too, so the shared query must cover all three
+    // adapters without a query of its own.
+    await expect
+      .element(
+        screen.getByRole("radio", {
+          name: "Messenger — 6 hội thoại cần phản hồi",
+        }),
+      )
+      .toBeVisible();
+
+    expect(mockApiJson.mock.calls.length).toBe(4);
+    expect(mockApiJson).toHaveBeenCalledWith(
+      "/api/v1/conversations/needs-attention",
+    );
     expect(mockApiJson).toHaveBeenCalledWith(
       "/api/v1/conversations/needs-attention?channel_provider=zalo_bot",
     );
     expect(mockApiJson).toHaveBeenCalledWith(
       "/api/v1/conversations/needs-attention?channel_provider=zalo_oa",
     );
+    expect(mockApiJson).toHaveBeenCalledWith(
+      "/api/v1/conversations/needs-attention?channel_provider=facebook_messenger",
+    );
+    // One cache entry holds every counter, and the total stays the server's
+    // unscoped answer rather than the sum of the provider buckets (2 + 4 + 6).
     expect(
-      queryClient.getQueryData(["conversations-needs-attention", "zalo_bot"]),
-    ).toEqual({ count: 2 });
-    expect(
-      queryClient.getQueryData(["conversations-needs-attention", "zalo_oa"]),
-    ).toEqual({ count: 4 });
-    await screen
-      .getByRole("radio", {
-        name: "Zalo OA — 4 hội thoại cần phản hồi",
-      })
-      .click();
+      queryClient.getQueryData(["conversations", "needs-attention", "counts"]),
+    ).toEqual({
+      total: 9,
+      byProvider: { zalo_bot: 2, zalo_oa: 4, facebook_messenger: 6 },
+    });
+
+    await oaRadio.click();
     const next = onSearchParamsChange.mock.calls[0]?.[0] as URLSearchParams;
     expect(next.get("channel_provider")).toBe("zalo_oa");
     expect(next.get("reason")).toBe("UNREAD");
@@ -170,5 +199,73 @@ describe("ChannelAdapterSelector", () => {
     expect(aggregate.has("channel_provider")).toBe(false);
     expect(aggregate.get("reason")).toBe("UNREAD");
     expect(aggregate.has("id")).toBe(false);
+  });
+
+  it("renders badges from the topbar's warm counts entry without polling again", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(["conversations", "needs-attention", "counts"], {
+      total: 7,
+      byProvider: { zalo_bot: 1, zalo_oa: 0, facebook_messenger: 6 },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ChannelAdapterSelector
+          provider={undefined}
+          searchParams={new URLSearchParams()}
+          onSearchParamsChange={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    await expect
+      .element(
+        screen.getByRole("radio", {
+          name: "Zalo Chatbot — 1 hội thoại cần phản hồi",
+        }),
+      )
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("radio", {
+          name: "Messenger — 6 hội thoại cần phản hồi",
+        }),
+      )
+      .toBeVisible();
+    expect(mockApiJson).not.toHaveBeenCalled();
+  });
+
+  it("shares one counts poll between the topbar bell and the adapter badges", async () => {
+    mockApiJson.mockImplementation(async (url: string) =>
+      url.includes("channel_provider") ? { count: 1 } : { count: 3 },
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <TopbarBellProbe />
+        <ChannelAdapterSelector
+          provider={undefined}
+          searchParams={new URLSearchParams()}
+          onSearchParamsChange={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    await expect.element(screen.getByTestId("bell")).toHaveTextContent("3");
+    await expect
+      .element(
+        screen.getByRole("radio", {
+          name: "Messenger — 1 hội thoại cần phản hồi",
+        }),
+      )
+      .toBeVisible();
+
+    // The panel and the bell ride the same query: four requests once per
+    // interval, one cache entry — not one poller each.
+    expect(mockApiJson.mock.calls.length).toBe(4);
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(1);
   });
 });

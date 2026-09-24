@@ -2,6 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiJson } from "@/lib/apiClient";
 import type { Conversation } from "../../types";
+import {
+  ATTENTION_REFRESH_INTERVAL_MS,
+  ATTENTION_ROWS_QUERY_KEY,
+} from "./attention-queries";
 
 /** Subset of {@link Conversation} rendered in the bell popover. */
 export type NeedsAttentionRow = Pick<
@@ -21,18 +25,18 @@ interface ConversationListResponse {
  * freshest rows; the footer link hands off to the full inbox.
  *
  * The query is **gated** by `enabled` so it only fires when the popover opens;
- * a 30s poll keeps the open panel fresh (mirrors `useNotifications`).
+ * the shared attention cadence keeps the open panel fresh.
  */
 export const useNeedsAttention = (enabled: boolean) => {
   const query = useQuery<ConversationListResponse>({
-    queryKey: ["conversations-needs-attention", "rows"],
+    queryKey: ATTENTION_ROWS_QUERY_KEY,
     queryFn: () =>
       apiJson<ConversationListResponse>(
         "/api/v1/conversations?needs_attention=true&per_page=8&sort=last_inbound_at&order=desc",
       ),
     enabled,
-    staleTime: 1000 * 30,
-    refetchInterval: enabled ? 1000 * 30 : false,
+    staleTime: ATTENTION_REFRESH_INTERVAL_MS,
+    refetchInterval: enabled ? ATTENTION_REFRESH_INTERVAL_MS : false,
   });
 
   return {
