@@ -24,10 +24,7 @@ import { loadConversationSnippets } from "../application/conversation-runtime";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { LeadAvatar } from "../LeadAvatar";
-import {
-  getGenericConversationPresentation,
-  useConversationCapabilitySlots,
-} from "../conversation-capability";
+import { useConversationCapabilitySlots } from "../conversation-capability";
 import {
   getConversationListKey,
   getConversationListServerFilter,
@@ -46,16 +43,16 @@ import {
   conversationSelectionParams,
   findSelectedConversation,
 } from "../domain/conversation-navigation";
+import {
+  pruneConversationRowViewModelCache,
+  resolveConversationRowViewModel,
+  type ConversationRowViewModelCacheEntry,
+} from "./conversation-row-view-model";
 import type { ConversationRowPresentation } from "../../capabilities/types";
 import conversationWorkspaceIllustration from "@/assets/empty-states/conversation-workspace-illustration.webp";
 import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
 import { AlertTriangle, Inbox, RefreshCw, Reply, SearchX } from "lucide-react";
 import "../inbox.css";
-
-type ConversationRow = Conversation & {
-  _presentation: ConversationRowPresentation;
-  _snippet?: string;
-};
 
 const CONVERSATION_LIST_SORT = { field: "last_message_at", order: "DESC" } as const;
 
@@ -122,26 +119,36 @@ const SKELETON_LINE_2_STYLE: React.CSSProperties = {
   borderRadius: 6,
 };
 
+// Hoisted empty read-set for `getConversationUnreadCount`: a row receives its
+// own `isRead` boolean, so the domain helper only needs a set that can never
+// match this row — allocating one per render would defeat the memo again.
+const EMPTY_READ_IDS: ReadonlySet<string> = new Set();
+
 type ConversationListItemProps = {
-  conversation: ConversationRow;
+  conversation: Conversation;
+  presentation: ConversationRowPresentation;
+  snippet: string;
+  isRead: boolean;
   isActive: boolean;
   onSelect: (c: Conversation) => void;
-  readIds: Set<string>;
 };
 
 // React.memo so a re-render of the list (typing in search, marking another row
 // read, a sibling row's realtime update) does NOT re-render every visible row.
-// Props are stable: `onSelect` is a useCallback in the parent, `readIds` is a
-// Set identity that only changes when a read is committed, and `conversation`
-// objects come from a memoized `rows` array.
+// Every prop keeps its identity while its own input is unchanged: `conversation`
+// comes straight from the list data, `presentation`/`snippet` come from the
+// per-id view-model cache, `isRead` is this row's boolean instead of the shared
+// read-id Set, `isActive` is a boolean and `onSelect` is stable across URL
+// changes (see the latest-setter ref in `ConversationListContent`).
 const ConversationListItem = memo(
   ({
     conversation,
+    presentation,
+    snippet,
+    isRead,
     isActive,
     onSelect,
-    readIds,
   }: ConversationListItemProps) => {
-    const presentation = conversation._presentation;
     const time = getRelativeTimeString(
       conversation.last_inbound_at ?? conversation.updated_at,
     );
@@ -149,7 +156,7 @@ const ConversationListItem = memo(
     const name = presentation.displayName;
     // Preview = latest message snippet (batched via vfic_last_messages), falling
     // back to the contact's phone when no snippet is available yet.
-    const subtitle = conversation._snippet || presentation.subtitle;
+    const subtitle = snippet || presentation.subtitle;
 
     const priorityChip = presentation.priorityLabel
       ? {
@@ -161,9 +168,11 @@ const ConversationListItem = memo(
     const needsBotAttention = botHasNotReplied(conversation);
     const needsAttention = needsHumanAttention || needsBotAttention;
     const attentionLabel = getConversationAttentionLabel(conversation);
-    // Unread badge: optimistically cleared once opened (readIds); otherwise the
+    // Unread badge: optimistically cleared once opened (isRead); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
-    const unread = getConversationUnreadCount(conversation, readIds);
+    const unread = isRead
+      ? 0
+      : getConversationUnreadCount(conversation, EMPTY_READ_IDS);
 
     return (
       <button
@@ -445,33 +454,48 @@ const ConversationListPanel = ({
     return () => controller.abort();
   }, [conversationIdsKey, conversations, slots.row]);
 
-  const rows: ConversationRow[] = useMemo(() => {
+  // Per-id view-model cache. The list renders the raw conversation records, so
+  // their identity is stable while the list data is; the `presentation`/`snippet`
+  // pair the memoized row also depends on is resolved through this cache, which
+  // reuses an entry while every input it was derived from is unchanged.
+  const rowViewModelCache = useMemo(
+    () => new Map<string, ConversationRowViewModelCacheEntry>(),
+    [],
+  );
+  const getRowViewModel = useCallback(
+    (conversation: Conversation) =>
+      resolveConversationRowViewModel(
+        rowViewModelCache,
+        conversation,
+        adapterPresentations.get(conversation.id),
+        snippets,
+      ),
+    [adapterPresentations, rowViewModelCache, snippets],
+  );
+
+  // Drop view-models for conversations that left the list (deleted rows, server
+  // filters that no longer match) so the cache cannot grow without bound.
+  useEffect(() => {
+    pruneConversationRowViewModelCache(rowViewModelCache, conversations);
+  }, [conversations, rowViewModelCache]);
+
+  const orderedConversations = useMemo(() => {
     if (!conversations) return [];
     return conversations
-      .map((c) => {
-        return {
-          ...c,
-          _presentation:
-            adapterPresentations.get(c.id) ??
-            getGenericConversationPresentation(c),
-          _snippet: snippets[c.zalo_chat_id ?? c.id] ?? "",
-        };
-      })
-      .filter((c) => {
-        if (deferredQuery) {
-          const haystack = [
-            c.zalo_chat_id ?? c.id,
-            c._presentation.searchText,
-            c._snippet,
-          ]
-            .filter(Boolean)
-            .join(" ");
-          if (!vietnameseSearchIncludes(haystack, deferredQuery)) return false;
-        }
-        return true;
+      .filter((conversation) => {
+        if (!deferredQuery) return true;
+        const viewModel = getRowViewModel(conversation);
+        const haystack = [
+          conversation.zalo_chat_id ?? conversation.id,
+          viewModel.presentation.searchText,
+          viewModel.snippet,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        return vietnameseSearchIncludes(haystack, deferredQuery);
       })
       .sort((first, second) => compareConversationRows(first, second, readIds));
-  }, [adapterPresentations, conversations, snippets, deferredQuery, readIds]);
+  }, [conversations, deferredQuery, getRowViewModel, readIds]);
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -489,7 +513,12 @@ const ConversationListPanel = ({
 
     observer.observe(marker);
     return () => observer.disconnect();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage, rows.length]);
+  }, [
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    orderedConversations.length,
+  ]);
 
   return (
     <aside className="panel left-panel" aria-label="Danh sách cuộc trò chuyện">
@@ -537,7 +566,7 @@ const ConversationListPanel = ({
           ))
         ) : error ? (
           <ListEmptyState kind="error" onAction={() => void refetch()} />
-        ) : rows.length === 0 ? (
+        ) : orderedConversations.length === 0 ? (
           <ListEmptyState
             kind={query || hasServerFilter ? "filtered" : "empty"}
             onAction={
@@ -545,15 +574,20 @@ const ConversationListPanel = ({
             }
           />
         ) : (
-          rows.map((c) => (
-            <ConversationListItem
-              key={c.id}
-              conversation={c}
-              isActive={selectedId === c.id}
-              onSelect={onSelect}
-              readIds={readIds}
-            />
-          ))
+          orderedConversations.map((conversation) => {
+            const viewModel = getRowViewModel(conversation);
+            return (
+              <ConversationListItem
+                key={conversation.id}
+                conversation={conversation}
+                presentation={viewModel.presentation}
+                snippet={viewModel.snippet}
+                isRead={readIds.has(conversation.id)}
+                isActive={selectedId === conversation.id}
+                onSelect={onSelect}
+              />
+            );
+          })
         )}
 
         {hasNextPage && (
@@ -718,26 +752,36 @@ const ConversationListContent = () => {
     deepLinkedConversation,
   );
 
+  // `setSearchParams` is memoized on `location.search` (react-router 7), so its
+  // identity changes on every navigation. Depending on it directly would
+  // re-create `onSelect` whenever the URL changes and re-render every memoized
+  // row — including the rows that a plain "open this one" click must not touch.
+  // Keep the latest setter in a ref: event handlers only run after the commit
+  // that refreshed it.
+  const setSearchParamsRef = useRef(setSearchParams);
+  useEffect(() => {
+    setSearchParamsRef.current = setSearchParams;
+  }, [setSearchParams]);
+
   // Stable identity so memoized ConversationListItem children don't re-render
   // on every list state change (the parent re-renders on search/selection, but
   // `onSelect` itself never needs to change — it only calls stable setters).
-  const openConversation = useCallback(
-    (c: Conversation) => {
-      setSelectedId(c.id);
-      // Optimistically clear the unread badge for this row; ConversationShow
-      // confirms server-side via markAsRead on open.
-      setPendingReadIds((prev) => {
-        if (prev.has(c.id)) return prev;
-        const next = new Set(prev);
-        next.add(c.id);
-        return next;
-      });
-      // Push (not replace) so each opened conversation is a history entry and the
-      // browser back button returns to the list.
-      setSearchParams((prev) => conversationSelectionParams(prev, c.id));
-    },
-    [setSearchParams],
-  );
+  const openConversation = useCallback((c: Conversation) => {
+    setSelectedId(c.id);
+    // Optimistically clear the unread badge for this row; ConversationShow
+    // confirms server-side via markAsRead on open.
+    setPendingReadIds((prev) => {
+      if (prev.has(c.id)) return prev;
+      const next = new Set(prev);
+      next.add(c.id);
+      return next;
+    });
+    // Push (not replace) so each opened conversation is a history entry and the
+    // browser back button returns to the list.
+    setSearchParamsRef.current((prev) =>
+      conversationSelectionParams(prev, c.id),
+    );
+  }, []);
 
   const backToList = () => {
     setSearchParams((prev) => conversationSelectionParams(prev, null), {
