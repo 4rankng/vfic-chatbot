@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.capabilities.contracts import IndustryPackDefinition
 from app.capabilities.registry import CapabilityRegistry, get_capability_registry
 from app.installation.domain.projection import (
     contains_secret_key,
@@ -796,7 +797,9 @@ class InstallationService:
         await self._invalidate_cache_safely()
         return await self._active_context(state, validation)
 
-    def _registry_pack_current(self, revision: InstallationManifestRevision):
+    def _registry_pack_current(
+        self, revision: InstallationManifestRevision
+    ) -> IndustryPackDefinition | None:
         """Return the registry pack only while it matches the revision contract."""
         try:
             pack = self.registry.get_pack(revision.pack_key)
