@@ -104,7 +104,12 @@
   background: color-mix(in srgb, var(--surface-solid) 90%, transparent);
 }
 
-.inbox-bg-container .ops-status-strip {
+/* The status strip renders only inside the knowledge workspace, so these two
+   duplicates of the bare rules above are scoped to that root (FE-19). The
+   matching compound forms in personas-responsive.css are raised the same way,
+   so the narrow-screen repeat(4) layout keeps winning the cascade exactly as
+   before and nothing reflows. */
+.inbox-bg-container.knowledge-workspace .ops-status-strip {
   grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
 }
 
@@ -116,7 +121,7 @@
   padding: 11px 14px;
 }
 
-.inbox-bg-container .ops-status-strip > div {
+.inbox-bg-container.knowledge-workspace .ops-status-strip > div {
   min-height: 64px;
   gap: 4px;
 }

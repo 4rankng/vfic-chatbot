@@ -21,7 +21,7 @@ const sheets = import.meta.glob<string>("../../**/*.css", {
  * rendered layout). This ratchet stops the debt growing meanwhile: the number
  * may go DOWN only. Lower it when you scope a sheet; never raise it.
  */
-const MAX_UNSCOPED_RULES = 691;
+const MAX_UNSCOPED_RULES = 689;
 
 const selectorsOf = (css: string): string[] => {
   const out: string[] = [];
