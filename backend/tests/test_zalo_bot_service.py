@@ -235,7 +235,12 @@ async def test_send_message_split_failure_reports_partial_delivery(
     assert result.telemetry is not None
     assert result.telemetry.chunk_count == 2
     assert result.telemetry.result == "provider_error"
-    assert result.error_class is None  # preserve retryable aggregate failure semantics
+    # REL-01: bubble 1 reached the candidate, so the aggregate is at-most-once.
+    # A null error_class here meant "retryable", which made the reconcile sweep
+    # re-answer the candidate — including the bubble they had already read. The
+    # ambiguous class is what routes the row to SEND_UNKNOWN instead.
+    assert result.partial is True
+    assert result.error_class == "unknown"
 
 
 async def test_send_message_with_optional_fields(
@@ -522,6 +527,69 @@ async def test_aggregate_chunked_send_short_circuits_on_first_failure() -> None:
         "chunks": [{"text": "a"}, {"text": "b"}],
         "message_ids": ["id-a"],
     }
+
+
+async def test_aggregate_chunked_send_marks_partial_delivery_at_most_once() -> None:
+    """Bubble 1 delivered + bubble 2 rejected is a PARTIAL delivery (REL-01).
+
+    The candidate already saw bubble 1, so the aggregate must be at-most-once:
+    it keeps the delivered bubble's id and promotes the definite rejection to an
+    ambiguous class, which is what the delivery-state machine routes to
+    ``SEND_UNKNOWN``. A bare retryable ``FAILED`` here is what made the reconcile
+    sweep answer the candidate twice.
+    """
+    from app.shared.application.outbound import is_ambiguous_send
+
+    async def send_chunk(chunk: str) -> svc.SendResult:
+        if chunk == "b":
+            return svc.SendResult(ok=False, error="upstream rejected")
+        return svc.SendResult(ok=True, msg_id=f"id-{chunk}")
+
+    result = await svc._aggregate_chunked_send(["a", "b"], send_chunk)
+
+    assert result.ok is False
+    assert result.partial is True
+    assert result.msg_id == "id-a"
+    assert result.error_class == "unknown"
+    assert is_ambiguous_send(result.error_class, ok=result.ok) is True
+
+
+async def test_aggregate_chunked_send_keeps_a_transport_class_on_partial_delivery() -> None:
+    """A partial delivery that failed ambiguously keeps its own class.
+
+    ``read_timeout`` is already at-most-once; rewriting it would lose the reason
+    the failed chunk produced.
+    """
+
+    async def send_chunk(chunk: str) -> svc.SendResult:
+        if chunk == "b":
+            return svc.SendResult(ok=False, error="timeout", error_class="read_timeout")
+        return svc.SendResult(ok=True, msg_id="id-a")
+
+    result = await svc._aggregate_chunked_send(["a", "b"], send_chunk)
+
+    assert result.partial is True
+    assert result.error_class == "read_timeout"
+
+
+async def test_aggregate_chunked_send_all_bubbles_failed_stays_retryable() -> None:
+    """Nothing was delivered → the failure keeps its own class, so recovery runs.
+
+    An answer the candidate never saw is a genuinely lost turn; it must stay a
+    retryable ``FAILED`` rather than being suppressed as a partial delivery.
+    """
+    from app.shared.application.outbound import is_ambiguous_send
+
+    async def send_chunk(chunk: str) -> svc.SendResult:
+        return svc.SendResult(ok=False, error="upstream rejected")
+
+    result = await svc._aggregate_chunked_send(["a", "b"], send_chunk)
+
+    assert result.ok is False
+    assert result.partial is False
+    assert result.msg_id is None
+    assert result.error_class is None
+    assert is_ambiguous_send(result.error_class, ok=result.ok) is False
 
 
 async def test_aggregate_chunked_send_handles_ok_without_msg_id() -> None:

@@ -347,6 +347,81 @@ async def test_permanently_rejected_oa_recipient_is_not_retried(
     assert await _proven(integration_session, conv, now=now) is False
 
 
+async def test_partially_delivered_failed_answer_is_not_re_answered(
+    integration_session: AsyncSession,
+) -> None:
+    """REL-01: a FAILED answer that delivered its first bubble is not a lost turn.
+
+    A long answer is sent as N provider requests. When bubble 1 is accepted and a
+    later bubble fails, the row carries bubble 1's provider id — the candidate
+    already read part of the answer, so the sweep must not answer again.
+    """
+    now = datetime.now(timezone.utc)
+    conv = await _conversation(integration_session)
+    integration_session.add(
+        _inbound(conv, body="Chào em", provider_id="in-a", created_at=_at(now, seconds_ago=300))
+    )
+    partial = _bot_outcome(
+        conv,
+        body="Dạ em chào anh. " * 40,  # > ZALO_VISIBLE_BUBBLE_CHARS → multi-bubble
+        status=DeliveryStatus.FAILED,
+        created_at=_at(now, seconds_ago=290),
+        external_error="chunk 2/2 failed: upstream rejected",
+    )
+    partial.zalo_message_id = "chunk-1-mid"
+    partial.provider_message_id = "chunk-1-mid"
+    integration_session.add(partial)
+    await integration_session.flush()
+
+    assert await _candidates(integration_session, now=now) == []
+
+
+async def test_legacy_partially_delivered_failed_answer_is_not_re_answered(
+    integration_session: AsyncSession,
+) -> None:
+    """Rows written before the neutral id column carry only ``zalo_message_id``."""
+    now = datetime.now(timezone.utc)
+    conv = await _conversation(integration_session)
+    integration_session.add(
+        _inbound(conv, body="Chào em", provider_id="in-a", created_at=_at(now, seconds_ago=300))
+    )
+    partial = _bot_outcome(
+        conv,
+        body="Dạ em chào anh",
+        status=DeliveryStatus.FAILED,
+        created_at=_at(now, seconds_ago=290),
+        external_error="chunk 2/2 failed: upstream rejected",
+    )
+    partial.zalo_message_id = "chunk-1-mid"
+    integration_session.add(partial)
+    await integration_session.flush()
+
+    assert await _candidates(integration_session, now=now) == []
+
+
+async def test_all_bubbles_failed_answer_is_still_recovered(
+    integration_session: AsyncSession,
+) -> None:
+    """Nothing reached the candidate, so the lost turn keeps its recovery path."""
+    now = datetime.now(timezone.utc)
+    conv = await _conversation(integration_session)
+    integration_session.add(
+        _inbound(conv, body="Chào em", provider_id="in-a", created_at=_at(now, seconds_ago=300))
+    )
+    integration_session.add(
+        _bot_outcome(
+            conv,
+            body="Dạ em chào anh",
+            status=DeliveryStatus.FAILED,
+            created_at=_at(now, seconds_ago=290),
+            external_error="chunk 1/2 failed: upstream rejected",
+        )
+    )
+    await integration_session.flush()
+
+    assert [c.id for c in await _candidates(integration_session, now=now)] == [conv.id]
+
+
 # --- guards: grace, max-age, human ownership, lock ---
 
 

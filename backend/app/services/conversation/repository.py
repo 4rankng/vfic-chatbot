@@ -552,6 +552,13 @@ class ConversationRepository:
         ``BOT/FAILED`` (Zalo rejected delivery) qualify, except for the known
         permanent OA recipient rejection.
 
+        A ``BOT/FAILED`` row that already carries a provider message id is also
+        excluded: it delivered at least its first bubble (REL-01 — a chunked
+        answer whose later bubble failed), so it is a partial delivery, not a
+        lost turn, and re-answering would duplicate the bubble the candidate
+        already saw. ``BOT/PENDING``/``BOT/SENDING`` rows are never excluded this
+        way — a provider id on those is a receipt that a live send is resolving.
+
         One more shape qualifies, and it is the one the loop-free rule would
         otherwise hide for good: the newest message is a completed ``BOT`` outcome
         whose durable outbound command quotes a DIFFERENT inbound than the newest
@@ -611,6 +618,19 @@ class ConversationRepository:
                                               AND c.zalo_channel = 'oa'
                                               AND lower(COALESCE(m.external_error, ''))
                                                   LIKE '%user_id is invalid%'
+                                          )
+                                          -- REL-01: a FAILED answer that already
+                                          -- carries a provider message id delivered
+                                          -- at least its first bubble (a chunked
+                                          -- send whose later bubble failed), so it
+                                          -- is NOT a lost turn — re-answering would
+                                          -- duplicate the bubble the candidate saw.
+                                          AND NOT (
+                                              m.delivery_status = 'FAILED'
+                                              AND COALESCE(
+                                                  NULLIF(m.provider_message_id, ''),
+                                                  NULLIF(m.zalo_message_id, '')
+                                              ) IS NOT NULL
                                           )
                                       )
                                   )

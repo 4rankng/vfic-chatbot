@@ -119,6 +119,56 @@ def _mock_redis(*, setnx_ok: bool = True) -> MagicMock:
     return redis
 
 
+_TICK_LOCK = "reconcile_tick_lock"
+
+
+class _CasRedis:
+    """Sync-Redis stand-in that models the tick-lock ownership contract.
+
+    ``eval`` applies the release script's rule (delete the key only when the
+    stored value is the caller's own id). ``delete`` raises: the tick lock must
+    never be released blindly, so a regression back to ``conn.delete(...)`` fails
+    loudly here. ``ttl_expired_to`` models the race the CAS closes — this tick's
+    300 s TTL ran out mid-sweep and a successor tick already owns the key.
+    """
+
+    def __init__(self, *, ttl_expired_to: str | None = None) -> None:
+        self.store: dict[str, str] = {}
+        self.release_calls: list[tuple[str, str]] = []
+        self.owner_value: str | None = None
+        self._ttl_expired_to = ttl_expired_to
+
+    def set(self, key, value, *, nx=False, ex=None):  # noqa: ANN001, ARG002
+        if nx and key in self.store:
+            return None
+        self.store[key] = value
+        if key == _TICK_LOCK:
+            self.owner_value = value
+        return True
+
+    def eval(self, script, numkeys, key, owner):  # noqa: ANN001, ARG002
+        from app.workers.reconcile_worker import _RELEASE_TICK_LOCK_LUA
+
+        assert script == _RELEASE_TICK_LOCK_LUA
+        self.release_calls.append((key, owner))
+        if self._ttl_expired_to is not None:
+            self.store[key] = self._ttl_expired_to
+        if self.store.get(key) == owner:
+            del self.store[key]
+            return 1
+        return 0
+
+    def delete(self, *keys):  # noqa: ANN002, ARG002
+        raise AssertionError("the tick lock must be released with an ownership CAS")
+
+    def incrby(self, key, amount):  # noqa: ANN001, ARG002
+        self.store[key] = int(self.store.get(key, 0)) + int(amount)
+        return self.store[key]
+
+    def pipeline(self):
+        return self
+
+
 # Patch targets use SOURCE modules because all imports in reconcile_worker
 # are lazy (inside function bodies), not at module level.
 _PATCH_SESSION = "app.workers._db.worker_session"
@@ -137,6 +187,50 @@ async def test_setnx_guard_skips_when_held(mock_get_redis):
     await _run_tick_async()
 
     mock_get_redis.assert_called_once()
+
+
+@patch(_PATCH_SESSION)
+@patch(_PATCH_REDIS)
+async def test_tick_lock_is_released_by_its_own_owner(mock_get_redis, mock_session_cls):
+    """The tick releases the lock with an ownership CAS, never a blind delete.
+
+    The lock value is this tick's own UUID, so a release that raced a TTL expiry
+    can prove ownership instead of deleting whatever is there.
+    """
+    redis = _CasRedis()
+    mock_get_redis.return_value = redis
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = _mock_db_for_scan([])
+    mock_session_cls.return_value = mock_cm
+
+    await _run_tick_async()
+
+    assert redis.owner_value is not None
+    uuid.UUID(redis.owner_value)  # a per-tick identity, not a shared constant
+    assert redis.release_calls == [("reconcile_tick_lock", redis.owner_value)]
+    assert "reconcile_tick_lock" not in redis.store
+
+
+@patch(_PATCH_SESSION)
+@patch(_PATCH_REDIS)
+async def test_tick_lock_survives_when_the_holder_is_not_the_owner(
+    mock_get_redis, mock_session_cls
+):
+    """A tick whose TTL expired must not delete the successor's lock.
+
+    Otherwise a slow sweep would release a lock it no longer owns and admit a
+    third concurrent tick on top of the new owner.
+    """
+    redis = _CasRedis(ttl_expired_to="successor-tick")
+    mock_get_redis.return_value = redis
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = _mock_db_for_scan([])
+    mock_session_cls.return_value = mock_cm
+
+    await _run_tick_async()
+
+    assert redis.release_calls == [("reconcile_tick_lock", redis.owner_value)]
+    assert redis.store["reconcile_tick_lock"] == "successor-tick"
 
 
 # --- No candidates ---
@@ -323,6 +417,63 @@ async def test_mark_stale_pending_called(mock_session_cls, mock_enqueue):
 
     assert mock_db_proc.execute.called
     mock_redis.incrby.assert_any_call("reconcile_stale_pending_total", 1)
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_partially_delivered_failed_answer_is_not_reenqueued(
+    mock_session_cls, mock_enqueue
+):
+    """REL-01: a FAILED row carrying a provider message id is a partial delivery.
+
+    The first bubble of a chunked answer reached the candidate before a later one
+    failed, so re-answering would duplicate it. The row must not become a
+    recovery turn — and it must not be counted as one either.
+    """
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    partial_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    partial_bot_msg.provider_message_id = "chunk-1-mid"
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=partial_bot_msg)
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_not_called()
+    assert conv.bot_locked_until is None  # lock released for the next tick
+    mock_redis.incrby.assert_any_call("reconcile_partial_delivery_skipped_total", 1)
+    # It is a partial delivery, not a delivery-failure retry.
+    counted = [call.args[0] for call in mock_redis.incrby.call_args_list]
+    assert "reconcile_failed_send_total" not in counted
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_legacy_failed_row_with_only_a_zalo_id_is_not_reenqueued(
+    mock_session_cls, mock_enqueue
+):
+    """The pre-0047 id column proves partial delivery just as well."""
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    partial_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    partial_bot_msg.zalo_message_id = "legacy-chunk-1-mid"
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=partial_bot_msg)
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_not_called()
+    mock_redis.incrby.assert_any_call("reconcile_partial_delivery_skipped_total", 1)
 
 
 @patch(_PATCH_ENQUEUE, return_value=True)

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,42 @@ _RECONCILE_UNKNOWN_SEND = "reconcile_unknown_send_outcome"
 _RECONCILE_SEND_UNKNOWN_SKIPPED = "reconcile_send_unknown_skipped_total"
 _RECONCILE_STALE_LOCK_BROKEN = "reconcile_stale_lock_broken"
 _RECONCILE_UNANSWERED_GAUGE = "reconcile_unanswered_gauge"
+_RECONCILE_PARTIAL_DELIVERY_SKIPPED = "reconcile_partial_delivery_skipped_total"
 _RECONCILE_TICK_LOCK = "reconcile_tick_lock"  # SETNX non-reentrancy key
+
+# Release the tick lock only when this tick still owns it. A tick whose 300 s TTL
+# expired while the sweep ran (the batch is up to ``reconcile_batch_size``
+# conversations, each with its own session) must not delete the SUCCESSOR tick's
+# lock — a blind DELETE would admit a third concurrent sweep on top of the new
+# owner. The same ownership CAS as ``core/singleflight.release``, made atomic in
+# Lua because this worker holds the sync Redis client.
+_RELEASE_TICK_LOCK_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+end
+return 0
+"""
+
+
+def _release_tick_lock(conn, owner_id: str) -> None:  # noqa: ANN001 (sync Redis client)
+    """Delete ``_RECONCILE_TICK_LOCK`` iff this tick is still its owner."""
+    conn.eval(_RELEASE_TICK_LOCK_LUA, 1, _RECONCILE_TICK_LOCK, owner_id)
+
+
+def _delivered_a_provider_message(message) -> bool:  # noqa: ANN001 (Message ORM row)
+    """Whether a FAILED BOT row already carries a provider message id.
+
+    An answer longer than ``ZALO_VISIBLE_BUBBLE_CHARS`` is sent as N provider
+    requests. The first accepted bubble stamps its id on the row while a later
+    bubble can still fail, so a non-null id on a FAILED row means the answer was
+    *partially* delivered: re-answering would duplicate the bubbles the candidate
+    already saw. The candidate scan excludes these rows; this is the fresh
+    re-check against state read after the scan.
+    """
+    return bool(
+        getattr(message, "provider_message_id", None)
+        or getattr(message, "zalo_message_id", None)
+    )
 
 # A conversation whose newest message is a FAILED BOT row is a candidate again
 # on the very next tick — the failed row is what makes it a candidate — so the
@@ -90,14 +126,17 @@ async def _run_tick_async() -> None:
     conn = get_redis_sync()
 
     # ── Non-reentrancy guard: skip if a prior tick is still running ──
-    if not conn.set(_RECONCILE_TICK_LOCK, "1", nx=True, ex=300):
+    # The stored value is this tick's own id, so the release below can prove
+    # ownership before deleting (see ``_release_tick_lock``).
+    tick_owner = uuid.uuid4().hex
+    if not conn.set(_RECONCILE_TICK_LOCK, tick_owner, nx=True, ex=300):
         logger.debug("reconcile tick: skipped — prior tick still running")
         return
 
     try:
         await _sweep(conn)
     finally:
-        conn.delete(_RECONCILE_TICK_LOCK)
+        _release_tick_lock(conn, tick_owner)
 
 
 async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
@@ -141,6 +180,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     send_unknown_skipped = 0
     stale_locks_broken = 0
     failed_send_backoff = 0
+    partial_delivery_skipped = 0
 
     for conv in candidates:
         async with worker_session() as db:
@@ -245,6 +285,16 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     elif newest.delivery_status.name == "PENDING":
                         reason = "stale_pending"
                     elif newest.delivery_status.name == "FAILED":
+                        if _delivered_a_provider_message(newest):
+                            # REL-01: the row already carries a provider message
+                            # id, so at least the first bubble of a chunked answer
+                            # reached the candidate. Partially delivered is not a
+                            # lost turn — re-answering would duplicate it. The
+                            # scan excludes these rows; re-checked here because
+                            # the id can be stamped between scan and this read.
+                            partial_delivery_skipped += 1
+                            await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
+                            continue
                         reason = "failed_send"
                     elif newest.delivery_status.name == "SEND_UNKNOWN":
                         # Ambiguous send (transport timeout after Zalo may have
@@ -348,14 +398,18 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
         pipe.incrby(_RECONCILE_UNKNOWN_SEND, unknown_send_outcome)
     if send_unknown_skipped:
         pipe.incrby(_RECONCILE_SEND_UNKNOWN_SKIPPED, send_unknown_skipped)
+    if partial_delivery_skipped:
+        pipe.incrby(_RECONCILE_PARTIAL_DELIVERY_SKIPPED, partial_delivery_skipped)
     if stale_locks_broken:
         pipe.incrby(_RECONCILE_STALE_LOCK_BROKEN, stale_locks_broken)
     pipe.execute()
     logger.info(
         "reconcile tick complete: %d candidates scanned, %d re-enqueued, %d "
-        "delivery-failure retries deferred, %d send_unknown skipped",
+        "delivery-failure retries deferred, %d send_unknown skipped, "
+        "%d partial deliveries skipped",
         len(candidates),
         re_enqueued,
         failed_send_backoff,
         send_unknown_skipped,
+        partial_delivery_skipped,
     )

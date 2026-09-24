@@ -31,6 +31,7 @@ from typing import Any, Awaitable, Callable, Literal
 
 from app.core.config import Settings, ZALO_BOT_API_BASE, get_settings
 from app.shared.application.outbound import (
+    AMBIGUOUS_SEND_CLASSES,
     OutboundTelemetry,
     combine_outbound_telemetry,
 )
@@ -56,6 +57,13 @@ class SendResult:
     provider) as ``SEND_UNKNOWN`` rather than retryable ``FAILED``. ``None`` on
     success and on definite upstream-rejected envelopes. Set by the sender's
     ``_post`` transport-error branch; see ``_TRANSPORT_ERROR_CLASS``.
+
+    ``partial`` marks a multi-bubble answer where an earlier bubble was already
+    accepted by the provider and a later one failed. ``msg_id`` then carries the
+    first delivered bubble's id and ``error_class`` is an ambiguous class, so
+    the delivery-state machine records the answer as ``SEND_UNKNOWN``
+    (at-most-once) instead of a retryable ``FAILED`` that recovery would
+    re-answer — see ``_aggregate_chunked_send``.
     """
 
     ok: bool
@@ -64,6 +72,7 @@ class SendResult:
     raw: dict[str, Any] | None = None
     error_class: str | None = None
     telemetry: OutboundTelemetry | None = None
+    partial: bool = False
 
 
 @dataclass(frozen=True)
@@ -225,6 +234,13 @@ async def _aggregate_chunked_send(
     with the full envelope trail in ``raw``. Channel differences — body shape,
     transport, token refresh, per-chunk validation — live in the ``send_chunk``
     callback, so the Bot and OA senders share this fold verbatim.
+
+    A failure after at least one accepted bubble is a *partial* delivery: it
+    keeps the first ``msg_id``, is flagged ``partial``, and carries an ambiguous
+    ``error_class`` so callers record ``SEND_UNKNOWN`` (at-most-once) rather
+    than a retryable ``FAILED`` whose recovery would answer the candidate twice.
+    A failure with no accepted bubble stays a bare ``ok=False`` with the
+    failing chunk's own class, so a lost turn is still recovered.
     """
     envelopes: list[dict[str, Any]] = []
     message_ids: list[str] = []
@@ -237,6 +253,16 @@ async def _aggregate_chunked_send(
         if result.msg_id:
             message_ids.append(result.msg_id)
         if not result.ok:
+            # REL-01: when an earlier bubble was already accepted, this answer is
+            # partially delivered. Re-sending it would duplicate the bubbles the
+            # candidate already saw, so the aggregate must be at-most-once: the
+            # delivery-state machine routes ambiguous classes to SEND_UNKNOWN,
+            # so a definite provider rejection is promoted to one. A transport
+            # failure (already ambiguous) keeps its own class.
+            partial = bool(message_ids)
+            error_class = result.error_class
+            if partial and error_class not in AMBIGUOUS_SEND_CLASSES:
+                error_class = "unknown"
             telemetry = (
                 combine_outbound_telemetry(
                     telemetry_base,
@@ -251,8 +277,9 @@ async def _aggregate_chunked_send(
                 msg_id=message_ids[0] if message_ids else None,
                 error=f"chunk {index}/{len(chunks)} failed: {result.error}",
                 raw={"chunks": envelopes, "message_ids": message_ids},
-                error_class=result.error_class,
+                error_class=error_class,
                 telemetry=telemetry,
+                partial=partial,
             )
     telemetry = (
         combine_outbound_telemetry(telemetry_base, chunk_telemetry, result="sent")
