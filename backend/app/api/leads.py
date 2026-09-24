@@ -40,8 +40,14 @@ router = APIRouter(
 )
 
 
-async def _load(lead_id: int, db: AsyncSession):
-    lead = await LeadService(db).get(lead_id)
+async def _load(lead_id: int, db: AsyncSession, viewer: User):
+    """Load one lead through the viewer-scope invariant.
+
+    Out-of-scope ids raise 404 (not 403) so the sequential lead ids are not
+    probeable: a recruiter may only reach their own or unassigned leads, an
+    admin reaches every lead.
+    """
+    lead = await LeadService(db).get_visible(lead_id, viewer=viewer)
     if lead is None:
         raise NotFoundError("lead not found")
     return lead
@@ -122,9 +128,9 @@ async def lead_board(
 
 @router.get("/{lead_id}", response_model=LeadOut)
 async def get_lead(
-    lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    lead_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> LeadOut:
-    return LeadOut.model_validate(await _load(lead_id, db))
+    return LeadOut.model_validate(await _load(lead_id, db, user))
 
 
 @router.patch("/{lead_id}", response_model=LeadOut)
@@ -134,7 +140,7 @@ async def update_lead(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> LeadOut:
-    lead = await _load(lead_id, db)
+    lead = await _load(lead_id, db, user)
     changes = body.model_dump(exclude_unset=True)
     try:
         stage = changes.pop("lead_stage", None)
@@ -162,7 +168,7 @@ async def assign_lead(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> LeadOut:
-    lead = await _load(lead_id, db)
+    lead = await _load(lead_id, db, user)
     try:
         return LeadOut.model_validate(
             await LeadService(db).assign(lead, body.recruiter_id, actor=user)
@@ -178,7 +184,7 @@ async def set_stage(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> LeadOut:
-    lead = await _load(lead_id, db)
+    lead = await _load(lead_id, db, user)
     try:
         return LeadOut.model_validate(await LeadService(db).set_stage(lead, body.stage, actor=user))
     except ConflictError:
@@ -194,7 +200,7 @@ async def create_followup(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> FollowUpOut:
-    lead = await _load(lead_id, db)
+    lead = await _load(lead_id, db, user)
     return FollowUpOut.model_validate(
         await LeadService(db).create_followup(lead, body.due_at, body.note, actor=user)
     )
@@ -203,10 +209,10 @@ async def create_followup(
 @router.get("/{lead_id}/tags", response_model=list[LeadTagOut])
 async def list_tags(
     lead_id: int,
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[LeadTagOut]:
-    lead = await _load(lead_id, db)
+    lead = await _load(lead_id, db, user)
     return [
         LeadTagOut.model_validate(tag) for tag in await LeadService(db).list_operational_tags(lead)
     ]
@@ -219,7 +225,7 @@ async def update_tags(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[LeadTagOut]:
-    lead = await _load(lead_id, db)
+    lead = await _load(lead_id, db, user)
     return [
         LeadTagOut.model_validate(tag)
         for tag in await LeadService(db).replace_manual_tags(
@@ -234,10 +240,10 @@ async def update_tags(
 @router.get("/{lead_id}/assist", response_model=LeadAssistOut)
 async def get_chatops_assist(
     lead_id: int,
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> LeadAssistOut:
-    lead = await _load(lead_id, db)
+    lead = await _load(lead_id, db, user)
     return LeadAssistOut.model_validate(await LeadService(db).build_chatops_assist(lead))
 
 
@@ -248,7 +254,7 @@ async def run_chatops_action(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> LeadChatOpsActionResult:
-    lead = await _load(lead_id, db)
+    lead = await _load(lead_id, db, user)
     service = LeadService(db)
     try:
         updated = await service.apply_chatops_action(lead, action, actor=user)
@@ -265,27 +271,27 @@ async def run_chatops_action(
 
 @router.get("/{lead_id}/follow-ups", response_model=list[FollowUpOut])
 async def list_followups(
-    lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    lead_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> list[FollowUpOut]:
-    await _load(lead_id, db)
+    await _load(lead_id, db, user)
     return [FollowUpOut.model_validate(f) for f in await LeadService(db).list_followups(lead_id)]
 
 
 @router.get("/{lead_id}/events", response_model=list[LeadEventOut])
 async def list_events(
-    lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    lead_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> list[LeadEventOut]:
-    await _load(lead_id, db)
+    await _load(lead_id, db, user)
     return [LeadEventOut.model_validate(e) for e in await LeadService(db).list_events(lead_id)]
 
 
 @router.get("/{lead_id}/memories", response_model=list[LeadMemoryOut])
 async def list_memories(
     lead_id: int,
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[LeadMemoryOut]:
-    lead = await _load(lead_id, db)
+    lead = await _load(lead_id, db, user)
     if not lead.zalo_id:
         return []
     rows = await MemoryRepository(db).list_for_chat(lead.zalo_id)
@@ -294,12 +300,12 @@ async def list_memories(
 
 @router.get("/{lead_id}/presence")
 async def get_lead_presence(
-    lead_id: int, _user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    lead_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> dict:
     """Return current viewers and typing users for a lead."""
     from app.services.presence import get_typing_users, get_viewers
 
-    await _load(lead_id, db)
+    await _load(lead_id, db, user)
     viewers = await get_viewers("lead", lead_id)
     typing = await get_typing_users("lead", str(lead_id))
     return {"viewers": viewers, "typing": typing}

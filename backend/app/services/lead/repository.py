@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import delete, desc, func, select, text
+from sqlalchemy import delete, desc, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadTag
+from app.services.viewer_scope import ViewerIdentity, viewer_scope_filter
 
 # ── Raw SQL constants ──────────────────────────────────────────────
 
@@ -87,15 +88,6 @@ _UPSQL = text(
     """
 )
 
-_SET_GENDER_BY_ID_SQL = text(
-    """
-    UPDATE leads
-    SET gender = :gender
-    WHERE id = :lead_id
-    RETURNING id
-    """
-)
-
 # Messenger rows are keyed by ``contact_id`` with a NULL ``zalo_id`` (migration
 # 0047), so a chat-id lookup never finds them. The latest lead for the contact
 # wins — multiple leads may share a contact, and the stub trigger only dedups
@@ -132,19 +124,42 @@ class LeadRepository:
         result = row.mappings().first()
         return dict(result) if result else None
 
-    async def set_gender_by_id(self, lead_id: int, gender: str) -> bool:
-        """Write a gender onto a lead by primary key; True when a row was updated.
+    async def get_visible(self, lead_id: int, *, viewer: ViewerIdentity) -> Lead | None:
+        """Fetch one lead the ``viewer`` is allowed to see; None when out of scope.
 
-        The blank-only guard lives in the adapter, which reads the row first, so
-        a stated/provider/CRM value is preserved unless the caller explicitly
-        overrides it (a candidate self-referring in the current message).
-        ``version`` and ``updated_at`` are deliberately untouched — this is
-        background enrichment, not a user-visible edit.
+        Mirrors :func:`app.services.viewer_scope.viewer_can_access_lead`: admins
+        get the row, recruiters only their own or unassigned rows. Callers map
+        ``None`` to a 404 so the sequential id space is not probeable.
         """
-        result = await self.db.execute(
-            _SET_GENDER_BY_ID_SQL, {"lead_id": lead_id, "gender": gender}
+        stmt = viewer_scope_filter(
+            select(Lead).where(Lead.id == lead_id),
+            Lead.assigned_recruiter_id,
+            viewer,
         )
-        return result.scalar_one_or_none() is not None
+        return (await self.db.scalars(stmt)).first()
+
+    async def set_gender_by_id(self, lead_id: int, gender: str, *, override: bool = False) -> bool:
+        """Write a gender onto a lead by primary key; True when a row changed.
+
+        The blank-only guarantee is part of the statement — ``gender IS NULL OR
+        btrim(gender) = ''`` — so a value a provider or a recruiter wrote
+        between the caller's read and this write is never replaced. There is no
+        read-then-write window to lose.
+
+        ``override`` is the candidate explicitly self-referring in the current
+        message; the candidate's own word outranks an earlier inference, so that
+        case overwrites and advances ``version`` (a real edit the recruiter
+        console must reconcile). ``updated_at`` always moves so the write is
+        visible; a blank fill leaves ``version`` alone.
+        """
+        values: dict = {"gender": gender, "updated_at": func.now()}
+        if override:
+            values["version"] = Lead.version + 1
+        stmt = update(Lead).where(Lead.id == lead_id).values(**values)
+        if not override:
+            stmt = stmt.where(or_(Lead.gender.is_(None), func.btrim(Lead.gender) == ""))
+        result = await self.db.execute(stmt.execution_options(synchronize_session=False))
+        return result.rowcount > 0
 
     async def by_contact_id(self, contact_id: str) -> dict | None:
         """Latest lead for a contact; None when the contact has no lead."""
@@ -159,8 +174,6 @@ class LeadRepository:
         and business logic (events, audit). The double-commit pattern in assign/set_stage
         is preserved by the caller committing events/audit separately.
         """
-        from sqlalchemy import update
-
         res = await self.db.execute(
             update(Lead)
             .where(

@@ -16,7 +16,7 @@ from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadS
 from app.models.user import User
 from app.services.viewer_scope import viewer_scope_condition, viewer_scope_filter
 from app.services.audit_service import record_audit
-from app.shared.domain.errors import ConflictError
+from app.shared.domain.errors import BadRequestError, ConflictError
 from app.services.lead import tags as _tag_lib
 from app.services.lead import viewmodels as _vm_lib
 from app.services.lead.chatops import ChatopsService
@@ -49,8 +49,13 @@ class LeadService:
         self.events = LeadEventBus()
         self.chatops = ChatopsService(self)
 
-    async def get(self, lead_id: int) -> Lead | None:
-        return await self.db.get(Lead, lead_id)
+    async def get_visible(self, lead_id: int, *, viewer: User) -> Lead | None:
+        """Fetch one lead through the viewer-scope invariant; None when out of scope.
+
+        The by-id routes use this instead of an unscoped primary-key read: a
+        recruiter sees their own or unassigned leads only, an admin sees all.
+        """
+        return await self.repo.get_visible(lead_id, viewer=viewer)
 
     async def list(
         self,
@@ -202,6 +207,8 @@ class LeadService:
         return lead
 
     async def assign(self, lead: Lead, recruiter_id: uuid.UUID, *, actor: User) -> Lead:
+        if not await self._is_assignable_recruiter(recruiter_id):
+            raise BadRequestError("Người phụ trách không tồn tại hoặc đã bị vô hiệu hoá")
         if not await self.repo.optimistic_apply(
             lead.id, lead.version, assigned_recruiter_id=recruiter_id, version=lead.version + 1
         ):
@@ -333,6 +340,18 @@ class LeadService:
         return await self.repo.list_followups(lead_id)
 
     # ── Private helpers ──────────────────────────────────────────────
+
+    async def _is_assignable_recruiter(self, recruiter_id: uuid.UUID) -> bool:
+        """True when ``recruiter_id`` resolves to an existing enabled user.
+
+        Guards ``POST /leads/{id}/assign``: an unknown or disabled user id must
+        not silently park the lead on a row nobody can work.
+        """
+        return (
+            await self.db.scalar(
+                select(User.id).where(User.id == recruiter_id, User.disabled.is_(False))
+            )
+        ) is not None
 
     async def _conversation_for_lead(self, lead: Lead) -> Conversation | None:
         # Canonical link is contact_id (Alembic 0047): every conversation and
