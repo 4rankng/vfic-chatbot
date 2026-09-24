@@ -110,8 +110,14 @@ def _retry_after_seconds(headers: Any) -> float | None:
 
 # Candidate-gender taxonomy. "unknown" is a first-class answer: a wrong "anh"/"chị"
 # reads worse to the candidate than staying neutral, so the runner stores only a
-# confident male/female and the next message re-judges anything else.
-_GENDER_CRITERIA = {"male": "Nam", "female": "Nữ", "unknown": "Không xác định"}
+# confident male/female and the next message re-judges anything else. The option
+# descriptions carry the Vietnamese cues (self-reference pronouns, name markers)
+# as guidance — the question stays a direction, not a rigid rule list.
+_GENDER_CRITERIA = {
+    "male": "Nam — tự xưng 'anh'/'chú'/'ông', hoặc tên đệm 'Văn' / tên riêng nam",
+    "female": "Nữ — tự xưng 'chị'/'cô'/'bà', hoặc tên đệm 'Thị' / tên riêng nữ",
+    "unknown": "Không xác định — chưa đủ dấu hiệu về giới tính",
+}
 
 # Display labels are short in practice; the cap stops a long profile label from
 # inflating every per-turn state payload (state is re-sent per call).
@@ -181,9 +187,10 @@ def build_turn_questions(*, include_gender: bool = True) -> dict:
         questions["gender"] = {
             "type": "choice",
             "instructions": (
-                "Ứng viên (người gửi tin nhắn `message`) là Nam hay Nữ? Chỉ dựa vào "
-                "tên hiển thị hồ sơ trong `profile_name` và cách ứng viên tự xưng "
-                "trong `message`/`recent`. Không đủ căn cứ thì chọn unknown, không đoán."
+                "Ứng viên (người gửi tin nhắn `message`) là Nam hay Nữ? Hãy suy luận "
+                "từ cách ứng viên tự xưng trong `message`/`recent` và tên hiển thị "
+                "trong `profile_name`; cách tự xưng là điều ứng viên nói về chính "
+                "mình nên đáng tin hơn tên. Không đủ căn cứ thì chọn unknown, không đoán."
             ),
             "criteria": _GENDER_CRITERIA,
         }
