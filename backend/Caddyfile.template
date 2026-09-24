@@ -10,8 +10,22 @@ bot.tingting.vip {
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# default-src 'self' pins every fetch to this origin. The explicit sources
+		# are what the SPA actually loads: the Google Fonts stylesheet and its font
+		# files; blob:/data: for the object-URL image previews (file inputs, avatar
+		# previews); and the provider image CDNs, because contact avatars are
+		# rendered straight from the URL the Zalo OA / Messenger profile APIs
+		# returned (nothing proxies them). Add a host here rather than widening to
+		# a bare `https:` scheme source. style-src needs 'unsafe-inline' because
+		# index.html ships an inline <style> loader block and React sets inline
+		# style attributes; a nonce/hash policy cannot cover the attribute form.
+		Content-Security-Policy "default-src 'self'; object-src 'none'; frame-ancestors 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' blob: data: https://*.zadn.vn https://*.fbcdn.net https://*.fbsbx.com"
+		X-Frame-Options "DENY"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# Nothing in the console uses these device APIs; clipboard-write stays
+		# enabled for the credential copy buttons.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 	}
 
 	handle /webhooks/* {

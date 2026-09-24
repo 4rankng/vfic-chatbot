@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import (
@@ -192,6 +193,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Host allowlist (SEC-06): a request whose Host header is not one of the
+# deployment's hostnames never reaches a handler, so a Host-spoofing /
+# DNS-rebinding request cannot make an endpoint echo attacker-controlled
+# absolute URLs. The list is ALLOWED_HOSTS (comma-separated bare hostnames);
+# localhost/127.0.0.1 stay allowed for the container healthchecks and local dev.
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
 
 API_V1_PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=API_V1_PREFIX)
