@@ -9,6 +9,17 @@ material fields carry provenance via field_evidence.
 Bus tables (bus_routes, bus_stops, bus_route_service_days) already exist from
 baseline migration 0001 — their ORM models live in bus.py.
 
+Runtime status: these tables are NOT the live serving path. The writers
+(ingestion template pipeline, publishing publisher, recruitment adapter) and
+the readers (knowledge tools domain_tools) were removed in Sept 2026 after an
+audit showed none was reachable from production — no API router or worker ever
+called them. The canonical FAQ the bot actually serves is chunk-based:
+ProjectFaqService → KnowledgeChunk rows (category='faq') via
+services/retrieval. The classes stay because models mirror the hand-written
+Alembic schema (the physical tables still exist); a future migration may drop
+them. Do NOT add new readers of these tables without wiring a production
+entry point in the same change.
+
 Scope/precedence (directive §7): every domain table has scope_type
 (global/company/location/job_posting/campaign) + scope_id; resolution precedence
 (job > location > company > global) lives in the tool layer (P1-3).
