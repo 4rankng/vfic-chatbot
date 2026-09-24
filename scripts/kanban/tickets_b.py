@@ -4,12 +4,15 @@ TICKETS = [
     # ------------------------------------------------------------------ perf
     dict(
         id="PERF-01",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Installation authority is re-derived from scratch 2–3× per turn",
         sev="high",
         area="performance",
         labels=["performance", "reliability"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`resolve_active()` runs the full authority derivation — state, revision, manifest "
             "validation, template checksums, configured integrations, persona version, case workflow "
@@ -44,12 +47,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-02",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="`allkeys-lru` Redis can evict the LLM semaphore token list and suppress every turn",
         sev="high",
         area="performance",
         labels=["performance", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Redis runs `--maxmemory-policy allkeys-lru`, so every key is an eviction candidate, "
             "including `llm_sem_tokens`. The semaphore registers its tokens once per process and never "
@@ -87,12 +93,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-03",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Conversation state is re-loaded 3× per turn, each load cascading 3–4 SELECTs",
         sev="high",
         area="performance",
         labels=["performance", "reliability"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "A turn loads the `Conversation` row, then issues two full `db.refresh(conv)` calls whose "
             "only consumers are a pure-Python ownership recheck and a conditional SQL UPDATE that is "
@@ -124,12 +133,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-04",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Direct-context lane runs an uncached full-KB scan every turn and re-sends the whole KB as prompt",
         sev="high",
         area="performance",
         labels=["performance"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`_DirectContextAdapter.resolve()` executes an uncached, unlimited join over every active "
             "project and loads the `normalized_text` TEXT column for all of them, on every turn whose "
@@ -163,12 +175,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-05",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="No provider prompt/prefix caching is exploited on any LLM call",
         sev="high",
         area="performance",
         labels=["performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Nothing in the LLM path sets a provider cache hint: the only `extra_body` in the codebase "
             "sets reasoning effort, and the chat builders pass no cache parameters. The static "
@@ -197,12 +212,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-06",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Turn preamble serialises four independent steps",
         sev="medium",
         area="performance",
         labels=["performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`run_turn` runs the pending record, the lead-gender lookup, the Jev HTTP call and "
             "project/direct-context resolution strictly in sequence, although only Jev consumes "
@@ -233,12 +251,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-14",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="The lead row is re-resolved 2–3× per turn by every adapter that needs it",
         sev="medium",
         area="performance",
         labels=["performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Each adapter that needs lead context calls `_resolve_lead` itself, so the same lookup "
             "repeats two to three times per turn and one redundant `UPDATE` fires when a gender is "
@@ -261,12 +282,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-07",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Connection budget exceeds `max_connections=150` and `pool_timeout=30s` outlives the turn SLA",
         sev="medium",
         area="performance",
         labels=["performance", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Every process uses the same 10+10 pool sizing while the compose topology has fewer "
             "processes than the config comment assumes, and the pool wait is three times the "
@@ -300,12 +324,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-08",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Retrieval computes the ANN distance three times per row and the memories halfvec index is unused",
         sev="medium",
         area="performance",
         labels=["performance"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The ANN query computes the same distance expression in its projection, its floor "
             "predicate and its ORDER BY, over 200 candidate rows and on the exact `vector` type. The "
@@ -342,12 +369,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-09",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="The retrieval cache key is non-deterministic because `active_project_ids()` has no ORDER BY",
         sev="medium",
         area="performance",
         labels=["performance", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`active_project_ids()` returns project ids in heap order, and that list is serialised "
             "straight into the retrieval cache digest, so row order becomes part of every RAG cache "
@@ -371,12 +401,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-10",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Single-flight coalescing can never engage, so the retrieval stampede is unmitigated",
         sev="medium",
         area="performance",
         labels=["performance", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The single-flight gate requires `project_ids is None`, but `project_ids` is set on every "
             "Zalo turn and every Page-scoped turn, so coalescing is off in production. The feature flag "
@@ -409,12 +442,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-11",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Dashboard runs whole-history aggregates every 30 s over a never-pruned `bot_runs` table",
         sev="medium",
         area="performance",
         labels=["performance", "ops"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The dashboard's summary and latency queries aggregate every `bot_runs` row with no time "
             "predicate, and one counter scans `conversations` on an unindexed predicate. The rows are "
@@ -443,12 +479,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-12",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Three periodic ticks and the reconcile sweep share a single `followup` worker with no depth bound",
         sev="medium",
         area="performance",
         labels=["performance", "ops", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The reconcile tick, the outbound-dispatch tick and the proactive-nudge tick all register "
             "on the `followup` queue, which has a single replica, and the reconcile sweep also enqueues "
@@ -480,12 +519,15 @@ TICKETS = [
     ),
     dict(
         id="PERF-13",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Embedding cache key is un-normalised and each entry is ~60 KB of JSON",
         sev="low",
         area="performance",
         labels=["performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The embedding cache hashes the raw query string, so case, Unicode form and trailing "
             "whitespace all produce distinct keys, and the value is a JSON array of Python floats. "
@@ -515,12 +557,15 @@ TICKETS = [
     # ---------------------------------------------------------- architecture
     dict(
         id="ARCH-01",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`app/services/ingestion/` is an 18-module subsystem with no production entry point",
         sev="high",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The whole ingestion/template subsystem is reachable only from tests: no API router "
             "exposes it, no worker calls it, and a repo-wide grep for `services.ingestion` inside "
@@ -547,12 +592,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-02",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Structured-fact / provenance subsystem is write-only at runtime and the canonical FAQ read path is dead",
         sev="high",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`models/provenance.py`'s twelve tables have writers whose only callers are themselves "
             "unreachable, and their readers are reached only through the dead `chatbot/paths.py`. The "
@@ -586,12 +634,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-03",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`services/chatbot/{paths,budget,deadlines}.py` is a parallel turn-dispatch implementation that never runs",
         sev="high",
         area="architecture",
         labels=["tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "A second, test-only turn dispatcher sits beside `graph/runner.py`'s inline branching, and "
             "the retrieval time-boxing it describes is unwired: `match_documents(..., deadline=None)` "
@@ -623,12 +674,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-04",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`graph/fast_lane.py` and the `template` route strategy are unreachable, so every pleasantry costs a full LLM turn",
         sev="high",
         area="architecture",
         labels=["tech-debt", "performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The router still emits a `template` strategy for pleasantries, but nothing consumes it — "
             "`runner.py` states outright that every normal user message reaches the LLM. The templates "
@@ -660,12 +714,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-05",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`graph/clients.py` (1626 LOC) holds seven responsibilities and duplicates `graph/grounding.py`",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "One file carries LangChain reasoning-field compatibility, Redis LLM observability, "
             "prefetch heuristics, grounding/authority extraction, provider retry/quota/failover, the "
@@ -694,12 +751,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-06",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`services/integration_settings.py` (1208 LOC) mixes crypto, six provider groups and cache invalidation",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "One module holds the AES-GCM credential cipher, six provider resolve/admin-view pairs "
             "each with its own key set, and the cache-namespace invalidation mechanics. The cipher has "
@@ -726,12 +786,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-07",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`api/integrations.py` (1353 LOC) carries provider business logic, including a raw httpx OAuth POST",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The router holds the Zalo webhook sync policy, a four-layer credential diagnostic that "
             "issues a raw httpx POST to the OAuth token endpoint, the whole Facebook OAuth flow with a "
@@ -760,12 +823,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-08",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`services/retrieval/repository.py` (992 LOC) implements the whole agent read surface and self-constructs its collaborators",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "One class owns memory match, document hybrid retrieval, FAQ, the project catalog, the "
             "persona body, the bus timetable and job/income reads. Four of its methods construct a "
@@ -794,12 +860,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-09",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`graph/factories.py` (900 LOC) does five jobs and is grandfathered out of the import guard",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The composition root holds port adapters, LLM builders, a process-wide client cache with "
             "async retirement, Page-scope resolution and `build_deps` plus six shims. The import guard "
@@ -826,12 +895,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-10",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`api/knowledge.py` calls private service methods, so the cutover guard is enforced at four call sites",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The router calls `KnowledgeService._require_version` and "
             "`KnowledgeService._require_legacy_mutation_allowed` directly, although the service "
@@ -856,12 +928,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-11",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Over-abstraction: single-implementation facades, a mis-declared Protocol and a test double in production code",
         sev="medium",
         area="architecture",
         labels=["tech-debt", "testing"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Several Protocols and facades have exactly one implementation and no behaviour of their "
             "own, one facade is wired two different ways depending on the caller, a Protocol is used "
@@ -892,12 +967,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-12",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`services/conversation/bot_path.py` (1118 LOC) carries five responsibilities",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "One file owns identity ensure, the inbound guards, the Redis lock lifecycle, the TOCTOU "
             "send claim, outcome recording, the reconcile sweeps and the proactive path. The lock "
@@ -922,12 +1000,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-13",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`@lru_cache get_settings()` plus seven import-time settings snapshots; `core/db.py` creates the engine at import",
         sev="medium",
         area="architecture",
         labels=["tech-debt", "testing"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Seven modules capture `get_settings()` at import time, which defeats the standard "
             "`monkeypatch.setenv` + `cache_clear()` remediation, and `core/db.py` binds the production "
@@ -952,12 +1033,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-14",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`app/capabilities/` is a live registry with a dormant, hash-verified extension API",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The registry's live half gates installation activation, but `resolve()`, "
             "`export_pack_contract()`, `ResolvedPack.adapter_descriptors` and "
@@ -984,12 +1068,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-15",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`services/outbox_service.py` (842 LOC) mixes row lifecycle with three provider dispatch branches",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "One module holds the dispatch value objects, the OA token refresh that happens during "
             "dispatch, the row lifecycle, the authority revalidation and three provider branches. The "
@@ -1013,12 +1100,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-16",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="`services/installation/service.py` (1055 LOC) interleaves validation, lifecycle, projection and checksums",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Revision CRUD and validation, the authority-locked lifecycle transitions, runtime "
             "resolution and readiness, the admin/runtime projections and the checksum assembly all "
@@ -1044,12 +1134,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-17",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="The enforced architecture rules miss the real import edges",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The layering rules the two architecture tests encode cover only part of the app, so the "
             "edges that actually violate the ports-first intent sit outside the guard and the guard "
@@ -1083,12 +1176,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-19",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="The flat services duplicate the bounded contexts in named pairs",
         sev="medium",
         area="architecture",
         labels=["tech-debt"],
         effort="L",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The flat `app/services/` layer and the bounded contexts implement the same concepts "
             "twice, so a fix must be applied in two places and only one copy is exercised in "
@@ -1116,12 +1212,15 @@ TICKETS = [
     ),
     dict(
         id="ARCH-18",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Import-time registry validation with failure semantics, and dormant `models/case.py` tables to record rather than drop",
         sev="low",
         area="architecture",
         labels=["tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`capabilities/registry.py` runs its dependency-graph and owner validation during import, "
             "so a pack defect becomes an import-order-dependent startup crash rather than a startup "

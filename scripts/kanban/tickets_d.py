@@ -9,7 +9,7 @@ TICKETS = [
     # ---------------------------------------------------------------- CRITICAL
     dict(
         id="OPS-01",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Full-droplet backup dies on a non-existent Caddyfile, and restore hard-requires the artifact it can never produce",
         sev="critical",
         area="ops",
@@ -19,6 +19,7 @@ TICKETS = [
             'Landed: backup-droplet.sh snapshots via guarded snapshot_file() and fetches the RENDERED /opt/vfic/Caddyfile (dies if empty/unflipped); restore accepts Caddyfile or Caddyfile.template',
             'BLOCKED: the card requires an end-to-end run against a throwaway droplet + a date in docs/DROPLET-BACKUP-RESTORE.md — no droplet access from here',
             'verified: bash -n on both scripts',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "`make backup-full` copies `backend/Caddyfile` into the bundle at step 4 of 7, but that "
@@ -58,7 +59,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-02",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Restore pins production to the latest tag instead of the dump's recorded image tag and never verifies schema compatibility",
         sev="critical",
         area="ops",
@@ -67,6 +68,7 @@ TICKETS = [
         evidence_log=[
             'Landed: restore-droplet.sh resolves IMAGE_TAG from ACTIVE_COLOR then manifests/docker-images.txt and fails closed when neither exists',
             'REMAINING: the deploy side (fail closed in bg_deploy.sh/flip_caddy.sh when ACTIVE_COLOR tag != running container tag) is not done',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "`scripts/restore-droplet.sh` runs `docker compose pull` and `docker compose up -d` with "
@@ -99,7 +101,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-03",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="The primary make backup path omits the key that encrypts integration credentials, so a restore silently yields undecryptable data",
         sev="critical",
         area="ops",
@@ -109,6 +111,7 @@ TICKETS = [
             '29446018 — make backup pulls /opt/vfic/.env + warns when the encryption key is absent',
             '4825c714/1f6b6fd9 — jwt_secret fallback labelled a migration hazard; DR-lost-secret documented',
             'verified: make -n backup parses; grep proves the key check sits on the fetch path',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "`make backup` dumps only `pg_dump` of `vfic` to OneDrive — no `.env` — yet every "
@@ -147,7 +150,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-04",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="No log rotation anywhere and no disk monitoring, so disk-full is an unalerted total outage",
         sev="critical",
         area="ops",
@@ -157,6 +160,7 @@ TICKETS = [
             '4825c714 — x-logging anchor attached to all 14 services (10 MB x 3 per container)',
             'scripts/ops-alerts.sh — disk >80/>95%, reclaimable Docker, /metrics thresholds, /health',
             'verified: yaml.safe_load parses; docker compose config -q clean with env set; bash -n',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "`backend/docker-compose.yml` declares no `logging:`, `max-size` or `max-file` keys on any of "
@@ -185,12 +189,15 @@ TICKETS = [
     # -------------------------------------------------------------------- HIGH
     dict(
         id="OPS-05",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Production and CI both ignore uv.lock, and 29 of 30 backend dependencies have no upper bound",
         sev="high",
         area="ops",
         labels=["ops", "reliability"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`backend/Dockerfile` installs with `pip install -e .` and every CI job uses "
             "`pip install -e .[dev]`; neither consults `backend/uv.lock`, which has no consumer anywhere "
@@ -221,7 +228,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-06",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Nothing scrapes the metrics endpoints and there are no alerts, so the only signal is the reconcile worker",
         sev="high",
         area="ops",
@@ -231,6 +238,7 @@ TICKETS = [
             '4825c714 + 1f6b6fd9 — scripts/ops-alerts.sh wired as a 1-minute cron, thresholds documented',
             'verified: bash -n scripts/ops-alerts.sh; thresholds match CHAT_QUEUE_MAX_DEPTH semantics',
             'remainder: an EXTERNAL uptime check still needs a third party — cannot be added from the repo',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "`/metrics` and `/health/queue` exist and export queue depths, worker counts and 9 reconcile "
@@ -268,12 +276,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-07",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Blue/green deploy runs migrations with no pre-migration dump and no lock_timeout",
         sev="high",
         area="ops",
         labels=["ops", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`bg_deploy.sh` step 3 runs `alembic upgrade head` before the new colour boots, with no "
             "`pg_dump` immediately prior and no `lock_timeout`/`statement_timeout` on the migration "
@@ -305,12 +316,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-08",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Worker healthchecks only ping Redis, so a wedged worker reports healthy forever",
         sev="high",
         area="ops",
         labels=["ops", "reliability"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Every worker and scheduler healthcheck is a Redis `ping()`. That proves the Redis client "
             "works, not that the worker consumes its queue, so a worker whose work loop has hung stays "
@@ -337,12 +351,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-09",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Memory limits cover 3 of 12 services and the documented host size contradicts itself",
         sev="high",
         area="ops",
         labels=["ops", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Only `worker-chatbot`, `worker-persistence` and `oa-profile-backfill` declare "
             "`deploy.resources.limits.memory`; the other nine services — including `postgres`, "
@@ -372,12 +389,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-10",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Every image is a mutable tag and no digest is pinned anywhere",
         sev="high",
         area="ops",
         labels=["ops", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "All base images and all eight application services resolve through mutable tags, and the "
             "restore path pulls `latest` by default. No digest pin exists in either Dockerfile or in "
@@ -402,12 +422,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-11",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Declared-but-unused dependencies and a dead curl in the runtime image",
         sev="medium",
         area="ops",
         labels=["ops", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Five declared backend dependencies have no import anywhere in `backend/app`, "
             "`backend/scripts` or `backend/tests`, and `curl` is installed in the runtime image \"for "
@@ -442,7 +465,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-12",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Documentation contradicts the code on operator-critical knobs",
         sev="medium",
         area="ops",
@@ -452,6 +475,7 @@ TICKETS = [
             '1f6b6fd9 — LLM_CONCURRENCY_LIMIT 0→8, EMBED_CONCURRENCY_LIMIT 0→6, VARCHAR(32)→VARCHAR(128) note',
             'c37ef6a5 — qa-runbook seeding path corrected to backend/scripts/seed_dev.py',
             'verified: each value read back from backend/app/core/config.py and the widen script',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "Six documented facts that operators act on are wrong: LLM/embed throttling defaults, the JWT "
@@ -484,12 +508,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-13",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Dev venv is Python 3.14 while production and CI are 3.12",
         sev="medium",
         area="ops",
         labels=["ops", "testing"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The local virtualenv resolves to Python 3.14 while the image and both CI jobs pin 3.12, and "
             "`requires-python` has no upper bound. The Makefile's `dev`/`db` targets and `release-check` "
@@ -520,12 +547,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-14",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Two copies of @tanstack/query-core ship in the frontend bundle",
         sev="medium",
         area="ops",
         labels=["ops", "performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`frontend/package.json` pins `@tanstack/query-core` exactly while floating "
             "`@tanstack/react-query` on a caret range, so npm resolves a nested second copy of the query "
@@ -551,12 +581,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-15",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Dev-only mock servers and the env template ship into the production backend image",
         sev="medium",
         area="ops",
         labels=["ops", "security"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`backend/.dockerignore` excludes `.venv`, `tests`, `.env*`, `Dockerfile`, "
             "`docker-compose*.yml` and `Caddyfile`, but not `mock_servers/` or `.env.example`. The image "
@@ -582,12 +615,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-16",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Nine migrations have fake or absent downgrades and no check exercises alembic downgrade",
         sev="medium",
         area="ops",
         labels=["ops", "tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Of 55 revisions plus one merge node, nine have `pass`, a `RuntimeError` or nothing in "
             "`downgrade()`. `release-check` asserts only that there is one head, no target, test or CI "
@@ -620,12 +656,15 @@ TICKETS = [
     ),
     dict(
         id="OPS-17",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Later migrations create indexes non-concurrently against live tables",
         sev="medium",
         area="ops",
         labels=["ops", "performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Five migrations after the baseline issue plain `CREATE INDEX`/`CREATE UNIQUE INDEX` on "
             "existing tables, unlike `0014` and `0016`, which correctly use `CREATE INDEX CONCURRENTLY` "
@@ -654,7 +693,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-18",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="make dev cannot work from a clean clone and no document says how to bootstrap",
         sev="medium",
         area="ops",
@@ -664,6 +703,7 @@ TICKETS = [
             '29446018 — idempotent `make bootstrap` (env, venv on 3.12, npm ci) and `dev` depends on it',
             'c37ef6a5 — root README.md with the one-command path; qa-runbook seed path fixed',
             'verified: make -n bootstrap / make -n dev produce the expected guarded commands',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "There is no root `README.md`, and no document contains a `python -m venv` or `npm ci` step. "
@@ -693,7 +733,7 @@ TICKETS = [
     ),
     dict(
         id="OPS-19",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Dead PORT plumbing between the root and backend Makefiles",
         sev="medium",
         area="ops",
@@ -702,6 +742,7 @@ TICKETS = [
         evidence_log=[
             '29446018 — root PORT deleted as dead plumbing; dev forwards FRONTEND_PORT (the variable backend reads)',
             'verified: make -n dev shows FRONTEND_PORT=$(PORT); backend/Makefile never references PORT',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "The root Makefile documents `make dev PORT=9000` and forwards `PORT` to `backend/Makefile`, "
@@ -727,7 +768,7 @@ TICKETS = [
     # --------------------------------------------------------------------- LOW
     dict(
         id="OPS-20",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Low-severity restore, backup, dev-exposure, release-gate and migration-naming hygiene",
         sev="low",
         area="ops",
@@ -737,6 +778,7 @@ TICKETS = [
             'Landed: ON_ERROR_STOP restore, password-reset prompt (FORCE=1), mktemp+trap, -Fc -Z6 + pg_restore, compose-resolved containers, retention of 10, loopback dev ports, uv lock --check, npm ci',
             'REMAINING: the filename==revision check (+ the two drifted revisions) — alembic/versions is approval-gated; renaming IDs would break deployed alembic_version rows',
             'Decision: no dev Redis password — loopback binding is the control (e2e harness pins a passwordless URL); documented in docker-compose.dev.yml',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "Five low-severity defects share one theme: the local tooling hides its own failures. "
@@ -774,12 +816,15 @@ TICKETS = [
     # ------------------------------------------------------------ DOCS / REPO
     dict(
         id="DOC-01",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="openwiki/INSTRUCTIONS.md documents a different product and steers the wiki agents are told to consult",
         sev="critical",
         area="docs",
         labels=["documentation", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`openwiki/INSTRUCTIONS.md` describes TingTing as a Vietnamese trucking-logistics platform "
             "built as a TypeScript monorepo with Express v5, Drizzle ORM, Casbin RBAC and a `shared/` "
@@ -811,7 +856,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-02",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="AGENTS.md routes to three skill paths that no longer exist and mis-paths the smoke script",
         sev="high",
         area="docs",
@@ -820,6 +865,7 @@ TICKETS = [
         evidence_log=[
             'AGENTS.md task routing now points at skill paths that exist (ak-cook/ak-debug) and backend/scripts/smoke_turn.py',
             'verified: every routed path exists on disk',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "The always-loaded constitution points at three `.claude/skills/*` paths that have been "
@@ -848,12 +894,15 @@ TICKETS = [
     ),
     dict(
         id="DOC-03",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Documentation drift cluster — every checked claim in TECH.md and codebase-summary.md except one is wrong",
         sev="high",
         area="docs",
         labels=["documentation"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Seventeen facts in the two documents that `AGENTS.md`/`TECH.md` designate as sources of truth "
             "are contradicted by the code — the auth library, the migration head, the entity count, the "
@@ -884,7 +933,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-04",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="plans/ is gitignored while AGENTS.md and the completion checklist mandate writing reports there",
         sev="high",
         area="docs",
@@ -893,6 +942,7 @@ TICKETS = [
         evidence_log=[
             'plans/reports/ is no longer gitignored: root rules plans/* + !plans/reports/ + !plans/qa-*/ (a nested .gitignore cannot re-include)',
             'verified against the vendored gitignore-spec engine: reports are ignored=false, per-plan dirs ignored=true',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "`.gitignore` ignores `plans/`, yet `AGENTS.md` and "
@@ -924,7 +974,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-05",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Three parallel agent-config systems, 1,858 tracked .claude files, and a hook that runs twice per prompt",
         sev="high",
         area="docs",
@@ -934,6 +984,7 @@ TICKETS = [
             '.claude/hooks/hooks.json deleted (its scripts were a strict subset of .claude/settings.json)',
             'settings.json UserPromptSubmit deduped 2 entries/6 invocations → 1/4, so hooks stop firing twice per prompt',
             'verified: json.load parses; all 14 registered hook scripts exist on disk; no loader reads the deleted manifest',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "`.claude/`, `.agentkit/` and `.omc/` are three competing sources of agent configuration with "
@@ -965,12 +1016,15 @@ TICKETS = [
     ),
     dict(
         id="DOC-06",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="repomix-output.xml is tracked at 4.8 MB although every ignore file classifies it as generated",
         sev="high",
         area="docs",
         labels=["documentation", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "A 4.8 MB stale text dump of the whole repository is tracked, while `.openwikiignore` lists it "
             "under generated artifacts and repomix's own header says it honours `.gitignore`. The dump "
@@ -996,12 +1050,15 @@ TICKETS = [
     ),
     dict(
         id="DOC-07",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="~21.2 MB of one-off marketing renders are tracked under assets/showoff",
         sev="high",
         area="docs",
         labels=["documentation", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`assets/showoff/zalo-oa-architecture-flow/**` commits 18 PNGs at 0.87-1.9 MB each — every "
             "aspect-ratio × slide combination, uncompressed — for a one-time artifact with no runtime "
@@ -1027,12 +1084,15 @@ TICKETS = [
     ),
     dict(
         id="DOC-08",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="One-off probe and QA scripts are tracked in frontend/qa although the backend explicitly bans the practice",
         sev="medium",
         area="docs",
         labels=["documentation", "testing"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`frontend/qa/` tracks ten `probe-*.cjs`/`qa-*.cjs`/`ultraqa-sweep.cjs` leftovers plus "
             "`TEST_PLAN.md` and a generated `registry.json`, while `backend/.gitignore` states the "
@@ -1058,12 +1118,15 @@ TICKETS = [
     ),
     dict(
         id="DOC-09",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="A 164.5 MB graph database is kept out of git only by a .gitignore inside its own untracked directory",
         sev="medium",
         area="docs",
         labels=["documentation", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`.code-review-graph/graph.db` is 164.5 MB and correctly untracked, but the only rule keeping "
             "it out of git lives at `.code-review-graph/.gitignore` — inside the untracked directory "
@@ -1091,7 +1154,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-10",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Repo-root sprawl — 22 top-level entries, 8 of them generated or stray",
         sev="medium",
         area="docs",
@@ -1100,6 +1163,7 @@ TICKETS = [
         evidence_log=[
             'Landed: root README.md created with purpose/stack/bootstrap/commands/docs map',
             'REMAINING: the other sprawl dispositions (untracked artifacts committed earlier by the docs slice) are partly applied — verify each entry before closing',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "The repository root carries 22 top-level entries, eight of which are generated output, stray "
@@ -1137,12 +1201,15 @@ TICKETS = [
     ),
     dict(
         id="DOC-11",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Core docs are about two months stale relative to the code they describe",
         sev="medium",
         area="docs",
         labels=["documentation"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Five of the six core documents carry July timestamps while roughly 60 commits have landed "
             "since mid-September, including the TypeSafe Jev router replacement, gender inference, the "
@@ -1170,7 +1237,7 @@ TICKETS = [
     ),
     dict(
         id="DOC-12",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Config duplication — three Makefiles, two JS lockfiles, two hook configs and rules duplicated across two trees",
         sev="medium",
         area="docs",
@@ -1179,6 +1246,7 @@ TICKETS = [
         evidence_log=[
             'config duplication reduced: hooks collapsed to settings.json, docs/agent-development-kit.md records one configuration authority',
             'verified: docs/agent-development-kit.md rewritten with the hooks layer + verification section',
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
         ],
         problem=(
             "Every shared concern in the build has at least two authoritative files: three Makefiles (one "
@@ -1209,12 +1277,15 @@ TICKETS = [
     ),
     dict(
         id="DOC-13",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="frontend/public ships ~7.7 MB with the same login art committed three times",
         sev="medium",
         area="docs",
         labels=["documentation", "performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Everything under `frontend/public/` is copied verbatim into the built image and served to "
             "browsers, yet it carries ~7.7 MB of masters and duplicates — four renderings of two login "

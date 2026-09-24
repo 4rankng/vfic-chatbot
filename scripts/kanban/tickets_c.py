@@ -3,12 +3,15 @@
 TICKETS = [
     dict(
         id="FE-01",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="ZaloIntegrationPage is a 2072-LOC module whose one component owns four product domains",
         sev="high",
         area="frontend",
         labels=["tech-debt"],
         effort="L",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`ZaloIntegrationPage.tsx` is 2072 LOC, of which a single component is ~1100 LOC with 19 "
             "`useState` owning four product domains: the Zalo channel form, the LLM provider "
@@ -47,6 +50,9 @@ TICKETS = [
         area="frontend",
         labels=["tech-debt"],
         effort="L",
+        evidence_log=[
+            'QA BLOCKED: test_no_new_layer_boundary_violations reports 16 edges from the five projects/application hooks this split created (outward imports of react, ra-core, project-knowledge-service and lib/apiClient, plus browser globals File/window.); test_frontend_domain_and_application_layers_do_not_use_browser_io_globals fails on the same files. Lane evidence is otherwise green (vitest 593, tsc, eslint, e2e 4+4).',
+        ],
         problem=(
             "`ProjectKnowledgePanel.tsx` is 1095 LOC whose `RagCategoriesPanel` alone is 623 LOC with "
             "12 `useState`, and it talks to the same backend through three different idioms: a plain "
@@ -78,12 +84,15 @@ TICKETS = [
     ),
     dict(
         id="FE-03",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="The message store never evicts a conversation and three exported selectors are dead duplicates",
         sev="high",
         area="frontend",
         labels=["performance", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The Zustand message store holds a `Map` of every conversation ever opened and nothing ever "
             "evicts an entry: `clear(convId)` exists but has zero callers repo-wide, `resetAll()` only "
@@ -115,12 +124,15 @@ TICKETS = [
     ),
     dict(
         id="FE-04",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Four overlapping 30-second polls of the same needs-attention endpoint per open tab",
         sev="high",
         area="frontend",
         labels=["performance", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Four queries poll the same `/conversations/needs-attention` endpoint every 30 seconds while "
             "the inbox is open: one unscoped count, three provider-scoped ones mounted inside the list "
@@ -150,12 +162,15 @@ TICKETS = [
     ),
     dict(
         id="FE-05",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="React.memo on the inbox row is structurally defeated by per-render row allocation",
         sev="high",
         area="frontend",
         labels=["performance"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`ConversationList` builds `rows` by allocating a new object per conversation inside a "
             "`useMemo` whose deps include `adapterPresentations`, `snippets`, `deferredQuery` and "
@@ -186,12 +201,15 @@ TICKETS = [
     ),
     dict(
         id="FE-06",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Confirmed-dead i18n catalog blocks and four self-testing kit/ components",
         sev="medium",
         area="frontend",
         labels=["tech-debt", "documentation"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`vietnameseCrmMessages.ts` still ships `resources.{companies,deals,notes,tasks,tags}`, "
             "`crm.settings.*`, a large `crm.dashboard.*` block and `crm.image_editor`/`crm.header`/"
@@ -231,12 +249,15 @@ TICKETS = [
     ),
     dict(
         id="FE-07",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Product code hardcodes Vietnamese, bypassing a catalog served by two competing providers",
         sev="medium",
         area="frontend",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Every product god component hardcodes Vietnamese in JSX and never calls `useTranslate`, "
             "while `components/admin/` uses it in 20+ files. Action labels are duplicated with two "
@@ -271,6 +292,9 @@ TICKETS = [
         area="frontend",
         labels=["tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA BLOCKED: test_no_new_layer_boundary_violations reports the provider seam this card introduced — conversations/presentation/{ChatThread.tsx,use-conversation-actions.ts} import providers/rest/dataProvider (commit f81c1042). Backend/FE lanes otherwise green.',
+        ],
         problem=(
             "`no-explicit-any` is set to `error` only for three flat globs, so "
             "`src/components/admin/layout/**` and `src/components/admin/form/**` are not covered, and "
@@ -301,12 +325,15 @@ TICKETS = [
     ),
     dict(
         id="FE-09",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="ExternalSourceList hand-rolls a 466-poll, 3h40m polling state machine",
         sev="medium",
         area="frontend",
         labels=["performance", "reliability"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`ExternalSourceList` derives a 13,200,000 ms (3h40m) sync budget and turns it into 466 "
             "follow-up polls, then implements them with 11 `useRef` plus 4 `useState`: a generation "
@@ -336,12 +363,15 @@ TICKETS = [
     ),
     dict(
         id="FE-10",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="A module-scope socket port pulls socket.io-client into the entry chunk and never re-auths after JWT rotation",
         sev="medium",
         area="frontend",
         labels=["performance", "reliability"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`createLeadRealtimePort(getRealtimeSocket())` is evaluated at module scope in a file that "
             "the entry graph imports eagerly, so the `realtime-vendor` chunk is fetched on first paint "
@@ -370,12 +400,15 @@ TICKETS = [
     ),
     dict(
         id="FE-11",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Two virtualization libraries, and manualChunks still splits the legacy one",
         sev="medium",
         area="frontend",
         labels=["performance", "tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`manualChunks` gives `/react-virtuoso/` its own vendor chunk, but the inbox thread uses "
             "`virtua` and react-virtuoso survives in exactly one place, so the config spends a manual "
@@ -403,12 +436,15 @@ TICKETS = [
     ),
     dict(
         id="FE-12",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="A 24-hour gcTime with no persister, plus offlineFirst mutations that can replay",
         sev="medium",
         area="frontend",
         labels=["reliability", "performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Every runtime generation configures `staleTime: 30_000`, `gcTime: 24h` and "
             "`networkMode: \"offlineFirst\"` on both queries and mutations, but no persister is wired "
@@ -435,12 +471,15 @@ TICKETS = [
     ),
     dict(
         id="FE-13",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="The layered slice pattern covers 6 of ~22 features, and the two worst god files are unlayered",
         sev="medium",
         area="frontend",
         labels=["tech-debt"],
         effort="L",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`application`/`domain`/`infrastructure` folders exist only under six features, while "
             "sixteen others — including `integrations/` and `dashboard/` — are flat, so the two worst "
@@ -476,12 +515,15 @@ TICKETS = [
     ),
     dict(
         id="FE-14",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Duplicated credential-field machinery between the Zalo and Facebook pages",
         sev="medium",
         area="frontend",
         labels=["tech-debt"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Two masked-secret-with-reveal implementations exist — `CredentialSecretField` for Zalo "
             "(copy + reveal + status) and an inline `MetaAppSecretField` for Facebook (reveal only, "
@@ -509,12 +551,15 @@ TICKETS = [
     ),
     dict(
         id="FE-15",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Dashboard derivations are recomputed on every render",
         sev="medium",
         area="frontend",
         labels=["performance"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`RecruitingCommandCenter` runs `filterHumanInterventions`, `groupCandidatesByDay` and a "
             "`reduce` count inline on every render, including opening or closing the candidate dialog "
@@ -541,12 +586,15 @@ TICKETS = [
     ),
     dict(
         id="FE-16",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="Unreachable English i18n default, unused dependencies, and an unscoped global CSS surface",
         sev="low",
         area="frontend",
         labels=["tech-debt", "documentation"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`frontend/src/lib/i18nProvider.ts` is an English default that the runtime always overrides, "
             "so \"which locale am I in\" has two answers. Four declared dependencies have no importers, "
@@ -574,12 +622,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-01",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="CI and the deploy gate run 1 of 29 backend integration test files",
         sev="critical",
         area="testing",
         labels=["testing", "ops"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The integration lane is 29 files wide, but both CI and the local release gate invoke "
             "exactly one of them — the harness smoke test that only proves the lane works. Every "
@@ -607,12 +658,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-02",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Knowledge-ingestion tests are marked skip, not integration, so they run nowhere",
         sev="critical",
         area="testing",
         labels=["testing"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Three knowledge-ingestion test modules carry an unconditional `pytest.mark.skip` with the "
             "reason \"moved out of unit suite\", which is false — they were not relocated. Because the "
@@ -641,12 +695,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-03",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Backend coverage is never measured and the frontend 80% gate covers 3 of 425 files",
         sev="critical",
         area="testing",
         labels=["testing", "ops"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The backend has no coverage tooling at all: `pytest-cov` is not a dependency and no `--cov` "
             "flag appears anywhere in CI or the Makefile. The frontend's 80% gate is real but its "
@@ -674,12 +731,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-04",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="The release gate is real but narrow, mislabelled correctness, and not wired to deploy",
         sev="high",
         area="testing",
         labels=["testing", "ops"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The golden-pass-rate gate is genuinely fail-closed and well unit-tested, but it measures "
             "retrieval precision on a committed fixture scored with canned embeddings — no bot turn is "
@@ -718,12 +778,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-05",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="No contract test links the frontend data provider to the backend routes",
         sev="high",
         area="testing",
         labels=["testing"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The frontend data provider asserts hardcoded URL strings with no link to the backend, and "
             "the backend pins its route surface only against itself. A route rename, a prefix move or a "
@@ -748,12 +811,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-06",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="No dependency or security scanning in CI",
         sev="high",
         area="testing",
         labels=["testing", "security", "ops"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The repository has two workflows, no Dependabot config, and no `pip-audit`, `npm audit`, "
             "CodeQL or SAST step anywhere, so a published CVE in any pinned dependency is invisible "
@@ -778,12 +844,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-07",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="The vitest claude project matches zero files and is never run",
         sev="high",
         area="testing",
         labels=["testing", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`vitest.config.ts` declares a second test project whose include glob matches no file in the "
             "repository, and neither CI nor the Makefile invokes its npm script. It reads as a working "
@@ -808,12 +877,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-08",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Visual-regression baselines are darwin-only and the visual projects are excluded from CI",
         sev="high",
         area="testing",
         labels=["testing", "ops"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The only pixel-level guard in the repo has four committed baselines, all `-darwin.png`, and "
             "the two visual Playwright projects are excluded from both the chromium and mobile projects "
@@ -839,12 +911,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-09",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Implementation is pinned by inspect.getsource substring assertions",
         sev="medium",
         area="testing",
         labels=["testing"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Several backend tests read a module's source text and assert that specific tokens appear in "
             "it, which is the inverse of test value: they pass on a refactor that extracts behaviour "
@@ -873,12 +948,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-10",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="~40 assertions test CSS and TSX source text instead of rendered layout",
         sev="medium",
         area="testing",
         labels=["testing", "tech-debt"],
         effort="L",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Nine frontend test files import stylesheets or component source via `?raw` and assert "
             "regexes against the text, which passes when a selector is misspelled, shadowed by a later "
@@ -906,12 +984,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-11",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Wall-clock timing assertions in the unit lane will flake on a slow runner",
         sev="medium",
         area="testing",
         labels=["testing"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Several unit tests prove concurrency or deadline behaviour with narrow wall-clock margins, "
             "so a GC pause or scheduler delay on a shared runner makes them red while the code is "
@@ -938,12 +1019,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-12",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="The unit lane has no outbound-network guard although the integration lane does",
         sev="medium",
         area="testing",
         labels=["testing"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The integration conftest blocks all non-loopback HTTP and socket connects, but the unit "
             "conftest has no equivalent guard, and it explicitly clears the shared httpx client "
@@ -974,12 +1058,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-13",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="56 migrations, ~8 with roundtrip coverage, and none of those run in CI",
         sev="medium",
         area="testing",
         labels=["testing", "ops"],
         effort="L",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The Alembic history holds 56 revisions, of which only about eight have any forward/backward "
             "roundtrip test, and none of those eight are reachable in CI. Because the blue/green flow "
@@ -1006,12 +1093,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-14",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="E2E is a 2-test smoke and the highest-blast-radius journeys are mock-only",
         sev="medium",
         area="testing",
         labels=["testing"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The browser suite is exactly two tests — login plus dashboard render, and conversation "
             "takeover/release. Nothing exercises knowledge upload through ingestion to a terminal "
@@ -1038,12 +1128,15 @@ TICKETS = [
     ),
     dict(
         id="TEST-15",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Sleep-pumped synchronization, deploy-Makefile test fakes, and AST-structure pins",
         sev="low",
         area="testing",
         labels=["testing", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Three low-severity patterns remain in the suite: `await asyncio.sleep(0)` used as a "
             "synchronization primitive for fire-and-forget tasks, deploy-Makefile tests that re-implement "
@@ -1073,12 +1166,15 @@ TICKETS = [
     ),
     dict(
         id="FE-17",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="registry.json is not the generator's output and registry:check already fails at HEAD",
         sev="medium",
         area="frontend",
         labels=["tech-debt", "testing"],
         effort="M",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "`frontend/registry.json` is a tracked generated artifact that no longer matches what "
             "`scripts/generate-registry.mjs` produces, and `npm run registry:check` fails at HEAD "
@@ -1113,12 +1209,17 @@ TICKETS = [
     ),
     dict(
         id="FE-18",
-        column="DEV_COMPLETED",
+        column="QA_TESTED",
         title="npm run lint never reaches src/components, so the CI lint step is vacuous",
         sev="high",
         area="testing",
         labels=["testing", "tech-debt"],
         effort="S",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 + ruff clean; integration 130 on a disposable Postgres 16 at alembic head; frontend tsc/eslint/vitest 593 green; e2e chromium 4 + Mobile Chrome 4 green against the real backend',
+            "2026-09-24 — fixed: glob quoted in `frontend/package.json`; verified `npm run lint` now lints 457 files and exits 0. The `no-explicit-any` scope added by FE-08 is now actually enforced.",
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "The lint script is `eslint **/*.{mjs,ts,tsx} --no-warn-ignored` — unquoted — so `/bin/sh` "
             "expands `**` as `*`. ESLint therefore receives only the top-level files and never reaches "
@@ -1143,18 +1244,18 @@ TICKETS = [
             "warnings, so the corrected script is immediately green — this is a one-line change, not a "
             "backlog."
         ),
-        evidence_log=[
-            "2026-09-24 — fixed: glob quoted in `frontend/package.json`; verified `npm run lint` now lints 457 files and exits 0. The `no-explicit-any` scope added by FE-08 is now actually enforced.",
-        ],
     ),
     dict(
         id="FE-19",
-        column="IN_PROGRESS",
+        column="QA_TESTED",
         title="Feature stylesheets are not scoped by module; selectors nest under one global container class",
         sev="low",
         area="frontend",
         labels=["tech-debt"],
         effort="L",
+        evidence_log=[
+            'QA 2026-09-24 (orchestrator, first-hand): unit 2299 passed + ruff clean; integration 130 passed (Postgres 16 disposable DB, alembic head); frontend tsc/eslint/vitest 593 green; e2e chromium 4 and Mobile Chrome 4 green against the real backend',
+        ],
         problem=(
             "Feature CSS is not scoped by module: selectors nest under a shared global container class, "
             "so any global rule can reach any feature's elements. The sheet surface is one 48 KB global "
