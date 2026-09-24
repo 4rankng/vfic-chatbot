@@ -27,12 +27,18 @@ from app.models.outbox import OutboundOutbox
 from app.services.viewer_scope import viewer_scope_filter, viewer_scope_sql
 
 # Whitelist of sortable conversation columns. Unknown / absent sort keys fall
-# back to updated_at (the default inbox ordering).
+# back to the inbox default.
 _CONVERSATION_SORT = {
     "updated_at": Conversation.updated_at,
     "created_at": Conversation.created_at,
     "last_inbound_at": Conversation.last_inbound_at,
+    # Inbox default: the latest candidate message, falling back to the row's
+    # update time. ``updated_at`` alone is unreliable — batch maintenance
+    # (backfills/migrations) touches it without a new message, which scrambles
+    # the inbox against the timestamp each row actually displays.
+    "last_message_at": func.coalesce(Conversation.last_inbound_at, Conversation.updated_at),
 }
+_CONVERSATION_DEFAULT_SORT = "last_message_at"
 
 
 def _unanswered_inbound_condition():
@@ -198,7 +204,9 @@ class ConversationRepository:
                 )
             )
         total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
-        sort_col = _CONVERSATION_SORT.get((sort_by or "").lower()) or Conversation.updated_at
+        sort_col = _CONVERSATION_SORT.get((sort_by or _CONVERSATION_DEFAULT_SORT).lower())
+        if sort_col is None:
+            sort_col = _CONVERSATION_SORT[_CONVERSATION_DEFAULT_SORT]
         order_expr = sort_col.asc() if (order or "desc").lower() == "asc" else sort_col.desc()
         mode_order_expr = case(
             (Conversation.mode == ConversationMode.HUMAN, 0),

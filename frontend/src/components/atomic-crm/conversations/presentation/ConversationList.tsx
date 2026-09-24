@@ -57,7 +57,7 @@ type ConversationRow = Conversation & {
   _snippet?: string;
 };
 
-const CONVERSATION_LIST_SORT = { field: "updated_at", order: "DESC" } as const;
+const CONVERSATION_LIST_SORT = { field: "last_message_at", order: "DESC" } as const;
 
 const getRelativeTimeString = (dateStr?: string) => {
   if (!dateStr) return "";
