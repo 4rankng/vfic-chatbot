@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
-import { useDataProvider, useNotify, useRefresh } from "ra-core";
+import {
+  type DataProvider,
+  useDataProvider,
+  useNotify,
+  useRefresh,
+} from "ra-core";
 import type { Conversation } from "../../types";
-import type { CrmDataProvider } from "../../providers/rest/dataProvider";
-import { changeConversationMode } from "../application/conversation-actions";
+import {
+  changeConversationMode,
+  type ConversationModeWriter,
+} from "../application/conversation-actions";
 import {
   deriveConversationModeState,
   type ConversationMode,
@@ -20,7 +27,7 @@ export type { ConversationMode } from "../domain/conversation-mode";
  * converges across every consumer reading `record.mode`.
  */
 export const useConversationActions = (record?: Conversation) => {
-  const modeWriter = useDataProvider<CrmDataProvider>();
+  const modeWriter = useDataProvider<DataProvider & ConversationModeWriter>();
   const notify = useNotify();
   const refresh = useRefresh();
   const [localMode, setLocalMode] = useState<ConversationMode | undefined>(

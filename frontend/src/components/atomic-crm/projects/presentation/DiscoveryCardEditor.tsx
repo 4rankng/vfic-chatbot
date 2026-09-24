@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { Project } from "../../types";
-import { useDiscoveryCardDraft } from "../application/use-discovery-card-draft";
+import { useDiscoveryCardDraft } from "./use-discovery-card-draft";
 
 /** Editor for the discovery card the agent matches candidates against. */
 export const DiscoveryCardEditor = ({ project }: { project: Project }) => {

@@ -5,7 +5,7 @@ import type {
   ConversationContextValue,
 } from "../capabilities/types";
 import type { Conversation } from "../types";
-import { getGenericConversationContext } from "./domain/conversation-presentation";
+import { getGenericConversationContext } from "./presentation/conversation-presentation";
 import { useConversationCapabilitySlots } from "./useConversationCapabilitySlots";
 
 export const GenericConversationContextAdapter = ({

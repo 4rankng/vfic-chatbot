@@ -190,6 +190,14 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/presentation/use-faq-auto-sync-notice.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/presentation/use-discovery-card-draft.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/presentation/use-category-draft.ts",
           "type": "registry:component"
         },
@@ -235,14 +243,6 @@
         },
         {
           "path": "src/components/atomic-crm/projects/domain/externalSourcePolling.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/projects/application/use-faq-auto-sync-notice.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/projects/application/use-discovery-card-draft.ts",
           "type": "registry:component"
         },
         {
@@ -758,6 +758,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/conversations/presentation/conversation-presentation.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/presentation/conversation-message-state.ts",
           "type": "registry:component"
         },
@@ -795,10 +799,6 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/domain/conversation-row-state.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/domain/conversation-presentation.ts",
           "type": "registry:component"
         },
         {

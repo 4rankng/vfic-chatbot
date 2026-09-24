@@ -13,6 +13,7 @@ import {
 } from "react";
 import { VList, type VListHandle } from "virtua";
 import {
+  type DataProvider,
   useDataProvider,
   useGetIdentity,
   useNotify,
@@ -21,12 +22,14 @@ import {
 import type { Conversation, Message } from "../../types";
 import {
   isHumanReplyFailure,
+  type MarkConversationReadPort,
   markConversationAsRead,
+  type RetryConversationReplyPort,
   retryConversationReply,
+  type SendConversationReplyPort,
   sendConversationReply,
 } from "../application/conversation-operations";
 import { isUnseenWorthyArrival } from "../domain/conversation-thread";
-import type { CrmDataProvider } from "../../providers/rest/dataProvider";
 import { useConversationActions } from "./use-conversation-actions";
 import { useConversationRealtime } from "./use-conversation-realtime";
 import {
@@ -341,7 +344,12 @@ export const ChatThread = ({
     retryInitial,
     retryHistory,
   } = useConversationRealtime(conversationId);
-  const operations = useDataProvider<CrmDataProvider>();
+  const operations = useDataProvider<
+    DataProvider &
+      MarkConversationReadPort &
+      SendConversationReplyPort &
+      RetryConversationReplyPort
+  >();
   const { identity } = useGetIdentity();
   const notify = useNotify();
   const translate = useTranslate();
