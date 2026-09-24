@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Iterable
 
-from app.capabilities.contracts import CapabilityDefinition, IndustryPackDefinition, ResolvedPack
+from app.capabilities.contracts import CapabilityDefinition, IndustryPackDefinition
 from app.capabilities.recruitment.definition import CAPABILITIES as RECRUITMENT_CAPABILITIES
 from app.capabilities.recruitment.definition import PACK as RECRUITMENT_PACK
 
@@ -68,46 +68,6 @@ class CapabilityRegistry:
             if missing:
                 raise ValueError(f"capability {capability_id} requires: {sorted(missing)}")
         return selected
-
-    def resolve(
-        self,
-        pack_key: str,
-        pack_version: str,
-        capability_ids: Iterable[str],
-        pack_contract_hash: str,
-        *,
-        kernel_abi: str = SUPPORTED_KERNEL_ABI,
-        schema_version: int = PACK_CONTRACT_SCHEMA_VERSION,
-    ) -> ResolvedPack:
-        pack = self.get_pack(pack_key)
-        if schema_version != PACK_CONTRACT_SCHEMA_VERSION:
-            raise ValueError(f"unsupported pack contract schema: {schema_version}")
-        if kernel_abi != SUPPORTED_KERNEL_ABI or pack.kernel_abi != kernel_abi:
-            raise ValueError(f"unsupported kernel ABI: {kernel_abi}")
-        if pack.version != pack_version:
-            raise ValueError(f"unsupported pack version: {pack_version}")
-        selected = self.validate_selection(pack_key, capability_ids)
-        expected_hash = self.pack_contract_hash(pack_key)
-        if pack_contract_hash != expected_hash:
-            raise ValueError("pack contract hash mismatch")
-        return ResolvedPack(
-            pack=pack,
-            capabilities=tuple(self._capabilities[item] for item in selected),
-            contract_hash=expected_hash,
-            adapter_descriptors=tuple(
-                descriptor
-                for item in selected
-                if (descriptor := self._capabilities[item].adapter_descriptor) is not None
-            ),
-        )
-
-    def export_pack_contract(self, pack_key: str) -> dict:
-        pack = self.get_pack(pack_key)
-        return {
-            "schema_version": PACK_CONTRACT_SCHEMA_VERSION,
-            "pack": self._pack_payload(pack),
-            "contract_hash": self.pack_contract_hash(pack_key),
-        }
 
     def pack_contract_hash(self, pack_key: str) -> str:
         """Hash only the selected pack contract, not unrelated registry entries."""
@@ -184,11 +144,6 @@ class CapabilityRegistry:
                     raise ValueError(f"duplicate {label} owner: {sorted(duplicate)}")
                 seen.update(values)
             dashboards += int(capability.dashboard_owner)
-            descriptor = capability.adapter_descriptor
-            if descriptor is not None and descriptor.capability_id != capability_id:
-                raise ValueError(
-                    f"adapter descriptor ownership mismatch: {descriptor.capability_id}"
-                )
         if dashboards > 1:
             raise ValueError("multiple dashboard owners")
 

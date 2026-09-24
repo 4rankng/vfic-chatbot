@@ -3,13 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
-
-
-class CapabilityAdapter(Protocol):
-    """Marker protocol for source-owned delegation adapters."""
-
-    capability_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,7 +16,6 @@ class CapabilityDefinition:
     frontend_resources: tuple[str, ...] = ()
     dashboard_owner: bool = False
     conversation_slots: tuple[str, ...] = ()
-    adapter_descriptor: CapabilityAdapter | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,11 +30,3 @@ class IndustryPackDefinition:
     workflow_ids: tuple[str, ...] = ()
     terminology_keys: tuple[str, ...] = ()
     runtime_ready: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedPack:
-    pack: IndustryPackDefinition
-    capabilities: tuple[CapabilityDefinition, ...]
-    contract_hash: str
-    adapter_descriptors: tuple[CapabilityAdapter, ...] = ()

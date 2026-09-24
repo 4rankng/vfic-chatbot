@@ -175,39 +175,28 @@ def test_selection_rejects_unknown_and_cross_pack_capability_ids() -> None:
         registry.validate_selection("recruitment", ("app.capabilities.recruitment",))
 
 
-def test_resolve_rejects_version_abi_schema_and_hash_mismatch() -> None:
-    registry = _registry()
-    selected = ("conversation", "knowledge", "job_advisory")
-    contract_hash = registry.pack_contract_hash("recruitment")
-    resolved = registry.resolve("recruitment", "1", selected, contract_hash)
-    assert resolved.contract_hash == contract_hash
+def test_shipped_pack_contract_hash_is_pinned_to_the_published_contract() -> None:
+    """The live hash must equal the published v1 contract's hash.
 
-    with pytest.raises(ValueError, match="pack version"):
-        registry.resolve("recruitment", "2", selected, contract_hash)
-    with pytest.raises(ValueError, match="kernel ABI"):
-        registry.resolve("recruitment", "1", selected, contract_hash, kernel_abi="2")
-    with pytest.raises(ValueError, match="schema"):
-        registry.resolve("recruitment", "1", selected, contract_hash, schema_version=2)
-    with pytest.raises(ValueError, match="hash mismatch"):
-        registry.resolve("recruitment", "1", selected, "0" * 64)
-
-
-def test_shipped_pack_export_is_canonical_non_executable_contract() -> None:
-    import json
+    Every installed revision stores this hash, so an accidental change to the
+    payload (a field added, an ordering tweak) would flag every production
+    installation with PACK_CONTRACT_MISMATCH. The fixture is the published
+    contract of record; only a deliberate contract bump may move this hash.
+    """
     from pathlib import Path
     from app.capabilities.registry import get_capability_registry
 
-    exported = get_capability_registry().export_pack_contract("recruitment")
     fixture = json.loads(
         (Path(__file__).parents[1] / "app/capabilities/recruitment_v1_contract.json").read_text()
     )
-    assert exported == fixture
-    assert exported["schema_version"] == 1
-    assert exported["contract_hash"] == (
+    assert get_capability_registry().pack_contract_hash("recruitment") == (
+        fixture["contract_hash"]
+    )
+    assert fixture["contract_hash"] == (
         "2a7c602a2e222d14686fca6d86e12da34b0e2ce8ee6b4af32a95af7bd58622d9"
     )
-    assert all("import" not in item for item in exported["pack"]["capabilities"])
-    assert all("factory" not in item for item in exported["pack"]["capabilities"])
+    assert all("import" not in item for item in fixture["pack"]["capabilities"])
+    assert all("factory" not in item for item in fixture["pack"]["capabilities"])
 
 
 @pytest.mark.parametrize(
@@ -243,37 +232,3 @@ def test_pack_hash_covers_contract_schema_envelope(monkeypatch) -> None:
     baseline = registry.pack_contract_hash("recruitment")
     monkeypatch.setattr(registry_module, "PACK_CONTRACT_SCHEMA_VERSION", 2)
     assert registry.pack_contract_hash("recruitment") != baseline
-
-
-def test_recruitment_descriptor_is_source_owned_resolved_and_not_exported() -> None:
-    from app.capabilities.recruitment.adapter import DESCRIPTOR
-    from app.capabilities.registry import get_capability_registry
-
-    registry = get_capability_registry()
-    resolved = registry.resolve(
-        "recruitment",
-        "1",
-        ("conversation", "candidate_intake"),
-        registry.pack_contract_hash("recruitment"),
-    )
-    assert resolved.adapter_descriptors == (DESCRIPTOR,)
-    assert "adapter" not in json.dumps(registry.export_pack_contract("recruitment"))
-
-
-def test_registry_rejects_adapter_descriptor_owned_by_another_capability() -> None:
-    from app.capabilities.recruitment.adapter import DESCRIPTOR
-
-    with pytest.raises(ValueError, match="ownership mismatch"):
-        _registry(
-            capabilities=(
-                CapabilityDefinition("conversation", adapter_descriptor=DESCRIPTOR),
-            ),
-            packs=(
-                IndustryPackDefinition(
-                    key="recruitment",
-                    version="1",
-                    capability_ids=("conversation",),
-                    kernel_abi="1",
-                ),
-            ),
-        )

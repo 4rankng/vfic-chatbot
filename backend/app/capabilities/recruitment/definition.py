@@ -1,7 +1,6 @@
 """Code-reviewed recruitment pack definition without runtime side effects."""
 
 from app.capabilities.contracts import CapabilityDefinition, IndustryPackDefinition
-from app.capabilities.recruitment.adapter import DESCRIPTOR
 
 CAPABILITIES = (
     CapabilityDefinition(
@@ -20,7 +19,6 @@ CAPABILITIES = (
         ("conversation",),
         api_routes=("/api/v1/leads",),
         conversation_slots=("row", "filters", "context", "actions"),
-        adapter_descriptor=DESCRIPTOR,
     ),
     CapabilityDefinition(
         "job_advisory",
