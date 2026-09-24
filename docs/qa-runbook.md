@@ -29,7 +29,7 @@ make dev              # Postgres + Redis + Adminer + backend (uvicorn :8000)
 
 If you only need the frontend hot-reloading against a running backend, from
 `backend/` run `make dev` (same target, fewer surprises). The first run seeds
-the dev database via `scripts/seed_dev.py`.
+the dev database via `backend/scripts/seed_dev.py`.
 
 ### Verify the stack is up
 
