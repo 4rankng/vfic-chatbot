@@ -30,11 +30,11 @@
     ],
     "customizations": [
       "Vietnamese-only UI (custom vi locale catalog via vietnameseCrmMessages; language switcher removed; i18nProvider pinned to vi)",
-      "Resources repointed at live VFIC Supabase: leads, conversations, bot_runs, knowledge_sources, users. Upstream contacts/companies/deals/tags/tasks/notes/sales were DELETED.",
-      "Custom Supabase dataProvider + authProvider (src/components/atomic-crm/providers/supabase/) bound to VFIC schema (profiles/leads/conversations/messages).",
+      "Resources repointed at the live VFIC FastAPI backend: conversations, bot_runs, knowledge_sources, knowledge_bases, projects, personas, settings, users. Upstream contacts/companies/deals/tags/tasks/notes/sales were DELETED.",
+      "Custom REST dataProvider + authProvider (src/components/atomic-crm/providers/rest/) bound to the VFIC API (/api/v1 REST + Socket.IO).",
       "Topbar: floating glass-pill + command palette + notifications bell (src/components/atomic-crm/layout/).",
       "/leads overhaul: dense LeadCard, LeadStageMenu, LeadsToolbar, grouped collapsible list, ?display mobile gate.",
-      "Conversations: virtualized chat thread (react-virtuoso), contacts-only inbox, batched getLeadsByZaloIds.",
+      "Conversations: virtualized chat thread (virtua), contacts-only inbox, batched getLeadsByZaloIds.",
       "OKLCH design tokens in src/index.css (three-tier convention; see adr/ADR-oklch-token-convention.md).",
       "Responsive layout across mobile/tablet/laptop/widescreen (dvh heights, 1440 cap, list-first mobile via ?id= URL)."
     ]

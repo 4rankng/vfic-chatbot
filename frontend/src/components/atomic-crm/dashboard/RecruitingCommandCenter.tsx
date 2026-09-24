@@ -1,9 +1,9 @@
 import { AlertTriangle, MessageCircle, PanelRight, Phone } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDataProvider, useNotify } from "ra-core";
-import { useRef, useState } from "react";
-import { GroupedVirtuoso } from "react-virtuoso";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { VList, WindowVirtualizer } from "virtua";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -116,42 +116,56 @@ export const RecruitingCommandCenter = ({
     staleTime: 25_000,
     gcTime: 5 * 60_000,
   });
-  const saveCandidateProfile: SaveCandidateProfile = async (
-    lead,
-    changes,
-    version,
-  ) => {
-    try {
-      await dataProvider.update<Lead>("leads", {
-        id: lead.id,
-        data: { ...changes, version },
-        previousData: lead,
-      });
-      notify("Đã cập nhật hồ sơ ứng viên", { type: "success" });
-      await candidatesQuery.refetch().catch(() => undefined);
-    } catch (error) {
-      await candidatesQuery.refetch().catch(() => undefined);
-      notify(
-        error instanceof Error
-          ? error.message
-          : "Không thể cập nhật hồ sơ ứng viên",
-        { type: "error" },
-      );
-      throw error;
-    }
-  };
+  // The result object changes on every fetch-state flip; the refetch binding
+  // does not, so the save callback can stay referentially stable.
+  const { refetch: refetchCandidates } = candidatesQuery;
+  const saveCandidateProfile: SaveCandidateProfile = useCallback(
+    async (lead, changes, version) => {
+      try {
+        await dataProvider.update<Lead>("leads", {
+          id: lead.id,
+          data: { ...changes, version },
+          previousData: lead,
+        });
+        notify("Đã cập nhật hồ sơ ứng viên", { type: "success" });
+        await refetchCandidates().catch(() => undefined);
+      } catch (error) {
+        // No refetch here: the write failed, so the cached list is still the
+        // authoritative snapshot — refetching only doubles list traffic.
+        notify(
+          error instanceof Error
+            ? error.message
+            : "Không thể cập nhật hồ sơ ứng viên",
+          { type: "error" },
+        );
+        throw error;
+      }
+    },
+    [dataProvider, notify, refetchCandidates],
+  );
 
   const shellClass =
     variant === "mobile"
       ? "recruiting-command recruiting-command-mobile"
       : "recruiting-command";
 
-  const interventionRows = filterHumanInterventions(data?.immediate ?? []);
-  const candidateGroups = groupCandidatesByDay(candidatesQuery.data ?? []);
-  const candidateCount = candidateGroups.reduce(
-    (total, group) => total + group.candidates.length,
-    0,
+  // Both derivations are O(n) over the whole queue, so they are memoized on
+  // their query data: unrelated re-renders (cache indicators, dialog state,
+  // 30s refetches that return identical data) must not regroup the lists.
+  const interventionRows = useMemo(
+    () => filterHumanInterventions(data?.immediate ?? []),
+    [data?.immediate],
   );
+  const { candidateGroups, candidateCount } = useMemo(() => {
+    const groups = groupCandidatesByDay(candidatesQuery.data ?? []);
+    return {
+      candidateGroups: groups,
+      candidateCount: groups.reduce(
+        (total, group) => total + group.candidates.length,
+        0,
+      ),
+    };
+  }, [candidatesQuery.data]);
 
   // Skeleton on first load only; cached data + refetch never flashes a skeleton.
   // Retained data + error banner on partial failure; retry pane on initial fail.
@@ -211,7 +225,7 @@ export const RecruitingCommandCenter = ({
             className="tt-btn tt-btn-sm tt-btn-error tt-btn-outline"
             onClick={() => {
               void refetch();
-              void candidatesQuery.refetch();
+              void refetchCandidates();
             }}
           >
             Thử lại
@@ -243,7 +257,7 @@ export const RecruitingCommandCenter = ({
             hasRows: candidateCount > 0,
           }}
           navigate={navigate}
-          onRetry={candidatesQuery.refetch}
+          onRetry={refetchCandidates}
           canEdit={canEdit}
           onSave={saveCandidateProfile}
         />
@@ -396,8 +410,35 @@ const CandidateGroupedList = ({
   onSave: SaveCandidateProfile;
 }) => {
   const isMobile = useIsMobile();
-  const candidates = groups.flatMap((group) => group.candidates);
   const desktopHeight = Math.min(640, count * 58 + groups.length * 30);
+
+  // virtua virtualizes a flat child list and has no grouped API, so each day
+  // header is emitted as its own item immediately before that day's rows. The
+  // list only exists for the virtualized branch, hence the empty array below
+  // the static-list threshold.
+  const virtualItems = useMemo(
+    () =>
+      count <= 20
+        ? []
+        : groups.flatMap((group) => [
+            <h3
+              key={`day-${group.key}`}
+              className="dashboard-candidate-day-header"
+            >
+              {group.label}
+            </h3>,
+            ...group.candidates.map((candidate) => (
+              <CandidateRow
+                key={`candidate-${candidate.id}`}
+                candidate={candidate}
+                navigate={navigate}
+                canEdit={canEdit}
+                onSave={onSave}
+              />
+            )),
+          ]),
+    [count, groups, navigate, canEdit, onSave],
+  );
 
   // The dashboard usually contains only a handful of recent candidates. A
   // direct list keeps those rows visible and avoids a virtualizer viewport
@@ -424,30 +465,24 @@ const CandidateGroupedList = ({
     );
   }
 
+  // Mobile scrolls the document (`.dashboard-workspace` is `overflow: visible`
+  // under 768px), so the window is the scroll container there; the desktop
+  // panel keeps its own bounded scroll viewport.
+  if (isMobile) {
+    return (
+      <div className="dashboard-candidate-virtual-list">
+        <WindowVirtualizer>{virtualItems}</WindowVirtualizer>
+      </div>
+    );
+  }
+
   return (
-    <GroupedVirtuoso
+    <VList
       className="dashboard-candidate-virtual-list"
-      data={candidates}
-      groupCounts={groups.map((group) => group.candidates.length)}
-      useWindowScroll={isMobile}
-      style={isMobile ? undefined : { height: desktopHeight }}
-      computeItemKey={(index, candidate) =>
-        candidate ? `candidate-${candidate.id}` : `group-${index}`
-      }
-      groupContent={(index) => (
-        <h3 className="dashboard-candidate-day-header">
-          {groups[index]?.label}
-        </h3>
-      )}
-      itemContent={(_index, _groupIndex, candidate) => (
-        <CandidateRow
-          candidate={candidate}
-          navigate={navigate}
-          canEdit={canEdit}
-          onSave={onSave}
-        />
-      )}
-    />
+      style={{ height: desktopHeight }}
+    >
+      {virtualItems}
+    </VList>
   );
 };
 

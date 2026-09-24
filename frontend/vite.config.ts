@@ -82,6 +82,10 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
+        // Vendor chunk rules below are keyed by package path, so they MUST
+        // track the actual imports: a rule for a package nothing imports spends
+        // a split on dead weight, and a heavy package on the hot path with no
+        // rule silently lands in whichever chunk imports it first.
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
           // React core — stable, must be in its own early-loaded chunk
@@ -115,9 +119,13 @@ export default defineConfig({
           ) {
             return "forms-vendor";
           }
-          // Virtualized message list
-          if (id.includes("/react-virtuoso/")) {
-            return "virtuoso-vendor";
+          // Virtualized lists (inbox thread + dashboard candidate list)
+          if (id.includes("/virtua/")) {
+            return "virtua-vendor";
+          }
+          // Schema validation (eager: InstallationBootstrap → runtime manifest)
+          if (id.includes("/zod/")) {
+            return "zod-vendor";
           }
         },
       },

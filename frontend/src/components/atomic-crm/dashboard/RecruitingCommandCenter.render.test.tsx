@@ -1,6 +1,5 @@
 import type * as RaCore from "ra-core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { render } from "vitest-browser-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,29 +28,6 @@ vi.mock("ra-core", async (importOriginal) => {
 
 vi.mock("@/hooks/use-mobile", () => ({
   useIsMobile: () => false,
-}));
-
-vi.mock("react-virtuoso", () => ({
-  GroupedVirtuoso: ({
-    data,
-    groupContent,
-    itemContent,
-  }: {
-    data: unknown[];
-    groupContent: (index: number) => ReactNode;
-    itemContent: (
-      index: number,
-      groupIndex: number,
-      candidate: unknown,
-    ) => ReactNode;
-  }) => (
-    <div data-testid="virtualized-candidate-list">
-      {groupContent(0)}
-      {data.map((candidate, index) => (
-        <div key={index}>{itemContent(index, 0, candidate)}</div>
-      ))}
-    </div>
-  ),
 }));
 
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
@@ -424,6 +400,13 @@ describe("RecruitingCommandCenter candidate rows", () => {
       name: /Chọn thao tác cho Ứng viên 21/,
     });
     await expect.element(firstRow).toBeVisible();
+    // Virtualizing must not drop the day grouping: the header is its own list
+    // item rendered above that day's rows.
+    await expect
+      .element(
+        screen.getByRole("heading", { name: "THỨ BA, 14/07/2026", level: 3 }),
+      )
+      .toBeVisible();
     await firstRow.click();
     await screen.getByRole("menuitem", { name: "Xem hội thoại" }).click();
     await expect
