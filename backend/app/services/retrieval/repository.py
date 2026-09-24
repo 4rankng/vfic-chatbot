@@ -223,11 +223,15 @@ class RetrievalRepository:
             # expression ran three times per row. Candidate selection in
             # ``ann_candidates`` keeps the halfvec cast that matches the 0016
             # HNSW index expression.
-            # Filtering/ordering on ``dist`` is equivalent to the previous
-            # ``1 - dist >= floor`` / ``ORDER BY 1 - dist`` form: over the
-            # cosine distances here (0.5–1.0) the ``1 - dist`` subtraction is
-            # exact (Sterbenz lemma), so neither the floor compare nor the row
-            # order can change.
+            # Filtering/ordering on ``dist`` preserves the previous rows and
+            # order. The sort key was the distance in both forms. For the
+            # floor: over the decision band (cosine distance 0.5–1.0) the old
+            # ``1 - dist`` subtraction is exact (Sterbenz lemma), and the
+            # sub-ulp gap between the double 0.7 and the exact 1 - 0.3
+            # literal contains no further double, so ``dist <= 1 - 0.30``
+            # accepts precisely the same rows (verified by an exhaustive
+            # double sweep). If SIMILARITY_FLOOR changes, re-derive this
+            # boundary rather than assuming it carries over.
             vector_sql = (
                 "WITH ann_candidates AS ("
                 "  SELECT c.id "
