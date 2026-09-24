@@ -24,7 +24,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Forward-only stack. The function is superseded by the Python port; to restore it,
-    # re-run the verbatim DDL in alembic/versions/0001_baseline.py:616-1079
-    # (module constant _REBUILD_BUS_TIMETABLE_SQL).
+    # downgrade: FORWARD_ONLY — the function is superseded by the Python port
+    # (app.services.knowledge.bus_timetable); to restore it, re-run the verbatim
+    # DDL from the module constant _REBUILD_BUS_TIMETABLE_SQL in
+    # alembic/versions/0001_baseline.py (or git history).
     pass

@@ -40,5 +40,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Downgrading should not delete candidate records created from real chats.
+    # downgrade: INTENTIONAL_NOOP — these are real candidate lead records
+    # backfilled from actual chats; a downgrade must not delete them.
     pass

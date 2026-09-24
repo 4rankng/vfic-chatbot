@@ -620,6 +620,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # downgrade: FORWARD_ONLY — the greenfield baseline has no inverse; recover
+    # by restoring the dump or dropping and replaying migrations.
     raise RuntimeError(
         "0001_baseline is the greenfield baseline and is not reversible. "
         "Drop & recreate the database, or add a forward-only corrective migration."

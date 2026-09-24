@@ -31,6 +31,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # ALTER TYPE ... ADD VALUE is not reversible; leaving the value in place is
-    # safe because it is only written by the send-failure classifier code path.
+    # downgrade: INTENTIONAL_NOOP — ALTER TYPE ... ADD VALUE is not reversible
+    # (PostgreSQL cannot drop an enum value); the value is inert unless the
+    # send-failure classifier code path writes it.
     pass

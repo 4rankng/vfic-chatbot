@@ -20,6 +20,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # PostgreSQL enum values cannot be dropped safely without rebuilding the type.
-    # Keep the value in place on downgrade.
+    # downgrade: INTENTIONAL_NOOP — PostgreSQL cannot drop an enum value without
+    # rebuilding the type (ALTER TYPE has no DROP VALUE); the extra value is
+    # inert unless application code writes it.
     pass

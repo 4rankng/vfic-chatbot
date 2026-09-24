@@ -41,6 +41,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Forward-only stack. To restore any object, recover its DDL from git history
-    # (0001_baseline.py for the tables/view/index).
+    # downgrade: FORWARD_ONLY — the objects were confirmed dead by a full
+    # audit (live columns vs ORM vs code references) and intentionally removed;
+    # to restore any of them, recover the DDL from git history
+    # (0001_baseline.py created the tables/view/index).
     pass

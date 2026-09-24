@@ -16,8 +16,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Merge nodes carry no DDL by design: this revision only joins the two
+    # 0013_ branches back into a single head for Alembic's graph.
     pass
 
 
 def downgrade() -> None:
+    # downgrade: INTENTIONAL_NOOP — a merge node has no DDL to reverse;
+    # downgrading past it means taking one of the merged branches explicitly.
     pass
