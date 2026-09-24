@@ -5,7 +5,7 @@ severity: high
 area: security
 labels: [security, reliability]
 effort: M
-status: todo
+status: done
 found: 2026-09-24
 ---
 
@@ -19,12 +19,12 @@ found: 2026-09-24
 
 ## Evidence
 
-- `backend/app/api/leads.py:44-47` — `_load(lead_id, db)` takes no viewer.
-- `backend/app/services/lead/service.py:52-53` — `get()` is a plain `db.get(Lead, lead_id)`; `update`/`assign`/`set_stage` apply no ownership check.
-- `backend/app/services/lead/service.py:56` — list *does* apply `viewer_scope_filter(...)`; `backend/app/services/conversation/repository.py:63-66` scopes conversation detail the same way.
-- `backend/app/api/leads.py:38-41` — the route gate is `require_capability_or_legacy("candidate_intake")`, an installation capability, not a role.
-- `backend/app/schemas/lead.py:18-23` — `LeadOut` exposes name, phone, address, notes.
-- Related: `backend/app/api/bot_runs.py:26-39` is org-wide for both roles and its projection can echo `proposed_reply` for conversations the caller cannot open.
+- `backend/app/api/leads.py:47-57` — `_load(lead_id, db)` takes no viewer.
+- `backend/app/services/lead/service.py:52-58` — `get()` is a plain `db.get(Lead, lead_id)`; `update`/`assign`/`set_stage` apply no ownership check.
+- `backend/app/services/lead/service.py:75` — list *does* apply `viewer_scope_filter(...)`; `backend/app/services/conversation/repository.py:156-162` scopes conversation detail the same way.
+- `backend/app/api/leads.py:40-44` — the route gate is `require_capability_or_legacy("candidate_intake")`, an installation capability, not a role.
+- `backend/app/schemas/lead.py:18-35` — `LeadOut` exposes name, phone, address, notes.
+- Related: `backend/app/api/bot_runs.py:32-42,45-60` is org-wide for both roles and its projection can echo `proposed_reply` for conversations the caller cannot open.
 
 ## Impact
 
@@ -32,7 +32,7 @@ Sequential integer ids make enumeration trivial: full candidate PII for the whol
 
 ## Suggested fix
 
-Thread the viewer through the lead read path as conversations do: add `LeadRepository.get_visible` mirroring `viewer_can_access_lead` (`backend/app/services/viewer_scope.py:52-59`), return **404** rather than 403 so ids are not probeable, and apply it to every by-id route plus `LeadService.update/assign/set_stage/create_followup/replace_manual_tags`. Validate `AssignRequest.recruiter_id` resolves to an enabled user. Scope the `/bot_runs` projection or drop `proposed_reply` from the list response.
+Thread the viewer through the lead read path as conversations do: add `LeadRepository.get_visible` mirroring `viewer_can_access_lead` (`backend/app/services/viewer_scope.py:70-77`), return **404** rather than 403 so ids are not probeable, and apply it to every by-id route plus `LeadService.update/assign/set_stage/create_followup/replace_manual_tags`. Validate `AssignRequest.recruiter_id` resolves to an enabled user. Scope the `/bot_runs` projection or drop `proposed_reply` from the list response.
 
 ---
 

@@ -19,13 +19,13 @@ Decode passes no `audience`, no `issuer`, and no `options={"require": [...]}`, a
 
 ## Evidence
 
-- `backend/app/core/security.py:59-64` — `jwt.decode(token, secret, algorithms=[_settings.jwt_algorithm])`.
+- `backend/app/core/security.py:65-72` — `jwt.decode(token, secret, algorithms=[_settings.jwt_algorithm])`.
 - `backend/app/core/config.py` — `jwt_algorithm: str = "HS256"` with no `field_validator`.
 - Not exploitable today: `type`/`ver`/`disabled` are checked and the subject must parse as a UUID, and `alg: none` is unreachable because PyJWT rejects a non-`None` key.
 
 ## Impact
 
-Real exposure is misconfiguration and cross-boundary reuse: a smuggled algorithm value (e.g. `RS256`) silently breaks signing and turns logins into 500s with no boot-time guard, and if any sibling service is ever pointed at the same secret, tokens become interchangeable across trust boundaries. Note `jwt_secret` also serves as the integration-settings cipher-key fallback (`backend/app/services/integration_settings.py:274`) — a key-reuse smell.
+Real exposure is misconfiguration and cross-boundary reuse: a smuggled algorithm value (e.g. `RS256`) silently breaks signing and turns logins into 500s with no boot-time guard, and if any sibling service is ever pointed at the same secret, tokens become interchangeable across trust boundaries. Note `jwt_secret` also serves as the integration-settings cipher-key fallback (`backend/app/services/integration_settings.py:299`) — a key-reuse smell.
 
 ## Suggested fix
 

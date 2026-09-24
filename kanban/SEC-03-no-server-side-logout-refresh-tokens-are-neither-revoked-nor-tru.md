@@ -20,8 +20,8 @@ There is no `/auth/logout`. `POST /auth/refresh` re-issues a token pair without 
 ## Evidence
 
 - `backend/app/api/auth.py` — the whole auth surface is login / forgot-password / reset-password / refresh / me / change-password; no logout route.
-- `backend/app/identity/infrastructure/http.py:65-86` — refresh validates `type`/`user`/`disabled`/`ver`, then mints new tokens; the presented token is never invalidated. No jti or generation store exists anywhere in `app/`.
-- `backend/app/core/config.py:92-93` — access token 60 min, refresh token 14 days.
+- `backend/app/identity/infrastructure/http.py:73-93` — refresh validates `type`/`user`/`disabled`/`ver`, then mints new tokens; the presented token is never invalidated. No jti or generation store exists anywhere in `app/`.
+- `backend/app/core/config.py:107-108` — access token 60 min, refresh token 14 days.
 - Frontend logout only clears `localStorage` (`frontend/src/components/atomic-crm/providers/rest/authProvider.ts`).
 
 ## Impact
@@ -30,7 +30,7 @@ An exfiltrated refresh token grants access for up to 14 days; logout is cosmetic
 
 ## Suggested fix
 
-Add `POST /api/v1/auth/logout` that bumps `user.token_version` — both token types already carry and check `ver` (`backend/app/identity/application/authentication.py:36-37`, `identity/infrastructure/http.py:83-84`), making this the cheapest correct fix. For real rotation, store a per-user refresh generation and reject a stale one so a replay invalidates the family. Also bump `token_version` on email change (`backend/app/services/user_service.py:139-148`).
+Add `POST /api/v1/auth/logout` that bumps `user.token_version` — both token types already carry and check `ver` (`backend/app/identity/application/authentication.py:42-43`, `backend/app/identity/infrastructure/http.py:94`), making this the cheapest correct fix. For real rotation, store a per-user refresh generation and reject a stale one so a replay invalidates the family. Also bump `token_version` on email change (`backend/app/services/user_service.py:125-126,141`).
 
 ---
 

@@ -5,7 +5,7 @@ severity: high
 area: performance
 labels: [performance, reliability]
 effort: S
-status: todo
+status: done
 found: 2026-09-24
 ---
 

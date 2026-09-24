@@ -19,9 +19,9 @@ The only configured limits are on login / forgot-password / reset-password / ref
 
 ## Evidence
 
-- `backend/app/identity/infrastructure/rate_limits.py` — the complete configured surface; `backend/app/api/auth.py:23-28` is its only importer.
-- Unbounded expensive routes: `POST /jobs/search` (`backend/app/api/jobs.py:95-105`), `POST /projects/{id}/rag/test` (`api/knowledge.py:216`), `GET /leads/{id}/assist`, `POST /leads/{id}/chatops-actions/*`, `POST /conversations/{id}/web-chat-turn` (`api/conversations.py:408`), and all four webhook POSTs.
-- `backend/app/core/ratelimit.py:56-57` fails open on any Redis exception; `:22-28` trusts the first `X-Forwarded-For` hop for bucketing.
+- `backend/app/identity/infrastructure/rate_limits.py` — the complete configured surface; `backend/app/api/auth.py:20-25` is its only importer.
+- Unbounded expensive routes: `POST /jobs/search` (`backend/app/api/jobs.py:96-106`), `POST /projects/{id}/rag/test` (`backend/app/api/knowledge.py:229`), `GET /leads/{id}/assist`, `POST /leads/{id}/chatops-actions/*`, `POST /conversations/{id}/web-chat-turn` (`backend/app/api/conversations.py:409`), and all four webhook POSTs.
+- `backend/app/core/ratelimit.py:60-70` fails open on any Redis exception; `:32-39` trusts the first `X-Forwarded-For` hop for bucketing.
 
 ## Impact
 

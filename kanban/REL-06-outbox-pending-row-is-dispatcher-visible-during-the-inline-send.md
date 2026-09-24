@@ -19,10 +19,10 @@ found: 2026-09-24
 
 ## Evidence
 
-- `backend/app/services/conversation/bot_path.py:516-558` — `claim_send` flips the message to SENDING and calls `create_pending_outbox` (row written PENDING) in one transaction.
-- `backend/app/services/outbox_service.py:606-617` — `pending_outbox_ids()` selects all PENDING rows with no minimum age.
-- `backend/app/services/outbox_service.py:186-216` — `claim_pending_outbox` is atomic, so **exactly one sender wins and there is no duplicate provider POST**. Verified: do not "fix" this.
-- `backend/app/services/conversation/bot_path.py:675-682` keeps the message SENT via forward-only rank, but `:610-618` still records `BotRunOutcome.ERROR` when `external_error` is set.
+- `backend/app/services/conversation/bot_path.py:548-573` — `claim_send` flips the message to SENDING and calls `create_pending_outbox` (row written PENDING) in one transaction.
+- `backend/app/services/outbox_service.py:710-720` — `pending_outbox_ids()` selects all PENDING rows with no minimum age.
+- `backend/app/services/outbox_service.py:197-226` — `claim_pending_outbox` is atomic, so **exactly one sender wins and there is no duplicate provider POST**. Verified: do not "fix" this.
+- `backend/app/services/conversation/bot_path.py:684-698` keeps the message SENT via forward-only rank, but `:628-636` still records `BotRunOutcome.ERROR` when `external_error` is set.
 
 ## Impact
 

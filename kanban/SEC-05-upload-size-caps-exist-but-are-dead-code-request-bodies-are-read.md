@@ -19,9 +19,9 @@ The intended 20 MiB upload cap and the zip-bomb guard have no production call si
 
 ## Evidence
 
-- `backend/app/services/ingestion/limits.py:13,43-50` — `MAX_UPLOAD_BYTES`, `assert_upload_size`, `assert_archive_metadata`; a repo-wide grep finds only `backend/tests/test_generic_source_blocks.py:9-13,63-66`.
-- `backend/app/api/knowledge.py:366-369` and `backend/app/services/knowledge/service.py:363-364` — `data = await file.read()` then `upload_bytes(...)`; `backend/app/api/personas.py:150-156` reads with no cap at all.
-- `backend/app/api/webhooks.py:68,113,207` — `await request.body()` on all three POST routes.
+- `backend/app/services/ingestion/limits.py:13,47-55` — `MAX_UPLOAD_BYTES`, `assert_upload_size`, `assert_archive_metadata`; a repo-wide grep finds only `backend/tests/test_generic_source_blocks.py:9-13,63-66`.
+- `backend/app/api/knowledge.py:387-398` and `backend/app/services/knowledge/service.py:355` — `data = await file.read()` then `upload_bytes(...)`; `backend/app/api/personas.py:154-161` reads with no cap at all.
+- `backend/app/api/webhooks.py:66-90` — `await request.body()` on all three POST routes (`:101`, `:148`, `:243`).
 
 ## Impact
 

@@ -171,7 +171,7 @@ The tree is lint-clean and type-clean, so the debt below is structural, not styl
 | Ops, deploy & data | 4 | 6 | 9 | 1 | 20 |
 | Docs & repo hygiene | 1 | 6 | 6 | 0 | 13 |
 
-Counts here derive from each ticket's single `area` field; `labels` may carry cross-cutting areas — e.g. SEC-02 and SEC-05 are also labeled `reliability`, so a label-based Reliability count reads 9, not 7.
+Counts here derive from each ticket's single `area` field, not from `labels`, which may carry cross-cutting areas — e.g. SEC-02 and SEC-05 sit in the Security row but are also labeled `reliability`, so a label-based Reliability count reads 29, not 7.
 
 ## Suggested first wave
 

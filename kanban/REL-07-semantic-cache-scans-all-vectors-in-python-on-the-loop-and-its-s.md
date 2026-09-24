@@ -19,9 +19,9 @@ Every uncached lookup transfers and parses all stored vectors and compares them 
 
 ## Evidence
 
-- `backend/app/graph/semantic_cache.py:97-118` — `HGETALL`, `json.loads` per entry, `_cosine` per entry (`:36-49`).
-- `backend/app/core/config.py:201-205` — `semantic_cache_enabled=False`, capacity 200, dim 3072.
-- `backend/app/graph/tools/knowledge.py:255,292` — the scope guard is `not project_slug`, but a Page-scoped conversation has `project_slug=None` with a non-empty `project_ids` (`backend/app/graph/factories.py:786-790`).
+- `backend/app/graph/semantic_cache.py:129-148,168-171` — `HGETALL`, `json.loads` per entry, `_cosine` per entry (`:89-102`).
+- `backend/app/core/config.py:245-248,46` — `semantic_cache_enabled=False`, capacity 200, dim 3072.
+- `backend/app/graph/tools/knowledge.py:260,309` — the scope guard is `not project_slug`, but a Page-scoped conversation has `project_slug=None` with a non-empty `project_ids` (`backend/app/graph/factories.py:835-860`).
 
 ## Impact
 

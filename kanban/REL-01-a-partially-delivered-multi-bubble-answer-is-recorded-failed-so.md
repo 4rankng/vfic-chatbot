@@ -19,10 +19,10 @@ Answers longer than 420 characters are sent as N separate provider requests. Whe
 
 ## Evidence
 
-- `backend/app/services/zalo_bot_service.py:96-97` — `ZALO_VISIBLE_BUBBLE_CHARS = 420`, so any answer over 420 chars is multi-request.
-- `backend/app/services/zalo_bot_service.py:214-269` (`_aggregate_chunked_send`) — on failure returns `ok=False`, `msg_id=message_ids[0]` (`:251`), `error_class=result.error_class` (`:254`).
-- `backend/app/graph/runner.py:1073-1079` — only `AMBIGUOUS_SEND_CLASSES` map to SEND_UNKNOWN, so a definite mid-chunk failure becomes `FAILED` (`backend/app/services/conversation/bot_path.py:610-618`).
-- `backend/app/services/conversation/repository.py:459-533` admits a newest BOT message with `delivery_status IN ('PENDING','SENDING','FAILED')`; `backend/app/workers/reconcile_worker.py:211-212` classifies it `failed_send` and re-enqueues after the 900 s backoff (`:49`).
+- `backend/app/services/zalo_bot_service.py:105-106` — `ZALO_VISIBLE_BUBBLE_CHARS = 420`, so any answer over 420 chars is multi-request.
+- `backend/app/services/zalo_bot_service.py:223-283` (`_aggregate_chunked_send`) — on failure returns `ok=False`, `msg_id=message_ids[0]` (`:277`), `error_class=result.error_class` (`:280`).
+- `backend/app/graph/runner.py:1095-1104` — only `AMBIGUOUS_SEND_CLASSES` map to SEND_UNKNOWN, so a definite mid-chunk failure becomes `FAILED` (`backend/app/services/conversation/bot_path.py:620-636`).
+- `backend/app/services/conversation/repository.py:603-620` admits a newest BOT message with `delivery_status IN ('PENDING','SENDING','FAILED')`; `backend/app/workers/reconcile_worker.py:298-311` classifies it `failed_send` and re-enqueues after the 900 s backoff (`:93`).
 
 ## Impact
 

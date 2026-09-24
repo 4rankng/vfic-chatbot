@@ -19,8 +19,8 @@ Every stored integration secret is returned to admin GETs as `first4...last4`, a
 
 ## Evidence
 
-- `backend/app/services/integration_settings.py:325-331` — `_preview()` returns `f"{value[:4]}...{value[-4:]}"`; attached at `:442-447`, `:481-484`, `:523-526`, `:577-580`, `:618-621`.
-- `backend/app/api/integrations.py:1116-1134` — `POST /admin/integrations/facebook/credentials/reveal` returns `facebook_app_secret` and the webhook verify token in plaintext; `require_admin` + `no-store` + actor logged, but no step-up.
+- `backend/app/services/integration_settings.py:350-366` — `_preview()` returns `f"{value[:4]}...{value[-4:]}"`; attached at `:465-473`, `:501`, `:540`, `:591`, `:629`, `:1099-1104`.
+- `backend/app/api/integrations.py:1116-1145` — `POST /admin/integrations/facebook/credentials/reveal` returns `facebook_app_secret` and the webhook verify token in plaintext; `require_admin` + `no-store` + actor logged, but no step-up.
 
 ## Impact
 

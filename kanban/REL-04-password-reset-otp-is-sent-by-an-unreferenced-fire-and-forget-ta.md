@@ -19,9 +19,9 @@ The only code that sends the OTP and writes the email audit rows runs in a task 
 
 ## Evidence
 
-- `backend/app/services/password_reset_service.py:87-88` — `asyncio.create_task(self._send_reset_email(...))`, handle dropped.
-- `backend/app/services/password_reset_service.py:90-122` — the only sender and the only writer of the `password_reset_email_sent`/`_failed` audit rows.
-- Contrast in-repo: `backend/app/workers/chatbot_worker.py:37-47` and `backend/app/core/events.py:99-101` both keep a module-level task set with `add_done_callback`.
+- `backend/app/services/password_reset_service.py:46-50,118` — `asyncio.create_task(self._send_reset_email(...))`, handle dropped.
+- `backend/app/services/password_reset_service.py:120-152` — the only sender and the only writer of the `password_reset_email_sent`/`_failed` audit rows.
+- Contrast in-repo: `backend/app/workers/chatbot_worker.py:16,38-50` and `backend/app/services/conversation/events.py:99-101` both keep a module-level task set with `add_done_callback`.
 
 ## Impact
 

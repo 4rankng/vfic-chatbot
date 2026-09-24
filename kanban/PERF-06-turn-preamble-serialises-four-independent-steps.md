@@ -5,7 +5,7 @@ severity: medium
 area: performance
 labels: [performance]
 effort: S
-status: todo
+status: done
 found: 2026-09-24
 ---
 

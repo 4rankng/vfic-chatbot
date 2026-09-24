@@ -5,7 +5,7 @@ severity: medium
 area: reliability
 labels: [reliability]
 effort: S
-status: todo
+status: done
 found: 2026-09-24
 ---
 
@@ -19,8 +19,8 @@ The "only fill a blank gender" rule lives in the adapter as a read-then-write, w
 
 ## Evidence
 
-- `backend/app/recruitment/infrastructure/service_adapters.py:109-130` — `stored_gender()` reads, then `record_inferred_gender()` re-reads and calls `set_gender_by_id`.
-- `backend/app/services/lead/repository.py:90-95` — `UPDATE leads SET gender = :gender WHERE id = :lead_id`, no `IS NULL`/blank guard; the docstring at `:135-144` acknowledges the guard lives in the adapter. `version`/`updated_at` are untouched.
+- `backend/app/recruitment/infrastructure/service_adapters.py:114-143` — `stored_gender()` reads, then `record_inferred_gender()` re-reads and calls `set_gender_by_id`.
+- `backend/app/services/lead/repository.py:141-160` — `UPDATE leads SET gender = :gender WHERE id = :lead_id`, no `IS NULL`/blank guard; the docstring at `:142-153` acknowledges the guard lives in the adapter. `version`/`updated_at` are untouched.
 - The provider path *is* atomic: `backend/app/services/profile_enrichment.py:287-312` uses `.where(..., _blank_column(Lead.gender))`.
 
 ## Impact

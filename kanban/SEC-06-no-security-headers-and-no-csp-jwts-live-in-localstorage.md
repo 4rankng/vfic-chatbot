@@ -19,7 +19,7 @@ The application sets no HSTS / CSP / X-Frame-Options / X-Content-Type-Options / 
 
 ## Evidence
 
-- `backend/app/main.py:176-182` — the only middleware is `CORSMiddleware`; no `TrustedHostMiddleware`.
+- `backend/app/main.py:189-195` — the only middleware is `CORSMiddleware`; no `TrustedHostMiddleware`.
 - `frontend/index.html` has no CSP meta; a repo-wide grep for those header names finds them only inside `.claude/skills/` reference docs.
 - `backend/docker-compose.yml` (caddy service) mounts `./Caddyfile`, which `backend/scripts/flip_caddy.sh` renders at deploy time — so this could **not** be verified from the repo. Confirm on the host before treating as confirmed.
 - `frontend/src/lib/apiClient.ts:12-13` — the JWT pair sits in `localStorage` under `RaStore.auth.*`.

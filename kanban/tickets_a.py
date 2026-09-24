@@ -31,10 +31,10 @@ TICKETS = [
             "than a deliberate org-wide policy."
         ),
         evidence=[
-            "`backend/app/api/leads.py:43-53` — `_load(lead_id, db)` takes no viewer.",
+            "`backend/app/api/leads.py:47-57` — `_load(lead_id, db)` takes no viewer.",
             "`backend/app/services/lead/service.py:52-58` — `get()` is a plain `db.get(Lead, lead_id)`; `update`/`assign`/`set_stage` apply no ownership check.",
             "`backend/app/services/lead/service.py:75` — list *does* apply `viewer_scope_filter(...)`; `backend/app/services/conversation/repository.py:156-162` scopes conversation detail the same way.",
-            "`backend/app/api/leads.py:36-40` — the route gate is `require_capability_or_legacy(\"candidate_intake\")`, an installation capability, not a role.",
+            "`backend/app/api/leads.py:40-44` — the route gate is `require_capability_or_legacy(\"candidate_intake\")`, an installation capability, not a role.",
             "`backend/app/schemas/lead.py:18-35` — `LeadOut` exposes name, phone, address, notes.",
             "Related: `backend/app/api/bot_runs.py:32-42,45-60` is org-wide for both roles and its projection can echo `proposed_reply` for conversations the caller cannot open.",
         ],
@@ -99,7 +99,7 @@ TICKETS = [
         ),
         evidence=[
             "`backend/app/identity/infrastructure/rate_limits.py` — the complete configured surface; `backend/app/api/auth.py:20-25` is its only importer.",
-            "Unbounded expensive routes: `POST /jobs/search` (`backend/app/api/jobs.py:95-103`), `POST /projects/{id}/rag/test` (`backend/app/api/knowledge.py:229`), `GET /leads/{id}/assist`, `POST /leads/{id}/chatops-actions/*`, `POST /conversations/{id}/web-chat-turn` (`backend/app/api/conversations.py:408`), and all four webhook POSTs.",
+            "Unbounded expensive routes: `POST /jobs/search` (`backend/app/api/jobs.py:96-106`), `POST /projects/{id}/rag/test` (`backend/app/api/knowledge.py:229`), `GET /leads/{id}/assist`, `POST /leads/{id}/chatops-actions/*`, `POST /conversations/{id}/web-chat-turn` (`backend/app/api/conversations.py:409`), and all four webhook POSTs.",
             "`backend/app/core/ratelimit.py:60-70` fails open on any Redis exception; `:32-39` trusts the first `X-Forwarded-For` hop for bucketing.",
         ],
         impact=(
@@ -127,7 +127,7 @@ TICKETS = [
         ),
         evidence=[
             "`backend/app/services/ingestion/limits.py:13,47-55` — `MAX_UPLOAD_BYTES`, `assert_upload_size`, `assert_archive_metadata`; a repo-wide grep finds only `backend/tests/test_generic_source_blocks.py:9-13,63-66`.",
-            "`backend/app/api/knowledge.py:387-398` and `backend/app/services/knowledge/service.py:354` — `data = await file.read()` then `upload_bytes(...)`; `backend/app/api/personas.py:154-161` reads with no cap at all.",
+            "`backend/app/api/knowledge.py:387-398` and `backend/app/services/knowledge/service.py:355` — `data = await file.read()` then `upload_bytes(...)`; `backend/app/api/personas.py:154-161` reads with no cap at all.",
             "`backend/app/api/webhooks.py:66-90` — `await request.body()` on all three POST routes (`:101`, `:148`, `:243`).",
         ],
         impact=(
@@ -248,7 +248,7 @@ TICKETS = [
         evidence=[
             "`backend/app/services/zalo_bot_service.py:105-106` — `ZALO_VISIBLE_BUBBLE_CHARS = 420`, so any answer over 420 chars is multi-request.",
             "`backend/app/services/zalo_bot_service.py:223-283` (`_aggregate_chunked_send`) — on failure returns `ok=False`, `msg_id=message_ids[0]` (`:277`), `error_class=result.error_class` (`:280`).",
-            "`backend/app/graph/runner.py:1095-1112` — only `AMBIGUOUS_SEND_CLASSES` map to SEND_UNKNOWN, so a definite mid-chunk failure becomes `FAILED` (`backend/app/services/conversation/bot_path.py:620-636`).",
+            "`backend/app/graph/runner.py:1095-1104` — only `AMBIGUOUS_SEND_CLASSES` map to SEND_UNKNOWN, so a definite mid-chunk failure becomes `FAILED` (`backend/app/services/conversation/bot_path.py:620-636`).",
             "`backend/app/services/conversation/repository.py:603-620` admits a newest BOT message with `delivery_status IN ('PENDING','SENDING','FAILED')`; `backend/app/workers/reconcile_worker.py:298-311` classifies it `failed_send` and re-enqueues after the 900 s backoff (`:93`).",
         ],
         impact=(
@@ -276,7 +276,7 @@ TICKETS = [
         effort="S",
         problem=(
             "Per-LLM-call counters and the semaphore release use the synchronous Redis client inline in "
-            "async code — exactly the pattern `core/security.py` documents as forbidden and correctly "
+            "async code — exactly the pattern `backend/app/core/security.py` documents as forbidden and correctly "
             "avoids everywhere else."
         ),
         evidence=[
@@ -323,7 +323,7 @@ TICKETS = [
             "the atomic `acquire_lock`. For the OA token refresh it is a correctness defect: Zalo "
             "refresh tokens are single-use, so two workers redeeming one leaves the loser's stale pair "
             "overwriting the winner's and the OA access token invalid until an admin re-authorizes "
-            "(`backend/app/services/integration_settings.py:864-867` documents this outcome)."
+            "(`backend/app/services/integration_settings.py:866` documents this outcome)."
         ),
         fix=(
             "Use `singleflight.release(key, leader_id)` (or an equivalent Lua CAS-delete) for both "
@@ -343,8 +343,8 @@ TICKETS = [
             "handle is discarded, so it can be garbage-collected or lost on reload — silently."
         ),
         evidence=[
-            "`backend/app/services/password_reset_service.py:87-88` — `asyncio.create_task(self._send_reset_email(...))`, handle dropped.",
-            "`backend/app/services/password_reset_service.py:90-122` — the only sender and the only writer of the `password_reset_email_sent`/`_failed` audit rows.",
+            "`backend/app/services/password_reset_service.py:46-50,118` — `asyncio.create_task(self._send_reset_email(...))`, handle dropped.",
+            "`backend/app/services/password_reset_service.py:120-152` — the only sender and the only writer of the `password_reset_email_sent`/`_failed` audit rows.",
             "Contrast in-repo: `backend/app/workers/chatbot_worker.py:16,38-50` and `backend/app/services/conversation/events.py:99-101` both keep a module-level task set with `add_done_callback`.",
         ],
         impact=(
@@ -400,10 +400,10 @@ TICKETS = [
             "claim and the turn records an ERROR for a message that was delivered."
         ),
         evidence=[
-            "`backend/app/services/conversation/bot_path.py:516-558` — `claim_send` flips the message to SENDING and calls `create_pending_outbox` (row written PENDING) in one transaction.",
-            "`backend/app/services/outbox_service.py:606-617` — `pending_outbox_ids()` selects all PENDING rows with no minimum age.",
-            "`backend/app/services/outbox_service.py:186-216` — `claim_pending_outbox` is atomic, so **exactly one sender wins and there is no duplicate provider POST**. Verified: do not \"fix\" this.",
-            "`backend/app/services/conversation/bot_path.py:675-682` keeps the message SENT via forward-only rank, but `:610-618` still records `BotRunOutcome.ERROR` when `external_error` is set.",
+            "`backend/app/services/conversation/bot_path.py:548-573` — `claim_send` flips the message to SENDING and calls `create_pending_outbox` (row written PENDING) in one transaction.",
+            "`backend/app/services/outbox_service.py:710-720` — `pending_outbox_ids()` selects all PENDING rows with no minimum age.",
+            "`backend/app/services/outbox_service.py:197-226` — `claim_pending_outbox` is atomic, so **exactly one sender wins and there is no duplicate provider POST**. Verified: do not \"fix\" this.",
+            "`backend/app/services/conversation/bot_path.py:684-698` keeps the message SENT via forward-only rank, but `:628-636` still records `BotRunOutcome.ERROR` when `external_error` is set.",
         ],
         impact=(
             "The candidate receives exactly one copy, but the dashboard error tile, the `bot_run` audit "
@@ -429,9 +429,9 @@ TICKETS = [
             "Page-scoped conversations."
         ),
         evidence=[
-            "`backend/app/graph/semantic_cache.py:97-118` — `HGETALL`, `json.loads` per entry, `_cosine` per entry (`:36-49`).",
-            "`backend/app/core/config.py:201-205` — `semantic_cache_enabled=False`, capacity 200, dim 3072.",
-            "`backend/app/graph/tools/knowledge.py:255,292` — the scope guard is `not project_slug`, but a Page-scoped conversation has `project_slug=None` with a non-empty `project_ids` (`backend/app/graph/factories.py:786-790`).",
+            "`backend/app/graph/semantic_cache.py:129-148,168-171` — `HGETALL`, `json.loads` per entry, `_cosine` per entry (`:89-102`).",
+            "`backend/app/core/config.py:245-248,46` — `semantic_cache_enabled=False`, capacity 200, dim 3072.",
+            "`backend/app/graph/tools/knowledge.py:260,309` — the scope guard is `not project_slug`, but a Page-scoped conversation has `project_slug=None` with a non-empty `project_ids` (`backend/app/graph/factories.py:835-860`).",
         ],
         impact=(
             "Dormant today because the feature is off, so this is latent cost plus an enabled-day "
