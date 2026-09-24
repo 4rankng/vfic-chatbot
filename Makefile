@@ -97,7 +97,9 @@ BACKUP_DIR  := $(HOME)/Library/CloudStorage/OneDrive-Personal/backup/vfic_db_bac
 
 ## backup: pg_dump the prod DB (custom format) and pull /opt/vfic/.env with it.
 ## The .env carries INTEGRATION_SETTINGS_ENCRYPTION_KEY: without it the dump
-## alone cannot be decrypted by a restore (OPS-03). Keeps the newest $(BACKUP_KEEP).
+## alone cannot be decrypted by a restore (OPS-03). Keeps the newest $(BACKUP_KEEP)
+## dumps; each vfic_env_*.env lives exactly as long as its dump pair (an env copy
+## holds prod secrets, so an orphan whose dump was pruned is deleted, not kept).
 BACKUP_KEEP := 10
 backup:
 	@echo "=== Starting database backup from production ===" && \
@@ -125,6 +127,15 @@ backup:
 	fi && \
 	echo "Pruning old dumps (keeping the newest $(BACKUP_KEEP))..." && \
 	ls -1t "$(BACKUP_DIR)"/vfic_pg_backup_*.dump 2>/dev/null | tail -n +$$(($(BACKUP_KEEP) + 1)) | xargs -r rm -f && \
+	echo "Pruning env copies whose dump pair is gone..." && \
+	for env in "$(BACKUP_DIR)"/vfic_env_*.env; do \
+		[ -e "$$env" ] || continue; \
+		ts="$$(basename "$$env" | sed -e 's/^vfic_env_//' -e 's/\.env$$//')"; \
+		if [ ! -f "$(BACKUP_DIR)/vfic_pg_backup_$$ts.dump" ] && [ ! -f "$(BACKUP_DIR)/vfic_pg_backup_$$ts.sql.gz" ]; then \
+			echo "  removing orphaned $$(basename "$$env") (its dump was pruned)"; \
+			rm -f "$$env"; \
+		fi; \
+	done && \
 	echo "Backup complete!" && \
 	echo "  Dump: $(BACKUP_DIR)/$${BACKUP_FILE}" && \
 	echo "  Env:  $(BACKUP_DIR)/$${ENV_FILE}" && \
