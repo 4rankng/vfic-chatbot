@@ -1055,3 +1055,181 @@ async def test_search_knowledge_no_metrics_is_backward_compatible(no_cache_io):
     )
 
     assert "Không tìm thấy" in out
+# ---------------------------------------------------------------------------
+# search_knowledge — cache-key determinism (project-id order must not matter)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_cache_key_ignores_project_id_order(
+    monkeypatch, cache_enabled_io
+):
+    """The project-id list feeds the cache digest, so DB row order must not
+    change the key: two fetches of the same ids in different orders must
+    produce one identical key."""
+    seen: list[str] = []
+
+    async def _recording_get(key):
+        seen.append(key)
+        return "HIT"
+
+    monkeypatch.setattr("app.graph.tools.knowledge.cache_get_json", _recording_get)
+
+    repo_a = _make_repo(active_project_ids=lambda self: _const(["p2", "p1"]))
+    repo_b = _make_repo(active_project_ids=lambda self: _const(["p1", "p2"]))
+    out_a = await search_knowledge(retrieval=repo_a, embedder=_FakeEmbedder(), query="luong")
+    out_b = await search_knowledge(retrieval=repo_b, embedder=_FakeEmbedder(), query="luong")
+
+    assert out_a == out_b == "HIT"
+    assert len(seen) == 2
+    assert seen[0] == seen[1]
+
+
+# ---------------------------------------------------------------------------
+# search_knowledge — single-flight gate is the config flag only
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_singleflight_engages_for_scoped_lookups(
+    monkeypatch, no_cache_io
+):
+    """The single-flight key IS the full cache key (query + project scope +
+    knowledge version), so a project-scoped lookup must be eligible for
+    coalescing when the flag is on."""
+    calls: list = []
+
+    async def _coalesced(**kwargs):
+        calls.append(kwargs)
+        return "COALESCED"
+
+    monkeypatch.setattr("app.graph.tools.knowledge._search_knowledge_coalesced", _coalesced)
+    s = SimpleNamespace(rag_cache_enabled=False, singleflight_enabled=True)
+    monkeypatch.setattr("app.graph.tools.knowledge.get_settings", lambda: s)
+
+    repo = _make_repo(active_project_ids=lambda self: _const(["p1"]))
+    out = await search_knowledge(retrieval=repo, embedder=_FakeEmbedder(), query="luong")
+
+    assert out == "COALESCED"
+    assert len(calls) == 1
+    assert calls[0]["cache_key"].startswith("rag:knowledge:")
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_singleflight_engages_for_unscoped_lookups(
+    monkeypatch, no_cache_io
+):
+    """No project scope at all must stay eligible for coalescing (the old
+    ``project_ids is None`` requirement was a tautology for this arm)."""
+    calls: list = []
+
+    async def _coalesced(**kwargs):
+        calls.append(kwargs)
+        return "COALESCED"
+
+    monkeypatch.setattr("app.graph.tools.knowledge._search_knowledge_coalesced", _coalesced)
+    s = SimpleNamespace(rag_cache_enabled=False, singleflight_enabled=True)
+    monkeypatch.setattr("app.graph.tools.knowledge.get_settings", lambda: s)
+
+    repo = _make_repo()  # no active_project_ids attr → project_ids None
+    out = await search_knowledge(retrieval=repo, embedder=_FakeEmbedder(), query="luong")
+
+    assert out == "COALESCED"
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_singleflight_disabled_by_default(monkeypatch, no_cache_io):
+    """Without the flag the coalescing wrapper is never invoked and the
+    direct compute path answers."""
+    calls: list = []
+
+    async def _coalesced(**kwargs):
+        calls.append(kwargs)
+        return "COALESCED"
+
+    monkeypatch.setattr("app.graph.tools.knowledge._search_knowledge_coalesced", _coalesced)
+
+    repo = _make_repo(
+        match_faq=lambda self, emb, *, top_k, project_ids: _const([]),
+        match_documents=lambda self, emb, top_k, *_a, **_k: _const([]),
+    )
+    out = await search_knowledge(retrieval=repo, embedder=_FakeEmbedder(), query="luong")
+
+    assert "Không tìm thấy" in out
+    assert calls == []
+
+
+# ---------------------------------------------------------------------------
+# _cached_embed — normalised key + packed float16 payload
+# ---------------------------------------------------------------------------
+
+
+class TestCachedEmbed:
+    def _settings(self):
+        return SimpleNamespace(
+            rag_cache_enabled=True,
+            embedding_provider="openrouter",
+            openrouter_embedding_model="text-embedding-test",
+            gemini_embedding_model="gemini-test",
+            embedding_dim=8,
+            embedding_cache_ttl_seconds=60,
+        )
+
+    def test_pack_unpack_roundtrip(self):
+        shared = tools._shared
+        vec = [0.5, -1.25, 3.0, 0.0]
+        assert shared._unpack_vector(shared._pack_vector(vec)) == vec
+
+    def test_unpack_rejects_legacy_and_corrupt_payloads(self):
+        shared = tools._shared
+        assert shared._unpack_vector([0.1, 0.2]) is None  # legacy JSON array
+        assert shared._unpack_vector("khong-phai-base64 !!") is None
+        assert shared._unpack_vector(None) is None
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_skips_embedder(self, monkeypatch):
+        monkeypatch.setattr(tools._shared, "get_settings", lambda: self._settings())
+        packed = tools._shared._pack_vector([0.5, 0.25])
+
+        async def _get(key):
+            return packed
+
+        monkeypatch.setattr(tools._shared, "cache_get_json", _get)
+        embedder = _FakeEmbedder()
+
+        out = await tools._shared._cached_embed(embedder, "Luong bao nhieu?")
+
+        assert out == [0.5, 0.25]
+        assert embedder.calls == []
+
+    @pytest.mark.asyncio
+    async def test_normalised_variants_share_one_key_and_store_packed(self, monkeypatch):
+        """Case/whitespace variants hash to one key; the embedder still
+        receives the raw query, and the stored value is the packed string."""
+        monkeypatch.setattr(tools._shared, "get_settings", lambda: self._settings())
+        gets: list[str] = []
+        sets: list[tuple] = []
+
+        async def _get(key):
+            gets.append(key)
+            return None
+
+        async def _set(key, value, ttl):
+            sets.append((key, value, ttl))
+
+        monkeypatch.setattr(tools._shared, "cache_get_json", _get)
+        monkeypatch.setattr(tools._shared, "cache_set_json", _set)
+        embedder = _FakeEmbedder(vec=[0.5] * 8)
+
+        await tools._shared._cached_embed(embedder, "  LƯƠNG BAO NHIÊU ")
+        await tools._shared._cached_embed(embedder, "lương bao nhiêu")
+
+        assert gets[0] == gets[1]
+        # The embedder is called with the raw queries, not the normalised form.
+        assert embedder.calls == ["  LƯƠNG BAO NHIÊU ", "lương bao nhiêu"]
+        key, value, ttl = sets[0]
+        assert key == gets[0]
+        assert isinstance(value, str)
+        assert tools._shared._unpack_vector(value) == [0.5] * 8
+        assert ttl == 60
