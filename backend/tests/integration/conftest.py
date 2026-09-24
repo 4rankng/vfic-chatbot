@@ -11,6 +11,7 @@ import os
 import socket
 import subprocess
 import uuid
+import warnings
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -193,6 +194,61 @@ async def integration_session(
                     await transaction.rollback()
     finally:
         await engine.dispose()
+
+
+# Migration tests downgrade the session-shared database. If an assertion fails
+# before their own restore runs — or they simply forget one — every later test
+# fails on missing columns, and the failure reports nothing about its real
+# cause: one leaking test cascades into dozens of unrelated red tests. This
+# guard puts head back after each schema-touching test and says which test left.
+_MIGRATION_TEST_HINTS = ("migration", "roundtrip", "upgrade", "downgrade", "alembic")
+
+
+def _current_revision(database: IntegrationDatabase) -> str:
+    """One line of `alembic current`, e.g. ``0055_memories_match_halfvec (head)``."""
+    env = os.environ.copy()
+    env.update(
+        {
+            "APP_ENV": "development",
+            "DATABASE_URL": database.async_url,
+            "DATABASE_URL_SYNC": database.sync_url,
+        }
+    )
+    result = subprocess.run(
+        [str(BACKEND_DIR / ".venv" / "bin" / "alembic"), "current"],
+        cwd=BACKEND_DIR,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    lines = [
+        line.strip()
+        for line in (result.stdout + result.stderr).splitlines()
+        if line.strip() and not line.startswith("INFO")
+    ]
+    return lines[0] if lines else ""
+
+
+@pytest.fixture(autouse=True)
+def _restore_head_after_schema_tests(
+    request: pytest.FixtureRequest, integration_database: IntegrationDatabase
+) -> Iterator[None]:
+    """Restore alembic head after any test that may have migrated the database."""
+    if not any(hint in request.node.nodeid for hint in _MIGRATION_TEST_HINTS):
+        yield
+        return
+    yield
+    revision = _current_revision(integration_database)
+    if not revision or revision.endswith("(head)"):
+        return
+    _run_alembic(integration_database, "upgrade", "head")
+    warnings.warn(
+        f"{request.node.name} left the integration database at '{revision}'; "
+        "head was restored by the conftest guard — the test itself must restore it.",
+        stacklevel=1,
+    )
 
 
 @pytest.fixture(autouse=True)

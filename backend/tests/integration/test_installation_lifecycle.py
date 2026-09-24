@@ -8,7 +8,7 @@ from dataclasses import replace
 import pytest
 from sqlalchemy import delete, select
 
-import app.services.installation.service as installation_service_module
+import app.services.installation.lifecycle as installation_lifecycle_module  # binds the fingerprint cache helpers
 from app.capabilities import CapabilityDefinition, CapabilityRegistry, IndustryPackDefinition
 from app.capabilities.recruitment.definition import CAPABILITIES, PACK
 from app.models.installation import InstallationState
@@ -172,7 +172,7 @@ async def test_revision_activation_rollback_suspend_and_resume_are_generation_sa
     async def cache_outage() -> None:
         raise RuntimeError("simulated Redis outage")
 
-    monkeypatch.setattr(installation_service_module, "invalidate_installation_cache", cache_outage)
+    monkeypatch.setattr(installation_lifecycle_module, "invalidate_installation_cache", cache_outage)
     first_active = await service.activate_revision(first.id, actor.id)
     assert first_active.fingerprint.authority_generation == 1
 
@@ -184,7 +184,7 @@ async def test_revision_activation_rollback_suspend_and_resume_are_generation_sa
             return replace(first_active.fingerprint, manifest_checksum="b" * 64)
         return None
 
-    monkeypatch.setattr(installation_service_module, "get_cached_fingerprint", forged_cache)
+    monkeypatch.setattr(installation_lifecycle_module, "get_cached_fingerprint", forged_cache)
     cache_checked = await service.require_active()
     assert cache_checked.fingerprint.manifest_checksum == "b" * 64
 
@@ -252,7 +252,7 @@ async def test_resolve_active_serves_a_warm_hit_without_revalidating_and_rederiv
             return replace(first_active.fingerprint, manifest_checksum="b" * 64)
         return None
 
-    monkeypatch.setattr(installation_service_module, "get_cached_fingerprint", warm_hit)
+    monkeypatch.setattr(installation_lifecycle_module, "get_cached_fingerprint", warm_hit)
     validation_calls = 0
     real_validation = InstallationService._validation_is_current
 

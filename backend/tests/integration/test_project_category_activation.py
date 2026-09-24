@@ -174,7 +174,7 @@ async def test_repository_visibility_uses_active_category_and_pre_cutover_legacy
     repository = RetrievalRepository(integration_session)
 
     async def visible_contents() -> set[str]:
-        rows = await repository._match_document_lexical_rows(
+        rows = await repository._documents._match_document_lexical_rows(
             emb=vector,
             top_k=10,
             filter_json="{}",
