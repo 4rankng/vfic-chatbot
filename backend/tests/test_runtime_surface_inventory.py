@@ -64,6 +64,9 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
     "outbox_boundary": 10,
+    # Same 10 sites; the claim_send / record_bot_outcome rows moved from
+    # bot_path.py into send_claim.py / bot_outcome.py when the bot-send state
+    # layer was split by change reason (file/scope keys only).
     # +2 for the Messenger User Profile API lookup (the Graph GET in
     # facebook_oauth.get_user_profile and the worker that calls it).
     # +7: the custom OpenAI-compatible probe + admin settings path; -2: the
@@ -111,7 +114,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "e9d34a6f409abe168d3d9ff33dcb8bb6945db215566514d39fa1183174f67b7b"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "bc0c345871d1b5b4da9dd5256f9adfc29e45205645292f2afe81becb1a02f880"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
