@@ -32,11 +32,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install locked backend toolchain
-        run: |
-          uv sync --all-extras --frozen
-          uv pip install --python .venv/bin/python -e .
-          git diff --exit-code -- uv.lock pyproject.toml || (echo 'uv.lock drifted from pyproject.toml' && exit 1)
+        run: uv sync --all-extras --frozen
 
       - name: Ruff
         run: .venv/bin/ruff check .
@@ -98,11 +98,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install locked backend toolchain
-        run: |
-          uv sync --all-extras --frozen
-          uv pip install --python .venv/bin/python -e .
-          git diff --exit-code -- uv.lock pyproject.toml || (echo 'uv.lock drifted from pyproject.toml' && exit 1)
+        run: uv sync --all-extras --frozen
 
       - name: Backend integration smoke (fast fail)
         run: .venv/bin/pytest -m integration tests/integration/test_harness_smoke.py
@@ -319,11 +319,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install locked backend toolchain
-        run: |
-          uv sync --all-extras --frozen
-          uv pip install --python .venv/bin/python -e .
-          git diff --exit-code -- uv.lock pyproject.toml || (echo 'uv.lock drifted from pyproject.toml' && exit 1)
+        run: uv sync --all-extras --frozen
 
       - name: Generate offline golden results
         run: |
@@ -393,11 +393,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install locked backend toolchain
-        run: |
-          uv sync --all-extras --frozen
-          uv pip install --python .venv/bin/python -e .
-          git diff --exit-code -- uv.lock pyproject.toml || (echo 'uv.lock drifted from pyproject.toml' && exit 1) pip-audit
+        run: uv sync --all-extras --frozen pip-audit
 
       - name: pip-audit (advisory)
         run: |

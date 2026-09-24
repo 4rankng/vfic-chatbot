@@ -530,6 +530,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/knowledge/domain/knowledge-text.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/knowledge/domain/knowledge-contracts.ts",
           "type": "registry:component"
         },
@@ -706,6 +710,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/conversations/useConversationCapabilitySlots.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/reset-runtime.ts",
           "type": "registry:component"
         },
@@ -790,6 +798,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/conversations/domain/conversation-presentation.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/domain/conversation-navigation.ts",
           "type": "registry:component"
         },
@@ -811,6 +823,10 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/domain/candidate-notes.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/domain/avatar-src.ts",
           "type": "registry:component"
         },
         {
@@ -838,7 +854,11 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/capabilities/runtime-context.tsx",
+          "path": "src/components/atomic-crm/capabilities/runtime-context.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/capabilities/RuntimeCapabilityProvider.tsx",
           "type": "registry:component"
         },
         {
@@ -846,7 +866,15 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/capabilities/recruitment/components.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/capabilities/kernel/index.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/capabilities/kernel/components.tsx",
           "type": "registry:component"
         },
         {
