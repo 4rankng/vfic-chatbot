@@ -83,7 +83,7 @@ async def test_release_gate_blocks_on_correctness_regression(monkeypatch):
         db=None, settings=_settings(), golden_pass_rate=80.0  # below 95%
     )
     assert result.verdict == "block"
-    assert any(f.gate == "correctness" for f in result.failures)
+    assert any(f.gate == "retrieval_correctness" for f in result.failures)
 
 
 async def test_release_gate_blocks_on_latency_regression(monkeypatch):
@@ -185,7 +185,7 @@ async def test_release_gate_skip_when_gates_disabled(monkeypatch):
     result = await evaluate_release_gate(db=None, settings=s, golden_pass_rate=10.0)
     assert result.verdict == "pass"
     assert result.slos == []
-    assert set(result.not_evaluated) == {"correctness", "latency_slo"}
+    assert set(result.not_evaluated) == {"retrieval_correctness", "latency_slo"}
 
 
 async def test_release_gate_blocks_when_golden_pass_rate_is_missing(monkeypatch):
@@ -201,7 +201,7 @@ async def test_release_gate_blocks_when_golden_pass_rate_is_missing(monkeypatch)
     _patch_window_count(monkeypatch)
     result = await evaluate_release_gate(db=None, settings=_settings(), golden_pass_rate=None)
     assert result.verdict == "block"
-    assert any(f.gate == "correctness" for f in result.failures)
+    assert any(f.gate == "retrieval_correctness" for f in result.failures)
 
 
 async def test_release_gate_blocks_when_latency_measurements_are_missing(monkeypatch):

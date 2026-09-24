@@ -43,7 +43,7 @@ async def test_cli_skips_dependencies_when_both_gates_disabled(monkeypatch, tmp_
     captured = capsys.readouterr()
     assert rc == 0
     assert "not evaluated:" in captured.out
-    assert "correctness: disabled by settings" in captured.out
+    assert "retrieval_correctness: disabled by settings" in captured.out
     assert "latency_slo: disabled by settings" in captured.out
 
 

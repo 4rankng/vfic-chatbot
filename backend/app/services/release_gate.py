@@ -140,7 +140,7 @@ async def evaluate_release_gate(
     golden_pass_rate: float | None = None,
     window_hours: int = 24,
 ) -> ReleaseGateResult:
-    """Evaluate correctness + latency gates against the configured thresholds.
+    """Evaluate retrieval-correctness + latency gates against the configured thresholds.
 
     ``golden_pass_rate`` is the % of golden-dataset turns (P3-1) that passed;
     None when the golden runner hasn't executed (e.g. CI skipped it).
@@ -167,22 +167,24 @@ async def evaluate_release_gate(
 
     slo_by_name = {s.name: s for s in slos}
 
-    # Correctness gate: golden dataset pass-rate.
+    # Retrieval-correctness gate: golden dataset pass-rate. The controlling
+    # setting keeps its historical release_gate_correctness_enabled name (it is
+    # deployment surface), while the gate label names what is actually measured.
     if settings.release_gate_correctness_enabled:
         threshold = GOLDEN_PASS_RATE_THRESHOLD_PCT
         if golden_pass_rate is None:
             failures.append(
                 GateFailure(
-                    "correctness",
+                    "retrieval_correctness",
                     None,
                     threshold,
-                    "golden pass rate missing; release correctness run did not produce results",
+                    "golden pass rate missing; the golden retrieval run did not produce results",
                 )
             )
         elif not math.isfinite(golden_pass_rate) or golden_pass_rate < 0.0 or golden_pass_rate > 100.0:
             failures.append(
                 GateFailure(
-                    "correctness",
+                    "retrieval_correctness",
                     None,
                     threshold,
                     "golden pass rate must be a finite percentage between 0 and 100",
@@ -191,14 +193,14 @@ async def evaluate_release_gate(
         elif golden_pass_rate < threshold:
             failures.append(
                 GateFailure(
-                    "correctness",
+                    "retrieval_correctness",
                     golden_pass_rate,
                     threshold,
                     f"golden pass rate {golden_pass_rate:.1f}% < {threshold}%",
                 )
             )
     else:
-        not_evaluated.append("correctness")
+        not_evaluated.append("retrieval_correctness")
 
     # Latency SLO gates.
     if settings.release_gate_latency_slo_enabled:
