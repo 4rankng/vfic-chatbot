@@ -49,8 +49,8 @@ jobs:
           grep -qF "**HEAD:** \`$HEAD_REV" ../docs/deployment-guide.md \
             || { echo "docs/deployment-guide.md's Alembic HEAD does not match alembic heads ($HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
 
-      - name: Backend unit tests
-        run: .venv/bin/pytest -m "not integration"
+      - name: Backend unit tests (coverage gate)
+        run: .venv/bin/pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
 
   backend-integration:
     name: Backend Integration
@@ -152,7 +152,7 @@ jobs:
           CI: "1"
         run: npm run test:unit:app -- --run
 
-      - name: Changed-surface coverage
+      - name: App coverage gate
         env:
           CI: "1"
         run: npm run test:unit:app:coverage:changed-surface -- --run

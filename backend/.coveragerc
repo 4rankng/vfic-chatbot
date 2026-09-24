@@ -1,11 +1,8 @@
-# Backend coverage configuration (TEST-03).
+# Backend coverage configuration.
 #
-# Consumed via:  .venv/bin/pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
-#
-# The CI backend-unit job should run exactly that command; it requires
-# pytest-cov to be declared in pyproject.toml's dev extra first (that manifest
-# is owned by the ops/manifest lane). Until then this config is dormant but
-# ready, and any developer can install pytest-cov locally to measure.
+# Consumed by the CI backend-unit job via:
+#   .venv/bin/pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
+# pytest-cov is declared in pyproject.toml's dev extra.
 
 [run]
 source = app
@@ -15,8 +12,8 @@ omit =
     app/workers/run_worker.py
 
 [report]
-# Report-only until CI wires the gate: no fail_under yet. The first CI run's
-# measured number becomes the ratchet floor; raise it only, never lower.
+# Report-only for now: no fail_under yet. The first CI run's measured number
+# becomes the ratchet floor; raise it only, never lower.
 fail_under = 0
 precision = 1
 show_missing = true
