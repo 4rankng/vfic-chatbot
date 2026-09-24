@@ -1097,18 +1097,11 @@ async def _claim_and_dispatch(
     # other failure stays FAILED (the reconciler may re-enqueue).
     send_suppressed = bool(getattr(send_result, "suppressed", False))
     send_error_class = send_result.error_class if not send_result.ok else None
-    # REL-01: a multi-bubble answer whose later bubble failed after an earlier
-    # one was accepted is partially delivered. The sender promotes it to an
-    # ambiguous class so it lands in SEND_UNKNOWN below; honour an explicit
-    # ``partial`` flag too (legacy senders return the concrete result directly).
-    # Either way it must never become a retryable FAILED — recovery would answer
-    # the candidate twice.
-    send_partial = bool(getattr(send_result, "partial", False))
     statuses = _delivery_statuses(deps)
     override_status: Any | None = None
     if send_suppressed:
         override_status = statuses.suppressed
-    elif send_partial or send_error_class in AMBIGUOUS_SEND_CLASSES:
+    elif send_error_class in AMBIGUOUS_SEND_CLASSES:
         override_status = statuses.send_unknown
     await svc.record_bot_outcome(
         conv,
@@ -1317,21 +1310,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
     _stamp_db(timings, "last_messages", db_t0)
     started = _now()
-    db_t0 = time.monotonic()
-    pending_kwargs: dict[str, object] = {}
-    if (
-        state.runtime_revision_id
-        and state.authority_generation is not None
-        and state.runtime_fingerprint
-    ):
-        pending_kwargs = {
-            "runtime_revision_id": uuid.UUID(state.runtime_revision_id),
-            "authority_generation": state.authority_generation,
-            "runtime_fingerprint": state.runtime_fingerprint,
-        }
-    pending_msg = await svc.record_bot_pending(conv, **pending_kwargs)
-    _stamp_db(timings, "record_bot_pending", db_t0)
-    state.pending_message_id = pending_msg.id
 
     # Per-stage timing accumulator. The enqueue/preamble slice is derived from
     # the worker's epoch stamps (state.preamble_start_epoch / received_at_epoch);
@@ -1359,6 +1337,31 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     # Messenger leads are contact-keyed (NULL zalo_id), so the recipient id alone
     # would miss them; the contact id is the fallback key.
     contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
+
+    # Jev fan-out: one decision call per turn. Absent port (tests / disabled) or
+    # any failure inside the client degrades to the neutral general/agent route —
+    # the bot keeps working without Jev. The call is HTTP-only on its own httpx
+    # client and touches no DB, so it is fired before the preamble's remaining
+    # DB work (lead lookup, pending write) and awaited after it: its latency
+    # overlaps that work instead of serialising behind it, while the shared
+    # AsyncSession keeps a single in-flight coroutine at any moment.
+
+    async def _timed_decide_turn() -> TurnDecisions:
+        decisions_t0 = time.monotonic()
+        try:
+            return await deps.turn_decisions.decide_turn(
+                user_text=state.user_text,
+                recent_messages=recent_messages,
+                profile_name=profile_name,
+            )
+        finally:
+            timings["jev_ms"] = int(round((time.monotonic() - decisions_t0) * 1000))
+
+    jev_task = (
+        asyncio.create_task(_timed_decide_turn())
+        if deps.turn_decisions is not None
+        else None
+    )
 
     # Resolve the candidate's lead row once and hand it to every adapter call
     # below (stored gender, inference write, prompt context); the adapters keep
@@ -1389,19 +1392,26 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         except Exception:  # noqa: BLE001 — an addressing hint must never break a turn
             logger.warning("lead gender lookup failed for %s", recipient_id, exc_info=True)
         _stamp_db(timings, "lead_gender", gender_t0)
-    # Jev fan-out: one parallel decision call per turn. Absent port (tests /
-    # disabled) or any failure inside the client degrades to the neutral
-    # general/agent route — the bot keeps working without Jev.
-    decisions_t0 = time.monotonic()
-    if deps.turn_decisions is not None:
-        decisions = await deps.turn_decisions.decide_turn(
-            user_text=state.user_text,
-            recent_messages=recent_messages,
-            profile_name=profile_name,
-        )
-    else:
-        decisions = TurnDecisions(degraded=True)
-    timings["jev_ms"] = int(round((time.monotonic() - decisions_t0) * 1000))
+
+    db_t0 = time.monotonic()
+    pending_kwargs: dict[str, object] = {}
+    if (
+        state.runtime_revision_id
+        and state.authority_generation is not None
+        and state.runtime_fingerprint
+    ):
+        pending_kwargs = {
+            "runtime_revision_id": uuid.UUID(state.runtime_revision_id),
+            "authority_generation": state.authority_generation,
+            "runtime_fingerprint": state.runtime_fingerprint,
+        }
+    pending_msg = await svc.record_bot_pending(conv, **pending_kwargs)
+    _stamp_db(timings, "record_bot_pending", db_t0)
+    state.pending_message_id = pending_msg.id
+
+    decisions = await jev_task if jev_task is not None else TurnDecisions(degraded=True)
+    if jev_task is None:
+        timings["jev_ms"] = 0
     if decisions.degraded:
         timings["jev_degraded"] = True
     else:

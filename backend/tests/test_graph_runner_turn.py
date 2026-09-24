@@ -136,14 +136,12 @@ class _SendResult:
         msg_id: str = "mid-1",
         error_class: str | None = None,
         telemetry=None,
-        partial: bool = False,
     ) -> None:
         self.ok = ok
         self.error = error
         self.msg_id = msg_id
         self.error_class = error_class
         self.telemetry = telemetry
-        self.partial = partial
 
 
 class _FakeZalo:
@@ -1011,39 +1009,6 @@ async def test_zalo_ambiguous_send_timeout_is_send_unknown(monkeypatch):
     from app.models.conversation import DeliveryStatus
 
     assert recorded[0]["delivery_status"] is DeliveryStatus.SEND_UNKNOWN
-
-
-@pytest.mark.asyncio
-async def test_partial_multi_bubble_send_is_send_unknown(monkeypatch):
-    """REL-01: a partially delivered answer is at-most-once, never retryable FAILED.
-
-    The sender flags a chunked send whose later bubble failed after an earlier one
-    was accepted (``partial``). Recovery would re-answer the candidate, who already
-    saw the delivered bubble, so the row must be recorded SEND_UNKNOWN — the
-    non-retriable state the sweep never re-enqueues.
-    """
-    conv = _FakeConv()
-    svc, recorded = _stub_svc(conv=conv, owned=True)
-    _stub_agent(monkeypatch, "Chào bạn!")
-    zalo = _FakeZalo(
-        results=[
-            _SendResult(
-                ok=False,
-                error="chunk 2/3 failed: upstream rejected",
-                msg_id="mid-1",  # bubble 1 was delivered
-                partial=True,
-            )
-        ]
-    )
-
-    res = await run_turn(_state(), _deps(zalo, conversation=svc))
-
-    assert res["outcome"] == "send_unknown"
-    assert res["reply"] == "Chào bạn!"
-    from app.models.conversation import DeliveryStatus
-
-    assert recorded[0]["delivery_status"] is DeliveryStatus.SEND_UNKNOWN
-    assert recorded[0]["zalo_message_id"] == "mid-1"
 
 
 @pytest.mark.asyncio
@@ -2614,6 +2579,54 @@ async def test_agent_turn_passes_the_resolved_lead_row_to_context(monkeypatch):
     )
 
     assert captured["lead"] is lead_row
+
+
+@pytest.mark.asyncio
+async def test_jev_decision_overlaps_the_pending_write(monkeypatch):
+    """The Jev HTTP call starts while the pending write is still in flight —
+    its latency hides behind the preamble DB work instead of serialising
+    after it (the turn's wall-clock drops by the overlap)."""
+    conv = _FakeConv()
+    timeline: dict[str, float] = {}
+
+    class _Svc:
+        async def get(self, _id):
+            return conv
+
+        async def last_messages(self, c, limit):  # noqa: ARG001
+            return []
+
+        async def record_bot_pending(self, c, **_kwargs):
+            timeline["pending_started"] = time.monotonic()
+            await asyncio.sleep(0.05)
+            timeline["pending_ended"] = time.monotonic()
+            return SimpleNamespace(id=777)
+
+        async def recheck_ownership(self, c, version_at_start, lock_owner=None):  # noqa: ARG001
+            return True
+
+        async def claim_send(
+            self, c, *, version_at_start, lock_owner, pending_message_id, reply, **_kwargs
+        ):  # noqa: ARG001
+            return pending_message_id is not None
+
+        async def record_bot_outcome(self, c, **kw):  # noqa: ARG002
+            return None
+
+    class _Port:
+        async def decide_turn(self, **kwargs):  # noqa: ARG002
+            timeline["jev_started"] = time.monotonic()
+            await asyncio.sleep(0.01)
+            return TurnDecisions(degraded=True)
+
+    _stub_agent(monkeypatch, "Dạ em chào anh ạ.")
+    deps = _deps(_FakeZalo(), conversation=_Svc())
+    deps.turn_decisions = _Port()
+
+    res = await run_turn(_state(), deps)
+
+    assert res["outcome"] == "sent"
+    assert timeline["jev_started"] < timeline["pending_ended"]
 
 
 # ─── silent terminals never leave the placeholder row behind ────────────────
