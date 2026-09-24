@@ -39,7 +39,10 @@ class _FakeRedis:
 
 
 class _ExplodingRedis:
-    """Redis double that always raises on incr, simulating a Redis outage."""
+    """Redis double that always raises, simulating a Redis outage."""
+
+    async def get(self, key: str) -> str | None:
+        raise RuntimeError("redis down")
 
     async def set(self, key: str, value: str, *, nx: bool = False) -> bool:
         raise RuntimeError("redis down")
@@ -60,8 +63,10 @@ async def test_bump_kb_caches_increments_both_namespaces(monkeypatch):
 
     await cache_mod.bump_kb_caches()
 
-    assert redis._store["cachever:knowledge"] == "2"
-    assert redis._store["cachever:semantic_cache"] == "2"
+    # Both namespaces are seeded at a fresh generation (never a small value
+    # that could match pre-loss v{n} entries).
+    assert int(redis._store["cachever:knowledge"]) > 10**9
+    assert int(redis._store["cachever:semantic_cache"]) > 10**9
 
 
 @pytest.mark.asyncio
@@ -80,23 +85,60 @@ async def test_bump_cache_version_increments_namespace(monkeypatch):
     monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
 
     await cache_mod.bump_cache_version("knowledge")
+    first = redis._store["cachever:knowledge"]
     await cache_mod.bump_cache_version("knowledge")
+    second = redis._store["cachever:knowledge"]
 
-    assert redis._store["cachever:knowledge"] == "3"
+    # First bump seeds a fresh generation; every later bump is a pure INCR.
+    assert int(first) > 10**9  # seeded generation, not a small counter restart
+    assert int(second) == int(first) + 1
 
 
 @pytest.mark.asyncio
-async def test_cache_version_returns_string_default(monkeypatch):
-    """cache_version returns the stored value or '1' default (never None)."""
+async def test_cache_version_seeds_fresh_generation_on_miss(monkeypatch):
+    """A missing counter is a FULL FLUSH, never a reset to "1".
+
+    Returning a small default after the counter is lost (eviction, flush) can
+    match still-live v{n} entries written before the loss and resurrect stale
+    cache data. The seeded generation must be larger than any INCR counter the
+    namespace ever carried, must be persisted so all processes agree, and must
+    be stable across reads — an unstable version would break cache hits.
+    """
     redis = _FakeRedis()
     monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
 
-    # Default when the key does not exist yet.
-    assert await cache_mod.cache_version("unknown") == "1"
+    first = await cache_mod.cache_version("unknown")
+    second = await cache_mod.cache_version("unknown")
 
-    # Reflects bumps.
-    await cache_mod.bump_cache_version("known")
-    assert await cache_mod.cache_version("known") == "2"
+    assert int(first) > 10**9  # beyond any legacy small counter, so nothing matches
+    assert first == second  # stable: persisted, not re-seeded per call
+    assert redis._store["cachever:unknown"] == first
+
+
+@pytest.mark.asyncio
+async def test_cache_version_returns_present_counter_verbatim(monkeypatch):
+    """A present counter is returned as stored — INCR semantics untouched."""
+    redis = _FakeRedis()
+    redis._store["cachever:known"] = "7"
+    monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
+
+    assert await cache_mod.cache_version("known") == "7"
+
+
+@pytest.mark.asyncio
+async def test_cache_version_outage_returns_fresh_generation_not_one(monkeypatch):
+    """During a Redis outage the returned value must never be "1".
+
+    The cache reads/writes that would use this value fail too (nothing stale
+    can be served through it), but a small constant could resurrect old v{n}
+    entries once Redis recovers with the counter still missing.
+    """
+    monkeypatch.setattr(cache_mod, "get_redis", lambda: _ExplodingRedis())
+
+    value = await cache_mod.cache_version("knowledge")
+
+    assert value != "1"
+    assert int(value) > 10**9
 
 
 # ── KB content mutation → cache invalidation contract ────────────────────
@@ -139,10 +181,21 @@ async def test_bump_kb_caches_invalidates_both_cache_namespaces(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_first_bump_advances_absent_namespace_from_logical_default(monkeypatch):
+async def test_first_bump_after_counter_loss_never_restarts_small(monkeypatch):
+    """A bump on an absent namespace must seed a fresh generation.
+
+    Recreating a lost counter at "2" (the pre-flush-on-miss behaviour) would
+    make still-live stale v2 entries readable again — the resurrection bug
+    PERF-02 describes. Seeding at epoch scale makes every historical v{n}
+    entry unreachable at once.
+    """
     redis = _FakeRedis()
     monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
 
-    assert await cache_mod.cache_version("fresh") == "1"
     assert await cache_mod.bump_cache_version("fresh") is True
-    assert await cache_mod.cache_version("fresh") == "2"
+    seeded = redis._store["cachever:fresh"]
+    assert int(seeded) > 10**9
+
+    await cache_mod.bump_cache_version("fresh")
+    assert int(redis._store["cachever:fresh"]) == int(seeded) + 1
+    assert await cache_mod.cache_version("fresh") == str(int(seeded) + 1)

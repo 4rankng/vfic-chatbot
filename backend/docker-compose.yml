@@ -20,7 +20,11 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    # volatile-lru: only TTL'd keys (embedding/RAG caches) are evictable. The
+    # LLM semaphore token lists and cachever:* counters carry no TTL, so memory
+    # pressure can never evict them and suppress every turn or resurrect stale
+    # cache generations.
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
     volumes: [vfic_redisdata:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
