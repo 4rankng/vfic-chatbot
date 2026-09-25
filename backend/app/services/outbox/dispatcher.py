@@ -18,6 +18,11 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.outbox import OutboxStatus, OutboundOutbox
+from app.services.outbox.recipient_marks import (
+    SEND_UNREACHABLE_ERROR_CLASS,
+    is_recipient_unreachable,
+    mark_recipient_unreachable,
+)
 from app.services.outbox.repository import DispatchCandidate, DispatchResult
 from app.shared.application.outbound import OutboundPolicySuppressedError
 
@@ -115,6 +120,21 @@ async def _dispatch_claimed_command(
     if not await authority.reacquire_and_verify():
         return _suppressed_dispatch_result(candidate)
 
+    recipient_id = str(candidate.payload.get("chat_id") or "")
+    if recipient_id and await is_recipient_unreachable(candidate.channel, recipient_id):
+        # The provider already stated this recipient can never receive a message
+        # (user_unreachable). A send is guaranteed to fail, so skip provider I/O
+        # and terminalize the command as suppressed; the finalizer records the
+        # conversation's opt-out from the user_unreachable error class.
+        return DispatchResult(
+            outbox_id=candidate.outbox_id,
+            message_id=candidate.message_id,
+            ok=False,
+            error="recipient terminally unreachable",
+            error_class=SEND_UNREACHABLE_ERROR_CLASS,
+            suppressed=True,
+        )
+
     from app.services.integration_settings import IntegrationSettingsService
     from app.services.zalo_sender import ZaloChannelSender
 
@@ -140,6 +160,7 @@ async def _dispatch_claimed_command(
             refresh_oa_access_token,
         )
         if dispatch_result is not None:
+            await _mark_unreachable_recipient(candidate, dispatch_result.error_class)
             return dispatch_result
 
         # Legacy path: direct ZaloChannelSender (unchanged behavior).
@@ -152,7 +173,7 @@ async def _dispatch_claimed_command(
         return _suppressed_dispatch_result(
             candidate, error="runtime authority changed during OA credential refresh"
         )
-    return DispatchResult(
+    dispatch_result = DispatchResult(
         outbox_id=candidate.outbox_id,
         message_id=candidate.message_id,
         ok=result.ok,
@@ -161,6 +182,23 @@ async def _dispatch_claimed_command(
         error_class=result.error_class,
         telemetry=result.telemetry,
     )
+    await _mark_unreachable_recipient(candidate, dispatch_result.error_class)
+    return dispatch_result
+
+
+async def _mark_unreachable_recipient(
+    candidate: DispatchCandidate, error_class: str | None
+) -> None:
+    """Record a terminal recipient mark after a send fails as unreachable.
+
+    Keyed by the outbox command's channel identity so the turn path / dispatcher
+    sweep can skip generating or sending to it within the marker TTL.
+    """
+    if error_class != SEND_UNREACHABLE_ERROR_CLASS:
+        return
+    recipient_id = str(candidate.payload.get("chat_id") or "")
+    if recipient_id:
+        await mark_recipient_unreachable(candidate.channel, recipient_id)
 
 
 @dataclass(frozen=True)

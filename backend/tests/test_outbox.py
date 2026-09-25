@@ -206,6 +206,158 @@ async def test_dispatch_message_outbox_never_sends_a_row_claimed_by_another_send
     provider.assert_not_awaited()
 
 
+# ─── terminal recipient marks (dead-recipient send failures) ──────────────────
+
+
+class _FakeRedis:
+    """Minimal async Redis for the terminal-marker helpers."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+        self.set_calls: list[tuple[str, str, int | None]] = []
+
+    async def set(self, key: str, value: str, ex: int | None = None) -> None:
+        self.store[key] = value
+        self.set_calls.append((key, value, ex))
+
+    async def exists(self, key: str) -> int:
+        return 1 if key in self.store else 0
+
+
+def _patch_redis(monkeypatch) -> _FakeRedis:
+    import app.core.redis as redis_mod
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(redis_mod, "get_redis", lambda: fake)
+    return fake
+
+
+def _sending_outbox(channel: str = "zalo_bot", chat_id: str = "c1"):
+    return SimpleNamespace(
+        id=5,
+        message_id=42,
+        channel=channel,
+        payload={"chat_id": chat_id, "text": "hi"},
+        status=OutboxStatus.SENDING.value,
+        fence_scope=None,
+    )
+
+
+def _dispatch_db(outbox):
+    from app.models.conversation import DeliveryStatus
+
+    message = SimpleNamespace(delivery_status=DeliveryStatus.SENDING)
+    return SimpleNamespace(
+        scalar=AsyncMock(side_effect=[outbox, DeliveryStatus.SENDING]),
+        get=AsyncMock(return_value=message),
+        commit=AsyncMock(),
+    )
+
+
+def _patch_dispatch(monkeypatch, provider):
+    from app.services import outbox_service
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.IntegrationSettingsService.resolve_zalo",
+        AsyncMock(return_value=SimpleNamespace()),
+    )
+    monkeypatch.setattr(outbox_service, "_try_neutral_dispatch", provider)
+    monkeypatch.setattr(
+        outbox_service, "claim_pending_outbox", AsyncMock(return_value=None)
+    )
+    return outbox_service
+
+
+async def test_mark_recipient_unreachable_round_trips_with_done_ttl(monkeypatch):
+    """The marker is per (channel, recipient) and uses the profile-marker TTL."""
+    from app.services.outbox.recipient_marks import (
+        _SEND_UNREACHABLE_TTL_SECONDS,
+        is_recipient_unreachable,
+        mark_recipient_unreachable,
+    )
+
+    fake = _patch_redis(monkeypatch)
+
+    assert await is_recipient_unreachable("zalo_bot", "c1") is False
+    await mark_recipient_unreachable("zalo_bot", "c1")
+
+    assert await is_recipient_unreachable("zalo_bot", "c1") is True
+    assert await is_recipient_unreachable("zalo_bot", "c2") is False  # per recipient
+    assert await is_recipient_unreachable("zalo_oa", "c1") is False  # per channel
+    assert fake.set_calls[0][2] == _SEND_UNREACHABLE_TTL_SECONDS
+
+
+async def test_dispatch_skips_a_terminally_marked_recipient(monkeypatch):
+    """A marked recipient is never sent to — the command terminalizes suppressed."""
+    from app.services.outbox.recipient_marks import mark_recipient_unreachable
+
+    _patch_redis(monkeypatch)
+    await mark_recipient_unreachable("zalo_bot", "c1")
+
+    outbox = _sending_outbox()
+    provider = AsyncMock()
+    outbox_service = _patch_dispatch(monkeypatch, provider)
+
+    result = await outbox_service.dispatch_message_outbox(
+        _dispatch_db(outbox), message_id=42
+    )
+
+    assert result is not None
+    assert result.suppressed is True
+    assert result.error_class == "user_unreachable"
+    provider.assert_not_awaited()
+
+
+async def test_dispatch_records_terminal_mark_on_unreachable_failure(monkeypatch):
+    """A user_unreachable send failure writes the marker for later turns."""
+    from app.services.outbox.recipient_marks import is_recipient_unreachable
+
+    _patch_redis(monkeypatch)
+    outbox = _sending_outbox()
+    provider = AsyncMock(
+        return_value=SimpleNamespace(
+            outbox_id=5,
+            message_id=42,
+            ok=False,
+            error="user_id is invalid",
+            error_class="user_unreachable",
+            suppressed=False,
+        )
+    )
+    outbox_service = _patch_dispatch(monkeypatch, provider)
+
+    result = await outbox_service.dispatch_message_outbox(
+        _dispatch_db(outbox), message_id=42
+    )
+
+    assert result is not None and result.ok is False
+    provider.assert_awaited_once()
+    assert await is_recipient_unreachable("zalo_bot", "c1") is True
+
+
+async def test_dispatch_does_not_mark_retryable_failures(monkeypatch):
+    """A retryable provider failure must not terminally mark the recipient."""
+    from app.services.outbox.recipient_marks import is_recipient_unreachable
+
+    _patch_redis(monkeypatch)
+    outbox = _sending_outbox()
+    provider = AsyncMock(
+        return_value=SimpleNamespace(
+            outbox_id=5,
+            message_id=42,
+            ok=False,
+            error="rate limited",
+            error_class=None,
+            suppressed=False,
+        )
+    )
+    outbox_service = _patch_dispatch(monkeypatch, provider)
+
+    await outbox_service.dispatch_message_outbox(_dispatch_db(outbox), message_id=42)
+
+    assert await is_recipient_unreachable("zalo_bot", "c1") is False
+
+
 async def test_enqueue_outbox_calls_insert_with_correct_fields(monkeypatch):
     """enqueue_outbox issues a PG insert with the right field mapping."""
     from app.services import outbox_service
