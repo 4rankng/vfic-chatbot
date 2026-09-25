@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.composition.conversation_messaging import (
     enqueue_chat_turn,
+    enqueue_chat_turn_async,
     enqueue_messenger_profile_enrichment,
     run_zalo_ingress,
     webhook_app_env,
@@ -137,7 +138,7 @@ async def zalo_webhook(
     result = await run_zalo_ingress(
         db,
         payload,
-        enqueue=enqueue_chat_turn,
+        enqueue=enqueue_chat_turn_async,
         bot_token=cfg.bot_token,
         runtime_authority=runtime_authority,
     )
@@ -180,7 +181,7 @@ async def zalo_oa_webhook(
     result = await run_zalo_ingress(
         db,
         payload,
-        enqueue=enqueue_chat_turn,
+        enqueue=enqueue_chat_turn_async,
         channel="oa",
         runtime_authority=runtime_authority,
     )

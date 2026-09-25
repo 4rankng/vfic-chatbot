@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
@@ -32,6 +33,18 @@ def enqueue_chat_turn(job) -> bool | None:
     from app.workers.chatbot_worker import enqueue_chat_run
 
     return enqueue_chat_run(job)
+
+
+async def enqueue_chat_turn_async(job) -> bool | None:
+    """Off-loop entry point for the single ``enqueue_chat_turn`` core.
+
+    ``enqueue_chat_turn`` reaches Redis through the synchronous redis-py client,
+    so awaiting it directly from an ASGI handler holds the event loop on network
+    I/O. Async webhook handlers await this instead: it runs the identical call on
+    the default executor. Return shape and backpressure semantics
+    (``False``/``None`` -> the caller's 503 path) are unchanged.
+    """
+    return await asyncio.to_thread(enqueue_chat_turn, job)
 
 
 def webhook_app_env() -> str:
@@ -151,6 +164,7 @@ __all__ = [
     "SqlAlchemyOutboundRecoveryAdapter",
     "build_delivery_status_values",
     "enqueue_chat_turn",
+    "enqueue_chat_turn_async",
     "run_outbound_recovery",
     "run_inline_web_chat_turn",
     "run_zalo_ingress",

@@ -92,7 +92,7 @@ async def test_bot_webhook_dispatches_turn_through_rq(monkeypatch):
     )
 
     assert response.status_code == 503
-    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn_async
     assert handle.await_args.kwargs["runtime_authority"] == _runtime_authority()
 
 
@@ -126,7 +126,7 @@ async def test_valid_oa_webhook_preserves_start_failed_retry_mapping(monkeypatch
     )
 
     assert response.status_code == 503
-    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn_async
 
 
 @pytest.mark.asyncio
@@ -211,7 +211,7 @@ async def test_oa_webhook_dispatches_verifiably_signed_event(monkeypatch):
 
     assert response.status_code == 200
     handle.assert_awaited_once()
-    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn
+    assert handle.await_args.kwargs["enqueue"] is webhooks.enqueue_chat_turn_async
     assert handle.await_args.kwargs["runtime_authority"] == _runtime_authority()
 
 
@@ -1317,3 +1317,166 @@ async def test_phase3_queued_job_carries_no_provider_token(monkeypatch):
         assert value != "secret-bot-token-12345", (
             f"token-like value leaked via payload key {key!r}"
         )
+
+
+@pytest.mark.asyncio
+async def test_enqueue_chat_turn_async_runs_the_sync_core_off_the_event_loop(monkeypatch):
+    """The awaited wrapper must hand the synchronous redis/RQ core to a worker
+    thread, so the ASGI loop never blocks on it, and pass its result through."""
+    import threading
+
+    from app.api import webhooks
+    from app.composition import conversation_messaging as messaging
+
+    loop_thread = threading.get_ident()
+    seen: dict[str, object] = {}
+
+    def fake_sync_enqueue(job):
+        seen["thread"] = threading.get_ident()
+        seen["job"] = job
+        return False  # the backpressure signal callers map to 503
+
+    monkeypatch.setattr(messaging, "enqueue_chat_turn", fake_sync_enqueue)
+
+    result = await webhooks.enqueue_chat_turn_async({"conversation_id": "c1"})
+
+    assert result is False
+    assert seen["job"] == {"conversation_id": "c1"}
+    assert seen["thread"] != loop_thread, "the sync enqueue ran on the event-loop thread"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_chat_turn_async_keeps_the_event_loop_responsive(monkeypatch):
+    """A blocking sync enqueue must not freeze the loop: while it waits, other
+    loop work still completes well before the sync body is released."""
+    import threading
+
+    from app.api import webhooks
+    from app.composition import conversation_messaging as messaging
+
+    release = threading.Event()
+
+    def blocking_enqueue(_job):
+        release.wait(timeout=5)
+        return True
+
+    monkeypatch.setattr(messaging, "enqueue_chat_turn", blocking_enqueue)
+
+    loop = asyncio.get_running_loop()
+    start = loop.time()
+    task = asyncio.create_task(webhooks.enqueue_chat_turn_async({"conversation_id": "c1"}))
+    try:
+        # Yields to the loop once. If the enqueue ran on-loop, this could not
+        # return until the 5s thread wait elapsed.
+        await asyncio.sleep(0.05)
+        elapsed = loop.time() - start
+    finally:
+        release.set()
+
+    assert elapsed < 1.0, "the event loop was blocked by the synchronous enqueue"
+    assert await task is True
+
+
+@pytest.mark.asyncio
+async def test_async_enqueue_wrapper_preserves_backpressure_start_failed(monkeypatch):
+    """Awaiting the wrapper keeps the existing backpressure mapping: a False
+    enqueue still yields start_failed (503 to Zalo) and releases the lock."""
+    from app.api import webhooks
+    from app.composition import conversation_messaging as messaging
+    from app.services.webhook import ZaloWebhookService
+
+    monkeypatch.setattr(messaging, "enqueue_chat_turn", lambda _job: False)
+
+    conv = SimpleNamespace(
+        id=uuid.uuid4(),
+        zalo_chat_id="bot-user-1",
+        zalo_channel="bot",
+        version=1,
+        mode="BOT",
+    )
+    lock_owner = uuid.UUID("00000000-0000-0000-0000-0000000000ab")
+    service = MagicMock()
+    service.ensure = AsyncMock(return_value=conv)
+    service.record_inbound = AsyncMock()
+    service.get = AsyncMock(return_value=conv)
+    service.run_start_guard = MagicMock(return_value=True)
+    service.acquire_lock = AsyncMock(return_value=lock_owner)
+    service.release_lock = AsyncMock()
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+
+    result = await ZaloWebhookService.handle(
+        db,
+        {"message": {"message_id": "msg-1", "chat": {"id": "bot-user-1"}, "text": "Xin chào"}},
+        enqueue=webhooks.enqueue_chat_turn_async,
+    )
+
+    assert result == {"status": "start_failed", "conversation_id": str(conv.id)}
+    service.release_lock.assert_awaited_once_with(conv, lock_owner=lock_owner)
+
+
+@pytest.mark.asyncio
+async def test_zalo_route_awaits_async_enqueue_and_maps_backpressure_to_503(monkeypatch):
+    """End-to-end through the route and the real handler: the wired wrapper is
+    awaited, and a backpressured (False) enqueue still yields the 503 Zalo
+    retries on, releasing the per-chat lock."""
+    from app.api import webhooks
+    from app.composition import conversation_messaging as messaging
+
+    monkeypatch.setattr(messaging, "enqueue_chat_turn", lambda _job: False)
+
+    cfg = SimpleNamespace(bot_webhook_secret="", bot_token="bot-token")
+    monkeypatch.setattr(
+        webhooks,
+        "IntegrationSettingsService",
+        lambda _db: SimpleNamespace(resolve_zalo=AsyncMock(return_value=cfg)),
+    )
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
+
+    conv = SimpleNamespace(
+        id=uuid.uuid4(),
+        zalo_chat_id="bot-user-1",
+        zalo_channel="bot",
+        version=1,
+        mode="BOT",
+    )
+    lock_owner = uuid.UUID("00000000-0000-0000-0000-0000000000ac")
+    service = MagicMock()
+    service.ensure = AsyncMock(return_value=conv)
+    service.record_inbound = AsyncMock()
+    service.get = AsyncMock(return_value=conv)
+    service.run_start_guard = MagicMock(return_value=True)
+    service.acquire_lock = AsyncMock(return_value=lock_owner)
+    service.release_lock = AsyncMock()
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        AsyncMock(return_value=None),
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+
+    response = await webhooks.zalo_webhook(
+        FakeRequest(
+            json.dumps(
+                {
+                    "message": {
+                        "message_id": "msg-1",
+                        "chat": {"id": "bot-user-1"},
+                        "text": "Xin chào",
+                    }
+                }
+            ).encode()
+        ),
+        db=db,
+    )
+
+    assert response.status_code == 503
+    service.release_lock.assert_awaited_once_with(conv, lock_owner=lock_owner)
