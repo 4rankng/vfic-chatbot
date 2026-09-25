@@ -15,6 +15,9 @@ OutboundErrorClass = Literal[
     "provider_error",
     "policy_suppressed",
     "auth_revoked",
+    # The provider permanently rejected the recipient id (Zalo OA -201
+    # "user_id is not valid"): retrying the same send can never succeed.
+    "user_unreachable",
 ]
 
 AMBIGUOUS_SEND_CLASSES: frozenset[OutboundErrorClass] = frozenset(

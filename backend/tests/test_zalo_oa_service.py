@@ -655,3 +655,57 @@ async def test_parse_oa_user_profile_priority() -> None:
     p4 = _parse_oa_user_profile({})
     assert p4.avatar_url == ""
     assert p4.display_name == ""
+
+
+async def test_oa_sender_classifies_user_id_invalid_as_user_unreachable() -> None:
+    """Zalo -201 "user_id is invalid" is a permanent recipient failure.
+
+    The provider's own message must survive verbatim in ``error`` — the
+    reconcile sweep greps it ("user_id is invalid") to skip re-answering.
+    """
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {"error": -201, "message": "user_id is invalid"}
+
+    class _FakeClient:
+        async def post(self, url: str, *, json=None, headers=None, **kw):
+            return _FakeResp()
+
+    register_fake_client("zalo_oa", _FakeClient())
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+
+    result = await sender.send_message("user-1", "hello", quote_message_id="inbound-1")
+
+    assert result.ok is False
+    # The provider's own wording must survive verbatim inside the folded chunk
+    # error — the reconcile sweep greps it to skip re-answering dead recipients.
+    assert result.error.endswith("user_id is invalid")
+    assert result.error_class == "user_unreachable"
+
+
+async def test_oa_sender_keeps_generic_provider_errors_unclassified() -> None:
+    """Non -201 provider failures stay plain provider_error-shaped results."""
+
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {"error": -137, "message": "User not in consultation window"}
+
+    class _FakeClient:
+        async def post(self, url: str, *, json=None, headers=None, **kw):
+            return _FakeResp()
+
+    register_fake_client("zalo_oa", _FakeClient())
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+
+    result = await sender.send_message("user-1", "hello", quote_message_id="inbound-1")
+
+    assert result.ok is False
+    assert result.error_class is None

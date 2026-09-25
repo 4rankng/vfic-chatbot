@@ -29,6 +29,10 @@ from app.services.conversation._shared import (
     _delivery_status_for_send_error,
     utcnow,
 )
+from app.services.conversation.unreachable import (
+    USER_UNREACHABLE_SEND_CLASS,
+    apply_user_unreachable_side_effects,
+)
 from app.shared.application.outbound import OutboundTelemetry
 
 
@@ -279,6 +283,8 @@ class SendClaimMixin:
         await self.db.commit()
         await self.db.refresh(msg)
         msg._delivery_attempts = outbox.attempts
+        if error_class == USER_UNREACHABLE_SEND_CLASS:
+            await apply_user_unreachable_side_effects(self.db, conv, self.events)
         await self.events.message_created(msg, conv)
         await self.events.conversation_updated(conv)
         return msg

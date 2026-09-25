@@ -114,6 +114,12 @@ const failureReasonLabel = (m: Message): string => {
   const reason = (m.external_error ?? "").toLowerCase();
   if (!reason) return "";
   if (
+    reason.includes("user_id is invalid") ||
+    reason.includes("user_id is not valid")
+  ) {
+    return "Người nhận không liên lạc được qua Zalo — thử lại sẽ không thành công";
+  }
+  if (
     reason.includes("timeout") ||
     reason.includes("connect") ||
     reason.includes("network")

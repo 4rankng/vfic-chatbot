@@ -158,8 +158,27 @@ class ZaloOASender:
             ok=False,
             error=str(message),
             raw=envelope,
-            error_class=envelope.get("error_class"),
+            error_class=(
+                "user_unreachable"
+                if ZaloOASender._is_user_unreachable(envelope)
+                else envelope.get("error_class")
+            ),
         )
+
+    @staticmethod
+    def _is_user_unreachable(envelope: dict[str, Any]) -> bool:
+        """True when Zalo permanently rejects the recipient id.
+
+        ``-201`` with a ``user_id`` message is Zalo saying this id is not a
+        sendable user of the OA the token belongs to (unfollowed, or the event
+        originated from a different OA). It is a property of the recipient, not
+        of the request, so retrying the same send can never succeed.
+        """
+        error = envelope.get("error")
+        if str(error or "") != "-201":
+            return False
+        message = str(envelope.get("message") or envelope.get("error_message") or "").lower()
+        return "user_id" in message
 
     @staticmethod
     def _is_token_invalid(envelope: dict[str, Any]) -> bool:
