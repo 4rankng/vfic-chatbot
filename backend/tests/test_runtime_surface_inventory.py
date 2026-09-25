@@ -92,7 +92,10 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # integration_settings.refresh_oa_access_token contributes `eval` where it
     # used to contribute `delete` — one reviewed site either way, which is why
     # `eval` is in the scanned verb set.
-    "provider_boundary": 79,
+    # +1: the OA sender's -201 unreachable classifier reads envelope.error /
+    # envelope.message in zalo_oa_service._is_user_unreachable — one new
+    # provider-transport `.get` site beside the existing result parsers.
+    "provider_boundary": 80,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -130,7 +133,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "6b3538141950ce5d50120c531ccbcf30f6b514889a536dd714d43bda69e07b43"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "1f0f2debbdbd882f57af6a6ff9834d5d05c88708d6efd422676aa7db06efead7"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

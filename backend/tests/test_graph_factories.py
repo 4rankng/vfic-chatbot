@@ -493,13 +493,18 @@ async def test_lead_context_uses_clear_oa_profile_name_without_reasking(monkeypa
     profile_leads = []
     profile_kwargs = []
     collection_leads = []
+    upserts = []
 
     class _Repo:
         def __init__(self, _db):
             pass
 
         async def by_zalo_id(self, _chat_id):
-            return {"name": None}
+            return {"name": None, "zalo_id": "oa:user-1"}
+
+        async def upsert(self, lead):
+            upserts.append(lead)
+            return 1
 
     class _ConversationService:
         def __init__(self, _db):
@@ -511,6 +516,10 @@ async def test_lead_context_uses_clear_oa_profile_name_without_reasking(monkeypa
                 (),
                 {"contact": type("_Contact", (), {"display_name": "Nguyễn Hùng"})()},
             )()
+
+    class _Db:
+        async def commit(self):
+            return None
 
     def _profile_text(lead, **kwargs):
         profile_leads.append(lead)
@@ -529,21 +538,24 @@ async def test_lead_context_uses_clear_oa_profile_name_without_reasking(monkeypa
         _collection_question,
     )
 
-    profile, question = await ServiceLeadContextAdapter(object()).context(
+    profile, question = await ServiceLeadContextAdapter(_Db()).context(
         "oa:user-1", "CTY ở đâu vậy", []
     )
 
     assert profile == "profile"
     assert question == "phone question"
-    assert profile_leads == [{"name": None}]
+    # The accepted profile name was persisted, so the prompt reads the merged
+    # lead (known name) instead of the unconfirmed display-label block.
+    assert profile_leads == [{"zalo_id": "oa:user-1", "name": "Nguyễn Hùng"}]
     assert profile_kwargs == [
         {
             "oa_profile_display_name": "Nguyễn Hùng",
-            "use_oa_profile_name": True,
+            "use_oa_profile_name": False,
             "personalize": True,
         }
     ]
-    assert collection_leads == [{"name": "Nguyễn Hùng"}]
+    assert collection_leads == [{"zalo_id": "oa:user-1", "name": "Nguyễn Hùng"}]
+    assert upserts and upserts[0]["name"] == "Nguyễn Hùng"
 
 
 def test_minimax_json_missing_key_names_minimax(monkeypatch):

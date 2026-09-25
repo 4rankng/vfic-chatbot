@@ -1215,7 +1215,7 @@ class TestLeadProfileText:
         assert '"Nguyễn Hùng"' in text
         assert "chưa được ứng viên xác nhận" in text
         assert "không hỏi lại tên" in text
-        assert "không tự ghi thành Lead.name" in text
+        assert "chưa được ghi vào hồ sơ" in text
         assert "Đã biết tên ứng viên" not in text
 
     @pytest.mark.parametrize(
@@ -1223,9 +1223,15 @@ class TestLeadProfileText:
         [
             ("Nguyễn Hùng", "Nguyễn Hùng"),
             ("Trần Văn Nam", "Trần Văn Nam"),
+            # Western-order display labels: family name last must also pass.
+            ("Duc Huy Nguyen", "Duc Huy Nguyen"),
+            ("Nguyen Duc Huy", "Nguyen Duc Huy"),
+            ("Thu Ha Nguyen", "Thu Ha Nguyen"),
             ("CTY ở đâu", None),
             ("Bé Gấu", None),
             ("Nguyễn Hùng?", None),
+            ("Dũng", None),
+            ("Công Ty TNHH ABC", None),
         ],
     )
     def test_high_confidence_profile_name(self, display_name, expected):

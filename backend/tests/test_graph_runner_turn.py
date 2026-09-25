@@ -269,6 +269,15 @@ def _state() -> BotRunState:
     )
 
 
+def _state_with_user_name(user_name: str) -> BotRunState:
+    return BotRunState(
+        conversation_id=CONV_ID,
+        version_at_start=1,
+        user_text="tôi muốn tìm việc lái xe",
+        user_name=user_name,
+    )
+
+
 @pytest.mark.asyncio
 async def test_messenger_turn_persists_messenger_outbox_route(monkeypatch):
     conv = _FakeConv(
@@ -2465,6 +2474,111 @@ async def test_messenger_conv_passes_contact_id_to_gender_port(monkeypatch):
         conv=conv,
     )
     assert stub.calls[0]["contact_id"] == "ct-9"
+
+
+# ---------------------------------------------------------------------------
+# Candidate profile-name capture (Jev judgment -> blank lead.name)
+# ---------------------------------------------------------------------------
+
+
+class _ProfileNameGenderStub(_LeadGenderStub):
+    """Gender stub that also records Jev-validated profile-name writes."""
+
+    def __init__(self, *args, stored_name: str | None = None, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.stored_name = stored_name
+        self.name_calls: list[dict] = []
+
+    async def record_profile_name(
+        self,
+        chat_id: str,
+        name: str,
+        *,
+        contact_id: str | None = None,
+        lead: dict | None = None,
+    ) -> bool:
+        self.name_calls.append({"chat_id": chat_id, "name": name, "contact_id": contact_id})
+        if self.stored_name:
+            return False
+        self.stored_name = name
+        return True
+
+
+@pytest.mark.asyncio
+async def test_jev_validated_profile_name_is_recorded_on_blank_lead(monkeypatch):
+    stub = _ProfileNameGenderStub(stored="")
+    result, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(profile_name_is_name=True),
+        gender_stub=stub,
+        state=_state_with_user_name("Duc Huy Nguyen"),
+    )
+    assert result["outcome"] == "sent"
+    assert stub.name_calls == [
+        {"chat_id": "z1", "name": "Duc Huy Nguyen", "contact_id": None}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_jev_rejected_profile_name_is_not_recorded(monkeypatch):
+    stub = _ProfileNameGenderStub(stored="")
+    _, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(profile_name_is_name=False),
+        gender_stub=stub,
+        state=_state_with_user_name("Bé Gấu Shop"),
+    )
+    assert stub.name_calls == []
+
+
+@pytest.mark.asyncio
+async def test_degraded_jev_never_records_profile_name(monkeypatch):
+    stub = _ProfileNameGenderStub(stored="")
+    _, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(profile_name_is_name=True, degraded=True),
+        gender_stub=stub,
+        state=_state_with_user_name("Duc Huy Nguyen"),
+    )
+    assert stub.name_calls == []
+
+
+@pytest.mark.asyncio
+async def test_blank_profile_name_is_never_recorded(monkeypatch):
+    stub = _ProfileNameGenderStub(stored="")
+    _, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(profile_name_is_name=True),
+        gender_stub=stub,
+        state=_state_with_user_name("   "),
+    )
+    assert stub.name_calls == []
+
+
+@pytest.mark.asyncio
+async def test_existing_lead_name_blocks_profile_name_write(monkeypatch):
+    stub = _ProfileNameGenderStub(stored="", stored_name="Nguyễn Văn A")
+    _, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(profile_name_is_name=True),
+        gender_stub=stub,
+        state=_state_with_user_name("Duc Huy Nguyen"),
+    )
+    assert stub.name_calls != []
+    assert stub.stored_name == "Nguyễn Văn A"
+
+
+@pytest.mark.asyncio
+async def test_gender_stub_without_name_method_keeps_turn_working(monkeypatch):
+    """Old double stubs without record_profile_name must not break the turn."""
+    stub = _LeadGenderStub(stored="")
+    result, _ = await _run_gender_turn(
+        monkeypatch,
+        decisions=TurnDecisions(profile_name_is_name=True),
+        gender_stub=stub,
+        state=_state_with_user_name("Duc Huy Nguyen"),
+    )
+    assert result["outcome"] == "sent"
 
 
 @pytest.mark.asyncio

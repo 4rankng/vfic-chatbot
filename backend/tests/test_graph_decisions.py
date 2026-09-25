@@ -87,6 +87,20 @@ async def test_questions_match_contract() -> None:
         "recent_vacancy",
         "contact_info",
     }
+    # The profile-name question is opt-in: only a non-blank profile_name asks it.
+    assert "profile_name_is_name" not in build_turn_questions()
+    assert "profile_name_is_name" not in build_turn_questions(include_gender=False)
+    assert set(build_turn_questions(include_profile_name=True)) == {
+        "intent",
+        "vacancy_listing",
+        "sort_by",
+        "pleasantry",
+        "recent_vacancy",
+        "contact_info",
+        "gender",
+        "gender_stated",
+        "profile_name_is_name",
+    }
     assert set(_GENDER_CRITERIA) == {"male", "female", "unknown"}
     assert set(_INTENT_CRITERIA) == {
         "small_talk",
@@ -208,6 +222,47 @@ async def test_client_skips_gender_question_when_disabled() -> None:
     client._system_one = _capture  # noqa: SLF001 — test seam
     await client.decide_turn(user_text="x", recent_messages=[], include_gender=False)
     assert "gender" not in sent["questions"]
+
+
+async def test_client_asks_profile_name_question_only_with_a_profile_name() -> None:
+    client = _client()
+    sent: dict = {}
+
+    async def _capture(state, questions):
+        sent["questions"] = questions
+        sent["state"] = state
+        return _payload(_answers())
+
+    client._system_one = _capture  # noqa: SLF001 — test seam
+    await client.decide_turn(user_text="x", recent_messages=[])
+    assert "profile_name_is_name" not in sent["questions"]
+
+    sent.clear()
+    await client.decide_turn(
+        user_text="x", recent_messages=[], profile_name="Duc Huy Nguyen"
+    )
+    assert "profile_name_is_name" in sent["questions"]
+    assert sent["state"]["profile_name"] == "Duc Huy Nguyen"
+
+
+async def test_client_parses_profile_name_answer() -> None:
+    client = _client()
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(profile_name_is_name=_noul(0.9)))
+    )
+    decisions = await client.decide_turn(
+        user_text="x", recent_messages=[], profile_name="Duc Huy Nguyen"
+    )
+    assert decisions.profile_name_is_name is True
+
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(profile_name_is_name=_noul(0.2)))
+    )
+    decisions = await client.decide_turn(
+        user_text="x", recent_messages=[], profile_name="Bé Gấu"
+    )
+    assert decisions.profile_name_is_name is False
+    assert decisions.degraded is False
 
 
 def test_turn_state_carries_and_caps_profile_name() -> None:

@@ -174,6 +174,11 @@ def high_confidence_profile_name(value: str | None) -> str | None:
     clearly human labels such as ``Nguyễn Hùng`` to avoid a redundant name
     question while leaving company names, questions, and nicknames for explicit
     confirmation.
+
+    The family name may sit in first position (native Vietnamese order,
+    ``Nguyễn Đức Huy``) or last position (Western order, ``Duc Huy Nguyen``) —
+    many candidates set provider display labels in Western order, and rejecting
+    those made every reply to them re-ask for a name that was already visible.
     """
     candidate = _pick(value)
     if not candidate or len(candidate) > 60:
@@ -183,8 +188,10 @@ def high_confidence_profile_name(value: str | None) -> str | None:
     words = candidate.split()
     if not (2 <= len(words) <= 5) or not all(word.istitle() for word in words):
         return None
-    family_name = normalize_vietnamese_text(words[0]).strip()
-    if family_name not in _COMMON_VIETNAMESE_FAMILY_NAMES:
+    deaccented = [normalize_vietnamese_text(word).strip() for word in words]
+    family_first = deaccented[0] in _COMMON_VIETNAMESE_FAMILY_NAMES
+    family_last = deaccented[-1] in _COMMON_VIETNAMESE_FAMILY_NAMES
+    if not (family_first or family_last):
         return None
     return candidate
 
@@ -394,7 +401,7 @@ def lead_profile_text(
         profile_instruction = (
             "- Hệ thống đã phân loại giá trị này là tên có thể dùng để xưng hô: "
             "không hỏi lại tên. Giá trị vẫn là dữ liệu nhà cung cấp, không phải "
-            "danh tính đã xác nhận và không tự ghi thành Lead.name."
+            "danh tính đã xác nhận; ở lượt này nó chưa được ghi vào hồ sơ."
             if use_oa_profile_name
             else "- Tự đánh giá bằng ngữ cảnh: nếu phù hợp để dùng như tên ứng viên thì "
             "có thể gọi tự nhiên và không hỏi lại; nếu không phù hợp hoặc không chắc "

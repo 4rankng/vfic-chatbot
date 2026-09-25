@@ -95,6 +95,14 @@ class LeadGenderPort(Protocol):
         override: bool = False,
     ) -> bool: ...
 
+    async def record_profile_name(
+        self,
+        chat_id: str,
+        name: str,
+        *,
+        contact_id: str | None = None,
+    ) -> bool: ...
+
 
 class ProactiveStatePort(Protocol):
     """Persistence seam used by graph proactive orchestration."""

@@ -159,3 +159,93 @@ async def test_adapter_still_ignores_unsupported_gender_values(adapter):
 async def test_adapter_writes_nothing_without_a_resolved_lead(adapter):
     assert await adapter.record_inferred_gender("chat-1", "male", lead={"gender": None}) is False
     assert _FakeLeadRepository.calls == []
+
+
+# --- profile-name capture: blank-only, zalo-keyed rows only -------------------
+
+
+class _FakeNameLeadRepository:
+    """Stands in for LeadRepository during profile-name persistence tests."""
+
+    instances: list = []
+    results: list = []
+
+    def __init__(self, _db) -> None:
+        self.upserts: list[dict] = []
+        _FakeNameLeadRepository.instances.append(self)
+
+    async def by_zalo_id(self, _chat_id):
+        return None
+
+    async def by_contact_id(self, _contact_id):
+        return None
+
+    async def upsert(self, lead: dict):
+        self.upserts.append(lead)
+        return _FakeNameLeadRepository.results.pop(0)
+
+
+@pytest.fixture()
+def name_db(monkeypatch):
+    """An async db stub whose commit is recorded and whose scalar finds no lead."""
+    from unittest.mock import AsyncMock
+
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=0)
+    db.commit = AsyncMock()
+    db.add = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.lead.repository.LeadRepository", _FakeNameLeadRepository
+    )
+    _FakeNameLeadRepository.instances = []
+    _FakeNameLeadRepository.results = [42]
+    return db
+
+
+@pytest.mark.asyncio
+async def test_record_profile_name_persists_blank_zalo_keyed_lead(name_db):
+    from app.recruitment.infrastructure.service_adapters import ServiceLeadGenderAdapter
+
+    adapter = ServiceLeadGenderAdapter(name_db)
+    lead = {"id": 7, "zalo_id": "oa:544936713681674566", "name": ""}
+
+    assert await adapter.record_profile_name("oa:544936713681674566", "Duc Huy Nguyen", lead=lead) is True
+    upserts = _FakeNameLeadRepository.instances[0].upserts
+    assert len(upserts) == 1
+    assert upserts[0]["zalo_id"] == "oa:544936713681674566"
+    assert upserts[0]["name"] == "Duc Huy Nguyen"
+    assert upserts[0]["phone"] is None
+    name_db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_record_profile_name_refuses_contact_keyed_lead(name_db):
+    """A Messenger lead (NULL zalo_id) must never be upserted by a chat id."""
+    from app.recruitment.infrastructure.service_adapters import ServiceLeadGenderAdapter
+
+    adapter = ServiceLeadGenderAdapter(name_db)
+    lead = {"id": 7, "zalo_id": None, "name": ""}
+
+    assert await adapter.record_profile_name("z1", "Duc Huy Nguyen", lead=lead) is False
+    assert _FakeNameLeadRepository.instances == []
+    name_db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_record_profile_name_refuses_leadless_non_oa_chat(name_db):
+    from app.recruitment.infrastructure.service_adapters import ServiceLeadGenderAdapter
+
+    adapter = ServiceLeadGenderAdapter(name_db)
+
+    assert await adapter.record_profile_name("raw-bot-id", "Duc Huy Nguyen", lead=None) is False
+    assert all(not repo.upserts for repo in _FakeNameLeadRepository.instances)
+
+
+@pytest.mark.asyncio
+async def test_record_profile_name_blank_name_is_a_no_op(name_db):
+    from app.recruitment.infrastructure.service_adapters import ServiceLeadGenderAdapter
+
+    adapter = ServiceLeadGenderAdapter(name_db)
+
+    assert await adapter.record_profile_name("oa:1", "   ", lead=None) is False
+    assert _FakeNameLeadRepository.instances == []

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 async def _resolve_lead(db, chat_id: str, contact_id: str | None) -> dict | None:
     """The lead by chat id, else by contact (Messenger rows are contact-keyed)."""
@@ -12,6 +16,36 @@ async def _resolve_lead(db, chat_id: str, contact_id: str | None) -> dict | None
     if lead is None and contact_id:
         lead = await repo.by_contact_id(contact_id)
     return lead
+
+
+async def _persist_profile_name_if_absent(
+    db, chat_id: str, name: str, lead: dict | None
+) -> bool:
+    """Persist an accepted provider profile name into the lead, blank-only.
+
+    Only the OA (``oa:``-prefixed) namespace and already-zalo-keyed rows are
+    writable here: the lead upsert is zalo_id-keyed, and a Messenger recipient
+    (page-scoped id, NULL ``zalo_id`` lead) upserted as a ``zalo_id`` would
+    create a bogus second lead. The COALESCE merge inside the upsert
+    guarantees a recruiter-entered or candidate-stated name is never
+    overwritten.
+    """
+    from app.services.lead.normalizers import normalize_lead
+    from app.services.lead.repository import LeadRepository
+
+    if not name:
+        return False
+    zalo_keyed = bool(lead is not None and str(lead.get("zalo_id") or "").strip())
+    if not zalo_keyed and not chat_id.startswith("oa:"):
+        return False
+    patch = normalize_lead({"name": name}, chat_id)
+    if patch is None:
+        return False
+    lead_id = await LeadRepository(db).upsert(patch)
+    if lead_id is None:
+        return False
+    await db.commit()
+    return True
 
 
 class ServiceLeadContextAdapter:
@@ -47,7 +81,19 @@ class ServiceLeadContextAdapter:
 
         collection_lead = lead
         effective_profile_name = high_confidence_profile_name(oa_profile_display_name)
+        profile_name_persisted = False
         if effective_profile_name and not str((lead or {}).get("name") or "").strip():
+            # Best-effort: a failed persistence must never break prompt building,
+            # which would fail the whole turn. The collection guidance still
+            # treats the label as a usable name either way.
+            try:
+                profile_name_persisted = await _persist_profile_name_if_absent(
+                    self._db, chat_id, effective_profile_name, lead
+                )
+            except Exception:  # noqa: BLE001 — prompt building outranks capture
+                logger.debug(
+                    "profile-name persistence failed chat=%s", chat_id, exc_info=True
+                )
             collection_lead = dict(lead or {})
             collection_lead["name"] = effective_profile_name
             collection_guidance = lead_collection_question(
@@ -71,11 +117,17 @@ class ServiceLeadContextAdapter:
                 current_user_text=current_user_text,
                 recent_messages=recent_messages,
             )
+        profile_text_lead = (
+            collection_lead
+            if effective_profile_name and profile_name_persisted
+            else lead
+        )
         return (
             lead_profile_text(
-                lead,
+                profile_text_lead,
                 oa_profile_display_name=oa_profile_display_name,
-                use_oa_profile_name=effective_profile_name is not None,
+                use_oa_profile_name=effective_profile_name is not None
+                and not profile_name_persisted,
                 personalize=chat_id.startswith("oa:"),
             ),
             collection_guidance,
@@ -143,6 +195,27 @@ class ServiceLeadGenderAdapter:
         return await LeadRepository(self._db).set_gender_by_id(
             lead["id"], gender, override=override
         )
+
+    async def record_profile_name(
+        self,
+        chat_id: str,
+        name: str,
+        *,
+        contact_id: str | None = None,
+        lead: dict | None = None,
+    ) -> bool:
+        """Persist a Jev-validated profile display name into a blank lead name.
+
+        Zalo-keyed (OA) rows only — the lead upsert is zalo_id-keyed, so a
+        Messenger row (NULL ``zalo_id``) must not be upserted by chat id. The
+        COALESCE merge inside the upsert keeps any existing name authoritative.
+        """
+        if not str(name or "").strip():
+            return False
+        resolved = lead if lead is not None else await _resolve_lead(self._db, chat_id, contact_id)
+        if resolved is not None and str(resolved.get("name") or "").strip():
+            return False
+        return await _persist_profile_name_if_absent(self._db, chat_id, name.strip(), resolved)
 
 
 class ServiceFollowupEligibilityAdapter:

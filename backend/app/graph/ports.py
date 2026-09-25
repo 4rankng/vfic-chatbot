@@ -97,6 +97,9 @@ class TurnDecisions:
     # True when the candidate explicitly self-refers or states their gender in
     # the current message — that outranks an earlier inferred stored value.
     gender_stated: bool = False
+    # True when Jev judged the provider display label (``profile_name``) a
+    # plausible real human name. The runner persists it into a blank lead name.
+    profile_name_is_name: bool = False
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0

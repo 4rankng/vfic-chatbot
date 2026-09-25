@@ -1435,6 +1435,36 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 state.conversation_id,
                 exc_info=True,
             )
+    # Jev judged the provider display label a plausible real human name: fill a
+    # blank lead name so the profile panel shows it and the bot stops re-asking.
+    # Blank-only by contract (the upsert merge keeps any existing name), so a
+    # later candidate-stated name still wins.
+    if (
+        deps.lead_gender is not None
+        and (recipient_id or contact_id)
+        and not decisions.degraded
+        and decisions.profile_name_is_name
+        and profile_name.strip()
+    ):
+        try:
+            name_recorder = getattr(deps.lead_gender, "record_profile_name", None)
+            if name_recorder is not None:
+                if await name_recorder(
+                    recipient_id or "",
+                    profile_name.strip(),
+                    contact_id=contact_id,
+                    **lead_prefetch,
+                ):
+                    logger.info(
+                        "candidate profile name captured conversation=%s",
+                        state.conversation_id,
+                    )
+        except Exception:  # noqa: BLE001 — name capture is best-effort
+            logger.warning(
+                "candidate profile name write failed conversation=%s",
+                state.conversation_id,
+                exc_info=True,
+            )
     turn_route = route_from_decisions(state.user_text, decisions)
     trace_sink.record_decision("route_selected", turn_route.reason)
 
