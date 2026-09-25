@@ -1055,6 +1055,98 @@ async def test_search_knowledge_no_metrics_is_backward_compatible(no_cache_io):
     )
 
     assert "Không tìm thấy" in out
+
+
+# ---------------------------------------------------------------------------
+# search_knowledge — bounded rendered evidence (tool-result size cap)
+# ---------------------------------------------------------------------------
+
+
+def _knowledge_row(index: int, *, body_len: int):
+    """A retrieval row shaped like the repository port returns."""
+    return SimpleNamespace(
+        id=f"row-{index}",
+        metadata={"citation": {"label": f"Nguồn {index}"}},
+        source_file=f"docs/{index}.md",
+        line_start=None,
+        line_end=None,
+        source_quote="x" * body_len,
+        summary=None,
+        content="",
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_caps_rendered_rows_and_keeps_top(no_cache_io):
+    """A large result set is trimmed to the cap and keeps the best-ranked rows."""
+    from app.graph.tools import knowledge as knowledge_mod
+
+    cap = knowledge_mod._MAX_EVIDENCE_ROWS
+    rows = [_knowledge_row(i, body_len=120) for i in range(cap + 5)]
+    repo = _make_repo(
+        match_faq=lambda self, emb, *, top_k, project_ids: _const([]),
+        match_documents=lambda self, emb, top_k, *_a, **_k: _const(rows),
+    )
+
+    out = await search_knowledge(retrieval=repo, embedder=_FakeEmbedder(), query="lương")
+
+    rendered = [line for line in out.splitlines() if line.startswith("- ")]
+    assert len(rendered) == cap
+    # Best-ranked rows survive; the tail is dropped.
+    assert "x" * 120 in rendered[0]
+    assert "Nguồn 0" in out
+    assert f"Nguồn {cap - 1}" in out
+    assert f"Nguồn {cap}" not in out
+    # Citation/source suffix format is preserved verbatim.
+    assert "Nguồn: Nguồn 0" in out
+    assert "file: docs/0.md" in out
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_caps_total_evidence_characters(no_cache_io):
+    """The total rendered-character budget bounds evidence before the row cap."""
+    from app.graph.tools import knowledge as knowledge_mod
+
+    # Long rows: the character budget binds before the row cap does. Each row
+    # renders to roughly 1339 chars, so the expected count is derived from the
+    # configured budget rather than hard-coded.
+    cap = knowledge_mod._MAX_EVIDENCE_ROWS
+    rows = [_knowledge_row(i, body_len=1300) for i in range(cap)]
+    repo = _make_repo(
+        match_faq=lambda self, emb, *, top_k, project_ids: _const([]),
+        match_documents=lambda self, emb, top_k, *_a, **_k: _const(rows),
+    )
+
+    out = await search_knowledge(retrieval=repo, embedder=_FakeEmbedder(), query="lương")
+
+    rendered = [line for line in out.splitlines() if line.startswith("- ")]
+    # The character budget binds before the row cap, and what survives is a
+    # contiguous best-first prefix: the last rendered row is exactly the next
+    # index after the ones kept, with no gaps or skipped rankings.
+    assert 0 < len(rendered) < cap
+    assert len(out) <= knowledge_mod._MAX_EVIDENCE_CHARS
+    assert f"Nguồn {len(rendered) - 1}" in out
+    assert f"Nguồn {len(rendered)}" not in out
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_truncates_a_single_oversized_row(no_cache_io):
+    """One row larger than the whole budget is clipped, not dropped."""
+    from app.graph.tools import knowledge as knowledge_mod
+
+    rows = [_knowledge_row(0, body_len=knowledge_mod._MAX_EVIDENCE_CHARS * 2)]
+    repo = _make_repo(
+        match_faq=lambda self, emb, *, top_k, project_ids: _const([]),
+        match_documents=lambda self, emb, top_k, *_a, **_k: _const(rows),
+    )
+
+    out = await search_knowledge(retrieval=repo, embedder=_FakeEmbedder(), query="lương")
+
+    assert len(out) <= knowledge_mod._MAX_EVIDENCE_CHARS
+    assert "Nguồn 0" in out
+    assert "file: docs/0.md" in out  # suffix survives the clip
+
+
 # ---------------------------------------------------------------------------
 # search_knowledge — cache-key determinism (project-id order must not matter)
 # ---------------------------------------------------------------------------

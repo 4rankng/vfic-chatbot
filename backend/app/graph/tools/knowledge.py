@@ -11,7 +11,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
+from typing import Any
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
@@ -21,6 +22,26 @@ from app.graph.ports import GraphRetrievalPort
 from app.graph.tools._shared import _cache_digest, _cached_embed
 
 logger = logging.getLogger(__name__)
+
+# --- Rendered-evidence budget -------------------------------------------------
+#
+# Prod measurement (2026-09, 284 turns/24h): tool-round turns rendered up to
+# ``top_k=25`` knowledge rows with unbounded per-row text, pushing the agent
+# prompt to 26k-33k tokens and 18-26s of LLM time per round. Retrieval already
+# returns rows best-first (FAQ prepass, then similarity order), so capping the
+# rendered evidence AFTER ranking keeps the highest-value citations while
+# bounding the prompt. Ranking, thresholds, and SQL are untouched.
+#
+# The budget is deliberately generous: the cost being bounded is decode time,
+# which is dominated by OUTPUT tokens, not by prefill (measured TTFT is only
+# 0.8-2.2s at a 15-16k prompt), while dropping a row can lose the one fact a
+# multi-part question needed. Prod chunk sizes: 1164 chunks, p50 268 chars, p90
+# 521, max 90,455 — so 20 rows x 640 chars is ~13k chars of ordinary evidence
+# (the pre-cap normal case) and the char ceiling exists to clip the pathological
+# document, not to trim normal retrieval. Lower these only with golden-set
+# evidence that recall survives.
+_MAX_EVIDENCE_ROWS = 20
+_MAX_EVIDENCE_CHARS = 20000
 
 
 def _format_knowledge_row(r) -> str:
@@ -66,6 +87,51 @@ def _format_knowledge_row(r) -> str:
         parts.append(f"Tóm tắt: {summary}")
     content = "\n".join(parts) if parts else str(r.content)
     return f"- {content}\n  {suffix}"
+
+
+def _truncate_evidence_line(rendered: str, limit: int) -> str:
+    """Clip one rendered row to ``limit`` chars, keeping its source suffix.
+
+    ``_format_knowledge_row`` renders ``- {content}\\n  {suffix}``. When a single
+    row is longer than the whole budget, keep the suffix (citation integrity) and
+    clip the content. Falls back to a plain clip when even the suffix cannot fit.
+    """
+    if len(rendered) <= limit:
+        return rendered
+    head, sep, suffix = rendered.partition("\n  ")
+    if sep and len(sep) + len(suffix) + 1 <= limit:
+        room = limit - len(sep) - len(suffix) - 1
+        return head[:room] + "…" + sep + suffix
+    return rendered[:limit]
+
+
+def _render_capped_evidence(rows: Iterable[Any]) -> list[str]:
+    """Render ranked rows within the evidence budget, best rows first.
+
+    The caller passes already-ranked rows (FAQ prepass, then similarity order);
+    this drops the tail once either the per-round row cap or the total character
+    cap is reached. The first row is always kept — truncated if it alone exceeds
+    the budget — so a single large hit still produces an answer. The
+    citation/source suffix format from ``_format_knowledge_row`` is preserved;
+    only how many rows are rendered (and, for an oversized sole row, how much
+    content survives) changes.
+    """
+    lines: list[str] = []
+    total = 0
+    for row in rows:
+        if len(lines) >= _MAX_EVIDENCE_ROWS:
+            break
+        rendered = _format_knowledge_row(row)
+        remaining = _MAX_EVIDENCE_CHARS - total
+        if len(rendered) > remaining:
+            if not lines:
+                # A single hit larger than the whole budget: keep it, clipped,
+                # rather than returning no evidence at all.
+                lines.append(_truncate_evidence_line(rendered, _MAX_EVIDENCE_CHARS))
+            break
+        lines.append(rendered)
+        total += len(rendered)
+    return lines
 
 
 async def search_knowledge(
@@ -283,29 +349,35 @@ async def _search_knowledge_compute(
 
     # FAQ-first pre-pass: prepend canonical FAQ answers when a strong match exists.
     faq_rows = await repo.match_faq(emb, top_k=3, project_ids=project_ids)
-    faq_lines = [_format_knowledge_row(r) for r in faq_rows]
     faq_ids: set[str] = {str(getattr(r, "id", "")) for r in faq_rows}
 
     rows = await repo.match_documents(emb, top_k, "{}", project_ids=project_ids, query_text=query)
-    if not rows and not faq_lines:
+    if not rows and not faq_rows:
         result = "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
         return result
-    logger.debug(
-        "search_knowledge: %d rows (project=%s), %d faq rows",
-        len(rows),
-        project_slug,
-        len(faq_lines),
-    )
-    lines: list[str] = []
-    if faq_lines:
-        lines.append("CÂU HỎI THƯỜNG GẶP (câu trả lời chuẩn):")
-        lines.extend(faq_lines)
+    # Ranked order: FAQ prepass first, then similarity order. Dedupe FAQ chunks
+    # out of ``rows`` BEFORE capping so the budget is spent on distinct hits.
+    ordered: list[Any] = list(faq_rows)
     for r in rows:
-        # Skip FAQ chunks already prepended above to avoid double-counting.
         if faq_ids and str(getattr(r, "id", "")) in faq_ids:
             continue
-        lines.append(_format_knowledge_row(r))
+        ordered.append(r)
+    rendered = _render_capped_evidence(ordered)
+    logger.debug(
+        "search_knowledge: %d rows (project=%s), %d faq rows, %d rendered",
+        len(rows),
+        project_slug,
+        len(faq_rows),
+        len(rendered),
+    )
+    # ``ordered`` is FAQ-first, so the leading rendered lines are the FAQ ones.
+    kept_faq = min(len(faq_rows), len(rendered))
+    lines: list[str] = []
+    if kept_faq:
+        lines.append("CÂU HỎI THƯỜNG GẶP (câu trả lời chuẩn):")
+        lines.extend(rendered[:kept_faq])
+    lines.extend(rendered[kept_faq:])
     result = "\n".join(lines)
     if s.rag_cache_enabled:
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
