@@ -12,10 +12,74 @@
 
 ## Bot Reply Latency Budget
 
-- **Fast lane (greetings, thanks, goodbye, help):** zero-LLM, template responses — sub-100ms.
-- **FAQ bypass:** deterministic short-circuit, no LLM — sub-200ms.
-- **Agent turn (full LLM):** within LLM latency budget (MiniMax/OpenRouter typical: 1–3s). Target end-to-end under 5s for the candidate.
-- **Proactive follow-up:** not latency-sensitive (runs in `followup` queue, 30-min tick).
+**Measured prod baseline (2026-09-26, 284 turns / 24 h, `BotRun.stage_timings`):**
+
+| Stage | p50 | p95 |
+|---|---|---|
+| webhook → worker pickup | 25 ms | 66 ms |
+| preamble (worker setup) | 132 ms | — |
+| **agent LLM generation** | **8,915 ms** | per-call p90 12,602 ms |
+| Jev router fan-out | 914 ms | — |
+| prefetch / retrieval | 113 ms | 1,784 ms |
+| DB round trips | 202 ms | — |
+| send to channel | 614 ms | — |
+| **end-to-end** | **11,959 ms** | **20,178 ms** |
+
+- **Target:** end-to-end under 5 s for the candidate; SLO `full_answer_ms = 4,000 ms`.
+  Current p50 is ~2.4× the target — the gap is generation time, not queueing
+  (`queue_depth` was 0 on every turn) and not CPU (`llm_queue_ms` p50 = 4 ms).
+- **There is no zero-LLM fast lane.** Every inbound message reaches the model
+  (`runner.py`: "Final replies do not use a template fast lane"), so greetings
+  (`small_talk`, 22 turns/24 h) also cost ~8 s of generation.
+- **Generation dominates because of decode throughput, not prompt size.**
+  Time-to-first-token at a 15–16 k-token prompt is only 0.8–2.2 s; the remaining
+  ~7–12 s is the model emitting ~400–700 tokens at the provider's rate.
+
+**Token-plan model throughput (measured 2026-09-26 from the prod container, same
+12 k-token prompt + tools + tool result):**
+
+| Model | full turn p50 | reasoning tokens | notes |
+|---|---|---|---|
+| MiniMax-M2.7-highspeed (prod primary) | 8,130 ms | 77 | thinking cannot be disabled (5 param shapes tried) |
+| MiniMax-M2.1-highspeed | 7,071 ms | 22 | |
+| MiniMax-M3 | 11,768 ms | 41 | |
+| **Xiaomi MiMo v2.6-flash, thinking off** | **5,227 ms** | **0** | `thinking:{type:disabled}` works |
+| Xiaomi MiMo v2.6-pro, thinking off | 6,328 ms | 0 | |
+
+- **`reasoning_mode` is now a first-class client input** (`graph/clients.py`
+  `_resolve_reasoning_mode`, default `off`): MiMo gets a thinking-disable field,
+  OpenRouter is no longer pinned to `effort: high`, and MiniMax deliberately gets
+  no field (unsupported there). Read via `getattr`, so it is live before the
+  settings field lands.
+- **Output cap** (`_agent_max_tokens`, default unset): measured — a 400-token cap
+  on the token plans still finished with `finish_reason=stop`, cutting a MiniMax
+  turn from 8,489 ms to ~6,100 ms; 250 truncated mid-answer on MiniMax.
+- **First useful bubble arrives long before the turn completes:** with streaming,
+  one complete 420-char bubble is ready at 2.1–3.0 s on the current model — the
+  turn only feels like 8 s because the reply is sent after full completion. No
+  streaming exists yet (`ainvoke` only), so this is the largest remaining win.
+- **Verify the streaming path live before any deploy that touches the LLM path:**
+  `backend/scripts/verify_streaming_turn.py` exercises the app's own client
+  builder + agent loop against a real provider and fails on a broken stream, a
+  dropped usage block, or streamed text that disagrees with the returned reply.
+  `--sweep` compares the cheap/high-throughput candidates. Measured 2026-09-26
+  from a developer machine:
+
+  | model | deltas | ttft | first bubble | total | early gain |
+  |---|---|---|---|---|---|
+  | deepseek/deepseek-v4.1-flash | 66 | 900 ms | 1,748 ms | 2,452 ms | **705 ms** |
+  | qwen/qwen3-30b-a3b-instruct-2507 | 207 | 407 ms | 746 ms | 1,321 ms | 576 ms |
+  | google/gemini-2.5-flash-lite | 8 | 1,024 ms | 1,719 ms | 1,757 ms | ~0 |
+  | openai/gpt-4o-mini | 109 | 1,969 ms | 2,739 ms | 2,829 ms | ~0 |
+  | MiniMax-M2.7-highspeed | 20 | 2,007 ms | 10,769 ms | 10,796 ms | ~0 (bursty from this host) |
+
+  **Early-delivery value is a property of the provider's delta cadence, not of
+  average tok/s:** a burst-style stream (few large chunks) reaches the bubble
+  threshold at almost the same moment it finishes, so progressive delivery buys
+  nothing there. Always re-measure on the host and network that will serve the
+  traffic before enabling it.
+- **Proactive follow-up:** not latency-sensitive (runs in the `followup` queue,
+  30-min tick).
 
 ## Database Pool Sizing
 

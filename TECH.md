@@ -96,15 +96,15 @@ with fakes (no API keys needed).
 ```
 load_conversation_state → typing → agent
    agent (error)  → error_reply
-   agent (ok)     → fast_safety_filter → needs_llm_safety?
-                      no  → combine_for_presend
-                      yes → llm_safety_check → safe_to_send?
-                              yes → combine_for_presend
-                              no  → retry_rewrite? (attempt<1) → agent | combine_for_presend
-   combine_for_presend → pre_send_guard → ownership_ok?
-                           yes → send_message → log_sent
+   agent (ok)     → finalize_user_visible_reply        (DeterministicReplyPolicy: regex/length)
+   finalize_user_visible_reply → pre_send_guard → ownership_ok?
+                           yes → dispatch_claimed_message → record_bot_outcome
                            no  → log_suppressed
 ```
+
+There is **no LLM safety judge on the answer path**: `GraphDeps.safety` is an unwired
+seam with no production caller (`MiniMaxSafety` has no call site). The earlier diagram
+in this file showed an `llm_safety_check` node that no longer runs.
 
 Key invariants:
 - **Turn routing is a Jev fan-out** (`decisions.py` → `router.route_from_decisions`): one ~300 ms calibrated call replaces the keyword router; on any failure it degrades to the neutral `general/agent` route, never blocking a turn.
@@ -119,7 +119,8 @@ The online answer path is deliberately short, deterministic, and measurable:
 
 1. Receive + normalize message.
 2. Load conversation state + candidate profile.
-3. Check **exact cache**, then **semantic cache** (`semantic_cache.py`).
+3. Check the exact retrieval cache, then the semantic retrieval cache (`semantic_cache.py`,
+   disabled by default) — neither short-circuits generation.
 4. Route into a small intent set via **structured outputs** (JSON-schema-constrained).
 5. Call retrieval tools (hybrid: PG full-text `tsvector` + pgvector ANN).
 6. Re-rank evidence.
@@ -130,7 +131,10 @@ Design choices:
 - **Section-based chunking**, not arbitrary token windows — overview / JD / requirements / benefits / salary / location / bus route / FAQ. Cleaner retrieval units, easier citations.
 - **RRF (Reciprocal Rank Fusion)** to merge lexical + vector lists.
 - **Prompt-prefix caching** — static policies/tool descriptions first, dynamic state last.
-- **Semantic response cache** for FAQ-like traffic cuts LLM latency from seconds to tens of ms.
+- **Retrieval caches** (`semantic_cache.py`, exact-hash `rag:knowledge:*`): these cache the
+  *retrieval* result, not the reply, and `semantic_cache_enabled` defaults to **off** —
+  measured 24 h in prod: 1 exact hit / 125 lookups, 0 semantic hits. There is no
+  response cache, so a repeated FAQ question still pays a full generation.
 - **Honesty policy**: if data is missing, the bot says so — never invents schedules, benefits, or requirements.
 
 ### 2.4 Background work (RQ, strictly offline)
