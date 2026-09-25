@@ -47,6 +47,64 @@ def test_parse_usage_attribute_style():
     assert u.cached_tokens == 20
 
 
+def test_parse_usage_langchain_normalized_input_token_details_dict():
+    """langchain-openai normalizes cache hits into ``input_token_details``.
+
+    The agent loop feeds ``ai.usage_metadata`` (already normalized) into
+    ``parse_usage``; before this shape was handled a real provider cache hit was
+    recorded as 0, so cache telemetry always read "no caching" (PERF-05
+    follow-up).
+    """
+    u = parse_usage(
+        {
+            "input_tokens": 12000,
+            "output_tokens": 400,
+            "total_tokens": 12400,
+            "input_token_details": {"cache_creation": 0, "cache_read": 9000},
+        }
+    )
+    assert u.prompt_tokens == 12000
+    assert u.completion_tokens == 400
+    assert u.cached_tokens == 9000
+
+
+def test_parse_usage_nested_prompt_tokens_details_attribute_style():
+    """OpenAI/OpenRouter nested ``prompt_tokens_details.cached_tokens``."""
+    u = parse_usage(
+        SimpleNamespace(
+            prompt_tokens=500,
+            completion_tokens=40,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=300),
+        )
+    )
+    assert u.cached_tokens == 300
+
+
+def test_parse_usage_input_token_details_attribute_style():
+    u = parse_usage(
+        SimpleNamespace(
+            input_tokens=800,
+            output_tokens=25,
+            input_token_details=SimpleNamespace(cache_read=512),
+        )
+    )
+    assert u.prompt_tokens == 800
+    assert u.cached_tokens == 512
+
+
+def test_parse_usage_direct_key_wins_over_nested():
+    """A flat provider key is authoritative when both shapes are present."""
+    u = parse_usage(
+        {
+            "prompt_tokens": 100,
+            "completion_tokens": 10,
+            "prompt_cache_hit_tokens": 42,
+            "input_token_details": {"cache_read": 7},
+        }
+    )
+    assert u.cached_tokens == 42
+
+
 def test_parse_usage_none_returns_zeros():
     u = parse_usage(None)
     assert u.total_tokens == 0

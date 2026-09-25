@@ -49,6 +49,38 @@ def _today_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+def _field(obj: object, key: str) -> object | None:
+    """Read ``key`` from a dict- or attribute-style usage object."""
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
+def _cached_tokens(usage_obj: object) -> int:
+    """Cached-prompt tokens across the key shapes the providers/LangChain emit.
+
+    Covers, in order:
+    - MiniMax's OpenAI-compatible ``prompt_cache_hit_tokens``;
+    - OpenAI/OpenRouter ``cached_tokens`` or
+      ``prompt_tokens_details.cached_tokens``;
+    - LangChain's *normalized* ``usage_metadata`` shape
+      ``input_token_details.cache_read``. langchain-openai converts the provider
+      block into this shape before the agent loop sees it, so without this key
+      a genuine cache hit was recorded as 0 — the metrics said "no caching"
+      regardless of what the provider actually did (PERF-05 follow-up).
+    """
+    direct = _field(usage_obj, "prompt_cache_hit_tokens") or _field(usage_obj, "cached_tokens")
+    if direct:
+        return int(direct)
+    details = _field(usage_obj, "prompt_tokens_details")
+    if details is not None and (value := _field(details, "cached_tokens")):
+        return int(value)
+    normalized = _field(usage_obj, "input_token_details")
+    if normalized is not None and (value := _field(normalized, "cache_read")):
+        return int(value)
+    return 0
+
+
 def parse_usage(usage_obj: object | None) -> TokenUsage:
     """Extract token counts from an OpenAI-compatible ``response.usage`` object.
 
@@ -59,33 +91,11 @@ def parse_usage(usage_obj: object | None) -> TokenUsage:
     if usage_obj is None:
         return TokenUsage()
     try:
-        if isinstance(usage_obj, dict):
-            prompt = int(usage_obj.get("prompt_tokens", 0) or usage_obj.get("input_tokens", 0) or 0)
-            completion = int(
-                usage_obj.get("completion_tokens", 0) or usage_obj.get("output_tokens", 0) or 0
-            )
-            cached = int(
-                usage_obj.get("prompt_cache_hit_tokens", 0)
-                or usage_obj.get("cached_tokens", 0)
-                or usage_obj.get("prompt_tokens_details", {}).get("cached_tokens", 0)
-                or 0
-            )
-            return TokenUsage(prompt, completion, cached)
-        # Attribute-style (langchain-openai Usage object).
-        prompt = int(
-            getattr(usage_obj, "prompt_tokens", 0) or getattr(usage_obj, "input_tokens", 0) or 0
-        )
+        prompt = int(_field(usage_obj, "prompt_tokens") or _field(usage_obj, "input_tokens") or 0)
         completion = int(
-            getattr(usage_obj, "completion_tokens", 0)
-            or getattr(usage_obj, "output_tokens", 0)
-            or 0
+            _field(usage_obj, "completion_tokens") or _field(usage_obj, "output_tokens") or 0
         )
-        cached = int(
-            getattr(usage_obj, "prompt_cache_hit_tokens", 0)
-            or getattr(usage_obj, "cached_tokens", 0)
-            or 0
-        )
-        return TokenUsage(prompt, completion, cached)
+        return TokenUsage(prompt, completion, _cached_tokens(usage_obj))
     except (TypeError, ValueError):
         return TokenUsage()
 
