@@ -32,12 +32,13 @@ from app.graph.client_cache import (
 )
 from app.graph.clients import (
     MiniMaxAgent,
+    _agent_max_tokens,
     _chat_for_role,
     _custom_chat,
     _minimax_chat,
     _openrouter_chat,
+    _resolve_reasoning_mode,
 )
-from app.graph.safety import DeterministicReplyPolicy
 from app.graph.types import GraphDeps
 
 logger = logging.getLogger(__name__)
@@ -116,7 +117,8 @@ def _build_fast_llm(*, minimax_config, openrouter_config, custom_config=None):
                 temperature=0.3,
                 timeout=s.openrouter_request_timeout,
                 api_key=openrouter_config.api_key,
-                capture_reasoning=True,
+                reasoning_mode=_resolve_reasoning_mode(),
+                max_tokens=_agent_max_tokens(),
             )
         # The custom provider's fast model is admin-configured (env fallback),
         # so read it off the resolved config instead of settings alone. Blank
@@ -134,6 +136,8 @@ def _build_fast_llm(*, minimax_config, openrouter_config, custom_config=None):
                 temperature=0.3,
                 api_key=custom_config.api_key,
                 base_url=custom_config.base_url,
+                reasoning_mode=_resolve_reasoning_mode(),
+                max_tokens=_agent_max_tokens(),
             )
         return None
     except Exception:  # noqa: BLE001
@@ -202,7 +206,8 @@ def _build_failover_chain(
                     temperature=0.3,
                     timeout=s.openrouter_request_timeout,
                     api_key=openrouter_config.api_key,
-                    capture_reasoning=True,
+                    reasoning_mode=_resolve_reasoning_mode(),
+                    max_tokens=_agent_max_tokens(),
                 ),
             )
         )
@@ -216,6 +221,8 @@ def _build_failover_chain(
                     temperature=0.3,
                     api_key=custom_config.api_key,
                     base_url=custom_config.base_url,
+                    reasoning_mode=_resolve_reasoning_mode(),
+                    max_tokens=_agent_max_tokens(),
                 ),
             )
         )
@@ -319,6 +326,14 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
         else None
     )
 
+    # Progressive send rides the minimax panel and is Redis-cached like the
+    # other resolves, so an admin toggle takes effect on the next turn. It is a
+    # delivery-policy flag, not a client input, so it is injected here instead of
+    # leaking into the cached LLM client bundle. getattr keeps a cached
+    # pre-upgrade payload (written before the field existed) valid.
+    llm_config = await integration_settings.resolve_minimax()
+    progressive_send = bool(getattr(llm_config, "progressive_send", False))
+
     async def _enrich_oa_profile(zalo_id: str, user_id: str) -> bool:
         # Production chatbot turns provide a session factory. Keep the provider
         # request and profile update isolated from the main turn transaction so
@@ -345,6 +360,13 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
 
         make_retrieval = _make_retrieval
 
+    def _recipient_unreachable(channel: str, recipient_id: str):
+        # Lazy import keeps the graph layer free of concrete-service imports at
+        # module load; the dispatcher records the mark, the turn reads it.
+        from app.services.outbox.recipient_marks import is_recipient_unreachable
+
+        return is_recipient_unreachable(channel, recipient_id)
+
     return GraphDeps(
         db=db,
         agent=MiniMaxAgent(
@@ -357,18 +379,19 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
         zalo=zalo_sender,
         conversation=ConversationService(db),
         retrieval=RetrievalRepository(db, page_project_ids=page_project_ids),
-        reply_policy=DeterministicReplyPolicy(),
         make_retrieval=make_retrieval,
         lead=_build_lead_context(db),
         lead_gender=_build_lead_gender(db),
         faq_bypass=_FaqBypassAdapter(db, clients.embedder, page_project_ids=page_project_ids),
         followup_allowed=_make_followup_allowed(db),
         enrich_oa_profile=_enrich_oa_profile,
+        recipient_unreachable=_recipient_unreachable,
         runtime_policy=_RuntimePolicyAdapter(db),
         direct_context=_DirectContextAdapter(db),
         proactive_state=_build_proactive_state(db),
         delivery_statuses=_build_delivery_statuses(),
         turn_decisions=turn_decisions,
+        progressive_send=progressive_send,
     )
 
 

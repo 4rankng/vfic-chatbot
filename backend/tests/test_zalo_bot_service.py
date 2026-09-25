@@ -198,7 +198,10 @@ async def test_send_message_splits_long_plain_text_into_visible_bubbles(
         "sản phẩm màn hình.\n\n"
         "Về địa chỉ văn phòng VFIC Hải Phòng, mình chưa có thông tin cụ thể trong dữ liệu lúc này. "
         "Bạn có thể gọi hotline VFIC để được cung cấp địa chỉ chính xác nhé.\n\n"
-        "Bạn còn câu hỏi gì thêm không, hay đã sẵn sàng đến nộp hồ sơ rồi?"
+        "Bạn còn câu hỏi gì thêm không, hay đã sẵn sàng đến nộp hồ sơ rồi?\n\n"
+        + ("Thông tin bổ sung " * 47).strip()
+        + "\n\n"
+        + ("Chi tiết thêm " * 60).strip()
     )
 
     result = await sender.send_message("chat-1", long_reply)
@@ -223,7 +226,7 @@ async def test_send_message_split_failure_reports_partial_delivery(
         ],
     )
     sender = svc.ZaloBotSender(settings=settings)
-    long_reply = "Đoạn một " + ("rất dài " * 60) + "\n\nĐoạn hai " + ("cũng dài " * 60)
+    long_reply = "Đoạn một " + ("rất dài " * 125) + "\n\nĐoạn hai " + ("cũng dài " * 111)
 
     result = await sender.send_message("chat-1", long_reply)
 
@@ -241,6 +244,46 @@ async def test_send_message_split_failure_reports_partial_delivery(
     # ambiguous class is what routes the row to SEND_UNKNOWN instead.
     assert result.partial is True
     assert result.error_class == "unknown"
+
+
+async def test_visible_bubble_size_stays_under_provider_cap() -> None:
+    """Bubbles split below the provider's documented 2000-char per-message cap."""
+    assert svc.ZALO_VISIBLE_BUBBLE_CHARS < svc.ZALO_MAX_TEXT_CHARS
+    # A long answer becomes a few sequential POSTs, not the many the old 420
+    # split produced.
+    assert svc.ZALO_VISIBLE_BUBBLE_CHARS >= 1000
+
+
+async def test_split_never_exceeds_provider_cap_on_giant_input() -> None:
+    """No split chunk may exceed the provider cap, even for adversarial input."""
+    giant = "từ " * 5000  # no punctuation, one giant run of words and spaces
+    chunks = svc._split_long_plain_text(giant)
+
+    assert len(chunks) >= 2
+    assert all(1 <= len(chunk) <= svc.ZALO_VISIBLE_BUBBLE_CHARS for chunk in chunks)
+    assert all(len(chunk) <= svc.ZALO_MAX_TEXT_CHARS for chunk in chunks)
+
+
+async def test_send_message_invalid_recipient_is_stamped_unreachable(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    """``user_id is invalid`` is a permanent recipient failure, not retryable."""
+    _patch_post(monkeypatch, [{"ok": False, "description": "user_id is invalid"}])
+    result = await svc.ZaloBotSender(settings=settings).send_message("chat-bad", "hi")
+
+    assert result.ok is False
+    assert result.error_class == "user_unreachable"
+
+
+async def test_send_message_other_rejection_stays_retryable(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    """A non-recipient rejection keeps a null class so the reconciler may retry."""
+    _patch_post(monkeypatch, [{"ok": False, "description": "rate limited"}])
+    result = await svc.ZaloBotSender(settings=settings).send_message("chat-1", "hi")
+
+    assert result.ok is False
+    assert result.error_class is None
 
 
 async def test_send_message_with_optional_fields(

@@ -362,10 +362,43 @@ async def test_build_deps_wires_graphdeps(monkeypatch):
     deps = await build_deps(object())
     assert isinstance(deps, GraphDeps)
     assert isinstance(deps.agent, MiniMaxAgent)
-    # safety client is no longer constructed (LLM judge removed); field is None.
-    assert deps.safety is None
+    # The LLM-judge seam is gone entirely (client + port + GraphDeps field), so
+    # there is nothing left to assert about it here.
     assert isinstance(deps.embedder, OpenRouterEmbedder)
     assert deps.zalo is not None
+    # Progressive send ships ON by default (first useful bubble is sent while the
+    # rest of the answer is still generating); the admin panel can switch it off.
+    assert deps.progressive_send is True
+
+    reset_client_cache()
+
+
+@pytest.mark.asyncio
+async def test_build_deps_injects_the_resolved_progressive_send_flag(monkeypatch):
+    """The admin-managed flag reaches GraphDeps; the graph never reads settings."""
+
+    class _FakeLLM:
+        pass
+
+    from app.services.integration_settings.providers.llm import MinimaxRuntimeConfig
+
+    reset_client_cache()
+    monkeypatch.setattr("app.graph.client_cache._chat_for_role", lambda *a, **k: _FakeLLM())
+    monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.client_cache.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
+
+    async def _fake_resolve_minimax(self):
+        return MinimaxRuntimeConfig(progressive_send=True)
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.IntegrationSettingsService.resolve_minimax",
+        _fake_resolve_minimax,
+    )
+
+    deps = await build_deps(object())
+
+    assert deps.progressive_send is True
 
     reset_client_cache()
 
@@ -624,7 +657,40 @@ def test_chat_for_role_returns_openrouter_client_when_default(monkeypatch):
     assert "deepseek" in llm.model_name
 
 
-def test_openrouter_fast_tier_requests_returned_reasoning(monkeypatch):
+def test_agent_role_carries_output_cap_and_reasoning_mode(monkeypatch):
+    """The agent lane gets the configured cap + reasoning mode; safety does not.
+
+    A cap on the safety/digest lanes would risk truncating their JSON payloads, so
+    `agent_limits`/`agent_reasoning` are deliberately role-scoped.
+    """
+    from app.graph.clients import _chat_for_role
+
+    class _Capped(_SettingsWithBothProviders):
+        llm_agent_max_tokens = 400
+        llm_reasoning_mode = "off"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Capped())
+
+    agent_llm = _chat_for_role("agent", temperature=0.3)
+    assert agent_llm.max_tokens == 400
+
+    safety_llm = _chat_for_role("safety", temperature=0.0)
+    assert safety_llm.max_tokens is None
+
+
+def test_agent_output_cap_unset_keeps_current_behaviour(monkeypatch):
+    from app.graph.clients import _chat_for_role
+
+    class _Uncapped(_SettingsWithBothProviders):
+        llm_agent_max_tokens = 0
+        llm_reasoning_mode = "off"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Uncapped())
+
+    assert _chat_for_role("agent", temperature=0.3).max_tokens is None
+
+
+def test_openrouter_fast_tier_gets_reasoning_and_cap_settings(monkeypatch):
     captured: dict = {}
     fast_client = object()
 
@@ -632,14 +698,15 @@ def test_openrouter_fast_tier_requests_returned_reasoning(monkeypatch):
         captured.update({"model": model, **kwargs})
         return fast_client
 
-    monkeypatch.setattr(
-        "app.graph.factories.get_settings",
-        lambda: SimpleNamespace(
-            minimax_fast_model="",
-            openrouter_fast_model="deepseek/deepseek-v4-flash",
-            openrouter_request_timeout=60,
-        ),
+    fake_settings = SimpleNamespace(
+        minimax_fast_model="",
+        openrouter_fast_model="deepseek/deepseek-v4-flash",
+        openrouter_request_timeout=60,
+        llm_reasoning_mode="off",
+        llm_agent_max_tokens=400,
     )
+    monkeypatch.setattr("app.graph.factories.get_settings", lambda: fake_settings)
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: fake_settings)
     monkeypatch.setattr("app.graph.factories._openrouter_chat", fake_openrouter_chat)
 
     result = _build_fast_llm(
@@ -648,7 +715,8 @@ def test_openrouter_fast_tier_requests_returned_reasoning(monkeypatch):
     )
 
     assert result is fast_client
-    assert captured["capture_reasoning"] is True
+    assert captured["reasoning_mode"] == "off"
+    assert captured["max_tokens"] == 400
 
 
 # ── US-001: LLM client cache ────────────────────────────────────────────────

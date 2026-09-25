@@ -134,6 +134,10 @@ class MinimaxIntegrationSettingsOut(BaseModel):
     minimax_enable: bool
     llm_default_provider: Literal["minimax", "openrouter", "custom"]
     llm_failover_order: list[Literal["minimax", "openrouter", "custom"]]
+    llm_reasoning_mode: Literal["off", "low", "default"]
+    llm_agent_max_tokens: int
+    # Forward the first complete answer bubble before the agent finishes.
+    llm_progressive_send: bool
     last_test: ProviderTestStatus | None = None
 
 
@@ -146,6 +150,12 @@ class MinimaxIntegrationSettingsUpdate(BaseModel):
     # Operator-ranked spare order; like the default radio it rides the minimax
     # PUT only, so the other panels' Update models deliberately omit it.
     llm_failover_order: list[Literal["minimax", "openrouter", "custom"]] | None = None
+    # Generic agent-lane decode knobs (stored on the minimax panel like the two
+    # fields above). 0 tokens means "no cap".
+    llm_reasoning_mode: Literal["off", "low", "default"] | None = None
+    llm_agent_max_tokens: int | None = Field(default=None, ge=0)
+    # Opt-in progressive delivery: stream the first answer bubble early.
+    llm_progressive_send: bool | None = None
 
 
 class MinimaxIntegrationTestOut(BaseModel):

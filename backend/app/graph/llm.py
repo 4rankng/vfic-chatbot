@@ -40,6 +40,11 @@ class AgentModel(Protocol):
     multiple tool calls arrive in one LLM response, each runs on its own session.
     ``required_tool`` forces the first tool round to establish an authority source;
     ``required_tool_args`` replaces model-supplied arguments for that tool.
+    ``on_delta`` (optional) receives answer text as it is streamed, enabling
+    progressive delivery; without it the call is a single blocking ``ainvoke``.
+    ``on_evidence`` (optional) receives the accumulated tool results after each
+    tool dispatch, so a streamed bubble can be grounded against the evidence the
+    model had actually seen at that point.
     """
 
     async def agent(
@@ -57,7 +62,8 @@ class AgentModel(Protocol):
         metrics: dict | None = None,
         required_tool: str | None = None,
         required_tool_args: dict | None = None,
-        retry_empty_generation: bool = False,
+        on_delta: Callable[[str], Awaitable[None]] | None = None,
+        on_evidence: Callable[[list[str]], Awaitable[None]] | None = None,
         trace_sink: DecisionTraceSink | None = None,
     ) -> str: ...
 
@@ -69,9 +75,3 @@ class AgentModel(Protocol):
         metrics: dict | None = None,
         trace_sink: DecisionTraceSink | None = None,
     ) -> str: ...
-
-
-class SafetyModel(Protocol):
-    """Returns the raw M2.5 verdict text (JSON) for the candidate reply."""
-
-    async def safety(self, candidate_reply: str) -> str: ...

@@ -10,7 +10,12 @@ from __future__ import annotations
 import pytest
 
 from app.graph.llm_semaphore import LLMThrottled
-from app.graph.provider_failover import _is_quota_exhausted, _llm_call_with_retry
+from app.graph.provider_failover import (
+    _is_429,
+    _is_quota_exhausted,
+    _llm_call_streaming_with_retry,
+    _llm_call_with_retry,
+)
 
 
 class _Boom:
@@ -23,6 +28,11 @@ class _Boom:
     async def ainvoke(self, messages):  # noqa: ARG002
         self.calls += 1
         raise RuntimeError(self.message)
+
+    async def astream(self, messages):  # noqa: ARG002
+        self.calls += 1
+        raise RuntimeError(self.message)
+        yield  # pragma: no cover — makes this an async generator
 
 
 class _Ok:
@@ -51,6 +61,48 @@ def test_quota_messages_are_recognised(message):
 @pytest.mark.parametrize("message", ["429 Too Many Requests", "timeout", "bad gateway"])
 def test_non_quota_messages_are_not_quota(message):
     assert _is_quota_exhausted(RuntimeError(message)) is False
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Error code: 429 - rate limited",
+        "429 Too Many Requests",
+        "HTTP 429",
+        "you have hit the rate limit",
+        "ratelimit exceeded",
+    ],
+)
+def test_rate_limit_messages_are_recognised(message):
+    assert _is_429(RuntimeError(message)) is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # Unrelated words that contain "rate" used to be treated as 429s, which
+        # cost a 0.5 s backoff, a pointless retry, and a false increment of the
+        # minimax_429s tile.
+        "content was flagged by the moderation service",
+        "corporate policy blocked the request",
+        "connection reset by peer",
+        "bad gateway",
+        "timeout after 60 seconds",
+    ],
+)
+def test_unrelated_errors_are_not_rate_limits(message):
+    assert _is_429(RuntimeError(message)) is False
+
+
+def test_status_code_attribute_wins_over_message_text():
+    class _Err(Exception):
+        status_code = 429
+
+    class _ErrOther(_Err):
+        status_code = 500
+
+    assert _is_429(_Err("anything at all")) is True
+    assert _is_429(_ErrOther("rate limit mentioned in passing")) is False
 
 
 async def test_quota_exhaustion_fails_over_without_backoff():
@@ -273,3 +325,132 @@ def test_failover_chain_treats_a_partial_order_as_a_ranking(monkeypatch):
     )
 
     assert rec.built == ["custom:cu-agent", "minimax:mm-agent"]
+
+
+# ── Streaming path (progressive delivery) ────────────────────────────────────
+
+
+class _Streaming:
+    """A provider that yields text chunks, optionally failing mid-stream."""
+
+    def __init__(self, chunks, *, fail_after: int | None = None, fail_with: str = "connection reset"):
+        self.chunks = chunks
+        self.fail_after = fail_after
+        self.fail_with = fail_with
+        self.calls = 0
+
+    async def astream(self, messages):  # noqa: ARG002
+        self.calls += 1
+        for index, chunk in enumerate(self.chunks):
+            if self.fail_after is not None and index >= self.fail_after:
+                raise RuntimeError(self.fail_with)
+            yield _chunk(chunk)
+
+
+def _chunk(text):
+    from langchain_core.messages import AIMessageChunk
+
+    return AIMessageChunk(content=text)
+
+
+async def test_streaming_forwards_every_delta_and_merges_the_message():
+    provider = _Streaming(["Dạ ", "lương ", "10 triệu", " ạ."])
+    seen: list[str] = []
+
+    async def on_delta(text):
+        seen.append(text)
+
+    message, backoff_ms = await _llm_call_streaming_with_retry(
+        provider, ["m"], on_delta=on_delta
+    )
+
+    assert seen == ["Dạ ", "lương ", "10 triệu", " ạ."]
+    assert message.content == "Dạ lương 10 triệu ạ."
+    assert backoff_ms == 0
+    assert provider.calls == 1
+
+
+async def test_streaming_merged_message_exposes_tool_calls_for_the_loop():
+    """A tool round must still look like a normal response to the agent loop."""
+    from langchain_core.messages import AIMessageChunk
+
+    class _ToolStreaming:
+        async def astream(self, messages):  # noqa: ARG002
+            yield AIMessageChunk(
+                content="",
+                tool_call_chunks=[
+                    {
+                        "name": "search_knowledge",
+                        "args": '{"query": "luong"}',
+                        "id": "call-1",
+                        "index": 0,
+                    }
+                ],
+            )
+
+    seen: list[str] = []
+
+    async def on_delta(text):
+        seen.append(text)
+
+    message, _ = await _llm_call_streaming_with_retry(
+        _ToolStreaming(), ["m"], on_delta=on_delta
+    )
+
+    assert seen == []  # no visible text on a tool round → nothing is sent early
+    assert [c["name"] for c in message.tool_calls] == ["search_knowledge"]
+
+
+async def test_streaming_fails_over_cleanly_before_the_first_token():
+    spent = _Boom("insufficient balance")
+    spare = _Streaming(["từ ", "nhà cung cấp dự phòng"])
+    metrics: dict = {}
+
+    async def on_delta(text):  # noqa: ARG001
+        return None
+
+    message, backoff_ms = await _llm_call_streaming_with_retry(
+        spent, ["m"], on_delta=on_delta, metrics=metrics, fallback_bounds=[spare]
+    )
+
+    assert message.content == "từ nhà cung cấp dự phòng"
+    assert backoff_ms == 0
+    assert metrics["llm_failover"] is True
+    assert metrics["llm_failover_reason"] == "quota_exhausted"
+    assert "stream_partial" not in metrics
+
+
+async def test_mid_stream_capacity_failure_is_recorded_as_partial_delivery():
+    """Text already sent cannot be recalled, so a mid-stream failover is marked."""
+    primary = _Streaming(
+        ["Dạ ", "em ", "kiểm tra nhé"], fail_after=2, fail_with="insufficient balance"
+    )
+    spare = _Streaming(["phần còn lại"])
+    metrics: dict = {}
+
+    async def on_delta(text):  # noqa: ARG001
+        return None
+
+    message, _ = await _llm_call_streaming_with_retry(
+        primary, ["m"], on_delta=on_delta, metrics=metrics, fallback_bounds=[spare]
+    )
+
+    assert message.content == "phần còn lại"
+    assert metrics["stream_partial"] is True
+    assert metrics["llm_failover_reason"] == "quota_exhausted"
+
+
+async def test_generic_mid_stream_failure_still_propagates():
+    """Non-capacity errors keep the old contract: the turn degrades, no failover."""
+    primary = _Streaming(["Dạ ", " em"], fail_after=1, fail_with="connection reset")
+    spare = _Streaming(["should not be used"])
+    metrics: dict = {}
+
+    async def on_delta(text):  # noqa: ARG001
+        return None
+
+    with pytest.raises(RuntimeError):
+        await _llm_call_streaming_with_retry(
+            primary, ["m"], on_delta=on_delta, metrics=metrics, fallback_bounds=[spare]
+        )
+    assert metrics == {}

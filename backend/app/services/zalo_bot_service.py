@@ -102,8 +102,12 @@ class WebhookInfo:
 # Chat action enum (documented values; ``upload_photo`` is "coming soon"
 # per the docs and currently no-ops on the Zalo side).
 ChatAction = Literal["typing", "upload_photo"]
+# Zalo's documented per-message text cap (Bot Platform sendMessage and OA CS
+# message both reject > 2000 chars). Bubbles are split at 1600 so a long answer
+# becomes a few sequential POSTs instead of many, while every chunk stays safely
+# under the provider cap.
 ZALO_MAX_TEXT_CHARS = 2000
-ZALO_VISIBLE_BUBBLE_CHARS = 420
+ZALO_VISIBLE_BUBBLE_CHARS = 1600
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +201,24 @@ async def _post(
     return data
 
 
+def _is_user_unreachable(envelope: dict[str, Any]) -> bool:
+    """True when the Bot Platform permanently rejects the recipient id.
+
+    Prod envelope: ``{ok: false, error_code: ..., description: "user_id is
+    invalid"}`` — the id is not a sendable user of this bot (the user
+    blocked/unfollowed it, or the event arrived from a different bot). It is a
+    property of the recipient, not the request, so retrying can never succeed;
+    stamping ``user_unreachable`` lets the dispatcher record a terminal marker
+    and skip the wasted generation/send instead of looping.
+
+    Matches the exact provider phrases this class is known by (the reconcile
+    scan greps ``user_id is invalid``), so a request-shape error like "invalid
+    user_id format" is not misclassified as a dead recipient.
+    """
+    description = str(envelope.get("description") or envelope.get("message") or "").lower()
+    return "user_id is invalid" in description or "user_id is not valid" in description
+
+
 def _send_result(envelope: dict[str, Any]) -> SendResult:
     """Project a ``{ok, result/error_code/description}`` envelope into ``SendResult``.
 
@@ -212,11 +234,14 @@ def _send_result(envelope: dict[str, Any]) -> SendResult:
         msg_id = result_dict.get("message_id")
         return SendResult(ok=True, msg_id=str(msg_id) if msg_id is not None else None, raw=envelope)
     desc = envelope.get("description") or envelope.get("error_code") or "unknown error"
+    error_class = envelope.get("error_class")
+    if error_class is None and _is_user_unreachable(envelope):
+        error_class = "user_unreachable"
     return SendResult(
         ok=False,
         error=str(desc),
         raw=envelope,
-        error_class=envelope.get("error_class"),
+        error_class=error_class,
     )
 
 

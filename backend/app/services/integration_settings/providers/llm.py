@@ -79,6 +79,22 @@ JEV_DEFAULT_MODEL = "jev-latest"
 JEV_SETTING_KEYS = (JEV_API_KEY, JEV_MODEL, JEV_ENABLE)
 JEV_SECRET_KEYS = (JEV_API_KEY,)
 
+# Generic LLM decode knobs, stored on the minimax panel (the same PUT that
+# carries the default-provider radio and failover order) so one save owns every
+# routing/wall-time lever. They apply to the agent answer lane whatever provider
+# serves it; the safety/digest lanes are bounded structured payloads already.
+# ``llm_reasoning_mode``: off | low | default. ``llm_agent_max_tokens``: output
+# cap; 0 means "no cap". ``llm_progressive_send``: forward the first complete
+# answer bubble before the agent finishes; OFF by default so the pre-existing
+# single-message behaviour is what an unsaved installation gets.
+LLM_REASONING_MODE = "llm_reasoning_mode"
+LLM_AGENT_MAX_TOKENS = "llm_agent_max_tokens"
+LLM_PROGRESSIVE_SEND = "llm_progressive_send"
+DEFAULT_LLM_REASONING_MODE = "off"
+DEFAULT_LLM_AGENT_MAX_TOKENS = 800
+DEFAULT_LLM_PROGRESSIVE_SEND = True
+_REASONING_MODES = frozenset({"off", "low", "default"})
+
 # The failover order rides the minimax panel (same PUT as the default radio),
 # so it lives in the minimax key set and its cache namespace.
 MINIMAX_SETTING_KEYS = (
@@ -86,6 +102,9 @@ MINIMAX_SETTING_KEYS = (
     MINIMAX_ENABLE,
     LLM_DEFAULT_PROVIDER,
     LLM_FAILOVER_ORDER,
+    LLM_REASONING_MODE,
+    LLM_AGENT_MAX_TOKENS,
+    LLM_PROGRESSIVE_SEND,
 )
 OPENROUTER_SETTING_KEYS = (
     OPENROUTER_API_KEY,
@@ -97,6 +116,31 @@ OPENROUTER_SETTING_KEYS = (
 )
 
 
+def _reasoning_mode_value(value: str | None, fallback: str = DEFAULT_LLM_REASONING_MODE) -> str:
+    """Stored reasoning mode, else fallback, clamped to the known selectors.
+
+    Mirrors ``_shared._provider_value``: an unknown/stale stored value falls back
+    to the safe default rather than reaching the provider request.
+    """
+    candidate = (value or fallback or DEFAULT_LLM_REASONING_MODE).strip().lower()
+    return candidate if candidate in _REASONING_MODES else DEFAULT_LLM_REASONING_MODE
+
+
+def _agent_max_tokens_value(
+    value: str | int | None, fallback: int = DEFAULT_LLM_AGENT_MAX_TOKENS
+) -> int:
+    """Stored output cap as an int (non-negative), else fallback.
+
+    0 is valid and means "no cap"; a malformed or negative stored value falls
+    back to the default so a bad row can never disable the cap silently.
+    """
+    try:
+        parsed = int(value) if value not in (None, "") else int(fallback)
+    except (TypeError, ValueError):
+        parsed = int(fallback)
+    return parsed if parsed >= 0 else int(fallback)
+
+
 @dataclass(frozen=True)
 class MinimaxRuntimeConfig:
     api_key: str = ""
@@ -105,6 +149,9 @@ class MinimaxRuntimeConfig:
     safety_model: str = ""
     enabled: bool = True
     default_provider: str = "minimax"
+    reasoning_mode: str = DEFAULT_LLM_REASONING_MODE
+    agent_max_tokens: int = DEFAULT_LLM_AGENT_MAX_TOKENS
+    progressive_send: bool = DEFAULT_LLM_PROGRESSIVE_SEND
 
 
 @dataclass(frozen=True)
@@ -169,6 +216,11 @@ class LlmSettingsMixin:
                     stored.get(LLM_DEFAULT_PROVIDER),
                     getattr(self.settings, "llm_default_provider", "minimax"),
                 ),
+                reasoning_mode=_reasoning_mode_value(stored.get(LLM_REASONING_MODE)),
+                agent_max_tokens=_agent_max_tokens_value(stored.get(LLM_AGENT_MAX_TOKENS)),
+                progressive_send=_bool_value(
+                    stored.get(LLM_PROGRESSIVE_SEND), DEFAULT_LLM_PROGRESSIVE_SEND
+                ),
             ).__dict__
 
         cached = await cached_minimax_config(_load)
@@ -184,6 +236,9 @@ class LlmSettingsMixin:
             "minimax_enable": cfg.enabled,
             "llm_default_provider": cfg.default_provider,
             "llm_failover_order": list(await self.resolve_llm_failover_order()),
+            "llm_reasoning_mode": cfg.reasoning_mode,
+            "llm_agent_max_tokens": cfg.agent_max_tokens,
+            "llm_progressive_send": cfg.progressive_send,
             "last_test": await self.get_provider_test_result("minimax"),
         }
 
@@ -391,7 +446,7 @@ class LlmSettingsMixin:
 
     async def update_minimax(
         self,
-        values: dict[str, str | bool | list[str] | None],
+        values: dict[str, str | int | bool | list[str] | None],
         *,
         actor_id,
     ) -> list[str]:

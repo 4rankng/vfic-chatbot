@@ -2,14 +2,19 @@
 
     load_conversation_state -> typing -> agent
       agent (error) -> error_reply
-      agent (ok)    -> fast_safety_filter -> needs_llm_safety?
-                         no  -> combine_for_presend
-                         yes -> llm_safety_check -> safe_to_send?
-                                   yes -> combine_for_presend
-                                   no -> retry_rewrite? (attempt<1) -> agent | combine_for_presend
-      combine_for_presend -> pre_send_guard -> ownership_ok?
-                                yes -> send_message -> log_sent
-                                no -> log_suppressed
+      agent (ok)    -> finalize_user_visible_reply
+      finalize_user_visible_reply -> pre_send_guard -> ownership_ok?
+                                yes -> dispatch_claimed_message -> record_bot_outcome
+                                no  -> log_suppressed
+
+The reply boundary is ``_finalize_user_visible_reply`` -> ``strip_think_reasoning``
+(``graph/safety.py``): the answer is shipped exactly as the agent generated it —
+the only transformation is dropping an inline provider thinking block so it never
+reaches the candidate. The former answer-review layer (regex cleaning,
+truncation, empty-reply verdicts, the ``safety_verdict`` trace) and the LLM
+safety judge before it were removed outright: neither is an LLM call, both sat
+between the generated answer and the send. Keep the diagram honest so a latency
+investigation does not hunt for a node that does not exist.
 
 LLM/embedder/Zalo/DB are injected via GraphDeps (defined in ``app.graph.types``), so
 the safety/ownership/suppress branches are unit-testable with fakes (no API keys needed).
@@ -21,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from contextlib import suppress
@@ -30,6 +36,7 @@ from typing import Any, NamedTuple
 from app.conversation_messaging.domain.delivery import DeliveryState
 from app.core.config import get_settings
 from app.graph.decision_trace import DecisionTraceBuilder
+from app.graph.grounding import ground_reply
 from app.graph.ports import (
     DeliveryResultPort,
     DirectMessageSenderPort,
@@ -61,6 +68,7 @@ from app.recruitment.domain.provider import (
     provider_from_conversation,
     recipient_from_conversation,
 )
+from app.graph.safety import strip_think_reasoning
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.shared.domain.text import normalize_vietnamese_text
@@ -100,6 +108,117 @@ _INCOME_COMPARE_HINT = (
     "trả lời theo từng dự án bằng đúng cơ sở dữ liệu (thu nhập tháng, bình quân năm chia 12, "
     "thưởng, kỳ lương), không gộp các cơ sở tính thành một con số duy nhất."
 )
+
+# ── Progressive send (opt-in, agent lane only) ──────────────────────────────
+# The agent lane streams its final answer round (``clients.MiniMaxAgent.agent`` →
+# ``on_delta``). When the admin-managed ``llm_progressive_send`` flag is on,
+# ``run_turn`` forwards the first complete bubble to the candidate while the rest
+# of the answer is still generating (measured: a sendable bubble exists at
+# ~2.1-3.0 s against a ~8 s completion). A bubble must clear the floor, end at a
+# sentence boundary (never cut mid-sentence) AND carry a concrete answer signal:
+# a model that opens with a pleasantry must not push filler to the candidate
+# first. When the floor is met but the substance test fails, the sender keeps
+# accumulating and re-tests at each later boundary; past the wait cap it gives up
+# and the turn falls back to the normal single-message path.
+PROGRESSIVE_BUBBLE_MIN_CHARS = 250
+PROGRESSIVE_SUBSTANCE_MIN_CHARS = 80
+PROGRESSIVE_MAX_WAIT_CHARS = 700
+_BUBBLE_BOUNDARY_CHARS = frozenset(".!?\n…")
+# "Dạ em chào anh/chị ạ." style openers, peeled from the head of a candidate
+# bubble before the substance length test. The lookahead keeps a token from
+# matching inside a longer word ("anh văn" peels "anh", "anhx" does not).
+# Cheap and deterministic by design — the gate never spends a model call.
+_GREETING_LEAD_RE = re.compile(
+    r"^\s*(?:dạ|vâng|ạ|ơi|xin chào|chào|hello|hi|em|mình|tôi|bên em|anh/chị|anh|chị)"
+    r"(?=$|[\s,;:.!?…/-])"
+    r"[\s,;:.!?…/-]*",
+    re.IGNORECASE,
+)
+
+
+def _next_sendable_offset(
+    raw: str, *, min_offset: int = PROGRESSIVE_BUBBLE_MIN_CHARS
+) -> int | None:
+    """Smallest raw-stream offset >= ``min_offset`` whose prefix ends a sentence.
+
+    The offset (not a finalized string) is the bubble boundary, so ``raw[:offset]``
+    and ``raw[offset:]`` are a true prefix/suffix pair of one stream: no part of
+    the answer can be sent twice, whatever the reply policy later rewrites.
+    """
+    for index in range(min_offset - 1, len(raw)):
+        if raw[index] in _BUBBLE_BOUNDARY_CHARS:
+            return index + 1
+    return None
+
+
+def _bubble_has_substance(text: str) -> bool:
+    """True when a candidate bubble carries a concrete answer signal.
+
+    Two cheap deterministic signals, no model call: a digit anywhere (salary,
+    shift times, quantities, ages) or enough prose left after peeling the leading
+    greeting/pleasantry run. Length alone is not enough — a bubble that is only
+    the opening pleasantry must not be the candidate's first message.
+    """
+    if any(character.isdigit() for character in text):
+        return True
+    stripped = text
+    while True:
+        # Peel the whole leading pleasantry run, however long it is (each pass
+        # strictly shortens the text, so this terminates).
+        peeled = _GREETING_LEAD_RE.sub("", stripped, count=1)
+        if peeled == stripped:
+            break
+        stripped = peeled
+    return len(stripped.strip()) >= PROGRESSIVE_SUBSTANCE_MIN_CHARS
+
+
+def _progressive_send_enabled(deps: GraphDeps, svc) -> bool:
+    """Whether this turn may send an early bubble at all.
+
+    Requires the admin flag AND a durable outbox dispatcher: a bubble followed by
+    a remainder is terminalized through ``finalize_outbound_dispatch``, so a
+    sender without it would strand a SENDING row. Absent either, the turn takes
+    the pre-existing single-message path unchanged.
+    """
+    if not getattr(deps, "progressive_send", False):
+        return False
+    dispatch = getattr(svc, "dispatch_outbound_message", None)
+    finalize = getattr(svc, "finalize_outbound_dispatch", None)
+    return iscoroutinefunction(dispatch) and iscoroutinefunction(finalize)
+
+
+class _ProgressiveStream:
+    """Raw answer deltas + latest tool evidence for one progressive turn.
+
+    ``raw`` is the single source of truth for the split (see
+    ``_next_sendable_offset``). ``evidence`` mirrors what the model had actually
+    been shown when the streamed text was produced, so a bubble passes the same
+    grounding cross-check as a full reply.
+    """
+
+    def __init__(self) -> None:
+        self.queue: asyncio.Queue[str] = asyncio.Queue()
+        self.raw = ""
+        self.evidence: list[str] = []
+
+    async def push_delta(self, text: str) -> None:
+        self.raw += text
+        await self.queue.put(text)
+
+    async def set_evidence(self, evidence: list[str]) -> None:
+        self.evidence = evidence
+
+
+class _EarlyBubble(NamedTuple):
+    """The bubble already sent to the candidate before the lane finished."""
+
+    text: str
+    raw: str
+    offset: int
+    message_id: int | None
+    outbox_id: int | None
+    send_result: Any
+    first_bubble_ms: int
 
 
 def _delivery_status_for_send_error(
@@ -255,6 +374,8 @@ async def _agent_turn(
     project_context=None,
     decisions: TurnDecisions | None = None,
     lead_row: dict | None = None,
+    on_delta=None,
+    on_evidence=None,
 ) -> str:
     route = route_from_decisions(user_text, decisions or TurnDecisions(degraded=True))
     focused_project = bool(
@@ -326,7 +447,6 @@ async def _agent_turn(
                 else compare_income_required_args
             ),
             metrics=timings,
-            retry_empty_generation=True,
             trace_sink=trace_sink,
         )
 
@@ -443,7 +563,14 @@ async def _agent_turn(
     # Model tier (Phase 5): low-complexity strategies use the fast model when one
     # is configured. ``should_use_fast_model`` encodes eligibility; the agent no-ops
     # the switch when no fast model was injected (tests / un-configured deployments).
-    use_fast = should_use_fast_model(route)
+    #
+    # The metric must follow the client that actually serves the turn: prod ran
+    # with no fast model configured while ``stage_timings.model_tier`` still read
+    # "fast" on every low-complexity turn, which made the dashboard claim a tier
+    # that never existed (34 turns/7d). Stamp "fast" only when the agent really
+    # has one, so the metric can be trusted when tiering is turned on.
+    fast_available = getattr(deps.agent, "fast_llm", None) is not None
+    use_fast = fast_available and should_use_fast_model(route)
     if timings is not None:
         timings["model_tier"] = "fast" if use_fast else "primary"
     allow_lead_context = (
@@ -505,7 +632,6 @@ async def _agent_turn(
         "make_retrieval": deps.make_retrieval,
         "lookup_query": evidence_query or user_text,
         "metrics": timings,
-        "retry_empty_generation": True,
     }
     if focused_rag and not vacancy_catalog_required:
         agent_kwargs["forced_project_slug"] = project_context.project_slug
@@ -524,6 +650,13 @@ async def _agent_turn(
         }
     if resolved_tool_registry is not None:
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
+    # Progressive delivery hooks ride only when the caller opened a stream: an
+    # agent implementation (or test fake) that predates them is never asked for a
+    # keyword it does not accept.
+    if on_delta is not None:
+        agent_kwargs["on_delta"] = on_delta
+    if on_evidence is not None:
+        agent_kwargs["on_evidence"] = on_evidence
     reply = await deps.agent.agent(
         contextual_user_text,
         **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
@@ -565,21 +698,12 @@ def _finalize_user_visible_reply(
     timings: dict,
     trace_sink: DecisionTraceBuilder,
 ) -> str:
-    """Invoke the reply-policy port once after all routing lanes converge."""
-    result = deps.reply_policy.finalize(
-        raw,
-        generated=generated,
-        user_text=user_text,
-    )
-    if result.trigger is not None:
-        timings["safety_trigger"] = result.trigger
-        logger.warning(
-            "reply altered by output policy: verdict=%s trigger=%s",
-            result.verdict,
-            result.trigger,
-        )
-    trace_sink.record_decision("safety_verdict", result.verdict)
-    return result.output
+    """Converged reply boundary: strip provider thinking, ship the answer as-is.
+
+    ``deps``/``generated``/``user_text`` stay in the signature so the
+    progressive-send bubble and the full-answer call site keep one boundary shape.
+    """
+    return strip_think_reasoning(raw)
 
 
 async def run_manifest_composed_agent(
@@ -592,7 +716,6 @@ async def run_manifest_composed_agent(
     required_tool: str | None = None,
     required_tool_args: dict | None = None,
     metrics: dict | None = None,
-    retry_empty_generation: bool = False,
     trace_sink=None,
 ) -> str | None:
     """Run an active manifest policy without granting legacy tool authority."""
@@ -617,7 +740,6 @@ async def run_manifest_composed_agent(
         "make_retrieval": deps.make_retrieval,
         "lookup_query": lookup_query or user_text,
         "metrics": metrics,
-        "retry_empty_generation": retry_empty_generation,
     }
     if required_tool is not None:
         agent_kwargs["required_tool"] = required_tool
@@ -888,6 +1010,7 @@ async def _resolve_lane(
     status_task,
     t0: float,
     lead_row: dict | None = None,
+    stream: _ProgressiveStream | None = None,
 ) -> _LaneResolution:
     """Select and run the turn's answer lane: clarification → direct → agent.
 
@@ -964,6 +1087,11 @@ async def _resolve_lane(
             agent_kwargs["manifest_policy"] = manifest_policy
         if lead_row is not None:
             agent_kwargs["lead_row"] = lead_row
+        if stream is not None:
+            # Only the agent lane streams: the hooks are attached here so a
+            # clarification/direct lane never opens a stream at all.
+            agent_kwargs["on_delta"] = stream.push_delta
+            agent_kwargs["on_evidence"] = stream.set_evidence
         raw = await _agent_turn(
             state,
             deps,
@@ -1089,6 +1217,52 @@ async def _claim_and_dispatch(
     )
     timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
     _stamp_outbound_telemetry(timings, send_result)
+    return await _record_dispatched_outcome(
+        state=state,
+        deps=deps,
+        conv=conv,
+        svc=svc,
+        candidate=candidate,
+        send_result=send_result,
+        timings=timings,
+        started=started,
+        lock_owner=lock_owner,
+        recipient_id=recipient_id,
+        outcome_label=outcome_label,
+        faq_metadata=faq_metadata,
+        manifest_policy=manifest_policy,
+        allow_recruitment_fast_lane=allow_recruitment_fast_lane,
+        t0=t0,
+        decision_trace=decision_trace,
+    )
+
+
+async def _record_dispatched_outcome(
+    *,
+    state: BotRunState,
+    deps: GraphDeps,
+    conv,
+    svc,
+    candidate: str,
+    send_result,
+    timings: dict,
+    started,
+    lock_owner: str | None,
+    recipient_id: str | None,
+    outcome_label: str,
+    faq_metadata: dict | None,
+    manifest_policy,
+    allow_recruitment_fast_lane: bool,
+    t0: float,
+    decision_trace,
+) -> TurnOutcome:
+    """Record an already-dispatched candidate: BotRun, message, outbox, lock.
+
+    Shared by the normal claim→send→record tail and the progressive path's
+    already-sent bubble, so the delivery classification and the audit row cannot
+    drift between the two. ``decision_trace`` is snapshotted by the caller at the
+    moment the send was claimed.
+    """
     timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
     _stamp_end_to_end(state, timings)
     db_t0 = time.monotonic()
@@ -1158,6 +1332,248 @@ async def _claim_and_dispatch(
             )
         deps.persist(persist_job)
     return {"outcome": outcome_label, "reply": candidate}
+
+
+async def _await_first_bubble(
+    *,
+    state: BotRunState,
+    deps: GraphDeps,
+    conv,
+    svc,
+    zalo: DirectMessageSenderPort,
+    stream: _ProgressiveStream,
+    lane_task: asyncio.Task,
+    timings: dict,
+    trace_sink: DecisionTraceBuilder,
+    lock_owner: str | None,
+    recipient_id: str | None,
+    status_task,
+    t0: float,
+) -> _EarlyBubble | None:
+    """Send the first complete, useful bubble while the agent is still generating.
+
+    Waits for either a sendable bubble or the lane task, whichever comes first.
+    Returns ``None`` on every path that must leave delivery to the existing
+    whole-reply flow: the lane finished first, the answer never cleared the
+    substance gate before the wait cap, the finalized bubble came out empty, or
+    the claim lost. The turn then behaves exactly as it did before this feature.
+    """
+    min_offset = PROGRESSIVE_BUBBLE_MIN_CHARS
+    rejected_for_substance = False
+
+    def _give_up() -> None:
+        """No early bubble: record why, and let the normal path deliver."""
+        if rejected_for_substance:
+            timings["progressive_first_bubble_skipped"] = "no_substance"
+
+    while True:
+        waiter = asyncio.ensure_future(stream.queue.get())
+        await asyncio.wait({waiter, lane_task}, return_when=asyncio.FIRST_COMPLETED)
+        if not waiter.done():
+            # The lane finished (short answer, non-agent lane, or a failure): the
+            # existing path owns delivery now, whole and unchanged.
+            waiter.cancel()
+            with suppress(asyncio.CancelledError):
+                await waiter
+            _give_up()
+            return None
+        waiter.result()  # consume the delta; the accumulator already has it
+        if len(stream.raw) > PROGRESSIVE_MAX_WAIT_CHARS:
+            # Past the wait cap: stop trying so the candidate still receives the
+            # complete answer as a single message.
+            _give_up()
+            return None
+        offset = _next_sendable_offset(stream.raw, min_offset=min_offset)
+        if offset is None:
+            continue
+        bubble_raw = stream.raw[:offset]
+        if not _bubble_has_substance(bubble_raw):
+            # Filler (greeting/pleasantry) that cleared the floor: keep
+            # accumulating and re-test at the next sentence boundary.
+            rejected_for_substance = True
+            min_offset = offset + 1
+            continue
+        first_bubble_ms = int(round((time.monotonic() - t0) * 1000))
+        bubble_text = _finalize_user_visible_reply(
+            ground_reply(bubble_raw, list(stream.evidence), trace_sink=trace_sink),
+            deps=deps,
+            generated=True,
+            user_text=state.user_text,
+            timings=timings,
+            trace_sink=trace_sink,
+        )
+        if not bubble_text.strip():
+            # Grounding stripped the whole bubble or the reply policy found
+            # nothing sendable. Send nothing; the existing path still owns the
+            # turn and will apply the same policy to the complete reply.
+            logger.info(
+                "progressive bubble empty after grounding/policy conversation=%s trace=%s",
+                state.conversation_id,
+                state.trace_id or "-",
+            )
+            return None
+        # Same pre-send guard as the normal path: refresh the ownership columns,
+        # then claim the ORIGINAL placeholder row (created by record_bot_pending
+        # at the top of run_turn) so no extra placeholder is created.
+        db_t0 = time.monotonic()
+        await deps.db.refresh(conv, _OWNERSHIP_REFRESH_COLUMNS)
+        owned = await svc.claim_send(
+            conv,
+            version_at_start=state.version_at_start,
+            lock_owner=lock_owner,
+            pending_message_id=state.pending_message_id,
+            reply=bubble_text,
+            outbox_channel=_channel_for_conversation(conv),
+            outbox_payload=_build_outbox_payload(
+                recipient_id, bubble_text, state.reply_to_message_id
+            ),
+        )
+        _stamp_db(timings, "claim_send", db_t0)
+        if not owned:
+            # Takeover / newer inbound / dead lock: send NOTHING and let the
+            # existing stand-down path handle the turn (no partial message).
+            return None
+        trace_sink.record_decision("ownership_verdict", "claimed")
+        await _cancel_status_task(status_task)
+        send_t0 = time.monotonic()
+        send_result = await _dispatch_claimed_message(
+            svc,
+            zalo,
+            conv,
+            message_id=state.pending_message_id,
+            text=bubble_text,
+            quote_message_id=state.reply_to_message_id,
+        )
+        timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
+        _stamp_outbound_telemetry(timings, send_result)
+        timings["progressive_send"] = True
+        timings["first_bubble_ms"] = first_bubble_ms
+        # Bubbles this turn's progressive path produced: 1 = the early bubble was
+        # the whole answer, 2 = a remainder followed through the normal path.
+        timings["progressive_bubbles"] = 1
+        return _EarlyBubble(
+            text=bubble_text,
+            raw=bubble_raw,
+            offset=offset,
+            message_id=state.pending_message_id,
+            outbox_id=getattr(send_result, "outbox_id", None),
+            send_result=send_result,
+            first_bubble_ms=first_bubble_ms,
+        )
+
+
+async def _complete_progressive_prefix(
+    *,
+    early: _EarlyBubble,
+    stream: _ProgressiveStream,
+    full_text: str,
+    state: BotRunState,
+    deps: GraphDeps,
+    conv,
+    svc,
+    timings: dict,
+    trace_sink: DecisionTraceBuilder,
+    lock_owner: str | None,
+    recipient_id: str | None,
+    started,
+    outcome_label: str,
+    faq_metadata: dict | None,
+    manifest_policy,
+    allow_recruitment_fast_lane: bool,
+    pending_kwargs: dict,
+    t0: float,
+) -> tuple[str, TurnOutcome | None]:
+    """Terminalize the early bubble and return what is left to send.
+
+    ``("", outcome)`` means the early bubble was the whole answer and the turn is
+    already recorded. ``(remainder_raw, None)`` means the caller must still run
+    the remainder through the existing finalize → claim → dispatch path. The
+    remainder is a true suffix of the raw stream by construction, so no text is
+    ever sent twice.
+    """
+    raw_stream = stream.raw
+    remainder_raw = raw_stream[early.offset:]
+    if early.raw + remainder_raw != raw_stream:
+        # Unreachable by construction (offset arithmetic). Logged, never raised:
+        # a wrong split would be a data bug, not a reason to drop the turn.
+        logger.error(
+            "progressive split mismatch conversation=%s trace=%s",
+            state.conversation_id,
+            state.trace_id or "-",
+        )
+    if full_text != raw_stream:
+        # The model retried or failed over mid-stream, so the streamed text is no
+        # longer the text the agent returned. The offset split remains the honest
+        # record of what the candidate saw; surface the frequency instead of
+        # silently trusting or discarding it.
+        timings["progressive_stream_mismatch"] = True
+        logger.warning(
+            "progressive streamed text differs from the returned reply "
+            "conversation=%s trace=%s streamed=%d returned=%d",
+            state.conversation_id,
+            state.trace_id or "-",
+            len(raw_stream),
+            len(full_text),
+        )
+    if not remainder_raw.strip() or early.outbox_id is None:
+        if early.outbox_id is None:
+            # Defensive: the durable-dispatcher gate makes this unreachable, but
+            # without an outbox id the early row cannot be terminalized, so record
+            # the bubble on its own row instead of stranding a SENDING one.
+            logger.error(
+                "progressive bubble has no outbox id conversation=%s trace=%s",
+                state.conversation_id,
+                state.trace_id or "-",
+            )
+        # The bubble was the whole answer (or the remainder cannot be
+        # dispatched): record the turn on the bubble's own pending row — BotRun,
+        # lock release, outbox final state — and send nothing more.
+        outcome = await _record_dispatched_outcome(
+            state=state,
+            deps=deps,
+            conv=conv,
+            svc=svc,
+            candidate=early.text,
+            send_result=early.send_result,
+            timings=timings,
+            started=started,
+            lock_owner=lock_owner,
+            recipient_id=recipient_id,
+            outcome_label=outcome_label,
+            faq_metadata=faq_metadata,
+            manifest_policy=manifest_policy,
+            allow_recruitment_fast_lane=allow_recruitment_fast_lane,
+            t0=t0,
+            decision_trace=trace_sink.snapshot_payload(),
+        )
+        return "", outcome
+    # Terminalize the early bubble now (its own message + outbox row) WITHOUT a
+    # BotRun: telemetry=None keeps ``finalize_outbound_dispatch`` from writing a
+    # recovery run, and the turn's single BotRun is written by the remainder's
+    # record_bot_outcome below.
+    db_t0 = time.monotonic()
+    await svc.finalize_outbound_dispatch(
+        conv,
+        message_id=early.message_id,
+        outbox_id=early.outbox_id,
+        delivered=early.send_result.ok,
+        zalo_message_id=early.send_result.msg_id,
+        external_error=None if early.send_result.ok else early.send_result.error,
+        error_class=early.send_result.error_class if not early.send_result.ok else None,
+        suppressed=bool(getattr(early.send_result, "suppressed", False)),
+        telemetry=None,
+    )
+    _stamp_db(timings, "finalize_outbound_dispatch", db_t0)
+    # A NEW pending row for the remainder: the early bubble's row is terminal, so
+    # the existing claim path needs its own placeholder to flip.
+    db_t0 = time.monotonic()
+    pending_msg = await svc.record_bot_pending(conv, **pending_kwargs)
+    _stamp_db(timings, "record_bot_pending", db_t0)
+    state.pending_message_id = pending_msg.id
+    timings["progressive_bubbles"] = 2
+    # Ground the remainder against the full evidence exactly as the bubble was
+    # grounded: each part passes the same job-id/entity guard, independently.
+    return ground_reply(remainder_raw, list(stream.evidence), trace_sink=trace_sink), None
 
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
@@ -1322,6 +1738,39 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         )
     t0 = time.monotonic()
     trace_sink = DecisionTraceBuilder()
+
+    # Terminal-recipient short-circuit: a recipient the provider permanently
+    # rejects ("user_id is invalid" on the Bot channel, "-201 user_id is not
+    # valid" on OA) can never receive the answer, so generating one costs a full
+    # ~9 s turn for nothing — measured at 21 of 284 turns in 24 h (7%, against a
+    # 1% error SLO). The dispatcher records the mark on the first such failure;
+    # here the turn stands down before Jev, the pending write and the model call.
+    # Fail-open: any Redis problem reports "reachable" and the turn proceeds.
+    if recipient_id and deps.recipient_unreachable is not None:
+        if await deps.recipient_unreachable(
+            _channel_for_conversation(conv), recipient_id
+        ):
+            trace_sink.record_decision("degradation_reason", "recipient_unreachable")
+            timings["lane"] = "recipient_unreachable"
+            logger.info(
+                "turn skipped: recipient permanently unreachable conversation=%s",
+                state.conversation_id,
+            )
+            # Single stand-down exit: records the audit row, releases the
+            # per-chat lock and stops the typing heartbeat.
+            return await _authority_gate(
+                state=state,
+                deps=deps,
+                conv=conv,
+                svc=svc,
+                reason="suppressed",
+                lock_owner=lock_owner,
+                started=started,
+                timings=timings,
+                trace_sink=trace_sink,
+                status_task=status_task,
+            )
+
     # The account label Jev judges the name against: the channel payload name
     # (Zalo bot / OA sender), else the stored provider profile label (Messenger,
     # filled in out of band by profile enrichment).
@@ -1506,31 +1955,97 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             )
         )
         # --- lane: clarification → direct context → agent (see _resolve_lane) ---
-        lane = await _resolve_lane(
-            state=state,
-            deps=deps,
-            conv=conv,
-            svc=svc,
-            decisions=decisions,
-            turn_route=turn_route,
-            project_context=project_context,
-            recent_messages=recent_messages,
-            manifest_policy=manifest_policy,
-            provider=provider,
-            recipient_id=recipient_id,
-            timings=timings,
-            trace_sink=trace_sink,
-            started=started,
-            lock_owner=lock_owner,
-            status_task=status_task,
-            t0=t0,
-            lead_row=lead_row,
-        )
+        # Progressive send is opt-in (admin ``llm_progressive_send``) and
+        # agent-lane only. When it is on, the lane runs as a task while a
+        # concurrent sender waits for the first complete, useful bubble; a lane
+        # that finishes first — or any non-agent lane — keeps the pre-existing
+        # single-message path exactly as it was.
+        stream = _ProgressiveStream() if _progressive_send_enabled(deps, svc) else None
+        lane_kwargs = {
+            "state": state,
+            "deps": deps,
+            "conv": conv,
+            "svc": svc,
+            "decisions": decisions,
+            "turn_route": turn_route,
+            "project_context": project_context,
+            "recent_messages": recent_messages,
+            "manifest_policy": manifest_policy,
+            "provider": provider,
+            "recipient_id": recipient_id,
+            "timings": timings,
+            "trace_sink": trace_sink,
+            "started": started,
+            "lock_owner": lock_owner,
+            "status_task": status_task,
+            "t0": t0,
+            "lead_row": lead_row,
+        }
+        early: _EarlyBubble | None = None
+        if stream is not None:
+            lane_task = asyncio.create_task(_resolve_lane(**lane_kwargs, stream=stream))
+            try:
+                early = await _await_first_bubble(
+                    state=state,
+                    deps=deps,
+                    conv=conv,
+                    svc=svc,
+                    zalo=zalo,
+                    stream=stream,
+                    lane_task=lane_task,
+                    timings=timings,
+                    trace_sink=trace_sink,
+                    lock_owner=lock_owner,
+                    recipient_id=recipient_id,
+                    status_task=status_task,
+                    t0=t0,
+                )
+            except Exception:  # noqa: BLE001 — the lane still owns the turn
+                # A failure in the early sender must never break the turn: the
+                # agent is still generating, and the normal path below delivers
+                # (or suppresses) the whole reply exactly as before.
+                logger.exception(
+                    "progressive early send failed; falling back to the normal path "
+                    "conversation=%s trace=%s",
+                    state.conversation_id,
+                    state.trace_id or "-",
+                )
+                early = None
+            lane = await lane_task
+        else:
+            lane = await _resolve_lane(**lane_kwargs)
         if lane.terminal is not None:
             return lane.terminal
         candidate = lane.candidate
         outcome_label = lane.outcome_label
         faq_metadata = lane.faq_metadata
+
+        if early is not None:
+            # The first bubble is already with the candidate. Split the raw
+            # stream at the sent offset: the remainder is a true suffix, so no
+            # text is ever sent twice.
+            candidate, early_outcome = await _complete_progressive_prefix(
+                early=early,
+                stream=stream,
+                full_text=lane.candidate,
+                state=state,
+                deps=deps,
+                conv=conv,
+                svc=svc,
+                timings=timings,
+                trace_sink=trace_sink,
+                lock_owner=lock_owner,
+                recipient_id=recipient_id,
+                started=started,
+                outcome_label=outcome_label,
+                faq_metadata=faq_metadata,
+                manifest_policy=manifest_policy,
+                allow_recruitment_fast_lane=allow_recruitment_fast_lane,
+                pending_kwargs=pending_kwargs,
+                t0=t0,
+            )
+            if early_outcome is not None:
+                return early_outcome
 
         # --- finalize: all routing lanes converge on one content boundary
         # before persistence and transport. Generated replies receive the full
@@ -1558,11 +2073,10 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 NEUTRAL_ADDRESS_FORM.capitalize(), resolved_address.capitalize()
             ).replace(NEUTRAL_ADDRESS_FORM, resolved_address)
 
-        # Defense-in-depth: every lane should already suppress empty output via
-        # DeterministicReplyPolicy. An empty candidate here means the bot has
-        # nothing to say: an "internal error" text would leak internals and read
-        # as a broken bot, so the turn is recorded SUPPRESSED with no customer
-        # message (the structured log carries the failure).
+        # Null guard, not an answer check: an empty string cannot be sent as a
+        # message. If the agent (or think-block stripping) left nothing to say,
+        # the turn is recorded SUPPRESSED with no customer message (the
+        # structured log carries the failure).
         if not (candidate or "").strip():
             logger.error(
                 "empty reply candidate, turn suppressed conversation=%s trace=%s",

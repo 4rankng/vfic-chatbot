@@ -35,10 +35,11 @@ from app.shared.application.outbound import OutboundTelemetry
 
 logger = logging.getLogger(__name__)
 
-# Recruiter messages are capped at 4,000 characters. Because the 420-character
-# splitter preserves paragraph/sentence boundaries, an adversarial valid body can
-# produce up to twenty short chunks rather than the ideal ten full chunks. OA may
-# add one token refresh and one retry. One chat-turn timeout remains as margin.
+# Recruiter messages are capped at 4,000 characters. The 1600-character splitter
+# preserves paragraph/sentence boundaries, so an adversarial valid body produces
+# only a handful of chunks; this window count keeps the conservative upper bound
+# derived from the old 420-character splitter. OA may add one token refresh and
+# one retry. One chat-turn timeout remains as margin.
 _MAX_PROVIDER_WINDOWS_PER_OUTBOX = 22
 
 

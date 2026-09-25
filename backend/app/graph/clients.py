@@ -38,12 +38,14 @@ from app.graph.prefetch import (
 from app.graph.provider_failover import (
     _bind_like,
     _is_429,
+    _llm_call_streaming_with_retry,
     _llm_call_with_retry,
 )
 from app.graph.reasoning_compat import (
     _extract_returned_reasoning,
     _reasoning_chat_class,
 )
+from app.graph.safety import strip_think_reasoning
 from app.graph.schemas import _dispatch_tool
 from app.graph.usage import record_token_usage as _record_token_usage
 
@@ -235,6 +237,8 @@ class MiniMaxAgent:
         required_tool_args: dict | None = None,
         forced_project_slug: str | None = None,
         retry_empty_generation: bool = False,
+        on_delta=None,
+        on_evidence=None,
         trace_sink=None,
     ) -> str:
         from app.graph.llm_semaphore import LLMThrottled, get_llm_semaphore
@@ -275,6 +279,18 @@ class MiniMaxAgent:
         def scoped_args(name: str, args: dict) -> dict:
             return _scope_project_tool_args(name, args, forced_project_slug)
 
+        async def _publish_evidence() -> None:
+            """Hand the accumulated tool evidence to the progressive sender.
+
+            Called after every ``tool_results`` append (prefetch and dispatched
+            rounds alike): a bubble streamed mid-generation must pass the same
+            job-id/entity grounding cross-check as the full reply, so it needs
+            the evidence the model had actually seen when that text was produced.
+            A snapshot copy is passed so a later append cannot mutate it.
+            """
+            if on_evidence is not None:
+                await on_evidence(list(tool_results))
+
         knowledge_lookup_route = allowed_tools == ("search_knowledge",)
         timetable_route = allowed_tools == ("search_bus_timetable",)
         income_compare_route = allowed_tools == ("compare_income",)
@@ -308,6 +324,7 @@ class MiniMaxAgent:
                 logger.warning("Contact knowledge prefetch failed", exc_info=True)
             else:
                 tool_results.append(str(prefetched))
+                await _publish_evidence()
                 messages.append(
                     SystemMessage(
                         content=(
@@ -332,6 +349,7 @@ class MiniMaxAgent:
                 dispatch=_dispatch_tool,
             )
             tool_results.append(str(prefetched))
+            await _publish_evidence()
             messages.append(
                 SystemMessage(
                     content=(
@@ -365,6 +383,7 @@ class MiniMaxAgent:
             )
             if prefetch_hit:
                 tool_results.append(str(prefetched))
+                await _publish_evidence()
                 messages.append(
                     SystemMessage(
                         content=(
@@ -486,8 +505,10 @@ class MiniMaxAgent:
                 features_hit = False
             if prefetch_hit:
                 tool_results.append(str(prefetched))
+                await _publish_evidence()
                 if features_hit:
                     tool_results.append(str(features))
+                    await _publish_evidence()
                     messages.append(
                         SystemMessage(
                             content=(
@@ -560,14 +581,18 @@ class MiniMaxAgent:
         authority_tool_dispatched = bool(
             required_tool == "list_active_jobs" and required_tool_called
         )
+        iterations_remaining = self.max_iters
         empty_retry_available = retry_empty_generation
         retrying_empty_generation = False
-        iterations_remaining = self.max_iters
         messages.append(HumanMessage(content=user_text))
         while iterations_remaining > 0:
             iterations_remaining -= 1
             if metrics is not None:
                 metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
+            # This iteration is a recovery attempt only if the previous round
+            # asked for one. Recovery is deliberately tool-free: the reply came
+            # back empty *because* the tool round consumed the answer budget, so
+            # re-asking without tools is what produces prose.
             was_empty_retry = retrying_empty_generation
             invocation_llm = active_llm if was_empty_retry else bound
             # Split the LLM path into semaphore-queue wait vs. model inference.
@@ -581,17 +606,29 @@ class MiniMaxAgent:
                     # The failover client must carry the same tool bindings as
                     # the primary, or a mid-loop switch would lose the tools the
                     # conversation already depends on.
-                    ai, backoff_ms = await _llm_call_with_retry(
-                        invocation_llm,
-                        messages,
-                        metrics=metrics,
-                        fallback_bounds=[
-                            _bind_like(
-                                client, schemas, bound_primary=not was_empty_retry
-                            )
-                            for client in self.fallback_llms
-                        ],
-                    )
+                    _fallback_bounds = [
+                        _bind_like(client, schemas, bound_primary=not was_empty_retry)
+                        for client in self.fallback_llms
+                    ]
+                    if on_delta is not None:
+                        # Progressive delivery: forward answer text as it is
+                        # produced so the first complete bubble can be sent
+                        # before the generation finishes. A tool-request round
+                        # emits no visible text, so nothing is sent for it.
+                        ai, backoff_ms = await _llm_call_streaming_with_retry(
+                            invocation_llm,
+                            messages,
+                            on_delta=on_delta,
+                            metrics=metrics,
+                            fallback_bounds=_fallback_bounds,
+                        )
+                    else:
+                        ai, backoff_ms = await _llm_call_with_retry(
+                            invocation_llm,
+                            messages,
+                            metrics=metrics,
+                            fallback_bounds=_fallback_bounds,
+                        )
                     model_ms = int((time.monotonic() - model_t0) * 1000)
             except LLMThrottled:
                 if retrying_empty_generation:
@@ -601,6 +638,8 @@ class MiniMaxAgent:
                 raise
             except Exception as exc:
                 if retrying_empty_generation:
+                    # Recovery is best-effort: a failed retry hands the turn back
+                    # to the runner's fallback instead of a provider error.
                     if metrics is not None:
                         metrics["generation_retry_failure"] = type(exc).__name__
                     logger.warning(
@@ -608,7 +647,7 @@ class MiniMaxAgent:
                         type(exc).__name__,
                     )
                     return ""
-                # Track non-retry-path 429s for observability (Phase 0 metric).
+                # Track provider 429s for observability (Phase 0 metric).
                 if _is_429(exc):
                     await _record_llm_429()
                     logger.error("llm_429", exc_info=True)
@@ -639,7 +678,6 @@ class MiniMaxAgent:
                 )
                 metrics["cached_tokens"] = metrics.get("cached_tokens", 0) + usage.cached_tokens
             logger.info("llm_invoke", extra={"llm_latency_ms": iter_total_ms})
-            retrying_empty_generation = False
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)
             record_model_turn = getattr(trace_sink, "record_model_turn", None)
@@ -664,26 +702,17 @@ class MiniMaxAgent:
                     tool_names=[call["name"] if "name" in call else "" for call in calls or []],
                 )
             if was_empty_retry:
-                from app.graph.safety import fast_safety_filter
-
-                # Recovery is deliberately tool-free. Re-run the deterministic
-                # safety filter on the retry result and never dispatch tools.
-                retry_safety = fast_safety_filter(str(ai.content or ""))
-                if retry_safety["safe_to_send"]:
-                    return _ground_reply(
-                        retry_safety["output"],
-                        tool_results,
-                        trace_sink=trace_sink,
-                    )
-                if retry_safety["too_long"]:
-                    return _ground_reply(retry_safety["output"], tool_results, trace_sink=trace_sink)
-                return _ground_reply("", tool_results, trace_sink=trace_sink)
+                # Never dispatch tools on a recovery round; the reply policy that
+                # used to gate this is gone, so the recovery simply ships the
+                # generated prose (thinking stripped).
+                return _ground_reply(
+                    strip_think_reasoning(str(ai.content or "")),
+                    tool_results,
+                    trace_sink=trace_sink,
+                )
             if not calls:
-                from app.graph.safety import fast_safety_filter
-
-                safety = fast_safety_filter(str(ai.content or ""))
                 if (
-                    safety["retryable_empty"]
+                    not strip_think_reasoning(str(ai.content or "")).strip()
                     and empty_retry_available
                     and (required_tool is None or required_tool_called)
                 ):
@@ -838,6 +867,9 @@ class MiniMaxAgent:
                         tool_call_id=tc.get("id") or f"call_{idx}_{tc.get('name', 'tool')}",
                     )
                 )
+            # One publish per dispatch round: the next model call is the one that
+            # can stream a bubble, and by then every result above is in hand.
+            await _publish_evidence()
             if required_tool_called and schemas and hasattr(active_llm, "bind_tools"):
                 # Require the authority tool only on the first model round. After
                 # evidence is present, allow the model to produce its final turn.
@@ -919,19 +951,39 @@ class MiniMaxAgent:
         return str(ai.content or "")
 
 
-class MiniMaxSafety:
-    def __init__(self, llm) -> None:
-        self.llm = llm
+_REASONING_MODES = ("off", "low", "default")
 
-    async def safety(self, candidate_reply: str) -> str:
-        from langchain_core.messages import HumanMessage, SystemMessage
 
-        from app.graph.prompts import SAFETY_PROMPT
+def _resolve_reasoning_mode(explicit: str | None = None) -> str:
+    """Resolve the reasoning mode: explicit arg, then settings, else ``off``.
 
-        resp = await self.llm.ainvoke(
-            [SystemMessage(content=SAFETY_PROMPT), HumanMessage(content=candidate_reply)]
-        )
-        return resp.content
+    Default is ``off`` — the chain-of-thought is never shown to the candidate and
+    only inflates wall time (measured: disabling it on the MiMo token plan cut a
+    12k-token turn from 6,925 ms to 5,227 ms at equal answer length). Read via
+    ``getattr`` so the behaviour is live before the settings field is added, and a
+    deployment that wants the old behaviour can set ``LLM_REASONING_MODE=default``.
+    """
+    if explicit:
+        mode = explicit.strip().lower()
+    else:
+        mode = str(getattr(get_settings(), "llm_reasoning_mode", "off") or "off").strip().lower()
+    return mode if mode in _REASONING_MODES else "off"
+
+
+def _agent_max_tokens() -> int | None:
+    """Output cap for the agent lane, or ``None`` when unset.
+
+    Measured on the token plans: a 400-token cap still ended with
+    ``finish_reason=stop`` (no truncation) and cut a MiniMax turn from 8,489 ms to
+    ~6,100 ms; 250 truncated mid-answer on MiniMax. Unset keeps today's unbounded
+    behaviour, so this only takes effect when an operator configures it.
+    """
+    raw = getattr(get_settings(), "llm_agent_max_tokens", 0) or 0
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
 
 
 def _minimax_chat(
@@ -940,6 +992,7 @@ def _minimax_chat(
     temperature: float,
     max_retries: int = 0,
     api_key: str | None = None,
+    max_tokens: int | None = None,
 ):
     """OpenAI-compatible MiniMax client from settings. Shared construction so
     model / base_url / timeout cannot drift between build_deps and the extractor.
@@ -948,12 +1001,23 @@ def _minimax_chat(
     ``_llm_call_with_retry`` (one backoff retry, then LLMThrottled → static
     degradation reply). The openai library's built-in retry would just waste
     time (3× the timeout) on top of that, so it stays off.
+
+    Reasoning cannot be switched off on this endpoint (measured 2026-09-26 on
+    ``api.minimax.io/v1`` with MiniMax-M2.7-highspeed): ``thinking:{type:disabled}``,
+    ``enable_thinking:false``, ``reasoning:{enabled:false}``, ``reasoning_effort:none``
+    and ``chat_template_kwargs`` all still returned 120–220 reasoning tokens, and
+    decode stayed ~40–60 tok/s. So this builder deliberately sends no reasoning
+    field — an unsupported field would risk 4xx on the primary lane for no gain.
+    ``max_tokens`` is the only lever that bounds a MiniMax turn.
     """
     s = get_settings()
     resolved_api_key = api_key or s.minimax_api_key
     if not resolved_api_key:
         raise RuntimeError("MINIMAX_API_KEY is required for MiniMax chat")
     chat_class = _reasoning_chat_class()
+    kwargs: dict = {}
+    if max_tokens:
+        kwargs["max_tokens"] = max_tokens
     return chat_class(
         model=model,
         api_key=resolved_api_key,
@@ -962,7 +1026,23 @@ def _minimax_chat(
         temperature=temperature,
         max_retries=max_retries,
         trace_provider="minimax",
+        # Streaming must still report token usage (progressive delivery path).
+        stream_usage=True,
+        **kwargs,
     )
+
+
+# Vendors known to accept an explicit thinking-disable field on their
+# OpenAI-compatible endpoint. Everything else (an operator-supplied custom
+# vendor) gets no reasoning field at all: an unknown vendor can reject an
+# undocumented request field and would 4xx the whole lane, so the change stays
+# opt-in per known host instead of global.
+_THINKING_DISABLE_HOSTS = ("xiaomimimo",)
+
+
+def _custom_supports_thinking_disable(base_url: str) -> bool:
+    host = (base_url or "").split("//", 1)[-1].split("/", 1)[0].lower()
+    return any(marker in host for marker in _THINKING_DISABLE_HOSTS)
 
 
 def _custom_chat(
@@ -973,6 +1053,8 @@ def _custom_chat(
     base_url: str,
     timeout: int | None = None,
     max_retries: int = 0,
+    reasoning_mode: str | None = None,
+    max_tokens: int | None = None,
 ):
     """OpenAI-compatible client for the admin-configured failover provider.
 
@@ -980,6 +1062,13 @@ def _custom_chat(
     rather than from code, so pointing this at a different vendor is an operator
     action. ``max_retries=0`` for the same reason as the other builders: the
     agent loop owns retry/failover policy.
+
+    Reasoning: the Xiaomi MiMo token plan honours ``thinking:{type:disabled}``
+    (measured 2026-09-26: reasoning tokens 41 → 0, and one 12k-token turn dropped
+    6,925 ms → 5,227 ms at equal answer length). MiMo exposes no graded budget, so
+    ``low`` is honoured as ``disabled``. Only hosts in
+    ``_THINKING_DISABLE_HOSTS`` receive the field; any other custom vendor is
+    left untouched.
     """
     if not api_key:
         raise RuntimeError("failover provider API key is required")
@@ -989,6 +1078,12 @@ def _custom_chat(
         raise RuntimeError("failover provider model is required")
     s = get_settings()
     chat_class = _reasoning_chat_class()
+    mode = _resolve_reasoning_mode(reasoning_mode)
+    kwargs: dict = {}
+    if max_tokens:
+        kwargs["max_tokens"] = max_tokens
+    if mode in {"off", "low"} and _custom_supports_thinking_disable(base_url):
+        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
     return chat_class(
         model=model,
         api_key=api_key,
@@ -997,6 +1092,8 @@ def _custom_chat(
         temperature=temperature,
         max_retries=max_retries,
         trace_provider="fallback",
+        stream_usage=True,
+        **kwargs,
     )
 
 
@@ -1008,18 +1105,29 @@ def _openrouter_chat(
     json_mode: bool = False,
     max_retries: int = 0,
     api_key: str | None = None,
-    capture_reasoning: bool = False,
+    reasoning_mode: str | None = None,
+    max_tokens: int | None = None,
 ):
-    """OpenAI-compatible OpenRouter client from settings."""
+    """OpenAI-compatible OpenRouter client from settings.
+
+    ``reasoning_mode`` (``off`` | ``low`` | ``default``) maps to OpenRouter's
+    documented ``reasoning`` body field. The previous behaviour pinned
+    ``effort: high`` on every agent call purely to capture the chain-of-thought
+    into the decision trace — the user never sees it, and it multiplied wall time
+    on the deepest-reasoning models, so it is no longer forced.
+    """
     s = get_settings()
     resolved_api_key = api_key or s.openrouter_api_key
     if not resolved_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter chat")
     kwargs = {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
-    if capture_reasoning:
-        kwargs["extra_body"] = {
-            "reasoning": {"effort": "high", "exclude": False},
-        }
+    mode = _resolve_reasoning_mode(reasoning_mode)
+    if mode == "off":
+        kwargs["extra_body"] = {"reasoning": {"enabled": False}}
+    elif mode == "low":
+        kwargs["extra_body"] = {"reasoning": {"effort": "low", "exclude": False}}
+    if max_tokens:
+        kwargs["max_tokens"] = max_tokens
     chat_class = _reasoning_chat_class()
     return chat_class(
         model=model,
@@ -1029,6 +1137,7 @@ def _openrouter_chat(
         temperature=temperature,
         max_retries=max_retries,
         trace_provider="openrouter",
+        stream_usage=True,
         # Stable system block as an explicit cache prefix (transport metadata
         # only — the prompt text is unchanged). OpenRouter's docs accept the
         # Anthropic-style breakpoint on a content block and translate it to
@@ -1088,6 +1197,8 @@ def _chat_for_role(
     openrouter_agent_model: str | None = None,
     openrouter_safety_model: str | None = None,
     openrouter_digest_model: str | None = None,
+    reasoning_mode: str | None = None,
+    max_tokens: int | None = None,
 ):
     """Build the OpenAI-compatible chat client for an agent/safety/digest role.
 
@@ -1097,6 +1208,11 @@ def _chat_for_role(
     here: the agent loop owns it per-call via ``_llm_call_with_retry`` with a
     failover chain from ``factories._build_failover_chain``, which keeps these
     clients stateless and safe to cache across turns.
+
+    ``reasoning_mode`` / ``max_tokens`` are the admin-configured latency knobs
+    resolved by ``build_cached_clients``. An explicit value wins; otherwise the
+    settings-backed default applies (``_resolve_reasoning_mode`` /
+    ``_agent_max_tokens``). ``max_tokens=0`` means "no cap".
     """
     s = get_settings()
     provider = _active_llm_provider(
@@ -1106,6 +1222,18 @@ def _chat_for_role(
         custom_enabled=custom_enabled,
         default_provider=default_provider,
     )
+    # The output cap and reasoning mode apply to the answer lane only: the
+    # safety/digest roles produce bounded structured payloads already, and
+    # capping them would risk truncating JSON. An explicit caller value (the
+    # admin-managed settings resolved by build_cached_clients) wins over the
+    # settings-backed default.
+    if role == "agent":
+        resolved_cap = max_tokens if max_tokens is not None else _agent_max_tokens()
+        agent_limits = {"max_tokens": resolved_cap}
+        agent_reasoning = reasoning_mode or _resolve_reasoning_mode()
+    else:
+        agent_limits = {}
+        agent_reasoning = "default"
 
     if provider == "custom":
         if custom_config is None or not custom_config.usable:
@@ -1118,6 +1246,8 @@ def _chat_for_role(
             temperature=temperature,
             api_key=custom_config.api_key,
             base_url=custom_config.base_url,
+            reasoning_mode=agent_reasoning,
+            **agent_limits,
         )
 
     if provider == "openrouter":
@@ -1139,7 +1269,8 @@ def _chat_for_role(
             timeout=timeout,
             json_mode=json_mode,
             api_key=resolved_openrouter_key,
-            capture_reasoning=role == "agent",
+            reasoning_mode=agent_reasoning,
+            **agent_limits,
         )
 
     # minimax
@@ -1163,4 +1294,5 @@ def _chat_for_role(
         model,
         temperature=temperature,
         api_key=resolved_minimax_key,
+        **agent_limits,
     )

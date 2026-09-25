@@ -49,7 +49,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.conversation_messaging.domain.statuses import DeliveryStatus, MessageSender
 from app.core.config import get_settings
-from app.graph.safety import DeterministicReplyPolicy
 from app.graph.runner import BotRunState, run_turn
 from app.graph.types import GraphDeps
 from app.models.contact import Contact, ContactChannelIdentity
@@ -122,7 +121,6 @@ def _build_smoke_deps(db) -> GraphDeps:
         zalo=_StubZalo(),
         conversation=ConversationService(db),
         retrieval=RetrievalRepository(db),
-        reply_policy=DeterministicReplyPolicy(),
         lead=build_lead_context(db),
     )
 

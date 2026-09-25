@@ -20,9 +20,7 @@ from typing import Any, TypedDict
 
 from app.graph.message_values import delivery_is, sender_is
 from app.graph.ports import SendOutcome
-from app.graph.safety import (
-    fast_safety_filter,
-)
+from app.graph.safety import strip_think_reasoning
 from app.graph.types import GraphDeps, TurnOutcome, _now, _speaker
 from app.recruitment.application.ports import ProactiveStatePort
 
@@ -169,7 +167,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
       5. Build context (reuse ``build_system_prompt`` + proactive user text).
       6. Single LLM call → JSON decision.
       7. Decision: ``send=False`` → suppress (no increment).
-      8. Safety gate (reuse ``fast_safety_filter`` + MiniMax safety LLM).
+      8. Structural gate: strip provider reasoning; nothing else rewrites it.
       9. Last-chance guards (ownership + opted-out + 48h).
      10. Send (``deps.zalo.send``).
      11. Persist (``record_proactive_outcome`` clears lock on any path).
@@ -343,17 +341,19 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             )
             return _outcome("suppressed", reason="empty_message")
 
-        # 8. Structural output gate (no LLM judge, no lexical filtering).
+        # 8. Structural output gate (no LLM judge, no lexical filtering, no
+        #    reply-policy layer: the only transformation is the reasoning strip).
         # The LLM safety judge was removed (p50 10.3s, as expensive as the agent
         # call). Lexical blocklists were removed too: they could not separate an
         # injection echo from ordinary Vietnamese and silently suppressed valid
         # nudges. What is left is shape, not meaning:
-        #   - nothing survived cleaning → suppress (there is no message to send)
-        #   - over-long → truncate and send (legitimate detailed nudge)
-        fs = fast_safety_filter(message)
-        candidate = fs["output"]
+        #   - nothing survived the reasoning strip → suppress (nothing to send)
+        #   - otherwise send as generated (the truncation that used to live here
+        #     was removed with the reply-policy layer; a long nudge is sent in
+        #     channel-sized bubbles by the sender instead)
+        candidate = strip_think_reasoning(message)
 
-        if fs["empty_after_clean"]:
+        if not candidate.strip():
             logger.info("proactive message empty after cleaning: conversation=%s", conv.zalo_chat_id)
             await svc.state.record_proactive_outcome(
                 conv,

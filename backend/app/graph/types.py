@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, NotRequired, TypedDict
 
-from app.graph.llm import AgentModel, Embedder, SafetyModel
+from app.graph.llm import AgentModel, Embedder
 from app.graph.message_values import speaker_label
 from app.graph.ports import (
     ConversationPort,
@@ -16,7 +16,6 @@ from app.graph.ports import (
     FaqBypassPort,
     LeadContextPort,
     LeadGenderPort,
-    ReplyPolicyPort,
     GraphRetrievalPort,
     RuntimePolicyPort,
     TurnDecisionsPort,
@@ -122,10 +121,9 @@ class GraphDeps:
     zalo: Any
     conversation: ConversationPort
     retrieval: GraphRetrievalPort
-    reply_policy: ReplyPolicyPort
-    # Unused after the LLM-judge removal; kept for GraphDeps API stability (tests
-    # still inject safety=...). Sits with the other defaulted fields by dataclass rule.
-    safety: SafetyModel | None = None
+    # Deterministic reply boundary applied once after all lanes converge: strips
+    # provider reasoning, cleans the text and truncates an over-long reply. A
+    # safety control, so it stays injected rather than hard-wired.
     # Lead-profile context for the agent prompt. None in tests that stub the turn.
     lead: LeadContextPort | None = None
     # Candidate gender memory for the decision hop: reads the stored value and
@@ -145,6 +143,11 @@ class GraphDeps:
     # Best-effort OA display-name/avatar enrichment after ownership validation
     # and before lead context is assembled. None for non-OA/test deployments.
     enrich_oa_profile: Callable[[str, str], Awaitable[bool]] | None = None
+    # (channel, recipient_id) -> True when the provider has permanently rejected
+    # this recipient, so the turn can stand down before spending a generation on
+    # an answer that can never be delivered. Wired in the composition root;
+    # None means "treat every recipient as reachable" (tests / no Redis).
+    recipient_unreachable: Callable[[str, str], Awaitable[bool]] | None = None
     # New manifest-composed runtime authority. It is intentionally not attached
     # to the legacy delivery path until Phase 7 has the full dispatch fence.
     runtime_policy: RuntimePolicyPort | None = None
@@ -159,6 +162,12 @@ class GraphDeps:
     # not enabled Jev: the runner then routes on the neutral fallback route
     # (general/agent) and the bot keeps working.
     turn_decisions: TurnDecisionsPort | None = None
+    # Admin-managed progressive send (minimax panel ``llm_progressive_send``):
+    # forward the first complete answer bubble before the agent finishes.
+    # Resolved by the composition root and injected here so the graph layer
+    # never imports the settings service. False keeps the pre-existing
+    # single-message delivery exactly as it was.
+    progressive_send: bool = False
 
 
 def _now() -> datetime:

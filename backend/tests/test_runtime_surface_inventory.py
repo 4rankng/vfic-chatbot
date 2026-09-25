@@ -95,7 +95,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: the OA sender's -201 unreachable classifier reads envelope.error /
     # envelope.message in zalo_oa_service._is_user_unreachable — one new
     # provider-transport `.get` site beside the existing result parsers.
-    "provider_boundary": 80,
+    # +1: the Bot platform's send-result classifier
+    # (zalo_bot_service._is_user_unreachable) reads the same error envelope
+    # fields to tell a permanently invalid recipient (`user_id is invalid`) from
+    # a transient failure — the bot-channel twin of the OA site above, and the
+    # gate for the terminal-recipient mark.
+    "provider_boundary": 81,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -133,7 +138,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "1f0f2debbdbd882f57af6a6ff9834d5d05c88708d6efd422676aa7db06efead7"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "753cbfaccda9fd5d827fd6ec8f7050b8c828630d493c99869484d99dababfd4d"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

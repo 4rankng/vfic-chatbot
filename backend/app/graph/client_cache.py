@@ -159,6 +159,8 @@ async def build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for
             minimax_enabled=minimax_config.enabled,
             openrouter_enabled=openrouter_config.enabled,
             default_provider=minimax_config.default_provider,
+            reasoning_mode=minimax_config.reasoning_mode,
+            max_tokens=minimax_config.agent_max_tokens,
             openrouter_agent_model=openrouter_config.agent_model,
             openrouter_safety_model=openrouter_config.safety_model,
             openrouter_digest_model=openrouter_config.digest_model,

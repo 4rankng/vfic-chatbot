@@ -2,6 +2,7 @@ import json
 import uuid
 
 import pytest
+from pydantic import ValidationError
 
 from app.core import preamble_cache
 from app.services.integration_settings import (
@@ -24,6 +25,11 @@ from app.services.integration_settings import (
     ZALO_OA_REFRESH_LOCK_KEY,
     ZALO_OA_REFRESH_TOKEN,
     ZALO_OA_SECRET_KEY,
+)
+from app.services.integration_settings.providers.llm import (
+    LLM_AGENT_MAX_TOKENS,
+    LLM_PROGRESSIVE_SEND,
+    LLM_REASONING_MODE,
 )
 
 
@@ -463,6 +469,163 @@ async def test_admin_view_reads_stored_failover_order():
     # The default provider always opens the turn regardless of its rank here;
     # the stored order ranks only the spares the operator cared to order.
     assert view["llm_failover_order"] == ["custom", "openrouter", "minimax"]
+
+
+@pytest.mark.asyncio
+async def test_minimax_resolves_llm_knob_defaults_when_nothing_stored():
+    service = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+
+    cfg = await service.resolve_minimax()
+    assert cfg.reasoning_mode == "off"
+    assert cfg.agent_max_tokens == 800
+    assert cfg.progressive_send is True
+
+    view = await service.admin_minimax_view()
+    assert view["llm_reasoning_mode"] == "off"
+    assert view["llm_agent_max_tokens"] == 800
+    assert view["llm_progressive_send"] is True
+
+
+@pytest.mark.asyncio
+async def test_minimax_stored_llm_knobs_override_defaults():
+    seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+    service = IntegrationSettingsService(
+        _ReadDb(
+            [
+                _Row(LLM_REASONING_MODE, seed.cipher.encrypt("low")),
+                _Row(LLM_AGENT_MAX_TOKENS, seed.cipher.encrypt("512")),
+                _Row(LLM_PROGRESSIVE_SEND, seed.cipher.encrypt("true")),
+            ]
+        ),
+        settings=_Settings(),
+    )
+
+    cfg = await service.resolve_minimax()
+
+    assert cfg.reasoning_mode == "low"
+    assert cfg.agent_max_tokens == 512
+    assert cfg.progressive_send is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        ("0", 0),  # 0 means "no cap" and must survive resolution untouched
+        ("-5", 800),  # a malformed/negative row falls back to the default
+        ("not-a-number", 800),
+    ],
+)
+async def test_minimax_agent_max_tokens_edge_stored_values(stored, expected):
+    seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+    service = IntegrationSettingsService(
+        _ReadDb([_Row(LLM_AGENT_MAX_TOKENS, seed.cipher.encrypt(stored))]),
+        settings=_Settings(),
+    )
+
+    cfg = await service.resolve_minimax()
+
+    assert cfg.agent_max_tokens == expected
+
+
+@pytest.mark.asyncio
+async def test_minimax_schemas_round_trip_llm_knobs():
+    from app.schemas.integrations import (
+        MinimaxIntegrationSettingsOut,
+        MinimaxIntegrationSettingsUpdate,
+    )
+
+    update = MinimaxIntegrationSettingsUpdate(
+        llm_reasoning_mode="low", llm_agent_max_tokens=0, llm_progressive_send=True
+    )
+    assert update.model_dump(exclude_unset=True) == {
+        "llm_reasoning_mode": "low",
+        "llm_agent_max_tokens": 0,
+        "llm_progressive_send": True,
+    }
+    with pytest.raises(ValidationError):
+        MinimaxIntegrationSettingsUpdate(llm_agent_max_tokens=-1)
+
+    service = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+    out = MinimaxIntegrationSettingsOut.model_validate(await service.admin_minimax_view())
+    assert out.llm_reasoning_mode == "off"
+    assert out.llm_agent_max_tokens == 800
+    assert out.llm_progressive_send is True
+
+
+@pytest.mark.asyncio
+async def test_update_minimax_llm_knobs_bump_the_llm_client_cache_namespace(monkeypatch):
+    async def fake_record_audit(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.providers.llm.record_audit",
+        fake_record_audit,
+    )
+    bumped: list[str] = []
+    evicted: list[str] = []
+
+    async def fake_bump_cache_version(namespace: str) -> bool:
+        bumped.append(namespace)
+        return True
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.storage.bump_cache_version",
+        fake_bump_cache_version,
+    )
+    monkeypatch.setattr(
+        "app.services.integration_settings.storage.evict_local_namespace",
+        lambda namespace: evicted.append(namespace),
+    )
+
+    db = _WriteDb()
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    changed = await service.update_minimax(
+        {"llm_reasoning_mode": "low", "llm_agent_max_tokens": 512},
+        actor_id=uuid.uuid4(),
+    )
+
+    assert changed == [LLM_REASONING_MODE, LLM_AGENT_MAX_TOKENS]
+    # build_cached_clients keys on cache_version("integration_minimax").
+    assert bumped == ["integration_minimax"]
+    assert evicted == ["integration_minimax"]
+    assert db.rows[LLM_AGENT_MAX_TOKENS].encrypted_value == "512"
+    assert db.rows[LLM_AGENT_MAX_TOKENS].is_secret is False
+
+
+@pytest.mark.asyncio
+async def test_client_cache_threads_resolved_llm_knobs_into_agent_client(monkeypatch):
+    from app.graph import client_cache
+
+    seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
+    rows = [
+        _Row(LLM_REASONING_MODE, seed.cipher.encrypt("low")),
+        _Row(LLM_AGENT_MAX_TOKENS, seed.cipher.encrypt("512")),
+    ]
+
+    captured: dict = {}
+
+    def _capture_chat_for_role(role, **kwargs):
+        captured["role"] = role
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(client_cache, "_chat_for_role", _capture_chat_for_role)
+    monkeypatch.setattr(client_cache, "build_embedder", lambda *a, **k: object())
+    monkeypatch.setattr(client_cache, "get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.factories._build_fast_llm", lambda **k: None)
+    monkeypatch.setattr("app.graph.factories._build_failover_chain", lambda **k: [])
+
+    client_cache.reset_client_cache()
+    try:
+        await client_cache.build_cached_clients(_ReadDb(rows))
+    finally:
+        client_cache.reset_client_cache()
+
+    assert captured["role"] == "agent"
+    assert captured["reasoning_mode"] == "low"
+    assert captured["max_tokens"] == 512
 
 
 def test_normalize_failover_order_drops_unknown_and_fills_canonically():

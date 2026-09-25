@@ -12,16 +12,31 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 
 from app.graph.llm_observability import _record_llm_429
 
 logger = logging.getLogger(__name__)
 
+# Rate-limit detection. The previous check was `"rate" in str(exc).lower()`,
+# which also matched unrelated words ("moderate", "corporate", "generate rate")
+# and turned an ordinary provider error into a 0.5 s backoff + pointless retry +
+# a false increment of the `minimax_429s` tile. Match the status code or an
+# explicit rate-limit phrase instead.
+_RATE_LIMIT_RE = re.compile(r"\b429\b")
+_RATE_LIMIT_PHRASES = ("rate limit", "rate_limit", "ratelimit", "too many requests")
+
 
 def _is_429(exc: Exception) -> bool:
     """Check if an exception represents an HTTP 429 (rate limit)."""
-    return "429" in str(exc) or "rate" in str(exc).lower()
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        return status == 429
+    text = str(exc).lower()
+    return bool(_RATE_LIMIT_RE.search(text)) or any(p in text for p in _RATE_LIMIT_PHRASES)
 
 
 # Quota exhaustion is not a rate limit: a spent token plan does not recover by
@@ -153,5 +168,134 @@ async def _llm_call_with_retry(
                 if _is_429(exc2):
                     await _record_llm_429()
                     return await _failover("rate_limited", backoff_ms)
+                raise
+        raise
+
+
+def _content_text(chunk: object) -> str:
+    """Best-effort plain text from a streamed chunk's ``content``."""
+    content = getattr(chunk, "content", "") or ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and isinstance(block.get("text"), str):
+                parts.append(block["text"])
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return ""
+
+
+async def _stream_collect(bound, messages, on_delta):
+    """Stream one completion, forwarding text deltas, and return the merged message.
+
+    langchain's ``AIMessageChunk`` supports ``+``, so summing the chunks yields a
+    message with the same ``content`` / ``tool_calls`` / ``usage_metadata`` shape
+    the non-streaming path returns — the agent loop above needs no special case.
+    A tool-request round simply yields no text deltas (measured: providers emit no
+    visible content alongside ``tool_calls``), so nothing is sent for it.
+    """
+    from langchain_core.messages import AIMessageChunk
+
+    assembled: AIMessageChunk | None = None
+    async for chunk in bound.astream(messages):
+        assembled = chunk if assembled is None else assembled + chunk
+        if on_delta is not None:
+            text = _content_text(chunk)
+            if text:
+                await on_delta(text)
+    if assembled is None:
+        return AIMessageChunk(content="")
+    return assembled
+
+
+async def _llm_call_streaming_with_retry(
+    bound,
+    messages,
+    *,
+    on_delta,
+    metrics: dict | None = None,
+    fallback_bounds: list | None = None,
+):
+    """Streaming twin of :func:`_llm_call_with_retry`.
+
+    Same capacity policy as :func:`_llm_call_with_retry` — retry once on 429,
+    fail over on a spent plan or a second 429, re-raise anything else — with one
+    honest difference: text already handed to ``on_delta`` cannot be recalled. A
+    capacity failure *before* the first token is therefore still a clean
+    retry/failover, while a capacity failure mid-stream sets ``stream_partial``
+    before the walk continues: the same partially-delivered state the chunked
+    sender already tolerates for a multi-bubble answer. A non-capacity failure
+    mid-stream still propagates (unchanged contract) and the turn degrades.
+    Returns ``(merged_message, backoff_ms)``.
+    """
+    from app.core.config import get_settings
+    from app.graph.llm_semaphore import LLMThrottled
+
+    # Text the *primary* already handed to the caller. Once true, the candidate
+    # has seen a prefix that no later attempt can recall, so the turn is partial
+    # no matter which provider finishes it. Emission by the replacement provider
+    # is normal and must not be mistaken for a partial delivery.
+    emitted_before_failover = False
+
+    async def _attempt(client) -> object:
+        async def _tap(text: str) -> None:
+            nonlocal emitted_before_failover
+            emitted_before_failover = True
+            await on_delta(text)
+
+        return await _stream_collect(client, messages, _tap)
+
+    async def _failover_stream(reason: str, backoff_ms: int):
+        candidates = [client for client in (fallback_bounds or []) if client is not None]
+        if not candidates:
+            raise LLMThrottled(f"LLM unavailable ({reason}) and no failover provider configured")
+        partial = emitted_before_failover
+        for index, client in enumerate(candidates):
+            try:
+                result = await _attempt(client)
+            except Exception:  # noqa: BLE001 — try the next provider, whatever failed
+                logger.warning(
+                    "llm_failover provider %d/%d failed; trying next",
+                    index + 1,
+                    len(candidates),
+                    exc_info=True,
+                )
+                continue
+            logger.warning(
+                "llm_failover_engaged reason=%s provider_index=%d", reason, index + 1
+            )
+            if metrics is not None:
+                metrics["llm_failover"] = True
+                metrics["llm_failover_reason"] = reason
+                metrics["llm_failover_index"] = index + 1
+                if partial:
+                    metrics["stream_partial"] = True
+            return result, backoff_ms
+        raise LLMThrottled(f"LLM unavailable ({reason}); all failover providers exhausted")
+
+    try:
+        return await _attempt(bound), 0
+    except Exception as exc:
+        if _is_quota_exhausted(exc):
+            return await _failover_stream("quota_exhausted", 0)
+        if _is_429(exc):
+            await _record_llm_429()
+            logger.warning("llm_429_retry", exc_info=True)
+            backoff_t0 = time.monotonic()
+            await asyncio.sleep(get_settings().llm_429_retry_sleep_seconds)
+            backoff_ms = int((time.monotonic() - backoff_t0) * 1000)
+            if metrics is not None:
+                metrics["retried_429"] = True
+            try:
+                return await _attempt(bound), backoff_ms
+            except Exception as exc2:
+                if _is_quota_exhausted(exc2):
+                    return await _failover_stream("quota_exhausted", backoff_ms)
+                if _is_429(exc2):
+                    await _record_llm_429()
+                    return await _failover_stream("rate_limited", backoff_ms)
                 raise
         raise

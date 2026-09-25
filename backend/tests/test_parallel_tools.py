@@ -15,7 +15,9 @@ concurrently via ``asyncio.gather``. This test suite pins:
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 
 import pytest
 
@@ -65,6 +67,27 @@ class _ScriptedLLM:
             return AIMessage(content=entry)
         # entry is a list of {"name", "args", "id"} dicts
         return AIMessage(content="", tool_calls=entry)
+
+    async def astream(self, messages, **kwargs):
+        """Stream the same scripted reply as one chunk (progressive-send tests).
+
+        A tool round carries no visible text, mirroring the real providers.
+        """
+        from langchain_core.messages import AIMessageChunk
+
+        message = await self.ainvoke(messages, **kwargs)
+        yield AIMessageChunk(
+            content=message.content,
+            tool_call_chunks=[
+                {
+                    "name": call["name"],
+                    "args": json.dumps(call.get("args", {})),
+                    "id": call.get("id") or f"call-{index}",
+                    "index": index,
+                }
+                for index, call in enumerate(getattr(message, "tool_calls", None) or [])
+            ],
+        )
 
 
 class _FakeRetrieval:
@@ -1064,3 +1087,65 @@ async def test_semaphore_caps_concurrency():
         settings.parallel_tool_max_concurrency = original
 
     assert max_concurrent <= 2, f"Expected ≤2 concurrent, got {max_concurrent}"
+
+
+async def test_on_evidence_publishes_accumulated_tool_results_before_the_final_round():
+    """Progressive send grounds a mid-generation bubble with the evidence the
+    model had seen when that text was produced, so ``on_evidence`` fires after a
+    tool dispatch and before the final answer round streams."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    async def handler(name, args):  # noqa: ARG001
+        return [SimpleNamespace(slug="lg-display", name="LG Display", summary="Nhà máy Hải Phòng")]
+
+    tool_calls = [{"name": "list_active_projects", "args": {}, "id": "c1"}]
+    llm = _ScriptedLLM([tool_calls, "Dạ em xin trả lời."])
+    published: list[list[str]] = []
+    deltas: list[str] = []
+    order: list[str] = []
+
+    async def on_evidence(evidence):
+        published.append(evidence)
+        order.append("evidence")
+
+    async def on_delta(text):
+        deltas.append(text)
+        order.append("delta")
+
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=5).agent(
+        "test",
+        system="sys",
+        retrieval=_FakeRetrieval(handler),
+        embedder=None,
+        allowed_tools=("list_active_projects",),
+        on_delta=on_delta,
+        on_evidence=on_evidence,
+    )
+
+    assert reply == "Dạ em xin trả lời."
+    assert published == [["- lg-display (LG Display): Nhà máy Hải Phòng"]]
+    assert deltas == ["Dạ em xin trả lời."]
+    # Evidence is in hand before the answer streams: that ordering is what lets a
+    # mid-generation bubble pass the same grounding check as the full reply.
+    assert order.index("evidence") < order.index("delta")
+
+
+async def test_without_on_evidence_the_agent_loop_is_unchanged():
+    """The hook is optional: no callback, no behaviour change."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    async def handler(name, args):  # noqa: ARG001
+        return [SimpleNamespace(slug="lg-display", name="LG Display", summary="Nhà máy Hải Phòng")]
+
+    llm = _ScriptedLLM([[{"name": "list_active_projects", "args": {}, "id": "c1"}], "done"])
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=5).agent(
+        "test",
+        system="sys",
+        retrieval=_FakeRetrieval(handler),
+        embedder=None,
+        allowed_tools=("list_active_projects",),
+    )
+
+    assert reply == "done"

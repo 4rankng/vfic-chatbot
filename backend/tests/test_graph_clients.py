@@ -497,7 +497,14 @@ def test_reasoning_chat_adapter_preserves_openrouter_reasoning_across_tool_round
     assert payload["messages"][1]["reasoning_details"] == raw_reasoning
 
 
-def test_openrouter_agent_client_requests_returned_reasoning(monkeypatch):
+def test_openrouter_agent_client_disables_reasoning_by_default(monkeypatch):
+    """The agent lane no longer pins effort=high; it asks for no reasoning.
+
+    ``effort: high`` was only there to capture chain-of-thought into the decision
+    trace, which the candidate never sees, and it multiplied wall time on
+    reasoning models. Default is now ``off``.
+    """
+
     class _OpenRouter(_Settings):
         openrouter_api_key = "test-key"
 
@@ -506,13 +513,39 @@ def test_openrouter_agent_client_requests_returned_reasoning(monkeypatch):
     chat = _openrouter_chat(
         "deepseek/deepseek-v4-flash",
         temperature=0.1,
-        capture_reasoning=True,
+        reasoning_mode="off",
     )
 
     assert chat.trace_provider == "openrouter"
-    assert chat.extra_body == {
-        "reasoning": {"effort": "high", "exclude": False},
-    }
+    assert chat.extra_body == {"reasoning": {"enabled": False}}
+
+
+def test_openrouter_agent_client_supports_low_reasoning(monkeypatch):
+    class _OpenRouter(_Settings):
+        openrouter_api_key = "test-key"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouter())
+
+    chat = _openrouter_chat(
+        "deepseek/deepseek-v4-flash",
+        temperature=0.1,
+        reasoning_mode="low",
+    )
+
+    assert chat.extra_body == {"reasoning": {"effort": "low", "exclude": False}}
+
+
+def test_openrouter_agent_client_default_mode_sends_no_reasoning_field(monkeypatch):
+    """``default`` defers to the provider (used by safety/digest roles)."""
+
+    class _OpenRouter(_Settings):
+        openrouter_api_key = "test-key"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouter())
+
+    chat = _openrouter_chat("deepseek/deepseek-v4-flash", temperature=0.0, reasoning_mode="default")
+
+    assert not hasattr(chat, "extra_body") or not chat.extra_body
 
 
 def test_openrouter_chat_marks_stable_system_block_as_cacheable_prefix(monkeypatch):
@@ -565,6 +598,85 @@ def test_minimax_chat_sends_no_cache_marker_on_openai_compatible_endpoint(monkey
     # keeps any future marker an explicit, deliberate change.
     assert chat.system_prefix_cache_control == {}
     assert payload["messages"][0]["content"] == "preamble"
+
+
+def test_minimax_chat_sends_no_reasoning_field(monkeypatch):
+    """MiniMax's OpenAI-compatible endpoint exposes no thinking switch.
+
+    Measured: thinking/enable_thinking/reasoning/reasoning_effort/chat_template_kwargs
+    all left 120-220 reasoning tokens in place, so the builder must not send an
+    unsupported field that could 4xx the primary lane.
+    """
+
+    class _MiniMax(_Settings):
+        minimax_api_key = "test-key"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _MiniMax())
+
+    chat = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
+    langchain_core = pytest.importorskip("langchain_core.messages")
+    payload = chat._get_request_payload(
+        [langchain_core.HumanMessage(content="hi"), langchain_core.HumanMessage(content="again")]
+    )
+
+    assert "thinking" not in payload
+    assert "reasoning" not in payload
+    assert "reasoning_effort" not in payload
+
+
+def test_minimax_chat_applies_output_cap(monkeypatch):
+    class _MiniMax(_Settings):
+        minimax_api_key = "test-key"
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _MiniMax())
+
+    capped = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1, max_tokens=400)
+    uncapped = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
+
+    assert capped.max_tokens == 400
+    assert uncapped.max_tokens is None
+
+
+def test_custom_chat_disables_thinking_on_known_token_plan(monkeypatch):
+    """MiMo on the Xiaomi token plan honours ``thinking:{type:disabled}``."""
+
+    class _Custom(_Settings):
+        custom_llm_request_timeout = 60
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Custom())
+
+    from app.graph.clients import _custom_chat
+
+    chat = _custom_chat(
+        "mimo-v2.6-flash",
+        temperature=0.3,
+        api_key="test-key",
+        base_url="https://token-plan-sgp.xiaomimimo.com/v1",
+        reasoning_mode="off",
+    )
+
+    assert chat.extra_body == {"thinking": {"type": "disabled"}}
+
+
+def test_custom_chat_leaves_unknown_vendor_reasoning_untouched(monkeypatch):
+    """An operator-supplied vendor must not receive an undocumented field."""
+
+    class _Custom(_Settings):
+        custom_llm_request_timeout = 60
+
+    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Custom())
+
+    from app.graph.clients import _custom_chat
+
+    chat = _custom_chat(
+        "some-model",
+        temperature=0.3,
+        api_key="test-key",
+        base_url="https://api.unknown-vendor.example/v1",
+        reasoning_mode="off",
+    )
+
+    assert not chat.extra_body
 
 
 # --- Authority-override regression -------------------------------------------

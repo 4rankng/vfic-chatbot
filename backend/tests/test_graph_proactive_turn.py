@@ -153,18 +153,15 @@ async def _always_allowed(conv):
 
 
 def _deps(agent, zalo, *, conversation, proactive_state=None) -> "object":
-    from app.graph.safety import DeterministicReplyPolicy
     from app.graph.types import GraphDeps
 
     deps = GraphDeps(
         db=_FakeDB(),
         agent=agent,
-        safety=object(),
         embedder=object(),
         zalo=zalo,
         conversation=conversation,
         retrieval=object(),
-        reply_policy=DeterministicReplyPolicy(),
         lead=_NoLead(),
         followup_allowed=_always_allowed,
     )
