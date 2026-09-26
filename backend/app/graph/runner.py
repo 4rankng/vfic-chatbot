@@ -68,7 +68,7 @@ from app.recruitment.domain.provider import (
     provider_from_conversation,
     recipient_from_conversation,
 )
-from app.graph.safety import strip_think_reasoning
+from app.graph.safety import strip_think_reasoning, visible_offset
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.shared.domain.text import normalize_vietnamese_text
@@ -1378,16 +1378,27 @@ async def _await_first_bubble(
             _give_up()
             return None
         waiter.result()  # consume the delta; the accumulator already has it
-        if len(stream.raw) > PROGRESSIVE_MAX_WAIT_CHARS:
+        visible_start = visible_offset(stream.raw)
+        if visible_start is None:
+            # The provider's think block is still open: nothing is candidate-visible
+            # yet, so neither the wait cap nor the boundary search may be spent on
+            # deliberation text.
+            continue
+        visible = stream.raw[visible_start:]
+        if len(visible) > PROGRESSIVE_MAX_WAIT_CHARS:
             # Past the wait cap: stop trying so the candidate still receives the
             # complete answer as a single message.
             _give_up()
             return None
+        floor = visible_start + PROGRESSIVE_BUBBLE_MIN_CHARS
+        if floor > min_offset:
+            min_offset = floor
         offset = _next_sendable_offset(stream.raw, min_offset=min_offset)
         if offset is None:
             continue
         bubble_raw = stream.raw[:offset]
-        if not _bubble_has_substance(bubble_raw):
+        visible_bubble = stream.raw[visible_start:offset]
+        if not _bubble_has_substance(visible_bubble):
             # Filler (greeting/pleasantry) that cleared the floor: keep
             # accumulating and re-test at the next sentence boundary.
             rejected_for_substance = True
@@ -1395,7 +1406,7 @@ async def _await_first_bubble(
             continue
         first_bubble_ms = int(round((time.monotonic() - t0) * 1000))
         bubble_text = _finalize_user_visible_reply(
-            ground_reply(bubble_raw, list(stream.evidence), trace_sink=trace_sink),
+            ground_reply(visible_bubble, list(stream.evidence), trace_sink=trace_sink),
             deps=deps,
             generated=True,
             user_text=state.user_text,

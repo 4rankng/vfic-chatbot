@@ -3241,3 +3241,44 @@ async def test_progressive_wait_cap_falls_back_to_the_whole_reply(monkeypatch):
     assert "progressive_send" not in stage
     assert "progressive_first_bubble_skipped" not in stage
 
+
+@pytest.mark.asyncio
+async def test_progressive_inline_thinking_answer_sends_bubble_from_visible_text(monkeypatch):
+    """MiniMax M2 streams its deliberation inline in think tags before the
+    answer. The wait cap, the bubble floor and the boundary search must all be
+    measured against the candidate-visible text, so the bubble still goes out
+    while the agent is generating — and the deliberation never leaves."""
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    reasoning = "Người dùng hỏi về LG Display. " * 30
+    parts = [
+        "\u003cthink\u003e" + reasoning + "\u003c/think\u003e",
+        _ANSWER_SENTENCES[0],
+        _ANSWER_SENTENCES[1],
+        _ANSWER_SENTENCES[2],
+        _ANSWER_SENTENCES[3],
+        _ANSWER_SENTENCES[4],
+    ]
+    assert len(reasoning) > runner.PROGRESSIVE_MAX_WAIT_CHARS
+    _stub_streaming_agent(monkeypatch, parts, svc=svc, pause_after=len(parts) - 1)
+
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, progressive_send=True))
+
+    assert res["outcome"] == "sent"
+    assert len(svc.dispatched) == 2
+    bubble = svc.dispatched[0]["text"]
+    remainder = svc.dispatched[1]["text"]
+    # The bubble is the visible answer, never the deliberation.
+    assert "Người dùng hỏi" not in bubble
+    assert "think" not in bubble
+    assert _ANSWER.startswith(bubble)
+    assert bubble.rstrip().endswith((".", "!", "?", "…"))
+    # The split is lossless at the sentence boundary (which consumes one space).
+    assert _norm(f"{bubble} {remainder}") == _norm(_ANSWER)
+    # The send happened while the agent was still generating.
+    assert svc.agent_returned_after_dispatches == [1]
+    assert recorded[0]["reply"] == remainder
+    stage = recorded[0]["stage_timings"]
+    assert stage["progressive_send"] is True
+    assert stage["progressive_bubbles"] == 2
+

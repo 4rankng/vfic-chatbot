@@ -10,7 +10,7 @@ candidate, so every user-visible reply passes through
 
 import pytest
 
-from app.graph.safety import strip_think_reasoning
+from app.graph.safety import strip_think_reasoning, visible_offset
 
 
 def test_strip_think_reasoning_removes_complete_block():
@@ -50,3 +50,23 @@ def test_strip_think_reasoning_discards_unclosed_minimax_think_reasoning(raw):
 
     assert "internal reasoning" not in out
     assert out == ""
+
+
+def test_visible_offset_is_zero_without_think():
+    # No deliberation: candidate-visible text starts at the very beginning.
+    assert visible_offset("Chào bạn!") == 0
+    assert visible_offset("") == 0
+    assert visible_offset(None) == 0
+
+
+def test_visible_offset_points_past_the_last_closing_tag():
+    raw = "\u003cthink\u003eSECRET\u003c/think\u003emid \u003cthink\u003emore\u003c/think\u003eChào bạn!"
+
+    assert visible_offset(raw) == raw.index("Chào bạn!")
+
+
+def test_visible_offset_is_none_while_a_think_block_is_open():
+    # Deliberation still streaming: nothing is visible yet, so the progressive
+    # sender must not spend its wait cap or look for a boundary.
+    assert visible_offset("\u003cthink\u003ereasoning") is None
+    assert visible_offset("mid \u003cthink\u003estill thinking") is None

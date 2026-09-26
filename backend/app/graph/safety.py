@@ -16,17 +16,40 @@ from __future__ import annotations
 
 import re
 
+# MiniMax M2 reasoning models wrap deliberation in think tags; the user-facing
+# reply is what follows the last closing tag. These three patterns are the single
+# source of truth for think-block semantics: ``strip_think_reasoning`` removes
+# them from the final text, and ``visible_offset`` locates where candidate-visible
+# text begins in the raw stream.
+_THINK_CLOSE_RE = re.compile(r"</think\s*>", re.IGNORECASE)
+_THINK_OPEN_RE = re.compile(r"<\s*think\b", re.IGNORECASE)
+_THINK_TRUNCATED_RE = re.compile(r"<\s*think\b[\s\S]*$", re.IGNORECASE)
+
+
+def visible_offset(raw: str) -> int | None:
+    """Index in ``raw`` where candidate-visible text starts.
+
+    ``0`` when there is no think block, the end of the last closing tag when the
+    deliberation is complete, and ``None`` while a think block is still open (the
+    stream so far is pure deliberation and nothing is visible yet).
+    """
+    raw = raw or ""
+    matches = list(_THINK_CLOSE_RE.finditer(raw))
+    if matches:
+        return matches[-1].end()
+    if _THINK_OPEN_RE.search(raw):
+        return None
+    return 0
+
 
 def strip_think_reasoning(raw: str) -> str:
     """Remove complete or truncated provider reasoning from user-visible text."""
     raw = raw or ""
-    # MiniMax M2 reasoning models wrap deliberation in think tags; the
-    # user-facing reply is what follows the last closing tag. Never send reasoning.
-    if re.search(r"</think\s*>", raw, flags=re.IGNORECASE):
-        raw = re.split(r"</think\s*>", raw, flags=re.IGNORECASE)[-1]
+    if _THINK_CLOSE_RE.search(raw):
+        raw = _THINK_CLOSE_RE.split(raw)[-1]
     # A provider timeout can truncate output before the closing tag. In that case
     # everything after the unmatched opener is still deliberation, not a reply.
     # Discard the incomplete block instead of removing only its tag and exposing
     # the reasoning text as user-visible content.
-    raw = re.sub(r"<\s*think\b[\s\S]*$", "", raw, flags=re.IGNORECASE)
+    raw = _THINK_TRUNCATED_RE.sub("", raw)
     return raw
