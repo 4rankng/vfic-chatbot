@@ -73,12 +73,58 @@ Plan deviations recorded (no behavior substituted):
 
 ## Result
 
-- Overall status: PASS for the code change; production deploy/prod-proof tracked
-  below.
+- Overall status: PASS — shipped to production. `531901c3` is live on
+  `web-green` (previous color `blue` @ `4bbdd5e1` retained for `make rollback`).
+- Deploy evidence:
+  - Quality gates CI: run `36212177264`, workflow `quality-gates.yml`, commit
+    `531901c3263f4ff8b234b1cc7edd1e291ad431db`, conclusion `success` (4m28s).
+  - `make deploy` (repo root): local `release-check` (backend lint/unit/full
+    integration, frontend lint/typecheck/unit/coverage/build/e2e desktop+mobile,
+    golden RAG gate) → both images built/pushed at `:531901c3` → blue/green
+    cutover. Smoke gate `SMOKE OK: outcome='sent'`; `flip_caddy` → `web-green`;
+    post-flip verification green (public `/health`, frontend root, Caddy upstream,
+    worker counts, `{"queue_depth": 0, "busy_workers": 1, "total_workers": 7}`).
+    Old `web-blue` drained and stopped. Total 792 s.
+  - Prod state: `ACTIVE_COLOR=green`, `PREV_COLOR=blue`, `PREV_TAG=4bbdd5e1`,
+    `vfic-web-green-1` = `ghcr.io/4rankng/tinghire-be:531901c3`,
+    `https://bot.tingting.vip/health` → `{"status":"ok","env":"production"}`.
+- Production behavioral proof (plan's `bot_runs` query, 45-minute window):
+  | started | outcome | lane | progressive_send | first_bubble_ms | end_to_end_ms | bubbles |
+  |---|---|---|---|---|---|---|
+  | 02:53:09 | SENT | agent | — | — | 17375 | — |
+  | 02:52:22 | SENT | agent | true | 9500 | 13216 | 2 |
+  | 02:51:06 | SENT | agent | true | 14635 | 19132 | 2 |
+  | 02:43:08 and earlier | SENT | agent | — | — | ~8.7–19.0 s | — |
+
+  The two turns after the flip (`web-green`, `531901c3`) carry
+  `progressive_send=true` with `first_bubble_ms` well below `end_to_end_ms`;
+  every pre-flip turn (old `4bbdd5e1`) has no stamp, matching the reported bug.
+  The 02:53:09 turn formed no stamp: the lane won the race on that one (provider
+  emitted its answer late), which the plan anticipates and is not a defect.
+- Bubble/remainder integrity in prod (run 1239, 9500 ms bubble):
+  - early bubble = message 3662 @02:52:22 (`bot_run_id` NULL, 270 chars), clean
+    Vietnamese answer text, no reasoning, ending at a sentence/boundary;
+  - remainder = message 3663 @02:52:34 (`bot_run_id=1239`, 153 chars) and
+    `bot_runs.proposed_reply` == that body byte-for-byte; the remainder continues
+    the bubble ("- Lịch kíp: …") with no repeated text.
+  - Run 1238 (02:51:06): 285 chars of `proposed_reply` == remainder body.
+- Reasoning-never-sent check (independent of the code path):
+  no BOT message since 2026-09-01 contains a think tag (`0` rows); all-time, the
+  only such row is `messages.id=736`, created **2026-07-22** — a delivered
+  reasoning+answer blob from before `strip_think_reasoning` existed. It is
+  already-delivered historical data (unfixable retroactively) and is unrelated to
+  this change; recorded as a finding, no code or data action taken.
 - Remaining risks or follow-ups:
-  - Production proof: after `make deploy`, query `bot_runs` for a recent
-    agent-lane turn carrying `stage_timings.progressive_send = true` with
-    `first_bubble_ms < end_to_end_ms`. If MiniMax emits answer deltas only at the
-    very end, the lane can win the race and no stamp appears — provider behavior,
-    not a defect of this fix; the deterministic proof is the runner test above.
-  - Independently assert that no dispatched text ever contains the reasoning string.
+  - Observed `first_bubble_ms` in prod is 9.5–14.6 s (design estimate was
+    2.1–3.0 s): MiniMax M2 spends most of the turn inside its think block, so the
+    first visible sentence still lands late. The bubble is early relative to the
+    lane finishing, but the candidate-perceived benefit is smaller than designed.
+    Measuring/pushing that earlier (e.g. provider think-suppression) is a
+    separate, unapproved change.
+  - If MiniMax emits answer deltas only at the very end, the lane can win the race
+    and no stamp appears — provider behavior, not a defect; the deterministic
+    proof remains the runner test.
+  - `backend/scripts/verify_streaming_turn.py` carries a pre-existing unrelated
+    operator modification (a `--with-tools` streamability probe). It was stashed
+    for the clean-worktree release gate and restored afterwards; it is not part of
+    this change and was not deployed with it.
