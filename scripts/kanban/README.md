@@ -37,7 +37,22 @@ rebuild — do not hand-move files, and do not hand-edit a generated card.
 
 ## Origin
 
-Every card came from the read-only tech-debt audit of **2026-09-24** (HEAD
+### Wave 2 — 2026-09-26 (HEAD `31d30377`)
+
+49 cards (`ARCH-20`…`ARCH-28`, `DOC-14`…`DOC-18`, `FE-20`…`FE-26`, `OPS-21`…`OPS-27`,
+`PERF-15`…`PERF-17`, `REL-8`…`REL-15`, `SEC-9`…`SEC-11`, `TEST-16`…`TEST-22`), all
+starting in `TODO/`. They came from a nine-lane parallel read-only audit (backend
+architecture, backend correctness, backend performance/async, security, graph/bot,
+frontend, testing/CI, ops/deploy/dependencies, docs/repo hygiene) run against the
+tree left by the swept wave-1 board. Data module: `tickets_e.py`. Ids continue each
+area sequence from wave 1. Known/deferred items (SEC-01, K-4/K-10/K-11/K-12, the
+sweep-ledger holds, the FE-02/FE-08 QA-blocked edges) were excluded from carding;
+audit-time baseline: ruff clean, backend unit `2397 passed / 24 skipped`, frontend
+tsc + eslint clean.
+
+### Wave 1 — 2026-09-24 (HEAD `923b1d3f`)
+
+Every wave-1 card came from the read-only tech-debt audit of **2026-09-24** (HEAD
 `923b1d3f`, `main`), which ran eight parallel read-only scouts over disjoint
 slices: backend architecture, backend correctness, backend performance,
 security, frontend, testing/CI, dependencies/ops/migrations, and repo hygiene.

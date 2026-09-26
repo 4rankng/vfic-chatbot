@@ -38,6 +38,7 @@ import tickets_a  # noqa: E402
 import tickets_b  # noqa: E402
 import tickets_c  # noqa: E402
 import tickets_d  # noqa: E402
+import tickets_e  # noqa: E402
 
 TICKET_DATE = "20260924"
 COLUMNS = ["TODO", "IN_PROGRESS", "DEV_COMPLETED", "QA_TESTED"]
@@ -242,7 +243,11 @@ def slugify(text: str) -> str:
     return text.strip("-")[:64].rstrip("-")
 
 
-def _existing_column(ticket_id: str) -> str | None:
+def _fmt_date(date: str) -> str:
+    return f"{date[:4]}-{date[4:6]}-{date[6:]}"
+
+
+def _existing_column(ticket_id: str, date: str) -> str | None:
     """Read the column a card currently occupies on disk.
 
     Progress state is mutable and is advanced by moving the card file; the audit
@@ -251,8 +256,8 @@ def _existing_column(ticket_id: str) -> str | None:
     COMPLETIONS table below) declares one explicitly.
     """
     for col in COLUMNS:
-        if (KANBAN / col / f"{TICKET_DATE}_{ticket_id}-").parent.exists():
-            for path in (KANBAN / col).glob(f"{TICKET_DATE}_{ticket_id}-*.md"):
+        if (KANBAN / col / f"{date}_{ticket_id}-").parent.exists():
+            for path in (KANBAN / col).glob(f"{date}_{ticket_id}-*.md"):
                 text = path.read_text(encoding="utf-8")
                 m = re.search(r"^column: (\w+)$", text, re.MULTILINE)
                 if m and m.group(1) in COLUMNS:
@@ -262,7 +267,7 @@ def _existing_column(ticket_id: str) -> str | None:
 
 def tickets():
     out = []
-    for mod in (tickets_a, tickets_b, tickets_c, tickets_d):
+    for mod in (tickets_a, tickets_b, tickets_c, tickets_d, tickets_e):
         out.extend(mod.TICKETS)
     seen = set()
     for t in out:
@@ -279,10 +284,13 @@ def tickets():
 
 
 def card_name(t) -> str:
-    return f"{TICKET_DATE}_{t['id']}-{slugify(t['title'])}.md"
+    date = t.get("date", TICKET_DATE)
+    return f"{date}_{t['id']}-{slugify(t['title'])}.md"
 
 
 def render_card(t, column: str) -> str:
+    date = t.get("date", TICKET_DATE)
+    head = t.get("audit_head", "923b1d3f")
     lines = [
         "---",
         f"id: {t['id']}",
@@ -293,7 +301,7 @@ def render_card(t, column: str) -> str:
         f"effort: {t['effort']}",
         f"status: {COLUMN_STATUS[column]}",
         f"column: {column}",
-        f"opened: {TICKET_DATE[:4]}-{TICKET_DATE[4:6]}-{TICKET_DATE[6:]}",
+        f"opened: {_fmt_date(date)}",
         "---",
         "",
         f"# {t['id']} — {t['title']}",
@@ -319,9 +327,8 @@ def render_card(t, column: str) -> str:
     lines += [
         "---",
         "",
-        f"_Opened {TICKET_DATE[:4]}-{TICKET_DATE[4:6]}-{TICKET_DATE[6:]} from the read-only "
-        "tech-debt audit (HEAD `923b1d3f`). No code was changed by the audit; every claim is "
-        "grounded in the cited `path:line` locations._",
+        f"_Opened {_fmt_date(date)} from the read-only tech-debt audit (HEAD `{head}`). No code "
+        "was changed by the audit; every claim is grounded in the cited `path:line` locations._",
         "",
     ]
     return "\n".join(lines)
@@ -335,7 +342,9 @@ def main() -> None:
 
     placed: dict[str, list] = {c: [] for c in COLUMNS}
     for t in ts:
-        column = t.get("column") or _existing_column(t["id"]) or "TODO"
+        column = (
+            t.get("column") or _existing_column(t["id"], t.get("date", TICKET_DATE)) or "TODO"
+        )
         placed[column].append((t, card_name(t)))
 
     # Regeneration is authoritative for *content* but must not resurrect a card
