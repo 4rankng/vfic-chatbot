@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,6 +101,41 @@ class CatalogRepository:
                 )
             )
         ).all()
+
+    async def external_api_project(self, slug: str) -> Any | None:
+        """One active, externally-integrated project resolved by slug.
+
+        The ``external_api`` payload travels with the row so the caller can
+        project the endpoint catalog without a second read. Page scope applies
+        exactly as it does for :meth:`list_active_projects`.
+        """
+        sql = (
+            "SELECT p.id, p.slug, p.name, p.external_api FROM projects p "
+            "WHERE p.slug = :s AND p.is_active AND p.external_api IS NOT NULL "
+            "AND p.external_api->>'enabled' = 'true'"
+        )
+        if self.page_project_ids is not None:
+            sql += " AND p.id = ANY(CAST(:pids AS uuid[]))"
+            return (
+                await self.db.execute(
+                    text(sql), {"s": slug, "pids": list(self.page_project_ids)}
+                )
+            ).first()
+        return (await self.db.execute(text(sql), {"s": slug})).first()
+
+    async def projects_with_external_api(self) -> list:
+        """Every active, externally-integrated project, Page-scoped."""
+        sql = (
+            "SELECT p.id, p.slug, p.name, p.external_api FROM projects p "
+            "WHERE p.is_active AND p.external_api IS NOT NULL "
+            "AND p.external_api->>'enabled' = 'true'"
+        )
+        if self.page_project_ids is not None:
+            sql += " AND p.id = ANY(CAST(:pids AS uuid[])) ORDER BY p.name"
+            return (
+                await self.db.execute(text(sql), {"pids": list(self.page_project_ids)})
+            ).all()
+        return (await self.db.execute(text(sql + " ORDER BY p.name"))).all()
 
     async def active_persona_body(self, provider: str | None = None) -> str | None:
         """Return the effective persona body for ``provider``, or None."""

@@ -2133,7 +2133,11 @@ async def test_rag_vacancy_salary_followup_scopes_knowledge_query_to_vacancy_thr
         timings={"lane": "agent"},
         decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9, recent_vacancy=True))
 
-    assert captured["allowed_tools"] == ("get_product_features", "search_knowledge")
+    assert captured["allowed_tools"] == (
+        "get_product_features",
+        "search_knowledge",
+        "call_project_api",
+    )
     assert "lG tràng duệ" in str(captured["lookup_query"])
     assert query in str(captured["lookup_query"])
     assert "required_tool" not in captured

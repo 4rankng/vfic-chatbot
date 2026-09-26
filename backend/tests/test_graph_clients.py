@@ -64,6 +64,7 @@ _DISPATCHED = {
     "recommend_jobs",
     "search_bus_timetable",
     "get_product_features",
+    "call_project_api",
 }
 
 

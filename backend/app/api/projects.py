@@ -21,6 +21,8 @@ from app.schemas.projects import (
     FeatureListResponse,
     FeatureOut,
     FeatureUpdate,
+    ProjectExternalApiOut,
+    ProjectExternalApiUpdate,
     ProjectFaqCreate,
     ProjectFaqOut,
     ProjectFaqResponse,
@@ -58,6 +60,7 @@ from app.services.knowledge.category_contracts import (
 )
 from app.services.knowledge.category_service import KnowledgeCategoryService
 from app.services.project import ProjectService
+from app.services.project.external_api import ProjectExternalApiService
 from app.shared.domain.errors import BadRequestError, ConflictError, RateLimitedError
 
 router = APIRouter(prefix="/knowledge/projects", tags=["projects"])
@@ -226,6 +229,27 @@ async def delete_project_single_page_external_source(
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> None:
     await ProjectService(db).delete_single_page_external_source(project_id, source_id, admin)
+
+
+@router.get("/{project_id}/external-api", response_model=ProjectExternalApiOut)
+async def get_project_external_api(
+    project_id: uuid.UUID,
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
+) -> ProjectExternalApiOut:
+    view = await ProjectExternalApiService(db).admin_view(project_id)
+    return ProjectExternalApiOut.model_validate(view)
+
+
+@router.put("/{project_id}/external-api", response_model=ProjectExternalApiOut)
+async def replace_project_external_api(
+    project_id: uuid.UUID,
+    body: ProjectExternalApiUpdate,
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
+) -> ProjectExternalApiOut:
+    view = await ProjectExternalApiService(db).replace(project_id, body, admin)
+    return ProjectExternalApiOut.model_validate(view)
 
 
 @router.get("/{project_id}/categories", response_model=CategoryCatalogOut)

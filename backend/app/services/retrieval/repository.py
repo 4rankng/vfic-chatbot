@@ -19,12 +19,23 @@ calls did.
 
 from __future__ import annotations
 
+import logging
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.project.external_api import (
+    ExternalApiOutcome,
+    ExternalApiPromptEntry,
+    ProjectExternalApiService,
+    parse_config,
+)
 from app.services.retrieval.catalog_repository import CatalogRepository, RecommendationQueries
 from app.services.retrieval.document_repository import DocumentRepository
 from app.services.retrieval.faq_repository import FaqRepository
 from app.services.retrieval.timetable_repository import TimetableRepository
+
+logger = logging.getLogger(__name__)
 
 
 class RetrievalRepository:
@@ -152,6 +163,78 @@ class RetrievalRepository:
 
     async def job_features_for_project(self, project_id) -> list:
         return await self._catalog.job_features_for_project(project_id)
+
+    async def project_external_api_catalog(self, project_slug: str | None) -> list[Any]:
+        """Prompt-ready guide for the configured external API in scope.
+
+        At most one entry: the resolved project's admin-written guide. Best-effort
+        — an unreadable row or a failed query yields ``[]`` (the prompt block is
+        then simply absent) so a turn never breaks because of an admin
+        integration.
+        """
+        try:
+            if project_slug:
+                row = await self._catalog.external_api_project(project_slug)
+                rows = [row] if row is not None else []
+            else:
+                rows = await self._catalog.projects_with_external_api()
+        except Exception as exc:  # noqa: BLE001 — prompt injection must not break a turn
+            logger.warning(
+                "project external api guide read failed error_type=%s", type(exc).__name__
+            )
+            return []
+        entries: list[Any] = []
+        for row in rows:
+            config = parse_config(row.external_api)
+            if not config.enabled or not config.guide.strip():
+                continue
+            entries.append(
+                ExternalApiPromptEntry(
+                    slug=str(row.slug), name=str(row.name), guide=config.guide
+                )
+            )
+        return entries
+
+    async def call_project_external_api(
+        self,
+        *,
+        project_slug: str | None,
+        method: str,
+        path: str,
+        params: dict | None,
+    ) -> ExternalApiOutcome:
+        """Resolve the project, then make exactly one call through its integration.
+
+        Project scope: an explicit slug wins; otherwise the only configured
+        project is used, several configured projects are reported as
+        ``ambiguous`` (the tool asks the candidate which one), and none is
+        ``not_configured``.
+        """
+        requested_path = (path or "").strip()
+        if project_slug:
+            row = await self._catalog.external_api_project(project_slug)
+            rows = [row] if row is not None else []
+            if not rows:
+                return ExternalApiOutcome("not_configured", None, requested_path, None, "")
+        else:
+            rows = await self._catalog.projects_with_external_api()
+            if not rows:
+                return ExternalApiOutcome("not_configured", None, requested_path, None, "")
+            if len(rows) > 1:
+                labels = ", ".join(str(candidate.name) for candidate in rows)
+                return ExternalApiOutcome(
+                    "ambiguous", None, requested_path, None, "", labels
+                )
+        row = rows[0]
+        service = ProjectExternalApiService(self.db)
+        runtime = await service.runtime(row.id)
+        if runtime is None:
+            return ExternalApiOutcome("not_configured", str(row.name), requested_path, None, "")
+        config, api_key = runtime
+        outcome = await service.invoke(
+            row.id, config, api_key, method=method, path=requested_path, params=params
+        )
+        return outcome._replace(project_label=str(row.name))
 
     async def income_summary_for_active_projects(self):
         return await self._catalog.income_summary_for_active_projects()

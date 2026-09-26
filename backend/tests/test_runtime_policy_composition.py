@@ -35,7 +35,9 @@ def test_runtime_policy_resolves_only_capability_owned_tools_and_neutral_prompt(
     policy = build_resolved_runtime_policy(active, persona_body=persona)
 
     assert policy is not None
-    assert policy.tool_registry.names == {"search_knowledge"}
+    # The knowledge capability grants the project external-API tool alongside
+    # retrieval: the map is not part of pack_contract_hash, so no re-pin.
+    assert policy.tool_registry.names == {"search_knowledge", "call_project_api"}
     assert not policy.tool_registry.allows("recommend_jobs")
     assert not policy.tool_registry.allows("search_user_memory")
     prompt = build_policy_system_prompt(policy)
@@ -193,7 +195,7 @@ async def test_manifest_composed_agent_passes_the_immutable_tool_registry():
 
     assert await run_manifest_composed_agent("hello", deps) == "ok"
     assert calls[0]["resolved_tool_registry"] == policy.tool_registry.names
-    assert calls[0]["allowed_tools"] == ("search_knowledge",)
+    assert calls[0]["allowed_tools"] == ("call_project_api", "search_knowledge")
 
 
 async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(monkeypatch):
@@ -213,8 +215,8 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
 
     class _Agent:
         async def agent(self, _text, **kwargs):
-            assert kwargs["resolved_tool_registry"] == {"search_knowledge"}
-            assert kwargs["allowed_tools"] == ("search_knowledge",)
+            assert kwargs["resolved_tool_registry"] == {"search_knowledge", "call_project_api"}
+            assert kwargs["allowed_tools"] == ("search_knowledge", "call_project_api")
             return "Thông tin có trong tài liệu."
 
     deps = SimpleNamespace(
@@ -392,7 +394,11 @@ async def test_non_recruitment_manifest_scopes_specific_vacancy_followup_to_know
         )
         == "knowledge reply"
     )
-    assert calls[0]["allowed_tools"] == ("get_product_features", "search_knowledge")
+    assert calls[0]["allowed_tools"] == (
+        "get_product_features",
+        "search_knowledge",
+        "call_project_api",
+    )
     assert "LG Tràng Duệ đang tuyển không?" in calls[0]["lookup_query"]
     assert calls[0]["lookup_query"].endswith("lương bao nhiêu?")
 

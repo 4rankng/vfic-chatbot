@@ -927,7 +927,7 @@ be shared by another Project.
   `search_knowledge` when an isolated retrieval session factory is available;
   EXPLORE turns remain RAG-only.
 - **Tools exposed to agent:** `list_active_jobs`, `search_knowledge`,
-  `search_user_memory`, `search_bus_timetable`.
+  `search_user_memory`, `search_bus_timetable`, `call_project_api` (see §14).
 - **Benchmarks:** `scripts/benchmark_rag.py` (golden-case scoring) and
   `scripts/capture_bus_timetable_golden.py`.
 
@@ -1020,3 +1020,34 @@ be shared by another Project.
 No external APM (no Sentry/Datadog). Structured JSON logs to stdout with
 `request_id` correlation via ContextVar + `RequestIdMiddleware`.
 `uvicorn.access` muted to WARNING.
+
+---
+
+## 14. Per-project external API (outbound, admin-configured)
+
+The bot can perform one business operation against an employer's own system — today, resending a
+password-reset OTP — without any vendor code path. See ADR-0011 for the decision record.
+
+- **Storage:** one nullable JSONB column `projects.external_api` (migration `0056`): `enabled`,
+  `base_url`, `auth_header`, `auth_scheme`, the AES-GCM sealed key (`v2:` bound to
+  `project-external-api:<project id>`), and the admin-written `guide` (≤ 16 000 characters).
+- **Admin surface:** `GET`/`PUT /api/v1/knowledge/projects/{id}/external-api` (admin only,
+  `backend/app/api/projects.py` → `app.services.project.external_api`). The key is write-only; the
+  read surface returns `{configured, preview}` only, and `ProjectOut` carries no field for it. An
+  audit row `project_external_api_updated` is written on every replace.
+- **UI:** `frontend/src/components/atomic-crm/projects/ProjectExternalApiPanel.tsx`, rendered by
+  `ProjectEdit` for admins. The guide can be pasted or loaded from a `.md`/`.txt` file.
+- **Prompt:** `runner._external_api_prompt_block` appends `=== API NGOÀI CỦA DỰ ÁN ===` (name, slug,
+  guide) to the system prompt of a **FOCUSED** turn. The base URL, auth header and key never enter
+  the prompt.
+- **Tool:** `call_project_api(method, path, params)` (`app/graph/tools/external_api.py`) →
+  `RetrievalRepository.call_project_external_api` → `ProjectExternalApiService.invoke`. Project
+  scope: the focused slug, else the only enabled project, else `ambiguous` (the tool asks the
+  candidate which project), else `not_configured`.
+- **Boundary:** the origin is fixed by the admin and the model supplies only a relative path
+  (`/`-prefixed, no scheme, no `//`, no `..`, no `?`/`#`); methods are `GET`/`POST`; params are a
+  flat `str → str` map (≤ 10 × 200 chars). 8 s timeout, 4 000-character response cap, no response
+  body on a status ≥ 400, and a 60 s identical-params dedupe window plus a 60/60 s ceiling on
+  non-GET calls (fail-open when Redis is down).
+- **Capability:** `call_project_api` is granted through the `knowledge` capability, which is not
+  covered by `pack_contract_hash` — no revision re-pin is required.

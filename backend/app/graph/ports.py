@@ -235,6 +235,21 @@ class GraphRetrievalPort(
     async def job_features_for_project(self, project_id: Any) -> list[Any]: ...
     async def income_summary_for_active_projects(self) -> list[Any]: ...
 
+    # Per-project external API integration (admin-managed). The catalog is the
+    # admin-written guide the agent reads; the call method resolves the project
+    # and performs exactly one outbound request against that project's fixed
+    # origin. Declared here because the external API is project surface, not a
+    # bounded-context knowledge query.
+    async def project_external_api_catalog(self, project_slug: str | None) -> list[Any]: ...
+    async def call_project_external_api(
+        self,
+        *,
+        project_slug: str | None,
+        method: str,
+        path: str,
+        params: dict | None,
+    ) -> Any: ...
+
 
 class FaqBypassPort(Protocol):
     """Deterministic, non-LLM FAQ short-circuit that runs before the agent node.

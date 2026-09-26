@@ -252,6 +252,26 @@ def _remaining(state: BotRunState) -> float:
     return state.deadline_at_epoch - time.time()
 
 
+def _external_api_prompt_block(catalog: list[Any]) -> str:
+    """Render the admin-written external API guide for the prompt.
+
+    The base URL, auth header and sealed key never enter the prompt: the model
+    only needs the guide (which endpoints exist and how to call them) plus the
+    tool contract, and the origin is fixed on this side.
+    """
+    lines = [
+        "=== API NGOÀI CỦA DỰ ÁN ===",
+        "Khi người dùng cần thao tác với hệ thống ngoài của dự án (ví dụ không nhận được mã "
+        "OTP đặt lại mật khẩu), hãy đọc hướng dẫn dưới đây rồi gọi "
+        "call_project_api(method, path, params) theo đúng bước cần làm. Chỉ dùng method GET "
+        "hoặc POST và path bắt đầu bằng /; chỉ nói lại đúng kết quả tool trả về.",
+    ]
+    for row in catalog:
+        lines.append(f"--- Dự án: {row.name} (slug: {row.slug}) ---")
+        lines.append(row.guide.strip())
+    return "\n".join(lines)
+
+
 def _zalo_for_conversation(deps: GraphDeps, conv):
     if hasattr(deps.zalo, "for_conversation"):
         return deps.zalo.for_conversation(conv)
@@ -473,6 +493,17 @@ async def _agent_turn(
                 "Không được dùng dữ liệu chi tiết của dự án khác. Câu trả lời cuối cùng "
                 "phải do bạn diễn đạt từ bằng chứng tool trả về."
             )
+            # One indexed read, no cache: an admin edit takes effect next turn.
+            # Optional enrichment — the concrete port always implements it, but
+            # the unit lane's runner doubles are bare objects, so a missing
+            # reader just leaves the block out instead of failing the turn.
+            catalog_reader = getattr(
+                deps.retrieval, "project_external_api_catalog", None
+            )
+            if catalog_reader is not None:
+                external_api_catalog = await catalog_reader(project_context.project_slug)
+                if external_api_catalog:
+                    system += "\n\n" + _external_api_prompt_block(external_api_catalog)
         else:
             system += (
                 "\n\n=== CHẾ ĐỘ KHÁM PHÁ ===\n"

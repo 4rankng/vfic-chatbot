@@ -55,11 +55,13 @@ EXPECTED_ROUTE_COUNTS = {
     "main": 3,
     "performance": 2,
     "personas": 11,  # adapter assignment GET/PUT replace project bulk assignment
-    "projects": 28,  # +4 single-page external-source-sync endpoints
+    # +4 single-page external-source-sync endpoints
+    # +2 project external-API endpoints (get / put)
+    "projects": 30,
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "eac0876be7c2b10f1b9952e33456fbc6b05e6167916895a981fb768781beee50"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "ccaeca80d7d8b1b14dbc36f9dd09d679e90b618d133c94c1f6004f1a49b5179e"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -104,7 +106,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # the provider response metadata (`finish_reason` / `stop_reason`) to tell a
     # generation cut at the output cap from a finished one. clients.py is a
     # provider-transport file, so both reads land in one reviewed row.
-    "provider_boundary": 82,
+    # +1: the per-project external API integration opens one egress site in
+    # app/services/project/external_api.py (ProjectExternalApiService._send's
+    # single `client.request`). The module imports `get_http_client`, so the
+    # whole file is classified provider transport; keeping the outbound call in
+    # one private method is what keeps this at one reviewed row.
+    "provider_boundary": 83,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -142,7 +149,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "3fbfbdad7aa8b5f2411388107bb30a82e906dd8046e8fda6e80073d54dd23200"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "7cb23af470ca285a82cd3da3a74e13fd01a1aa802739421cf4be326692e14250"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

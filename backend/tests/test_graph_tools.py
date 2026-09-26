@@ -23,6 +23,7 @@ from app.recruitment.domain.recommendation import ActiveProjectIncomeSummary, In
 from app.graph.tools import (
     TOOLS_REGISTRY,
     _format_knowledge_row,
+    call_project_api,
     compare_income,
     get_product_features,
     list_active_jobs,
@@ -33,6 +34,7 @@ from app.graph.tools import (
     search_user_memory,
 )
 from app.graph.income_contract import IncomeVerdict
+from app.services.project.external_api import ExternalApiOutcome
 
 # The tools package splits tool logic into domain modules; each holds its own
 # module-level binding of get_settings/cache helpers, so the cache fixtures
@@ -138,6 +140,7 @@ def test_tools_registry_exposes_expected_tools():
         "recommend_jobs",
         "search_bus_timetable",
         "get_product_features",
+        "call_project_api",
     }
     assert all(callable(fn) for fn in TOOLS_REGISTRY.values())
 
@@ -1325,3 +1328,135 @@ class TestCachedEmbed:
         assert isinstance(value, str)
         assert tools._shared._unpack_vector(value) == [0.5] * 8
         assert ttl == 60
+
+
+# ---------------------------------------------------------------------------
+# call_project_api — the per-project external API tool
+# ---------------------------------------------------------------------------
+
+
+class _StubExternalApiRetrieval:
+    """Records the port call and returns a canned outcome."""
+
+    def __init__(self, outcome) -> None:
+        self.outcome = outcome
+        self.calls: list[dict] = []
+
+    async def call_project_external_api(self, *, project_slug, method, path, params):
+        self.calls.append(
+            {
+                "project_slug": project_slug,
+                "method": method,
+                "path": path,
+                "params": params,
+            }
+        )
+        return self.outcome
+
+
+async def _call(retrieval, **kwargs) -> str:
+    return await call_project_api(
+        retrieval,
+        project_slug=kwargs.get("project_slug"),
+        method=kwargs.get("method", "POST"),
+        path=kwargs.get("path", "/api/v1/integration/password-reset/otp"),
+        params=kwargs.get("params"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_call_project_api_ok_hands_back_the_real_body() -> None:
+    retrieval = _StubExternalApiRetrieval(
+        ExternalApiOutcome(
+            "ok",
+            "LG Display",
+            "/api/v1/integration/password-reset/otp",
+            200,
+            '{"status":"success","data":{"otp_sent":true,"session_id":"P0h8"}}',
+        )
+    )
+
+    result = await _call(retrieval, params={"phone": "0987654321"})
+
+    assert "Kết quả từ hệ thống ngoài (LG Display):" in result
+    assert '"otp_sent":true' in result
+    assert "không thêm thông tin không có trong đó" in result
+    assert retrieval.calls == [
+        {
+            "project_slug": None,
+            "method": "POST",
+            "path": "/api/v1/integration/password-reset/otp",
+            "params": {"phone": "0987654321"},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_call_project_api_error_says_it_could_not_do_it() -> None:
+    retrieval = _StubExternalApiRetrieval(
+        ExternalApiOutcome("error", "LG Display", "/v1/x", 500, "", "status_500")
+    )
+
+    result = await _call(retrieval, project_slug="lg-display")
+
+    assert "HTTP 500" in result
+    assert "status_500" in result
+    assert "chuyển chuyên viên hỗ trợ" in result
+
+
+@pytest.mark.asyncio
+async def test_call_project_api_invalid_request_points_back_at_the_guide() -> None:
+    retrieval = _StubExternalApiRetrieval(
+        ExternalApiOutcome("invalid_request", "LG Display", "https://evil/x", None, "", "path_invalid")
+    )
+
+    result = await _call(retrieval, path="https://evil/x")
+
+    assert "Yêu cầu không hợp lệ (path_invalid)" in result
+    assert "API NGOÀI CỦA DỰ ÁN" in result
+
+
+@pytest.mark.asyncio
+async def test_call_project_api_rate_limited_asks_the_user_to_wait() -> None:
+    retrieval = _StubExternalApiRetrieval(
+        ExternalApiOutcome("rate_limited", None, "/v1/x", None, "")
+    )
+
+    result = await _call(retrieval)
+
+    assert "trong vòng 1 phút" in result
+
+
+@pytest.mark.asyncio
+async def test_call_project_api_ambiguous_lists_candidates() -> None:
+    retrieval = _StubExternalApiRetrieval(
+        ExternalApiOutcome("ambiguous", None, "/v1/x", None, "", "LG Display, Pegatron")
+    )
+
+    result = await _call(retrieval)
+
+    assert "chưa xác định dự án (LG Display, Pegatron)" in result
+    assert "project_slug" in result
+
+
+@pytest.mark.asyncio
+async def test_call_project_api_not_configured_keeps_the_handoff() -> None:
+    retrieval = _StubExternalApiRetrieval(
+        ExternalApiOutcome("not_configured", None, "/v1/x", None, "")
+    )
+
+    result = await _call(retrieval)
+
+    assert "chưa cấu hình API ngoài" in result
+
+
+@pytest.mark.asyncio
+async def test_call_project_api_missing_path_never_calls_the_port() -> None:
+    retrieval = _StubExternalApiRetrieval(
+        ExternalApiOutcome("ok", "LG Display", "/v1/x", 200, "body")
+    )
+
+    result = await _call(retrieval, path="   ")
+
+    assert "Thiếu đường dẫn API" in result
+    assert retrieval.calls == []

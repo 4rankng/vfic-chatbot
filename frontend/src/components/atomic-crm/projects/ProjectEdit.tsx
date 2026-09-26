@@ -12,6 +12,7 @@ import { TextInput } from "@/components/admin/text-input";
 import { BooleanInput } from "@/components/admin/boolean-input";
 import { Button } from "@/components/ui/button";
 import { useRoleActions } from "../hooks/useRoleActions";
+import { ProjectExternalApiPanel } from "./ProjectExternalApiPanel";
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
@@ -114,6 +115,7 @@ const ProjectEditContent = () => {
         </section>
 
         <div className="project-detail-stack mt-4">
+          {isAdmin && <ProjectExternalApiPanel projectId={String(project.id)} />}
           <ProjectKnowledgePanel
             project={project}
             editable={canEdit}

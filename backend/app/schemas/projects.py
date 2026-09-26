@@ -187,3 +187,43 @@ class ProjectFaqUpdate(BaseModel):
     question_variants: list[str] | None = Field(default=None, max_length=50)
     required_terms: list[str] | None = Field(default=None, max_length=50)
     forbidden_terms: list[str] | None = Field(default=None, max_length=50)
+
+
+# --- Per-project external API integration (admin only) ---
+#
+# The integration is reachable only through these routes; ``ProjectOut`` carries
+# no field for it, so the sealed key never travels on the project CRUD surface.
+
+
+class ProjectExternalApiKeyStatus(BaseModel):
+    """Status projection of the stored key — never the value."""
+
+    configured: bool
+    preview: str | None = None
+
+
+class ProjectExternalApiOut(BaseModel):
+    enabled: bool
+    base_url: str = ""
+    auth_header: str = ""
+    auth_scheme: str = ""
+    guide: str = ""
+    api_key: ProjectExternalApiKeyStatus
+
+
+class ProjectExternalApiUpdate(BaseModel):
+    """Full replace of the stored config; ``api_key`` is tri-state.
+
+    ``None``/absent keeps the sealed value, ``""`` clears it, anything else
+    replaces it. Field-level rules (URL scheme, guide bounds) live in
+    ``ExternalApiConfig`` so the machine codes stay in one place.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    base_url: str = ""
+    auth_header: str = "Authorization"
+    auth_scheme: str = "Bearer"
+    guide: str = ""
+    api_key: str | None = None

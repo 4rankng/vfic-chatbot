@@ -129,7 +129,11 @@ _INTENT_ROUTES = {
     "profile_update": ("profile", (), "profile_terms"),
     "timetable": ("structured_lookup", ("search_bus_timetable",), "timetable_terms"),
     "contact": ("knowledge_lookup", ("search_knowledge",), "contact_terms"),
-    "faq_detail": ("knowledge_lookup", ("get_product_features", "search_knowledge"), "job_detail_terms"),
+    "faq_detail": (
+        "knowledge_lookup",
+        ("get_product_features", "search_knowledge", "call_project_api"),
+        "job_detail_terms",
+    ),
     "out_of_scope": ("safe_redirect", (), "off_domain_terms"),
     "general": ("agent", (), "fallback"),
 }
