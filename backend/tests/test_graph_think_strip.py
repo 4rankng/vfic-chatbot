@@ -1,4 +1,4 @@
-"""Unit tests for graph/safety.py — provider reasoning stripping.
+"""Unit tests for graph/think_strip.py — provider reasoning stripping.
 
 The pre-send answer review layer that used to live in ``graph/safety.py``
 (``fast_safety_filter``, ``DeterministicReplyPolicy``, ``truncate_for_chat``)
@@ -10,7 +10,7 @@ candidate, so every user-visible reply passes through
 
 import pytest
 
-from app.graph.safety import strip_think_reasoning, visible_offset
+from app.graph.think_strip import strip_think_reasoning, visible_offset
 
 
 def test_strip_think_reasoning_removes_complete_block():

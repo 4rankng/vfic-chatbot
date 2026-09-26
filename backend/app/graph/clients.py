@@ -45,7 +45,7 @@ from app.graph.reasoning_compat import (
     _extract_returned_reasoning,
     _reasoning_chat_class,
 )
-from app.graph.safety import strip_think_reasoning
+from app.graph.think_strip import strip_think_reasoning
 from app.graph.schemas import _dispatch_tool
 from app.graph.usage import record_token_usage as _record_token_usage
 

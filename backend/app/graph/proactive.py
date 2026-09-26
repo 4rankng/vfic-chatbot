@@ -20,7 +20,7 @@ from typing import Any, TypedDict
 
 from app.graph.message_values import delivery_is, sender_is
 from app.graph.ports import SendOutcome
-from app.graph.safety import strip_think_reasoning
+from app.graph.think_strip import strip_think_reasoning
 from app.graph.types import GraphDeps, TurnOutcome, _now, _speaker
 from app.recruitment.application.ports import ProactiveStatePort
 

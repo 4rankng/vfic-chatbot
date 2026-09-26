@@ -8,7 +8,7 @@
                                 no  -> log_suppressed
 
 The reply boundary is ``_finalize_user_visible_reply`` -> ``strip_think_reasoning``
-(``graph/safety.py``): the answer is shipped exactly as the agent generated it —
+(``graph/think_strip.py``): the answer is shipped exactly as the agent generated it —
 the only transformation is dropping an inline provider thinking block so it never
 reaches the candidate. The former answer-review layer (regex cleaning,
 truncation, empty-reply verdicts, the ``safety_verdict`` trace) and the LLM
@@ -68,7 +68,7 @@ from app.recruitment.domain.provider import (
     provider_from_conversation,
     recipient_from_conversation,
 )
-from app.graph.safety import strip_think_reasoning, visible_offset
+from app.graph.think_strip import strip_think_reasoning, visible_offset
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.shared.domain.text import normalize_vietnamese_text
