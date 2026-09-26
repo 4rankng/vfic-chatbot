@@ -21,8 +21,8 @@ from redis import Redis
 from sqlalchemy.engine import URL, make_url
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_ASYNC_URL = "postgresql+asyncpg://vfic:vfic@127.0.0.1:5432/vfic_e2e"
-DEFAULT_SYNC_URL = "postgresql+psycopg://vfic:vfic@127.0.0.1:5432/vfic_e2e"
+DEFAULT_ASYNC_URL = "postgresql+asyncpg://vfic:vfic@127.0.0.1:5443/vfic_e2e"
+DEFAULT_SYNC_URL = "postgresql+psycopg://vfic:vfic@127.0.0.1:5443/vfic_e2e"
 DEFAULT_ADMIN_EMAIL = "admin@example.org"
 DEFAULT_ADMIN_PASSWORD = "Universal-E2E-Only-42!"
 LOOPBACK_DATABASE_HOSTS = {"127.0.0.1", "localhost", "::1"}

@@ -26,7 +26,7 @@ db:
 	@echo "==> Waiting for Postgres..."
 	@timeout 60 sh -c 'until [ "$$(docker inspect --format "{{.State.Health.Status}}" "$$(docker compose -f docker-compose.dev.yml ps -q postgres)" 2>/dev/null)" = healthy ]; do sleep 1; done' || echo "  Postgres slow to start"
 	@if [ ! -f .env ]; then \
-		sed -e 's#@postgres:#@localhost:#g' -e 's#redis://redis:6379#redis://localhost:6382#g' .env.example > .env; \
+		sed -e 's#@postgres:#@localhost:5443:#g' -e 's#redis://redis:6379#redis://localhost:6382#g' .env.example > .env; \
 		echo "==> Created backend/.env from .env.example (localhost dev URLs). Set API keys to exercise the bot."; \
 	fi
 	@echo "==> Applying Alembic baseline (idempotent)..."

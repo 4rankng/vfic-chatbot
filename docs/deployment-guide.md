@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last updated:** 2026-09-24
+**Last updated:** 2026-09-26
 **Production host:** `bot.tingting.vip` (DigitalOcean droplet, 2 vCPU / ~4 GB RAM)
 **Stack path:** `/opt/vfic` · **Git remote:** `git@github.com:4rankng/vfic-chatbot.git` (`main`)
 
@@ -71,12 +71,14 @@ build + push both images → blue/green cutover.
 
 ### Full deploy (`make deploy`)
 1. `release-check` — a clean committed worktree, exactly one Alembic head with
-   §4 below matching it, `uv lock --check`, then backend lint/tests + the full
-   integration suite (harness smoke first as a fast-fail canary, then every
-   `-m integration` file with `--durations=25`), frontend
-   lint/typecheck/registry/scoped coverage/build + desktop/mobile Playwright,
-   and the offline golden retrieval-correctness check. Every lane runs on the
-   deploying machine — there is **no CI** in the release path (see K-13 in
+   §4 below matching it, `uv lock --check`, then backend lint + unit tests,
+   frontend lint/typecheck/registry/scoped coverage/build, and the offline
+   golden retrieval-correctness check (the latency SLO is not evaluated —
+   a dev machine has no production telemetry). The gate is **unit-only** (since
+   2026-09-26): the backend integration suite and desktop/mobile Playwright
+   remain manual lanes and are no longer deploy blockers, so a deploy never
+   depends on local dev infrastructure. Every lane runs on the deploying
+   machine — there is **no CI** in the release path (see K-13 in
    `docs/project-roadmap.md`). Stops before any image is pushed if a check
    fails.
 2. `cd frontend && make push` — buildx AMD64, tag `:latest` + `:<git-sha>`, push.
@@ -428,12 +430,13 @@ procedure. Summary of the available targets:
 
 - **Dev compose** (`backend/docker-compose.dev.yml`): Postgres+pgvector +
   Redis + Adminer only. Backend + frontend run on host for hot-reload.
-  - Postgres `:5432`, Redis `:6382` (6379 belongs to sibling payroll project),
+  - Postgres `:5443` (5432 belongs to the kiosk-app project's postgres),
+    Redis `:6382` (6379 belongs to sibling payroll project),
     Adminer `:8082` (8081 collides with `tuyennhanvien`). Dev Redis has no
     password.
 - `make db` (backend) starts the dev stack, waits healthy, auto-creates
   `backend/.env` from `.env.example` (host rewrites: `postgres:` →
-  `localhost:`, `redis://redis:6379` → `redis://localhost:6382`), runs
+  `localhost:5443`, `redis://redis:6379` → `redis://localhost:6382`), runs
   `alembic upgrade head`, creates the dev admin.
 - Backend: `uvicorn app.main:app --reload --port 8000`.
 - Frontend: `npm run dev --port 5173 --strictPort` (Vite proxies `/api`,
@@ -452,7 +455,7 @@ procedure. Summary of the available targets:
 |---|---|
 | 5173 | Frontend (Vite) |
 | 8000 | Backend (uvicorn) |
-| 5432 | Postgres (dev) |
+| 5443 | Postgres (dev) — **not** 5432 (kiosk-app's postgres) |
 | 6382 | Redis (dev) — **not** 6379 (payroll) |
 | 8082 | Adminer (dev) |
 | 8788 | Zalo mock (dev) |

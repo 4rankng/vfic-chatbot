@@ -168,10 +168,14 @@ There is no CI. `make release-check` (repo root) is the whole gate set, and it m
 | Lane | What it runs |
 |---|---|
 | backend unit | `ruff check .` and `pytest -m "not integration"` in `backend/`. |
-| backend integration | The integration harness smoke as a fast-fail canary, then the full suite (`pytest -m integration`) against local PostgreSQL 16 + pgvector and Redis. |
 | frontend quality | `npm run lint`, `npm run typecheck`, `npm run registry:check`, the app unit suite, the changed-surface coverage gate, and `npm run build` in `frontend/`. |
-| functional E2E | Playwright on both the `chromium` and `Mobile Chrome` projects against a disposable backend + vite server (`reuseExistingServer: false`, so ports 8000/4173 must be free). |
-| release gate | Offline golden-result generation with `scripts/benchmark_rag.py --gold` and evaluation with `scripts/release_gate_check.py`. The latency SLO gate reports `not evaluated` locally — there is no production telemetry from a dev machine. |
+| release gate | Offline golden-result generation with `scripts/benchmark_rag.py --gold` and evaluation with `scripts/release_gate_check.py`, which the gate runs with `RELEASE_GATE_LATENCY_SLO_ENABLED=false` — the latency SLO needs production telemetry a dev machine never has, so it reports `not evaluated` and the golden pass rate is the enforced check. |
+
+The backend integration suite (`pytest -m integration`) and functional Playwright
+E2E remain available as **manual lanes** (see above for their startup commands)
+but are no longer part of the pre-deploy gate: since 2026-09-26 the gate runs
+unit-only so a deploy never depends on local dev infrastructure (local
+PostgreSQL/Redis ports being free, no local web server).
 
 `make deploy` additionally runs the blue/green smoke turn (`scripts/smoke_turn.py`) against the live new colour before the Caddy flip, and `scripts/turn_pipeline_check.py` after it.
 

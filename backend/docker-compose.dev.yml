@@ -14,7 +14,10 @@ services:
       POSTGRES_USER: vfic
       POSTGRES_PASSWORD: vfic
       POSTGRES_DB: vfic
-    ports: ["127.0.0.1:5432:5432"]
+    # Host port 5443 (not 5432) to avoid clashing with the kiosk-app project's
+    # postgres on the same dev machine; 5440-5442 belong to sibling stacks too.
+    # backend/.env's DATABASE_URL must match (make db writes localhost:5443).
+    ports: ["127.0.0.1:5443:5432"]
     volumes: [vfic_dev_pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vfic -d vfic"]

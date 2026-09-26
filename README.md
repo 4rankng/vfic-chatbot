@@ -36,8 +36,9 @@ Then open `http://localhost:5173` and log in with `admin@vfic.dev` /
 
 ## Verification and deployment
 
-- `make release-check` — the pre-deploy gate (lint, tests, integration
-  suite, frontend build + Playwright, golden correctness check).
+- `make release-check` — the pre-deploy gate (lint, unit tests, frontend
+  build, golden correctness check); the integration suite and Playwright E2E
+  run manually when wanted.
 - `make deploy` — blue/green cutover, smoke-gated; `make rollback` flips
   back in ~1s. Read [`docs/deployment-guide.md`](docs/deployment-guide.md)
   in full before any deploy.

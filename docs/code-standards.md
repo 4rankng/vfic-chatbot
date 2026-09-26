@@ -301,11 +301,12 @@ directly, but treat changes with the weight of an upstream fork:
 
 ## Gate notes
 - **There is no CI.** Every gate runs locally, on this machine, orchestrated by
-  the repo-root `make release-check`: backend unit (ruff + pytest), backend
-  integration smoke, the full backend integration suite, frontend quality
-  (lint/typecheck/registry/unit/coverage/build), functional Playwright E2E
-  (chromium + Mobile Chrome), `uv lock --check`, exactly one Alembic head with
-  `docs/deployment-guide.md` §4 matching it, and the offline golden release gate.
+  the repo-root `make release-check`: backend unit (ruff + pytest), frontend
+  quality (lint/typecheck/registry/unit/coverage/build), `uv lock --check`,
+  exactly one Alembic head with `docs/deployment-guide.md` §4 matching it, and
+  the offline golden release gate. The backend integration suite and Playwright
+  E2E are manual lanes only (2026-09-26) so a deploy never depends on local dev
+  infrastructure.
 - `make deploy` runs `release-check` first and refuses to build or push an image
   when any gate fails. Run it directly to validate a change without deploying.
 - The GitHub Actions workflows (`quality-gates.yml`, `openwiki-update.yml`) were
