@@ -176,7 +176,7 @@ moved.
 | `backend/app/graph/factories.py` | `build_deps(db, ...)` — resolves admin-managed MiniMax/OpenRouter/Zalo creds. |
 | `backend/app/graph/clients.py` | MiniMax / OpenRouter LLM clients; `_chat_for_role` selects one configured provider per client; `_llm_call_with_retry` retries one 429 then fails over across enabled providers; `GeminiEmbedder`. |
 | `backend/app/graph/tools.py` | `TOOL_SCHEMAS` + `_dispatch_tool`. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
-| `backend/app/graph/safety.py` | `fast_safety_filter`, `parse_verdict`, `build_retry_prompt` — structural cleaning only; an empty result suppresses the turn. |
+| `backend/app/graph/safety.py` | `strip_think_reasoning` — the only user-visible transform at the reply boundary: drops an inline provider ` thinking…` block (complete or truncated) so reasoning never reaches a candidate. The former answer-review layer (`fast_safety_filter`, `DeterministicReplyPolicy`, `truncate_for_chat`) was removed on purpose; the answer ships as generated. |
 | `backend/app/graph/llm_semaphore.py` | Redis-backed cross-process LLM concurrency semaphore; `LLMThrottled`. |
 | `backend/app/api/projects.py` | Project CRUD plus single-page knowledge, 12-category replacement, clear, cutover, and rollback endpoints. |
 | `backend/app/services/zalo_sender.py` | `ZaloChannelSender` facade — dispatches per `conv.zalo_channel`. |

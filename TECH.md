@@ -96,7 +96,7 @@ with fakes (no API keys needed).
 ```
 load_conversation_state → typing → agent
    agent (error)  → error_reply
-   agent (ok)     → finalize_user_visible_reply        (DeterministicReplyPolicy: regex/length)
+   agent (ok)     → finalize_user_visible_reply        (strip provider thinking only)
    finalize_user_visible_reply → pre_send_guard → ownership_ok?
                            yes → dispatch_claimed_message → record_bot_outcome
                            no  → log_suppressed

@@ -387,8 +387,8 @@ sequenceDiagram
     end
     end
 
-    Note over WK: ── reply policy ──
-    WK->>WK: ReplyPolicyPort.finalize<br/>(DeterministicReplyPolicy by default;<br/>strip think/code/markdown, truncate)<br/>blocklist_hit → deterministic fallback
+    Note over WK: ── reply boundary ──
+    WK->>WK: _finalize_user_visible_reply<br/>strip_think_reasoning only — the answer<br/>ships as generated (no rewrite, no truncation)
 
     rect rgb(245, 235, 235)
     Note over WK,DB: ── mode policy guard layer 4/4 (closes TOCTOU) ──
@@ -563,7 +563,7 @@ load_conversation_state -> typing -> direct_context?
       vacancy-thread follow-up -> combined vacancy query + current question -> KB answer until a newer named topic boundary
       other agent intent -> scoped tool-calling LLM
       agent (error) -> error_reply
-      all user-visible outputs -> ReplyPolicyPort.finalize (DeterministicReplyPolicy by default) -> combine_for_presend
+      all user-visible outputs -> _finalize_user_visible_reply (strip provider thinking) -> combine_for_presend
   combine_for_presend -> pre_send_guard -> ownership_ok?
                             yes -> send_message -> log_sent
                             no  -> log_suppressed
@@ -572,8 +572,7 @@ load_conversation_state -> typing -> direct_context?
 - **State:** `BotRunState` dataclass (`graph/types.py:21`).
 - **Dependencies:** injected via `GraphDeps` (`graph/types.py:32`), wired by
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
-  MiniMax/OpenRouter/Zalo credentials from `integration_settings` and installs
-  `DeterministicReplyPolicy` as the graph-level `ReplyPolicyPort`.
+  MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
 - **Vacancy authority:** generic requests such as “đang tuyển gì?” bypass FAQ
   and focused direct-context resolution, so vacancy turns go straight to
   required `list_active_jobs(top_k=10)` with no filters. That tool returns a
@@ -593,10 +592,10 @@ load_conversation_state -> typing -> direct_context?
   benefits, and other details stay scoped to the same company evidence.
   `search_knowledge` remains the path for document facts. Any LLM-generated
   user-visible reply from the direct-context or routed RAG/agent lanes passes
-  through the graph-level reply-policy port before persistence/delivery; the
-  default concrete policy is `DeterministicReplyPolicy`, which is replaceable at
-  the composition root without changing routing, persistence, or channel
-  adapters. Template replies, FAQ bypass answers, and evidence blocks remain
+  through the graph-level reply boundary
+  (`runner._finalize_user_visible_reply`) before persistence/delivery, whose only
+  transform is `strip_think_reasoning` — the answer is otherwise shipped exactly
+  as generated. Template replies, FAQ bypass answers, and evidence blocks remain
   verbatim.
   An empty catalog does not block a real answer from published KB evidence for a
   specific vacancy question.

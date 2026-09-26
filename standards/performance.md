@@ -54,10 +54,14 @@
 - **Output cap** (`_agent_max_tokens`, default unset): measured — a 400-token cap
   on the token plans still finished with `finish_reason=stop`, cutting a MiniMax
   turn from 8,489 ms to ~6,100 ms; 250 truncated mid-answer on MiniMax.
-- **First useful bubble arrives long before the turn completes:** with streaming,
-  one complete 420-char bubble is ready at 2.1–3.0 s on the current model — the
-  turn only feels like 8 s because the reply is sent after full completion. No
-  streaming exists yet (`ainvoke` only), so this is the largest remaining win.
+- **Progressive delivery is live** (`llm_progressive_send`, default on): the
+  agent call streams, and the first complete, substance-gated, grounded bubble is
+  sent while the rest of the answer is still generating; the remainder follows
+  through the unchanged claim→dispatch path. Guard rails: the durable outbox
+  dispatcher is required, a lost ownership claim sends nothing, grounding and the
+  reasoning strip run per bubble, and the remainder is a true suffix of the raw
+  stream (never sent twice). Any doubt falls back to the single-message path.
+  One admin toggle disables it.
 - **Verify the streaming path live before any deploy that touches the LLM path:**
   `backend/scripts/verify_streaming_turn.py` exercises the app's own client
   builder + agent loop against a real provider and fails on a broken stream, a
