@@ -25,7 +25,7 @@ risk, so current inversions are frozen and removed slice by slice.
 | Conversation and messaging | inbound commands, ownership, message/outbox state | webhook/provider/realtime transports |
 | Channels and outbound | neutral delivery contract and provider selection | conversation policy, graph policy |
 | Recruitment | leads, personas, recommendations, follow-ups, Job queries | derived Job writes, LLM provider objects |
-| Agent runtime | bot-turn orchestration, reply/safety/grounding policy | concrete services and provider credentials |
+| Agent runtime | bot-turn orchestration, grounding policy | concrete services and provider credentials |
 | Reporting | read models and projections | write-side business decisions |
 
 ### Production package map
@@ -113,9 +113,11 @@ Any route or dispatch change requires an explicit snapshot review.
   Public client events include `join/leave conversation`, `join/leave lead`,
   `message.created`, and `lead.updated`.
 - `GraphDeps` fields: `db`, `agent`, `embedder`, `zalo`, `conversation`,
-  `retrieval`, `reply_policy`, `safety`, `lead`, `make_retrieval`, `faq_bypass`,
-  `followup_allowed`, `persist`, `enrich_oa_profile`, `runtime_policy`, and
-  `direct_context`. Protocols live in `app/graph/ports.py`.
+  `retrieval`, `lead`, `lead_gender`, `make_retrieval`, `faq_bypass`,
+  `followup_allowed`, `persist`, `enrich_oa_profile`, `recipient_unreachable`,
+  `runtime_policy`, `direct_context`, `proactive_state`, `delivery_statuses`,
+  `turn_decisions`, and `progressive_send`. The dataclass lives in
+  `app/graph/types.py`; Protocols live in `app/graph/ports.py`.
 - Frontend resource names are frozen by
   `capabilities/static-recruitment-runtime.test.ts`; the data provider is a
   transport adapter and feature code consumes application ports.

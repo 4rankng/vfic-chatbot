@@ -313,15 +313,15 @@ Sourced from `backend/.env.example` (committed template) and
 | `MINIMAX_API_KEY` | MiniMax API key. |
 | `MINIMAX_BASE_URL` | `https://api.minimax.io/v1`. |
 | `MINIMAX_AGENT_MODEL` | `MiniMax-M2.7-highspeed`. |
-| `MINIMAX_SAFETY_MODEL` | `MiniMax-M2.5-highspeed`. |
+| `MINIMAX_EXTRACTOR_MODEL` | `MiniMax-M2.5-highspeed`. Model for post-reply candidate extraction. |
 | `MINIMAX_DIGEST_MODEL` | Background KB digestion model. |
 | `MINIMAX_REQUEST_TIMEOUT` | 60s. |
 | `OPENROUTER_ENABLE` | Enables OpenRouter as a selectable generation provider. |
 | `OPENROUTER_API_KEY` | OpenRouter API key. |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1`. |
-| `OPENROUTER_AGENT_MODEL` / `OPENROUTER_SAFETY_MODEL` / `OPENROUTER_DIGEST_MODEL` | Default `deepseek/deepseek-v4-flash`. |
+| `OPENROUTER_AGENT_MODEL` / `OPENROUTER_EXTRACTOR_MODEL` / `OPENROUTER_DIGEST_MODEL` | Default `deepseek/deepseek-v4-flash`. |
 | `OPENROUTER_REQUEST_TIMEOUT` / `OPENROUTER_DIGEST_TIMEOUT` | 60s / 180s. |
-| `CUSTOM_LLM_ENABLE` / `CUSTOM_LLM_API_KEY` / `CUSTOM_LLM_BASE_URL` / `CUSTOM_LLM_AGENT_MODEL` / `CUSTOM_LLM_SAFETY_MODEL` / `CUSTOM_LLM_FAST_MODEL` / `CUSTOM_LLM_LABEL` / `CUSTOM_LLM_REQUEST_TIMEOUT` | Third provider slot (any OpenAI-compatible endpoint, e.g. Xiaomi MiMo). Env is bootstrap fallback only — runtime prefers the settings page. |
+| `CUSTOM_LLM_ENABLE` / `CUSTOM_LLM_API_KEY` / `CUSTOM_LLM_BASE_URL` / `CUSTOM_LLM_AGENT_MODEL` / `CUSTOM_LLM_FAST_MODEL` / `CUSTOM_LLM_LABEL` / `CUSTOM_LLM_REQUEST_TIMEOUT` | Third provider slot (any OpenAI-compatible endpoint, e.g. Xiaomi MiMo). Env is bootstrap fallback only — runtime prefers the settings page. |
 | `LLM_DEFAULT_PROVIDER` | `minimax` / `openrouter` / `custom` — where a turn starts. On quota or rate-limit exhaustion the turn fails over to the next enabled provider; only when every enabled provider is exhausted does the turn get suppressed (logged for engineers, no customer message). |
 | `GEMINI_API_KEY` | Embedding fallback only. |
 | `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-2`. |

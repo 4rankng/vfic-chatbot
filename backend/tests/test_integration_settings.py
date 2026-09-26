@@ -47,12 +47,12 @@ class _Settings:
     minimax_enable = True
     minimax_base_url = "https://api.minimax.io/v1"
     minimax_agent_model = "MiniMax-M2.7-highspeed"
-    minimax_safety_model = "MiniMax-M2.5-highspeed"
+    minimax_extractor_model = "MiniMax-M2.5-highspeed"
     openrouter_api_key = ""
     openrouter_enable = False
     openrouter_base_url = "https://openrouter.ai/api/v1"
     openrouter_agent_model = "deepseek/deepseek-v4-flash"
-    openrouter_safety_model = "deepseek/deepseek-v4-flash"
+    openrouter_extractor_model = "deepseek/deepseek-v4-flash"
     openrouter_digest_model = "deepseek/deepseek-v4-flash"
     openrouter_embedding_model = "openai/text-embedding-3-large"
     embedding_dim = 3072
@@ -63,7 +63,6 @@ class _Settings:
     custom_llm_api_key = ""
     custom_llm_base_url = ""
     custom_llm_agent_model = ""
-    custom_llm_safety_model = ""
     custom_llm_fast_model = ""
     # Meta / Facebook app credentials (env defaults — DB overrides per field).
     meta_app_id = ""
@@ -477,12 +476,12 @@ async def test_minimax_resolves_llm_knob_defaults_when_nothing_stored():
 
     cfg = await service.resolve_minimax()
     assert cfg.reasoning_mode == "off"
-    assert cfg.agent_max_tokens == 800
+    assert cfg.agent_max_tokens == 0
     assert cfg.progressive_send is True
 
     view = await service.admin_minimax_view()
     assert view["llm_reasoning_mode"] == "off"
-    assert view["llm_agent_max_tokens"] == 800
+    assert view["llm_agent_max_tokens"] == 0
     assert view["llm_progressive_send"] is True
 
 
@@ -512,8 +511,8 @@ async def test_minimax_stored_llm_knobs_override_defaults():
     ("stored", "expected"),
     [
         ("0", 0),  # 0 means "no cap" and must survive resolution untouched
-        ("-5", 800),  # a malformed/negative row falls back to the default
-        ("not-a-number", 800),
+        ("-5", 0),  # a malformed/negative row falls back to the no-cap default
+        ("not-a-number", 0),
     ],
 )
 async def test_minimax_agent_max_tokens_edge_stored_values(stored, expected):
@@ -549,7 +548,7 @@ async def test_minimax_schemas_round_trip_llm_knobs():
     service = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
     out = MinimaxIntegrationSettingsOut.model_validate(await service.admin_minimax_view())
     assert out.llm_reasoning_mode == "off"
-    assert out.llm_agent_max_tokens == 800
+    assert out.llm_agent_max_tokens == 0
     assert out.llm_progressive_send is True
 
 
@@ -801,7 +800,6 @@ async def test_custom_llm_admin_view_is_unconfigured_without_env_or_db():
     assert view["custom_llm_api_key"] == {"configured": False, "preview": None}
     assert view["custom_llm_base_url"] == ""
     assert view["custom_llm_agent_model"] == ""
-    assert view["custom_llm_safety_model"] == ""
     assert view["custom_llm_fast_model"] == ""
     assert view["custom_llm_usable"] is False
     assert view["custom_llm_enable"] is False
@@ -816,7 +814,6 @@ async def test_custom_llm_admin_view_env_fallback_and_usable():
         custom_llm_api_key = "sk-mimo-secret-token"
         custom_llm_base_url = "https://api.xiaomi.example/v1"
         custom_llm_agent_model = "mimo-7b"
-        custom_llm_safety_model = ""
         custom_llm_fast_model = ""
 
     service = IntegrationSettingsService(_ReadDb([]), settings=_CustomSettings())
@@ -826,8 +823,7 @@ async def test_custom_llm_admin_view_env_fallback_and_usable():
     assert view["custom_llm_api_key"] == {"configured": True, "preview": "20 ký tự"}
     assert view["custom_llm_base_url"] == "https://api.xiaomi.example/v1"
     assert view["custom_llm_agent_model"] == "mimo-7b"
-    # Blank safety/fast models inherit the agent model: one model id is enough.
-    assert view["custom_llm_safety_model"] == "mimo-7b"
+    # Blank fast model inherits the agent model: one model id is enough.
     assert view["custom_llm_usable"] is True
 
 

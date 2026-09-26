@@ -412,7 +412,6 @@ class _CustomLlmService:
             "custom_llm_api_key": {"configured": True, "preview": "20 ký tự"},
             "custom_llm_base_url": "https://api.xiaomi.example/v1",
             "custom_llm_agent_model": "mimo-7b",
-            "custom_llm_safety_model": "mimo-7b",
             "custom_llm_fast_model": "",
             "custom_llm_label": "Dự phòng",
             "custom_llm_enable": True,

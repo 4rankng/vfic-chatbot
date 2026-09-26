@@ -1,9 +1,9 @@
-"""Proactive follow-up turn — LLM-decided nudge through the safety gate.
+"""Proactive follow-up turn — LLM-decided nudge.
 
-Mirrors the reactive pipeline in ``runner.py`` (safety gate, lock/ownership
-guards, send, persist) but without an inbound user message and without a BotRun.
+Mirrors the reactive pipeline in ``runner.py`` (lock/ownership guards, send,
+persist) but without an inbound user message and without a BotRun.
 The LLM decides whether to send via a **single-call JSON decision** (no tool loop in v1);
-the response is parsed, safety-filtered, and persisted with ``bot_run_id IS NULL``
+the response is parsed and persisted with ``bot_run_id IS NULL``
 to mark it as a proactive send.
 
 Outcome dict keys: ``outcome`` (sent / suppressed / error), ``reason``, ``reply``.
@@ -379,7 +379,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
             await proactive_state.commit()
             return _outcome("suppressed", reason="ownership_lost")
-        # Re-check 48h one more time (covers slow LLM/safety generation)
+        # Re-check 48h one more time (covers slow LLM generation)
         if _now() - conv.last_inbound_at > margin:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
             await proactive_state.commit()

@@ -121,9 +121,6 @@ class GraphDeps:
     zalo: Any
     conversation: ConversationPort
     retrieval: GraphRetrievalPort
-    # Deterministic reply boundary applied once after all lanes converge: strips
-    # provider reasoning, cleans the text and truncates an over-long reply. A
-    # safety control, so it stays injected rather than hard-wired.
     # Lead-profile context for the agent prompt. None in tests that stub the turn.
     lead: LeadContextPort | None = None
     # Candidate gender memory for the decision hop: reads the stored value and

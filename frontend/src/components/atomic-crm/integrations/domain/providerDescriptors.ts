@@ -80,7 +80,7 @@ export type ProviderFieldDescriptor =
       label: string;
       options: readonly string[];
       saved: (bundle: ProviderSettingsBundle) => string;
-      /** OpenRouter fans one model choice out to agent/safety/digest keys. */
+      /** OpenRouter fans one model choice out to agent/extractor/digest keys. */
       payloadKeys?: readonly string[];
     }
   | {
@@ -167,7 +167,7 @@ type OpenRouterUpdatePayload = {
   openrouter_api_key?: string;
   openrouter_enable?: boolean;
   openrouter_agent_model?: string;
-  openrouter_safety_model?: string;
+  openrouter_extractor_model?: string;
   openrouter_digest_model?: string;
   llm_default_provider?: LlmProvider;
 };
@@ -275,7 +275,7 @@ export const OPENROUTER_PANEL: ProviderPanelDescriptor = {
       saved: (bundle) => bundle.openRouter?.openrouter_agent_model ?? "",
       payloadKeys: [
         "openrouter_agent_model",
-        "openrouter_safety_model",
+        "openrouter_extractor_model",
         "openrouter_digest_model",
       ],
     },

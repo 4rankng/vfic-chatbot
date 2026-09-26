@@ -302,7 +302,7 @@ class _Settings:
     minimax_api_key = "sk-mm-fake"
     minimax_base_url = "https://api.minimax.io/v1"
     minimax_agent_model = "MiniMax-M2.7-highspeed"
-    minimax_safety_model = "MiniMax-M2.5-highspeed"
+    minimax_extractor_model = "MiniMax-M2.5-highspeed"
     minimax_digest_model = ""
     minimax_request_timeout = 60
     minimax_digest_timeout = 180
@@ -312,7 +312,7 @@ class _Settings:
     openrouter_base_url = "https://openrouter.ai/api/v1"
     openrouter_api_key = ""
     openrouter_agent_model = "deepseek/deepseek-v4-flash"
-    openrouter_safety_model = "deepseek/deepseek-v4-flash"
+    openrouter_extractor_model = "deepseek/deepseek-v4-flash"
     openrouter_digest_model = "deepseek/deepseek-v4-flash"
     openrouter_embedding_model = "openai/text-embedding-3-large"
     openrouter_embedding_timeout = 60
@@ -339,7 +339,7 @@ class _SettingsWithBothProviders(_Settings):
     openrouter_api_key = "sk-or-fake"
     openrouter_base_url = "https://openrouter.ai/api/v1"
     openrouter_agent_model = "deepseek/deepseek-v3.2"
-    openrouter_safety_model = "deepseek/deepseek-v3.2"
+    openrouter_extractor_model = "deepseek/deepseek-v3.2"
     openrouter_digest_model = "deepseek/deepseek-v3.2"
     openrouter_request_timeout = 60
     openrouter_digest_timeout = 180
@@ -658,9 +658,9 @@ def test_chat_for_role_returns_openrouter_client_when_default(monkeypatch):
 
 
 def test_agent_role_carries_output_cap_and_reasoning_mode(monkeypatch):
-    """The agent lane gets the configured cap + reasoning mode; safety does not.
+    """The agent lane gets the configured cap + reasoning mode; extractor does not.
 
-    A cap on the safety/digest lanes would risk truncating their JSON payloads, so
+    A cap on the extractor/digest lanes would risk truncating their JSON payloads, so
     `agent_limits`/`agent_reasoning` are deliberately role-scoped.
     """
     from app.graph.clients import _chat_for_role
@@ -674,8 +674,8 @@ def test_agent_role_carries_output_cap_and_reasoning_mode(monkeypatch):
     agent_llm = _chat_for_role("agent", temperature=0.3)
     assert agent_llm.max_tokens == 400
 
-    safety_llm = _chat_for_role("safety", temperature=0.0)
-    assert safety_llm.max_tokens is None
+    extractor_llm = _chat_for_role("extractor", temperature=0.0)
+    assert extractor_llm.max_tokens is None
 
 
 def test_agent_output_cap_unset_keeps_current_behaviour(monkeypatch):

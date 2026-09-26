@@ -37,7 +37,7 @@ MINIMAX_ENABLE = "minimax_enable"
 OPENROUTER_API_KEY = "openrouter_api_key"
 OPENROUTER_ENABLE = "openrouter_enable"
 OPENROUTER_AGENT_MODEL = "openrouter_agent_model"
-OPENROUTER_SAFETY_MODEL = "openrouter_safety_model"
+OPENROUTER_EXTRACTOR_MODEL = "openrouter_extractor_model"
 OPENROUTER_DIGEST_MODEL = "openrouter_digest_model"
 
 # Quota-failover provider: any OpenAI-compatible endpoint, fully operator-supplied
@@ -47,7 +47,6 @@ CUSTOM_LLM_LABEL = "custom_llm_label"
 CUSTOM_LLM_API_KEY = "custom_llm_api_key"
 CUSTOM_LLM_BASE_URL = "custom_llm_base_url"
 CUSTOM_LLM_AGENT_MODEL = "custom_llm_agent_model"
-CUSTOM_LLM_SAFETY_MODEL = "custom_llm_safety_model"
 CUSTOM_LLM_FAST_MODEL = "custom_llm_fast_model"
 
 CUSTOM_LLM_SETTING_KEYS = (
@@ -56,7 +55,6 @@ CUSTOM_LLM_SETTING_KEYS = (
     CUSTOM_LLM_API_KEY,
     CUSTOM_LLM_BASE_URL,
     CUSTOM_LLM_AGENT_MODEL,
-    CUSTOM_LLM_SAFETY_MODEL,
     CUSTOM_LLM_FAST_MODEL,
     LLM_DEFAULT_PROVIDER,
 )
@@ -82,7 +80,7 @@ JEV_SECRET_KEYS = (JEV_API_KEY,)
 # Generic LLM decode knobs, stored on the minimax panel (the same PUT that
 # carries the default-provider radio and failover order) so one save owns every
 # routing/wall-time lever. They apply to the agent answer lane whatever provider
-# serves it; the safety/digest lanes are bounded structured payloads already.
+# serves it; the extractor/digest lanes are bounded structured payloads already.
 # ``llm_reasoning_mode``: off | low | default. ``llm_agent_max_tokens``: output
 # cap; 0 means "no cap". ``llm_progressive_send``: forward the first complete
 # answer bubble before the agent finishes; OFF by default so the pre-existing
@@ -91,7 +89,14 @@ LLM_REASONING_MODE = "llm_reasoning_mode"
 LLM_AGENT_MAX_TOKENS = "llm_agent_max_tokens"
 LLM_PROGRESSIVE_SEND = "llm_progressive_send"
 DEFAULT_LLM_REASONING_MODE = "off"
-DEFAULT_LLM_AGENT_MAX_TOKENS = 800
+# No cap by default. On MiniMax M2.x thinking cannot be disabled and arrives
+# inside ``content``, so the cap covered the deliberation as well as the answer:
+# a value sized for the answer cut the answer mid-word (the provider reported
+# ``finish_reason=length``). A capped lane now also pays a continuation round
+# (see the answer-completion guard in ``graph/clients.py``), so an unsaved
+# installation keeps today's unbounded completion and only an operator who
+# knowingly wants the wall-time lever sets a value.
+DEFAULT_LLM_AGENT_MAX_TOKENS = 0
 DEFAULT_LLM_PROGRESSIVE_SEND = True
 _REASONING_MODES = frozenset({"off", "low", "default"})
 
@@ -110,7 +115,7 @@ OPENROUTER_SETTING_KEYS = (
     OPENROUTER_API_KEY,
     OPENROUTER_ENABLE,
     OPENROUTER_AGENT_MODEL,
-    OPENROUTER_SAFETY_MODEL,
+    OPENROUTER_EXTRACTOR_MODEL,
     OPENROUTER_DIGEST_MODEL,
     LLM_DEFAULT_PROVIDER,
 )
@@ -146,7 +151,7 @@ class MinimaxRuntimeConfig:
     api_key: str = ""
     base_url: str = ""
     agent_model: str = ""
-    safety_model: str = ""
+    extractor_model: str = ""
     enabled: bool = True
     default_provider: str = "minimax"
     reasoning_mode: str = DEFAULT_LLM_REASONING_MODE
@@ -159,7 +164,7 @@ class OpenRouterRuntimeConfig:
     api_key: str = ""
     base_url: str = ""
     agent_model: str = ""
-    safety_model: str = ""
+    extractor_model: str = ""
     digest_model: str = ""
     embedding_model: str = ""
     embedding_dim: int = EMBEDDING_DIM
@@ -174,7 +179,6 @@ class CustomLlmRuntimeConfig:
     api_key: str = ""
     base_url: str = ""
     agent_model: str = ""
-    safety_model: str = ""
     fast_model: str = ""
     label: str = ""
     enabled: bool = False
@@ -210,7 +214,7 @@ class LlmSettingsMixin:
                 api_key=stored.get(MINIMAX_API_KEY) or self.settings.minimax_api_key,
                 base_url=self.settings.minimax_base_url,
                 agent_model=self.settings.minimax_agent_model,
-                safety_model=self.settings.minimax_safety_model,
+                extractor_model=self.settings.minimax_extractor_model,
                 enabled=_bool_value(stored.get(MINIMAX_ENABLE), self.settings.minimax_enable),
                 default_provider=_provider_value(
                     stored.get(LLM_DEFAULT_PROVIDER),
@@ -232,7 +236,7 @@ class LlmSettingsMixin:
             "minimax_api_key": _secret_status(cfg.api_key),
             "minimax_base_url": cfg.base_url,
             "minimax_agent_model": cfg.agent_model,
-            "minimax_safety_model": cfg.safety_model,
+            "minimax_extractor_model": cfg.extractor_model,
             "minimax_enable": cfg.enabled,
             "llm_default_provider": cfg.default_provider,
             "llm_failover_order": list(await self.resolve_llm_failover_order()),
@@ -250,8 +254,9 @@ class LlmSettingsMixin:
                 base_url=self.settings.openrouter_base_url,
                 agent_model=stored.get(OPENROUTER_AGENT_MODEL)
                 or self.settings.openrouter_agent_model,
-                safety_model=(
-                    stored.get(OPENROUTER_SAFETY_MODEL) or self.settings.openrouter_safety_model
+                extractor_model=(
+                    stored.get(OPENROUTER_EXTRACTOR_MODEL)
+                    or self.settings.openrouter_extractor_model
                 ),
                 digest_model=(
                     stored.get(OPENROUTER_DIGEST_MODEL) or self.settings.openrouter_digest_model
@@ -274,7 +279,7 @@ class LlmSettingsMixin:
             "openrouter_api_key": _secret_status(cfg.api_key),
             "openrouter_base_url": cfg.base_url,
             "openrouter_agent_model": cfg.agent_model,
-            "openrouter_safety_model": cfg.safety_model,
+            "openrouter_extractor_model": cfg.extractor_model,
             "openrouter_digest_model": cfg.digest_model,
             "openrouter_embedding_model": cfg.embedding_model,
             "openrouter_embedding_dim": cfg.embedding_dim,
@@ -299,11 +304,10 @@ class LlmSettingsMixin:
                 api_key=stored.get(CUSTOM_LLM_API_KEY) or _default("custom_llm_api_key"),
                 base_url=stored.get(CUSTOM_LLM_BASE_URL) or _default("custom_llm_base_url"),
                 agent_model=agent_model,
-                # Mirror the agent model into safety/fast unconditionally: no
-                # lane consumes them today, so a stray stored/env value (a
-                # browser once autofilled an email into a model box) can never
-                # reach a request.
-                safety_model=agent_model,
+                # Mirror the agent model into fast unconditionally: no lane
+                # consumes it today, so a stray stored/env value (a browser
+                # once autofilled an email into a model box) can never reach a
+                # request.
                 fast_model=agent_model,
                 label=stored.get(CUSTOM_LLM_LABEL) or _default("custom_llm_label", "Dự phòng"),
                 enabled=_bool_value(
@@ -325,7 +329,6 @@ class LlmSettingsMixin:
             "custom_llm_api_key": _secret_status(cfg.api_key),
             "custom_llm_base_url": cfg.base_url,
             "custom_llm_agent_model": cfg.agent_model,
-            "custom_llm_safety_model": cfg.safety_model,
             "custom_llm_fast_model": cfg.fast_model,
             "custom_llm_label": cfg.label,
             "custom_llm_enable": cfg.enabled,

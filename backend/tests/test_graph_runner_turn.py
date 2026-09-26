@@ -1,6 +1,6 @@
 """Characterization tests for graph/runner.run_turn — the bot-turn pipeline.
 
-``run_turn`` is the reactive brain: agent -> safety -> ownership guard -> send.
+``run_turn`` is the reactive brain: agent -> ownership guard -> send.
 Its outcome matrix (sent / suppressed / error / send_failed) is exactly what a
 graph-layer refactor (e.g. breaking the graph<->services cycle) must preserve.
 
@@ -2383,8 +2383,8 @@ async def test_stage_timings_captures_preamble_and_webhook_to_pickup(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_empty_agent_candidate_uses_safety_fallback(monkeypatch):
-    """An empty agent result must become a visible, deterministic safety reply.
+async def test_empty_agent_candidate_suppressed_without_send(monkeypatch):
+    """An empty agent result must stay silent: nothing sent, suppressed audit row.
 
     Regression for the empty "Gửi lỗi" bubble: without the guard, the empty
     candidate is stamped onto the pending row (body="") and, when the send

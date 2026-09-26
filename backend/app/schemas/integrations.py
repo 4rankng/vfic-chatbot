@@ -130,7 +130,7 @@ class MinimaxIntegrationSettingsOut(BaseModel):
     minimax_api_key: SecretStatus
     minimax_base_url: str
     minimax_agent_model: str
-    minimax_safety_model: str
+    minimax_extractor_model: str
     minimax_enable: bool
     llm_default_provider: Literal["minimax", "openrouter", "custom"]
     llm_failover_order: list[Literal["minimax", "openrouter", "custom"]]
@@ -172,7 +172,7 @@ class OpenRouterIntegrationSettingsOut(BaseModel):
     openrouter_api_key: SecretStatus
     openrouter_base_url: str
     openrouter_agent_model: str
-    openrouter_safety_model: str
+    openrouter_extractor_model: str
     openrouter_digest_model: str
     openrouter_embedding_model: str
     openrouter_embedding_dim: int
@@ -188,7 +188,7 @@ class OpenRouterIntegrationSettingsUpdate(BaseModel):
     openrouter_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
     openrouter_enable: bool | None = None
     openrouter_agent_model: str | None = Field(default=None, min_length=1, max_length=256)
-    openrouter_safety_model: str | None = Field(default=None, min_length=1, max_length=256)
+    openrouter_extractor_model: str | None = Field(default=None, min_length=1, max_length=256)
     openrouter_digest_model: str | None = Field(default=None, min_length=1, max_length=256)
     llm_default_provider: Literal["minimax", "openrouter", "custom"] | None = None
 
@@ -212,7 +212,6 @@ class CustomLlmIntegrationSettingsOut(BaseModel):
     custom_llm_api_key: SecretStatus
     custom_llm_base_url: str
     custom_llm_agent_model: str
-    custom_llm_safety_model: str
     custom_llm_fast_model: str
     custom_llm_label: str
     custom_llm_enable: bool
@@ -230,7 +229,6 @@ class CustomLlmIntegrationSettingsUpdate(BaseModel):
     custom_llm_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
     custom_llm_base_url: str | None = Field(default=None, min_length=1, max_length=512)
     custom_llm_agent_model: str | None = Field(default=None, min_length=1, max_length=256)
-    custom_llm_safety_model: str | None = Field(default=None, min_length=1, max_length=256)
     custom_llm_fast_model: str | None = Field(default=None, min_length=1, max_length=256)
     custom_llm_label: str | None = Field(default=None, min_length=1, max_length=64)
     custom_llm_enable: bool | None = None

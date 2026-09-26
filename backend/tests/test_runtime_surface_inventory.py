@@ -100,7 +100,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # fields to tell a permanently invalid recipient (`user_id is invalid`) from
     # a transient failure — the bot-channel twin of the OA site above, and the
     # gate for the terminal-recipient mark.
-    "provider_boundary": 81,
+    # +1: the answer-completion guard added clients._answer_was_cut, which reads
+    # the provider response metadata (`finish_reason` / `stop_reason`) to tell a
+    # generation cut at the output cap from a finished one. clients.py is a
+    # provider-transport file, so both reads land in one reviewed row.
+    "provider_boundary": 82,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -138,7 +142,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "753cbfaccda9fd5d827fd6ec8f7050b8c828630d493c99869484d99dababfd4d"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "3fbfbdad7aa8b5f2411388107bb30a82e906dd8046e8fda6e80073d54dd23200"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

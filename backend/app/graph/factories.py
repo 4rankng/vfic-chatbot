@@ -45,10 +45,10 @@ logger = logging.getLogger(__name__)
 
 
 def build_minimax_extractor():
-    """MiniMax extractor (safety model, temp 0) for candidate extraction."""
+    """MiniMax extractor client (temp 0) for candidate extraction."""
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    llm = _chat_for_role("safety", temperature=0.0)
+    llm = _chat_for_role("extractor", temperature=0.0)
 
     async def extractor(system: str, user: str) -> str:
         return (
@@ -95,7 +95,7 @@ def _build_fast_llm(*, minimax_config, openrouter_config, custom_config=None):
     primary reasoning model, the pre-tiering default).
 
     The fast model is built directly (not via ``_chat_for_role``) because the
-    role factory hard-codes the agent/safety model names. Here we explicitly use
+    role factory hard-codes the agent/extractor model names. Here we explicitly use
     ``minimax_fast_model`` / ``openrouter_fast_model`` / ``custom_llm_fast_model``
     so the tier is genuine.
 
@@ -268,7 +268,7 @@ async def resolve_page_project_scope(db, conversation_id) -> tuple[str, ...] | N
 
 
 async def build_deps(db, *, session_factory=None, conversation_id=None, page_project_ids=None):
-    """Wire the full GraphDeps for one chatbot turn (agent + safety + embedder + zalo).
+    """Wire the full GraphDeps for one chatbot turn (agent + embedder + zalo).
 
     The expensive LLM clients + embedder are cached process-wide (see
     ``_build_cached_clients``); this function only re-binds the per-turn pieces:

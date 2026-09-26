@@ -1,4 +1,4 @@
-"""LLM/embedder clients + MiniMax/OpenRouter agent/safety/digest factories.
+"""LLM/embedder clients + MiniMax/OpenRouter agent/extractor/digest factories.
 
 Heavy SDKs (google-genai, langchain-openai / langchain-core) are imported LAZILY inside
 methods so importing this module stays cheap and free of optional-dependency failures at
@@ -51,7 +51,7 @@ from app.graph.usage import record_token_usage as _record_token_usage
 
 logger = logging.getLogger(__name__)
 
-ModelRole = Literal["agent", "safety", "digest"]
+ModelRole = Literal["agent", "extractor", "digest"]
 # The three configurable providers. "custom" is any OpenAI-compatible endpoint
 # the operator supplies (base URL + model ids), e.g. Xiaomi MiMo.
 LlmProvider = Literal["minimax", "openrouter", "custom"]
@@ -187,6 +187,105 @@ def build_embedder(
     if provider == "gemini":
         return GeminiEmbedder(s)
     raise RuntimeError("EMBEDDING_PROVIDER must be 'openrouter' or 'gemini'")
+
+
+# ── Answer-completion guard (provider output cap) ────────────────────────────
+# MiniMax M2.x cannot disable thinking and emits its deliberation *inside*
+# ``content`` (`` thinking…``), so an operator-configured generation budget
+# (``llm_agent_max_tokens``, 0 = no cap and the shipped default) covers reasoning
+# AND answer. A cap the think block mostly consumes hands back a half-written
+# answer with ``finish_reason=length``; the reply boundary that used to repair a
+# cut answer was removed, so a cut would ship verbatim (observed: a route list
+# ending mid-word). The lanes therefore COMPLETE a cut answer before it is
+# delivered: the model is asked to continue from the exact cut, bounded by
+# ``_MAX_ANSWER_CONTINUATIONS`` and by the turn's remaining model-call budget. If
+# the provider still stops at the cap, the dangling tail is dropped (bounded to
+# the last complete sentence or line), so a candidate never receives a mid-word
+# fragment.
+_TRUNCATED_FINISH_REASONS = frozenset(
+    {"length", "max_tokens", "max_output_tokens", "max_completion_tokens"}
+)
+_MAX_ANSWER_CONTINUATIONS = 2
+_CUT_ANSWER_CONTINUE_INSTRUCTION = (
+    "Câu trả lời của bạn vừa bị nhà cung cấp cắt ngang vì chạm hạn mức độ dài. "
+    "Hãy viết tiếp NGAY tại đúng chỗ đang dở, không lặp lại phần đã viết, không mở "
+    "đầu lại và không lặp lời chào; hoàn thành trọn vẹn câu trả lời cho người lao động."
+)
+# A repeated seam (the model re-emitting the tail it was handed) is dropped, but
+# only when the overlap is long enough and word-aligned on both sides, so
+# legitimate repetition inside an answer is never deleted.
+_CONTINUATION_OVERLAP_MIN_CHARS = 24
+_CONTINUATION_OVERLAP_MAX_CHARS = 400
+_ANSWER_SENTENCE_END_CHARS = frozenset(".!?…")
+_SEAM_BOUNDARY_CHARS = frozenset(",.;:!?…-")
+# How far back a dangling (still-cut) tail may be trimmed, so a long complete
+# answer is never gutted by a single missing full stop.
+_MAX_DANGLING_TAIL_CHARS = 200
+
+
+def _answer_was_cut(message) -> bool:
+    """True when the provider stopped at its output cap instead of finishing."""
+    metadata = getattr(message, "response_metadata", None) or {}
+    reason = str(metadata.get("finish_reason") or metadata.get("stop_reason") or "")
+    return reason.strip().lower() in _TRUNCATED_FINISH_REASONS
+
+
+def _should_continue_cut_answer(message, visible: str, used: int) -> bool:
+    """Whether a cut answer may be continued instead of shipped half-written."""
+    return used < _MAX_ANSWER_CONTINUATIONS and bool(visible.strip()) and _answer_was_cut(message)
+
+
+def _record_answer_continuation(metrics: dict | None, count: int) -> None:
+    """Surface the output-cap repair on the turn's metrics."""
+    if metrics is not None:
+        metrics["answer_continuations"] = count
+        metrics["answer_continuation_reason"] = "output_cap"
+
+
+def _join_answer_parts(parts: list[str]) -> str:
+    """Join the answer rounds of one generation, dropping a repeated seam."""
+    joined = ""
+    for part in parts:
+        if not part:
+            continue
+        joined = part if not joined else joined + _seam_remainder(joined, part)
+    return joined
+
+
+def _seam_remainder(joined: str, part: str) -> str:
+    """``part`` minus its overlap with ``joined``, else ``part`` unchanged."""
+    limit = min(len(joined), len(part), _CONTINUATION_OVERLAP_MAX_CHARS)
+    for size in range(limit, _CONTINUATION_OVERLAP_MIN_CHARS - 1, -1):
+        if not joined.endswith(part[:size]):
+            continue
+        following = part[size : size + 1]
+        if following and not (following.isspace() or following in _SEAM_BOUNDARY_CHARS):
+            continue
+        preceding = joined[-size - 1 : -size] if size < len(joined) else ""
+        if preceding and not (preceding.isspace() or preceding in _SEAM_BOUNDARY_CHARS):
+            continue
+        return part[size:]
+    return part
+
+
+def _drop_dangling_tail(text: str) -> str:
+    """Drop a still-truncated answer's dangling tail.
+
+    Bounded to the last ``_MAX_DANGLING_TAIL_CHARS`` so a complete answer is
+    never gutted: cut at the last sentence/line boundary in that window, else at
+    the last whitespace, so the delivered text never ends mid-word.
+    """
+    stripped = text.rstrip()
+    if not stripped:
+        return text
+    start = max(0, len(stripped) - _MAX_DANGLING_TAIL_CHARS)
+    for index in range(len(stripped) - 1, start - 1, -1):
+        if stripped[index] in _ANSWER_SENTENCE_END_CHARS or stripped[index] == "\n":
+            return stripped[: index + 1].rstrip() or text
+    for index in range(len(stripped) - 1, start - 1, -1):
+        if stripped[index].isspace():
+            return stripped[:index].rstrip() or text
+    return text
 
 
 class MiniMaxAgent:
@@ -584,6 +683,12 @@ class MiniMaxAgent:
         iterations_remaining = self.max_iters
         empty_retry_available = retry_empty_generation
         retrying_empty_generation = False
+        # Answer rounds of this turn (see the answer-completion guard above):
+        # normally one, more when the provider cut an answer at its output cap.
+        answer_parts: list[str] = []
+        answer_continuations = 0
+        continuing_answer = False
+        last_round_cut = False
         messages.append(HumanMessage(content=user_text))
         while iterations_remaining > 0:
             iterations_remaining -= 1
@@ -594,7 +699,11 @@ class MiniMaxAgent:
             # back empty *because* the tool round consumed the answer budget, so
             # re-asking without tools is what produces prose.
             was_empty_retry = retrying_empty_generation
-            invocation_llm = active_llm if was_empty_retry else bound
+            # A recovery round and an answer-continuation round are both
+            # tool-free: a cut answer is continued as prose, never by re-entering
+            # tool dispatch.
+            tool_free_round = was_empty_retry or continuing_answer
+            invocation_llm = active_llm if tool_free_round else bound
             # Split the LLM path into semaphore-queue wait vs. model inference.
             # Previously a single timer covered both, so a 34s "LLM" p95 was
             # ambiguous between a slow model and self-inflicted throttle wait.
@@ -607,7 +716,7 @@ class MiniMaxAgent:
                     # the primary, or a mid-loop switch would lose the tools the
                     # conversation already depends on.
                     _fallback_bounds = [
-                        _bind_like(client, schemas, bound_primary=not was_empty_retry)
+                        _bind_like(client, schemas, bound_primary=not tool_free_round)
                         for client in self.fallback_llms
                     ]
                     if on_delta is not None:
@@ -680,6 +789,7 @@ class MiniMaxAgent:
             logger.info("llm_invoke", extra={"llm_latency_ms": iter_total_ms})
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)
+            last_round_cut = _answer_was_cut(ai)
             record_model_turn = getattr(trace_sink, "record_model_turn", None)
             if callable(record_model_turn):
                 provider = getattr(active_llm, "trace_provider", "unknown")
@@ -705,14 +815,28 @@ class MiniMaxAgent:
                 # Never dispatch tools on a recovery round; the reply policy that
                 # used to gate this is gone, so the recovery simply ships the
                 # generated prose (thinking stripped).
+                visible_round = strip_think_reasoning(str(ai.content or ""))
+                answer_parts.append(visible_round)
+                if _should_continue_cut_answer(ai, visible_round, answer_continuations):
+                    answer_continuations += 1
+                    continuing_answer = True
+                    messages.append(SystemMessage(content=_CUT_ANSWER_CONTINUE_INSTRUCTION))
+                    _record_answer_continuation(metrics, answer_continuations)
+                    continue
+                answer = _join_answer_parts(answer_parts)
+                if _answer_was_cut(ai):
+                    # Still cut after the continuation budget: drop the dangling
+                    # fragment instead of a mid-word tail.
+                    answer = _drop_dangling_tail(answer)
                 return _ground_reply(
-                    strip_think_reasoning(str(ai.content or "")),
+                    answer,
                     tool_results,
                     trace_sink=trace_sink,
                 )
             if not calls:
+                visible_round = strip_think_reasoning(str(ai.content or ""))
                 if (
-                    not strip_think_reasoning(str(ai.content or "")).strip()
+                    not visible_round.strip()
                     and empty_retry_available
                     and (required_tool is None or required_tool_called)
                 ):
@@ -736,12 +860,28 @@ class MiniMaxAgent:
                         metrics=metrics,
                         trace_sink=trace_sink,
                     )
+                answer_parts.append(visible_round)
+                if _should_continue_cut_answer(ai, visible_round, answer_continuations):
+                    answer_continuations += 1
+                    continuing_answer = True
+                    messages.append(SystemMessage(content=_CUT_ANSWER_CONTINUE_INSTRUCTION))
+                    _record_answer_continuation(metrics, answer_continuations)
+                    logger.warning(
+                        "answer cut by the provider output cap; continuing %d/%d",
+                        answer_continuations,
+                        _MAX_ANSWER_CONTINUATIONS,
+                    )
+                    continue
                 # Active-job authority turns fail closed to the tool-rendered
                 # safe reply. This removes the former third LLM rewrite while
                 # avoiding partial regex validation of titles, locations,
                 # vacancy counts, and salary formats. Other tools retain the
                 # sanitize-only ID/entity grounding path.
-                final_reply = str(ai.content or "")
+                final_reply = _join_answer_parts(answer_parts)
+                if _answer_was_cut(ai):
+                    # The provider stopped at the cap again: drop the dangling
+                    # fragment so the candidate never reads a mid-word tail.
+                    final_reply = _drop_dangling_tail(final_reply)
                 if authority_tool_dispatched:
                     final_reply = _ground_active_job_reply(final_reply, tool_results)
                 return _ground_reply(final_reply, tool_results, trace_sink=trace_sink)
@@ -885,7 +1025,14 @@ class MiniMaxAgent:
                 metrics=metrics,
                 trace_sink=trace_sink,
             )
-        final = messages[-1].content if hasattr(messages[-1], "content") else ""
+        if answer_parts:
+            # A continued answer outranks the last message: exhaustion after a
+            # cut-answer continuation must never ship the instruction text.
+            final = _join_answer_parts(answer_parts)
+            if last_round_cut:
+                final = _drop_dangling_tail(final)
+        else:
+            final = messages[-1].content if hasattr(messages[-1], "content") else ""
         if authority_tool_dispatched:
             final = _ground_active_job_reply(str(final or ""), tool_results)
         # Apply the same deterministic authority boundary on loop exhaustion;
@@ -900,55 +1047,83 @@ class MiniMaxAgent:
         metrics: dict | None = None,
         trace_sink=None,
     ) -> str:
-        """One model call for a direct-context KB; no schemas, tools, or prefetch."""
+        """One model call for a direct-context KB; no schemas, tools, or prefetch.
+
+        A provider that stops at its output cap is continued exactly as in
+        ``agent`` (see the answer-completion guard above): this lane produces
+        candidate-visible prose too, so a cut answer must never ship.
+        """
         from app.graph.llm_semaphore import get_llm_semaphore
         from langchain_core.messages import HumanMessage, SystemMessage
 
         sem = get_llm_semaphore()
         if trace_sink is not None:
             trace_sink.record_decision("model_selected", "direct")
-        if metrics is not None:
-            metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
-            metrics["direct_context_llm_calls"] = metrics.get("direct_context_llm_calls", 0) + 1
-        sem_t0 = time.monotonic()
-        async with sem:
-            queue_ms = int((time.monotonic() - sem_t0) * 1000)
-            model_t0 = time.monotonic()
-            ai, backoff_ms = await _llm_call_with_retry(
-                self.llm,
-                [SystemMessage(content=system), HumanMessage(content=user_text)],
-                metrics=metrics,
-                fallback_bounds=self.fallback_llms,
-            )
-            model_ms = int((time.monotonic() - model_t0) * 1000)
-        total_ms = int((time.monotonic() - sem_t0) * 1000)
-        if metrics is not None:
-            metrics["llm_invoke_ms"] = metrics.get("llm_invoke_ms", 0) + total_ms
-            metrics["llm_queue_ms"] = metrics.get("llm_queue_ms", 0) + queue_ms
-            metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + (model_ms - backoff_ms)
-        await _record_llm_latency(total_ms)
-        if trace_sink is not None:
-            record_model_turn = getattr(trace_sink, "record_model_turn", None)
-            if callable(record_model_turn):
-                provider = getattr(self.llm, "trace_provider", "unknown")
-                # "fallback" is the admin-configured custom provider
-                # (schema literal DecisionTraceProvider); without it here a
-                # custom-provider turn is recorded as "unknown".
-                if provider not in {"minimax", "openrouter", "fallback"}:
-                    provider = "unknown"
-                record_model_turn(
-                    phase="direct",
-                    provider=provider,
-                    model=str(
-                        getattr(self.llm, "model_name", None)
-                        or getattr(self.llm, "model", None)
-                        or "unknown"
-                    ),
-                    reasoning=_extract_returned_reasoning(ai),
-                    tool_names=[],
+        messages = [SystemMessage(content=system), HumanMessage(content=user_text)]
+        answer_parts: list[str] = []
+        answer_continuations = 0
+        ai = None
+        for _round in range(_MAX_ANSWER_CONTINUATIONS + 1):
+            if metrics is not None:
+                metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
+                metrics["direct_context_llm_calls"] = metrics.get("direct_context_llm_calls", 0) + 1
+            sem_t0 = time.monotonic()
+            async with sem:
+                queue_ms = int((time.monotonic() - sem_t0) * 1000)
+                model_t0 = time.monotonic()
+                ai, backoff_ms = await _llm_call_with_retry(
+                    self.llm,
+                    messages,
+                    metrics=metrics,
+                    fallback_bounds=self.fallback_llms,
                 )
+                model_ms = int((time.monotonic() - model_t0) * 1000)
+            total_ms = int((time.monotonic() - sem_t0) * 1000)
+            if metrics is not None:
+                metrics["llm_invoke_ms"] = metrics.get("llm_invoke_ms", 0) + total_ms
+                metrics["llm_queue_ms"] = metrics.get("llm_queue_ms", 0) + queue_ms
+                metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + (model_ms - backoff_ms)
+            await _record_llm_latency(total_ms)
+            if trace_sink is not None:
+                record_model_turn = getattr(trace_sink, "record_model_turn", None)
+                if callable(record_model_turn):
+                    provider = getattr(self.llm, "trace_provider", "unknown")
+                    # "fallback" is the admin-configured custom provider
+                    # (schema literal DecisionTraceProvider); without it here a
+                    # custom-provider turn is recorded as "unknown".
+                    if provider not in {"minimax", "openrouter", "fallback"}:
+                        provider = "unknown"
+                    record_model_turn(
+                        phase="direct",
+                        provider=provider,
+                        model=str(
+                            getattr(self.llm, "model_name", None)
+                            or getattr(self.llm, "model", None)
+                            or "unknown"
+                        ),
+                        reasoning=_extract_returned_reasoning(ai),
+                        tool_names=[],
+                    )
+            visible_round = strip_think_reasoning(str(ai.content or ""))
+            answer_parts.append(visible_round)
+            if not _should_continue_cut_answer(ai, visible_round, answer_continuations):
+                break
+            answer_continuations += 1
+            messages.append(SystemMessage(content=_CUT_ANSWER_CONTINUE_INSTRUCTION))
+            _record_answer_continuation(metrics, answer_continuations)
+            logger.warning(
+                "direct answer cut by the provider output cap; continuing %d/%d",
+                answer_continuations,
+                _MAX_ANSWER_CONTINUATIONS,
+            )
+        if trace_sink is not None:
             trace_sink.record_decision("grounding_verdict", "skipped")
-        return str(ai.content or "")
+        answer = _join_answer_parts(answer_parts)
+        if ai is not None and _answer_was_cut(ai):
+            # Still cut after the continuation budget: drop the dangling
+            # fragment rather than send a mid-word tail.
+            answer = _drop_dangling_tail(answer)
+        return answer
 
 
 _REASONING_MODES = ("off", "low", "default")
@@ -977,6 +1152,16 @@ def _agent_max_tokens() -> int | None:
     ``finish_reason=stop`` (no truncation) and cut a MiniMax turn from 8,489 ms to
     ~6,100 ms; 250 truncated mid-answer on MiniMax. Unset keeps today's unbounded
     behaviour, so this only takes effect when an operator configures it.
+
+    Nothing is configured by default: the admin knob's default is 0 ("no cap"), so
+    the answer lane runs unbounded unless an operator chooses the wall-time lever.
+
+    On MiniMax M2.x a configured cap covers the inline `` thinking`` deliberation as
+    well as the answer (the provider cannot disable thinking, and the deliberation
+    is returned inside ``content``), so a value sized for the answer alone cuts the
+    answer mid-word. Such a turn is completed by the answer-completion guard above
+    instead of shipping the cut — at the cost of one extra model call, which is the
+    second reason the shipped default is no cap.
     """
     raw = getattr(get_settings(), "llm_agent_max_tokens", 0) or 0
     try:
@@ -1195,12 +1380,12 @@ def _chat_for_role(
     custom_config=None,
     default_provider: LlmProvider | None = None,
     openrouter_agent_model: str | None = None,
-    openrouter_safety_model: str | None = None,
+    openrouter_extractor_model: str | None = None,
     openrouter_digest_model: str | None = None,
     reasoning_mode: str | None = None,
     max_tokens: int | None = None,
 ):
-    """Build the OpenAI-compatible chat client for an agent/safety/digest role.
+    """Build the OpenAI-compatible chat client for an agent/extractor/digest role.
 
     Returns a plain ``ChatOpenAI`` for the single configured provider. The
     active provider is resolved once by ``_active_llm_provider`` (default first,
@@ -1223,7 +1408,7 @@ def _chat_for_role(
         default_provider=default_provider,
     )
     # The output cap and reasoning mode apply to the answer lane only: the
-    # safety/digest roles produce bounded structured payloads already, and
+    # extractor/digest roles produce bounded structured payloads already, and
     # capping them would risk truncating JSON. An explicit caller value (the
     # admin-managed settings resolved by build_cached_clients) wins over the
     # settings-backed default.
@@ -1238,9 +1423,7 @@ def _chat_for_role(
     if provider == "custom":
         if custom_config is None or not custom_config.usable:
             raise RuntimeError("custom LLM provider selected but not fully configured")
-        model = (
-            custom_config.safety_model if role == "safety" else custom_config.agent_model
-        ) or custom_config.agent_model
+        model = custom_config.agent_model
         return _custom_chat(
             model,
             temperature=temperature,
@@ -1254,7 +1437,7 @@ def _chat_for_role(
         resolved_openrouter_key = openrouter_api_key or s.openrouter_api_key
         model = {
             "agent": openrouter_agent_model or s.openrouter_agent_model,
-            "safety": openrouter_safety_model or s.openrouter_safety_model,
+            "extractor": openrouter_extractor_model or s.openrouter_extractor_model,
             "digest": (
                 openrouter_digest_model
                 or s.openrouter_digest_model
@@ -1289,7 +1472,7 @@ def _chat_for_role(
             temperature=temperature,
             **kwargs,
         )
-    model = s.minimax_agent_model if role == "agent" else s.minimax_safety_model
+    model = s.minimax_agent_model if role == "agent" else s.minimax_extractor_model
     return _minimax_chat(
         model,
         temperature=temperature,

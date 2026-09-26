@@ -173,7 +173,7 @@ class Settings(BaseSettings):
     minimax_api_key: str = ""
     minimax_base_url: str = "https://api.minimax.io/v1"
     minimax_agent_model: str = "MiniMax-M2.7-highspeed"
-    minimax_safety_model: str = "MiniMax-M2.5-highspeed"
+    minimax_extractor_model: str = "MiniMax-M2.5-highspeed"
     minimax_request_timeout: int = 60
     # Fast-tier model for low-complexity intents (Phase 5 model tiering). Empty = disabled
     # (every intent uses the reasoning agent model, the pre-tiering default). When set,
@@ -186,7 +186,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_agent_model: str = OPENROUTER_DEFAULT_MODEL
-    openrouter_safety_model: str = OPENROUTER_DEFAULT_MODEL
+    openrouter_extractor_model: str = OPENROUTER_DEFAULT_MODEL
     openrouter_digest_model: str = OPENROUTER_DEFAULT_MODEL
     # OpenRouter fast-tier for low-complexity intents (Phase 5). Empty = use agent model.
     openrouter_fast_model: str = ""
@@ -212,9 +212,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("custom_llm_base_url", "OPENAI_BASE_URL"),
     )
     custom_llm_agent_model: str = ""
-    # Empty safety/fast models fall back to the agent model, so one model id is
+    # Empty fast model falls back to the agent model, so one model id is
     # enough to get a working provider.
-    custom_llm_safety_model: str = ""
     custom_llm_fast_model: str = ""
     custom_llm_request_timeout: int = 60
 

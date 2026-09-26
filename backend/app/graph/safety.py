@@ -4,7 +4,11 @@ The pre-send answer review layer that used to live here — ``fast_safety_filter
 ``DeterministicReplyPolicy``, ``truncate_for_chat`` — was removed on explicit
 operator instruction: it re-judged and rewrote the agent's answer after
 generation (empty-retry, truncation, verdicts) while adding no LLM call worth
-its cost. The agent's answer now ships as generated.
+its cost. The agent's answer now ships as generated — with one exception that
+belongs to generation, not review: a provider that stops at its output cap is
+continued (and, failing that, has its dangling tail dropped) inside
+``clients.MiniMaxAgent``, so a half-written answer is never delivered. See the
+answer-completion guard in ``clients.py``.
 
 One invariant remains: provider reasoning must never reach a candidate.
 MiniMax M2 deliberation arrives inline as think blocks inside the content, so

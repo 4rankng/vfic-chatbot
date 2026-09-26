@@ -97,8 +97,8 @@ PROMPTS: list[str] = [
 def strip_think(raw: str) -> str:
     """Remove MiniMax M2.x reasoning wrap (force-think tags).
 
-    Re-implements the 2 core lines from app/graph/safety.py:32-34 so the
-    benchmark stays decoupled from the full safety pipeline.
+    Re-implements the core of ``strip_think_reasoning`` (app/graph/safety.py)
+    so the benchmark stays decoupled from the app package.
     """
     if not raw:
         return ""

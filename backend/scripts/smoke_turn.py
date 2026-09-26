@@ -55,8 +55,7 @@ from app.models.contact import Contact, ContactChannelIdentity
 from app.models.conversation import Conversation, ConversationMode, Message
 from app.models.outbox import OutboxStatus, OutboundOutbox
 
-# A non-empty reply that passes the deterministic keyword safety filter and is
-# not a banned phrase, so the turn reaches the real send/outcome path.
+# Any non-empty reply reaches the real send/outcome path.
 SMOKE_REPLY = "Kiem tra trien khai thanh cong."  # diacritics-stripped upstream anyway
 
 # Distinctive marker so the throwaway rows are unambiguous and easy to clean up.

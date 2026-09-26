@@ -47,7 +47,7 @@ export type MinimaxSettings = {
   minimax_api_key: SecretStatus;
   minimax_base_url: string;
   minimax_agent_model: string;
-  minimax_safety_model: string;
+  minimax_extractor_model: string;
   minimax_enable: boolean;
   llm_default_provider: LlmProvider;
   /** Operator-ranked spare order; the default provider always starts a turn. */
@@ -59,7 +59,7 @@ export type OpenRouterSettings = {
   openrouter_api_key: SecretStatus;
   openrouter_base_url: string;
   openrouter_agent_model: string;
-  openrouter_safety_model: string;
+  openrouter_extractor_model: string;
   openrouter_digest_model: string;
   openrouter_enable: boolean;
   llm_default_provider: LlmProvider;
@@ -71,7 +71,6 @@ export type CustomLlmSettings = {
   custom_llm_api_key: SecretStatus;
   custom_llm_base_url: string;
   custom_llm_agent_model: string;
-  custom_llm_safety_model: string;
   custom_llm_fast_model: string;
   custom_llm_label: string;
   custom_llm_enable: boolean;
@@ -222,7 +221,7 @@ export const zaloIntegrationGateway = {
       openrouter_api_key: string;
       openrouter_enable: boolean;
       openrouter_agent_model: string;
-      openrouter_safety_model: string;
+      openrouter_extractor_model: string;
       openrouter_digest_model: string;
       llm_default_provider: LlmProvider;
     }>,

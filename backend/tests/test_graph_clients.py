@@ -38,14 +38,14 @@ class _Settings:
     minimax_base_url = "https://api.minimax.io/v1"
     minimax_request_timeout = 60
     minimax_agent_model = "MiniMax-M2.7-highspeed"
-    minimax_safety_model = "MiniMax-M2.5-highspeed"
+    minimax_extractor_model = "MiniMax-M2.5-highspeed"
     minimax_digest_model = ""
     minimax_digest_timeout = 180
     openrouter_enable = False
     openrouter_api_key = ""
     openrouter_base_url = "https://openrouter.ai/api/v1"
     openrouter_agent_model = "deepseek/deepseek-v3.2"
-    openrouter_safety_model = "deepseek/deepseek-v3.2"
+    openrouter_extractor_model = "deepseek/deepseek-v3.2"
     openrouter_digest_model = "deepseek/deepseek-v3.2"
     openrouter_embedding_model = "openai/text-embedding-3-large"
     openrouter_embedding_timeout = 60
@@ -536,7 +536,7 @@ def test_openrouter_agent_client_supports_low_reasoning(monkeypatch):
 
 
 def test_openrouter_agent_client_default_mode_sends_no_reasoning_field(monkeypatch):
-    """``default`` defers to the provider (used by safety/digest roles)."""
+    """``default`` defers to the provider (used by extractor/digest roles)."""
 
     class _OpenRouter(_Settings):
         openrouter_api_key = "test-key"

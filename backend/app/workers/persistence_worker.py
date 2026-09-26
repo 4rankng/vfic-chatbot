@@ -61,7 +61,7 @@ def _build_extractor():
     """MiniMax extractor for candidate extraction.
 
     Thin wrapper over the shared factory so candidate extraction reuses the same
-    safety-LLM wiring as the chatbot agent.
+    LLM wiring as the chatbot agent.
     """
     from app.graph.factories import build_minimax_extractor
 

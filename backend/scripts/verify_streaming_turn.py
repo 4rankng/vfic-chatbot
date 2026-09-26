@@ -88,6 +88,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip the KB evidence fixture (measures an ungrounded window; the reply will be a refusal).",
     )
     parser.add_argument(
+        "--with-tools",
+        action="store_true",
+        help=(
+            "Bind the tool schemas, as most production turns do. Some providers "
+            "buffer their whole response when tools are bound, which collapses "
+            "the delta cadence and defeats early delivery."
+        ),
+    )
+    parser.add_argument(
         "--min-deltas",
         type=int,
         default=5,
@@ -139,7 +148,14 @@ def _build_llm(provider: str, model: str):
     ), None
 
 
-async def _run(provider: str, model: str, *, min_deltas: int, with_evidence: bool = True) -> int:
+async def _run(
+    provider: str,
+    model: str,
+    *,
+    min_deltas: int,
+    with_evidence: bool = True,
+    with_tools: bool = False,
+) -> int:
     from app.graph.clients import MiniMaxAgent
 
     llm, error = _build_llm(provider, model)
@@ -152,6 +168,7 @@ async def _run(provider: str, model: str, *, min_deltas: int, with_evidence: boo
     warnings: list[str] = []
     print(f"model            : {model}")
     print(f"grounded         : {with_evidence}")
+    print(f"tools bound      : {with_tools}")
     print(f"provider         : {getattr(llm, 'trace_provider', None)}")
     print(f"max_tokens       : {getattr(llm, 'max_tokens', None)}")
     print(f"extra_body       : {getattr(llm, 'extra_body', None) or {}}")
@@ -181,9 +198,10 @@ async def _run(provider: str, model: str, *, min_deltas: int, with_evidence: boo
         retrieval=None,
         embedder=None,
         # An empty registry (not an empty allow-list: that means "full registry")
-        # binds no tools, so this harness measures the answer stream alone. The
-        # tool round is exercised by the unit tests.
-        resolved_tool_registry=frozenset(),
+        # binds no tools. --with-tools binds the real toolset instead, which is
+        # what production turns do and which some providers treat as
+        # "non-streamable" (they then emit the answer in one or two chunks).
+        **({} if with_tools else {"resolved_tool_registry": frozenset()}),
         metrics=metrics,
         on_delta=on_delta,
     )
@@ -295,6 +313,7 @@ async def main() -> int:
         model,
         min_deltas=args.min_deltas,
         with_evidence=not args.no_evidence,
+        with_tools=args.with_tools,
     )
 
 

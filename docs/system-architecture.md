@@ -388,6 +388,7 @@ sequenceDiagram
     end
 
     Note over WK: ── reply boundary ──
+    WK->>WK: agent.agent() answer-completion guard<br/>(continue a provider-cut answer, drop a dangling tail)
     WK->>WK: _finalize_user_visible_reply<br/>strip_think_reasoning only — the answer<br/>ships as generated (no rewrite, no truncation)
 
     rect rgb(245, 235, 235)
