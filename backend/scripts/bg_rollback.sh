@@ -13,7 +13,7 @@ cd /opt/vfic
 ACTIVE_FILE="/opt/vfic/ACTIVE_COLOR"
 PREV_COLOR_FILE="/opt/vfic/PREV_COLOR"
 PREV_TAG_FILE="/opt/vfic/PREV_TAG"
-WORKERS="worker-chatbot worker-persistence worker-ingest worker-followup scheduler"
+WORKERS="worker-chatbot worker-persistence worker-ingest worker-followup scheduler worker-maintenance metrics-watch"
 PUBLIC_BASE_URL="https://bot.tingting.vip"
 
 _count_lines() {
@@ -76,6 +76,69 @@ require_running_service_count() {
 $cids
 EOF
   [ "$found" = "1" ]
+}
+
+service_healthy_count() {
+  local service="$1" cid count=0
+  for cid in $(IMAGE_TAG="$IMAGE_TAG" docker compose ps -q "$service" 2>/dev/null || true); do
+    [ -n "$cid" ] || continue
+    if [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo unknown)" = "healthy" ]; then
+      count=$((count + 1))
+    fi
+  done
+  echo "$count"
+}
+
+# The oldest running container of $service still on a tag other than $IMAGE_TAG.
+stale_service_container() {
+  local service="$1" cid image
+  for cid in $(IMAGE_TAG="$IMAGE_TAG" docker compose ps -q "$service" 2>/dev/null || true); do
+    [ -n "$cid" ] || continue
+    image="$(docker inspect --format '{{.Config.Image}}' "$cid" 2>/dev/null || echo "")"
+    if [ "${image##*:}" != "$IMAGE_TAG" ]; then
+      echo "$cid"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Recreate $service replicas ONE AT A TIME (see the long note in bg_deploy.sh).
+# Kept as a copy rather than a shared library on purpose: this script is the
+# emergency path and must not depend on a sibling file being present on the
+# droplet. Duplicating the helper follows the convention already used for
+# _count_lines / declared_replicas / require_running_service_count here.
+rolling_recreate_service() {
+  local service="$1"
+  local expected stale replaced=0 budget=180 waited
+  expected="$(declared_replicas "$service")"
+
+  if [ "$expected" -le 1 ]; then
+    echo "==> rollback rolling recreate $service: 1 replica, single recreate"
+    IMAGE_TAG="$IMAGE_TAG" docker compose up -d --no-deps --force-recreate "$service"
+    return 0
+  fi
+
+  echo "==> rollback rolling recreate $service: $expected replicas, one at a time (keeping $((expected - 1)) consuming)"
+  while stale="$(stale_service_container "$service")"; do
+    echo "    replacing stale container=$stale"
+    docker rm -f "$stale" >/dev/null 2>&1 || true
+    IMAGE_TAG="$IMAGE_TAG" docker compose up -d --no-deps --no-recreate \
+      --scale "$service=$expected" "$service" >/dev/null
+    replaced=$((replaced + 1))
+    waited=0
+    while [ "$(service_healthy_count "$service")" -lt "$((expected - 1))" ] && [ "$waited" -lt "$budget" ]; do
+      sleep 2
+      waited=$((waited + 2))
+    done
+    if [ "$replaced" -ge "$expected" ]; then
+      break
+    fi
+  done
+
+  IMAGE_TAG="$IMAGE_TAG" docker compose up -d --no-deps --no-recreate \
+    --scale "$service=$expected" "$service" >/dev/null
+  echo "    $service healthy replicas: $(service_healthy_count "$service")/$expected"
 }
 
 assert_caddy_routes_color() {
@@ -176,6 +239,13 @@ if not isinstance(busy_workers, int) or busy_workers < 0 or busy_workers > total
     )
 print(json.dumps({"queue_depth": queue_depth, "busy_workers": busy_workers, "total_workers": total_workers}))
 PY
+
+  # Pipeline gate (same rationale as bg_deploy.sh): workers existing is not the
+  # same as work draining — assert no conversation is waiting for a reply.
+  IMAGE_TAG="$PREV_TAG" docker compose exec -T "web-$color" python -m scripts.turn_pipeline_check || {
+    echo "==> rollback check: turn pipeline stalled (inbound unanswered or outbox not draining)" >&2
+    return 1
+  }
 }
 
 ACTIVE="$(tr -d '[:space:]' < "$ACTIVE_FILE" 2>/dev/null || true)"
@@ -194,8 +264,25 @@ echo "==> bg_rollback: active=$ACTIVE -> prev=$PREV tag=$PREV_TAG"
 # resumable; a rejected image must not keep mutating production after rollback.
 docker compose --profile maintenance stop oa-profile-backfill || true
 
-# Revive the previous color at its tag + bring workers to the same tag.
-IMAGE_TAG="$PREV_TAG" docker compose up -d --no-deps --force-recreate "web-$PREV" $WORKERS
+# Revive the previous color at its tag + bring workers to the same tag. The
+# turn worker is rolled one replica at a time so webhook_high keeps a live
+# consumer across the restart (same defect class as bg_deploy.sh step 4).
+NON_TURN_WORKERS=""
+for svc in $WORKERS; do
+  case " worker-chatbot " in
+    *" $svc "*) continue ;;
+  esac
+  NON_TURN_WORKERS="$NON_TURN_WORKERS $svc"
+done
+# shellcheck disable=SC2086 # word-splitting the service list is intended
+IMAGE_TAG="$PREV_TAG" docker compose up -d --no-deps --force-recreate "web-$PREV" $NON_TURN_WORKERS
+IMAGE_TAG="$PREV_TAG"
+export IMAGE_TAG
+rolling_recreate_service worker-chatbot
+if [ "$(service_healthy_count worker-chatbot)" -lt 1 ]; then
+  echo "==> no healthy worker-chatbot replica after rollback; webhooks would queue unanswered" >&2
+  exit 1
+fi
 
 # Wait for it healthy before flipping.
 cid="$(IMAGE_TAG="$PREV_TAG" docker compose ps -q "web-$PREV")"

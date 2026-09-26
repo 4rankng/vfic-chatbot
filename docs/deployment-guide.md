@@ -105,7 +105,31 @@ build + push both images → blue/green cutover.
    keeps serving either way), and `statement_timeout` (15 min default) bounds
    runaway statements; override via `ALEMBIC_LOCK_TIMEOUT_MS` /
    `ALEMBIC_STATEMENT_TIMEOUT_MS` when a migration legitimately needs more.
-4. Bring up the **inactive** web color + all workers at the new tag.
+4. Bring up the **inactive** web color + all workers at the new tag. Two
+   classes of service are handled differently, because the workers are shared
+   across colors (they are keyed to `${IMAGE_TAG}`, not to a color):
+   - Services that do **not** consume `webhook_high` (the web color,
+     `worker-persistence`, `worker-ingest`, `worker-followup`, `scheduler`,
+     `worker-maintenance`) are recreated outright — restarting them cannot
+     strand an inbound turn.
+   - The turn workers (`TURN_WORKERS=worker-chatbot`) are recreated **one
+     replica at a time** (`rolling_recreate_service`), waiting for a healthy
+     replacement before touching the next, so at least `replicas - 1` keep
+     consuming `webhook_high` throughout. Recreating all three at once leaves
+     accepted webhooks queued for the whole cold preload (~83 s on this host)
+     even though every container reports healthy — the 2026-09-26 incident.
+     The roll uses `up -d --no-recreate --scale <svc>=<n>`, which creates the
+     missing replica and leaves the surviving ones untouched; mixed tags across
+     replicas during a roll are intended (blue/green already runs old and new
+     code concurrently, and step 3's migrations are additive).
+   - A hard gate then requires at least one healthy `worker-chatbot` replica
+     before the flip; a rolled worker that never registered would otherwise
+     strand every accepted webhook.
+   Every service whose image is pinned to `${IMAGE_TAG}` in
+   `docker-compose.yml` **must** be listed in the deploy script's `WORKERS`
+   variable, or it silently keeps running the previous release —
+   `worker-maintenance` (the outbound dispatcher, queue `maintenance`) was
+   omitted and drifted onto 38-hour-old code until 2026-09-26.
 5. Wait for the new color's `/health` to go healthy.
 6. **Smoke gate**: run one real bot turn on the new color
    (`scripts/smoke_turn.py`) — exercises `claim_send` (outbox INSERT),
@@ -123,11 +147,20 @@ build + push both images → blue/green cutover.
    - `https://bot.tingting.vip/health` returns `{"status":"ok"}`.
    - `https://bot.tingting.vip/` returns the frontend root.
    - `Caddyfile` routes the public edge to the new `web-<color>:8000` upstream.
-   - `docker compose ps` shows 1 `frontend`, 2 `worker-chatbot`, 1 each of
-     `worker-persistence`, `worker-ingest`, `worker-followup`, and `scheduler`
-     containers running, with health checks healthy when present.
+   - `docker compose ps` shows 1 `frontend`, 3 `worker-chatbot`, 1 each of
+     `worker-persistence`, `worker-ingest`, `worker-followup`, `scheduler`, and
+     `worker-maintenance` containers running, with health checks healthy when
+     present.
    - `web-<color>` `/health/queue` exposes queue depth, busy/total workers,
      LLM latency, recent LLM invokes, and recent Minimax 429 counters.
+   - **Turn-pipeline gate**: `python -m scripts.turn_pipeline_check` inside the
+     active color (`scripts/turn_pipeline_check.py`) asserts the bot is actually
+     *answering*, not merely running — at least one live consumer registered on
+     `webhook_high`, no `BOT`-mode conversation waiting for a reply after its
+     newest inbound (`--window`, default 300 s; in-flight turns are excluded via
+     open `bot_runs`), and no `PENDING` outbound row older than `--stale-after`
+     (default 120 s). `/health/queue` proves workers exist; this proves work is
+     draining. Self-test: `--min-consumers 999` MUST exit 1.
    Failure on a non-inaugural deploy rolls back to `PREV_COLOR`/`PREV_TAG`.
    Inaugural failure has no prior color to restore, so `web-<color>` stays up
    and operator intervention is required.
@@ -206,7 +239,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0055_memories_match_halfvec` (24 Sep 2026).
+- **HEAD:** `0056_project_external_api` (26 Sep 2026).
 - **Baseline `0001`** is ~58 KB of raw `op.execute` SQL; later revisions are
   normal Alembic. `app/models/` mirrors schema but does **not** generate
   migrations.

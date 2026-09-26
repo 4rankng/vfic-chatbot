@@ -681,7 +681,16 @@ def test_bg_deploy_exec_inaugural_public_verify_failure_keeps_blue_running(tmp_p
     assert proc.returncode == 1
     assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "blue"
     assert "web-blue:8000" in (root / "Caddyfile").read_text(encoding="utf-8")
-    assert "docker compose up -d --no-deps --force-recreate web-blue worker-chatbot worker-persistence worker-ingest worker-followup scheduler" in commands
+    # The web color and the non-turn workers are recreated outright; the turn
+    # worker goes through the rolling path (which falls back to a single
+    # recreate here, because the stubbed `compose config` cannot report
+    # replicas). See rolling_recreate_service for why they are not one command.
+    assert (
+        "docker compose up -d --no-deps --force-recreate web-blue"
+        " worker-persistence worker-ingest worker-followup scheduler worker-maintenance"
+        in commands
+    )
+    assert "docker compose up -d --no-deps --force-recreate worker-chatbot" in commands
     assert "docker compose stop web-blue" not in commands
     assert "bash scripts/bg_rollback.sh" not in commands
 
@@ -763,3 +772,98 @@ def test_bg_rollback_exec_success_swaps_state_only_after_public_checks(tmp_path:
     assert commands.index("curl https://bot.tingting.vip/health\n") < commands.index(
         "docker compose stop web-green\n"
     )
+
+
+BACKEND_IMAGE_PREFIX = "ghcr.io/4rankng/tinghire-be"
+
+
+def _compose_services() -> dict:
+    compose = yaml.safe_load((BACKEND_DIR / "docker-compose.yml").read_text())
+    return compose["services"]
+
+
+def _worker_list(script_name: str) -> list[str]:
+    match = re.search(r'^WORKERS="([^"]+)"', _read(script_name), re.MULTILINE)
+    assert match is not None, f"{script_name} must define WORKERS"
+    return match.group(1).split()
+
+
+def test_every_backend_service_pinned_to_image_tag_is_deployed() -> None:
+    # Found 2026-09-26: worker-maintenance (the outbound dispatcher — the
+    # component that actually pushes bot replies to Zalo) was pinned to
+    # ${IMAGE_TAG} in compose but missing from WORKERS, so it kept running
+    # 38-hour-old code; metrics-watch was never created in production at all.
+    # Any backend service pinned to the deploy tag must be deployed by the
+    # deploy script, or it silently drifts.
+    deployed = set(_worker_list("bg_deploy.sh"))
+    missing = set()
+    for name, service in _compose_services().items():
+        image = str(service.get("image", ""))
+        if not image.startswith(BACKEND_IMAGE_PREFIX) or "${IMAGE_TAG" not in image:
+            continue
+        if name in {"web-blue", "web-green"}:
+            continue  # brought up by the flip orchestration itself
+        if service.get("profiles"):
+            continue  # started explicitly (e.g. oa-profile-backfill post-flip)
+        if name not in deployed:
+            missing.add(name)
+
+    assert missing == set(), f"services pinned to IMAGE_TAG but never deployed: {missing}"
+
+
+def test_deploy_and_rollback_worker_lists_agree() -> None:
+    assert set(_worker_list("bg_deploy.sh")) == set(_worker_list("bg_rollback.sh"))
+
+
+def test_turn_workers_are_rolled_not_restarted_together() -> None:
+    # Recreating all chatbot replicas at once stranded inbound turns for the
+    # whole cold preload (~83s) while every container still reported healthy.
+    script = _read("bg_deploy.sh")
+    blunt_recreate = next(
+        line for line in script.splitlines() if '--force-recreate "web-$NEXT"' in line
+    )
+
+    assert 'TURN_WORKERS="worker-chatbot"' in script
+    assert "rolling_recreate_service" in script
+    assert "$NON_TURN_WORKERS" in blunt_recreate
+    assert "$WORKERS" not in blunt_recreate
+    # The roll must leave the surviving replicas alone while it replaces one.
+    roll_body = script.split("rolling_recreate_service() {", 1)[1].split("\n}", 1)[0]
+    assert "--no-recreate" in roll_body
+    assert "--scale" in roll_body
+    assert "--force-recreate" not in roll_body.split("expected\" -le 1")[1].split("return 0")[1]
+
+
+def test_deploy_requires_a_live_turn_consumer_before_the_flip() -> None:
+    script = _read("bg_deploy.sh")
+    consumer_gate = script.rindex("service_healthy_count \"$svc\"")
+    flip = script.index("./scripts/flip_caddy.sh")
+
+    assert consumer_gate < flip, "a live webhook_high consumer must exist before the flip"
+
+
+def test_deploy_and_rollback_run_the_turn_pipeline_gate() -> None:
+    # /health/queue proves workers exist; the pipeline gate proves work drains.
+    for name in ("bg_deploy.sh", "bg_rollback.sh"):
+        script = _read(name)
+        assert "python -m scripts.turn_pipeline_check" in script, name
+        assert "turn pipeline stalled" in script, name
+
+
+def test_web_healthcheck_budget_survives_deploy_contention() -> None:
+    # A 5s compose timeout with a 3s in-probe socket timeout reported BOTH colors
+    # unhealthy during deploy-time CPU contention (2026-09-26), which can abort a
+    # deploy mid-cutover. The probe budget must exceed the socket timeout.
+    compose = yaml.safe_load((BACKEND_DIR / "docker-compose.yml").read_text())
+    for color in ("web-blue", "web-green"):
+        healthcheck = compose["services"][color]["healthcheck"]
+        assert "timeout=10" in str(healthcheck["test"])
+        assert int(str(healthcheck["timeout"]).rstrip("s")) >= 15
+
+
+def test_chatbot_worker_start_period_covers_the_measured_preload() -> None:
+    compose = yaml.safe_load((BACKEND_DIR / "docker-compose.yml").read_text())
+    healthcheck = compose["services"]["worker-chatbot"]["healthcheck"]
+
+    # 83.2s measured preload on 2026-09-26; 60s was already optimistic.
+    assert int(str(healthcheck["start_period"]).rstrip("s")) >= 180

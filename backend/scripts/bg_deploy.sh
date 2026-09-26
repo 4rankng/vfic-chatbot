@@ -24,7 +24,18 @@ set -euo pipefail
 cd /opt/vfic
 
 IMAGE_TAG="${IMAGE_TAG:?IMAGE_TAG is required (passed by Makefile)}"
-WORKERS="worker-chatbot worker-persistence worker-ingest worker-followup scheduler"
+# Every service whose image is pinned to ${IMAGE_TAG} in docker-compose.yml MUST
+# be listed here, or it silently keeps running the previous release — or is never
+# started at all. Two such drifts were found on 2026-09-26: the outbound
+# dispatcher (worker-maintenance, queue `maintenance` — the component that
+# actually pushes bot replies to Zalo) had been left on 38-hour-old code, and the
+# queue-depth alert poller (metrics-watch) had never been created in production.
+WORKERS="worker-chatbot worker-persistence worker-ingest worker-followup scheduler worker-maintenance metrics-watch"
+# Worker services that consume the inbound turn queue. These are recreated one
+# replica at a time (see rolling_recreate_service) so a listener is always
+# draining `webhook_high`; recreating them together leaves accepted webhooks
+# queued for the whole ~83s cold preload (2026-09-26 outage class).
+TURN_WORKERS="worker-chatbot"
 ACTIVE_FILE="/opt/vfic/ACTIVE_COLOR"
 PREV_COLOR_FILE="/opt/vfic/PREV_COLOR"
 PREV_TAG_FILE="/opt/vfic/PREV_TAG"
@@ -92,6 +103,89 @@ require_running_service_count() {
 $cids
 EOF
   [ "$found" = "1" ]
+}
+
+service_healthy_count() {
+  local service="$1" cid count=0
+  for cid in $(IMAGE_TAG="$IMAGE_TAG" docker compose ps -q "$service" 2>/dev/null || true); do
+    [ -n "$cid" ] || continue
+    if [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo unknown)" = "healthy" ]; then
+      count=$((count + 1))
+    fi
+  done
+  echo "$count"
+}
+
+# The oldest running container of $service still on a tag other than $IMAGE_TAG.
+stale_service_container() {
+  local service="$1" cid image
+  for cid in $(IMAGE_TAG="$IMAGE_TAG" docker compose ps -q "$service" 2>/dev/null || true); do
+    [ -n "$cid" ] || continue
+    image="$(docker inspect --format '{{.Config.Image}}' "$cid" 2>/dev/null || echo "")"
+    if [ "${image##*:}" != "$IMAGE_TAG" ]; then
+      echo "$cid"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Recreate $service replicas ONE AT A TIME, replacing the oldest stale container
+# and waiting for a healthy replacement before touching the next. `--no-recreate`
+# leaves the healthy replicas (still on the old tag) untouched, so the remaining
+# replicas keep consuming the queue for the whole preload of the new one.
+#
+# This is what keeps inbound turns flowing across a deploy: a single
+# `--force-recreate` of worker-chatbot (3 replicas, ~83s cold preload each on
+# this host) leaves webhook_high unconsumed and recruiters unanswered for
+# minutes even though every container reports healthy (2026-09-26).
+#
+# Mixed tags across replicas are intended: blue/green already runs old and new
+# code concurrently, and migrations are additive (step 3) before this runs.
+rolling_recreate_service() {
+  local service="$1"
+  local expected stale replaced=0 budget=180 waited
+  expected="$(declared_replicas "$service")"
+
+  if [ "$expected" -le 1 ]; then
+    # Nothing to keep alive — a single replica cannot be rolled.
+    echo "==> rolling recreate $service: 1 replica, single recreate"
+    IMAGE_TAG="$IMAGE_TAG" docker compose up -d --no-deps --force-recreate "$service"
+    return 0
+  fi
+
+  echo "==> rolling recreate $service: $expected replicas, one at a time (keeping $((expected - 1)) consuming)"
+  while stale="$(stale_service_container "$service")"; do
+    echo "    replacing stale container=$stale"
+    docker rm -f "$stale" >/dev/null 2>&1 || true
+    IMAGE_TAG="$IMAGE_TAG" docker compose up -d --no-deps --no-recreate \
+      --scale "$service=$expected" "$service" >/dev/null
+    replaced=$((replaced + 1))
+    # Wait for the replacement to register before removing the next replica, so
+    # at least $((expected - 1)) consumers stay live throughout.
+    waited=0
+    while [ "$(service_healthy_count "$service")" -lt "$((expected - 1))" ] && [ "$waited" -lt "$budget" ]; do
+      sleep 2
+      waited=$((waited + 2))
+    done
+    if [ "$waited" -ge "$budget" ]; then
+      echo "    WARNING: fewer than $((expected - 1)) healthy $service replicas after ${budget}s; continuing" >&2
+    fi
+    if [ "$replaced" -ge "$expected" ]; then
+      break
+    fi
+  done
+
+  # Converge count/name drift from a partial or interrupted previous run.
+  IMAGE_TAG="$IMAGE_TAG" docker compose up -d --no-deps --no-recreate \
+    --scale "$service=$expected" "$service" >/dev/null
+
+  waited=0
+  while [ "$(service_healthy_count "$service")" -lt "$expected" ] && [ "$waited" -lt "$budget" ]; do
+    sleep 2
+    waited=$((waited + 2))
+  done
+  echo "    $service healthy replicas: $(service_healthy_count "$service")/$expected"
 }
 
 assert_caddy_routes_color() {
@@ -193,6 +287,15 @@ if not isinstance(busy_workers, int) or busy_workers < 0 or busy_workers > total
     )
 print(json.dumps({"queue_depth": queue_depth, "busy_workers": busy_workers, "total_workers": total_workers}))
 PY
+
+  # Pipeline gate. /health/queue above proves workers EXIST; this proves work is
+  # actually draining. The 2026-09-26 outage had healthy containers, a passing
+  # smoke gate and HTTP 200 webhooks while worker-chatbot preloaded (83s) and
+  # recruiters waited minutes for a reply — only a pipeline assertion catches it.
+  IMAGE_TAG="$IMAGE_TAG" docker compose exec -T "web-$color" python -m scripts.turn_pipeline_check || {
+    echo "==> post-flip check: turn pipeline stalled (inbound unanswered or outbox not draining)" >&2
+    return 1
+  }
 }
 
 rollback_post_flip_failure() {
@@ -273,7 +376,30 @@ IMAGE_TAG="$IMAGE_TAG" docker compose run --rm --no-deps web-blue \
 
 # 4. Bring up the new color + workers at the new tag.
 echo "==> [4/10] bringing up web-$NEXT + workers at $IMAGE_TAG..."
-IMAGE_TAG="$IMAGE_TAG" docker compose up -d --no-deps --force-recreate "web-$NEXT" $WORKERS
+# Services that do NOT consume webhook_high are recreated outright: restarting
+# them cannot strand an inbound turn. Turn workers are rolled one replica at a
+# time instead (see rolling_recreate_service).
+NON_TURN_WORKERS=""
+for svc in $WORKERS; do
+  case " $TURN_WORKERS " in
+    *" $svc "*) continue ;;
+  esac
+  NON_TURN_WORKERS="$NON_TURN_WORKERS $svc"
+done
+# shellcheck disable=SC2086 # word-splitting the service list is intended
+IMAGE_TAG="$IMAGE_TAG" docker compose up -d --no-deps --force-recreate "web-$NEXT" $NON_TURN_WORKERS
+for svc in $TURN_WORKERS; do
+  rolling_recreate_service "$svc"
+done
+# Hard gate: at least one replica must be consuming webhook_high before the flip.
+# A rolled worker that never registered would strand every accepted webhook, and
+# the web color's own healthcheck cannot see that.
+for svc in $TURN_WORKERS; do
+  if [ "$(service_healthy_count "$svc")" -lt 1 ]; then
+    echo "==> no healthy $svc replica before flip; webhooks would queue unanswered. ABORTING — ${ACTIVE:-<none>} keeps serving." >&2
+    exit 1
+  fi
+done
 
 # 5. Wait for the new color's healthcheck to pass. Cold-boot on the droplet can
 #    exceed 120s (image pull + uvicorn + scheduler registration + DB-pool

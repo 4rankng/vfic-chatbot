@@ -121,9 +121,13 @@ services:
     expose: ["8000"]
     healthcheck:
       # uvicorn serves /health on :8000. Python is guaranteed in the image (no curl dep).
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""]
-      interval: 5s
-      timeout: 5s
+      # The probe's own socket timeout (10s) must stay under the compose timeout
+      # (15s) below. Both were 3s/5s until 2026-09-26, when deploy-time CPU
+      # contention on this 2-vCPU host made the probe exceed 5s and both colours
+      # reported `unhealthy` while serving fine — which aborts a deploy mid-flip.
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=10).status==200 else 1)\""]
+      interval: 10s
+      timeout: 15s
       retries: 5
       # 30s absorbs the cold-boot fork window so compose's own probe does not
       # start firing before the single uvicorn worker has bound :8000.
@@ -149,9 +153,9 @@ services:
     volumes: [vfic_kb_uploads:/data/kb_uploads]
     expose: ["8000"]
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""]
-      interval: 5s
-      timeout: 5s
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=10).status==200 else 1)\""]
+      interval: 10s
+      timeout: 15s
       retries: 5
       start_period: 30s
     restart: unless-stopped
@@ -196,7 +200,9 @@ services:
       retries: 5
       # The chatbot worker preloads langchain/openai + warms LLM clients before
       # the work loop registers itself; the probe must not fire before that.
-      start_period: 60s
+      # Measured 83.2s on 2026-09-26 (2-vCPU host under deploy-time contention),
+      # so 60s was already optimistic — 180s states the real budget.
+      start_period: 180s
     restart: unless-stopped
 
   # RQ worker: best-effort lead/memory enrichment after a reply is sent.
@@ -372,12 +378,19 @@ services:
         POLL = int(os.environ.get("METRICS_WATCH_INTERVAL", "30"))
         DEPTH_LIMIT = int(os.environ.get("METRICS_WATCH_MAX_QUEUE_DEPTH", "20"))
         SATURATION_POLLS = int(os.environ.get("METRICS_WATCH_SATURATION_POLLS", "10"))
+        # Must be one of allowed_hosts (SEC-06) — see get().
+        HOST_HEADER = os.environ.get("METRICS_WATCH_HOST_HEADER", "bot.tingting.vip")
         COLORS = ("web-blue", "web-green")
         QUEUE_KEYS = ("webhook_high", "recovery", "persistence_low", "ingest", "followup", "maintenance")
         COUNTERS = ("reconcile_enqueue_failed_total", "reconcile_unknown_send_outcome")
 
         def get(url):
-            with urllib.request.urlopen(url, timeout=5) as r:
+            # TrustedHostMiddleware (SEC-06, allowed_hosts in .env) answers 400 to
+            # a direct `Host: web-green:8000` probe, so every request must present
+            # an allowed Host. Without this the poller saw both colours as dead
+            # (found on its first ever run, 2026-09-26 — it had never been started).
+            request = urllib.request.Request(url, headers={"Host": HOST_HEADER})
+            with urllib.request.urlopen(request, timeout=5) as r:
                 return json.loads(r.read().decode())
 
         def emit(level, alert, **fields):
