@@ -42,7 +42,7 @@ release-check:
 			echo "Release blocked: docs/deployment-guide.md's Alembic HEAD no longer matches alembic heads ($$HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
 	@docker compose -f backend/docker-compose.dev.yml up -d --wait postgres redis
 	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest -m "not integration" && .venv/bin/pytest -m integration tests/integration/test_harness_smoke.py && .venv/bin/pytest -m integration --durations=25
-	@cd frontend && npm run lint && npm run typecheck && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build && npm run test:e2e:desktop && npm run test:e2e:mobile
+	@cd frontend && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build && npm run test:e2e:desktop && npm run test:e2e:mobile
 	@tmp_raw="$$(mktemp -t release-gate-raw.XXXXXX.json)"; \
 		tmp_gold="$$(mktemp -t release-gate-golden.XXXXXX.json)"; \
 		(cd backend && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp_raw"); \
