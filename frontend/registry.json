@@ -146,6 +146,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/external-api-service.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/ProjectWorkspaceShell.tsx",
           "type": "registry:component"
         },
@@ -159,6 +163,10 @@
         },
         {
           "path": "src/components/atomic-crm/projects/ProjectKnowledgePanel.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/ProjectExternalApiPanel.tsx",
           "type": "registry:component"
         },
         {
@@ -243,6 +251,14 @@
         },
         {
           "path": "src/components/atomic-crm/projects/domain/externalSourcePolling.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/domain/external-api-policy.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/domain/external-api-contracts.ts",
           "type": "registry:component"
         },
         {
