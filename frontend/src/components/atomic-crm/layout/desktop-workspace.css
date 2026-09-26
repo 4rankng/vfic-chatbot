@@ -11,6 +11,12 @@
     grid-template-rows: 2.75rem minmax(0, 1fr);
   }
 
+  /* From 768px up the rail carries the brand, so the topbar brand (small
+     mark) would sit beside it as a duplicate; it stays mobile-only. */
+  .workspace-topbar-brand {
+    display: none;
+  }
+
   .workspace-topbar-actions {
     justify-self: end;
     margin-left: auto;

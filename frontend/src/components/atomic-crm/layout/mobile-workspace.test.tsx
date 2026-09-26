@@ -77,7 +77,6 @@ describe("desktop workspace rail", () => {
     const topbarBrand = screen.container.querySelector<HTMLElement>(
       ".workspace-topbar-brand",
     )!;
-    const topbarBrandMark = topbarBrand.querySelector<HTMLElement>("img")!;
     const frame =
       screen.container.querySelector<HTMLElement>(".workspace-frame")!;
     const topbar =
@@ -95,10 +94,9 @@ describe("desktop workspace rail", () => {
     expect(getComputedStyle(rail).width).toBe("72px");
     expect(topbar.getBoundingClientRect().height).toBeCloseTo(44, 0);
     expect(getComputedStyle(compactMark).display).toBe("block");
-    expect(getComputedStyle(topbarBrand).display).not.toBe("none");
-    expect(getComputedStyle(topbarBrandMark).borderTopWidth).toBe("0px");
-    expect(getComputedStyle(topbarBrandMark).borderRadius).toBe("0px");
-    expect(getComputedStyle(topbarBrandMark).objectFit).toBe("contain");
+    // The rail mark is the only brand at tablet width; the topbar mark would
+    // duplicate it.
+    expect(getComputedStyle(topbarBrand).display).toBe("none");
   });
 
   it("pins the notification and account controls to the far right of the top bar", async () => {
