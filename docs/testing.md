@@ -161,17 +161,19 @@ the E2E database during global teardown.
 | Frontend API | Unit tests use custom dataProvider/authProvider mocks; Playwright uses the test-only FastAPI server and real JWT login. |
 | Frontend realtime | Unit tests mock Socket.IO in `useConversationRealtime.test.ts`. |
 
-## Root CI Quality Gates
+## Root Quality Gates
 
-The GitHub Actions `quality-gates.yml` workflow runs on pull requests and pushes to `main`. Its lanes are:
+There is no CI. `make release-check` (repo root) is the whole gate set, and it must pass before any image is built or production is touched — `make deploy` invokes it first and aborts on the first failure. Lanes:
 
-| Job | What it runs |
+| Lane | What it runs |
 |---|---|
-| `backend-unit` | `ruff check .` and `pytest -m "not integration"` in `backend/`. |
-| `backend-integration` | The full backend integration suite (`pytest -m integration`) against local PostgreSQL 16 + pgvector and Redis. |
-| `frontend-quality` | `npm run lint`, `npm run typecheck`, `npm run test:unit:app:coverage -- --run`, and `npm run build` in `frontend/`. |
-| `visual-e2e` | Playwright on both `chromium` and `Mobile Chrome` projects inside the pinned `playwright:v1.60.0-noble` image; `@visual-only` specs run with `VFIC_VISUAL_ONLY=1` and no database services. |
-| `release-gate` | Offline golden-result generation with `scripts/benchmark_rag.py --gold`, evaluation with `scripts/release_gate_check.py`, then one real bot turn through `scripts/smoke_turn.py` against a migrated disposable database plus its `--inject-failure` fail-closed self-test. Fresh CI disables the latency SLO gate — CI has no production telemetry, so the job reports it as `not evaluated` rather than measuring it. |
+| backend unit | `ruff check .` and `pytest -m "not integration"` in `backend/`. |
+| backend integration | The integration harness smoke as a fast-fail canary, then the full suite (`pytest -m integration`) against local PostgreSQL 16 + pgvector and Redis. |
+| frontend quality | `npm run lint`, `npm run typecheck`, `npm run registry:check`, the app unit suite, the changed-surface coverage gate, and `npm run build` in `frontend/`. |
+| functional E2E | Playwright on both the `chromium` and `Mobile Chrome` projects against a disposable backend + vite server (`reuseExistingServer: false`, so ports 8000/4173 must be free). |
+| release gate | Offline golden-result generation with `scripts/benchmark_rag.py --gold` and evaluation with `scripts/release_gate_check.py`. The latency SLO gate reports `not evaluated` locally — there is no production telemetry from a dev machine. |
+
+`make deploy` additionally runs the blue/green smoke turn (`scripts/smoke_turn.py`) against the live new colour before the Caddy flip, and `scripts/turn_pipeline_check.py` after it.
 
 ## Regression Policy
 

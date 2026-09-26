@@ -156,8 +156,7 @@ as candidate work items; confirm with the owner before scheduling.
 - **Status:** resolved — the inherited Atomic CRM workflow tree
   (`frontend/.github/`, both `check.yml` and `deploy.yml`) was removed.
   GitHub only reads repo-root `.github/workflows/`, so these files never ran
-  for this repository; root `quality-gates.yml` covers every gate they
-  provided.
+  for this repository; `make release-check` covers every gate they provided.
 
 ### K-6. `lead_stage` PATCH dropped the concurrency guard — RESOLVED
 - **Diagnosed and fixed 2026-09-21.** Root cause: in `update_lead`
@@ -184,9 +183,11 @@ as candidate work items; confirm with the owner before scheduling.
   `frontend/package.json`.
 
 ### K-8. No backend CI — RESOLVED
-- **Status:** resolved — repo-root `.github/workflows/quality-gates.yml` runs
-  backend unit (ruff + pytest), backend integration smoke, frontend quality,
-  functional E2E, and the release gate on every PR and push to `main`.
+- **Status:** resolved — repo-root `make release-check` runs backend unit
+  (ruff + pytest), the backend integration suite, frontend quality, functional
+  E2E, and the release gate, and `make deploy` refuses to build or push an image
+  until it passes. (Originally resolved through GitHub Actions; the workflows
+  were removed on 2026-09-26 for local-only gating — see K-13.)
 
 ### K-9. Domain exception coverage partial — RESOLVED
 - **Status:** resolved (2026-09-21). The scope was understated: **12 routers, 64
@@ -241,13 +242,30 @@ as candidate work items; confirm with the owner before scheduling.
 ### K-12. Frontend `react-refresh/only-export-components` warnings (16)
 - **Where:** 9 component modules under `frontend/src/components/`.
 - **Status:** deliberately tolerated. `eslint.config.js` sets the rule to
-  `warn` (with `allowConstantExport`), and CI runs a bare `npm run lint` with no
-  `--max-warnings`, so warnings never fail the build.
+  `warn` (with `allowConstantExport`), and `release-check` runs a bare
+  `npm run lint` with no `--max-warnings`, so warnings never fail the gate.
 - **Impact:** Fast Refresh degrades to a full reload while editing those files.
   Development-time only; no runtime or production effect.
 - **Owner action:** only worth doing alongside real work on those modules —
   it means extracting the non-component exports into sibling modules and
   updating every importer.
+
+### K-13. GitHub Actions removed — local-only gating
+- **Decided:** 2026-09-26 (operator).
+- **What:** `.github/workflows/quality-gates.yml` and
+  `.github/workflows/openwiki-update.yml` are deleted. `release-check` no longer
+  requires a green CI run for the commit under release; it runs every lane on
+  the deploying machine instead. The gate list itself is unchanged.
+- **Why:** deploys were already manual, so the workflows duplicated work and
+  added a hard external dependency — a dead `gh` token, an account billing
+  block, or a missing run all blocked a release that the local lanes could have
+  cleared in the same time. They cost more than they caught.
+- **Trade-off accepted:** a release now has no third-party record of the gates
+  having passed. `make deploy` still aborts on the first failing lane, and the
+  blue/green smoke turn + turn-pipeline gate remain the production-side proof.
+- **OpenWiki:** the index is refreshed locally with `make openwiki` at the end
+  of a task (needs `OPENROUTER_API_KEY`). Nothing regenerates it otherwise, so
+  it only stays current if that step is actually run.
 
 ---
 

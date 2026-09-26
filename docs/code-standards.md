@@ -299,18 +299,23 @@ directly, but treat changes with the weight of an upstream fork:
 
 ---
 
-## CI notes
-- CI lives in the repo-root `.github/workflows/quality-gates.yml`: backend
-  unit (ruff + pytest), backend integration smoke, frontend quality
-  (lint/typecheck/unit/coverage/build, Node 22), functional Playwright E2E
-  (chromium + Mobile Chrome), and the offline golden release gate — on every
-  PR and push to `main`.
-- `openwiki-update.yml` refreshes the generated OpenWiki evidence index.
-- Deploys are still manual: `make push` (docker buildx AMD64 → GHCR) +
-  `make deploy` (blue/green, smoke-gated Caddy flip) over SSH.
+## Gate notes
+- **There is no CI.** Every gate runs locally, on this machine, orchestrated by
+  the repo-root `make release-check`: backend unit (ruff + pytest), backend
+  integration smoke, the full backend integration suite, frontend quality
+  (lint/typecheck/registry/unit/coverage/build), functional Playwright E2E
+  (chromium + Mobile Chrome), `uv lock --check`, exactly one Alembic head with
+  `docs/deployment-guide.md` §4 matching it, and the offline golden release gate.
+- `make deploy` runs `release-check` first and refuses to build or push an image
+  when any gate fails. Run it directly to validate a change without deploying.
+- The GitHub Actions workflows (`quality-gates.yml`, `openwiki-update.yml`) were
+  removed on 2026-09-26 — deploys are manual anyway, and the gates are the same
+  commands run by hand.
+- The generated OpenWiki evidence index is refreshed locally with
+  `make openwiki` (at the end of a task), never by CI.
 - The inherited Atomic CRM workflows under `frontend/.github/` were removed
   (2026-09-13): GitHub only reads root-level workflows, so they never ran for
-  this repository, and root quality-gates.yml covers the same gates.
+  this repository.
 
 ---
 

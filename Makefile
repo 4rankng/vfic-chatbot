@@ -1,4 +1,4 @@
-.PHONY: dev bootstrap deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod release-check
+.PHONY: dev bootstrap deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod release-check openwiki
 
 # Ports are owned by backend/Makefile (BACKEND_PORT / FRONTEND_PORT /
 # ZALO_MOCK_PORT). This file only forwards the frontend one, so
@@ -31,9 +31,8 @@ bootstrap:
 	@echo "bootstrap complete — run 'make dev'"
 
 # Release must be committed and validated before any image is pushed or production is touched.
+# Every gate runs on this machine — there is no CI in the loop.
 release-check:
-	@command -v gh >/dev/null 2>&1 || { echo "Release blocked: gh CLI not found — the release requires a green quality-gates run for the exact commit under release."; exit 1; }
-	@test -n "$$(gh run list --workflow quality-gates.yml --commit "$$(git rev-parse HEAD)" --status success --limit 1)" || { echo "Release blocked: no green quality-gates run for $$(git rev-parse HEAD) — push and let CI finish before releasing."; exit 1; }
 	@test -z "$$(git status --porcelain)" || { echo "Release blocked: commit or stash all local changes first."; exit 1; }
 	@git diff --check
 	@if command -v uv >/dev/null 2>&1; then (cd backend && uv lock --check); else echo "WARNING: uv not found — skipped uv lock --check"; fi
@@ -70,6 +69,22 @@ deploy: release-check
 
 # Adminer over an SSH tunnel -> http://localhost:18081 (no public exposure).
 # Ctrl-C closes the tunnel.
+## openwiki: refresh the generated OpenWiki evidence index (run at the end of a task).
+## Reads OPENROUTER_API_KEY from the environment, falling back to backend/.env.
+openwiki:
+	@set -eu; \
+		key="$${OPENROUTER_API_KEY:-}"; \
+		if [ -z "$$key" ] && [ -f backend/.env ]; then \
+			key="$$(sed -n 's/^OPENROUTER_API_KEY=//p' backend/.env | tail -1)"; \
+		fi; \
+		command -v openwiki >/dev/null 2>&1 || { \
+			echo "OpenWiki blocked: 'openwiki' CLI not found — npm install -g openwiki@0.5.0 mermaid@11.16.0 jsdom@29.1.1"; exit 1; }; \
+		test -n "$$key" || { \
+			echo "OpenWiki blocked: no OpenRouter key. Export OPENROUTER_API_KEY or fill it in backend/.env."; exit 1; }; \
+		OPENWIKI_PROVIDER=openrouter OPENWIKI_MODEL_ID="z-ai/glm-5.2" OPENROUTER_API_KEY="$$key" \
+			openwiki code --update --print; \
+		rm -f -- openwiki/.run.json
+
 adminer:
 	$(MAKE) -C backend adminer
 

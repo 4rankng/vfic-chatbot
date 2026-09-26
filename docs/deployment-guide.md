@@ -70,14 +70,15 @@ All targets live in the root `Makefile` (delegates to `backend/Makefile`).
 build + push both images → blue/green cutover.
 
 ### Full deploy (`make deploy`)
-1. `release-check` — requires a green quality-gates CI run for the exact commit
-   under release (a missing `gh` CLI, an unpushed commit, or a red/missing run
-   blocks the release), a clean committed worktree, exactly one Alembic head,
-   then backend lint/tests + the full integration suite (harness smoke first as a
-   fast-fail canary, then every `-m integration` file with `--durations=25`),
-   frontend lint/typecheck/scoped
-   coverage/build + desktop/mobile Playwright, and the offline golden
-   retrieval-correctness check. Stops before any image is pushed if a check fails.
+1. `release-check` — a clean committed worktree, exactly one Alembic head with
+   §4 below matching it, `uv lock --check`, then backend lint/tests + the full
+   integration suite (harness smoke first as a fast-fail canary, then every
+   `-m integration` file with `--durations=25`), frontend
+   lint/typecheck/registry/scoped coverage/build + desktop/mobile Playwright,
+   and the offline golden retrieval-correctness check. Every lane runs on the
+   deploying machine — there is **no CI** in the release path (see K-13 in
+   `docs/project-roadmap.md`). Stops before any image is pushed if a check
+   fails.
 2. `cd frontend && make push` — buildx AMD64, tag `:latest` + `:<git-sha>`, push.
 3. `cd backend && make push` — same for the backend image (now including
    `scripts/smoke_turn.py`, which ships in the image).
