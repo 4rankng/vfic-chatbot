@@ -7,6 +7,8 @@
 import { apiJson } from "@/lib/apiClient";
 
 import type {
+  ExternalApiTestRequest,
+  ExternalApiTestResult,
   ExternalApiUpdatePayload,
   ExternalApiView,
 } from "./domain/external-api-contracts";
@@ -24,4 +26,13 @@ export const saveProjectExternalApi = (
   apiJson<ExternalApiView>(basePath(projectId), {
     method: "PUT",
     body: payload,
+  });
+
+export const testProjectExternalApi = (
+  projectId: string,
+  request: ExternalApiTestRequest,
+) =>
+  apiJson<ExternalApiTestResult>(`${basePath(projectId)}/test`, {
+    method: "POST",
+    body: request,
   });

@@ -22,6 +22,7 @@ const view = (overrides: Partial<ExternalApiView> = {}): ExternalApiView => ({
   auth_scheme: "",
   guide: GUIDE,
   api_key: { configured: true, preview: "10 ký tự" },
+  chatbot_readiness: { ready: true, blockers: [] },
   ...overrides,
 });
 

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   getProjectExternalApi: vi.fn(),
   saveProjectExternalApi: vi.fn(),
+  testProjectExternalApi: vi.fn(),
 }));
 
 vi.mock("ra-core", () => ({
@@ -16,6 +17,7 @@ vi.mock("ra-core", () => ({
 vi.mock("./external-api-service", () => ({
   getProjectExternalApi: mocks.getProjectExternalApi,
   saveProjectExternalApi: mocks.saveProjectExternalApi,
+  testProjectExternalApi: mocks.testProjectExternalApi,
 }));
 
 import { ProjectExternalApiPanel } from "./ProjectExternalApiPanel";
@@ -32,6 +34,7 @@ const savedView: ExternalApiView = {
   auth_scheme: "",
   guide: GUIDE,
   api_key: { configured: true, preview: "10 ký tự" },
+  chatbot_readiness: { ready: true, blockers: [] },
 };
 
 const renderPanel = () =>
@@ -159,5 +162,81 @@ describe("ProjectExternalApiPanel", () => {
         screen.getByTestId("project-external-api-save").element(),
       ).toHaveProperty("disabled", true);
     });
+  });
+
+  it("shows the readiness chip as ready for a saved, active integration", async () => {
+    const screen = await renderPanel();
+
+    await expect
+      .element(screen.getByTestId("project-external-api-readiness"))
+      .toHaveTextContent("Chatbot sẵn sàng gọi API");
+  });
+
+  it("lists each blocker when the chatbot cannot call the API", async () => {
+    mocks.getProjectExternalApi.mockResolvedValue({
+      ...savedView,
+      chatbot_readiness: {
+        ready: false,
+        blockers: ["project_inactive", "knowledge_capability_missing"],
+      },
+    });
+    const screen = await renderPanel();
+
+    await expect
+      .element(screen.getByTestId("project-external-api-readiness"))
+      .toHaveTextContent(
+        "Chưa sẵn sàng · Dự án đang tắt; Agent chưa có quyền tri thức",
+      );
+  });
+
+  it("runs one test call and renders the outcome", async () => {
+    mocks.testProjectExternalApi.mockResolvedValue({
+      state: "ok",
+      status_code: 200,
+      detail: "",
+      text: "{}",
+    });
+    const screen = await renderPanel();
+    await screen.getByLabelText("Đường dẫn thử").fill("/health");
+    await screen.getByTestId("project-external-api-test").click();
+
+    await vi.waitFor(() => {
+      expect(mocks.testProjectExternalApi).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.testProjectExternalApi).toHaveBeenCalledWith("project-1", {
+      method: "GET",
+      path: "/health",
+    });
+    await expect
+      .element(screen.getByTestId("project-external-api-test-result"))
+      .toHaveTextContent("Thành công · HTTP 200");
+  });
+
+  it("rejects malformed JSON params before the probe can fire", async () => {
+    const screen = await renderPanel();
+    await screen.getByLabelText("Đường dẫn thử").fill("/health");
+    await screen.getByLabelText("Tham số JSON").fill("{not json");
+
+    await expect
+      .element(screen.getByText("Tham số phải là JSON object"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByTestId("project-external-api-test"))
+      .toBeDisabled();
+    expect(mocks.testProjectExternalApi).not.toHaveBeenCalled();
+  });
+
+  it("sections the panel into labeled groups", async () => {
+    const screen = await renderPanel();
+
+    for (const name of [
+      "Kết nối",
+      "Xác thực",
+      "Khóa API",
+      "Hướng dẫn API cho chatbot",
+      "Gửi thử",
+    ]) {
+      await expect.element(screen.getByRole("heading", { name })).toBeVisible();
+    }
   });
 });

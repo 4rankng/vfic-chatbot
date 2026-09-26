@@ -516,15 +516,14 @@ describe("ProjectKnowledgePanel", () => {
       <ProjectKnowledgePanel project={project} editable />,
     );
 
+    await screen
+      .getByRole("button", { name: "Vị trí tuyển dụng" })
+      .click();
     const jobsEditor = screen.getByLabelText(
       "Dữ liệu hiện tại của danh mục Vị trí tuyển dụng",
     );
     await expect.element(jobsEditor).toHaveValue("CURRENT JOBS");
     await expect.element(jobsEditor).toHaveAttribute("readonly");
-    await expect.element(jobsEditor).not.toBeVisible();
-    await screen
-      .getByLabelText("Xem dữ liệu danh mục Vị trí tuyển dụng")
-      .click();
     await expect.element(jobsEditor).toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Sửa nội dung" }))
@@ -546,11 +545,6 @@ describe("ProjectKnowledgePanel", () => {
 
     await screen.getByRole("button", { name: "Lương & thu nhập" }).click();
 
-    expect(
-      screen.container.querySelector(
-        '[aria-label="Xem dữ liệu danh mục Lương & thu nhập"]',
-      ),
-    ).toBeNull();
     expect(
       screen.container.querySelector(
         '[aria-label="Dữ liệu hiện tại của danh mục Lương & thu nhập"]',
@@ -673,16 +667,7 @@ describe("ProjectKnowledgePanel", () => {
     const screen = await renderPanel(
       <ProjectKnowledgePanel project={project} editable />,
     );
-    await expect
-      .element(
-        screen.getByLabelText(
-          "Dữ liệu hiện tại của danh mục Vị trí tuyển dụng",
-        ),
-      )
-      .not.toBeVisible();
-    await screen
-      .getByLabelText("Xem dữ liệu danh mục Vị trí tuyển dụng")
-      .click();
+    // The selected category's YAML must be visible with no second interaction.
     await expect
       .element(
         screen.getByLabelText(

@@ -29,7 +29,7 @@ from app.services.project.external_api import (
     normalize_method,
     sanitize_params,
 )
-from app.shared.domain.errors import BadRequestError
+from app.shared.domain.errors import BadRequestError, InstallationError
 
 GUIDE = (
     "# Hướng dẫn tích hợp API\n\n"
@@ -111,7 +111,7 @@ def _fake_redis(monkeypatch: pytest.MonkeyPatch) -> _CountingRedis:
 
 
 def _project(project_id: uuid.UUID, config: dict | None):
-    return SimpleNamespace(id=project_id, external_api=config)
+    return SimpleNamespace(id=project_id, external_api=config, is_active=True)
 
 
 def _config(**overrides) -> dict:
@@ -383,6 +383,171 @@ async def test_replace_rejects_invalid_config_with_machine_code() -> None:
             SimpleNamespace(id=uuid.uuid4()),
         )
     assert exc.value.detail == "base_url_scheme"
+
+
+# --------------------------------------------------------------------------- #
+# Service: chatbot readiness projection
+# --------------------------------------------------------------------------- #
+
+
+def _stub_installation(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    capabilities: list[str],
+    persona_body: str | None,
+) -> None:
+    """Bind an authority stub whose revision answers the readiness gates."""
+
+    class _StubInstallation:
+        def __init__(self, db: object) -> None:
+            self.db = db
+
+        async def require_active(self):
+            return SimpleNamespace(
+                revision=SimpleNamespace(
+                    capability_ids=capabilities,
+                    persona_version_id=uuid.uuid4(),
+                )
+            )
+
+        @property
+        def repo(self):
+            async def get_persona_version(_version_id: uuid.UUID):
+                return SimpleNamespace(body_md=persona_body)
+
+            return SimpleNamespace(get_persona_version=get_persona_version)
+
+    monkeypatch.setattr(mod, "InstallationService", _StubInstallation)
+
+
+@pytest.mark.asyncio
+async def test_readiness_reports_disabled_config_and_inactive_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_installation(
+        monkeypatch, capabilities=["knowledge"], persona_body="Đại diện tuyển dụng."
+    )
+    project_id = uuid.uuid4()
+    db = _FakeSession(_project(project_id, None))
+    db.project.is_active = False
+
+    view = await ProjectExternalApiService(db).admin_view(project_id)
+
+    assert view["chatbot_readiness"] == {
+        "ready": False,
+        "blockers": ["integration_disabled", "project_inactive"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_readiness_is_ready_for_enabled_active_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_installation(
+        monkeypatch, capabilities=["knowledge"], persona_body="Đại diện tuyển dụng."
+    )
+    project_id = uuid.uuid4()
+    db = _FakeSession(_project(project_id, _config()))
+
+    view = await ProjectExternalApiService(db).admin_view(project_id)
+
+    assert view["chatbot_readiness"] == {"ready": True, "blockers": []}
+
+
+@pytest.mark.asyncio
+async def test_readiness_reports_missing_capability_and_persona(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_installation(monkeypatch, capabilities=["installation"], persona_body="  ")
+    project_id = uuid.uuid4()
+    db = _FakeSession(_project(project_id, _config()))
+
+    view = await ProjectExternalApiService(db).admin_view(project_id)
+
+    assert view["chatbot_readiness"] == {
+        "ready": False,
+        "blockers": ["knowledge_capability_missing", "persona_missing"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_readiness_reports_missing_installation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NoInstallation:
+        def __init__(self, db: object) -> None:
+            self.db = db
+
+        async def require_active(self):
+            raise InstallationError(
+                "Installation is not active",
+                code="INSTALLATION_NOT_ACTIVE",
+                lifecycle="UNCONFIGURED",
+            )
+
+    monkeypatch.setattr(mod, "InstallationService", _NoInstallation)
+    project_id = uuid.uuid4()
+    db = _FakeSession(_project(project_id, _config()))
+
+    view = await ProjectExternalApiService(db).admin_view(project_id)
+
+    assert view["chatbot_readiness"] == {
+        "ready": False,
+        "blockers": ["installation_required"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_readiness_degrades_when_authority_query_unavailable() -> None:
+    """The fake session cannot answer authority queries — degrade, never 500."""
+    project_id = uuid.uuid4()
+    db = _FakeSession(_project(project_id, _config()))
+
+    view = await ProjectExternalApiService(db).admin_view(project_id)
+
+    assert view["chatbot_readiness"] == {
+        "ready": False,
+        "blockers": ["readiness_unavailable"],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Service: admin test call
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_test_call_reports_not_configured_when_disabled() -> None:
+    project_id = uuid.uuid4()
+    db = _FakeSession(_project(project_id, _config(enabled=False)))
+
+    outcome = await ProjectExternalApiService(db).test(
+        project_id, method="GET", path="/health", params=None
+    )
+
+    assert outcome.state == "not_configured"
+    assert outcome.path == "/health"
+
+
+@pytest.mark.asyncio
+async def test_test_call_reports_undecryptable_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid.uuid4()
+    db = _FakeSession(
+        _project(project_id, _config(api_key_encrypted=_sealed(project_id)))
+    )
+    # A non-empty seal that yields no plaintext must fail closed, not call out.
+    monkeypatch.setattr(
+        ProjectExternalApiService, "_decrypt", lambda self, stored, pid: ""
+    )
+
+    outcome = await ProjectExternalApiService(db).test(
+        project_id, method="GET", path="/health", params=None
+    )
+
+    assert outcome.state == "error"
+    assert outcome.detail == "key_undecryptable"
 
 
 # --------------------------------------------------------------------------- #

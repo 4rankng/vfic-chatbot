@@ -34,7 +34,8 @@ vi.mock("ra-core", () => ({
     <form
       onSubmit={(event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        onSubmit({ name: "LG Display", is_active: true });
+        // react-hook-form submits record defaults plus registered inputs.
+        onSubmit({ ...project, name: "LG Display", is_active: true });
       }}
     >
       {children}
@@ -121,6 +122,13 @@ describe("ProjectEdit", () => {
         previousData: project,
         data: { name: "LG Display", is_active: true },
       });
+      const updatePayload = mocks.update.mock.calls[0][1] as {
+        data: Record<string, unknown>;
+      };
+      expect(Object.keys(updatePayload.data).sort()).toEqual([
+        "is_active",
+        "name",
+      ]);
       expect(mocks.redirect).toHaveBeenCalledWith("/projects");
     });
   });

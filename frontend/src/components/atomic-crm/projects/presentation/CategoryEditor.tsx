@@ -1,12 +1,5 @@
 import type { Ref } from "react";
-import {
-  ChevronDown,
-  Database,
-  Save,
-  Pencil,
-  Download,
-  Upload,
-} from "lucide-react";
+import { Save, Pencil, Download, Upload } from "lucide-react";
 import { useTranslate } from "ra-core";
 
 import { Badge } from "@/components/ui/badge";
@@ -208,34 +201,16 @@ export const CategoryEditor = ({
           placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
         />
       ) : hasCurrentSource ? (
-        <details className="group border-y border-border">
-          <summary
-            aria-label={`Xem dữ liệu danh mục ${label}`}
-            className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-1 py-2 text-body font-semibold outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
-          >
-            <Database
-              className="size-4 shrink-0 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <span className="min-w-0 flex-1 truncate">
-              Xem dữ liệu đang dùng
-            </span>
-            <ChevronDown
-              className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-              aria-hidden="true"
-            />
-          </summary>
-          <div className="pb-3 pt-1">
-            <Textarea
-              value={content}
-              readOnly
-              rows={14}
-              className="project-category-textarea font-mono"
-              aria-label={`Dữ liệu hiện tại của danh mục ${label}`}
-              placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
-            />
-          </div>
-        </details>
+        <div className="border-y border-border py-2">
+          <Textarea
+            value={content}
+            readOnly
+            rows={14}
+            className="project-category-textarea font-mono"
+            aria-label={`Dữ liệu hiện tại của danh mục ${label}`}
+            placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
+          />
+        </div>
       ) : null}
     </section>
   );

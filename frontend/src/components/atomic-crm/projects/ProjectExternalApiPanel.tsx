@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { AlertCircle, Info, Loader2, Plug, Save, Upload } from "lucide-react";
 import { useNotify } from "ra-core";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import type {
   ExternalApiFormState,
+  ExternalApiTestResult,
   ExternalApiView,
 } from "./domain/external-api-contracts";
 import {
@@ -24,7 +28,70 @@ import {
 import {
   getProjectExternalApi,
   saveProjectExternalApi,
+  testProjectExternalApi,
 } from "./external-api-service";
+
+/** Stable readiness blocker codes → the chip's Vietnamese labels. */
+const BLOCKER_LABELS: Record<string, string> = {
+  integration_disabled: "Tích hợp đang tắt",
+  project_inactive: "Dự án đang tắt",
+  knowledge_capability_missing: "Agent chưa có quyền tri thức",
+  persona_missing: "Agent chưa có persona",
+  installation_required: "Chưa có bản cài đặt Agent hoạt động",
+  readiness_unavailable: "Không kiểm tra được trạng thái Agent",
+};
+
+type TestOutcome = {
+  variant: "info" | "warning" | "destructive";
+  title: string;
+  body: ReactNode;
+};
+
+/** Map one test-call state onto the alert that explains it to the admin. */
+const formatTestResult = (result: ExternalApiTestResult): TestOutcome => {
+  switch (result.state) {
+    case "ok":
+      return {
+        variant: "info",
+        title: `Thành công · HTTP ${result.status_code}`,
+        body: (
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 p-2 font-mono text-helper">
+            {result.text}
+          </pre>
+        ),
+      };
+    case "rate_limited":
+      return {
+        variant: "warning",
+        title: "Bị chặn thử lại",
+        body: "Từ chối gửi trùng trong 1 phút — đúng như chatbot gặp phải.",
+      };
+    case "not_configured":
+      return {
+        variant: "warning",
+        title: "Chưa cấu hình",
+        body: "Tích hợp đang tắt hoặc dự án đang tắt, nên không có gì để gọi.",
+      };
+    case "invalid_request":
+      return {
+        variant: "warning",
+        title: "Yêu cầu không hợp lệ",
+        body: result.detail,
+      };
+    case "error":
+      return {
+        variant: "destructive",
+        title: `Lỗi${result.status_code ? ` · HTTP ${result.status_code}` : ""}`,
+        body: result.detail,
+      };
+    default:
+      return {
+        variant: "destructive",
+        title: "Không gọi được",
+        body: result.detail,
+      };
+  }
+};
 
 /**
  * Per-project external API integration editor (admin only).
@@ -41,6 +108,11 @@ export const ProjectExternalApiPanel = ({ projectId }: { projectId: string }) =>
   const [form, setForm] = useState<ExternalApiFormState>(emptyExternalApiForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testMethod, setTestMethod] = useState<"GET" | "POST">("GET");
+  const [testPath, setTestPath] = useState("");
+  const [testParams, setTestParams] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ExternalApiTestResult | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +141,23 @@ export const ProjectExternalApiPanel = ({ projectId }: { projectId: string }) =>
     (error) => error.startsWith("Base URL") || error.startsWith("Chỉ dùng"),
   );
   const guideInvalid = errors.some((error) => error.startsWith("Hướng dẫn API"));
+
+  // The params field is a JSON object literal; anything else is a typo the
+  // admin must fix before the probe can fire.
+  let paramsError: string | null = null;
+  let parsedParams: Record<string, unknown> | null = null;
+  if (testParams.trim() !== "") {
+    try {
+      const parsed: unknown = JSON.parse(testParams);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        parsedParams = parsed as Record<string, unknown>;
+      } else {
+        paramsError = "Tham số phải là JSON object";
+      }
+    } catch {
+      paramsError = "Tham số phải là JSON object";
+    }
+  }
 
   // Mirrors the backend's composition (`f"{scheme} {key}".strip()`), with the
   // secret masked, so the admin sees exactly what the vendor will receive.
@@ -116,6 +205,22 @@ export const ProjectExternalApiPanel = ({ projectId }: { projectId: string }) =>
     }
   };
 
+  const runTest = async () => {
+    setTesting(true);
+    try {
+      const result = await testProjectExternalApi(projectId, {
+        method: testMethod,
+        path: testPath.trim(),
+        ...(parsedParams ? { params: parsedParams } : {}),
+      });
+      setTestResult(result);
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div
@@ -136,45 +241,63 @@ export const ProjectExternalApiPanel = ({ projectId }: { projectId: string }) =>
     );
   }
 
+  const testOutcome = testResult ? formatTestResult(testResult) : null;
+
   return (
-    <div
-      className="overflow-hidden rounded-lg border border-border bg-card shadow-xs"
+    <Card
       data-testid="project-external-api"
+      className="overflow-hidden rounded-lg border border-border bg-card shadow-xs"
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border bg-muted/30 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Plug className="size-4 text-primary" aria-hidden="true" />
-          <h4 className="text-body font-semibold">API ngoài của dự án</h4>
+      <CardHeader className="border-b border-border bg-muted/30 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="flex items-center gap-3">
+            <span
+              className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"
+              aria-hidden="true"
+            >
+              <Plug className="size-4" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <CardTitle className="text-body">API ngoài của dự án</CardTitle>
+              <p className="text-body-sm text-muted-foreground">
+                Chatbot chỉ gọi được hệ thống ngoài trên Base URL bên dưới, theo
+                đúng hướng dẫn bạn dán vào đây. Base URL và khóa API không bao
+                giờ được gửi cho chatbot.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {view ? (
+              <Badge
+                data-testid="project-external-api-readiness"
+                variant={
+                  view.chatbot_readiness.ready ? "secondary" : "outline"
+                }
+              >
+                {view.chatbot_readiness.ready
+                  ? "Chatbot sẵn sàng gọi API"
+                  : `Chưa sẵn sàng · ${view.chatbot_readiness.blockers
+                      .map((code) => BLOCKER_LABELS[code] ?? code)
+                      .join("; ")}`}
+              </Badge>
+            ) : null}
+            <label className="inline-flex cursor-pointer items-center gap-2 text-body-sm text-muted-foreground">
+              <Switch
+                checked={form.enabled}
+                onCheckedChange={(checked) =>
+                  setForm((current) => ({ ...current, enabled: checked }))
+                }
+                aria-label="Bật tích hợp API"
+              />
+              Bật tích hợp API
+            </label>
+          </div>
         </div>
-        <label className="inline-flex cursor-pointer items-center gap-2 text-body-sm text-muted-foreground">
-          <Switch
-            checked={form.enabled}
-            onCheckedChange={(checked) =>
-              setForm((current) => ({ ...current, enabled: checked }))
-            }
-            aria-label="Bật tích hợp API"
-          />
-          Bật tích hợp API
-        </label>
-      </div>
+      </CardHeader>
 
-      <div className="space-y-5 p-4">
-        <p className="max-w-3xl text-body-sm text-muted-foreground">
-          Chatbot chỉ gọi được hệ thống ngoài trên Base URL bên dưới, theo đúng
-          hướng dẫn bạn dán vào đây. Base URL và khóa API không bao giờ được gửi
-          cho chatbot.
-        </p>
-
-        {!form.enabled && (
-          <Alert variant="info">
-            <Info aria-hidden="true" />
-            <AlertDescription>
-              Tích hợp đang tắt. Chatbot sẽ không gọi API ngoài của dự án này.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="space-y-2">
+      <CardContent className="px-0 py-0">
+        <section className="grid gap-3 px-6 py-5">
+          <h5 className="text-section-title">Kết nối</h5>
           <Label htmlFor="external-api-base-url">Base URL</Label>
           <Input
             id="external-api-base-url"
@@ -187,53 +310,64 @@ export const ProjectExternalApiPanel = ({ projectId }: { projectId: string }) =>
               setForm((current) => ({ ...current, base_url: event.target.value }))
             }
           />
-        </div>
+          <p className="text-body-sm text-muted-foreground">
+            Chatbot chỉ gọi origin này. Bắt buộc https; http chỉ hợp lệ với
+            127.0.0.1/localhost.
+          </p>
+        </section>
 
-        <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="external-api-auth-header">
-              Tên header xác thực
-            </Label>
-            <Input
-              id="external-api-auth-header"
-              value={form.auth_header}
-              placeholder="X-API-Key"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  auth_header: event.target.value,
-                }))
-              }
-            />
+        <div className="border-t border-border" />
+
+        <section className="grid gap-3 px-6 py-5">
+          <h5 className="text-section-title">Xác thực</h5>
+          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="external-api-auth-header">
+                Tên header xác thực
+              </Label>
+              <Input
+                id="external-api-auth-header"
+                value={form.auth_header}
+                placeholder="X-API-Key"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    auth_header: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="external-api-auth-scheme">Tiền tố xác thực</Label>
+              <Input
+                id="external-api-auth-scheme"
+                value={form.auth_scheme}
+                placeholder="Bearer"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    auth_scheme: event.target.value,
+                  }))
+                }
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="external-api-auth-scheme">Tiền tố xác thực</Label>
-            <Input
-              id="external-api-auth-scheme"
-              value={form.auth_scheme}
-              placeholder="Bearer"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  auth_scheme: event.target.value,
-                }))
-              }
-            />
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-sm text-muted-foreground">
+            <span>Chatbot sẽ gửi header</span>
+            <code
+              className="rounded-md border border-border bg-muted/30 px-1.5 py-0.5 font-mono text-helper text-foreground"
+              data-testid="project-external-api-header-preview"
+            >
+              {headerPreview}
+            </code>
+            <span>— để trống tiền tố nếu API nhận khóa trực tiếp.</span>
           </div>
-        </div>
+        </section>
 
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-sm text-muted-foreground">
-          <span>Chatbot sẽ gửi header</span>
-          <code
-            className="rounded-md border border-border bg-muted/30 px-1.5 py-0.5 font-mono text-helper text-foreground"
-            data-testid="project-external-api-header-preview"
-          >
-            {headerPreview}
-          </code>
-          <span>— để trống tiền tố nếu API nhận khóa trực tiếp.</span>
-        </div>
+        <div className="border-t border-border" />
 
-        <div className="space-y-2">
+        <section className="grid gap-3 px-6 py-5">
+          <h5 className="text-section-title">Khóa API</h5>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Label htmlFor="external-api-key">Khóa API</Label>
             <div className="flex items-center gap-2">
@@ -278,9 +412,16 @@ export const ProjectExternalApiPanel = ({ projectId }: { projectId: string }) =>
               }))
             }
           />
-        </div>
+          <p className="text-body-sm text-muted-foreground">
+            Khóa được niêm phong và chỉ dùng cho lời gọi của chatbot. Để trống
+            nếu không đổi cấu hình.
+          </p>
+        </section>
 
-        <div className="space-y-2">
+        <div className="border-t border-border" />
+
+        <section className="grid gap-3 px-6 py-5">
+          <h5 className="text-section-title">Hướng dẫn API cho chatbot</h5>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Label htmlFor="external-api-guide">Hướng dẫn API cho chatbot</Label>
             <div className="flex items-center gap-2">
@@ -338,28 +479,107 @@ export const ProjectExternalApiPanel = ({ projectId }: { projectId: string }) =>
             .md. Chatbot đọc phần này để biết cần gọi endpoint nào và truyền tham
             số gì.
           </p>
-        </div>
+        </section>
+
+        <div className="border-t border-border" />
+
+        <section className="grid gap-3 px-6 py-5">
+          <h5 className="text-section-title">Gửi thử</h5>
+          <Label>Gửi thử lời gọi</Label>
+          <p className="text-body-sm text-muted-foreground">
+            Gửi một lời gọi thật qua đúng đường mà chatbot dùng: cùng khóa, cùng
+            header, cùng luật chống gửi trùng.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Method"
+              value={testMethod}
+              onChange={(event) =>
+                setTestMethod(event.target.value === "POST" ? "POST" : "GET")
+              }
+              className="h-10 w-24 rounded-md border border-border bg-background px-3 text-control outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+            >
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+            </select>
+            <Input
+              aria-label="Đường dẫn thử"
+              placeholder="/api/v1/integration/password-reset/otp"
+              value={testPath}
+              onChange={(event) => setTestPath(event.target.value)}
+              className="min-w-40 flex-1"
+            />
+            <Input
+              aria-label="Tham số JSON"
+              placeholder='{"phone":"0900000000"}'
+              value={testParams}
+              onChange={(event) => setTestParams(event.target.value)}
+              aria-invalid={paramsError !== null}
+              aria-describedby={
+                paramsError !== null ? "external-api-test-params-error" : undefined
+              }
+              className="min-w-40 flex-1"
+            />
+            <Button
+              type="button"
+              data-testid="project-external-api-test"
+              disabled={testing || !testPath.trim() || paramsError !== null}
+              onClick={() => void runTest()}
+            >
+              {testing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Plug className="size-4" />
+              )}
+              {testing ? "Đang gửi…" : "Gửi thử"}
+            </Button>
+          </div>
+          {paramsError !== null && (
+            <p
+              id="external-api-test-params-error"
+              className="text-body-sm text-destructive"
+            >
+              {paramsError}
+            </p>
+          )}
+          {testOutcome !== null && (
+            <Alert
+              variant={testOutcome.variant}
+              data-testid="project-external-api-test-result"
+            >
+              {testOutcome.variant === "info" ? (
+                <Info aria-hidden="true" />
+              ) : (
+                <AlertCircle aria-hidden="true" />
+              )}
+              <AlertTitle>{testOutcome.title}</AlertTitle>
+              <AlertDescription>{testOutcome.body}</AlertDescription>
+            </Alert>
+          )}
+        </section>
 
         {errors.length > 0 && (
-          <Alert
-            variant="destructive"
-            id="external-api-errors"
-            data-testid="project-external-api-errors"
-          >
-            <AlertCircle aria-hidden="true" />
-            <AlertTitle>Chưa lưu được</AlertTitle>
-            <AlertDescription>
-              <ul className="space-y-1">
-                {errors.map((error) => (
-                  <li key={error}>{error}</li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
+          <div className="px-6 py-4">
+            <Alert
+              variant="destructive"
+              id="external-api-errors"
+              data-testid="project-external-api-errors"
+            >
+              <AlertCircle aria-hidden="true" />
+              <AlertTitle>Chưa lưu được</AlertTitle>
+              <AlertDescription>
+                <ul className="space-y-1">
+                  {errors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </div>
         )}
-      </div>
+      </CardContent>
 
-      <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-4 py-3">
+      <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-6 py-4">
         <Button
           type="button"
           size="sm"
@@ -375,6 +595,6 @@ export const ProjectExternalApiPanel = ({ projectId }: { projectId: string }) =>
           {saving ? "Đang lưu…" : "Lưu"}
         </Button>
       </div>
-    </div>
+    </Card>
   );
 };

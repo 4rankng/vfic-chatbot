@@ -25,6 +25,7 @@ from app.core.ratelimit import enforce_rate_limit, enforce_rate_limit_key
 _WEBHOOK_PREFIX = "webhook"
 _JOBS_SEARCH_PREFIX = "jobs-search"
 _RAG_TEST_PREFIX = "knowledge-rag-test"
+_EXTERNAL_API_TEST_PREFIX = "project-external-api-test"
 _WEB_CHAT_TURN_PREFIX = "web-chat-turn"
 _LEAD_ASSIST_PREFIX = "lead-assist"
 _LEAD_CHATOPS_ACTION_PREFIX = "lead-chatops-action"
@@ -66,6 +67,11 @@ async def enforce_rag_test_rate_limit(user_id: uuid.UUID | str) -> None:
     await _enforce_user_budget(_RAG_TEST_PREFIX, user_id)
 
 
+async def enforce_external_api_test_rate_limit(user_id: uuid.UUID | str) -> None:
+    """Per-user cap for ``POST /knowledge/projects/{id}/external-api/test``."""
+    await _enforce_user_budget(_EXTERNAL_API_TEST_PREFIX, user_id)
+
+
 async def enforce_web_chat_turn_rate_limit(user_id: uuid.UUID | str) -> None:
     """Per-user cap for ``POST /conversations/{id}/web-chat-turn`` (a full bot turn)."""
     await _enforce_user_budget(_WEB_CHAT_TURN_PREFIX, user_id)
@@ -82,6 +88,7 @@ async def enforce_lead_chatops_action_rate_limit(user_id: uuid.UUID | str) -> No
 
 
 __all__ = [
+    "enforce_external_api_test_rate_limit",
     "enforce_jobs_search_rate_limit",
     "enforce_lead_assist_rate_limit",
     "enforce_lead_chatops_action_rate_limit",

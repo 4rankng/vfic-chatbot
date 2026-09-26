@@ -46,8 +46,13 @@ from app.core.redis import get_redis
 from app.schemas.projects import ProjectExternalApiUpdate
 from app.services.audit_service import record_audit
 from app.services.integration_settings.cipher import IntegrationSettingsCipher
+from app.services.installation.service import InstallationService
 from app.services.project.repository import require_project
-from app.shared.domain.errors import BadRequestError, NotFoundError
+from app.shared.domain.errors import (
+    BadRequestError,
+    InstallationError,
+    NotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -271,10 +276,45 @@ class ProjectExternalApiService:
     def _parse(self, project: Any, project_id: uuid.UUID) -> ExternalApiConfig:
         return parse_config(project.external_api, project_id=project_id)
 
+    async def _chatbot_blockers(
+        self, project: Any, config: ExternalApiConfig
+    ) -> list[str]:
+        """Stable codes for the gates that fail closed before ``call_project_api``.
+
+        ``config.enabled`` already implies a valid https ``base_url`` and a
+        guide of at least ``EXTERNAL_API_MIN_GUIDE_CHARS`` (enforced on save;
+        an invalid row parses as disabled), so ``integration_disabled`` covers
+        both. The capability and persona checks mirror the fail-closed gates in
+        ``app/graph/runtime_policy.py`` and the tool registry build; the
+        per-conversation page scope is deliberately not part of this projection.
+        """
+        blockers: list[str] = []
+        if not config.enabled:
+            blockers.append("integration_disabled")
+        if not project.is_active:
+            blockers.append("project_inactive")
+        try:
+            installation = InstallationService(self.db)
+            active = await installation.require_active()
+            if "knowledge" not in active.revision.capability_ids:
+                blockers.append("knowledge_capability_missing")
+            persona = await installation.repo.get_persona_version(
+                active.revision.persona_version_id
+            )
+            if persona is None or not (persona.body_md or "").strip():
+                blockers.append("persona_missing")
+        except InstallationError:
+            blockers.append("installation_required")
+        except Exception:  # noqa: BLE001 — an admin read must never 500 on authority lookup
+            logger.warning("chatbot readiness unavailable project_id=%s", project.id)
+            blockers.append("readiness_unavailable")
+        return blockers
+
     async def admin_view(self, project_id: uuid.UUID) -> dict:
         """Masked projection for the admin UI — the key itself never appears."""
         project = await require_project(self.db, project_id)
         config = self._parse(project, project_id)
+        blockers = await self._chatbot_blockers(project, config)
         return {
             "enabled": config.enabled,
             "base_url": config.base_url,
@@ -282,6 +322,7 @@ class ProjectExternalApiService:
             "auth_scheme": config.auth_scheme,
             "guide": config.guide,
             "api_key": api_key_status(self._decrypt(config.api_key_encrypted, project_id)),
+            "chatbot_readiness": {"ready": not blockers, "blockers": blockers},
         }
 
     async def replace(
@@ -319,6 +360,32 @@ class ProjectExternalApiService:
         )
         await self.db.commit()
         return await self.admin_view(project_id)
+
+    async def test(
+        self,
+        project_id: uuid.UUID,
+        *,
+        method: str,
+        path: str,
+        params: dict | None,
+    ) -> ExternalApiOutcome:
+        """Admin-triggered mirror of the chatbot's one call.
+
+        Same validation, dedupe/throttle and egress as ``invoke`` — the point
+        is to prove the stored integration works through the bot's own path.
+        """
+        project = await require_project(self.db, project_id)
+        config = self._parse(project, project_id)
+        if not config.enabled:
+            return ExternalApiOutcome("not_configured", None, path.strip(), None, "")
+        api_key = self._decrypt(config.api_key_encrypted, project_id)
+        if config.api_key_encrypted and not api_key:
+            return ExternalApiOutcome(
+                "error", None, path.strip(), None, "", "key_undecryptable"
+            )
+        return await self.invoke(
+            project_id, config, api_key, method=method, path=path, params=params
+        )
 
     async def runtime(self, project_id: uuid.UUID) -> tuple[ExternalApiConfig, str] | None:
         """The callable config + decrypted key, or ``None`` when unusable."""

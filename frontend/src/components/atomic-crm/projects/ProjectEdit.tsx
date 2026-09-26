@@ -35,7 +35,13 @@ const ProjectEditContent = () => {
       await dataProvider.update("projects", {
         id: project.id,
         previousData: project,
-        data,
+        data: {
+          name: typeof data.name === "string" ? data.name : project.name,
+          is_active:
+            data.is_active === undefined
+              ? project.is_active
+              : Boolean(data.is_active),
+        },
       });
       notify("Đã lưu.", { type: "success" });
       redirect("/projects");

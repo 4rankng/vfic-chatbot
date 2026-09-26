@@ -57,11 +57,12 @@ EXPECTED_ROUTE_COUNTS = {
     "personas": 11,  # adapter assignment GET/PUT replace project bulk assignment
     # +4 single-page external-source-sync endpoints
     # +2 project external-API endpoints (get / put)
-    "projects": 30,
+    # +1 project external-API admin test-call endpoint (post)
+    "projects": 31,
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "ccaeca80d7d8b1b14dbc36f9dd09d679e90b618d133c94c1f6004f1a49b5179e"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "4cab676955f026b833b42d51b7ede0152ed35b86b096a5961b028ea94ecf757d"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

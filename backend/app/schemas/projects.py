@@ -202,6 +202,13 @@ class ProjectExternalApiKeyStatus(BaseModel):
     preview: str | None = None
 
 
+class ProjectChatbotReadiness(BaseModel):
+    """Machine codes for what still blocks the chatbot's external-API call path."""
+
+    ready: bool
+    blockers: list[str] = Field(default_factory=list)
+
+
 class ProjectExternalApiOut(BaseModel):
     enabled: bool
     base_url: str = ""
@@ -209,6 +216,7 @@ class ProjectExternalApiOut(BaseModel):
     auth_scheme: str = ""
     guide: str = ""
     api_key: ProjectExternalApiKeyStatus
+    chatbot_readiness: ProjectChatbotReadiness
 
 
 class ProjectExternalApiUpdate(BaseModel):
@@ -227,3 +235,26 @@ class ProjectExternalApiUpdate(BaseModel):
     auth_scheme: str = "Bearer"
     guide: str = ""
     api_key: str | None = None
+
+
+class ProjectExternalApiTestIn(BaseModel):
+    """Admin test-call body.
+
+    Method/path semantics are not re-validated here: the service normalises and
+    rejects them through the same code path the chatbot uses.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: str = "GET"
+    path: str = Field(min_length=1, max_length=1000)
+    params: dict[str, Any] | None = None
+
+
+class ProjectExternalApiTestOut(BaseModel):
+    """One test call's outcome — the state the UI renders, never a transport error."""
+
+    state: str
+    status_code: int | None = None
+    detail: str = ""
+    text: str = ""

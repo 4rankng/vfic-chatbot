@@ -22,6 +22,8 @@ from app.schemas.projects import (
     FeatureOut,
     FeatureUpdate,
     ProjectExternalApiOut,
+    ProjectExternalApiTestIn,
+    ProjectExternalApiTestOut,
     ProjectExternalApiUpdate,
     ProjectFaqCreate,
     ProjectFaqOut,
@@ -62,6 +64,7 @@ from app.services.knowledge.category_service import KnowledgeCategoryService
 from app.services.project import ProjectService
 from app.services.project.external_api import ProjectExternalApiService
 from app.shared.domain.errors import BadRequestError, ConflictError, RateLimitedError
+from app.shared.infrastructure.rate_limits import enforce_external_api_test_rate_limit
 
 router = APIRouter(prefix="/knowledge/projects", tags=["projects"])
 _SINGLE_PAGE_SOURCE_BAD_REQUESTS = {
@@ -250,6 +253,26 @@ async def replace_project_external_api(
 ) -> ProjectExternalApiOut:
     view = await ProjectExternalApiService(db).replace(project_id, body, admin)
     return ProjectExternalApiOut.model_validate(view)
+
+
+@router.post("/{project_id}/external-api/test", response_model=ProjectExternalApiTestOut)
+async def test_project_external_api(
+    project_id: uuid.UUID,
+    body: ProjectExternalApiTestIn,
+    admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
+) -> ProjectExternalApiTestOut:
+    """One real call through the stored integration — the chatbot's egress path."""
+    await enforce_external_api_test_rate_limit(admin.id)
+    outcome = await ProjectExternalApiService(db).test(
+        project_id, method=body.method, path=body.path, params=body.params
+    )
+    return ProjectExternalApiTestOut(
+        state=outcome.state,
+        status_code=outcome.status_code,
+        detail=outcome.detail,
+        text=outcome.text,
+    )
 
 
 @router.get("/{project_id}/categories", response_model=CategoryCatalogOut)

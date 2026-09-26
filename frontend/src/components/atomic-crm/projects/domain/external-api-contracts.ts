@@ -12,6 +12,9 @@ export type ExternalApiKeyStatus = Readonly<{
   preview: string | null;
 }>;
 
+/** Machine codes for what still blocks the chatbot's external-API call path. */
+export type ChatbotReadiness = Readonly<{ ready: boolean; blockers: string[] }>;
+
 export type ExternalApiView = Readonly<{
   enabled: boolean;
   base_url: string;
@@ -19,6 +22,21 @@ export type ExternalApiView = Readonly<{
   auth_scheme: string;
   guide: string;
   api_key: ExternalApiKeyStatus;
+  chatbot_readiness: ChatbotReadiness;
+}>;
+
+/** Admin test-call body — one real call through the chatbot's egress path. */
+export type ExternalApiTestRequest = Readonly<{
+  method: "GET" | "POST";
+  path: string;
+  params?: Record<string, unknown>;
+}>;
+
+export type ExternalApiTestResult = Readonly<{
+  state: string;
+  status_code: number | null;
+  detail: string;
+  text: string;
 }>;
 
 /**

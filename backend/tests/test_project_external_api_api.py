@@ -16,9 +16,16 @@ from fastapi.testclient import TestClient
 from app.api import projects as projects_api
 from app.api.auth_dependencies import require_admin
 from app.core.errors import register_domain_exception_handlers
+from app.core.http import register_test_client
 from app.project_knowledge.infrastructure.api_dependencies import get_project_knowledge_db
 from app.services.integration_settings.cipher import IntegrationSettingsCipher
-from tests.test_project_external_api import GUIDE, _FakeSession
+from tests.test_project_external_api import (
+    EXTERNAL_API_CLIENT_NAME,
+    GUIDE,
+    _FakeHttp,
+    _FakeResponse,
+    _FakeSession,
+)
 
 _BASE = "/api/v1/knowledge/projects"
 
@@ -37,6 +44,7 @@ def client() -> tuple[TestClient, SimpleNamespace]:
 def _configured_project(project_id: uuid.UUID, secret: str = "ttk_secret") -> SimpleNamespace:
     return SimpleNamespace(
         id=project_id,
+        is_active=True,
         external_api={
             "enabled": True,
             "base_url": "https://api.example.com",
@@ -64,6 +72,11 @@ def test_get_masks_the_api_key(client) -> None:
     assert body["base_url"] == "https://api.example.com"
     assert body["auth_header"] == "X-API-Key"
     assert body["guide"] == GUIDE
+    # The readiness projection degrades on the fake session instead of failing.
+    assert body["chatbot_readiness"] == {
+        "ready": False,
+        "blockers": ["readiness_unavailable"],
+    }
     # The sealed value must not appear anywhere in the wire payload.
     assert "api_key_encrypted" not in response.text
     assert "ttk_secret" not in response.text
@@ -138,3 +151,31 @@ def test_put_enabled_without_a_guide_is_rejected(client) -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "guide_required"
+
+
+def test_post_test_call_routes_through_the_chatbot_egress_path(client) -> None:
+    """The admin test call must hit the same egress path the bot uses."""
+    http, holder = client
+    project_id = uuid.uuid4()
+    holder.db = _FakeSession(_configured_project(project_id))
+    fake = _FakeHttp(response=_FakeResponse(200, '{"ok": true}'))
+    register_test_client(EXTERNAL_API_CLIENT_NAME, fake)
+
+    response = http.post(
+        f"{_BASE}/{project_id}/external-api/test",
+        json={"method": "GET", "path": "/health"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "ok"
+    assert body["status_code"] == 200
+    assert body["detail"] == ""
+    assert body["text"] == '{"ok": true}'
+    # Exactly one outbound request, to the configured origin.
+    assert len(fake.calls) == 1
+    method, url, kwargs = fake.calls[0]
+    assert method == "GET"
+    assert url == "https://api.example.com/health"
+    # auth_header + auth_scheme composed over the decrypted key.
+    assert kwargs["headers"] == {"X-API-Key": "ttk_secret"}

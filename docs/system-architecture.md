@@ -1031,9 +1031,12 @@ password-reset OTP — without any vendor code path. See ADR-0011 for the decisi
 - **Storage:** one nullable JSONB column `projects.external_api` (migration `0056`): `enabled`,
   `base_url`, `auth_header`, `auth_scheme`, the AES-GCM sealed key (`v2:` bound to
   `project-external-api:<project id>`), and the admin-written `guide` (≤ 16 000 characters).
-- **Admin surface:** `GET`/`PUT /api/v1/knowledge/projects/{id}/external-api` (admin only,
-  `backend/app/api/projects.py` → `app.services.project.external_api`). The key is write-only; the
-  read surface returns `{configured, preview}` only, and `ProjectOut` carries no field for it. An
+- **Admin surface:** `GET`/`PUT /api/v1/knowledge/projects/{id}/external-api` plus
+  `POST /api/v1/knowledge/projects/{id}/external-api/test` — one real call through the stored
+  integration (same validation, dedupe/throttle and egress as the bot, rate-limited per admin) —
+  (admin only, `backend/app/api/projects.py` → `app.services.project.external_api`). The key is
+  write-only; the read surface returns `{configured, preview}` plus the `chatbot_readiness`
+  projection (`ready` + stable blocker codes) only, and `ProjectOut` carries no field for it. An
   audit row `project_external_api_updated` is written on every replace.
 - **UI:** `frontend/src/components/atomic-crm/projects/ProjectExternalApiPanel.tsx`, rendered by
   `ProjectEdit` for admins. The guide can be pasted or loaded from a `.md`/`.txt` file.

@@ -445,6 +445,17 @@ Sync failures preserve the previous page. `FAILED` records an error code on the
 row, `NO_OP` records an unchanged content hash, and `OK` records the new hash
 and row count after atomic replacement.
 
+## Per-project external API
+
+The admin-only integration surface for the outbound `call_project_api` path
+(see ADR-0011). All three routes require an admin session.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/knowledge/projects/{project_id}/external-api` | Masked view incl. `chatbot_readiness` (`ready` + stable blocker codes), key never returned. |
+| `PUT /api/v1/knowledge/projects/{project_id}/external-api` | Full replace; tri-state `api_key` (absent keeps, `""` clears). |
+| `POST /api/v1/knowledge/projects/{project_id}/external-api/test` | One real call through the stored integration (same validation, dedupe/throttle and egress as the bot); returns `{state, status_code, detail, text}`; rate-limited per admin user. |
+
 ## Project category authority
 
 The admin-only Project API exposes explicit authority transitions for RAG category data.
