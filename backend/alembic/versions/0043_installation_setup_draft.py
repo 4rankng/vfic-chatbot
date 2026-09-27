@@ -80,27 +80,39 @@ def upgrade() -> None:
     )
 
 
+def _data_refusal_sql() -> str:
+    """A plpgsql guard that raises if the setup draft / auth authority holds data.
+
+    This used to be a Python-side ``connection.scalar(SELECT EXISTS ...)``
+    check, which made the downgrade impossible to render offline: alembic's
+    ``--sql`` mode hands the migration a ``MockConnection`` that has no
+    ``scalar``, so ``alembic downgrade head:base --sql`` died with an
+    ``AttributeError`` instead of producing a reviewable script.
+
+    The emitted ``DO`` block tests the same two predicates and raises the same
+    refusal, so it still fires before any DDL runs inside the migration's
+    transaction on a live database, and fires at apply time when the rendered
+    script is run against a real database.
+    """
+    return """
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.installation_setup_drafts LIMIT 1) OR EXISTS (
+    SELECT 1 FROM public.installation_manifest_revisions
+    WHERE authentication_policy IS NOT NULL OR authentication_policy_checksum IS NOT NULL
+    UNION ALL
+    SELECT 1 FROM public.installation_manifest_validations
+    WHERE authentication_policy_checksum IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'refusing to downgrade populated installation setup or authentication authority';
+  END IF;
+END;
+$$;
+"""
+
+
 def downgrade() -> None:
-    connection = op.get_bind()
-    has_draft = connection.scalar(
-        sa.text("SELECT EXISTS (SELECT 1 FROM installation_setup_drafts LIMIT 1)")
-    )
-    has_authentication_authority = connection.scalar(
-        sa.text(
-            "SELECT EXISTS ("
-            "SELECT 1 FROM installation_manifest_revisions "
-            "WHERE authentication_policy IS NOT NULL "
-            "OR authentication_policy_checksum IS NOT NULL "
-            "UNION ALL "
-            "SELECT 1 FROM installation_manifest_validations "
-            "WHERE authentication_policy_checksum IS NOT NULL"
-            ")"
-        )
-    )
-    if has_draft or has_authentication_authority:
-        raise RuntimeError(
-            "refusing to downgrade populated installation setup or authentication authority"
-        )
+    op.execute(sa.text(_data_refusal_sql()))
 
     op.drop_constraint(
         "installation_validation_authentication_checksum_sha256",

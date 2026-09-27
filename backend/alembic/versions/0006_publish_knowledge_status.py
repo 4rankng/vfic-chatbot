@@ -94,6 +94,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # The pre-0006 `knowledge_status` — the one 0001 created and the one the
+    # rest of the reverse walk still expects — already contained 'PUBLISHED';
+    # it never contained the approval labels. 0006's upgrade is therefore
+    # schema-neutral for the enum, and its downgrade must restore that same
+    # label set.
+    #
+    # Restoring the approval labels here (as an earlier draft of this file
+    # did) rewrote every 'PUBLISHED' document to 'APPROVED' on real data and
+    # then left 0005's downgrade — which filters on `status = 'PUBLISHED'` —
+    # with a label that no longer existed, so `downgrade base` could not get
+    # past this revision. Keeping 'PUBLISHED' both preserves the documents
+    # 0005 can filter on and matches app.project_knowledge.domain.statuses.
     op.execute("DROP FUNCTION IF EXISTS public.match_documents(vector, integer, jsonb, uuid[])")
     op.execute("DROP FUNCTION IF EXISTS public.match_documents(vector, integer, jsonb)")
     op.execute("DROP VIEW IF EXISTS public.documents")
@@ -101,36 +113,16 @@ def downgrade() -> None:
     op.execute("ALTER TYPE public.knowledge_status RENAME TO knowledge_status_new")
     op.execute(
         "CREATE TYPE public.knowledge_status AS ENUM "
-        "('UPLOADED','PROCESSING','READY_FOR_REVIEW','APPROVED','REJECTED','ARCHIVED','FAILED')"
+        "('UPLOADED','PROCESSING','PUBLISHED','ARCHIVED','FAILED')"
     )
     op.execute(
         """
         ALTER TABLE public.knowledge_documents
         ALTER COLUMN status TYPE public.knowledge_status
-        USING (
-          CASE status::text
-            WHEN 'PUBLISHED' THEN 'APPROVED'
-            ELSE status::text
-          END
-        )::public.knowledge_status
+        USING status::text::public.knowledge_status
         """
     )
     op.execute("ALTER TABLE public.knowledge_documents ALTER COLUMN status SET DEFAULT 'UPLOADED'")
     op.execute("DROP TYPE public.knowledge_status_new")
-    op.execute(
-        """
-        CREATE OR REPLACE VIEW public.documents AS
-        SELECT
-          kd.id            AS id,
-          kc.content       AS content,
-          kd.metadata      AS metadata,
-          kc.embedding     AS embedding,
-          kd.drive_file_id AS drive_file_id,
-          kd.source        AS source,
-          kd.project_id    AS project_id
-        FROM public.knowledge_documents kd
-        JOIN public.knowledge_chunks kc ON kc.document_id = kd.id
-        WHERE kd.status NOT IN ('ARCHIVED', 'REJECTED', 'FAILED');
-        """
-    )
+    op.execute(_DOCUMENTS_VIEW_SQL)
     op.execute(_MATCH_DOCUMENTS_SQL)

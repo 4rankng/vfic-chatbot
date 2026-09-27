@@ -35,6 +35,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Evaluated in the reverse walk *after* 0006's downgrade, where
+    # `knowledge_status` is the 0001 label set. 'PUBLISHED' is a member of that
+    # set, so this predicate stays valid; 0006's downgrade must keep it so.
+
     op.execute(
         """
         CREATE OR REPLACE VIEW public.documents AS

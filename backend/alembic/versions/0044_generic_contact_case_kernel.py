@@ -15,6 +15,19 @@ branch_labels = None
 depends_on = None
 
 
+_GUARDED_TABLES = (
+    "case_followups",
+    "case_notes",
+    "case_tag_assignments",
+    "cases",
+    "contact_channel_identities",
+    "contacts",
+    "case_workflow_transitions",
+    "case_tag_definitions",
+    "case_workflow_stages",
+    "case_workflow_versions",
+)
+
 def upgrade() -> None:
     op.create_table(
         "case_workflow_versions",
@@ -445,37 +458,56 @@ def upgrade() -> None:
     )
 
 
+def _data_refusal_sql() -> str:
+    """A plpgsql guard that raises if the kernel this revision drops holds data.
+
+    This used to be a Python-side ``connection.scalar(SELECT EXISTS ...)``
+    check, which made the downgrade impossible to render offline: alembic's
+    ``--sql`` mode hands the migration a ``MockConnection`` that has no
+    ``scalar``, so ``alembic downgrade head:base --sql`` died with an
+    ``AttributeError`` instead of producing a reviewable script.
+
+    Emitting the same checks as a ``DO`` block keeps the guard just as strict
+    online (it raises before any DDL runs, inside the migration's transaction)
+    while rendering as ordinary SQL offline, where it fires at apply time
+    against whichever database the operator runs the script on.
+    """
+    table_checks = "\n".join(
+        "  IF EXISTS (SELECT 1 FROM public."
+        + table
+        + " LIMIT 1) THEN populated := array_append(populated, '"
+        + table
+        + "'); END IF;"
+        for table in _GUARDED_TABLES
+    )
+    return (
+        "DO $$\n"
+        "DECLARE\n"
+        "  populated text[] := ARRAY[]::text[];\n"
+        "BEGIN\n"
+        f"{table_checks}\n"
+        "  IF cardinality(populated) > 0 THEN\n"
+        "    RAISE EXCEPTION 'refusing to downgrade populated generic kernel: %', populated;\n"
+        "  END IF;\n"
+        "  IF EXISTS (SELECT 1 FROM public.conversations"
+        " WHERE contact_id IS NOT NULL OR channel_identity_id IS NOT NULL) THEN\n"
+        "    RAISE EXCEPTION 'refusing to downgrade: conversations reference the contact kernel';\n"
+        "  END IF;\n"
+        "  IF EXISTS ("
+        " SELECT 1 FROM public.installation_manifest_revisions"
+        " WHERE workflow_version_id IS NOT NULL OR workflow_version_checksum IS NOT NULL"
+        " UNION ALL"
+        " SELECT 1 FROM public.installation_manifest_validations"
+        " WHERE workflow_version_checksum IS NOT NULL) THEN\n"
+        "    RAISE EXCEPTION 'refusing to downgrade: installation manifests pin a workflow version';\n"
+        "  END IF;\n"
+        "END;\n"
+        "$$;"
+    )
+
+
 def downgrade() -> None:
-    connection = op.get_bind()
-    checks = (
-        "case_followups",
-        "case_notes",
-        "case_tag_assignments",
-        "cases",
-        "contact_channel_identities",
-        "contacts",
-        "case_workflow_transitions",
-        "case_tag_definitions",
-        "case_workflow_stages",
-        "case_workflow_versions",
-    )
-    populated = [
-        table
-        for table in checks
-        if connection.scalar(sa.text(f"SELECT EXISTS (SELECT 1 FROM {table} LIMIT 1)"))
-    ]
-    linked = connection.scalar(
-        sa.text(
-            "SELECT EXISTS (SELECT 1 FROM conversations WHERE contact_id IS NOT NULL OR channel_identity_id IS NOT NULL)"
-        )
-    )
-    pinned = connection.scalar(
-        sa.text(
-            "SELECT EXISTS (SELECT 1 FROM installation_manifest_revisions WHERE workflow_version_id IS NOT NULL OR workflow_version_checksum IS NOT NULL UNION ALL SELECT 1 FROM installation_manifest_validations WHERE workflow_version_checksum IS NOT NULL)"
-        )
-    )
-    if populated or linked or pinned:
-        raise RuntimeError(f"refusing to downgrade populated generic kernel: {populated}")
+    op.execute(sa.text(_data_refusal_sql()))
 
     op.drop_index("uq_conversations_channel_identity", table_name="conversations")
     op.drop_index("ix_conversations_contact", table_name="conversations")

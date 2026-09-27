@@ -280,23 +280,54 @@ def upgrade() -> None:
     )
 
 
-def downgrade() -> None:
-    connection = op.get_bind()
-    guarded_tables = (
-        "installation_state",
-        "installation_manifest_validations",
-        "installation_manifest_revisions",
-        "persona_versions",
+_GUARDED_TABLES = (
+    "installation_state",
+    "installation_manifest_validations",
+    "installation_manifest_revisions",
+    "persona_versions",
+)
+
+
+def _data_refusal_sql() -> str:
+    """A plpgsql guard that raises if the immutable installation tables hold data.
+
+    This used to be a Python-side ``connection.scalar(SELECT EXISTS ...)``
+    check, which made the downgrade impossible to render offline: alembic's
+    ``--sql`` mode hands the migration a ``MockConnection`` that has no
+    ``scalar``, so ``alembic downgrade head:base --sql`` died with an
+    ``AttributeError`` instead of producing a reviewable script.
+
+    The emitted ``DO`` block tests the same predicate and raises the same
+    refusal for the same tables, so it still fires before any DDL runs inside
+    the migration's transaction when a live database is being downgraded. In
+    offline mode it is rendered as ordinary SQL and fires against whichever
+    database the operator runs the script on.
+    """
+    table_checks = "\n".join(
+        "  IF EXISTS (SELECT 1 FROM public."
+        + table
+        + " LIMIT 1) THEN populated := array_append(populated, '"
+        + table
+        + "'); END IF;"
+        for table in _GUARDED_TABLES
     )
-    populated = [
-        table
-        for table in guarded_tables
-        if connection.scalar(sa.text(f'SELECT EXISTS (SELECT 1 FROM "{table}" LIMIT 1)'))
-    ]
-    if populated:
-        raise RuntimeError(
-            "refusing to downgrade populated immutable installation tables: " + ", ".join(populated)
-        )
+    return (
+        "DO $$\n"
+        "DECLARE\n"
+        "  populated text[] := ARRAY[]::text[];\n"
+        "BEGIN\n"
+        f"{table_checks}\n"
+        "  IF cardinality(populated) > 0 THEN\n"
+        "    RAISE EXCEPTION 'refusing to downgrade populated immutable installation tables: %',"
+        " array_to_string(populated, ', ');\n"
+        "  END IF;\n"
+        "END;\n"
+        "$$;"
+    )
+
+
+def downgrade() -> None:
+    op.execute(sa.text(_data_refusal_sql()))
 
     op.drop_table("installation_state")
     op.drop_index(
