@@ -44,7 +44,14 @@ bootstrap:
 # Release must be committed and validated before any image is pushed or production is touched.
 # Every gate runs on this machine — there is no CI in the loop.
 release-check:
-	@test -z "$$(git status --porcelain)" || { echo "Release blocked: commit or stash all local changes first."; exit 1; }
+	@dirty="$$(git status --porcelain | grep -v '^ M \.claude/CLAUDE\.md$$')"; \
+	if [ -n "$$dirty" ]; then \
+		echo "Release blocked: commit or stash all local changes first."; \
+		echo "$$dirty" | sed 's/^/    /'; \
+		echo "Only .claude/CLAUDE.md may differ, and only inside its generated block."; \
+		exit 1; \
+	fi
+	@node scripts/check-agent-rules-committed.mjs
 	@git diff --check
 	@if command -v uv >/dev/null 2>&1; then (cd backend && uv lock --check); else echo "WARNING: uv not found — skipped uv lock --check"; fi
 	@cd backend && test "$$(.venv/bin/python -m alembic heads | wc -l | tr -d ' ')" = 1
@@ -69,7 +76,13 @@ Path(sys.argv[2]).write_text(json.dumps({"golden_pass_rate_pct": passed / case_c
 		exit "$$rc"
 
 # Build & push BOTH GHCR images, then deploy to bot.tingting.vip.
-deploy: release-check
+#
+# Depends on `backup`, not just `release-check`: this target runs `alembic upgrade
+# head` on the production database, so a bad migration is only recoverable from a
+# dump taken BEFORE the run. `deploy-backend` already had this dependency;
+# `deploy` did not, which meant a full deploy -- the one that carries migrations --
+# was the one path with no pre-migration dump.
+deploy: release-check backup
 	@echo "=== Building & pushing frontend ==="
 	cd frontend && make push
 	@echo "=== Building & pushing backend ==="
