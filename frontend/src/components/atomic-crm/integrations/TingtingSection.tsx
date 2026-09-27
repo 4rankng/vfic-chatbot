@@ -4,15 +4,19 @@ import { useNotify, useTranslate } from "ra-core";
 
 import { Button } from "@/components/ui/button";
 
-import type { SettingsStatusState } from "../SettingsFieldStatus";
-import { SettingsGroupStatus } from "../SettingsFieldStatus";
+import type { SettingsStatusState } from "./SettingsFieldStatus";
+import { SettingsGroupStatus } from "./SettingsFieldStatus";
 import {
   zaloIntegrationGateway,
   type TingtingSettings,
   type TingtingSettingsUpdate,
-} from "../api";
+} from "./api";
 import { PlainField, SecretField } from "./SecretField";
 import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
+
+
+/** The one API key plus the four Zalo OA credentials this panel owns. */
+const TINGTING_FIELD_COUNT = 5;
 
 /** One query key for the endpoint, so a save can write back its own response. */
 const tingtingSettingsKey = ["tingting-settings"] as const;
@@ -142,7 +146,6 @@ export const TingtingSection = () => {
     }
   }
 
-  const configured = settings?.configured ?? false;
   // Optional chaining on the credential objects too: a payload cached before
   // this card grew the OA fields must not crash the section.
   const oaConfigured = Boolean(
@@ -151,6 +154,16 @@ export const TingtingSection = () => {
       settings?.oa_secret_key?.configured,
   );
   const dirty = Boolean(trimmedApiKey) || Object.keys(oaPost).length > 0;
+
+  // The badge counts the five visible credentials, so "3/5" names which are
+  // still missing instead of restating the backend's overall readiness flag.
+  const configuredFields = [
+    settings?.api_key?.configured,
+    settings?.oa_app_id,
+    settings?.oa_secret_key?.configured,
+    settings?.oa_access_token?.configured,
+    settings?.oa_refresh_token?.configured,
+  ].filter(Boolean).length;
 
   const submit = () => {
     saveSettings.mutate({
@@ -161,38 +174,48 @@ export const TingtingSection = () => {
 
   return (
     <SettingsSectionPanel id="settings-tingting">
-      <div className="settings-grid settings-grid-models">
-        <SettingsGroup
-          className="settings-llm-card"
-          title="TingTing · Đặt lại mật khẩu"
-          description="Tra cứu nhân sự và gửi OTP đặt lại mật khẩu qua API TingTing trên Zalo OA TingTing Software Solution."
-          icon={
-            <img
-              src="/brand/tingting-oa.png"
-              alt="TingTing"
-              className="size-6 rounded-[6px] object-contain"
-            />
-          }
-          meta={
-            <SettingsGroupStatus
-              configured={configured ? 1 : 0}
-              total={1}
-              state={statusState}
-            />
-          }
-        >
-          <SecretField
-            id="tingting_api_key"
-            label="API key TingTing"
-            placeholder="Nhập API key"
-            configured={settings?.api_key?.configured ?? false}
-            statusState={statusState}
-            preview={settings?.api_key?.preview ?? null}
-            value={apiKey}
-            onChange={setApiKey}
-            notify={notify}
-            hint="Quy trình gửi OTP đã được tích hợp sẵn trong hệ thống. Để trống để giữ API key đã lưu."
+      {/* One integration, so one full-width card: the page header already
+          carries the title and the purpose. The card names the integration,
+          reports how much of it is configured, and lays the credentials out in
+          pairs instead of a single tall column. */}
+      <SettingsGroup
+        className="settings-tingting-card"
+        title="TingTing"
+        icon={
+          <img
+            src="/brand/tingting-oa.png"
+            alt=""
+            className="size-5 rounded-[6px] object-contain"
           />
+        }
+        meta={
+          <SettingsGroupStatus
+            configured={configuredFields}
+            total={TINGTING_FIELD_COUNT}
+            state={statusState}
+          />
+        }
+        defaultOpen
+      >
+        <SecretField
+          id="tingting_api_key"
+          label="API key TingTing"
+          placeholder="Nhập API key"
+          configured={settings?.api_key?.configured ?? false}
+          statusState={statusState}
+          preview={settings?.api_key?.preview ?? null}
+          value={apiKey}
+          onChange={setApiKey}
+          notify={notify}
+          hint="Quy trình gửi OTP đã tích hợp sẵn. Để trống để giữ API key đã lưu."
+        />
+
+        <div className="settings-tingting-subhead">
+          <h3>Zalo OA</h3>
+          <p>Lấy trong Zalo OA Console (Cài đặt → API).</p>
+        </div>
+
+        <div className="settings-tingting-grid">
           <PlainField
             id="tingting_oa_app_id"
             label="Zalo App ID"
@@ -201,7 +224,6 @@ export const TingtingSection = () => {
             configured={Boolean(settings?.oa_app_id)}
             statusState={statusState}
             showMissingStatus={false}
-            hint="Lấy trong Zalo OA Console của OA TingTing Software Solution (Cài đặt → API)."
           />
           <SecretField
             id="tingting_oa_secret_key"
@@ -213,7 +235,7 @@ export const TingtingSection = () => {
             value={oaForm.secret_key}
             onChange={(value) => setOaField("secret_key", value)}
             notify={notify}
-            hint="Dùng để tự động gia hạn Access Token (Zalo cấp cùng App ID)."
+            hint="Tự gia hạn Access Token (Zalo cấp cùng App ID)."
           />
           <SecretField
             id="tingting_oa_access_token"
@@ -225,7 +247,7 @@ export const TingtingSection = () => {
             value={oaForm.access_token}
             onChange={(value) => setOaField("access_token", value)}
             notify={notify}
-            hint="Bắt buộc. Hệ thống kiểm tra bằng Zalo và tự nhận diện OA khi bạn lưu."
+            hint="Bắt buộc — hệ thống kiểm tra với Zalo và tự nhận diện OA khi lưu."
           />
           <SecretField
             id="tingting_oa_refresh_token"
@@ -237,28 +259,28 @@ export const TingtingSection = () => {
             value={oaForm.refresh_token}
             onChange={(value) => setOaField("refresh_token", value)}
             notify={notify}
-            hint="Nên có: Access Token hết hạn sau ~25 giờ, thiếu Refresh Token thì OA sẽ ngừng gửi được tin."
+            hint="Nên có — Access Token hết hạn sau ~25 giờ."
           />
-          <div className="settings-field">
-            <div className="settings-field-label-row">
-              <span className="settings-field-hint">
-                {describeOaLink(settings)}
-              </span>
-            </div>
-            {oaConfigured ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="tt-btn-touch"
-                onClick={() => checkOa.mutate()}
-                disabled={checkOa.isPending}
-              >
-                {checkOa.isPending ? "Đang kiểm tra…" : "Kiểm tra lại OA"}
-              </Button>
-            ) : null}
-          </div>
-        </SettingsGroup>
-      </div>
+        </div>
+
+        <div className="settings-tingting-link">
+          <span className="settings-tingting-link-copy" role="status">
+            {describeOaLink(settings)}
+          </span>
+          {oaConfigured ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="settings-test-button tt-btn-touch"
+              onClick={() => checkOa.mutate()}
+              disabled={checkOa.isPending}
+              aria-busy={checkOa.isPending}
+            >
+              {checkOa.isPending ? "Đang kiểm tra…" : "Kiểm tra lại OA"}
+            </Button>
+          ) : null}
+        </div>
+      </SettingsGroup>
 
       <div className={`settings-llm-footer${dirty ? " is-dirty" : ""}`}>
         <Button
@@ -269,7 +291,7 @@ export const TingtingSection = () => {
         >
           {saveSettings.isPending
             ? translate("crm.common.saving")
-            : "Lưu & kiểm tra"}
+            : translate("crm.common.save_and_test")}
         </Button>
         <span className="settings-llm-footer-note">
           {dirty

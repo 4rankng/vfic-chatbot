@@ -40,7 +40,7 @@ import {
   SettingsGroupStatus,
   type SettingsStatusState,
 } from "./SettingsFieldStatus";
-import { PlainField, SecretField } from "./presentation/SecretField";
+import { PlainField, SecretField } from "./SecretField";
 
 type CredentialsFormState = {
   facebook_app_id: string;
@@ -411,7 +411,7 @@ export const FacebookMessengerIntegrationPage = () => {
             >
               {saveCredentials.isPending
                 ? translate("crm.common.saving")
-                : "Lưu thông tin"}
+                : translate("crm.common.save_credentials")}
             </Button>
           </div>
         </div>

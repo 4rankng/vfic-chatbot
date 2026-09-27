@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-import "../../conversations/inbox.css";
-import "../settings.css";
+import "../conversations/inbox.css";
+import "./settings.css";
 import {
   SETTINGS_NAV_ITEMS,
   SETTINGS_VIEW_COPY,

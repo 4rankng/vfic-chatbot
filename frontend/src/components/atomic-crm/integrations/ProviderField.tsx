@@ -8,12 +8,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import type { SettingsStatusState } from "../SettingsFieldStatus";
+import type { SettingsStatusState } from "./SettingsFieldStatus";
 import type {
   ProviderFieldDescriptor,
   ProviderFormState,
   ProviderSettingsBundle,
-} from "../domain/providerDescriptors";
+} from "./providerDescriptors";
 import { SecretField } from "./SecretField";
 import type { CredentialFieldNotify } from "./credentialClipboard";
 

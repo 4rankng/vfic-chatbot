@@ -10,7 +10,7 @@ import {
   type ProviderTestResult,
   type ProviderTestStatus,
   type SecretStatus,
-} from "../api";
+} from "./api";
 
 // ---------------------------------------------------------------------------
 // Provider settings panels (descriptor-driven)

@@ -1,26 +1,26 @@
 import { useState } from "react";
 import { usePermissions, useTranslate } from "ra-core";
 
-import { useProviderPanels } from "./application/useProviderPanels";
-import { useSettingsBundle } from "./application/useSettingsBundle";
-import { useZaloForm } from "./application/useZaloForm";
+import { useProviderPanels } from "./useProviderPanels";
+import { useSettingsBundle } from "./useSettingsBundle";
+import { useZaloForm } from "./useZaloForm";
 import {
   AgentsSettingsSection,
   MessengerSettingsSection,
   UsersSettingsSection,
-} from "./presentation/EmbeddedSettingsSections";
-import { JevSection } from "./presentation/JevSection";
-import { LlmProvidersSection } from "./presentation/LlmProvidersSection";
-import { TingtingSection } from "./presentation/TingtingSection";
+} from "./EmbeddedSettingsSections";
+import { JevSection } from "./JevSection";
+import { LlmProvidersSection } from "./LlmProvidersSection";
+import { TingtingSection } from "./TingtingSection";
 import {
   SettingsChrome,
   SettingsWorkspace,
-} from "./presentation/SettingsChrome";
-import { ZaloChannelSection } from "./presentation/ZaloChannelSection";
+} from "./SettingsChrome";
+import { ZaloChannelSection } from "./ZaloChannelSection";
 import {
   resolveInitialSettingsItemId,
   type SettingsItemId,
-} from "./presentation/settingsNav";
+} from "./settingsNav";
 
 /**
  * The Settings resource: a console shell that switches between seven section

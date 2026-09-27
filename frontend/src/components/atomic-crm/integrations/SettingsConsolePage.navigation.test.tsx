@@ -834,4 +834,53 @@ describe("SettingsConsolePage provider sections", () => {
       .element(screen.getByRole("button", { name: "Lưu & kiểm tra" }))
       .toBeDisabled();
   });
+
+  it("renders the catalog copy for the save-and-test and token footer labels", async () => {
+    mocks.isMobile = false;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <SettingsConsolePage />
+      </QueryClientProvider>,
+    );
+
+    // Both Zalo channel cards pair the busy label with the idle one. The idle
+    // half used to be a literal, so the pair could drift apart; both halves now
+    // have to come back from the catalog.
+    await expect
+      .element(
+        screen
+          .getByRole("button", {
+            name: testI18nProvider.translate("crm.common.save_and_test"),
+          })
+          .first(),
+      )
+      .toBeVisible();
+
+    const providersButton = Array.from(
+      screen.container.querySelectorAll<HTMLButtonElement>(
+        ".settings-side-nav-link",
+      ),
+    ).find((button) => button.textContent?.includes("AI Providers"));
+    providersButton?.click();
+
+    await expect
+      .element(
+        screen.getByRole("heading", { name: "AI Providers", exact: true }),
+      )
+      .toBeVisible();
+
+    // With nothing pending the footer note is the catalog's token hint, not a
+    // string baked into the section.
+    const footerNote = screen.container.querySelector<HTMLElement>(
+      ".settings-llm-footer-note",
+    );
+    await expect
+      .element(footerNote)
+      .toHaveTextContent(
+        testI18nProvider.translate("crm.common.token_encrypted_hint"),
+      );
+  });
 });

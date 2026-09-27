@@ -2,13 +2,13 @@ import { useNotify, useTranslate } from "ra-core";
 
 import { Button } from "@/components/ui/button";
 
-import type { SettingsStatusState } from "../SettingsFieldStatus";
-import { SettingsGroupStatus } from "../SettingsFieldStatus";
-import type { ProviderPanels } from "../application/useProviderPanels";
+import type { SettingsStatusState } from "./SettingsFieldStatus";
+import { SettingsGroupStatus } from "./SettingsFieldStatus";
+import type { ProviderPanels } from "./useProviderPanels";
 import {
   PROVIDER_PANELS_BY_ID,
   type ProviderSettingsBundle,
-} from "../domain/providerDescriptors";
+} from "./providerDescriptors";
 import { ProviderField } from "./ProviderField";
 import {
   ProviderSwitchField,
@@ -135,7 +135,7 @@ export const JevSection = ({
         <span className="settings-llm-footer-note">
           {panels.dirty.standalone
             ? translate("crm.common.unsaved_changes")
-            : "Token được mã hoá, không hiển thị lại."}
+            : translate("crm.common.token_encrypted_hint")}
         </span>
       </div>
     </SettingsSectionPanel>

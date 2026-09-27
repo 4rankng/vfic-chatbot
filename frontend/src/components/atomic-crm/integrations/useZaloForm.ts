@@ -2,12 +2,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNotify } from "ra-core";
 
-import { zaloIntegrationGateway, type ZaloSettings } from "../api";
+import { zaloIntegrationGateway, type ZaloSettings } from "./api";
 import {
   buildZaloUpdatePayload,
   type ZaloFormState,
   type ZaloSettingsScope,
-} from "../zaloUpdatePayload";
+} from "./zaloUpdatePayload";
 import { integrationSettingsKeys } from "./useSettingsBundle";
 
 /** One Zalo channel scope; "all" belongs to the payload builder, not the UI. */

@@ -33,14 +33,6 @@ export const vietnameseCrmMessages = {
         network: "Không kết nối được đến máy chủ. Vui lòng thử lại.",
         error: "Gửi tin nhắn thất bại.",
       },
-      takeover: {
-        success: "Đã chuyển sang Tư vấn viên",
-        error: "Tiếp nhận thất bại",
-      },
-      release: {
-        success: "Đã chuyển sang ChatBot",
-        error: "Trả lại thất bại",
-      },
     },
     bot_runs: {
       name: "Lần chạy bot |||| Lần chạy bot",
@@ -155,6 +147,10 @@ export const vietnameseCrmMessages = {
       success: "Đã chuyển sang Tư vấn viên",
       error: "Tiếp nhận hội thoại thất bại",
     },
+    semi_auto: {
+      success: "Đã bật chế độ bán tự động",
+      error: "Không thể bật chế độ bán tự động",
+    },
     release: {
       success: "Đã chuyển sang ChatBot",
       error: "Trả hội thoại về ChatBot thất bại",
@@ -162,55 +158,28 @@ export const vietnameseCrmMessages = {
   },
   crm: {
     navigation: {
-      label: "Điều hướng",
       overview: "Tổng quan",
-      messages: "Tin nhắn",
-      projects: "Dự án",
-      settings: "Cài đặt",
-      performance: "Hiệu suất",
-      account: "Tài khoản",
-    },
-    settings: {
-      title: "Cài đặt",
-      preferences: "Tùy chọn",
-      about: "Giới thiệu",
-      app_title: "Tên ứng dụng",
-      light_mode_logo: "Logo chế độ sáng",
-      dark_mode_logo: "Logo chế độ tối",
-      saved: "Đã lưu cấu hình",
-      saving: "Đang lưu…",
-      save_error: "Không thể lưu cấu hình.",
-      reset_defaults: "Khôi phục mặc định",
-      sections: {
-        branding: "Thương hiệu",
-      },
-    },
-    theme: {
-      label: "Giao diện",
-      system: "Theo hệ thống",
-      light: "Sáng",
-      dark: "Tối",
     },
     profile: {
       title: "Hồ sơ cá nhân",
-      record_not_found: "Không tìm thấy bản ghi",
       updated: "Hồ sơ của bạn đã được cập nhật",
       update_error: "Đã xảy ra lỗi. Vui lòng thử lại",
     },
     common: {
-      copy: "Sao chép",
-      copied: "Đã sao chép",
       saving: "Đang lưu…",
       save_changes: "Lưu thay đổi",
+      save_and_test: "Lưu & kiểm tra",
+      save_credentials: "Lưu thông tin",
+      save_project: "Lưu dự án",
+      save_file: "Lưu tệp",
       retry: "Thử lại",
       retrying: "Đang thử lại…",
-      loading: "Đang tải…",
-      load_failed: "Không tải được dữ liệu.",
       unknown: "Chưa rõ",
       retry_hint: "Kiểm tra kết nối rồi thử lại.",
       back_to_overview: "Về Tổng quan",
       no_data: "Chưa có dữ liệu",
       unsaved_changes: "Có thay đổi chưa lưu.",
+      token_encrypted_hint: "Token được mã hoá, không hiển thị lại.",
       refreshing: "Đang làm mới…",
       testing: "Đang kiểm tra",
       test: "Kiểm tra",
@@ -218,36 +187,9 @@ export const vietnameseCrmMessages = {
       upload: "Tải lên",
     },
     language: "Ngôn ngữ",
-    auth: {
-      sign_in_google_workspace: "Đăng nhập bằng Google Workspace",
-      sign_in_google: "Đăng nhập với Google",
-      welcome_back: "Chào mừng bạn trở lại!",
-      welcome_subtitle: "Đăng nhập để tiếp tục với %{title}",
-      recover_now: "Khôi phục ngay",
-      or_divider: "hoặc",
-      footer_tagline: "Giải pháp tuyển dụng TingHire",
-      welcome_title: "Chào mừng đến với VFIC CRM",
-      first_name: "Tên",
-      last_name: "Họ",
-      sign_in_failed: "Đăng nhập thất bại.",
-      confirmation_required:
-        "Vui lòng nhấn vào liên kết chúng tôi vừa gửi qua email để xác nhận tài khoản của bạn.",
-      signup: {
-        initial_user_created: "Đã tạo người dùng ban đầu",
-        create_first_user:
-          "Tạo tài khoản người dùng đầu tiên để hoàn tất thiết lập.",
-        creating: "Đang tạo…",
-        create_account: "Tạo tài khoản",
-      },
-    },
     users: {
       access_denied_help:
         "Chỉ quản trị viên mới được quản lý người dùng. Hãy nhờ quản trị viên cấp quyền truy cập.",
-    },
-  },
-  "ra-auth": {
-    auth: {
-      forgot_password: "Quên mật khẩu?",
     },
   },
   ra: {

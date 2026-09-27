@@ -66,22 +66,13 @@ export const ProfilePage = () => {
       refetchIdentity();
       refetchUser();
       setEditMode(false);
-      notify("crm.profile.updated", {
-        messageArgs: {
-          _: "Thông tin đã được cập nhật",
-        },
-      });
+      notify("crm.profile.updated");
     },
     onError: (error: Error) => {
       if (error instanceof ApiError && error.status === 409) {
         notify("Email đã được sử dụng bởi tài khoản khác", { type: "error" });
       } else {
-        notify("crm.profile.update_error", {
-          type: "error",
-          messageArgs: {
-            _: "Đã xảy ra lỗi. Vui lòng thử lại",
-          },
-        });
+        notify("crm.profile.update_error", { type: "error" });
       }
     },
   });

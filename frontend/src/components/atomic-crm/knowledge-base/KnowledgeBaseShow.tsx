@@ -395,7 +395,9 @@ export const KnowledgeBaseShowContent = () => {
                     aria-hidden="true"
                   />
                 ) : null}
-                {savingFile ? translate("crm.common.saving") : "Lưu tệp"}
+                {savingFile
+                  ? translate("crm.common.saving")
+                  : translate("crm.common.save_file")}
               </Button>
             </div>
           </KnowledgeSection>

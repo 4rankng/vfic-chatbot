@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import {
   SettingsFieldStatus,
   type SettingsStatusState,
-} from "../SettingsFieldStatus";
+} from "./SettingsFieldStatus";
 import {
   copyCredentialFieldValue,
   type CredentialFieldNotify,

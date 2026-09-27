@@ -3,11 +3,11 @@ import { useNotify, useTranslate } from "ra-core";
 
 import { Button } from "@/components/ui/button";
 
-import type { ZaloOaSignatureHealth, ZaloSettings } from "../api";
-import type { SettingsStatusState } from "../SettingsFieldStatus";
-import { SettingsGroupStatus } from "../SettingsFieldStatus";
-import type { ZaloChannelScope } from "../application/useZaloForm";
-import type { ZaloFormState } from "../zaloUpdatePayload";
+import type { ZaloOaSignatureHealth, ZaloSettings } from "./api";
+import type { SettingsStatusState } from "./SettingsFieldStatus";
+import { SettingsGroupStatus } from "./SettingsFieldStatus";
+import type { ZaloChannelScope } from "./useZaloForm";
+import type { ZaloFormState } from "./zaloUpdatePayload";
 import { PlainField, SecretField } from "./SecretField";
 import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
 import { formatRelativeEpoch } from "./statusCopy";
@@ -114,7 +114,7 @@ export const ZaloChannelSection = ({
               <Wifi className="size-4" />
               {channelTesting.bot
                 ? translate("crm.common.testing")
-                : "Lưu & kiểm tra"}
+                : translate("crm.common.save_and_test")}
             </Button>
           </div>
         </SettingsGroup>
@@ -187,7 +187,7 @@ export const ZaloChannelSection = ({
                 <Wifi className="size-4" />
                 {channelTesting.oa
                   ? translate("crm.common.testing")
-                  : "Lưu & kiểm tra"}
+                  : translate("crm.common.save_and_test")}
               </Button>
             </div>
             <details className="settings-advanced settings-webhook-health tt-collapse tt-collapse-arrow">

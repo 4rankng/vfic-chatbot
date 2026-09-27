@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNotify } from "ra-core";
 
-import type { LlmProvider, ProviderTestStatus } from "../api";
+import type { LlmProvider, ProviderTestStatus } from "./api";
 import {
   CHAIN_PANEL_ID_BY_PROVIDER,
   LLM_PROVIDER_ORDER,
@@ -18,7 +18,7 @@ import {
   type ProviderPanelId,
   type ProviderPayload,
   type ProviderSettingsBundle,
-} from "../domain/providerDescriptors";
+} from "./providerDescriptors";
 import { integrationSettingsKeys } from "./useSettingsBundle";
 
 const EMPTY_PROVIDER_ENABLED: Record<ProviderPanelId, boolean> = {

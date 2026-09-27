@@ -4,15 +4,15 @@ import { useNotify, useTranslate } from "ra-core";
 
 import { Button } from "@/components/ui/button";
 
-import type { LlmProvider } from "../api";
-import type { SettingsStatusState } from "../SettingsFieldStatus";
-import type { ProviderPanels } from "../application/useProviderPanels";
+import type { LlmProvider } from "./api";
+import type { SettingsStatusState } from "./SettingsFieldStatus";
+import type { ProviderPanels } from "./useProviderPanels";
 import {
   CHAIN_PANEL_ID_BY_PROVIDER,
   PROVIDER_GROUP_IDS,
   PROVIDER_PANELS_BY_ID,
   type ProviderSettingsBundle,
-} from "../domain/providerDescriptors";
+} from "./providerDescriptors";
 import { ProviderField } from "./ProviderField";
 import {
   ProviderSwitchField,
@@ -279,7 +279,7 @@ export const LlmProvidersSection = ({
         <span className="settings-llm-footer-note">
           {panels.dirty.chain
             ? translate("crm.common.unsaved_changes")
-            : "Token được mã hoá, không hiển thị lại."}
+            : translate("crm.common.token_encrypted_hint")}
         </span>
       </div>
     </SettingsSectionPanel>

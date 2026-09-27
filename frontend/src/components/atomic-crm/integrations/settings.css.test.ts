@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import featureStyles from "../conversations/inbox/features.css?raw";
-import embeddedSectionsSource from "./presentation/EmbeddedSettingsSections.tsx?raw";
-import jevSource from "./presentation/JevSection.tsx?raw";
-import llmProvidersSource from "./presentation/LlmProvidersSection.tsx?raw";
-import providerFieldSource from "./presentation/ProviderField.tsx?raw";
-import secretFieldSource from "./presentation/SecretField.tsx?raw";
-import tingtingSource from "./presentation/TingtingSection.tsx?raw";
-import chromeSource from "./presentation/SettingsChrome.tsx?raw";
-import groupSource from "./presentation/SettingsGroup.tsx?raw";
-import zaloChannelSource from "./presentation/ZaloChannelSection.tsx?raw";
+import embeddedSectionsSource from "./EmbeddedSettingsSections.tsx?raw";
+import jevSource from "./JevSection.tsx?raw";
+import llmProvidersSource from "./LlmProvidersSection.tsx?raw";
+import providerFieldSource from "./ProviderField.tsx?raw";
+import secretFieldSource from "./SecretField.tsx?raw";
+import tingtingSource from "./TingtingSection.tsx?raw";
+import chromeSource from "./SettingsChrome.tsx?raw";
+import groupSource from "./SettingsGroup.tsx?raw";
+import zaloChannelSource from "./ZaloChannelSection.tsx?raw";
 import messengerSource from "./FacebookMessengerIntegrationPage.tsx?raw";
 import pageSource from "./SettingsConsolePage.tsx?raw";
 import stylesheet from "./settings.css?raw";

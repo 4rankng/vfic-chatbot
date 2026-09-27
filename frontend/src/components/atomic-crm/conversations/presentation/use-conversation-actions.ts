@@ -66,7 +66,7 @@ export const useConversationActions = (record?: Conversation) => {
         nextMode === "human"
           ? "conversations.takeover.success"
           : nextMode === "semi_auto"
-            ? "Đã bật chế độ bán tự động"
+            ? "conversations.semi_auto.success"
             : "conversations.release.success";
       notify(key, { type: "success" });
       refresh();
@@ -75,7 +75,7 @@ export const useConversationActions = (record?: Conversation) => {
         nextMode === "human"
           ? "conversations.takeover.error"
           : nextMode === "semi_auto"
-            ? "Không thể bật chế độ bán tự động"
+            ? "conversations.semi_auto.error"
             : "conversations.release.error";
       notify(errorKey, { type: "error" });
     }

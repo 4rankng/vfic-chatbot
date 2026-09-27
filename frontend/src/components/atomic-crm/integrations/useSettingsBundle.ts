@@ -9,9 +9,9 @@ import {
   type MinimaxSettings,
   type OpenRouterSettings,
   type ZaloSettings,
-} from "../api";
-import type { SettingsStatusState } from "../SettingsFieldStatus";
-import type { ProviderSettingsBundle } from "../domain/providerDescriptors";
+} from "./api";
+import type { SettingsStatusState } from "./SettingsFieldStatus";
+import type { ProviderSettingsBundle } from "./providerDescriptors";
 
 /**
  * One query key per settings endpoint, mirroring the Facebook integration's

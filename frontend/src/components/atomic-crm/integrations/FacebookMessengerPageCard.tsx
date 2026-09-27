@@ -108,7 +108,9 @@ const FacebookPageProjectsEditor = ({
           disabled={saving || !dirty}
           aria-busy={saving}
         >
-          {saving ? translate("crm.common.saving") : "Lưu dự án"}
+          {saving
+            ? translate("crm.common.saving")
+            : translate("crm.common.save_project")}
         </Button>
       </div>
       <FacebookProjectCheckboxList

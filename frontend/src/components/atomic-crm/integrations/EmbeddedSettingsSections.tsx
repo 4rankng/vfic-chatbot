@@ -1,6 +1,6 @@
-import { PersonaList } from "../../personas/PersonaList";
-import { UserList } from "../../users/UserList";
-import { FacebookMessengerIntegrationPage } from "../FacebookMessengerIntegrationPage";
+import { PersonaList } from "../personas/PersonaList";
+import { UserList } from "../users/UserList";
+import { FacebookMessengerIntegrationPage } from "./FacebookMessengerIntegrationPage";
 
 /**
  * The settings console embeds three pages owned by other products (personas,
