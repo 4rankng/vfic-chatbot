@@ -15,7 +15,8 @@ Three properties are pinned here against a live PostgreSQL + pgvector:
 2. The downgrades are symmetric: downgrading past 0056 restores the vector
    overload, and downgrading past 0055 removes the halfvec one, so a full
    downgrade returns the database to the 0001 state and re-upgrading lands
-   back on halfvec.
+   back on halfvec. That walk runs on a database this module creates and
+   drops, so no crash inside it can strand the session-shared one mid-chain.
 3. Both statements ``DocumentRepository.match_memories`` issues bind their
    embedding as ``halfvec`` — the type the surviving function takes and the
    type the HNSW index is built on.
@@ -34,6 +35,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from typing import Protocol
 
 import pytest
 from sqlalchemy import text
@@ -41,6 +43,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.services.retrieval.document_repository import DocumentRepository
 from tests.integration.conftest import BACKEND_DIR, IntegrationDatabase
+from tests.integration.test_migration_roundtrip_walk import (
+    _roundtrip_database as _disposable_database,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -49,7 +54,19 @@ _ROW_COUNT = 2000
 _EMBEDDING = "[" + ",".join(["0.0125"] * 3072) + "]"
 
 
-def _alembic(database: IntegrationDatabase, command: str, target: str) -> None:
+class _AlembicTarget(Protocol):
+    """The two URLs an alembic subprocess needs.
+
+    Both the session-shared ``IntegrationDatabase`` and the throwaway database
+    this module migrates are addressed through this, so a downgrade aimed at
+    the wrong one is a wrong value, not a wrong type.
+    """
+
+    async_url: str
+    sync_url: str
+
+
+def _alembic(database: _AlembicTarget, command: str, target: str) -> None:
     env = os.environ.copy()
     env.update(
         {
@@ -79,6 +96,17 @@ async def _match_memories_arg_types(session: AsyncSession) -> list[str]:
         )
     )
     return list(rows.scalars().all())
+
+
+async def _alembic_revision(connection) -> str:
+    """``alembic_version.version_num`` — where this database's schema actually is.
+
+    Read from the table rather than from ``alembic current`` so a downgrade
+    that never reached a later test (a killed worker, a crash mid-walk) is
+    visible as a wrong value rather than as a cascade of unrelated failures.
+    """
+    rows = await connection.execute(text("SELECT version_num FROM alembic_version"))
+    return ", ".join(rows.scalars().all())
 
 
 class _RecordingSession:
@@ -217,25 +245,70 @@ async def test_head_leaves_only_the_halfvec_match_memories_overload(
 async def test_the_vector_overload_is_restored_and_removed_symmetrically(
     integration_database: IntegrationDatabase,
 ) -> None:
-    """0057 down -> vector overload returns; 0055 down -> halfvec overload goes."""
-    engine = create_async_engine(integration_database.async_url)
-    try:
+    """0057 down -> vector overload returns; 0055 down -> halfvec overload goes.
 
-        async def arg_types() -> list[str]:
-            async with engine.connect() as connection:
-                return await _match_memories_arg_types(connection)
+    The walk runs against a throwaway database created and dropped by this
+    test, never the session-shared one. Downgrading the shared database is
+    only safe while the test is alive: a hard kill, a timeout, or an xdist
+    worker crash between the two downgrades leaves every later integration
+    test on a 0054 schema and reports it as a mystery missing-column error
+    rather than as the crash that caused it.
 
-        _alembic(integration_database, "downgrade", "0056_project_external_api")
-        assert await arg_types() == ["halfvec", "vector"]
+    The isolation is asserted, not assumed: the shared database's migration
+    revision and its ``match_memories`` overload set are re-read after every
+    alembic step, so a walk pointed back at the shared URL fails here instead
+    of quietly mutating it.
+    """
+    with _disposable_database() as scratch:
+        _alembic(scratch, "upgrade", "head")
+        scratch_engine = create_async_engine(scratch.async_url)
+        shared_engine = create_async_engine(integration_database.async_url)
+        try:
 
-        _alembic(integration_database, "downgrade", "0054_channel_account_projects")
-        assert await arg_types() == ["vector"]
+            async def scratch_state() -> tuple[str, list[str]]:
+                async with scratch_engine.connect() as connection:
+                    return (
+                        await _alembic_revision(connection),
+                        await _match_memories_arg_types(connection),
+                    )
 
-        _alembic(integration_database, "upgrade", "head")
-        assert await arg_types() == ["halfvec"]
-    finally:
-        await engine.dispose()
-        _alembic(integration_database, "upgrade", "head")
+            async def shared_state() -> tuple[str, list[str]]:
+                async with shared_engine.connect() as connection:
+                    return (
+                        await _alembic_revision(connection),
+                        await _match_memories_arg_types(connection),
+                    )
+
+            head_revision, head_types = await scratch_state()
+            assert head_types == ["halfvec"], (
+                f"a freshly upgraded database must expose the head schema; found {head_types}"
+            )
+            assert scratch.sync_url != integration_database.sync_url, (
+                "the throwaway database resolved to the session-shared one, so "
+                "the walk below would downgrade the database every other "
+                "integration test is using."
+            )
+            shared_before = await shared_state()
+            assert shared_before == (head_revision, head_types), (
+                "the shared integration database must sit at the head state this "
+                f"test preserves, got {shared_before!r} against {head_revision!r}"
+            )
+
+            # Each step moves the throwaway database and nothing else.
+            _alembic(scratch, "downgrade", "0056_project_external_api")
+            assert (await scratch_state())[1] == ["halfvec", "vector"]
+            assert await shared_state() == shared_before
+
+            _alembic(scratch, "downgrade", "0054_channel_account_projects")
+            assert (await scratch_state())[1] == ["vector"]
+            assert await shared_state() == shared_before
+
+            _alembic(scratch, "upgrade", "head")
+            assert await scratch_state() == (head_revision, ["halfvec"])
+            assert await shared_state() == shared_before
+        finally:
+            await scratch_engine.dispose()
+            await shared_engine.dispose()
 
 
 async def test_both_memories_retrieval_statements_use_the_hnsw_index(

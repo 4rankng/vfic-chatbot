@@ -120,7 +120,9 @@ class Settings(BaseSettings):
     # (`/jobs/search`, `/knowledge/projects/{id}/rag/test`, `/web-chat-turn`,
     # `/leads/{id}/assist`, `/leads/{id}/chatops-actions/*` — bucketed per user,
     # one bucket per route so a burst on a cheap route cannot consume an
-    # expensive route's budget). Redis fixed windows; see app/core/ratelimit.py.
+    # expensive route's budget). Each bucket admits at most `limit` requests per
+    # `window` seconds, and a rejected request never extends that window (Redis
+    # counters; see app/core/ratelimit.py).
     ratelimit_webhook_limit: int = 120
     ratelimit_webhook_window_seconds: int = 60
     ratelimit_llm_limit: int = 30

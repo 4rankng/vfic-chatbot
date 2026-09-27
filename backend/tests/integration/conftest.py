@@ -243,7 +243,12 @@ def _restore_head_after_schema_tests(
     revision = _current_revision(integration_database)
     if not revision or revision.endswith("(head)"):
         return
-    _run_alembic(integration_database, "upgrade", "head")
+    # _run_alembic already runs `upgrade head`; it takes the database only.
+    # Passing "upgrade", "head" here raised TypeError, so this safety net never
+    # restored anything -- a test that left the shared database at an older
+    # revision would surface as an unexplained schema error in a later test
+    # rather than as a warning from the test that caused it.
+    _run_alembic(integration_database)
     warnings.warn(
         f"{request.node.name} left the integration database at '{revision}'; "
         "head was restored by the conftest guard — the test itself must restore it.",

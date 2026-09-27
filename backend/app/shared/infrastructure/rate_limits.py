@@ -2,9 +2,11 @@
 
 ``app/api/*`` may not import ``app.core`` (enforced by
 ``tests/test_architecture_boundaries.py``), so the limiter entry points the API
-routers call live here and delegate to the Redis fixed-window primitives in
-``app.core.ratelimit``. Limits, windows, and the fail-open choice come from
-settings (``ratelimit_webhook_*`` / ``ratelimit_llm_*``) so an operator can tune
+routers call live here and delegate to the Redis bucket primitives in
+``app.core.ratelimit``: a bucket admits at most ``limit`` requests per
+``window`` seconds and a rejected request never extends that window.
+Limits, windows, and the fail-open choice come from settings
+(``ratelimit_webhook_*`` / ``ratelimit_llm_*``) so an operator can tune
 them without a deploy.
 
 Bucket shape: one bucket per protected route. A burst on a cheap route
