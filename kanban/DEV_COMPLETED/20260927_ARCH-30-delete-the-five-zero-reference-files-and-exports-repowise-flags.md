@@ -5,8 +5,8 @@ severity: low
 area: architecture
 labels: [dead-code, frontend]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-27
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-27
 
 **Severity:** low · **Area:** architecture · **Effort:** S · **Labels:** dead-code, frontend
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -36,6 +36,11 @@ Dead frontend surface that linters and tsc pass over: readers and future refacto
 ## Suggested fix
 
 Delete the three files and both exports, then run npm run typecheck and the vitest suite — their passing is the final reference check. If any has a hidden runtime loader (none is expected: none is named in config or manifest files), restore and record why in this card.
+
+## Evidence log
+
+- Executed per the card's own re-verification rule, with a material finding: grep REFUTED the zero-reference claim for 3 of the 5 items — confirm.tsx has 4 live importers (KnowledgeSourceList, ConversationShow, UserActions, simple-form-iterator), icon-button-with-tooltip.tsx has 1 (simple-form-iterator.tsx:42), field.type.ts feeds the admin field components. Those three files were left in place.
+- The two genuinely dead exports were removed: hasPersonaFollowupRules (personaMarkdown.ts) and getEndToEndMetric (performanceDiagnostics.ts); grep now shows zero references. Lesson recorded: repowise in_degree=0 unreachable-file findings require a grep re-check before deletion in this repo.
 
 ---
 

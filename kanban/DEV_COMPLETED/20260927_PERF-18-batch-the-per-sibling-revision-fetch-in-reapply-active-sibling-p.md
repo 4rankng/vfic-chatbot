@@ -5,8 +5,8 @@ severity: medium
 area: performance
 labels: [io-in-loop, knowledge]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-27
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-27
 
 **Severity:** medium · **Area:** performance · **Effort:** S · **Labels:** io-in-loop, knowledge
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -37,6 +37,11 @@ Collect sibling.active_revision_id keys before the loop and fetch once with sele
 ## Notes
 
 Adjacent to but distinct from ARCH-23: that card splits category_service.py, this one fixes a query shape in category_projections.py.
+
+## Evidence log
+
+- _reapply_active_sibling_projections now collects sibling.active_revision_id keys and fetches once via select(KnowledgeCategoryRevision).where(id.in_(keys)), mapped by id; the vanished-mid-read None-guard is preserved and the empty-sibling case issues no revision query.
+- Regression test backend/tests/test_category_projections_sibling_batch.py (batched fetch + IN params + vanished-skip + zero-query when no siblings); full unit suite 2542 passed / 24 skipped.
 
 ---
 

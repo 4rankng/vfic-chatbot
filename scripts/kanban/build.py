@@ -88,6 +88,29 @@ COMPLETIONS: dict[str, dict] = {
             "docs/codebase-summary.md tree/key-files rows fixed: migration ceiling to 0056, phantom graph/tools.py and safety.py rows replaced with the real module map, service enumeration corrected to 14 always-on services (metrics-watch always-on, oa-profile-backfill profile-gated) — verified against docker-compose.yml; TECH.md:59 count updated to match.",
         ],
     },
+    # 2026-09-27 backend-misc lane — report:
+    # plans/reports/kanban-sweep-260927-1539-backend-misc-completion.md
+    "PERF-18": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "_reapply_active_sibling_projections now collects sibling.active_revision_id keys and fetches once via select(KnowledgeCategoryRevision).where(id.in_(keys)), mapped by id; the vanished-mid-read None-guard is preserved and the empty-sibling case issues no revision query.",
+            "Regression test backend/tests/test_category_projections_sibling_batch.py (batched fetch + IN params + vanished-skip + zero-query when no siblings); full unit suite 2542 passed / 24 skipped.",
+        ],
+    },
+    "ARCH-31": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "enrich_messenger_user flattened from nesting 5 / CCN 42 to max nesting 2 via guard clauses plus extracted helpers (_messenger_gender, _messenger_missing_fields, MessengerFieldWrites, _messenger_settled, _emit_messenger_lead_updates, _apply_messenger_fields); behavior contract preserved field-for-field.",
+            "REL-05 gender guards in test_lead_gender_guard.py pass untouched; new backend/tests/test_messenger_profile_enrichment.py (5 tests) covers the previously untested messenger path; enrichment suite 69 passed.",
+        ],
+    },
+    "ARCH-30": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "Executed per the card's own re-verification rule, with a material finding: grep REFUTED the zero-reference claim for 3 of the 5 items — confirm.tsx has 4 live importers (KnowledgeSourceList, ConversationShow, UserActions, simple-form-iterator), icon-button-with-tooltip.tsx has 1 (simple-form-iterator.tsx:42), field.type.ts feeds the admin field components. Those three files were left in place.",
+            "The two genuinely dead exports were removed: hasPersonaFollowupRules (personaMarkdown.ts) and getEndToEndMetric (performanceDiagnostics.ts); grep now shows zero references. Lesson recorded: repowise in_degree=0 unreachable-file findings require a grep re-check before deletion in this repo.",
+        ],
+    },
     "FE-01": {
         "column": "QA_TESTED",
         "evidence": [

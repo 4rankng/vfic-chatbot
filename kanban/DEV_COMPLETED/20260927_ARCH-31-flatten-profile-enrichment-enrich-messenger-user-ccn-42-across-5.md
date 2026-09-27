@@ -5,8 +5,8 @@ severity: medium
 area: architecture
 labels: [nested-complexity, backend]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-27
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-27
 
 **Severity:** medium · **Area:** architecture · **Effort:** M · **Labels:** nested-complexity, backend
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -36,6 +36,11 @@ Convert the nesting to guard clauses and extract the per-field mapping into smal
 ## Notes
 
 REL-05 (lead gender TOCTOU) landed in this file; coordinate the refactor with its regression test.
+
+## Evidence log
+
+- enrich_messenger_user flattened from nesting 5 / CCN 42 to max nesting 2 via guard clauses plus extracted helpers (_messenger_gender, _messenger_missing_fields, MessengerFieldWrites, _messenger_settled, _emit_messenger_lead_updates, _apply_messenger_fields); behavior contract preserved field-for-field.
+- REL-05 gender guards in test_lead_gender_guard.py pass untouched; new backend/tests/test_messenger_profile_enrichment.py (5 tests) covers the previously untested messenger path; enrichment suite 69 passed.
 
 ---
 
