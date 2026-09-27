@@ -61,11 +61,12 @@ const hooks = globSync(path.join(hooksPath, "**", "*.ts*"), ignoreTests).filter(
     return !excludedHooks.includes(path.basename(hook));
   },
 );
-const libFiles = globSync(path.join(libPath, "**", "*.ts*"), ignoreTests).filter(
-  (file) => {
-    return !excludedLibFiles.includes(path.basename(file));
-  },
-);
+const libFiles = globSync(
+  path.join(libPath, "**", "*.ts*"),
+  ignoreTests,
+).filter((file) => {
+  return !excludedLibFiles.includes(path.basename(file));
+});
 
 // Feature stylesheets ship with their feature. Every glob above is a component
 // glob, so the app entry `src/index.css` and its non-feature siblings
@@ -75,9 +76,9 @@ const styles = [
   ...globSync(path.join(atomicCrmComponentsPath, "**", stylePattern)),
   ...globSync(path.join(supabaseComponentsPath, "**", stylePattern)),
 ];
-const assets = globSync(path.join(basePath, "assets", "**", assetPattern)).filter(
-  (file) => !excludedAssetFiles.includes(path.basename(file)),
-);
+const assets = globSync(
+  path.join(basePath, "assets", "**", assetPattern),
+).filter((file) => !excludedAssetFiles.includes(path.basename(file)));
 
 const registryContent = JSON.parse(fs.readFileSync(registryPath, "utf-8"));
 
