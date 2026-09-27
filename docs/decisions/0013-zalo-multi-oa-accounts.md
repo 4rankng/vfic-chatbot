@@ -28,47 +28,56 @@ replies would leave with the original OA's token.
 
 ## Decision
 
-1. **Per-account credentials in the existing namespace.** An additional OA stores
-   the same four credentials under `zalo_oa_*:<oa id>` (mirroring
-   `facebook_page_token:<page id>`). `resolve_zalo(account_key)` returns an
-   account's own values; a **non-default account never inherits the singletons or
-   the env fallback** — missing credentials resolve empty and the senders fail
-   closed, because a reply leaving as the wrong brand is worse than a failed send.
-2. **Routing by `oa_id`.** `POST /webhooks/zalo/oa` resolves the receiving OA from
-   the body (`oa_id`, falling back to the recipient id) to a linked, ACTIVE
-   `zalo_oa` channel account. An absent or unknown id resolves to `default:zalo_oa`
-   — today's behaviour — so an unlinked OA or a payload-shape change degrades to
-   the single-OA path instead of dropping events. The key threads through
-   `run_zalo_ingress` → `ZaloWebhookService.handle` → `ensure(...)` and the OA
-   side-event handler, so contact identities, conversations, receipts and
-   enrichment all belong to the OA that received the event.
-3. **Sending as the receiving OA.** The graph turn resolves the conversation's
-   account key (`resolve_zalo_account_key`) and binds the Zalo config (and the
-   refresh closure) to it; the outbox dispatcher resolves the same key from the
-   message's conversation identity; the OA channel adapter scopes receipts to the
-   account it was built for.
-4. **Refresh is per account.** Each OA has its own single-use refresh token, so
-   the lock key and the rotated keys are account-scoped
-   (`zalo:oa:token:refresh:<oa id>`). Sharing one lock would let one OA's refresh
-   block another's.
-5. **Linking is explicit and reversible.** `POST /admin/integrations/zalo/oa-accounts`
-   (with `oa_id` + credentials; an access token is required) creates or
-   reactivates the channel account and bumps its generation, which fences
-   outbound work queued under the previous credentials.
-   `DELETE .../zalo/oa-accounts/{account_key}` marks it INACTIVE and **deletes**
-   the stored credentials: history stays readable, but no token remains that could
-   send as that OA. The seeded original OA cannot be unlinked.
-6. **No re-keying of existing data.** Contacts, conversations and messages stay on
-   the account key that created them. Backfilling the original OA's history onto a
-   real OA id would split identity rows
-   (`uq_contact_channel_authority (provider, account_key, external_id)`) and orphan
-   live conversations. Linking the **original** OA under its own OA id would do
-   exactly that to every future event, so `link` refuses an access token equal to
-   the stored original OA's token ("this token belongs to the OA already
-   configured") — the same token identifies the same OA.
-7. **The reset flow pin now has something to point at.** `tingting_reset_oa_id`
-   (ADR-0012 §12) accepts the linked account key, so the flow runs only on the
-   TingTing OA once the operator links it.
+1. **One linked support OA, configured like the existing OA.** The operator asked
+   for "the same flow as the current OA": the TingTing card holds the same four
+   fields (App ID, Secret Key, OA Access Token, OA Refresh Token) as the Zalo OA
+   card. There is no "mã OA" field and no account-key field anywhere — a typed
+   identifier was unreadable to the operator and easy to get wrong.
+2. **Zalo names the OA.** Saving the four fields probes `getoa`
+   (`TingtingOaLinkService`): the response carries the OA's own id and display
+   name, which are stored in the support account's `provider_metadata`
+   (id/name/verified_at, or a redacted `last_error`). A failed probe still stores
+   what was typed — the admin fixes one field and saves again — but the account
+   stays INACTIVE and the reset flow stays off, so a broken link can never serve
+   employees. A cleared four-field submission unlinks (credentials destroyed).
+3. **The account key is a constant, not the OA id.** The support account is
+   `zalo_oa` / `tingting`, with credentials under the standard per-account
+   namespace (`zalo_oa_*:tingting`), so `resolve_zalo("tingting")`, the per-account
+   token refresh and the senders need no new plumbing. Inbound routing compares
+   the event's OA id against the **registered** one:
+   `ZaloOaAccountResolver.account_key_for_payload` → `tingting` on match,
+   otherwise `default:zalo_oa` (today's behaviour, never a dropped event).
+4. **Routing roles are kind-aware.** The OA id comes from the parsed event
+   (`ZaloOAWebhookEvent.oa_id`): the root `oa_id` when Zalo sends it, else the
+   sender for receipt events (roles invert there) and the recipient otherwise.
+   Reading the recipient blindly matches a *user* id on receipts.
+5. **The reset flow is bound to that account.** `_tingting_reset_allowed`
+   requires provider `zalo_oa`, `account_key == "tingting"`, and the pin
+   `tingting_reset_oa_id == "tingting"` — a value only a verified link writes, so
+   the original OA, the recruitment Bot and Messenger can never serve the flow.
+   The pin is no longer an admin field.
+6. **Serving policy split.** On the support OA the bot serves the reset flow and
+   nothing else: the bound tools are the five TingTing tools (no project
+   knowledge, no recruiting catalog), and any non-reset message gets the fixed
+   line "Vui lòng chờ chuyên viên tư vấn liên hệ." plus a handoff that flags the
+   conversation for a human. Everywhere else, a reset request gets the fixed
+   pointer to the support OA (`https://zalo.me/3383849659955472174`). Both strings
+   are returned verbatim, never generated, so a paraphrase cannot drop the link or
+   invent a hotline.
+7. **Admin-only threads, out of the pipeline.** The support OA carries staff
+   password resets, not candidates: `viewer_scope.py` gains a correlated
+   `NOT EXISTS` on the canonical identity, applied through
+   `viewer_conversation_filter` / `viewer_lead_filter` at every conversation and
+   lead read (list, message page, counters, socket check, dashboard aggregates) —
+   and its raw-SQL twins for the dashboard. Candidate extraction, the inbound
+   deterministic name capture and proactive follow-ups are skipped on that
+   account. Admins read those threads through a fourth badge on
+   `/#/conversations` (`tingting_oa`), which filters by account key.
+8. **No re-keying of existing data.** Contacts, conversations and messages stay on
+   the account key that created them; the original OA's history is untouched. The
+   support OA's own events were previously indistinguishable and are now routed to
+   `tingting` — a new identity per employee on that OA, which is correct: those
+   conversations never existed anywhere before.
 
 ## Consequences
 
@@ -76,9 +85,9 @@ replies would leave with the original OA's token.
   and Messenger keep their paths, and no event changes hands.
 - OA credentials remain server-side and encrypted; the admin API only ever returns
   `{configured, preview}` status, and the settings page never renders a value.
-- Linking a second OA is one admin action; the OA id becomes the account key, so a
-  wrong id shows up as events still landing on the original OA rather than as a
-  silent mis-route.
+- Linking is one admin action (paste four fields, save): either the card reports
+  "Đã liên kết: <OA name> (<OA id>)" or it reports why Zalo rejected the token.
+  Nothing to type by hand, nothing to guess.
 - Unlinking is a credential-destroying action, so a mistaken unlink requires
   re-entering the OA's tokens from the Zalo console (no stored copy remains).
 - The registry still keys adapters by provider: one dispatch resolves one account's

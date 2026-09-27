@@ -994,40 +994,47 @@ be shared by another Project.
   local disconnect, and the live channel runtime is documented elsewhere in
   this section.
 
-### 11.2 Multi-OA accounts (a second Zalo OA)
+### 11.2 The employee-support OA (TingTing), a second Zalo OA
 
-See ADR-0013. A deployment runs one Zalo OA out of the box (`default:zalo_oa`,
-the row Alembic 0047 seeded, with the singleton `zalo_oa_*` credentials).
-Additional OAs become first-class channel accounts:
+See ADR-0013. The recruiting OA stays the seeded `default:zalo_oa` account with
+its singleton credentials; the operator's **support** OA for the employee password
+reset (ADR-0012) is a second channel account, `zalo_oa / tingting`.
 
-- **Storage:** an extra OA keeps its four credentials under
-  `zalo_oa_*:<oa id>`; `IntegrationSettingsService.resolve_zalo(account_key)`
-  returns that account's own values and a **non-default account never inherits the
-  singletons or the env fallback** (missing credentials resolve empty and the
-  senders fail closed, rather than a reply leaving as the wrong brand).
-  `refresh_oa_access_token(account_key)` scopes both the rotated keys and the
-  Redis lock (`zalo:oa:token:refresh:<oa id>`) — each OA holds its own
-  single-use refresh token.
-- **Routing:** `POST /webhooks/zalo/oa` resolves the receiving OA from the body
-  (`oa_id`, else the recipient id) via
-  `ZaloOaAccountResolver.account_key_for_payload` to a linked, ACTIVE `zalo_oa`
-  channel account. An absent or unknown id falls back to `default:zalo_oa`
-  (today's behaviour) instead of dropping the event. The key threads through
-  `run_zalo_ingress` → `ZaloWebhookService.handle` → `BotConversationState.ensure`
-  and `handle_oa_side_event`, so identity, conversation, receipts and OA profile
-  enrichment all belong to the receiving OA.
-- **Sending:** the graph turn resolves the conversation's account key
-  (`app/graph/factories.py:resolve_zalo_account_key`) and binds the Zalo config and
-  refresh closure to it; the outbox dispatcher resolves the same key from the
-  message's conversation identity (`_zalo_account_key_for_message`) and stamps it
-  on the outbound command; `ZaloOAChannelAdapter` scopes receipts to its account.
-- **Admin surface:** `GET`/`POST /api/v1/admin/integrations/zalo/oa-accounts` and
-  `DELETE .../{account_key}` (admin only, status-only credentials). Linking writes
-  the channel account + credentials in one transaction and bumps the generation
-  (which fences outbound work queued under the previous credentials); unlinking
-  marks the row INACTIVE and deletes the stored credentials. The seeded original OA
-  cannot be unlinked. UI: the "Zalo OA đã liên kết" block in
-  `ZaloChannelSection.tsx`.
+- **Configuring it:** the TingTing settings card holds the same four fields as the
+  Zalo OA card (App ID, Secret Key, OA Access Token, OA Refresh Token) plus
+  "Lưu & kiểm tra". Saving probes Zalo's `getoa` with the effective access token
+  (`app/services/tingting_oa.py`): the response's `oa_id`/`name` are written to
+  the account's `provider_metadata`, the account is registered ACTIVE, and the
+  binding `tingting_reset_oa_id` is set to `tingting`. There is **no** OA-id or
+  account-key field to type. A failed probe still stores what was typed, records a
+  redacted `last_error`, leaves the account INACTIVE and the flow off; a cleared
+  four-field submission unlinks (credentials destroyed). `POST
+  /api/v1/admin/integrations/tingting/oa/check` re-probes the stored values.
+- **Storage:** the four credentials live under the standard per-account namespace
+  (`zalo_oa_*:tingting`), so `resolve_zalo("tingting")`, the account-scoped refresh
+  lock (`zalo:oa:token:refresh:tingting`) and the senders work unchanged.
+- **Routing:** `ZaloOaAccountResolver.account_key_for_payload` compares the
+  event's OA id (from `ZaloOAWebhookEvent.oa_id`, kind-aware: root `oa_id`, else
+  the sender on receipt events, else the recipient) with the registered one →
+  `tingting`, otherwise `default:zalo_oa`. Events are never dropped.
+- **Serving:** on `tingting` the turn binds only the five TingTing tools (no
+  project knowledge) and the guide; a non-reset message is answered with the fixed
+  line "Vui lòng chờ chuyên viên tư vấn liên hệ." and the conversation is flagged
+  for a human. Everywhere else an employee-support intent gets the fixed pointer to
+  the support OA (`https://zalo.me/3383849659955472174`). Off the support OA the
+  TingTing tools are stripped from the registry.
+- **Flow binding:** `runner._tingting_reset_allowed` requires provider `zalo_oa`,
+  `account_key == "tingting"` and the pin `tingting_reset_oa_id == "tingting"`;
+  the original OA, the Bot channel and Messenger can never run it.
+- **Admin-only threads:** `viewer_scope.py` adds a correlated `NOT EXISTS` on the
+  canonical identity (`support_account_condition` / `support_account_sql`) and the
+  lead twin, applied through `viewer_conversation_filter` / `viewer_lead_filter` at
+  every conversation and lead read, plus the dashboard's raw-SQL aggregates and
+  the realtime socket check. Candidate extraction, inbound name capture and
+  proactive follow-ups skip the account. Admins read the threads via the
+  `tingting_oa` badge on `/#/conversations`
+  (`ChannelAdapterSelector` + `conversation-list-filters.ts`, one extra per-badge
+  attention count).
 
 ---
 
@@ -1108,19 +1115,20 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   TTL 15 min, merged per step): the `session_id` and `reset_token` never enter the prompt, so a
   code typed in the next turn is verified against the session the send turn created. A verified
   phone is the gate `send_tingting_otp` reads — identity cannot be skipped.
-- **Channel scope:** the flow exists **only on a Zalo OA conversation**
-  (`_tingting_reset_allowed`): the recruitment Bot channel and Messenger never get the guide, never
-  bind the reset tools, and an account-support turn there is answered honestly instead of starting a
-  flow the channel cannot serve. The optional admin pin `tingting_reset_oa_id` narrows it to one OA
-  account key (the TingTing Software Solution OA the operator links); empty = any connected OA.
-  A configuration-read error fails closed.
+- **Channel scope:** the flow exists **only on the TingTing support OA**
+  (`_tingting_reset_allowed`): provider `zalo_oa`, `account_key == "tingting"`, and the pin
+  `tingting_reset_oa_id == "tingting"` — a value only a verified link writes (§11.2). The original
+  recruitment OA, the Bot channel and Messenger never get the guide and never bind the reset tools;
+  an account-support turn there is answered with the fixed pointer to the support OA
+  (`https://zalo.me/3383849659955472174`). Any configuration-read error fails closed, and an
+  unlinked support OA turns the flow off everywhere.
 - **Verification precondition:** a record with no CCCD, or a CCCD equal to its own mobile, cannot
   make the CCCD a distinguishing factor; the tool then requires name + phone only instead of
   deadlocking the employee on a field that can never match.
-- **Routing:** the `employee_support` intent binds all four step tools (plus `call_tingting_api`
-  and `search_knowledge`) instead of refusing; a focused RAG turn keeps them bound rather than
-  collapsing to `search_knowledge`, and a direct-context project no longer captures an
-  employee-support turn (that lane has no tools). A short follow-up while the assistant's last
+- **Routing:** on the support OA the `employee_support` intent binds the five TingTing tools only
+  (no project knowledge, no catalog) — a focused RAG turn cannot widen it; any other intent there is
+  answered with "Vui lòng chờ chuyên viên tư vấn liên hệ." and hands the conversation to a human.
+  Off the support OA those five tools are stripped from the registry. A short follow-up while the assistant's last
   message was mid-flow (`TurnDecisions.recent_account_support`, judged from `bot_last_message`)
   re-routes to `employee_support` with reason `employee_support_continuation`, so "sao rồi" keeps
   the tools and answers with the current step.
