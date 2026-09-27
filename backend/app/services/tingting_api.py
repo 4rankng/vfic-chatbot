@@ -142,6 +142,67 @@ class TingtingFlowStore:
             logger.warning("tingting flow clear skipped error_type=%s", type(exc).__name__)
 
 
+# Identity verification may not succeed inside one 15-minute flow window: an
+# employee can give up and return the next day with the corrected CCCD. The
+# failed-attempt counter therefore lives under its own key and its own TTL, long
+# enough to survive a multi-turn struggle but bounded so an abandoned count
+# cannot outlive the conversation that earned it.
+TINGTING_VERIFY_MAX_ATTEMPTS = 3
+TINGTING_VERIFY_ATTEMPTS_TTL_SECONDS = 86400
+TINGTING_VERIFY_KEY_PREFIX = "tingting:verify_attempts"
+
+
+def _verify_attempts_key(scope: str) -> str:
+    """Redis key for one conversation's failed-verification count.
+
+    The scope is the conversation id (a UUID string the caller already holds);
+    it is digested like the flow key so the raw identifier never becomes a
+    Redis key segment.
+    """
+    digest = hashlib.sha256(str(scope or "").encode("utf-8")).hexdigest()[:32]
+    return f"{TINGTING_VERIFY_KEY_PREFIX}:{digest}"
+
+
+class TingtingVerifyAttemptsStore:
+    """Per-conversation failed-identity-verification counter.
+
+    Counts the tries an employee has spent on ``verify_tingting_identity`` in
+    this conversation, so the flow can stop asking after
+    :data:`TINGTING_VERIFY_MAX_ATTEMPTS` failures and hand off to a consultant
+    instead. Fail-open like :class:`TingtingFlowStore`: a Redis outage degrades
+    to "no count recorded", which leaves the flow unlimited rather than locking
+    a legitimate employee out of the reset flow.
+    """
+
+    async def count(self, scope: str) -> int:
+        try:
+            raw = await get_redis().get(_verify_attempts_key(scope))
+        except Exception as exc:  # noqa: BLE001 — a counter read must not break a turn
+            logger.warning("tingting verify count skipped error_type=%s", type(exc).__name__)
+            return 0
+        try:
+            return max(0, int(raw or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    async def record_failure(self, scope: str) -> int:
+        """Count one failed verification and return the running total."""
+        try:
+            key = _verify_attempts_key(scope)
+            total = int(await get_redis().incr(key))
+            await get_redis().expire(key, TINGTING_VERIFY_ATTEMPTS_TTL_SECONDS)
+            return max(1, total)
+        except Exception as exc:  # noqa: BLE001 — a counter write must not 500 a turn
+            logger.warning("tingting verify failure record skipped error_type=%s", type(exc).__name__)
+            return 0
+
+    async def reset(self, scope: str) -> None:
+        try:
+            await get_redis().delete(_verify_attempts_key(scope))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tingting verify reset skipped error_type=%s", type(exc).__name__)
+
+
 @dataclass(frozen=True)
 class TingtingApiRuntime:
     """The callable configuration: a fixed origin plus the decrypted key."""
@@ -393,8 +454,12 @@ __all__ = [
     "TINGTING_READ_ONLY_PATHS",
     "TINGTING_FLOW_KEY_PREFIX",
     "TINGTING_FLOW_TTL_SECONDS",
+    "TINGTING_VERIFY_ATTEMPTS_TTL_SECONDS",
+    "TINGTING_VERIFY_KEY_PREFIX",
+    "TINGTING_VERIFY_MAX_ATTEMPTS",
     "TingtingApiRuntime",
     "TingtingApiService",
     "TingtingFlowStore",
+    "TingtingVerifyAttemptsStore",
     "resolve_base_url",
 ]

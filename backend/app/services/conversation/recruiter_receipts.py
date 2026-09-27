@@ -35,6 +35,7 @@ from app.services.conversation.unreachable import (
     USER_UNREACHABLE_SEND_CLASS,
     apply_user_unreachable_side_effects,
 )
+from app.services.tingting_api import TingtingVerifyAttemptsStore
 
 
 class RecruiterReceiptsMixin:
@@ -72,6 +73,9 @@ class RecruiterReceiptsMixin:
         )
         await self.db.commit()
         await self.db.refresh(msg)
+        # A human has replied: the identity-verification attempt cap re-arms
+        # (only a human message resets it). Best-effort Redis, fail-open.
+        await TingtingVerifyAttemptsStore().reset(str(conv.id))
         await self.events.message_created(msg, conv)
         await self.events.conversation_updated(conv)
         return msg
@@ -121,6 +125,9 @@ class RecruiterReceiptsMixin:
         await self.db.commit()
         await self.db.refresh(msg)
         msg._delivery_attempts = 0
+        # A human has replied: the identity-verification attempt cap re-arms
+        # (only a human message resets it). Best-effort Redis, fail-open.
+        await TingtingVerifyAttemptsStore().reset(str(conv.id))
         await self.events.message_created(msg, conv)
         await self.events.conversation_updated(conv)
         return msg, outbox.id

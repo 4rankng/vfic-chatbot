@@ -3928,3 +3928,63 @@ async def test_progressive_stream_mismatch_is_recorded_as_alarmable(monkeypatch)
     assert stage["progressive_stream_mismatch_chars"] == abs(
         len(_ANSWER) - len(replacement)
     )
+
+
+@pytest.mark.asyncio
+async def test_the_verification_exhaustion_reply_escalates_like_the_handoff_line(monkeypatch):
+    """A reply ENDING with the consultant sentence is a handoff, not a coincidence.
+
+    The verify tool dictates the exhaustion reply, whose tail is the exact
+    consultant-promise sentence; the lane hook must fire on that suffix so the
+    conversation reaches a consultant even though the reply is longer than the
+    bare line.
+    """
+    from app.graph import lanes
+    from app.graph.runner import TINGTING_HANDOFF_REPLY, _agent_turn
+    from app.graph.tingting_guide import TINGTING_VERIFY_EXHAUSTED_REPLY
+
+    captured: dict[str, object] = {}
+    escalations: list[dict] = []
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return TINGTING_VERIFY_EXHAUSTED_REPLY
+
+    class _Conversations:
+        async def get(self, _conversation_id):
+            return SimpleNamespace(id=CONV_ID, version=7)
+
+        async def escalate_extracted_intent(
+            self, conv, *, reason, confidence, expected_version, preserve_turn_ownership=False
+        ):
+            escalations.append({"reason": reason, "preserve_turn_ownership": preserve_turn_ownership})
+            return True
+
+    deps = _deps(_FakeZalo(), conversation=_Conversations())
+    deps.agent = _FakeAgent()
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=7,
+            user_text="Nguyễn Việt Dũng cccd 1111999 dt 0357210887",
+        ),
+        deps,
+        "Nguyễn Việt Dũng cccd 1111999 dt 0357210887",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.95),
+        tingting_reset_allowed=True,
+    )
+
+    assert reply == TINGTING_VERIFY_EXHAUSTED_REPLY
+    assert reply.endswith(TINGTING_HANDOFF_REPLY)
+    assert len(escalations) == 1
+    assert escalations[0]["reason"] == "tingting_support_handoff"
+    assert escalations[0]["preserve_turn_ownership"] is True

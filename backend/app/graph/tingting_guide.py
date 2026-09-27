@@ -24,6 +24,22 @@ TINGTING_RESET_REDIRECT_REPLY = (
     f"{TINGTING_SUPPORT_OA_URL}"
 )
 
+# The one consultant-promise sentence. Defined here so every fixed reply that
+# promises a consultant ends with the SAME sentence — the lane's escalation
+# hook detects its own handoff replies by that suffix (lanes.py), so a drift in
+# one copy would silently break the needs_human write. Re-exported by lanes.py
+# as TINGTING_HANDOFF_REPLY / OUT_OF_SCOPE_HANDOFF_REPLY.
+TINGTING_CONSULTANT_HANDOFF_LINE = "Vui lòng chờ chuyên viên tư vấn liên hệ."
+
+# The identity-verification exhaustion reply: the employee has spent all three
+# tries without a matching record, so the bot stops asking and hands off.
+# Operator-approved fixed words, quoted verbatim by both the API guide and the
+# verify_tingting_identity tool verdict.
+TINGTING_VERIFY_EXHAUSTED_REPLY = (
+    "Dạ thông tin anh/chị cung cấp chưa hợp lệ nên em chưa xác minh được tài khoản ạ. "
+    f"{TINGTING_CONSULTANT_HANDOFF_LINE}"
+)
+
 # Fixed replies, not model output: the operator approved these exact words. The
 # confirm question is the OA's only clarifying turn, and the three-field ask is
 # the only way the reset flow starts — both are quoted verbatim by the guide
@@ -46,7 +62,10 @@ xe, nghỉ việc hay bất kỳ việc gì khác — kể cả khi được h�
 liệt kê "các chức năng em có thể hỗ trợ".
 
 === GIỌNG NÓI — BẮT BUỘC, kiểm tra trước khi gửi MỌI tin nhắn ===
-1. Tự xưng "em"; gọi người dùng "anh", "chị" hoặc "anh/chị"; chưa rõ thì dùng "anh/chị".
+1. Tự xưng "em"; gọi người dùng "anh", "chị" hoặc "anh/chị"; chưa rõ thì dùng "anh/chị". Khi
+   người dùng đã cung cấp họ tên và giới tính đã rõ (tên đệm "Văn" hoặc tên gọi nam → "anh";
+   "Thị" hoặc tên gọi nữ → "chị"; xem thêm mục giới tính tool trả về), dùng đúng "anh" hoặc
+   "chị" thay cho "anh/chị".
 2. Tiếng Việt, chat như nói chuyện thật, đoạn ngắn (~300 ký tự). Không Markdown, không bảng.
 3. KHÔNG BAO GIỜ tiết lộ mình là bot/AI/tự động.
 4. Mỗi tin nhắn chỉ một câu hỏi chính; không hỏi lại thông tin đã có trong lịch sử.
@@ -115,6 +134,10 @@ Quy trình bắt buộc (theo thứ tự, mỗi lượt một bước, không h�
      hướng dẫn tool trả về; không hỏi lại trường đã khớp, không hỏi lại số điện thoại đã có.
    - Nếu tool báo KHÔNG cần CCCD (hồ sơ không có CCCD hoặc CCCD trùng số điện thoại) thì chỉ cần
      họ tên + số điện thoại khớp là đủ.
+   - GIỚI HẠN 3 LẦN THỬ: người dùng chỉ được cung cấp thông tin tối đa 3 lần. Khi tool trả về
+     kết quả "THÔNG TIN KHÔNG HỢP LỆ" (hết lượt), trả lời ĐÚNG NGUYÊN VĂN một tin nhắn, không
+     thêm bớt chữ, không Markdown, không emoji: «{TINGTING_VERIFY_EXHAUSTED_REPLY}» — không hỏi
+     lại trường nào, không gọi verify_tingting_identity nữa, không hướng dẫn thêm.
 2. GỬI OTP. Gọi send_tingting_otp(phone="<số điện thoại>") — chỉ sau khi bước 1 trả về ĐÃ XÁC MINH.
    Hệ thống từ chối nếu số chưa xác minh; khi đó quay lại bước 1.
    - Thành công: hỏi mã 6 số nhân viên nhận được trong Zalo.
@@ -167,8 +190,10 @@ __all__ = [
     "TINGTING_API_BLOCK_HEADER",
     "TINGTING_API_GUIDE",
     "TINGTING_CONFIRM_REPLY",
+    "TINGTING_CONSULTANT_HANDOFF_LINE",
     "TINGTING_FIELDS_ASK",
     "TINGTING_SUPPORT_PERSONA",
+    "TINGTING_VERIFY_EXHAUSTED_REPLY",
     "tingting_api_prompt_block",
     "tingting_support_system_prompt",
 ]

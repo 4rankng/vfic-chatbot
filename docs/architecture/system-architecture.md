@@ -1102,7 +1102,10 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   `app/graph/tools/tingting_identity.py`):
   `verify_tingting_identity(phone, full_name, cccd)` decides the identity match in code
   (diacritics/case/spacing folded on names, `+84` folded on digits, CCCD compared as digits) and
-  records the verified phone; `send_tingting_otp(phone)`; `confirm_tingting_otp(phone, code)`;
+  records the verified phone; the verdict also carries the address form ("anh"/"chị") inferred
+  deterministically from the name the employee typed
+  (`app/shared/domain/vietnamese_gender.py`) — never from the record, which is the verification
+  answer key; `send_tingting_otp(phone)`; `confirm_tingting_otp(phone, code)`;
   `reset_tingting_password(phone)` — it sets the password itself, in the operator's fixed
   format `Vfic@<OTP>` (the 6-digit code the employee just verified, e.g. `Vfic@123980`): readable
   over chat, typeable on a phone, changed after the first login, and never chosen by the
@@ -1118,6 +1121,21 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   TTL 15 min, merged per step): the `session_id` and `reset_token` never enter the prompt, so a
   code typed in the next turn is verified against the session the send turn created. A verified
   phone is the gate `send_tingting_otp` reads — identity cannot be skipped.
+- **Three-try cap:** a wrong answer spends one of the employee's tries — an unknown phone, a
+  submitted name that does not match, or a submitted CCCD that does not match; a pure
+  progression ask (record found, everything submitted so far matching) spends nothing. The
+  counter lives per conversation (`TingtingVerifyAttemptsStore`, Redis, 24 h sliding TTL,
+  scope = the conversation id the lane injects server-side into the tool args — never a
+  model-supplied argument). The third failure makes the tool dictate the fixed exhaustion reply
+  «Dạ thông tin anh/chị cung cấp chưa hợp lệ nên em chưa xác minh được tài khoản ạ. Vui lòng chờ
+  chuyên viên tư vấn liên hệ.», raise `conversations.needs_human` (plain flag write,
+  `RetrievalRepository.mark_tingting_verification_exhausted`), and stop asking; a verified match
+  clears the counter. **Only a recruiter's human message resets the cap**
+  (`RecruiterReceiptsMixin.record_recruiter_message` / `prepare_recruiter_message`). The lane's
+  escalation hook fires on any reply that ENDS with the consultant sentence
+  (`TINGTING_CONSULTANT_HANDOFF_LINE` in `app/graph/tingting_guide.py`, the single source both
+  fixed replies and the tool verdict quote), so the exhaustion reply queues a human exactly like
+  the bare handoff line does.
 - **Channel scope:** the flow exists **only on the TingTing support OA**
   (`_tingting_reset_allowed`): provider `zalo_oa`, `account_key == "tingting"`, and the pin
   `tingting_reset_oa_id == "tingting"` — a value only a verified link writes (§11.2). The original
@@ -1139,8 +1157,9 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   asks the fixed question «Anh/chị cần đặt lại mật khẩu ứng dụng TingTing phải không ạ?» and keeps
   the thread; a **confident non-support** intent is answered
   with "Vui lòng chờ chuyên viên tư vấn liên hệ." and hands the conversation to a human. When the
-  model itself emits that handoff line on the OA, the turn queues a human as well (the line promises
-  a consultant, so the queue write follows the exact reply, not only the routing branch).
+  model itself ends a reply with that handoff line on the OA, the turn queues a human as well (the
+  line promises a consultant, so the queue write follows the suffix — the verification-exhaustion
+  reply rides the same hook, not only the routing branch).
   Off the support OA those tools are stripped from the registry. A short follow-up while the assistant's last
   message was mid-flow (`TurnDecisions.recent_account_support`, judged from `bot_last_message`)
   re-routes to `employee_support` with reason `employee_support_continuation`, so "sao rồi" keeps

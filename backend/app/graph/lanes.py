@@ -763,6 +763,10 @@ async def _agent_turn(
         "make_retrieval": deps.make_retrieval,
         "lookup_query": evidence_query or user_text,
         "metrics": timings,
+        # Server-side conversation identity for tools that count per-conversation
+        # state (the TingTing verification cap). Never model-supplied: scoped_args
+        # injects it into the tool args at dispatch time.
+        "conversation_scope": str(getattr(state, "conversation_id", "") or ""),
     }
     # ``forced_project_slug`` scopes the knowledge prefetch (and any project-keyed
     # tool); a focused project names its knowledge base exactly, so a turn never
@@ -798,10 +802,12 @@ async def _agent_turn(
         contextual_user_text,
         **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
     )
-    if tingting_reset_allowed and reply.strip() == TINGTING_HANDOFF_REPLY:
-        # The line promises a consultant, and the model can reach it (an unclear
-        # reading of a non-reset request), so the queue write follows the exact
-        # reply rather than only the routing branch that also returns it.
+    if tingting_reset_allowed and reply.strip().endswith(TINGTING_HANDOFF_REPLY):
+        # The line promises a consultant. The model can reach it verbatim (an
+        # unclear reading of a non-reset request) or as the tail of the
+        # verification-exhaustion reply the tool dictates — both promise a
+        # consultant, so the queue write follows the suffix rather than only
+        # the routing branches that also return it.
         await _consultant_handoff(state, deps, reason=TINGTING_HANDOFF_REASON)
     return reply
 

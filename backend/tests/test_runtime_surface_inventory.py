@@ -130,7 +130,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # app/services/tingting_api.py gains a Redis `get` in load() plus the
     # `delete` in clear(), and the dispatcher names the send_tingting_otp tool
     # call — the flow tools themselves open no new egress site.
-    "provider_boundary": 87,
+    # +2: the three-try verification cap (TingtingVerifyAttemptsStore, same
+    # provider-transport file) adds a Redis `get` in count() and a `delete` in
+    # reset(); record_failure's incr/expire are not scanned verbs — two
+    # reviewed rows, no new egress site.
+    "provider_boundary": 89,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -200,7 +204,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # recruiter_path.py into recruiter_receipts.py: same scope, same call, same
 # count, so EXPECTED_BROAD_BOUNDARY_COUNTS is unchanged and only the digest
 # (which covers the file key) moves.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "5bfbad9fa4d2a34fb925010e56954571800c372461dbcc2b3eb9ba0bbc46c8ab"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "4460ca85fe32c8d982f1842bbb72d133e8a593b404dca614fa70b8e35191013d"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

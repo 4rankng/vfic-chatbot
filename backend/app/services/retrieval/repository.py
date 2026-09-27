@@ -20,6 +20,7 @@ calls did.
 from __future__ import annotations
 
 import logging
+import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +29,7 @@ from app.services.retrieval.catalog_repository import CatalogRepository, Recomme
 from app.services.retrieval.document_repository import DocumentRepository
 from app.services.retrieval.faq_repository import FaqRepository
 from app.services.retrieval.timetable_repository import TimetableRepository
-from app.services.tingting_api import TingtingApiService, TingtingFlowStore
+from app.services.tingting_api import TingtingApiService, TingtingFlowStore, TingtingVerifyAttemptsStore
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,42 @@ class RetrievalRepository:
     async def clear_tingting_flow_state(self, phone: str) -> None:
         """Drop the flow state once the password has been reset."""
         await TingtingFlowStore().clear(phone)
+
+    async def tingting_verify_attempts(self, scope: str) -> int:
+        """Failed verification tries spent in this conversation so far."""
+        return await TingtingVerifyAttemptsStore().count(scope)
+
+    async def record_tingting_verify_failure(self, scope: str) -> int:
+        """Count one failed verification; returns the running total."""
+        return await TingtingVerifyAttemptsStore().record_failure(scope)
+
+    async def clear_tingting_verify_attempts(self, scope: str) -> None:
+        """Clear the counter once identity verification has succeeded."""
+        await TingtingVerifyAttemptsStore().reset(scope)
+
+    async def mark_tingting_verification_exhausted(self, scope: str) -> None:
+        """Raise ``needs_human`` so a consultant sees the exhausted conversation.
+
+        A plain flag write — no version bump, no conversation_seq: the turn's
+        own outcome is what commits next, and the lane's consultant-handoff
+        transition (fired when the reply carries the handoff line) is the
+        full lifecycle step. Idempotent by shape: the WHERE clause includes
+        the flag so a replayed call touches nothing.
+        """
+        try:
+            conversation_id = uuid.UUID(str(scope))
+        except (TypeError, ValueError):
+            return
+        from sqlalchemy import update
+
+        from app.models.conversation import Conversation
+
+        await self.db.execute(
+            update(Conversation)
+            .where(Conversation.id == conversation_id, Conversation.needs_human.is_(False))
+            .values(needs_human=True)
+        )
+        await self.db.commit()
 
     async def tingting_reset_oa_id(self) -> str:
         """The OA account key the reset flow is pinned to (``""`` = any OA)."""

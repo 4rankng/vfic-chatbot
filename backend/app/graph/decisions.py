@@ -220,9 +220,12 @@ def build_turn_questions(
             "type": "choice",
             "instructions": (
                 "Ứng viên (người gửi tin nhắn `message`) là Nam hay Nữ? Hãy suy luận "
-                "từ cách ứng viên tự xưng trong `message`/`recent` và tên hiển thị "
-                "trong `profile_name`; cách tự xưng là điều ứng viên nói về chính "
-                "mình nên đáng tin hơn tên. Không đủ căn cứ thì chọn unknown, không đoán."
+                "từ cách ứng viên tự xưng trong `message`/`recent`, tên hiển thị "
+                "trong `profile_name`, và — mạnh nhất — họ tên đầy đủ ứng viên TỰ cung "
+                "cấp trong `message`/`recent`: tên đệm 'Văn' là nam, 'Thị' là nữ; tên "
+                "gọi Việt Nam ('Dũng', 'Tuấn', 'Hùng'… nam; 'Dung', 'Hằng', 'Thảo', "
+                "'Hương'… nữ). Cách tự xưng và họ tên do ứng viên cung cấp đáng tin hơn "
+                "tên hiển thị hồ sơ. Không đủ căn cứ thì chọn unknown, không đoán."
             ),
             "criteria": _GENDER_CRITERIA,
         }

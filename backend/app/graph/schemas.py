@@ -454,6 +454,10 @@ async def _dispatch_tool(
                 phone=str(args.get("phone") or "").strip(),
                 full_name=str(args.get("full_name") or ""),
                 cccd=str(args.get("cccd") or ""),
+                # Server-injected (clients.scoped_args), never model-supplied:
+                # the per-conversation failure cap must not be dodgeable by
+                # varying the id in the tool call.
+                conversation_scope=str(args.get("_conversation_scope") or ""),
             )
         elif name == "send_tingting_otp":
             result = await send_tingting_otp(

@@ -146,6 +146,7 @@ class _AgentTurn:
         "required_tool",
         "required_tool_args",
         "forced_project_slug",
+        "conversation_scope",
         "on_delta",
         "on_evidence",
         "trace_sink",
@@ -182,6 +183,7 @@ class _AgentTurn:
         required_tool: str | None,
         required_tool_args: dict | None,
         forced_project_slug: str | None,
+        conversation_scope: str = "",
         on_delta,
         on_evidence,
         trace_sink,
@@ -203,6 +205,10 @@ class _AgentTurn:
         self.required_tool = required_tool
         self.required_tool_args = required_tool_args
         self.forced_project_slug = forced_project_slug
+        # Server-side conversation identity (see lanes._agent_turn). Injected
+        # into tool args at dispatch so per-conversation tools never trust a
+        # model-supplied id.
+        self.conversation_scope = conversation_scope
         self.on_delta = on_delta
         self.on_evidence = on_evidence
         self.trace_sink = trace_sink
@@ -236,7 +242,10 @@ class _AgentTurn:
 
     def scoped_args(self, name: str, args: dict) -> dict:
         """Force the turn's project focus onto a model-supplied tool call."""
-        return _scope_project_tool_args(name, args, self.forced_project_slug)
+        scoped = _scope_project_tool_args(name, args, self.forced_project_slug)
+        if self.conversation_scope:
+            scoped = {**scoped, "_conversation_scope": self.conversation_scope}
+        return scoped
 
     async def publish_evidence(self) -> None:
         """Hand the accumulated tool evidence to the progressive sender.
@@ -349,6 +358,7 @@ class MiniMaxAgent:
         required_tool: str | None = None,
         required_tool_args: dict | None = None,
         forced_project_slug: str | None = None,
+        conversation_scope: str = "",
         retry_empty_generation: bool = False,
         on_delta=None,
         on_evidence=None,
@@ -383,6 +393,7 @@ class MiniMaxAgent:
             required_tool=required_tool,
             required_tool_args=required_tool_args,
             forced_project_slug=forced_project_slug,
+            conversation_scope=conversation_scope,
             on_delta=on_delta,
             on_evidence=on_evidence,
             trace_sink=trace_sink,

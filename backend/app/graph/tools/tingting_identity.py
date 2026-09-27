@@ -30,6 +30,7 @@ the OTP step.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import unicodedata
 from collections.abc import Mapping
@@ -37,6 +38,9 @@ from typing import Any
 
 from app.graph.ports import GraphRetrievalPort
 from app.graph.tools.tingting_api import LOOKUP_PATH, tingting_state_text
+from app.graph.tingting_guide import TINGTING_VERIFY_EXHAUSTED_REPLY
+from app.services.tingting_api import TINGTING_VERIFY_MAX_ATTEMPTS
+from app.shared.domain.vietnamese_gender import infer_gender_from_name
 
 _MISSING_PHONE = (
     "Thiếu số điện thoại để xác minh. Hãy hỏi số điện thoại đã đăng ký với TingTing "
@@ -48,6 +52,8 @@ _UNREADABLE_RESPONSE = (
 )
 
 _FIELD_LABELS = {"full_name": "họ tên đầy đủ", "cccd": "số CCCD/CMND đã đăng ký"}
+
+logger = logging.getLogger(__name__)
 
 
 def _digits(value: Any) -> str:
@@ -192,6 +198,16 @@ def render_verdict(verdict: Mapping[str, Any]) -> str:
         f"- trạng thái: {'ĐÃ XÁC MINH' if verdict['verified'] else 'CHƯA XÁC MINH'}",
         f"- cần hỏi lại: {owed}",
     ]
+    gender = str(verdict.get("submitted_name_gender") or "")
+    if gender:
+        lines.append(
+            "- giới tính (suy đoán từ tên người dùng tự cung cấp): "
+            + ("nam" if gender == "male" else "nữ")
+        )
+        lines.append(
+            "- xưng hô: gọi người dùng là «anh» nếu nam, «chị» nếu nữ — thay vì «anh/chị»; "
+            "vẫn KHÔNG gọi tên người dùng."
+        )
     lines.append(f"- việc phải làm tiếp theo: {_identity_note(verdict)}")
     lines.append(
         "Chỉ hỏi đúng những trường ở mục 'cần hỏi lại'; không hỏi lại trường đã khớp và không "
@@ -205,12 +221,49 @@ def render_verdict(verdict: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _counts_as_failed_try(verdict: Mapping[str, Any], *, full_name: str, cccd: str) -> bool:
+    """Whether this verdict spends one of the employee's tries.
+
+    A wrong answer spends a try: an unknown phone (nothing to match against),
+    a submitted name that does not match, or a submitted CCCD that does not
+    match. A pure progression ask — record found, everything submitted so far
+    matching, fields still owed — spends nothing, or the normal
+    name-then-CCCD sequence would burn all three tries on correct answers.
+    """
+    if not verdict["found"]:
+        return True
+    if full_name.strip() and not verdict["name_match"]:
+        return True
+    return bool(cccd.strip()) and bool(verdict["cccd_required"]) and not verdict["cccd_match"]
+
+
+def _render_exhausted() -> str:
+    """The tool block for an employee who has spent every try.
+
+    Dictates the fixed exhaustion reply verbatim; the reply ends with the
+    consultant-handoff sentence, which is what fires the lane's escalation
+    hook — the model paraphrasing here cannot lose the handoff.
+    """
+    return "\n".join(
+        [
+            "Kết quả đối chiếu danh tính: THÔNG TIN KHÔNG HỢP LỆ.",
+            f"Người dùng đã cung cấp sai thông tin {TINGTING_VERIFY_MAX_ATTEMPTS} lần — "
+            "quy trình xác minh dừng tại đây.",
+            "Trả lời ĐÚNG NGUYÊN VĂN một tin nhắn sau, không thêm bớt chữ, không Markdown, "
+            f"không emoji: «{TINGTING_VERIFY_EXHAUSTED_REPLY}»",
+            "KHÔNG gọi verify_tingting_identity nữa, KHÔNG hỏi lại bất kỳ trường nào, "
+            "không hướng dẫn gì thêm.",
+        ]
+    )
+
+
 async def verify_tingting_identity(
     retrieval: GraphRetrievalPort,
     *,
     phone: str,
     full_name: str = "",
     cccd: str = "",
+    conversation_scope: str = "",
 ) -> str:
     """Look the employee up and return a code-decided identity verdict."""
     clean_phone = (phone or "").strip()
@@ -231,11 +284,34 @@ async def verify_tingting_identity(
     verdict = evaluate_identity(
         record, full_name=full_name, cccd=cccd, phone=clean_phone
     )
+    # Address form from the name the EMPLOYEE typed — never from the record:
+    # the record is the verification answer key, so deriving anything from it
+    # (even a gender) discloses data to whoever is being verified.
+    verdict["submitted_name_gender"] = (
+        infer_gender_from_name(full_name) if full_name.strip() else ""
+    )
     if verdict["verified"]:
         # Monotonic within the flow TTL: the phone stays verified for the OTP and
         # reset steps that follow, so the model never has to re-prove identity to
         # resend a code. ``send_tingting_otp`` reads this flag as its gate.
         await retrieval.save_tingting_flow_state(clean_phone, {"verified": True})
+        if conversation_scope:
+            await retrieval.clear_tingting_verify_attempts(conversation_scope)
+        return render_verdict(verdict)
+    if conversation_scope and _counts_as_failed_try(verdict, full_name=full_name, cccd=cccd):
+        attempts = await retrieval.record_tingting_verify_failure(conversation_scope)
+        if attempts >= TINGTING_VERIFY_MAX_ATTEMPTS:
+            # Best-effort consultant flag: the reply is the deliverable, the
+            # queue write is bookkeeping (the lane hook escalates again when
+            # the dictated reply lands).
+            try:
+                await retrieval.mark_tingting_verification_exhausted(conversation_scope)
+            except Exception:  # noqa: BLE001 — the flag must never break the reply
+                logger.warning(
+                    "tingting verification exhaustion flag failed scope_set=%s",
+                    bool(conversation_scope),
+                )
+            return _render_exhausted()
     return render_verdict(verdict)
 
 
