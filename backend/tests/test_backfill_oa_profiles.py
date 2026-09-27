@@ -28,10 +28,10 @@ async def test_enrich_one_forces_db_eligible_profile_lookup(monkeypatch) -> None
         def __init__(self, _db) -> None:
             pass
 
-        async def resolve_zalo(self):
+        async def resolve_zalo(self, account_key=None):
             return SimpleNamespace(oa_access_token="test-token")
 
-        async def refresh_oa_access_token(self):
+        async def refresh_oa_access_token(self, account_key=None):
             return "refreshed"
 
     class FakeSender:

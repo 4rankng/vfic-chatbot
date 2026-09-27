@@ -96,6 +96,26 @@ class ZaloOAWebhookEvent:
         return hashlib.sha256(f"oa:{stable_id}".encode("utf-8")).hexdigest()[:32]
 
 
+def oa_id_from_payload(payload: dict[str, Any]) -> str | None:
+    """The receiving OA's own id from a webhook body, or ``None``.
+
+    Zalo puts the OA id at the body root (``oa_id``); some event shapes only
+    carry it as the recipient. Multi-OA routing keys on this value, and an
+    absent or unknown id falls back to the default account.
+    """
+    if not isinstance(payload, dict):
+        return None
+    recipient = _as_dict(payload.get("recipient") or payload.get("to"))
+    found = _first_text(
+        payload.get("oa_id"),
+        payload.get("oaId"),
+        recipient.get("id"),
+        recipient.get("user_id"),
+        payload.get("recipient_id"),
+    )
+    return found or None
+
+
 def parse_oa_webhook_event(payload: dict[str, Any]) -> ZaloOAWebhookEvent | None:
     if not isinstance(payload, dict):
         return None

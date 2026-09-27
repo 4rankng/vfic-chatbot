@@ -144,8 +144,16 @@ class ConversationService:
         return await self.repo.latest_unanswered_worker_message(conv)
 
     # --- mutations (delegate to state) ---
-    async def ensure(self, zalo_chat_id: str, *, zalo_channel: str = "bot") -> Conversation:
-        return await self.state.ensure(zalo_chat_id, zalo_channel=zalo_channel)
+    async def ensure(
+        self,
+        zalo_chat_id: str,
+        *,
+        zalo_channel: str = "bot",
+        account_key: str | None = None,
+    ) -> Conversation:
+        return await self.state.ensure(
+            zalo_chat_id, zalo_channel=zalo_channel, account_key=account_key
+        )
 
     async def ensure_by_identity(
         self,

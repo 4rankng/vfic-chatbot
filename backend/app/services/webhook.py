@@ -95,6 +95,7 @@ class ZaloWebhookService:
         bot_token: str | None = None,
         runtime_authority: RuntimeAuthorityStamp | None = None,
         enrich_oa_profile: Callable[[dict], object] | None = None,
+        account_key: str | None = None,
     ) -> dict:
         """Run the synchronous guard chain and (if allowed) enqueue the bot turn.
 
@@ -103,6 +104,10 @@ class ZaloWebhookService:
         ``handle_oa_side_event`` instead. The *enqueue* callback returns ``False``
         when the job cannot be enqueued (Redis down / queue depth exceeded); the
         caller translates that to HTTP 503 so Zalo retries.
+
+        ``account_key`` is the OA that received the event (multi-OA routing). It
+        scopes the contact identity, the conversation, and the OA profile
+        enrichment; ``None`` keeps the seeded default OA.
         """
         if channel == "oa":
             event = parse_oa_webhook_event(payload)
@@ -111,7 +116,7 @@ class ZaloWebhookService:
             if event.can_start_bot_turn:
                 norm = _normalized_from_oa_event(event)
             else:
-                return await handle_oa_side_event(db, event)
+                return await handle_oa_side_event(db, event, account_key=account_key)
         else:
             event = None
             norm = ZaloWebhookService.normalize_bot(payload)
@@ -122,7 +127,9 @@ class ZaloWebhookService:
             return {"status": "duplicate"}
 
         svc = ConversationService(db)
-        conv = await svc.ensure(norm.zalo_chat_id, zalo_channel=norm.zalo_channel)
+        conv = await svc.ensure(
+            norm.zalo_chat_id, zalo_channel=norm.zalo_channel, account_key=account_key
+        )
         await db.refresh(conv)
         await svc.record_inbound(
             conv,
@@ -268,7 +275,11 @@ class ZaloWebhookService:
         ):
             try:
                 enrich_oa_profile(
-                    {"zalo_id": norm.zalo_chat_id, "user_id": event.sender_id}
+                    {
+                        "zalo_id": norm.zalo_chat_id,
+                        "user_id": event.sender_id,
+                        "account_key": account_key or "",
+                    }
                 )
             except Exception:  # noqa: BLE001 — enrichment is best-effort
                 logger.debug(
@@ -291,13 +302,18 @@ def _normalized_from_oa_event(event) -> NormalizedMessage:
     )
 
 
-async def handle_oa_side_event(db: AsyncSession, event) -> dict:
+async def handle_oa_side_event(
+    db: AsyncSession, event, *, account_key: str | None = None
+) -> dict:
     """Dispatch non-text OA events: receipts, follow/unfollow, clicks, media.
 
     None of these start a bot turn, acquire the per-chat lock, or fire typing.
     Receipts advance outbound ``Message.delivery_status``; follow/unfollow adjust
     lifecycle flags; button clicks record a SYSTEM note; media/reactions are
     logged and dropped (deliberately low-noise).
+
+    ``account_key`` scopes every conversation lookup to the OA that received the
+    event, so a receipt on one OA can never advance another OA's message.
     """
     kind = event.kind
     svc = ConversationService(db)
@@ -305,7 +321,9 @@ async def handle_oa_side_event(db: AsyncSession, event) -> dict:
     if kind in ("user_seen", "user_received"):
         if not event.message_ids or not event.sender_id:
             return {"status": "ignored"}
-        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
+        conv = await svc.ensure(
+            event.scoped_chat_id, zalo_channel="oa", account_key=account_key
+        )
         await svc.apply_delivery_receipt_batch(
             conv,
             zalo_message_ids=list(event.message_ids),
@@ -315,18 +333,24 @@ async def handle_oa_side_event(db: AsyncSession, event) -> dict:
         return {"status": "receipt"}
 
     if kind == "follow":
-        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
+        conv = await svc.ensure(
+            event.scoped_chat_id, zalo_channel="oa", account_key=account_key
+        )
         await svc.apply_follow(conv)
         return {"status": "follow"}
 
     if kind == "unfollow":
-        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
+        conv = await svc.ensure(
+            event.scoped_chat_id, zalo_channel="oa", account_key=account_key
+        )
         await svc.apply_unfollow(conv)
         await svc.record_system_note(conv, body="Người dùng đã bỏ quan tâm (unfollow) OA.")
         return {"status": "unfollow"}
 
     if kind == "click_to_message":
-        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa")
+        conv = await svc.ensure(
+            event.scoped_chat_id, zalo_channel="oa", account_key=account_key
+        )
         title = _event_button_title(event.raw)
         body = f"👤 Người dùng đã nhấn nút: {title}" if title else "👤 Người dùng đã nhấn nút."
         await svc.record_system_note(conv, body=body)

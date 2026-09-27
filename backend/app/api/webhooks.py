@@ -178,12 +178,20 @@ async def zalo_oa_webhook(
     # cutover when a dedicated signing secret is available.
 
     runtime_authority = await _runtime_authority_or_inactive(db, channel="oa")
+    # Multi-OA routing: the event names the OA that received it. A linked OA is
+    # served under its own account key (own credentials, own send token); an
+    # absent/unknown id falls back to the original OA, so an unlinked OA can
+    # never be dropped and the single-OA deployment behaves exactly as before.
+    from app.channels.providers.zalo_account import ZaloOaAccountResolver
+
+    oa_account_key = await ZaloOaAccountResolver(db).account_key_for_payload(payload)
     result = await run_zalo_ingress(
         db,
         payload,
         enqueue=enqueue_chat_turn_async,
         channel="oa",
         runtime_authority=runtime_authority,
+        account_key=oa_account_key,
     )
     code = 503 if result.get("status") == "start_failed" else 200
     await _stamp_ack(t0, code)

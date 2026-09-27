@@ -129,13 +129,16 @@ async def _enrich_oa_profile_async(job: dict) -> None:
     user_id = job.get("user_id") or ""
     if not zalo_id or not user_id:
         return
+    # Multi-OA: the lookup must authenticate as the OA the user wrote to, so the
+    # job carries that account key (empty → the original OA).
+    account_key = job.get("account_key") or None
     try:
         async with worker_session() as db:
             integration = IntegrationSettingsService(db)
-            cfg = await integration.resolve_zalo()
+            cfg = await integration.resolve_zalo(account_key)
             sender = ZaloOASender(
                 access_token=cfg.oa_access_token,
-                refresh=integration.refresh_oa_access_token,
+                refresh=lambda: integration.refresh_oa_access_token(account_key),
             )
             await ProfileEnrichmentService(db, sender).enrich_oa_user(
                 zalo_id,

@@ -123,10 +123,10 @@ async def test_oa_profile_worker_waits_for_inline_lookup_before_retrying():
         def __init__(self, received_db) -> None:
             assert received_db is db
 
-        async def resolve_zalo(self):
+        async def resolve_zalo(self, account_key=None):
             return type("_Config", (), {"oa_access_token": "test-token"})()
 
-        async def refresh_oa_access_token(self):
+        async def refresh_oa_access_token(self, account_key=None):
             return "refreshed-token"
 
     class _ProfileService:

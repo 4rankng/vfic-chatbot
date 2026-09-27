@@ -76,16 +76,27 @@ class BotConversationState(
 
     # --- webhook-side primitives (used by US-006 chatbot) ---
 
-    async def ensure(self, zalo_chat_id: str, *, zalo_channel: str = "bot") -> Conversation:
+    async def ensure(
+        self,
+        zalo_chat_id: str,
+        *,
+        zalo_channel: str = "bot",
+        account_key: str | None = None,
+    ) -> Conversation:
         """Resolve a Zalo channel/chat pair to its canonical channel identity.
 
         The Zalo account keys are the stable synthetic values backfilled by
         Alembic 0047. OA's ``oa:`` storage prefix is stripped from the external
         id, matching the backfill normalization.
+
+        ``account_key`` selects the receiving OA for ``zalo_channel="oa"``: the
+        multi-OA router passes the OA id of the linked account the event came
+        from, and everything else (the recruitment Bot, the original OA, any
+        caller that omits the key) keeps the seeded default.
         """
         if zalo_channel == "oa":
             provider = "zalo_oa"
-            account_key = "default:zalo_oa"
+            account_key = account_key or "default:zalo_oa"
             external_id = zalo_chat_id.removeprefix("oa:") if zalo_chat_id.startswith("oa:") else zalo_chat_id
         else:
             provider = "zalo_bot"

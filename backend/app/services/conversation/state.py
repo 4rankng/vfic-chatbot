@@ -62,10 +62,12 @@ class ConversationState:
         zalo_chat_id: str,
         *,
         zalo_channel: str = "bot",
+        account_key: str | None = None,
     ) -> Conversation:
         return await self._bot.ensure(
             zalo_chat_id,
             zalo_channel=zalo_channel,
+            account_key=account_key,
         )
 
     async def ensure_by_identity(

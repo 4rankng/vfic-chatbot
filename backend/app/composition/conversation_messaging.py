@@ -110,6 +110,7 @@ async def run_zalo_ingress(
     channel: str = "bot",
     bot_token: str | None = None,
     runtime_authority=None,
+    account_key: str | None = None,
 ):
     """Execute the established Zalo transaction from the composition boundary."""
     from app.services.webhook import ZaloWebhookService
@@ -123,6 +124,7 @@ async def run_zalo_ingress(
         bot_token=bot_token,
         runtime_authority=runtime_authority,
         enrich_oa_profile=enqueue_enrich_oa_profile,
+        account_key=account_key,
     )
 
 

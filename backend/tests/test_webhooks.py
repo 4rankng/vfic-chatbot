@@ -790,7 +790,9 @@ async def test_oa_user_seen_message_advances_delivery_to_read(monkeypatch):
 
     assert result == {"status": "receipt"}
     # Receipts scope to the recipient (the user), not the sender (the OA).
-    svc.ensure.assert_awaited_once_with("oa:user-123", zalo_channel="oa")
+    svc.ensure.assert_awaited_once_with(
+        "oa:user-123", zalo_channel="oa", account_key=None
+    )
     svc.apply_delivery_receipt_batch.assert_awaited_once()
     kwargs = svc.apply_delivery_receipt_batch.call_args.kwargs
     # Every id in the batch is forwarded so all matched messages advance to READ.
@@ -852,7 +854,9 @@ async def test_oa_follow_ensures_and_applies_follow(monkeypatch):
     )
 
     assert result == {"status": "follow"}
-    svc.ensure.assert_awaited_once_with("oa:user-123", zalo_channel="oa")
+    svc.ensure.assert_awaited_once_with(
+        "oa:user-123", zalo_channel="oa", account_key=None
+    )
     svc.apply_follow.assert_awaited_once_with(conv)
     svc.apply_unfollow.assert_not_called()
 
@@ -1003,7 +1007,13 @@ async def test_oa_text_message_starts_bot_turn(monkeypatch):
     # The OA profile enrichment job is enqueued fire-and-forget with the
     # conversation-scoped zalo_id and the external OA user id.
     assert len(enrich_calls) == 1
-    assert enrich_calls[0] == {"zalo_id": "oa:user-123", "user_id": "user-123"}
+    assert enrich_calls[0] == {
+        "zalo_id": "oa:user-123",
+        "user_id": "user-123",
+        # Multi-OA: the enrichment authenticates as the OA that received the
+        # message; empty means the seeded original OA.
+        "account_key": "",
+    }
 
 
 # ─── Phase 1 characterization: Zalo behaviors the neutral contracts must
