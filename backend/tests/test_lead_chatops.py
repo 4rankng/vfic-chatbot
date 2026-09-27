@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from app.models.conversation import Conversation, ConversationMode, MessageSender
 from app.models.lead import Lead, LeadScore, LeadStage
 from app.services.lead import LeadService
+from app.shared.domain.errors import ConflictError
 
 
 def _make_lead(**patch) -> Lead:
