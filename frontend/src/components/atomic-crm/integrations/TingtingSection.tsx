@@ -14,7 +14,6 @@ import {
 import { PlainField, SecretField } from "./SecretField";
 import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
 
-
 /** The one API key plus the four Zalo OA credentials this panel owns. */
 const TINGTING_FIELD_COUNT = 5;
 
