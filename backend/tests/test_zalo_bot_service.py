@@ -704,3 +704,43 @@ async def test_public_api_surface() -> None:
         "BotInfo",
         "WebhookInfo",
     } <= names
+
+
+# ---------------------------------------------------------------------------
+# Verbatim rendering — markdown must not reach the user
+# ---------------------------------------------------------------------------
+
+
+async def test_send_message_flattens_markdown_to_plain_text(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    """Zalo renders text verbatim: emphasis markup is dropped and links keep
+    their target as bare text (clients auto-link URLs)."""
+    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "m-md"}}])
+
+    result = await svc.ZaloBotSender(settings=settings).send_message(
+        "chat-1",
+        "Xin chào! Hiện **đặt lại mật khẩu** chỉ hỗ trợ trên "
+        "[Zalo OA TingTing](https://zalo.me/3383849659955472174)",
+    )
+
+    assert result.ok is True
+    _, body = cap.calls[0]
+    assert body["text"] == (
+        "Xin chào! Hiện đặt lại mật khẩu chỉ hỗ trợ trên "
+        "Zalo OA TingTing: https://zalo.me/3383849659955472174"
+    )
+
+
+async def test_send_message_parse_mode_opt_out_skips_flattening(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    """A caller that opted into parse_mode owns its formatting and passes as-is."""
+    cap = _patch_post(monkeypatch, [{"ok": True, "result": {"message_id": "m-pm"}}])
+
+    await svc.ZaloBotSender(settings=settings).send_message(
+        "chat-1", "**bold** stays", parse_mode="markdown"
+    )
+
+    _, body = cap.calls[0]
+    assert body["text"] == "**bold** stays"

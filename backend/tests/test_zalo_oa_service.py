@@ -709,3 +709,36 @@ async def test_oa_sender_keeps_generic_provider_errors_unclassified() -> None:
 
     assert result.ok is False
     assert result.error_class is None
+
+
+async def test_oa_send_message_flattens_markdown_to_plain_text() -> None:
+    """The OA CS API renders text verbatim: markdown must arrive flattened."""
+    captured: dict[str, Any] = {}
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {"error": 0, "data": {"message_id": "oa-md-1"}}
+
+    class _FakeClient:
+        async def post(self, url: str, *, json=None, headers=None, **kw):
+            captured["json"] = json
+            return _FakeResp()
+
+    register_fake_client("zalo_oa", _FakeClient())
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+
+    result = await sender.send_message(
+        "user-1",
+        "Hiện **đặt lại mật khẩu** chỉ hỗ trợ trên "
+        "[Zalo OA TingTing](https://zalo.me/3383849659955472174)",
+        quote_message_id="inbound-1",
+    )
+
+    assert result.ok is True
+    assert captured["json"]["message"]["text"] == (
+        "Hiện đặt lại mật khẩu chỉ hỗ trợ trên "
+        "Zalo OA TingTing: https://zalo.me/3383849659955472174"
+    )

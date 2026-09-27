@@ -20,6 +20,7 @@ from app.shared.application.outbound import (
     OutboundPolicySuppressedError,
     OutboundTelemetry,
 )
+from app.shared.domain.text import plain_text
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +274,9 @@ class ZaloOASender:
         self, chat_id: str, text: str, *, quote_message_id: str | None = None, **_: Any
     ) -> SendResult:
         prepare_t0 = time.monotonic()
-        text = text.strip()
+        # The OA CS API renders text verbatim: flatten the channel-agnostic
+        # markdown reply so no literal ** markers reach the user.
+        text = plain_text(text).strip()
         if not text:
             return SendResult(
                 ok=False,

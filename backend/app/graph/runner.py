@@ -71,7 +71,10 @@ from app.recruitment.domain.provider import (
 from app.graph.runtime_policy import TINGTING_TOOL_NAMES
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.think_strip import strip_provider_artifacts, visible_offset
-from app.graph.tingting_guide import tingting_api_prompt_block
+from app.graph.tingting_guide import (
+    TINGTING_RESET_REDIRECT_REPLY,
+    tingting_api_prompt_block,
+)
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.shared.domain.text import normalize_vietnamese_text
 
@@ -798,16 +801,6 @@ async def _direct_context_turn(
     )
 
 
-# Both replies are fixed strings, not model output: the operator approved these
-# exact words, and a paraphrase would either drop the OA link or invent a channel
-# the deployment cannot serve. The link is the TingTing OA the operator supplied
-# (its Zalo id is also the routing key inbound events carry).
-TINGTING_SUPPORT_OA_URL = "https://zalo.me/3383849659955472174"
-TINGTING_RESET_REDIRECT_REPLY = (
-    "Chức năng đặt lại mật khẩu chỉ hỗ trợ trên Zalo OA Ting Ting Software Solution. "
-    "Anh/chị vui lòng liên hệ OA đó để được hỗ trợ: "
-    f"{TINGTING_SUPPORT_OA_URL}"
-)
 # The support OA itself serves the reset flow only; every other message hands the
 # employee to a human instead of answering (operator requirement).
 TINGTING_HANDOFF_REPLY = "Vui lòng chờ chuyên viên tư vấn liên hệ."

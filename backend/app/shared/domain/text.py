@@ -60,4 +60,4 @@ def normalize_vietnamese_text(value: str) -> str:
     return " ".join(no_marks.replace("đ", "d").split())
 
 
-__all__ = ["normalize_vietnamese_text"]
+__all__ = ["normalize_vietnamese_text", "plain_text"]

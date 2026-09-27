@@ -35,6 +35,7 @@ from app.shared.application.outbound import (
     OutboundTelemetry,
     combine_outbound_telemetry,
 )
+from app.shared.domain.text import plain_text
 
 logger = logging.getLogger(__name__)
 
@@ -419,6 +420,11 @@ class ZaloBotSender:
     ) -> SendResult:
         """Send a text message, chunking long plain text into readable Zalo bubbles."""
         prepare_t0 = time.monotonic()
+        # Zalo renders message text verbatim: a channel-agnostic reply written in
+        # markdown would reach the user as literal asterisks. Callers that opt
+        # into parse_mode/text_styles own their formatting and pass unchanged.
+        if parse_mode is None and text_styles is None:
+            text = plain_text(text)
         text = text.strip()
         if not text:
             return SendResult(
@@ -499,6 +505,9 @@ class ZaloBotSender:
 
     async def send_photo(self, chat_id: str, photo: str, caption: str | None = None) -> SendResult:
         """Send an image by URL/path. ``caption`` is 1-2000 chars if provided."""
+        if caption is not None:
+            # Same verbatim-rendering constraint as send_message.
+            caption = plain_text(caption)
         if caption is not None and not 1 <= len(caption) <= 2000:
             return SendResult(ok=False, error="caption length must be 1..2000 when provided")
         body: dict[str, Any] = {"chat_id": chat_id, "photo": photo}

@@ -12,6 +12,18 @@ contains no secret: the base URL and the key never enter the prompt.
 
 from __future__ import annotations
 
+# Fixed replies, not model output: the operator approved these exact words, and a
+# paraphrase would either drop the OA link or invent a channel the deployment
+# cannot serve. The URL is the TingTing OA the operator supplied (its Zalo id is
+# also the routing key inbound events carry), defined once here because both
+# the runner's redirect guard and the agent rules (graph/context.py) quote it.
+TINGTING_SUPPORT_OA_URL = "https://zalo.me/3383849659955472174"
+TINGTING_RESET_REDIRECT_REPLY = (
+    "Chức năng đặt lại mật khẩu chỉ hỗ trợ trên Zalo OA Ting Ting Software Solution. "
+    "Anh/chị vui lòng liên hệ OA đó để được hỗ trợ: "
+    f"{TINGTING_SUPPORT_OA_URL}"
+)
+
 TINGTING_API_BLOCK_HEADER = "=== API TINGTING: ĐẶT LẠI MẬT KHẨU NHÂN VIÊN ==="
 
 TINGTING_API_GUIDE = """

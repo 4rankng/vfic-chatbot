@@ -3570,3 +3570,17 @@ async def test_progressive_inline_thinking_answer_sends_bubble_from_visible_text
     assert stage["progressive_send"] is True
     assert stage["progressive_bubbles"] == 2
 
+
+def test_agent_rules_quote_the_redirect_reply_when_reset_tools_are_absent():
+    """The exact-reply guard only fires on a classified employee_support intent.
+
+    When routing misclassifies the message, the model still must redirect the
+    employee with the operator's exact words — OA name and clickable link
+    included — so the static agent rules quote the reply verbatim and forbid
+    paraphrase.
+    """
+    from app.graph.context import _RUNTIME_RETRIEVAL_RULES
+    from app.graph.tingting_guide import TINGTING_RESET_REDIRECT_REPLY
+
+    assert TINGTING_RESET_REDIRECT_REPLY in _RUNTIME_RETRIEVAL_RULES
+
