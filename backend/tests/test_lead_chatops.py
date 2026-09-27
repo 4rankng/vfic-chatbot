@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -158,3 +158,62 @@ async def test_apply_chatops_action_rejects_unknown_action():
 
     with pytest.raises(ValueError):
         await service.apply_chatops_action(lead, "bogus_action", actor=SimpleNamespace())
+
+
+@pytest.mark.asyncio
+async def test_schedule_followup_pins_due_at_to_vn_morning_and_applies_version_guard():
+    """schedule_followup must land on the Vietnam business calendar and guard the
+    lead write.
+
+    The due morning is 09:00 Asia/Ho_Chi_Minh the next day (02:00 UTC) — the same
+    calendar the dashboard's FOLLOWUP_TODAY counter compares on — and the
+    ``next_action_at`` write goes through the optimistic-concurrency primitive
+    like every other LeadService mutator.
+    """
+    service = LeadService(AsyncMock())
+    lead = _make_lead()
+    actor = SimpleNamespace(id=7, full_name="Recruiter")
+    captured: dict = {}
+
+    async def _create_followup(lead_id, due_at, note, created_by=None):
+        captured["create_followup"] = (lead_id, due_at, note, created_by)
+        return SimpleNamespace(id=1)
+
+    async def _optimistic_apply(lead_id, current_version, **values):
+        captured["optimistic_apply"] = (lead_id, current_version, values)
+        return True
+
+    service.repo.create_followup = _create_followup
+    service.repo.optimistic_apply = _optimistic_apply
+    service.db.add = Mock()  # plain sync add; AsyncMock would leak a coroutine
+    service.db.refresh = AsyncMock()
+    service.events.lead_updated = AsyncMock()
+
+    await service.apply_chatops_action(lead, "schedule_followup", actor=actor)
+
+    vn = ZoneInfo("Asia/Ho_Chi_Minh")
+    due_at = captured["create_followup"][1]
+    assert due_at.utcoffset() == timedelta(hours=7)
+    assert (due_at.hour, due_at.minute) == (9, 0)
+    assert due_at.astimezone(timezone.utc).hour == 2
+    assert due_at.astimezone(vn).date() == datetime.now(vn).date() + timedelta(days=1)
+    assert captured["create_followup"][0] == 1
+    assert captured["create_followup"][3] == 7
+    assert captured["optimistic_apply"] == (1, 1, {"next_action_at": due_at, "version": 2})
+
+
+@pytest.mark.asyncio
+async def test_schedule_followup_conflicts_when_lead_was_modified_concurrently():
+    """A lost version race rejects the action like set_stage/assign instead of
+    silently overwriting the concurrency token."""
+    service = LeadService(AsyncMock())
+    lead = _make_lead()
+    service.repo.create_followup = AsyncMock(return_value=SimpleNamespace(id=1))
+    service.repo.optimistic_apply = AsyncMock(return_value=False)
+    service.db.refresh = AsyncMock()
+
+    with pytest.raises(ConflictError):
+        await service.apply_chatops_action(
+            lead, "schedule_followup", actor=SimpleNamespace(id=7, full_name="Recruiter")
+        )
+    service.db.refresh.assert_awaited_once_with(lead)
