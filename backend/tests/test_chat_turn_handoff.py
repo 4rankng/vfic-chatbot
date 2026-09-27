@@ -55,7 +55,24 @@ def _inbound(body: str, provider_id: str, *, row_id: int = 1):
 
 
 class _Svc:
-    """ConversationPort stub: the newest inbound plus a free per-chat mutex."""
+    """ConversationPort stub: the newest inbound plus a free per-chat mutex.
+
+    The worker reaches the reads through ``repo`` and the guard/lock through
+    ``state``; the scheduler still takes the flat service (it is handed one),
+    so the flat lock methods stay on this stub too.
+    """
+
+    class _Repo:
+        def __init__(self, outer) -> None:
+            self._outer = outer
+
+        async def get(self, _id):
+            return self._outer._conv
+
+        async def latest_worker_message(self, _conv):
+            if self._outer._raises:
+                raise RuntimeError("newest-inbound read failed")
+            return self._outer._newest
 
     def __init__(self, conv, newest, *, unanswered=_MISSING, raises: bool = False, bot_may_run=True):
         self._conv = conv
@@ -65,17 +82,11 @@ class _Svc:
         self._bot_may_run = bot_may_run
         self.lock_calls = 0
         self.recorded: list[dict] = []
+        self.repo = self._Repo(self)
+        self.state = self
 
     def run_start_guard(self, _conv):
         return self._bot_may_run
-
-    async def get(self, _id):
-        return self._conv
-
-    async def latest_worker_message(self, _conv):
-        if self._raises:
-            raise RuntimeError("newest-inbound read failed")
-        return self._newest
 
     async def latest_unanswered_worker_message(self, _conv):
         return self._unanswered

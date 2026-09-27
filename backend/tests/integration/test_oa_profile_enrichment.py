@@ -90,7 +90,7 @@ async def test_first_oa_conversation_creates_lead_then_enriches_profile(
     monkeypatch,
 ) -> None:
     """Alembic's conversation trigger supplies the lead required by enrichment."""
-    conversation = await ConversationService(integration_session).ensure(
+    conversation = await ConversationService(integration_session).state.ensure(
         "oa:first-contact-user",
         zalo_channel="oa",
     )
@@ -154,7 +154,7 @@ async def test_concurrent_profile_writer_is_not_overwritten(
 
     try:
         async with sessions() as setup:
-            conversation = await ConversationService(setup).ensure(
+            conversation = await ConversationService(setup).state.ensure(
                 "oa:race-user",
                 zalo_channel="oa",
             )

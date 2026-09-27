@@ -155,7 +155,8 @@ async def test_provider_scope_composes_with_search_attention_reason_and_viewer(
     await integration_session.flush()
 
     service = ConversationService(integration_session)
-    bot_rows, bot_total = await service.list(
+    repo = service.repo
+    bot_rows, bot_total = await repo.list(
         viewer=recruiter,
         channel_provider="zalo_bot",
         q="searchable",
@@ -169,10 +170,10 @@ async def test_provider_scope_composes_with_search_attention_reason_and_viewer(
     }
     assert bot_total == 3
 
-    assert await service.needs_attention_count(
+    assert await repo.needs_attention_count(
         viewer=recruiter, channel_provider="zalo_oa"
     ) == 2
-    assert await service.needs_attention_count(viewer=recruiter) == 5
+    assert await repo.needs_attention_count(viewer=recruiter) == 5
 
     from app.composition.reporting import run_conversation_attention_query
 

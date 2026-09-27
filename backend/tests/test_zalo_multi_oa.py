@@ -327,8 +327,8 @@ async def test_handle_scopes_the_conversation_alias_to_the_receiving_oa(monkeypa
 
     conv = types.SimpleNamespace(zalo_chat_id="oa:tingting:u-1")
     svc = MagicMock()
-    svc.ensure = AsyncMock(return_value=conv)
-    svc.apply_follow = AsyncMock()
+    svc.state.ensure = AsyncMock(return_value=conv)
+    svc.state.apply_follow = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
 
     await ZaloWebhookService.handle(  # type: ignore[arg-type]
@@ -339,7 +339,7 @@ async def test_handle_scopes_the_conversation_alias_to_the_receiving_oa(monkeypa
         account_key="tingting",
     )
 
-    assert svc.ensure.await_args.args[0] == "oa:tingting:u-1"
+    assert svc.state.ensure.await_args.args[0] == "oa:tingting:u-1"
 
 
 # ---------------------------------------------------------------------------
@@ -380,12 +380,12 @@ async def test_handle_scopes_the_conversation_to_the_receiving_oa(monkeypatch):
         id=_uuid.uuid4(), zalo_chat_id="oa:user-1", zalo_channel="oa", version=1, mode="BOT"
     )
     svc = MagicMock()
-    svc.ensure = AsyncMock(return_value=conv)
-    svc.record_inbound = AsyncMock()
-    svc.get = AsyncMock(return_value=conv)
-    svc.run_start_guard = MagicMock(return_value=True)
-    svc.acquire_lock = AsyncMock(return_value=_uuid.uuid4())
-    svc.release_lock = AsyncMock()
+    svc.state.ensure = AsyncMock(return_value=conv)
+    svc.state.record_inbound = AsyncMock()
+    svc.repo.get = AsyncMock(return_value=conv)
+    svc.state.run_start_guard = MagicMock(return_value=True)
+    svc.state.acquire_lock = AsyncMock(return_value=_uuid.uuid4())
+    svc.state.release_lock = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
     monkeypatch.setattr(
         "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
@@ -409,7 +409,7 @@ async def test_handle_scopes_the_conversation_to_the_receiving_oa(monkeypatch):
     )
 
     assert result["status"] == "processing"
-    assert svc.ensure.await_args.kwargs["account_key"] == SECOND_OA_ID
+    assert svc.state.ensure.await_args.kwargs["account_key"] == SECOND_OA_ID
     # The enrichment must authenticate as the same OA, never the original one.
     assert enrich[0]["account_key"] == SECOND_OA_ID
 
@@ -423,8 +423,8 @@ async def test_side_events_are_scoped_to_the_receiving_oa(monkeypatch):
 
     conv = SimpleNamespace(id=_uuid.uuid4(), zalo_chat_id="oa:user-1", zalo_channel="oa")
     svc = MagicMock()
-    svc.ensure = AsyncMock(return_value=conv)
-    svc.apply_follow = AsyncMock()
+    svc.state.ensure = AsyncMock(return_value=conv)
+    svc.state.apply_follow = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
 
     result = await ZaloWebhookService.handle(  # type: ignore[arg-type]
@@ -436,7 +436,7 @@ async def test_side_events_are_scoped_to_the_receiving_oa(monkeypatch):
     )
 
     assert result == {"status": "follow"}
-    assert svc.ensure.await_args.kwargs["account_key"] == SECOND_OA_ID
+    assert svc.state.ensure.await_args.kwargs["account_key"] == SECOND_OA_ID
 
 
 class _MessageSession:

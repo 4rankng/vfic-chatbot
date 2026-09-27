@@ -60,7 +60,7 @@ async def test_web_cleanup_continues_then_propagates_cancellation(monkeypatch) -
 @pytest.mark.asyncio
 async def test_shutdown_cancellation_waits_for_real_direct_turn_before_resources(monkeypatch) -> None:
     from app import main
-    from app.workers import chatbot_worker
+    from app.workers import chatbot_worker, direct_turn
 
     started = asyncio.Event()
     finalized = asyncio.Event()
@@ -77,7 +77,7 @@ async def test_shutdown_cancellation_waits_for_real_direct_turn_before_resources
         resource_observations.append((name, finalized.is_set()))
 
     monkeypatch.setattr(chatbot_worker, "_run_job_async", blocked_turn)
-    monkeypatch.setattr(chatbot_worker, "_DIRECT_TURN_SHUTDOWN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(direct_turn, "_DIRECT_TURN_SHUTDOWN_TIMEOUT_SECONDS", 0.01)
     monkeypatch.setattr(main, "engine", SimpleNamespace(dispose=lambda: observe("database")))
     monkeypatch.setattr("app.graph.factories.aclose_client_cache", lambda: observe("llm"))
     monkeypatch.setattr("app.core.http.aclose_all", lambda: observe("http"))
