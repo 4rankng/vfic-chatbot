@@ -5,8 +5,8 @@ severity: medium
 area: docs
 labels: [documentation, tech-debt, agent-context]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-26
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-26
 
 **Severity:** medium · **Area:** docs · **Effort:** S · **Labels:** documentation, tech-debt, agent-context
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -39,6 +39,11 @@ Five one-line edits in TECH.md: :21 → head 0055_memories_match_halfvec; :52 �
 ## Notes
 
 Port-name drift also live in docs/testing.md:44 and standards/coding-style.md:22 (DOC-15/DOC-17); migration head is correct in docs/deployment-guide.md:242 (CI-guarded).
+
+## Evidence log
+
+- TECH.md Alembic head corrected to 0056 — the audit's 0055 was superseded by 0056_project_external_api after the audit; matches CI-guarded deployment-guide.md:245.
+- The CI-hardening half self-resolved: quality-gates.yml was deleted in e7010b22 (gates moved to `make release-check`) and testing.md's CI table was already rewritten by that commit — verified accurate against Makefile:35-56 rather than re-edited. The optional TECH.md-head drift guard in Makefile is deferred to the ops lane.
 
 ---
 

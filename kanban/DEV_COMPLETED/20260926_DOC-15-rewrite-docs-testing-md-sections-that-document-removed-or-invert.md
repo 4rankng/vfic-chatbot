@@ -5,8 +5,8 @@ severity: medium
 area: docs
 labels: [documentation, testing, ci]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-26
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-26
 
 **Severity:** medium · **Area:** docs · **Effort:** M · **Labels:** documentation, testing, ci
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -39,6 +39,10 @@ One docs/testing.md pass: delete the claude-project bullet and the test:unit:cla
 ## Notes
 
 Pure doc drift; cross-ref TEST-18 (the ratchet itself) is a separate fix.
+
+## Evidence log
+
+- docs/testing.md rewritten: removed/ inverted test-infrastructure sections corrected; coverage ratchet documented from vitest.config.ts (whole-atomic-crm floors 67/55/57/68 plus three 80% per-file gates).
 
 ---
 

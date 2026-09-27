@@ -55,6 +55,39 @@ COLUMN_STATUS = {
 # regeneration cannot discard it, and rather than in the ticket data modules so
 # the audit data stays a record of the audit rather than of the remediation.
 COMPLETIONS: dict[str, dict] = {
+    # 2026-09-27 docs sweep (lane-docs) — every claim re-verified at HEAD before
+    # editing; ledger in plans/reports/kanban-sweep-260927-1539-docs-completion.md
+    "DOC-14": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "TECH.md Alembic head corrected to 0056 — the audit's 0055 was superseded by 0056_project_external_api after the audit; matches CI-guarded deployment-guide.md:245.",
+            "The CI-hardening half self-resolved: quality-gates.yml was deleted in e7010b22 (gates moved to `make release-check`) and testing.md's CI table was already rewritten by that commit — verified accurate against Makefile:35-56 rather than re-edited. The optional TECH.md-head drift guard in Makefile is deferred to the ops lane.",
+        ],
+    },
+    "DOC-15": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "docs/testing.md rewritten: removed/ inverted test-infrastructure sections corrected; coverage ratchet documented from vitest.config.ts (whole-atomic-crm floors 67/55/57/68 plus three 80% per-file gates).",
+        ],
+    },
+    "DOC-16": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "react-virtuoso mandates replaced with the virtua reality (virtua-vendor chunk name verified against vite.config.ts) in docs/testing.md, standards/coding-style.md and standards/performance.md:159; qa-runbook's dangling '(per docs/HLD.md)' citation removed — HLD.md has no virtualization text.",
+        ],
+    },
+    "DOC-17": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "Phantom RetrievalPort protocol name corrected in standards/coding-style.md and docs/testing.md against the live graph/ports.py protocol names.",
+        ],
+    },
+    "DOC-18": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "docs/codebase-summary.md tree/key-files rows fixed: migration ceiling to 0056, phantom graph/tools.py and safety.py rows replaced with the real module map, service enumeration corrected to 14 always-on services (metrics-watch always-on, oa-profile-backfill profile-gated) — verified against docker-compose.yml; TECH.md:59 count updated to match.",
+        ],
+    },
     "FE-01": {
         "column": "QA_TESTED",
         "evidence": [

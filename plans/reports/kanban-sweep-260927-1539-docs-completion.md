@@ -77,8 +77,8 @@ Key environment facts discovered during verification (HEAD moved since the audit
 
 ### DOC-16 — react-virtuoso sweep + 65-test-file count
 
-| Card claim | Current-truth check | Same card-class extras fixed (verified) |
-|---|---| found |
+| Card claim | Current-truth check | Action |
+|---|---|---|
 | performance.md:136 react-virtuoso mandate | package.json:73 `virtua ^0.49.2`; zero react-virtuoso in any manifest | Fixed → virtua (VList) |
 | performance.md:159 checklist item (same file) | — | Fixed → virtua (VList) |
 | performance.md bundle chunk list `virtuoso-vendor` | `vite.config.ts:123-124` chunk is `virtua-vendor` | Fixed → virtua-vendor |
@@ -103,11 +103,11 @@ Key environment facts discovered during verification (HEAD moved since the audit
 ### DOC-18 — docs/codebase-summary.md (+ TECH.md:59)
 
 | Card claim | Current-truth check | Action |
-|---|---| preexisting |
+|---|---|---|
 | :40 "through 0054" | 0056 exists (evidence above) | **Fixed → "through 0056"** |
 | :178 phantom `graph/tools.py` key-files row | `ls backend/app/graph/` — no tools.py; `schemas.py:32` TOOL_SCHEMAS, `:412` _dispatch_tool; `tools/` package holds jobs/knowledge/memory/income/catalog/tingting_api/tingting_identity/_shared | **Fixed** — row → `graph/schemas.py`; added `graph/tools/` row naming the per-domain modules |
 | :46,:210 13-service count, no metrics-watch | `backend/docker-compose.yml`: 14 always-on services (postgres, redis, web-blue, web-green, worker-chatbot, worker-persistence, worker-ingest, scheduler, worker-followup, worker-maintenance, metrics-watch, frontend, adminer, caddy); only `oa-profile-backfill` has `profiles: ["maintenance"]` (compose :439); metrics-watch is always-on `restart: unless-stopped` | **Fixed** — both rows → 14 services + metrics-watch added to the enumeration; TECH.md:59 → 14 |
-| :4 Last updated 2026-09-24 | — | **Fixed → 2026-09-09-27** |
+| :4 Last updated 2026-09-24 | — | **Fixed → 2026-09-27** |
 | card note: metrics-watch may be uncommitted OPS-25 work | `git diff HEAD -- backend/docker-compose.yml` → clean (metrics-watch is committed) | Safe to correct the docs |
 | — | tree row :22-24 and module map :127 still listed phantom `safety`/`safety.py` in graph/ (file removed; `ls backend/app/graph/` has no safety.py) — same phantom-name class in an authorized file, contradicting the doc's own think_strip row | **Fixed** — tree row → "tools/, schemas, think_strip"; module-map row → "`think_strip.py` provider-artefact stripping" |
 

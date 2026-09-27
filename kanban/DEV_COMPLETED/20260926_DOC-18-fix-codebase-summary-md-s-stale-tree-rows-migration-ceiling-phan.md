@@ -5,8 +5,8 @@ severity: low
 area: docs
 labels: [documentation, tech-debt]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-26
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-26
 
 **Severity:** low · **Area:** docs · **Effort:** S · **Labels:** documentation, tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -38,6 +38,10 @@ Bump :40 to 'through 0055' (or point at deployment-guide's CI-guarded HEAD line)
 ## Notes
 
 Verify with `git diff HEAD -- backend/docker-compose.yml` before fixing the count: metrics-watch may be part of the uncommitted incident response (OPS-25) — if so the docs correction lands with that commit.
+
+## Evidence log
+
+- docs/codebase-summary.md tree/key-files rows fixed: migration ceiling to 0056, phantom graph/tools.py and safety.py rows replaced with the real module map, service enumeration corrected to 14 always-on services (metrics-watch always-on, oa-profile-backfill profile-gated) — verified against docker-compose.yml; TECH.md:59 count updated to match.
 
 ---
 

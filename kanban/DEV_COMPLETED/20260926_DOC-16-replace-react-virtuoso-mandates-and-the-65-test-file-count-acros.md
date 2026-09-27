@@ -5,8 +5,8 @@ severity: medium
 area: docs
 labels: [documentation, tech-debt, standards]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-26
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-26
 
 **Severity:** medium · **Area:** docs · **Effort:** S · **Labels:** documentation, tech-debt, standards
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -39,6 +39,10 @@ Sweep react-virtuoso → virtua across standards/performance.md:136, definition-
 ## Notes
 
 Wave-1 docs work did not cover standards/; this is the residual.
+
+## Evidence log
+
+- react-virtuoso mandates replaced with the virtua reality (virtua-vendor chunk name verified against vite.config.ts) in docs/testing.md, standards/coding-style.md and standards/performance.md:159; qa-runbook's dangling '(per docs/HLD.md)' citation removed — HLD.md has no virtualization text.
 
 ---
 

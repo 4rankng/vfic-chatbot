@@ -5,8 +5,8 @@ severity: low
 area: docs
 labels: [documentation, tech-debt]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-26
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-26
 
 **Severity:** low · **Area:** docs · **Effort:** S · **Labels:** documentation, tech-debt
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -38,6 +38,10 @@ In standards/coding-style.md:22 replace RetrievalPort with GraphRetrievalPort (a
 ## Notes
 
 Deliberately scoped to the two sites not covered by DOC-14/DOC-15 so the port-name fix is one grep-verified pass.
+
+## Evidence log
+
+- Phantom RetrievalPort protocol name corrected in standards/coding-style.md and docs/testing.md against the live graph/ports.py protocol names.
 
 ---
 
