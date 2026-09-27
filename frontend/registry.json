@@ -617,6 +617,30 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/useZaloForm.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/useSettingsBundle.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/useProviderPanels.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/statusCopy.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/settingsNav.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/providerDescriptors.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/integrations/index.tsx",
           "type": "registry:component"
         },
@@ -625,7 +649,23 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/credentialClipboard.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/integrations/api.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/ZaloChannelSection.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/TingtingSection.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/SettingsGroup.tsx",
           "type": "registry:component"
         },
         {
@@ -637,6 +677,26 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/SettingsChrome.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/SecretField.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/ProviderField.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/LlmProvidersSection.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/JevSection.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/integrations/FacebookMessengerPageCard.tsx",
           "type": "registry:component"
         },
@@ -645,67 +705,7 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/integrations/presentation/statusCopy.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/settingsNav.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/credentialClipboard.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/ZaloChannelSection.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/TingtingSection.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/SettingsGroup.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/SettingsChrome.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/SecretField.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/ProviderField.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/LlmProvidersSection.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/JevSection.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/presentation/EmbeddedSettingsSections.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/domain/providerDescriptors.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/application/useZaloForm.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/application/useSettingsBundle.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/integrations/application/useProviderPanels.ts",
+          "path": "src/components/atomic-crm/integrations/EmbeddedSettingsSections.tsx",
           "type": "registry:component"
         },
         {
