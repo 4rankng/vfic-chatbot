@@ -7,13 +7,14 @@ import assignmentsSource from "./PersonaAssignments.tsx?raw";
 import editSource from "./PersonaEdit.tsx?raw";
 import formSource from "./PersonaForm.tsx?raw";
 import listSource from "./PersonaList.tsx?raw";
+import overviewSource from "./presentation/PersonaStudioOverview.tsx?raw";
 
 describe("Agent workspace layout regressions", () => {
   it("keeps the Agent overview flat with one clear edit action", () => {
     expect(listSource).not.toContain("tt-card");
     expect(listSource).not.toContain("Sửa prompt");
     expect(listSource).not.toContain("Đang xem");
-    expect(listSource.match(/onEdit\(persona\)/g) ?? []).toHaveLength(1);
+    expect(overviewSource.match(/onEdit\(persona\)/g) ?? []).toHaveLength(1);
     expect(studioStyles).toMatch(
       /\.persona-studio-layout\s*\{[\s\S]*border:\s*0;[\s\S]*border-radius:\s*0;/,
     );

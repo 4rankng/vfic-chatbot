@@ -35,6 +35,10 @@ export type ProjectKnowledgeCatalog = Readonly<{
  * Owns every read and write of the project's category catalog, including the
  * revision-review poll loop. Components never touch the knowledge service
  * directly, so one layer owns cache coherence for the catalog.
+ *
+ * At most one poll chain runs at a time: starting a new chain (or leaving the
+ * page, or switching project) cancels the previous one, and a hidden tab
+ * pauses the chain until the tab becomes visible again.
  */
 export const useProjectKnowledgeCatalog = (
   projectId: string,
@@ -46,6 +50,10 @@ export const useProjectKnowledgeCatalog = (
   const [processingKey, setProcessingKey] =
     useState<ProjectKnowledgeCategory | null>(null);
   const pollRef = useRef<number | null>(null);
+  /** Bumped whenever the active chain is replaced or torn down. */
+  const pollEpochRef = useRef(0);
+  /** A hop that woke while the tab was hidden parks here until visible. */
+  const resumePollRef = useRef<(() => void) | null>(null);
 
   const loadCatalog = useCallback(async () => {
     const catalog = await getProjectKnowledgeCategories(projectId);
@@ -53,51 +61,95 @@ export const useProjectKnowledgeCatalog = (
     return catalog.data;
   }, [projectId]);
 
+  const cancelPoll = useCallback(() => {
+    pollEpochRef.current += 1;
+    if (pollRef.current !== null) {
+      window.clearTimeout(pollRef.current);
+      pollRef.current = null;
+    }
+    resumePollRef.current = null;
+  }, []);
+
   const pollUntilActive = useCallback(
     function poll(revisionId: string, attempts = 0) {
-      pollRef.current = window.setTimeout(() => {
-        void loadCatalog()
-          .then((rows) => {
-            if (rows.some((row) => row.active_revision_id === revisionId)) {
-              setProcessingKey(null);
-              notify("Dữ liệu mới đã sẵn sàng cho Agent.", {
-                type: "success",
-              });
-            } else if (
-              rows.some(
-                (row) =>
-                  row.latest_revision_id === revisionId &&
-                  row.status === "FAILED",
-              )
-            ) {
-              setProcessingKey(null);
-              notify("Nội dung mới có lỗi. Dữ liệu đang dùng không thay đổi.", {
-                type: "error",
-              });
-            } else if (attempts < MAX_POLL_ATTEMPTS) {
-              poll(revisionId, attempts + 1);
-            } else {
-              setProcessingKey(null);
-              notify(
-                "Dữ liệu đang được xử lý. Bạn có thể quay lại kiểm tra sau.",
-                { type: "info" },
-              );
-            }
-          })
-          .catch(() => setProcessingKey(null));
-      }, POLL_INTERVAL_MS);
+      // A new chain cancels the previous one instead of orphaning it: drop its
+      // pending hop and stamp this chain's epoch so results from any hop of a
+      // superseded chain are discarded.
+      cancelPoll();
+      const epoch = pollEpochRef.current;
+
+      const schedule = () => {
+        pollRef.current = window.setTimeout(() => {
+          pollRef.current = null;
+          if (epoch !== pollEpochRef.current) return;
+          if (document.visibilityState === "hidden") {
+            // A hidden tab must not keep hitting the backend; park this hop
+            // until the tab becomes visible again.
+            resumePollRef.current = () => poll(revisionId, attempts);
+            return;
+          }
+          void loadCatalog()
+            .then((rows) => {
+              if (epoch !== pollEpochRef.current) return;
+              if (rows.some((row) => row.active_revision_id === revisionId)) {
+                setProcessingKey(null);
+                notify("Dữ liệu mới đã sẵn sàng cho Agent.", {
+                  type: "success",
+                });
+              } else if (
+                rows.some(
+                  (row) =>
+                    row.latest_revision_id === revisionId &&
+                    row.status === "FAILED",
+                )
+              ) {
+                setProcessingKey(null);
+                notify(
+                  "Nội dung mới có lỗi. Dữ liệu đang dùng không thay đổi.",
+                  { type: "error" },
+                );
+              } else if (attempts < MAX_POLL_ATTEMPTS) {
+                poll(revisionId, attempts + 1);
+              } else {
+                setProcessingKey(null);
+                notify(
+                  "Dữ liệu đang được xử lý. Bạn có thể quay lại kiểm tra sau.",
+                  { type: "info" },
+                );
+              }
+            })
+            .catch(() => {
+              if (epoch === pollEpochRef.current) setProcessingKey(null);
+            });
+        }, POLL_INTERVAL_MS);
+      };
+
+      schedule();
     },
-    [loadCatalog, notify],
+    [cancelPoll, loadCatalog, notify],
   );
 
   useEffect(() => {
+    // The indicator belongs to the previous project once the catalog reloads.
+    setProcessingKey(null);
     void loadCatalog().catch((error) =>
       notify((error as Error).message, { type: "error" }),
     );
-    return () => {
-      if (pollRef.current !== null) window.clearTimeout(pollRef.current);
+    const handleVisibilityChange = () => {
+      const resume = resumePollRef.current;
+      if (resume && document.visibilityState !== "hidden") {
+        resumePollRef.current = null;
+        resume();
+      }
     };
-  }, [loadCatalog, notify]);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      // Bumping the epoch here also discards an in-flight hop's response, so
+      // no category write or toast lands after leaving the page.
+      cancelPoll();
+    };
+  }, [cancelPoll, loadCatalog, notify]);
 
   const trackRevision = useCallback(
     (key: ProjectKnowledgeCategory, revisionId: string) => {

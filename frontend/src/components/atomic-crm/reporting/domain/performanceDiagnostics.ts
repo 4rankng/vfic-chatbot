@@ -1,4 +1,4 @@
-import type { PerfMetrics, PerfSlowTurn } from "./contracts";
+import type { PerfSlowTurn } from "./contracts";
 
 export type Tone = "neutral" | "success" | "warning" | "danger";
 
@@ -130,6 +130,3 @@ export const likelyBottleneck = (turn: PerfSlowTurn): string => {
     ? "Chưa xác định"
     : `${candidate[0]} (${formatCompactDuration(candidate[1])})`;
 };
-
-export const getEndToEndMetric = (metrics: PerfMetrics) =>
-  metrics.percentiles.end_to_end?.p95 ?? null;

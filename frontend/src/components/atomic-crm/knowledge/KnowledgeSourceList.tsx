@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ListBase, useNotify, usePermissions, useRefresh } from "ra-core";
 import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
+import { usePipelineAutoRefresh } from "./usePipelineAutoRefresh";
 import { BookOpen, FileText, RefreshCw, Search, Upload } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -99,7 +100,6 @@ export const KnowledgeRelearnAction = () => {
 };
 
 const KnowledgeSourceListContent = () => {
-  const refresh = useRefresh();
   const { permissions } = usePermissions();
   const [uploadOpen, setUploadOpen] = useState(false);
 
@@ -127,12 +127,8 @@ const KnowledgeSourceListContent = () => {
     projectFilter !== ALL_PROJECTS ? projectFilter : selectedSource?.project_id;
 
   // Auto-refresh only while something is actively moving through the pipeline;
-  // stop when everything has settled (less visual jitter at rest).
-  useEffect(() => {
-    if (!sources.some(isPipelineActive)) return;
-    const timer = window.setInterval(() => refresh(), 5000);
-    return () => window.clearInterval(timer);
-  }, [refresh, sources]);
+  // stop when everything has settled, and never poll a hidden tab.
+  usePipelineAutoRefresh(sources);
 
   const hasActive = sources.some(isPipelineActive);
   const hasSources = sources.length > 0;

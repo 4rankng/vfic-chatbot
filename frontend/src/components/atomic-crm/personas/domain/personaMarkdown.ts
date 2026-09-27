@@ -1,5 +1,3 @@
-import type { PersonaFollowupRules } from "../../types";
-
 export const PERSONA_SECTIONS = [
   {
     title: "1. Vai trò của tôi",
@@ -151,7 +149,3 @@ export const getPersonaSectionSummaries = (markdown: string) => {
     content: parsed.sections[index]?.trim() ?? "",
   }));
 };
-
-export const hasPersonaFollowupRules = (
-  rules: PersonaFollowupRules | null | undefined,
-) => Boolean(rules);
