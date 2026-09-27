@@ -13,8 +13,14 @@ Mirrors migration 0016, which built the memories HNSW index on
 vector-typed operands the planner cannot use that index for
 ``memories.embedding <=> query_embedding`` comparisons.
 
-Downgrade restores the original vector-typed function (the verbatim baseline
-form) — reversible because CREATE OR REPLACE swaps signatures in place.
+``CREATE OR REPLACE`` cannot replace a function whose argument *type* differs,
+so this revision ADDS a halfvec overload rather than replacing the
+vector-typed one; 0057 drops that leftover overload once the app binds
+``halfvec(3072)`` and only the halfvec signature is ever called again.
+
+Downgrade drops the halfvec overload this revision created and restores the
+original vector-typed function (the verbatim baseline form), returning the
+database to exactly its pre-0055 state.
 
 Revision ID: 0055_memories_match_halfvec
 Revises: 0054_channel_account_projects
@@ -55,6 +61,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DROP FUNCTION IF EXISTS public.match_memories(halfvec, integer, jsonb)")
     op.execute(
         """
         CREATE OR REPLACE FUNCTION public.match_memories(query_embedding vector, match_count integer DEFAULT 10, filter jsonb DEFAULT '{}'::jsonb)

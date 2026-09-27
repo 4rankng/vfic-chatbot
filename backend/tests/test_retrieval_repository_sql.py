@@ -1,13 +1,15 @@
 """Characterization of retrieval SQL shape properties without a live DB.
 
-Three properties are pinned:
+Two properties are pinned:
 
 * the ANN vector query computes the exact distance ONCE per candidate row --
   an inner ``dist`` alias feeds both the floor predicate and the ORDER BY --
   while candidate selection keeps the halfvec(3072) cast that matches the
   HNSW index expression;
 * the memories fast path casts to halfvec(3072) so its HNSW index expression
-  matches (the slow path still binds the SQL ``match_memories`` function);
+  matches (the general-filter path delegates to the SQL ``match_memories``
+  function, whose halfvec typing and index selection are proven against a
+  live database in ``tests/integration/test_memories_halfvec_index.py``);
 * ``active_project_ids`` sorts deterministically so the RAG cache digest
   cannot depend on heap row order.
 """
@@ -92,15 +94,6 @@ async def test_memories_fast_path_uses_halfvec_cast():
     sql_flat = " ".join(sql.split())
     assert "embedding::halfvec(3072) <=> CAST(:emb AS halfvec(3072))" in sql_flat
     assert "ORDER BY embedding::halfvec(3072) <=> CAST(:emb AS halfvec(3072))" in sql_flat
-
-
-@pytest.mark.asyncio
-async def test_memories_sql_function_path_unchanged():
-    db = _CaptureExecDb()
-    repo = repository.RetrievalRepository(db)
-    await repo.match_memories("e", 5, "{}")
-    sql, _ = db.calls[0]
-    assert "match_memories(CAST(:emb AS vector)" in sql
 
 
 @pytest.mark.asyncio

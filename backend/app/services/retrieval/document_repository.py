@@ -137,7 +137,16 @@ class DocumentRepository:
         )
 
     async def match_memories(self, emb: str, top_k: int, filter_json: str) -> list:
-        """Top-k memory rows for a chat (``match_memories`` SQL function)."""
+        """Top-k memory rows for a chat.
+
+        Both arms bind the query as ``halfvec(3072)`` so the distance
+        expression matches the ``memories_embedding_halfvec_hnsw_idx``
+        expression index (0016) and the HNSW index can serve them; a
+        ``vector`` argument would select the exact-compute plan and the
+        index would stay dead weight. The chat-scoped arm queries
+        ``memories`` directly; the general arm goes through the
+        ``match_memories`` SQL function, which orders by the same cast.
+        """
         try:
             filter_obj = json.loads(filter_json or "{}")
         except json.JSONDecodeError:
@@ -162,11 +171,15 @@ class DocumentRepository:
                     {"emb": emb, "k": top_k, "chat_id": chat_id},
                 )
             ).all()
+        # ``halfvec(3072)``, not ``vector``: this is the only overload of
+        # ``match_memories`` (0057 dropped the vector one), and its ORDER BY
+        # is ``embedding::halfvec(3072) <=> <query>`` — the exact expression
+        # the HNSW index is built on. Mirrors the fast path above.
         return (
             await self.db.execute(
                 text(
                     "SELECT content, similarity FROM match_memories("
-                    "CAST(:emb AS vector), :k, CAST(:filter AS jsonb))"
+                    "CAST(:emb AS halfvec(3072)), :k, CAST(:filter AS jsonb))"
                 ),
                 {"emb": emb, "k": top_k, "filter": filter_json},
             )
