@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Pre-flip blue-green deploy smoke gate.
 
-Runs ONE real bot turn end-to-end against the live service layer (real
+Runs real bot turns end-to-end against the live service layer (real
 ``ConversationService`` -> ``ConversationState``) with the LLM agent and the
-Zalo transport stubbed, so the turn makes no external calls and costs nothing,
+Zalo transport stubbed, so a turn makes no external calls and costs nothing,
 yet still exercises the exact regression surface behind the 2026-07 production
 outages:
 
@@ -14,16 +14,34 @@ outages:
   * ``ConversationEventBus.schedule_realtime``        -> ``MissingGreenlet`` in
     the fire-and-forget realtime task
 
+Each probe seeds its own throwaway conversation and runs one turn. The gate
+passes only when EVERY probe records its exact terminal state, so the flip is
+gated on the same delivery machinery a candidate receives:
+
+  * ``single-message``  -- progressive send OFF: the pre-existing path.
+  * ``progressive-send`` -- progressive send ON with a streaming stub agent:
+    the early bubble AND the remainder must both persist as SENT, each with its
+    own finalized outbox command, and together they must carry the streamed
+    answer exactly once.
+  * ``progressive-send-failure`` -- progressive send ON, the lane dies right
+    after the early bubble reached the wire. A bubble the candidate is already
+    reading must never be blanked: the row stays SENT with its own text and its
+    outbox command is terminalized (REL-13), never overwritten with the
+    "nothing was sent" empty reply the failure paths used to record.
+
 Why the stubs are safe: the smoke dependencies wire the REAL
 ``ConversationService(db)`` and ``RetrievalRepository(db)``. The former delegates
-to ``ConversationState`` -- where all three failure modes live. Only the pure
+to ``ConversationState`` -- where all the failure modes above live. Only the pure
 LLM/transport seams are stubbed, so persistence + realtime run unmodified without
-constructing provider clients or resolving integration secrets.
+constructing provider clients or resolving integration secrets. The progressive
+probes add no wall-clock waiting: the stream is a canned answer and the one
+cross-task rendezvous (the failing lane waits for the transport stub's ack) is a
+bounded guard, so a path that never sends fails the gate instead of hanging it.
 
-Exit code is 0 ONLY when the turn completes with no raised exception, no
-unhandled background-task error, and the session is not left in a needs-rollback
-state. Any other outcome must abort the blue-green flip (the old color keeps
-serving traffic).
+Exit code is 0 ONLY when every turn completes with no raised exception, no
+unhandled background-task error, and the sessions are not left in a
+needs-rollback state. Any other outcome must abort the blue-green flip (the old
+color keeps serving traffic).
 
 Usage (inside the new-color container, before ``flip_caddy.sh``):
 
@@ -41,6 +59,7 @@ import argparse
 import asyncio
 import sys
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -57,9 +76,32 @@ from app.models.outbox import OutboxStatus, OutboundOutbox
 
 # Any non-empty reply reaches the real send/outcome path.
 SMOKE_REPLY = "Kiem tra trien khai thanh cong."  # diacritics-stripped upstream anyway
-
 # Distinctive marker so the throwaway rows are unambiguous and easy to clean up.
 SMOKE_MARKER = "__smoke__"
+
+# The progressive probes stream a canned answer instead of returning it whole.
+# Shape (all three properties are load-bearing, see the module docstring):
+#   * it clears PROGRESSIVE_BUBBLE_MIN_CHARS before the FIRST sentence end, so
+#     the sender really splits instead of falling back to the single-message
+#     path, and the remainder after that boundary is non-empty;
+#   * it stays under PROGRESSIVE_MAX_WAIT_CHARS, past which the sender gives up
+#     and the turn degrades to one message;
+#   * it carries a concrete answer signal (a digit) so it passes the substance
+#     gate, and no phone/email/job-id shape, so grounding ships it unchanged.
+SMOKE_STREAM_PARTS = (
+    "Day la lan kiem tra trien khai cua he thong danh dau mau moi, so 3 duoc chay thu ",
+    "truoc khi chuyen sang mau chinh thuc. ",
+    "Buoc dau kiem tra cac bang du lieu va cot trang thai cua phien ban truoc khi ",
+    "chay lai toan bo luong trich xuat, lap chi muc va doi chieu ket qua. ",
+    "Ket qua cua lan chay nay duoc ghi lai de doi chieu voi lan chay truoc do, ",
+    "va bao cao trien khai duoc dong lai ngay sau khi hoan tat. ",
+)
+SMOKE_STREAM_REPLY = "".join(SMOKE_STREAM_PARTS)
+
+# How long the failing lane waits for the transport stub to report that the
+# early bubble really went out. A path that never sends must fail the gate, not
+# hang the deploy, so this is a bound on a broken build rather than a sleep.
+WIRE_ACK_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass
@@ -68,6 +110,9 @@ class _SmokeSendResult:
 
     The runner only reads ``ok``/``error_class``/``suppressed`` and hands the
     object to ``_stamp_outbound_telemetry`` (which reads ``msg_id``/``telemetry``).
+    ``outbox_id`` is the row the real dispatcher claimed and returns: the
+    progressive sender terminalizes the early bubble against that id, so a
+    stand-in without it would collapse the two-bubble split into a single send.
     """
 
     ok: bool = True
@@ -76,6 +121,7 @@ class _SmokeSendResult:
     suppressed: bool = False
     msg_id: str = "smoke"
     telemetry: object = None
+    outbox_id: int | None = None
 
 
 class _StubAgent:
@@ -86,6 +132,55 @@ class _StubAgent:
 
     async def direct(self, _user_text: str, **_kwargs: object) -> str:
         return SMOKE_REPLY
+
+
+class _StubStreamingAgent:
+    """Streams the canned answer through ``on_delta`` before returning it.
+
+    Progressive send reads the answer as the provider produces it, so a stub
+    that never calls ``on_delta`` would leave the flag on with nothing to send
+    and the gate would pass without ever opening a bubble. The parts are pushed
+    with a bare ``asyncio.sleep(0)`` yield between them -- not a wall-clock
+    wait -- so the early sender runs while the lane is still generating, which
+    is the interleaving production sees.
+    """
+
+    async def agent(self, _user_text: str, **kwargs: object) -> str:
+        on_delta = kwargs.get("on_delta")
+        for part in SMOKE_STREAM_PARTS:
+            if on_delta is not None:
+                await on_delta(part)
+            await asyncio.sleep(0)
+        return SMOKE_STREAM_REPLY
+
+    async def direct(self, _user_text: str, **_kwargs: object) -> str:
+        return SMOKE_STREAM_REPLY
+
+
+class _StubFailingStreamingAgent:
+    """Streams one sendable bubble, waits for the wire, then fails the lane.
+
+    This is the REL-13 shape: the candidate is already reading the bubble when
+    the lane dies, so the terminal path has to record THAT message instead of
+    the "nothing was sent" empty reply. The wait is on the transport seam's
+    ack, so the failure can only land after the bubble was really dispatched
+    rather than racing it.
+    """
+
+    def __init__(self, wire_ack: asyncio.Event) -> None:
+        self.wire_ack = wire_ack
+
+    async def agent(self, _user_text: str, **kwargs: object) -> str:
+        on_delta = kwargs.get("on_delta")
+        if on_delta is not None:
+            # One delta carrying the whole answer: a complete, sendable bubble
+            # is available to the sender however the two tasks interleave.
+            await on_delta(SMOKE_STREAM_REPLY)
+        await asyncio.wait_for(self.wire_ack.wait(), timeout=WIRE_ACK_TIMEOUT_SECONDS)
+        raise RuntimeError("smoke probe: the agent lane failed after the early bubble was sent")
+
+    async def direct(self, _user_text: str, **_kwargs: object) -> str:
+        raise RuntimeError("smoke probe: the agent lane failed before any bubble")
 
 
 class _StubZalo:
@@ -107,7 +202,7 @@ async def _stub_embedder(_text: str) -> list[float]:
     return [0.0] * 3072
 
 
-def _build_smoke_deps(db) -> GraphDeps:
+def _smoke_graph_deps(db, *, agent, progressive_send: bool) -> GraphDeps:
     """Wire the real turn services without constructing unused provider clients."""
     from app.services.conversation import ConversationService
     from app.services.retrieval import RetrievalRepository
@@ -115,13 +210,44 @@ def _build_smoke_deps(db) -> GraphDeps:
 
     return GraphDeps(
         db=db,
-        agent=_StubAgent(),
+        agent=agent,
         embedder=_stub_embedder,
         zalo=_StubZalo(),
         conversation=ConversationService(db),
         retrieval=RetrievalRepository(db),
         lead=build_lead_context(db),
+        progressive_send=progressive_send,
     )
+
+
+def _build_smoke_deps(db) -> GraphDeps:
+    """Progressive send OFF: the pre-existing single-message delivery path."""
+    return _smoke_graph_deps(db, agent=_StubAgent(), progressive_send=False)
+
+
+def _build_progressive_smoke_deps(db) -> GraphDeps:
+    """Progressive send ON with a streaming agent: early bubble plus remainder."""
+    return _smoke_graph_deps(db, agent=_StubStreamingAgent(), progressive_send=True)
+
+
+def _build_failing_progressive_smoke_deps(db) -> GraphDeps:
+    """Progressive send ON with a lane that dies once the bubble reached the wire."""
+    return _smoke_graph_deps(
+        db,
+        agent=_StubFailingStreamingAgent(asyncio.Event()),
+        progressive_send=True,
+    )
+
+
+def _dispatch_signal(deps: GraphDeps) -> asyncio.Event | None:
+    """The stub agent's transport-ack event, when this probe's agent has one.
+
+    The transport stub sets it the moment a command reaches the (stubbed)
+    channel, which is how the failing-lane probe guarantees the lane can only
+    die AFTER the early bubble is with the candidate. Probes whose agent never
+    waits on it have no signal.
+    """
+    return getattr(getattr(deps, "agent", None), "wire_ack", None)
 
 
 async def _seed_smoke_conversation(
@@ -202,6 +328,97 @@ def _resolved_provider_message_id(
     return provider_id
 
 
+async def _load_bot_messages(db, *, conv_id) -> list[Message]:
+    """Every BOT message of the smoke conversation, oldest first."""
+    return (
+        await db.scalars(
+            select(Message)
+            .where(
+                Message.conversation_id == conv_id,
+                Message.sender == MessageSender.BOT,
+            )
+            .order_by(Message.id.asc())
+        )
+    ).all()
+
+
+async def _assert_delivered_bot_row(
+    db,
+    *,
+    message: Message,
+    expected_body: str,
+    label: str,
+    streamed_edge: str | None = None,
+) -> None:
+    """Require one delivered BOT row and its single outbox command to be terminal.
+
+    Shared by every probe so "delivered" cannot drift between the single-message
+    path and the two progressive paths: the body the candidate was sent, a SENT
+    status, a persisted provider id, no retained transport error, and exactly
+    one outbox row on the same terminal state.
+
+    ``streamed_edge`` is ``"prefix"``/``"suffix"`` for the halves of the
+    progressive split, where a row carries a slice of the streamed answer
+    rather than all of it. The slice must still be a non-blank piece of that
+    answer at that end, which is what a blanked or replaced bubble fails on.
+    """
+    if streamed_edge == "prefix":
+        aligned = bool(message.body) and expected_body.startswith(message.body)
+    elif streamed_edge == "suffix":
+        aligned = bool(message.body) and expected_body.endswith(message.body)
+    elif message.body != expected_body:
+        raise AssertionError("smoke BOT message body did not persist the expected reply")
+    else:
+        aligned = True
+    if not aligned:
+        raise AssertionError(
+            f"{label} body {message.body!r} was not a non-blank {streamed_edge} "
+            "of the streamed reply"
+        )
+    if message.delivery_status != DeliveryStatus.SENT:
+        raise AssertionError(
+            f"{label} delivery_status was {message.delivery_status!s}, expected SENT"
+        )
+    message_provider_id = _resolved_provider_message_id(
+        canonical_id=message.provider_message_id,
+        compatibility_id=message.zalo_message_id,
+        label=label,
+    )
+    if message.external_error is not None:
+        raise AssertionError(f"{label} should not retain external_error after SENT")
+
+    outboxes = (
+        await db.scalars(
+            select(OutboundOutbox)
+            .where(OutboundOutbox.message_id == message.id)
+            .order_by(OutboundOutbox.id.asc())
+        )
+    ).all()
+    if len(outboxes) != 1:
+        raise AssertionError(
+            f"expected exactly one outbound_outbox row for the {label}, found {len(outboxes)}"
+        )
+
+    outbox = outboxes[0]
+    if outbox.message_id != message.id:
+        raise AssertionError(
+            f"{label} outbound_outbox message_id {outbox.message_id} did not match the message id"
+        )
+    if outbox.status != OutboxStatus.SENT.value:
+        raise AssertionError(
+            f"{label} outbound_outbox status was {outbox.status!r}, expected {OutboxStatus.SENT.value!r}"
+        )
+    outbox_provider_id = _resolved_provider_message_id(
+        canonical_id=outbox.provider_message_id,
+        compatibility_id=outbox.zalo_message_id,
+        label=f"{label} outbound_outbox",
+    )
+    if outbox_provider_id != message_provider_id:
+        raise AssertionError(
+            f"{label} outbound_outbox provider message id did not match the message"
+        )
+
+
 async def _assert_persisted_delivery_invariant(
     db,
     *,
@@ -213,16 +430,7 @@ async def _assert_persisted_delivery_invariant(
     if message_id is None:
         raise AssertionError("run_turn did not persist a pending_message_id for the smoke turn")
 
-    bot_messages = (
-        await db.scalars(
-            select(Message)
-            .where(
-                Message.conversation_id == conv_id,
-                Message.sender == MessageSender.BOT,
-            )
-            .order_by(Message.id.asc())
-        )
-    ).all()
+    bot_messages = await _load_bot_messages(db, conv_id=conv_id)
     if len(bot_messages) != 1:
         raise AssertionError(
             f"expected exactly one BOT message for the smoke conversation, found {len(bot_messages)}"
@@ -233,53 +441,106 @@ async def _assert_persisted_delivery_invariant(
         raise AssertionError(
             f"smoke BOT message id {msg.id} did not match pending_message_id {message_id}"
         )
-    if msg.body != expected_reply:
-        raise AssertionError("smoke BOT message body did not persist the expected reply")
-    if msg.delivery_status != DeliveryStatus.SENT:
-        raise AssertionError(
-            f"smoke BOT message delivery_status was {msg.delivery_status!s}, expected SENT"
-        )
-    message_provider_id = _resolved_provider_message_id(
-        canonical_id=msg.provider_message_id,
-        compatibility_id=msg.zalo_message_id,
+    await _assert_delivered_bot_row(
+        db,
+        message=msg,
+        expected_body=expected_reply,
         label="smoke BOT message",
     )
-    if msg.external_error is not None:
-        raise AssertionError("smoke BOT message should not retain external_error after SENT")
 
-    outboxes = (
-        await db.scalars(
-            select(OutboundOutbox)
-            .where(OutboundOutbox.message_id.in_([row.id for row in bot_messages]))
-            .order_by(OutboundOutbox.id.asc())
-        )
-    ).all()
-    if len(outboxes) != 1:
+
+async def _assert_progressive_delivery_invariant(
+    db,
+    *,
+    conv_id,
+    remainder_message_id: int | None,
+    expected_reply: str = SMOKE_STREAM_REPLY,
+) -> None:
+    """Require BOTH progressive rows to survive the turn: the bubble and the rest.
+
+    The early bubble is already with the candidate when the remainder is sent, so
+    each half owns its own message row and its own outbox command. Two terminal
+    rows that concatenate back to the streamed answer also prove the split sent
+    no text twice and dropped none of it.
+    """
+    if remainder_message_id is None:
+        raise AssertionError("run_turn did not persist a pending_message_id for the smoke turn")
+
+    bot_messages = await _load_bot_messages(db, conv_id=conv_id)
+    if len(bot_messages) != 2:
         raise AssertionError(
-            f"expected exactly one outbound_outbox row for the smoke BOT message, found {len(outboxes)}"
+            "expected exactly two BOT messages for the smoke conversation (the early "
+            f"bubble and its remainder), found {len(bot_messages)}"
         )
 
-    outbox = outboxes[0]
-    if outbox.message_id != message_id:
+    bubble, remainder = bot_messages
+    if remainder.id != remainder_message_id:
         raise AssertionError(
-            f"smoke outbound_outbox message_id {outbox.message_id} did not match pending_message_id {message_id}"
+            f"progressive remainder message id {remainder.id} did not match "
+            f"pending_message_id {remainder_message_id}"
         )
-    if outbox.status != OutboxStatus.SENT.value:
-        raise AssertionError(
-            f"smoke outbound_outbox status was {outbox.status!r}, expected {OutboxStatus.SENT.value!r}"
-        )
-    outbox_provider_id = _resolved_provider_message_id(
-        canonical_id=outbox.provider_message_id,
-        compatibility_id=outbox.zalo_message_id,
-        label="smoke outbound_outbox",
+    await _assert_delivered_bot_row(
+        db,
+        message=bubble,
+        expected_body=expected_reply,
+        label="progressive early bubble",
+        streamed_edge="prefix",
     )
-    if outbox_provider_id != message_provider_id:
+    await _assert_delivered_bot_row(
+        db,
+        message=remainder,
+        expected_body=expected_reply,
+        label="progressive remainder",
+        streamed_edge="suffix",
+    )
+    if bubble.body + remainder.body != expected_reply:
         raise AssertionError(
-            "smoke outbound_outbox provider message id did not match the BOT message"
+            "the progressive bubbles did not carry the streamed answer exactly once "
+            f"({len(bubble.body)} + {len(remainder.body)} chars, expected {len(expected_reply)})"
         )
 
 
-async def _run_smoke(*, inject_failure: bool) -> int:
+async def _assert_delivered_bubble_invariant(
+    db,
+    *,
+    conv_id,
+    message_id: int | None,
+    expected_reply: str = SMOKE_STREAM_REPLY,
+) -> None:
+    """Require a bubble that already reached the wire to survive a failed lane.
+
+    The failure-after-bubble turn records the bubble as this turn's answer, so
+    the row stays SENT with the text the candidate is reading and its outbox
+    command is terminalized. The regression this exists for is the opposite: the
+    failure path recording "nothing was sent" against the bubble's own row, which
+    blanked a delivered message and left its command stuck in SENDING.
+    """
+    if message_id is None:
+        raise AssertionError("run_turn did not persist a pending_message_id for the smoke turn")
+
+    bot_messages = await _load_bot_messages(db, conv_id=conv_id)
+    if len(bot_messages) != 1:
+        raise AssertionError(
+            "expected exactly one BOT message for the failed progressive turn, found "
+            f"{len(bot_messages)}"
+        )
+
+    bubble = bot_messages[0]
+    if bubble.id != message_id:
+        raise AssertionError(
+            f"delivered bubble message id {bubble.id} did not match pending_message_id {message_id}"
+        )
+    await _assert_delivered_bot_row(
+        db,
+        message=bubble,
+        expected_body=expected_reply,
+        label="delivered early bubble",
+        streamed_edge="prefix",
+    )
+
+
+async def _run_probe(probe: "_SmokeProbe", *, inject_failure: bool) -> int:
+    """Run one bot turn end to end and require its persisted terminal state."""
     settings = get_settings()
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -304,27 +565,11 @@ async def _run_smoke(*, inject_failure: bool) -> int:
 
     real_dispatch_message_outbox = outbox_service.dispatch_message_outbox
 
-    async def _stub_dispatch_message_outbox(_db, *, message_id: int) -> _SmokeSendResult:  # noqa: ARG001
-        # ConversationService.dispatch_outbound_message calls this as
-        # ``dispatch_message_outbox(self.db, message_id=...)`` (db positional),
-        # matching the real signature ``dispatch_message_outbox(db, *, message_id)``.
-        return _SmokeSendResult(msg_id=f"smoke-{message_id}")
-
-    outbox_service.dispatch_message_outbox = _stub_dispatch_message_outbox  # type: ignore[assignment]
-
-    if inject_failure:
-        # Simulate the kwarg-drift outage class: a record_bot_outcome that raises.
-        from app.services.conversation import ConversationService
-
-        async def _boom(self, _conv, **_kwargs):  # noqa: ANN001, ARG001
-            raise TypeError("injected record_bot_outcome kwarg drift")
-
-        ConversationService.record_bot_outcome = _boom  # type: ignore[assignment,method-assign]
-
     conv_id = identity_id = contact_id = None
     result_code = 1
     success_message = None
     cleanup_failed = False
+    shipped_record_bot_outcome = None
     try:
         # Seed in its own session, then CLOSE it. The turn runs in a FRESH
         # session so run_turn's ``svc.get`` loads the conversation the same way
@@ -339,7 +584,42 @@ async def _run_smoke(*, inject_failure: bool) -> int:
             version_at_start = int(conv.version or 0)
 
         async with session_factory() as db:
-            deps = _build_smoke_deps(db)
+            deps = probe.build_deps(db)
+            wire_ack = _dispatch_signal(deps)
+
+            async def _stub_dispatch_message_outbox(
+                dispatch_db, *, message_id: int
+            ) -> _SmokeSendResult:
+                # ConversationService.dispatch_outbound_message calls this as
+                # ``dispatch_message_outbox(self.db, message_id=...)`` (db positional),
+                # matching the real signature
+                # ``dispatch_message_outbox(db, *, message_id)``.
+                #
+                # The real dispatcher returns the row it claimed, and the
+                # progressive sender terminalizes the early bubble against that
+                # id, so the stand-in reports the row claim_send just wrote.
+                outbox_id = await dispatch_db.scalar(
+                    select(OutboundOutbox.id).where(OutboundOutbox.message_id == message_id)
+                )
+                if wire_ack is not None:
+                    wire_ack.set()
+                return _SmokeSendResult(
+                    msg_id=f"smoke-{message_id}",
+                    outbox_id=None if outbox_id is None else int(outbox_id),
+                )
+
+            outbox_service.dispatch_message_outbox = _stub_dispatch_message_outbox  # type: ignore[assignment]
+
+            if inject_failure:
+                # Simulate the kwarg-drift outage class: a record_bot_outcome that raises.
+                from app.services.conversation import ConversationService
+
+                shipped_record_bot_outcome = ConversationService.record_bot_outcome
+
+                async def _boom(self, _conv, **_kwargs):  # noqa: ANN001, ARG001
+                    raise TypeError("injected record_bot_outcome kwarg drift")
+
+                ConversationService.record_bot_outcome = _boom  # type: ignore[assignment,method-assign]
 
             state = BotRunState(
                 conversation_id=str(conv_id),
@@ -359,16 +639,11 @@ async def _run_smoke(*, inject_failure: bool) -> int:
                 _fail(f"background task error(s): {[type(e).__name__ for e in task_errors]}")
             else:
                 result = outcome.get("outcome") if isinstance(outcome, dict) else None
-                if result != "sent":
-                    _fail(f"unexpected outcome: {result!r}")
+                if result != probe.expected_outcome:
+                    _fail(f"unexpected outcome: {result!r}, expected {probe.expected_outcome!r}")
                 else:
-                    await _assert_persisted_delivery_invariant(
-                        db,
-                        conv_id=conv_id,
-                        message_id=state.pending_message_id,
-                        expected_reply=SMOKE_REPLY,
-                    )
-                    success_message = f"SMOKE OK: outcome={result!r}"
+                    await probe.check(db, conv_id=conv_id, state=state)
+                    success_message = f"SMOKE OK [{probe.label}]: outcome={result!r}"
                     result_code = 0
     except Exception as exc:  # noqa: BLE001 -- the whole point is to catch anything
         import traceback
@@ -390,6 +665,10 @@ async def _run_smoke(*, inject_failure: bool) -> int:
             except Exception as cleanup_exc:  # noqa: BLE001 -- cleanup must fail closed
                 cleanup_failed = True
                 _fail(f"cleanup incomplete: {cleanup_exc}")
+        if shipped_record_bot_outcome is not None:
+            # The next probe runs against the class the image shipped, so undo
+            # the injected method instead of leaking it into every later turn.
+            ConversationService.record_bot_outcome = shipped_record_bot_outcome  # type: ignore[method-assign]
         await engine.dispose()
 
     if cleanup_failed:
@@ -397,6 +676,104 @@ async def _run_smoke(*, inject_failure: bool) -> int:
     if success_message is not None:
         print(success_message, file=sys.stderr)
     return result_code
+
+
+async def _check_single_message(db, *, conv_id, state) -> None:
+    await _assert_persisted_delivery_invariant(
+        db,
+        conv_id=conv_id,
+        message_id=state.pending_message_id,
+        expected_reply=SMOKE_REPLY,
+    )
+
+
+async def _check_progressive_pair(db, *, conv_id, state) -> None:
+    await _assert_progressive_delivery_invariant(
+        db,
+        conv_id=conv_id,
+        remainder_message_id=state.pending_message_id,
+        expected_reply=SMOKE_STREAM_REPLY,
+    )
+
+
+async def _check_delivered_bubble(db, *, conv_id, state) -> None:
+    await _assert_delivered_bubble_invariant(
+        db,
+        conv_id=conv_id,
+        message_id=state.pending_message_id,
+        expected_reply=SMOKE_STREAM_REPLY,
+    )
+
+
+@dataclass(frozen=True)
+class _SmokeProbe:
+    """One end-to-end turn variant the pre-flip gate runs.
+
+    Every probe wires the real services and the real runner; only the delivery
+    path under test differs, so a regression in any of them aborts the flip.
+    ``build_deps`` is resolved by name at call time, which is what lets a test
+    substitute the deps builder.
+    """
+
+    label: str
+    build_deps: Callable[[object], GraphDeps]
+    expected_outcome: str
+    check: Callable[..., Awaitable[None]]
+
+
+# The flip is gated on every probe below. Order matters only for reporting: the
+# single-message path runs first so a broad breakage is diagnosed before the
+# progressive ones, which assume the same turn machinery works.
+_SINGLE_MESSAGE_PROBE = _SmokeProbe(
+    label="single-message",
+    build_deps=lambda db: _build_smoke_deps(db),
+    expected_outcome="sent",
+    check=_check_single_message,
+)
+
+_PROGRESSIVE_PROBE = _SmokeProbe(
+    label="progressive-send",
+    build_deps=lambda db: _build_progressive_smoke_deps(db),
+    expected_outcome="sent",
+    check=_check_progressive_pair,
+)
+
+_PROGRESSIVE_FAILURE_PROBE = _SmokeProbe(
+    label="progressive-send-failure",
+    build_deps=lambda db: _build_failing_progressive_smoke_deps(db),
+    expected_outcome="error",
+    check=_check_delivered_bubble,
+)
+
+SMOKE_PROBES = (_SINGLE_MESSAGE_PROBE, _PROGRESSIVE_PROBE, _PROGRESSIVE_FAILURE_PROBE)
+
+
+async def _run_smoke(*, inject_failure: bool) -> int:
+    return await _run_probe(_SINGLE_MESSAGE_PROBE, inject_failure=inject_failure)
+
+
+async def _run_progressive_smoke(*, inject_failure: bool) -> int:
+    return await _run_probe(_PROGRESSIVE_PROBE, inject_failure=inject_failure)
+
+
+async def _run_progressive_failure_smoke(*, inject_failure: bool) -> int:
+    return await _run_probe(_PROGRESSIVE_FAILURE_PROBE, inject_failure=inject_failure)
+
+
+async def _run_smoke_gate(*, inject_failure: bool) -> int:
+    """Run every probe in order; the gate passes only when all of them do.
+
+    Sequential on purpose: the probes share the event loop's exception handler
+    and, under ``--inject-failure``, the patched outcome recorder.
+    """
+    failed: list[str] = []
+    for probe in SMOKE_PROBES:
+        if await _run_probe(probe, inject_failure=inject_failure) != 0:
+            failed.append(probe.label)
+    if failed:
+        _fail(f"probe(s) failed: {', '.join(failed)}")
+        return 1
+    return 0
 
 
 def _fail(message: str) -> None:
@@ -411,7 +788,7 @@ def main() -> int:
         help="self-test: make record_bot_outcome raise; the gate MUST exit 1",
     )
     args = parser.parse_args()
-    return asyncio.run(_run_smoke(inject_failure=args.inject_failure))
+    return asyncio.run(_run_smoke_gate(inject_failure=args.inject_failure))
 
 
 if __name__ == "__main__":
