@@ -29,12 +29,18 @@ class _FakeRedis:
         self.store: dict[str, int] = {}
         self.expiries: dict[str, int] = {}
 
-    async def incr(self, key: str) -> int:
-        self.store[key] = self.store.get(key, 0) + 1
-        return self.store[key]
 
-    async def expire(self, key: str, window: int) -> None:
-        self.expiries[key] = window
+    async def eval(self, _script: str, _numkeys: int, key: str, window: int) -> int:
+        """The limiter's atomic bucket script: INCR, arming the window on a new bucket only.
+
+        Redis runs a script to completion without interleaving, so this is a
+        single synchronous step — the whole point of the script is that the
+        counter and its TTL cannot be separated by a crash.
+        """
+        self.store[key] = self.store.get(key, 0) + 1
+        if self.store[key] == 1:
+            self.expiries[key] = window
+        return self.store[key]
 
 
 def _boom(*_args, **_kwargs):

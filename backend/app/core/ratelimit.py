@@ -29,6 +29,27 @@ _LIMITER_UNAVAILABLE = (
     "Vui lòng thử lại sau vài phút."
 )
 
+# Arm the bucket's window on its first hit, atomically with the increment.
+# These must not be separable: a process death or dropped connection between
+# INCR and EXPIRE leaves a counter that no later request will ever reset, so
+# the caller stays 429'd until an operator deletes the key by hand — on the
+# auth path this module exists to keep available. Redis runs a script to
+# completion without interleaving, so the two commands cannot drift apart.
+#
+# The window is armed only when the counter is new, and never re-armed on a
+# later hit. Re-arming on every increment would be self-healing for a stranded
+# key, but it also means a client that keeps hammering a bucket it is already
+# locked out of extends its own lockout on every rejected request — the
+# limiter would then pin that caller out indefinitely with no recovery short
+# of operator intervention, which is strictly worse than the race it fixes.
+_BUCKET_INCREMENT = """
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return current
+"""
+
 
 def _client_ip(request: Request) -> str:
     # Honour the first hop of X-Forwarded-For (set by Caddy) when present, so
@@ -50,22 +71,15 @@ async def _enforce_bucket(
 ) -> None:
     """Increment ``key`` and reject with 429 once it exceeds ``limit``/``window``s.
 
-    The window TTL is re-armed on *every* increment, not only on the first
-    one. The counter and its expiry are two separate Redis commands, so a
-    process death or a dropped connection between them leaves a counter that
-    no later request will ever reset: every subsequent hit pushes it further
-    past ``limit`` and the caller is 429'd until an operator deletes the key
-    by hand — on the auth path this module exists to keep available.
-    Re-arming on every hit makes that state self-healing, at the cost of one
-    extra round trip per request, which is noise next to the Argon2 verify or
-    LLM call the limiter is shielding. It is also never more permissive than
-    a fixed window: a bucket still admits at most ``limit`` requests per
-    ``window`` seconds, just measured from its most recent hit.
+    The increment and the window's TTL are established by a single atomic
+    Redis script (see ``_BUCKET_INCREMENT``): the TTL is armed on the bucket's
+    first hit and never re-armed afterwards. A bucket therefore admits at most
+    ``limit`` requests per ``window`` seconds, measured from its first hit,
+    and a rejected request does not push that window further out.
     """
     try:
         redis = get_redis()
-        count = await redis.incr(key)
-        await redis.expire(key, window)
+        count = await redis.eval(_BUCKET_INCREMENT, 1, key, window)
         if count > limit:
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, _TOO_MANY_REQUESTS)
     except HTTPException:

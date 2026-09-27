@@ -37,12 +37,11 @@ class _CountingRedis:
     def __init__(self) -> None:
         self.counts: dict[str, int] = {}
 
-    async def incr(self, key: str) -> int:
+
+    async def eval(self, _script: str, _numkeys: int, key: str, window: int) -> int:
+        """The limiter's atomic bucket script, run to completion without interleaving."""
         self.counts[key] = self.counts.get(key, 0) + 1
         return self.counts[key]
-
-    async def expire(self, key: str, window: int) -> None:
-        return None
 
 
 def _install_production_limiter(monkeypatch, *, limit: int, window: int = 60) -> _CountingRedis:

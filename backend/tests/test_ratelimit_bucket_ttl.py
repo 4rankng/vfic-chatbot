@@ -1,17 +1,28 @@
-"""The rate-limit bucket can never be left counting without a window TTL.
+"""The rate-limit bucket's counter and its window are one indivisible step.
 
-``_enforce_bucket`` issues its counter and its expiry as two separate Redis
-commands, so the interval between them is a real window in which a dead
-process or a dropped connection leaves ``rl:<prefix>:<bucket>`` counting
-towards its limit with nothing to reset it. Every later request then pushes the
-count further over the limit and the caller is 429'd until an operator deletes
-the key by hand — on the auth path the limiter exists to keep available.
+``_enforce_bucket`` runs a single Redis script that INCRs the bucket and arms
+its TTL when — and only when — the counter is new. Two properties follow, and
+both are load-bearing:
 
-These tests drive the production branch against a Redis double that keeps real
-TTL state (and a real expiry clock is not needed: the assertion is that a TTL
-is *armed*, and by how much). Faults are injected exactly where production
-faults land — the EXPIRE that follows the first INCR — and the invariant is
-checked after the storm has settled, sequentially and under concurrency.
+- The counter and its TTL cannot be separated. A process death or dropped
+  connection between them is no longer expressible, so a bucket can no longer be
+  left counting towards its limit with nothing to reset it.
+- A rejected request does not re-arm the window. This is the property that
+  constrains the design: re-arming the window on every increment looks
+  self-healing, but it means a client that keeps hammering a bucket it is
+  already locked out of extends its own lockout on every rejected request. The
+  limiter would then pin that caller out indefinitely, with no recovery short
+  of an operator deleting the key — on the auth path, strictly worse than the
+  race the script exists to close.
+
+Note the window value is constant in these tests, so re-arming the TTL is
+invisible in the stored TTL alone — it would write the same number back. The
+double therefore counts *arming operations*, which is the only way to observe
+the regression.
+
+The double models the script as one uninterruptible step, because that is what
+Redis guarantees. Any command the limiter adds beyond this script shows up here
+as an ``AttributeError`` rather than as a silently unexercised path.
 """
 
 from __future__ import annotations
@@ -25,6 +36,7 @@ from fastapi import HTTPException
 from app.core import ratelimit
 
 WINDOW = 90
+LIMIT = 3
 
 
 def _request(xff: str) -> SimpleNamespace:
@@ -34,51 +46,45 @@ def _request(xff: str) -> SimpleNamespace:
 
 
 class _BucketRedis:
-    """Redis double with real TTL state for the commands the limiter issues.
-
-    Implements only ``incr`` and ``expire`` — the whole surface ``_enforce_bucket``
-    uses — so a command added to the limiter without updating this double shows up
-    here as an ``AttributeError`` rather than as a silently unexercised path.
-
-    ``fail_expires`` makes the next N EXPIRE calls raise the way a dropped
-    connection does: the INCR has already landed, the expiry never does. Every
-    command yields first so concurrent callers genuinely interleave instead of
-    each running to completion.
-    """
+    """Redis double exposing exactly the script surface the limiter uses."""
 
     def __init__(self) -> None:
         self.counts: dict[str, int] = {}
-        # ``None`` means "key exists, no expiry set" — the poisoned state.
+        # ``None`` means "key exists, no expiry set" — a stranded bucket.
         self.ttls: dict[str, int | None] = {}
-        self.fail_expires = 0
+        self.arms = 0
+        self.fail_next_eval = 0
         self.interleavings = 0
 
     async def _tick(self) -> None:
+        """Yield before the script so concurrent callers queue up realistically."""
         self.interleavings += 1
         await asyncio.sleep(0)
 
-    async def incr(self, key: str) -> int:
+    async def eval(self, _script: str, _numkeys: int, key: str, window: int) -> int:
         await self._tick()
+        if self.fail_next_eval:
+            self.fail_next_eval -= 1
+            raise ConnectionError("redis unavailable")
+        # No yield between the INCR and the EXPIRE: Redis runs a script to
+        # completion, so the two cannot be interrupted apart.
         self.counts[key] = self.counts.get(key, 0) + 1
-        self.ttls.setdefault(key, None)
+        if self.counts[key] == 1:
+            self.arms += 1
+            self.ttls[key] = window
         return self.counts[key]
 
-    async def expire(self, key: str, window: int) -> None:
-        await self._tick()
-        if self.fail_expires:
-            self.fail_expires -= 1
-            raise ConnectionError("connection dropped before EXPIRE landed")
-        self.ttls[key] = window
-
-    def poison(self, key: str, count: int) -> None:
-        """Seed a bucket the way a crash between INCR and EXPIRE leaves it."""
+    def strand(self, key: str, count: int) -> None:
+        """Seed a bucket with a counter but no window, as an older build could leave it."""
         self.counts[key] = count
         self.ttls[key] = None
 
 
 def _install(monkeypatch, redis: _BucketRedis) -> None:
     """Run the limiter's production branch against ``redis``."""
-    monkeypatch.setattr(ratelimit, "get_settings", lambda: SimpleNamespace(app_env="production"))
+    monkeypatch.setattr(
+        ratelimit, "get_settings", lambda: SimpleNamespace(app_env="production")
+    )
     monkeypatch.setattr(ratelimit, "get_redis", lambda: redis)
 
 
@@ -92,153 +98,170 @@ async def _record(coro) -> str:
 
 
 @pytest.mark.asyncio
-async def test_the_first_increment_always_arms_the_window(monkeypatch):
+async def test_the_first_hit_arms_the_window(monkeypatch):
     redis = _BucketRedis()
     _install(monkeypatch, redis)
 
-    await ratelimit.enforce_rate_limit(_request("203.0.113.7"), "login", limit=5, window=WINDOW)
-
-    assert redis.ttls["rl:login:203.0.113.7"] == WINDOW
-
-
-@pytest.mark.asyncio
-async def test_a_bucket_that_lost_its_ttl_is_rearmed_instead_of_staying_429_forever(monkeypatch):
-    """The regression: a counter stranded without a TTL must not self-perpetuate.
-
-    Seeding the bucket over its limit with no expiry is exactly what a process
-    death between the INCR and the EXPIRE leaves behind. The 429 below is correct
-    — the count really is over budget — but the expiry it re-arms is what lets the
-    caller back out of that state on their own instead of needing an operator.
-    """
-    redis = _BucketRedis()
-    _install(monkeypatch, redis)
-    redis.poison("rl:login:203.0.113.9", count=9)
-
-    with pytest.raises(HTTPException) as exc:
-        await ratelimit.enforce_rate_limit(_request("203.0.113.9"), "login", limit=5, window=WINDOW)
-    assert exc.value.status_code == 429
-
-    assert redis.ttls["rl:login:203.0.113.9"] == WINDOW
-
-
-@pytest.mark.asyncio
-async def test_a_dropped_connection_between_incr_and_expire_is_healed_by_the_next_request(
-    monkeypatch,
-):
-    redis = _BucketRedis()
-    _install(monkeypatch, redis)
-    # The first request's INCR lands; its EXPIRE dies with the connection. The
-    # limiter fails open (auth must stay available), leaving a TTL-less counter.
-    redis.fail_expires = 1
-
-    await ratelimit.enforce_rate_limit(_request("198.51.100.4"), "login", limit=5, window=WINDOW)
-
-    assert redis.counts["rl:login:198.51.100.4"] == 1
-    assert redis.ttls["rl:login:198.51.100.4"] is None
-
-    # The next request must re-establish the window rather than add to a bucket
-    # that could never reset.
-    await ratelimit.enforce_rate_limit(_request("198.51.100.4"), "login", limit=5, window=WINDOW)
-
-    assert redis.ttls["rl:login:198.51.100.4"] == WINDOW
-
-
-@pytest.mark.asyncio
-async def test_a_dropped_expiry_on_a_fail_closed_bucket_is_healed_too(monkeypatch):
-    """The LLM bucket fails closed, so the poisoned counter is denied and grows.
-
-    It must still be re-armed, or that one Redis blip costs the user their LLM
-    budget for the lifetime of the deployment.
-    """
-    redis = _BucketRedis()
-    _install(monkeypatch, redis)
-    redis.fail_expires = 1
-    key = "rl:web-chat-turn:user-1"
-
-    with pytest.raises(HTTPException) as exc:
-        await ratelimit.enforce_rate_limit_key(
-            "web-chat-turn", "user-1", limit=1, window=WINDOW, fail_open=False
-        )
-    assert exc.value.status_code == 429
-    assert redis.ttls[key] is None
-
-    with pytest.raises(HTTPException):
-        await ratelimit.enforce_rate_limit_key(
-            "web-chat-turn", "user-1", limit=1, window=WINDOW, fail_open=False
-        )
-
-    assert redis.ttls[key] == WINDOW
-
-
-@pytest.mark.asyncio
-async def test_concurrent_first_hits_leave_the_bucket_armed_and_counted_exactly(monkeypatch):
-    redis = _BucketRedis()
-    _install(monkeypatch, redis)
-    request = _request("203.0.113.20")
-    key = "rl:login:203.0.113.20"
-
-    await asyncio.gather(
-        *(
-            ratelimit.enforce_rate_limit(request, "login", limit=1000, window=WINDOW)
-            for _ in range(50)
-        )
+    await ratelimit.enforce_rate_limit(
+        _request("203.0.113.7"), "login", limit=LIMIT, window=WINDOW
     )
 
-    assert redis.counts[key] == 50
-    assert redis.ttls[key] == WINDOW
-    # The commands really did interleave; a fake that ran each caller to
-    # completion could not have caught an INCR racing an EXPIRE.
-    assert redis.interleavings > 50
+    assert redis.ttls["rl:login:203.0.113.7"] == WINDOW
+    assert redis.arms == 1
 
 
 @pytest.mark.asyncio
-async def test_a_concurrent_storm_that_loses_expiries_still_ends_with_every_bucket_armed(
-    monkeypatch,
-):
-    """Concurrency plus a flaky connection: the invariant has to survive both.
+async def test_a_rejected_request_does_not_re_arm_the_window(monkeypatch):
+    """The regression this design exists to prevent: an unbounded self-lockout.
 
-    Distinct clients, distinct buckets, EXPIRE failing for some of them — after
-    the storm every counter that exists must carry a window, otherwise whichever
-    request comes next inherits a bucket that can never reset.
+    A client that keeps hitting a bucket it is already over budget must not
+    re-arm the expiry each time. If it did, the lockout would never end on its
+    own and only an operator could clear it.
     """
     redis = _BucketRedis()
     _install(monkeypatch, redis)
-    clients = [f"203.0.113.{n}" for n in range(1, 13)]
-    # Every third EXPIRE dies mid-storm, so the buckets end up in a mix of
-    # armed, never-armed, and never-re-armed states.
-    redis.fail_expires = 6
+    req = _request("203.0.113.8")
 
-    async def hit(ip: str) -> None:
-        try:
-            await ratelimit.enforce_rate_limit(_request(ip), "login", limit=1000, window=WINDOW)
-        except HTTPException as exc:  # pragma: no cover - the budget is never reached
-            raise AssertionError(f"a 1000-request budget cannot be exhausted: {exc}")
+    for _ in range(LIMIT):
+        await ratelimit.enforce_rate_limit(req, "login", limit=LIMIT, window=WINDOW)
+    assert redis.arms == 1
 
-    # Two rounds: the first leaves some buckets armed by luck, the second must
-    # re-arm every one of them.
-    await asyncio.gather(*(hit(ip) for ip in clients))
-    await asyncio.gather(*(hit(ip) for ip in clients))
+    for _ in range(25):
+        assert (
+            await _record(
+                ratelimit.enforce_rate_limit(req, "login", limit=LIMIT, window=WINDOW)
+            )
+            == "429"
+        )
 
-    assert redis.fail_expires == 0
-    assert {ip: redis.ttls[f"rl:login:{ip}"] for ip in clients} == {ip: WINDOW for ip in clients}
-    assert all(redis.counts[f"rl:login:{ip}"] == 2 for ip in clients)
+    assert redis.arms == 1
+    assert redis.ttls["rl:login:203.0.113.8"] == WINDOW
 
 
 @pytest.mark.asyncio
-async def test_concurrent_hits_still_spend_the_shared_budget(monkeypatch):
-    """Arming the TTL must not let requests past the limit — including racing ones."""
+async def test_a_stranded_bucket_is_not_rearmed_by_further_requests(monkeypatch):
+    """A bucket left without a window stays exactly as stranded.
+
+    Re-arming it here would look like recovery, but it would happen on the
+    rejected path — precisely the path that must not extend a lockout. The
+    stranded state can only be cleared by the window elapsing, so this asserts
+    the window stays ``None`` rather than asserting a repair.
+    """
     redis = _BucketRedis()
     _install(monkeypatch, redis)
-    request = _request("198.51.100.30")
-    key = "rl:login:198.51.100.30"
+    req = _request("203.0.113.9")
+    redis.strand("rl:login:203.0.113.9", count=LIMIT + 5)
+
+    for _ in range(10):
+        assert (
+            await _record(
+                ratelimit.enforce_rate_limit(req, "login", limit=LIMIT, window=WINDOW)
+            )
+            == "429"
+        )
+        assert redis.ttls["rl:login:203.0.113.9"] is None
+
+    assert redis.arms == 0
+
+
+@pytest.mark.asyncio
+async def test_the_budget_is_still_enforced_under_concurrent_first_hits(monkeypatch):
+    """Atomicity must not cost the limiter its budget.
+
+    Many callers racing on a brand-new bucket must produce exactly ``limit``
+    admissions, and the window must be armed exactly once no matter how the
+    interleaving fell out.
+    """
+    redis = _BucketRedis()
+    _install(monkeypatch, redis)
+    req = _request("203.0.113.10")
 
     outcomes = await asyncio.gather(
         *(
-            _record(ratelimit.enforce_rate_limit(request, "login", limit=4, window=WINDOW))
+            _record(
+                ratelimit.enforce_rate_limit(req, "login", limit=LIMIT, window=WINDOW)
+            )
             for _ in range(20)
         )
     )
 
-    assert redis.counts[key] == 20
-    assert outcomes.count("ok") == 4
-    assert outcomes.count("429") == 16
+    assert outcomes.count("ok") == LIMIT
+    assert outcomes.count("429") == 20 - LIMIT
+    assert redis.counts["rl:login:203.0.113.10"] == 20
+    assert redis.ttls["rl:login:203.0.113.10"] == WINDOW
+    assert redis.arms == 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_storms_across_many_buckets_arm_each_window_once(monkeypatch):
+    """Per-bucket arming must hold when a storm spans many buckets at once."""
+    redis = _BucketRedis()
+    _install(monkeypatch, redis)
+
+    buckets = [f"203.0.113.{n}" for n in range(20, 32)]
+    outcomes = await asyncio.gather(
+        *(
+            _record(
+                ratelimit.enforce_rate_limit(
+                    _request(ip), "login", limit=LIMIT, window=WINDOW
+                )
+            )
+            for ip in buckets
+            for _ in range(4)
+        )
+    )
+
+    assert all(redis.ttls[f"rl:login:{ip}"] == WINDOW for ip in buckets)
+    assert all(redis.counts[f"rl:login:{ip}"] == 4 for ip in buckets)
+    # 4 hits against a limit of 3 admits 3 per bucket, across 12 buckets.
+    assert outcomes.count("ok") == 3 * len(buckets)
+    # One arming per bucket, not one per request.
+    assert redis.arms == len(buckets)
+
+
+@pytest.mark.asyncio
+async def test_an_unavailable_redis_fails_open_on_the_auth_path(monkeypatch):
+    """The limiter is best-effort for auth: a Redis outage must not lock users out.
+
+    This is why the script's failure is survivable at all — the counter never
+    lands, so no bucket is left half-written.
+    """
+    redis = _BucketRedis()
+    _install(monkeypatch, redis)
+    redis.fail_next_eval = 1
+
+    outcome = await _record(
+        ratelimit.enforce_rate_limit(
+            _request("203.0.113.40"), "login", limit=LIMIT, window=WINDOW
+        )
+    )
+
+    assert outcome == "ok"
+    assert redis.counts == {}
+    assert redis.arms == 0
+
+
+@pytest.mark.asyncio
+async def test_the_scarce_llm_budget_fails_closed_when_redis_is_unavailable(monkeypatch):
+    """The scarce deployment-wide resource is the opposite case: deny, do not admit.
+
+    An unverifiable budget must not hand out capacity, so the same script failure
+    that is survivable on the auth path is a 429 here.
+    """
+    redis = _BucketRedis()
+    _install(monkeypatch, redis)
+    redis.fail_next_eval = 1
+
+    outcome = await _record(
+        ratelimit.enforce_rate_limit(
+            _request("203.0.113.41"),
+            "llm",
+            limit=LIMIT,
+            window=WINDOW,
+            fail_open=False,
+        )
+    )
+
+    assert outcome == "429"
+    assert redis.counts == {}
+    assert redis.arms == 0
