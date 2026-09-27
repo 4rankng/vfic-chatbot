@@ -73,6 +73,32 @@
   the console renders the TingTing nav entry, opens the section, exposes the `API key TingTing`
   field, and keeps Save disabled until a key is typed.
 
+## Deployment (production, 2026-09-27)
+
+- `make deploy` (approved by the product owner in-session) — tag `13dee9ba`, blue/green backend
+  (`bg_deploy done. active=web-blue`), `PIPELINE OK: consumers live, no conversation awaiting a
+  reply, outbox drained`, frontend container recreated from the same tag.
+- First attempt failed in `release-check` at `npm run registry:check` (nothing was built, pushed or
+  deployed): `frontend/registry.json` still listed the four deleted project external-API modules and
+  did not publish `TingtingSection.tsx`. Fixed with `npm run registry:gen` (diff: −4 paths, +1) and
+  committed as `13dee9ba`.
+- After-checks against production:
+  - `GET /api/v1/admin/integrations/tingting` → **404 before / 401 after** (sibling `/jev` → 401);
+    `/health` → 200.
+  - Deployed chunk `assets/ZaloIntegrationPage-Y1i4HdWP.js` is byte-identical to the local build
+    (sha256 `cb8eeb0b67a856c3`, 59 697 B) and contains `TingTing`, `Đặt lại mật khẩu` and
+    `tingting_api_key`.
+- Operator action still required: paste the TingTing API key into *Cài đặt → TingTing · Đặt lại mật
+  khẩu*; until then the section reports `configured: false` and the guide stays out of the prompt.
+
+## Git housekeeping (same session)
+
+- Transient OpenWiki run-state files untracked + gitignored: `openwiki/.run.json`,
+  `openwiki/.last-update.json` (`.gitignore:119-120`); both remain on disk.
+- The two unpushed commits were rebuilt so the run-state files never appear in them
+  (`273a2e49` → now `6967c6c0` on top); `git diff <old HEAD> main` was empty, i.e. the final tree is
+  unchanged. Old commits remain in the reflog.
+
 ## Result
 
 - Overall status: PASS
