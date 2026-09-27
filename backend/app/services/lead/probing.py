@@ -6,8 +6,7 @@ import json
 import re
 
 from app.models.conversation import Message, MessageSender
-
-_PHONE_RE = re.compile(r"(?:\+?84|0)(?:\D*\d){8,10}\b")
+from app.shared.domain.text import has_phone
 
 
 def _last_bot_message(recent_messages: list[Message]) -> str:
@@ -26,7 +25,7 @@ def _bot_asked_for_name(text: str) -> bool:
 
 def _current_text_answers_name(current_user_text: str, recent_messages: list[Message]) -> bool:
     text = re.sub(r"\s+", " ", current_user_text or "").strip()
-    if not text or _PHONE_RE.search(text):
+    if not text or has_phone(text):
         return False
     lowered = text.casefold()
     if any(
@@ -129,7 +128,7 @@ def lead_collection_question(
         # Per-field same-turn "already answered" guards.
         if field == "name" and _current_text_answers_name(text, recent_messages):
             continue
-        if field == "phone" and bool(_PHONE_RE.search(text)):
+        if field == "phone" and has_phone(text):
             continue
         keywords = FIELD_DETECT_KEYWORDS.get(field)
         if keywords:

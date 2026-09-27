@@ -16,6 +16,7 @@ to it.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from inspect import Parameter, signature
 from typing import Any, NamedTuple
@@ -27,9 +28,11 @@ from app.graph.direct_context import (
     build_direct_user_text,
 )
 from app.graph.llm_semaphore import LLMThrottled
+from app.graph.message_values import sender_is
 from app.graph.ports import TurnDecisions
 from app.graph.progressive import _ProgressiveStream
 from app.graph.prompt_context import build_agent_user_text
+from app.graph.tingting_guide import TINGTING_CONSULTANT_HANDOFF_LINE
 from app.graph.router import (
     TurnRoute,
     _SUPPORT_CLARIFY_INTENTS,
@@ -49,7 +52,7 @@ from app.recruitment.domain.recommendation import (
     is_salary_profile_statement,
     parse_salary_band,
 )
-from app.shared.domain.text import normalize_vietnamese_text
+from app.shared.domain.text import has_phone, normalize_vietnamese_text
 
 logger = logging.getLogger(__name__)
 DIRECT_HISTORY_TOKEN_BUDGET = 12_000
@@ -61,8 +64,29 @@ _INCOME_COMPARE_HINT = (
 
 # The support OA itself serves the reset flow only; every other message hands the
 # employee to a human instead of answering (operator requirement).
-TINGTING_HANDOFF_REPLY = "Vui lòng chờ chuyên viên tư vấn liên hệ."
+# The consultant promise is one operator-approved sentence, defined in
+# tingting_guide.py so every fixed reply that ends with it is detected by the
+# escalation hook below (the exhaustion reply is longer than the line alone).
+TINGTING_HANDOFF_REPLY = TINGTING_CONSULTANT_HANDOFF_LINE
 TINGTING_HANDOFF_REASON = "tingting_support_handoff"
+
+# Off the support OA, a question outside the bot's scope does not get a
+# generated "let me steer you back to jobs" answer — the operator's contract is
+# a phone number first (a consultant can only call someone back) and the fixed
+# handoff line once it is in hand. Both replies are code, not model output.
+OUT_OF_SCOPE_HANDOFF_REPLY = TINGTING_CONSULTANT_HANDOFF_LINE
+OUT_OF_SCOPE_HANDOFF_REASON = "out_of_scope_handoff"
+OUT_OF_SCOPE_PHONE_ASK = (
+    "Dạ phần này em chuyển chuyên viên tư vấn hỗ trợ mình ạ. Anh/chị cho em xin số "
+    "điện thoại để chuyên viên liên hệ mình nhé?"
+)
+
+# Intents that answer a real recruiting question. While the phone ask is
+# outstanding, one of these means the candidate changed the subject, so the turn
+# is answered normally instead of asking for the number a second time.
+_PHONE_ASK_PIVOT_INTENTS: frozenset[str] = frozenset(
+    {"recommend", "faq_detail", "timetable", "contact"}
+)
 
 
 # The legacy keyword volatile-markers list and the recent-vacancy body scan
@@ -109,17 +133,19 @@ def _with_optional_trace(callable_obj, kwargs: dict, trace_sink) -> dict:
     return {**kwargs, "trace_sink": trace_sink}
 
 
-async def _tingting_support_handoff(state: BotRunState, deps: GraphDeps) -> None:
-    """Flag the support-OA conversation for a human.
+async def _consultant_handoff(state: BotRunState, deps: GraphDeps, *, reason: str) -> None:
+    """Flag the conversation for a human consultant.
 
-    The reply tells the employee to wait for a consultant; without this
-    transition nobody would know to contact them. Best-effort: a failure must
-    never swallow the reply the employee is waiting for.
+    Both fixed handoff lines promise that a consultant will take over, so the
+    reply is meaningless without this transition — nobody would know to make
+    contact. The reason distinguishes the two paths in the audit trail. It is
+    best-effort: a failure must never swallow the reply the candidate is
+    waiting for.
 
     ``preserve_turn_ownership`` keeps the escalation from invalidating THIS
     turn's send claim: the claim re-checks ``version`` and the live
     ``bot_lock_owner`` server-side at commit time, so a version bump or an early
-    lock release here would suppress the very reply the employee is waiting for.
+    lock release here would suppress the very reply the candidate is waiting for.
     """
     try:
         conv = await deps.conversation.get(state.conversation_id)
@@ -130,13 +156,85 @@ async def _tingting_support_handoff(state: BotRunState, deps: GraphDeps) -> None
         # version the turn started with (that one moved when the inbound landed).
         await deps.conversation.escalate_extracted_intent(
             conv,
-            reason=TINGTING_HANDOFF_REASON,
+            reason=reason,
             confidence=1.0,
             expected_version=conv.version,
             preserve_turn_ownership=True,
         )
     except Exception:  # noqa: BLE001 — the handoff is bookkeeping, never the answer
-        logger.warning("tingting support handoff failed", exc_info=True)
+        logger.warning("consultant handoff failed reason=%s", reason, exc_info=True)
+
+
+def _last_bot_message(recent_messages: list[Any]) -> str:
+    """The most recent non-empty bot message, or "" when there is none."""
+    for msg in reversed(recent_messages or []):
+        if sender_is(msg, "BOT") and str(getattr(msg, "body", "") or "").strip():
+            return str(msg.body).strip()
+    return ""
+
+
+def _out_of_scope_ask_key(text: str) -> str:
+    """Reduce the phone ask to a comparison key the stored reply still matches.
+
+    The stored message is not the constant verbatim: the runner rewrites
+    ``Anh/chị`` into the candidate's gender (``runner._claim_and_dispatch``) and
+    the channel may flatten plain text. Normalising accents and dropping the
+    address form leaves the sentence the ask actually is, so the flow survives
+    both rewrites.
+    """
+    normalized = normalize_vietnamese_text(text or "")
+    return re.sub(r"\banh/chi\b|\banh\b|\bchi\b", " ", normalized).strip()
+
+
+def _out_of_scope_phone_ask_outstanding(recent_messages: list[Any]) -> bool:
+    """Whether the previous turn already asked for the out-of-scope phone.
+
+    The ask is a fixed operator-approved constant, so the bot's own last message
+    identifies the step exactly — no extra model call and no reading to
+    misjudge.
+    """
+    last = _last_bot_message(recent_messages)
+    if not last:
+        return False
+    return _out_of_scope_ask_key(last) == _out_of_scope_ask_key(OUT_OF_SCOPE_PHONE_ASK)
+
+
+def _out_of_scope_handoff_turn(
+    route: TurnRoute,
+    *,
+    user_text: str,
+    recent_messages: list[Any],
+    lead_row: dict | None,
+) -> str | None:
+    """The fixed reply an off-scope turn owes, or None to answer normally.
+
+    Two entries reach this flow. A confident ``out_of_scope`` reading starts it:
+    the bot asks for a phone number because a consultant cannot call back
+    someone it cannot reach. The number itself almost never reads as
+    ``out_of_scope`` — a bare "0912..." classifies as profile data — so the
+    outstanding ask carries the flow across that turn, and a turn that supplies
+    a phone completes it with the handoff line.
+
+    The confidence floor guards only the *start*. A low-confidence reading is
+    "the model cannot tell", and handing a working recruiting lead to a human on
+    that basis is worse than answering; the continuation is never floor-gated
+    because the number is itself a low-confidence message.
+
+    A candidate who pivots back to a real question mid-flow is answered
+    normally (None) rather than asked for the number again.
+    """
+    if route.intent == "employee_support":
+        return None
+    awaiting_phone = _out_of_scope_phone_ask_outstanding(recent_messages)
+    if not awaiting_phone and not (
+        route.intent == "out_of_scope" and route.confidence >= ROUTE_CONFIDENCE_FLOOR
+    ):
+        return None
+    if awaiting_phone and route.intent in _PHONE_ASK_PIVOT_INTENTS:
+        return None
+    if has_phone(user_text) or bool(str((lead_row or {}).get("phone") or "").strip()):
+        return OUT_OF_SCOPE_HANDOFF_REPLY
+    return OUT_OF_SCOPE_PHONE_ASK
 
 
 async def _tingting_reset_allowed(deps: GraphDeps, conv) -> bool:
@@ -328,8 +426,26 @@ async def _agent_turn(
         else:
             if trace_sink is not None:
                 trace_sink.record_decision("tingting_scope", "support_only_handoff")
-            await _tingting_support_handoff(state, deps)
+            await _consultant_handoff(state, deps, reason=TINGTING_HANDOFF_REASON)
             return TINGTING_HANDOFF_REPLY
+    if not tingting_reset_allowed:
+        # This channel is not the support OA, so the OA branch above never
+        # claimed the turn. An off-scope question therefore gets no generated
+        # answer at all: the phone ask, then the fixed handoff line once a
+        # number is in hand. Only the handoff escalates — escalating on the ask
+        # would set HUMAN mode and starve the thread before the number arrives.
+        off_scope_reply = _out_of_scope_handoff_turn(
+            route,
+            user_text=user_text,
+            recent_messages=recent_messages,
+            lead_row=lead_row,
+        )
+        if off_scope_reply is not None:
+            if off_scope_reply == OUT_OF_SCOPE_HANDOFF_REPLY:
+                await _consultant_handoff(
+                    state, deps, reason=OUT_OF_SCOPE_HANDOFF_REASON
+                )
+            return off_scope_reply
     focused_project = bool(
         project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
     )
@@ -686,7 +802,7 @@ async def _agent_turn(
         # The line promises a consultant, and the model can reach it (an unclear
         # reading of a non-reset request), so the queue write follows the exact
         # reply rather than only the routing branch that also returns it.
-        await _tingting_support_handoff(state, deps)
+        await _consultant_handoff(state, deps, reason=TINGTING_HANDOFF_REASON)
     return reply
 
 
@@ -771,10 +887,19 @@ async def _resolve_lane(
     # Messenger leads are keyed by contact (NULL zalo_id), so the contact id is
     # the fallback key for the agent's lead context.
     contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
+    # An off-scope question must reach ``_agent_turn``, where the phone-ask /
+    # handoff branch lives. Both curated lanes below would otherwise answer it
+    # from project context first and the handoff would never be offered. The
+    # outstanding phone ask counts too: a bare number classifies as profile
+    # data, not ``out_of_scope``, but it still completes the same handoff.
+    off_scope = turn_route.intent == "out_of_scope" or _out_of_scope_phone_ask_outstanding(
+        recent_messages
+    )
     if (
         project_context is not None
         and project_context.clarification
         and not tingting_reset_allowed
+        and not off_scope
     ):
         trace_sink.record_decision("context_selected", "project_clarification")
         trace_sink.record_decision("lane_selected", "project_clarification")
@@ -794,6 +919,7 @@ async def _resolve_lane(
         and turn_route.reason != "vacancy_listing"
         and turn_route.intent != "employee_support"
         and not tingting_reset_allowed
+        and not off_scope
     ):
         trace_sink.record_decision("context_selected", "direct_context")
         trace_sink.record_decision("lane_selected", "direct_context")

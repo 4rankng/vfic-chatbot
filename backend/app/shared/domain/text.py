@@ -60,4 +60,18 @@ def normalize_vietnamese_text(value: str) -> str:
     return " ".join(no_marks.replace("đ", "d").split())
 
 
-__all__ = ["normalize_vietnamese_text", "plain_text"]
+_PHONE_IN_TEXT = re.compile(r"(?:\+?84|0)(?:\D*\d){8,10}\b")
+
+
+def has_phone(value: str | None) -> bool:
+    """Whether free text carries a Vietnamese phone number.
+
+    Scans a whole message rather than one field, so a number typed inside a
+    sentence counts. Lives in this framework-free module because both the graph
+    turn layer and the lead-probing rules need it, and neither may depend on the
+    other's service module.
+    """
+    return bool(_PHONE_IN_TEXT.search(value or ""))
+
+
+__all__ = ["has_phone", "normalize_vietnamese_text", "plain_text"]

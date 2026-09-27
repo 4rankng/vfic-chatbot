@@ -4,7 +4,7 @@ Production symptom (console, 2026-09-27): an employee writes on the TingTing
 support OA, the console shows the handoff line ``Vui lòng chờ chuyên viên tư vấn
 liên hệ.`` with the "Đã chặn" badge, and the employee receives NOTHING.
 
-``_tingting_support_handoff`` runs inside the answer lane, i.e. BEFORE the turn
+``_consultant_handoff`` runs inside the answer lane, i.e. BEFORE the turn
 claims its send. The escalation it performs (``escalate_extracted_intent``) bumps
 ``conversations.version`` and clears ``bot_lock_owner`` — the two columns
 ``claim_send`` re-checks server-side — so the claim always lost and the drafted
