@@ -43,7 +43,12 @@ describe("ChannelAdapterSelector", () => {
       <div className="inbox-bg-container">
         <ChannelAdapterSelectorView
           provider="zalo_bot"
-          counts={{ zalo_bot: 0, zalo_oa: 135, facebook_messenger: 0 }}
+          counts={{
+            zalo_bot: 0,
+            zalo_oa: 135,
+            facebook_messenger: 0,
+            tingting_oa: 0,
+          }}
           onProviderChange={onProviderChange}
         />
       </div>,

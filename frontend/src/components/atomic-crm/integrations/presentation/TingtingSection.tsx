@@ -196,7 +196,6 @@ export const TingtingSection = () => {
           <PlainField
             id="tingting_oa_app_id"
             label="Zalo App ID"
-            placeholder="App ID của Zalo OA TingTing"
             value={oaForm.app_id || settings?.oa_app_id || ""}
             onChange={(value) => setOaField("app_id", value)}
             configured={Boolean(settings?.oa_app_id)}
@@ -207,6 +206,7 @@ export const TingtingSection = () => {
           <SecretField
             id="tingting_oa_secret_key"
             label="OA Secret Key"
+            placeholder="Nhập Secret Key"
             configured={settings?.oa_secret_key?.configured ?? false}
             statusState={statusState}
             preview={settings?.oa_secret_key?.preview ?? null}
@@ -218,6 +218,7 @@ export const TingtingSection = () => {
           <SecretField
             id="tingting_oa_access_token"
             label="OA Access Token"
+            placeholder="Nhập Access Token"
             configured={settings?.oa_access_token?.configured ?? false}
             statusState={statusState}
             preview={settings?.oa_access_token?.preview ?? null}
@@ -229,6 +230,7 @@ export const TingtingSection = () => {
           <SecretField
             id="tingting_oa_refresh_token"
             label="OA Refresh Token"
+            placeholder="Nhập Refresh Token"
             configured={settings?.oa_refresh_token?.configured ?? false}
             statusState={statusState}
             preview={settings?.oa_refresh_token?.preview ?? null}
