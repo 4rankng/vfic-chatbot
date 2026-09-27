@@ -11,6 +11,37 @@ export type ZaloOaSignatureHealth = {
   consec_failures: number | null;
 };
 
+/** One linked Zalo OA (multi-OA contract). `default:zalo_oa` is the seeded OA. */
+export type ZaloOaAccount = {
+  /** Stable key: `default:zalo_oa` for the seeded OA, otherwise the OA id. */
+  account_key: string;
+  label: string;
+  status: "ACTIVE" | "INACTIVE";
+  generation: number;
+  /** The seeded OA: always present and never unlinkable. */
+  is_default: boolean;
+  app_id: string;
+  // The API only ever returns `{configured, preview}` — never the raw secret.
+  secret_key: SecretStatus;
+  access_token: SecretStatus;
+  refresh_token: SecretStatus;
+};
+
+/** Response envelope of both the list and the link/unlink mutations. */
+export type ZaloOaAccounts = {
+  accounts: ZaloOaAccount[];
+};
+
+/** POST body: empty optional credentials are omitted, not sent as "". */
+export type ZaloOaAccountLinkRequest = {
+  oa_id: string;
+  label: string;
+  app_id?: string;
+  secret_key?: string;
+  access_token: string;
+  refresh_token?: string;
+};
+
 export type ZaloSettings = {
   zalo_bot_token: SecretStatus;
   zalo_bot_webhook_secret: SecretStatus;
@@ -265,6 +296,27 @@ export const zaloIntegrationGateway = {
     apiJson<ZaloChannelTestResult>(
       `${ADMIN_INTEGRATIONS_BASE_PATH}/zalo/oa/test`,
       { method: "POST" },
+    ),
+
+  listZaloOaAccounts: async (): Promise<ZaloOaAccounts> =>
+    apiJson<ZaloOaAccounts>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/zalo/oa-accounts`,
+    ),
+
+  /** Link one more OA; the response is the full account list. */
+  linkZaloOaAccount: async (
+    body: ZaloOaAccountLinkRequest,
+  ): Promise<ZaloOaAccounts> =>
+    apiJson<ZaloOaAccounts>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/zalo/oa-accounts`,
+      { method: "POST", body },
+    ),
+
+  /** Unlink one OA by its account key; 422 for the seeded default OA. */
+  unlinkZaloOaAccount: async (accountKey: string): Promise<ZaloOaAccounts> =>
+    apiJson<ZaloOaAccounts>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/zalo/oa-accounts/${encodeURIComponent(accountKey)}`,
+      { method: "DELETE" },
     ),
 
   testMinimaxConnection: async (): Promise<ProviderTestResult> =>

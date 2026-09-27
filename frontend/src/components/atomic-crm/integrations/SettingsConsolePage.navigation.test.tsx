@@ -2,6 +2,18 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "vitest-browser-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+type ZaloOaAccountFixture = {
+  account_key: string;
+  label: string;
+  status: "ACTIVE" | "INACTIVE";
+  generation: number;
+  is_default: boolean;
+  app_id: string;
+  secret_key: { configured: boolean; preview?: string | null };
+  access_token: { configured: boolean; preview?: string | null };
+  refresh_token: { configured: boolean; preview?: string | null };
+};
+
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   loadZaloSettings: vi.fn(() =>
@@ -79,6 +91,45 @@ const mocks = vi.hoisted(() => ({
       oa_token_expired: false,
     }),
   ),
+  // Multi-OA list: the seeded default plus one linked OA. Mutations return a
+  // fresh envelope, which the panel writes straight back into the query cache.
+  oaAccounts: [
+    {
+      account_key: "default:zalo_oa",
+      label: "Zalo OA TingTing Software Solution",
+      status: "ACTIVE" as const,
+      generation: 1,
+      is_default: true,
+      app_id: "1234567890",
+      secret_key: { configured: true, preview: "…1234" },
+      access_token: { configured: true, preview: "…5678" },
+      refresh_token: { configured: false, preview: null },
+    },
+    {
+      account_key: "987654321",
+      label: "OA Tuyển dụng",
+      status: "INACTIVE" as const,
+      generation: 2,
+      is_default: false,
+      app_id: "",
+      secret_key: { configured: false, preview: null },
+      access_token: { configured: true, preview: "…abcd" },
+      refresh_token: { configured: false, preview: null },
+    },
+  ] as ZaloOaAccountFixture[],
+  listZaloOaAccounts: vi.fn(() =>
+    Promise.resolve({ accounts: mocks.oaAccounts }),
+  ),
+  linkZaloOaAccount: vi.fn((_body: unknown) =>
+    Promise.resolve({ accounts: mocks.oaAccounts }),
+  ),
+  unlinkZaloOaAccount: vi.fn((accountKey: string) =>
+    Promise.resolve({
+      accounts: mocks.oaAccounts.filter(
+        (account) => account.account_key !== accountKey,
+      ),
+    }),
+  ),
   loadFacebookStatus: vi.fn(() =>
     Promise.resolve({ enabled: true, accounts: [] }),
   ),
@@ -121,6 +172,9 @@ vi.mock("./api", () => ({
     saveCustomLlmSettings: vi.fn(),
     testBotConnection: vi.fn(),
     testOaConnection: mocks.testOaConnection,
+    listZaloOaAccounts: mocks.listZaloOaAccounts,
+    linkZaloOaAccount: mocks.linkZaloOaAccount,
+    unlinkZaloOaAccount: mocks.unlinkZaloOaAccount,
     testMinimaxConnection: vi.fn(),
     testOpenRouterConnection: vi.fn(),
     testCustomLlmConnection: vi.fn(),
@@ -163,6 +217,9 @@ afterEach(async () => {
   mocks.saveMinimaxSettings.mockClear();
   mocks.saveOpenRouterSettings.mockClear();
   mocks.testOaConnection.mockClear();
+  mocks.listZaloOaAccounts.mockClear();
+  mocks.linkZaloOaAccount.mockClear();
+  mocks.unlinkZaloOaAccount.mockClear();
   mocks.loadFacebookStatus.mockClear();
   mocks.loadFacebookCredentials.mockClear();
   mocks.loadFacebookOAuthPages.mockClear();
@@ -816,5 +873,167 @@ describe("SettingsConsolePage provider sections", () => {
     await expect
       .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
       .toBeDisabled();
+  });
+});
+
+describe("Zalo OA accounts", () => {
+  const renderZaloConsole = async () => {
+    mocks.isMobile = false;
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <SettingsConsolePage />
+      </QueryClientProvider>,
+    );
+  };
+
+  it("lists linked OAs with masked credentials and hides unlink for the default OA", async () => {
+    const screen = await renderZaloConsole();
+
+    await expect
+      .element(screen.getByText("Zalo OA TingTing Software Solution"))
+      .toBeVisible();
+    await expect.element(screen.getByText("default:zalo_oa")).toBeVisible();
+    await expect.element(screen.getByText("OA Tuyển dụng")).toBeVisible();
+    await expect.element(screen.getByText("987654321")).toBeVisible();
+    // The seeded OA is marked and only masked credential tails are rendered.
+    await expect
+      .element(screen.getByText("OA gốc", { exact: true }))
+      .toBeVisible();
+    await expect.element(screen.getByText("đã lưu (…1234)")).toBeVisible();
+    await expect.element(screen.getByText("đã lưu (…abcd)")).toBeVisible();
+
+    const unlinkButtons = Array.from(
+      screen.container.querySelectorAll<HTMLButtonElement>(
+        ".settings-oa-linked button",
+      ),
+    ).filter((button) => button.textContent?.includes("Gỡ liên kết"));
+    expect(unlinkButtons).toHaveLength(1);
+    const defaultRow = screen
+      .getByText("default:zalo_oa")
+      .element()
+      .closest("li");
+    expect(defaultRow?.querySelector("button")).toBeNull();
+  });
+
+  it("links a new OA with the exact POST body and refreshes the list", async () => {
+    mocks.linkZaloOaAccount.mockResolvedValueOnce({
+      accounts: [
+        ...mocks.oaAccounts,
+        {
+          account_key: "555000111",
+          label: "OA Sự nghiệp",
+          status: "ACTIVE",
+          generation: 1,
+          is_default: false,
+          app_id: "999888777",
+          secret_key: { configured: false, preview: null },
+          access_token: { configured: true, preview: "…9999" },
+          refresh_token: { configured: false, preview: null },
+        },
+      ],
+    });
+    const screen = await renderZaloConsole();
+    await expect.element(screen.getByText("OA Tuyển dụng")).toBeVisible();
+
+    await screen.getByLabelText("Mã OA").fill("555000111");
+    await screen.getByLabelText("Tên hiển thị").fill("OA Sự nghiệp");
+    await screen.getByLabelText("App ID", { exact: true }).fill("999888777");
+    await screen
+      .getByLabelText("Secret Key", { exact: true })
+      .fill("sk-secret");
+    await screen
+      .getByLabelText("Access Token", { exact: true })
+      .fill("access-token");
+    await screen
+      .getByLabelText("Refresh Token", { exact: true })
+      .fill("refresh-token");
+
+    await screen.getByRole("button", { name: "Liên kết OA" }).click();
+
+    await expect.poll(() => mocks.linkZaloOaAccount.mock.calls.length).toBe(1);
+    expect(mocks.linkZaloOaAccount.mock.calls[0]).toEqual([
+      {
+        oa_id: "555000111",
+        label: "OA Sự nghiệp",
+        app_id: "999888777",
+        secret_key: "sk-secret",
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      },
+    ]);
+    // The mutation response is the list's new truth.
+    await expect.element(screen.getByText("OA Sự nghiệp")).toBeVisible();
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toEqual([["Đã liên kết Zalo OA.", { type: "success" }]]);
+  });
+
+  it("omits optional credentials left empty from the link POST body", async () => {
+    mocks.linkZaloOaAccount.mockResolvedValueOnce({
+      accounts: mocks.oaAccounts,
+    });
+    const screen = await renderZaloConsole();
+    await expect.element(screen.getByText("OA Tuyển dụng")).toBeVisible();
+
+    await screen.getByLabelText("Mã OA").fill("555000111");
+    await screen.getByLabelText("Access Token", { exact: true }).fill("token");
+
+    await screen.getByRole("button", { name: "Liên kết OA" }).click();
+
+    await expect.poll(() => mocks.linkZaloOaAccount.mock.calls.length).toBe(1);
+    expect(mocks.linkZaloOaAccount.mock.calls[0]).toEqual([
+      { oa_id: "555000111", label: "", access_token: "token" },
+    ]);
+  });
+
+  it("unlinks a linked OA by its account key and refreshes the list", async () => {
+    const screen = await renderZaloConsole();
+    await expect.element(screen.getByText("OA Tuyển dụng")).toBeVisible();
+
+    await screen.getByRole("button", { name: "Gỡ liên kết" }).click();
+
+    await expect
+      .poll(() => mocks.unlinkZaloOaAccount.mock.calls.length)
+      .toBe(1);
+    expect(mocks.unlinkZaloOaAccount.mock.calls[0]).toEqual(["987654321"]);
+    await expect
+      .poll(() => screen.getByText("OA Tuyển dụng").query())
+      .toBeNull();
+    await expect
+      .element(screen.getByText("Zalo OA TingTing Software Solution"))
+      .toBeVisible();
+  });
+
+  it("shows an explicit error when the OA list fails to load", async () => {
+    mocks.listZaloOaAccounts.mockRejectedValueOnce(new Error("boom"));
+    const screen = await renderZaloConsole();
+
+    await expect
+      .element(
+        screen.getByText("Không tải được danh sách Zalo OA. Vui lòng thử lại."),
+      )
+      .toBeVisible();
+  });
+
+  it("surfaces the API error message when linking fails", async () => {
+    mocks.linkZaloOaAccount.mockRejectedValueOnce(
+      new Error("Mã OA không hợp lệ."),
+    );
+    const screen = await renderZaloConsole();
+    await expect.element(screen.getByText("OA Tuyển dụng")).toBeVisible();
+
+    await screen.getByLabelText("Mã OA").fill("abc");
+    await screen.getByLabelText("Access Token", { exact: true }).fill("token");
+    await screen.getByRole("button", { name: "Liên kết OA" }).click();
+
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toEqual([["Mã OA không hợp lệ.", { type: "error" }]]);
   });
 });
