@@ -7,7 +7,7 @@
                                 yes -> dispatch_claimed_message -> record_bot_outcome
                                 no  -> log_suppressed
 
-The reply boundary is ``_finalize_user_visible_reply`` -> ``strip_think_reasoning``
+The reply boundary is ``_finalize_user_visible_reply`` -> ``strip_provider_artifacts``
 (``graph/think_strip.py``): the answer is shipped exactly as the agent generated it —
 the only transformation is dropping an inline provider thinking block so it never
 reaches the candidate. The former answer-review layer (regex cleaning,
@@ -69,7 +69,7 @@ from app.recruitment.domain.provider import (
     recipient_from_conversation,
 )
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
-from app.graph.think_strip import strip_think_reasoning, visible_offset
+from app.graph.think_strip import strip_provider_artifacts, visible_offset
 from app.graph.tingting_guide import tingting_api_prompt_block
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.shared.domain.text import normalize_vietnamese_text
@@ -759,7 +759,7 @@ def _finalize_user_visible_reply(
     ``deps``/``generated``/``user_text`` stay in the signature so the
     progressive-send bubble and the full-answer call site keep one boundary shape.
     """
-    return strip_think_reasoning(raw)
+    return strip_provider_artifacts(raw)
 
 
 async def run_manifest_composed_agent(

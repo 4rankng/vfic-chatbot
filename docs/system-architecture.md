@@ -389,7 +389,7 @@ sequenceDiagram
 
     Note over WK: ── reply boundary ──
     WK->>WK: agent.agent() answer-completion guard<br/>(continue a provider-cut answer, drop a dangling tail)
-    WK->>WK: _finalize_user_visible_reply<br/>strip_think_reasoning only — the answer<br/>ships as generated (no rewrite, no truncation)
+    WK->>WK: _finalize_user_visible_reply<br/>strip_provider_artifacts only — the answer<br/>ships as generated (no rewrite, no truncation)
 
     rect rgb(245, 235, 235)
     Note over WK,DB: ── mode policy guard layer 4/4 (closes TOCTOU) ──
@@ -595,7 +595,8 @@ load_conversation_state -> typing -> direct_context?
   user-visible reply from the direct-context or routed RAG/agent lanes passes
   through the graph-level reply boundary
   (`runner._finalize_user_visible_reply`) before persistence/delivery, whose only
-  transform is `strip_think_reasoning` — the answer is otherwise shipped exactly
+  transform is `strip_provider_artifacts` (inline provider thinking and any
+  tool-call markup the provider serialized as content) — the answer is otherwise shipped exactly
   as generated. Template replies, FAQ bypass answers, and evidence blocks remain
   verbatim.
   An empty catalog does not block a real answer from published KB evidence for a

@@ -45,7 +45,7 @@ from app.graph.reasoning_compat import (
     _extract_returned_reasoning,
     _reasoning_chat_class,
 )
-from app.graph.think_strip import strip_think_reasoning
+from app.graph.think_strip import extract_text_tool_calls, strip_provider_artifacts
 from app.graph.schemas import _dispatch_tool
 from app.graph.usage import record_token_usage as _record_token_usage
 
@@ -694,6 +694,56 @@ class MiniMaxAgent:
         answer_continuations = 0
         continuing_answer = False
         last_round_cut = False
+
+        async def _dispatch_one(tc: dict) -> str:
+            name = tc.get("name", "")
+            raw_args = (
+                dict(required_tool_args)
+                if name == required_tool and required_tool_args is not None
+                else tc.get("args", {})
+            )
+            if forced_project_slug and name in {
+                "list_active_projects",
+                "recommend_projects",
+                "recommend_jobs",
+                "search_bus_timetable",
+            }:
+                return "Công cụ khám phá nhiều dự án không khả dụng khi cuộc trò chuyện đang tập trung vào một dự án."
+            args = scoped_args(name, raw_args)
+            tool_call_t0 = time.monotonic()
+            try:
+                if make_retrieval is not None:
+                    try:
+                        async with make_retrieval() as fresh_retrieval:
+                            return await _dispatch_tool(
+                                fresh_retrieval,
+                                embedder,
+                                name,
+                                args,
+                                metrics=metrics,
+                                resolved_registry=resolved_tool_registry,
+                            )
+                    except Exception:  # noqa: BLE001 — session setup failed → shared
+                        logger.warning(
+                            "isolated retrieval for tool %s failed, using shared",
+                            name,
+                            exc_info=True,
+                        )
+                return await _dispatch_tool(
+                    retrieval,
+                    embedder,
+                    name,
+                    args,
+                    metrics=metrics,
+                    resolved_registry=resolved_tool_registry,
+                )
+            finally:
+                if metrics is not None:
+                    breakdown = metrics.setdefault("tool_breakdown", {})
+                    breakdown[name] = breakdown.get(name, 0) + int(
+                        (time.monotonic() - tool_call_t0) * 1000
+                    )
+
         messages.append(HumanMessage(content=user_text))
         while iterations_remaining > 0:
             iterations_remaining -= 1
@@ -820,7 +870,7 @@ class MiniMaxAgent:
                 # Never dispatch tools on a recovery round; the reply policy that
                 # used to gate this is gone, so the recovery simply ships the
                 # generated prose (thinking stripped).
-                visible_round = strip_think_reasoning(str(ai.content or ""))
+                visible_round = strip_provider_artifacts(str(ai.content or ""))
                 answer_parts.append(visible_round)
                 if _should_continue_cut_answer(ai, visible_round, answer_continuations):
                     answer_continuations += 1
@@ -840,7 +890,50 @@ class MiniMaxAgent:
                     trace_sink=trace_sink,
                 )
             if not calls:
-                visible_round = strip_think_reasoning(str(ai.content or ""))
+                raw_content = str(ai.content or "")
+                text_calls = extract_text_tool_calls(raw_content)
+                if text_calls:
+                    # The provider wrote its call as content markup instead of a
+                    # tool_calls block (production delivered the whole
+                    # <invoke name="search_knowledge"> block to a candidate). Run
+                    # it through the same dispatch and guards as a structured
+                    # call, hand the result back to the model and let it answer
+                    # now that it has the data. The markup never reaches a reply:
+                    # this path consumes it, and the boundary strips whatever
+                    # remains.
+                    logger.warning(
+                        "provider emitted %d tool call(s) as text: %s",
+                        len(text_calls),
+                        ", ".join(call["name"] for call in text_calls),
+                    )
+                    if trace_sink is not None:
+                        for call in text_calls:
+                            trace_sink.record_tool_selection(
+                                call["name"], selected_by="model_text"
+                            )
+                    text_outs = [await _dispatch_one(call) for call in text_calls]
+                    for call, out in zip(text_calls, text_outs):
+                        tool_results.append(str(out))
+                        await _publish_evidence()
+                        if call["name"] == required_tool:
+                            required_tool_called = True
+                        # OpenAI tool protocol needs an id; the synthesized one
+                        # matches the parsed order and is never shown to anyone.
+                        messages.append(
+                            ToolMessage(
+                                content=str(out),
+                                tool_call_id=str(call["id"]),
+                                name=str(call["name"]),
+                            )
+                        )
+                    if metrics is not None:
+                        metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(text_calls)
+                        metrics["tool_rounds"] = metrics.get("tool_rounds", 0) + 1
+                        metrics["text_tool_calls"] = metrics.get("text_tool_calls", 0) + len(
+                            text_calls
+                        )
+                    continue
+                visible_round = strip_provider_artifacts(raw_content)
                 if (
                     not visible_round.strip()
                     and empty_retry_available
@@ -912,55 +1005,6 @@ class MiniMaxAgent:
             # concurrently (each on its own DB session via ``make_retrieval``) so
             # the latency is max(t1..tN) instead of t1+t2+..+tN. Sequential
             # fallback when there's only one call or no factory is wired (tests).
-            async def _dispatch_one(tc: dict) -> str:
-                name = tc.get("name", "")
-                raw_args = (
-                    dict(required_tool_args)
-                    if name == required_tool and required_tool_args is not None
-                    else tc.get("args", {})
-                )
-                if forced_project_slug and name in {
-                    "list_active_projects",
-                    "recommend_projects",
-                    "recommend_jobs",
-                    "search_bus_timetable",
-                }:
-                    return "Công cụ khám phá nhiều dự án không khả dụng khi cuộc trò chuyện đang tập trung vào một dự án."
-                args = scoped_args(name, raw_args)
-                tool_call_t0 = time.monotonic()
-                try:
-                    if make_retrieval is not None:
-                        try:
-                            async with make_retrieval() as fresh_retrieval:
-                                return await _dispatch_tool(
-                                    fresh_retrieval,
-                                    embedder,
-                                    name,
-                                    args,
-                                    metrics=metrics,
-                                    resolved_registry=resolved_tool_registry,
-                                )
-                        except Exception:  # noqa: BLE001 — session setup failed → shared
-                            logger.warning(
-                                "isolated retrieval for tool %s failed, using shared",
-                                name,
-                                exc_info=True,
-                            )
-                    return await _dispatch_tool(
-                        retrieval,
-                        embedder,
-                        name,
-                        args,
-                        metrics=metrics,
-                        resolved_registry=resolved_tool_registry,
-                    )
-                finally:
-                    if metrics is not None:
-                        breakdown = metrics.setdefault("tool_breakdown", {})
-                        breakdown[name] = breakdown.get(name, 0) + int(
-                            (time.monotonic() - tool_call_t0) * 1000
-                        )
-
             if len(calls) > 1 and make_retrieval is not None:
                 sem = asyncio.Semaphore(get_settings().parallel_tool_max_concurrency)
 
@@ -1120,7 +1164,7 @@ class MiniMaxAgent:
                         reasoning=_extract_returned_reasoning(ai),
                         tool_names=[],
                     )
-            visible_round = strip_think_reasoning(str(ai.content or ""))
+            visible_round = strip_provider_artifacts(str(ai.content or ""))
             answer_parts.append(visible_round)
             if not _should_continue_cut_answer(ai, visible_round, answer_continuations):
                 break

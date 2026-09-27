@@ -10,7 +10,13 @@ candidate, so every user-visible reply passes through
 
 import pytest
 
-from app.graph.think_strip import strip_think_reasoning, visible_offset
+from app.graph.think_strip import (
+    extract_text_tool_calls,
+    strip_provider_artifacts,
+    strip_think_reasoning,
+    strip_tool_call_markup,
+    visible_offset,
+)
 
 
 def test_strip_think_reasoning_removes_complete_block():
@@ -70,3 +76,66 @@ def test_visible_offset_is_none_while_a_think_block_is_open():
     # sender must not spend its wait cap or look for a boundary.
     assert visible_offset("\u003cthink\u003ereasoning") is None
     assert visible_offset("mid \u003cthink\u003estill thinking") is None
+
+
+# ── Tool-call markup written as content ─────────────────────────────────────
+# Production delivered `<invoke name="search_knowledge">…` to a candidate: the
+# provider serialized its call into the content instead of the tool_calls field.
+
+_LEAKED_REPLY = (
+    "Dạ, để em kiểm tra thông tin liên hệ của VFIC ngay ạ.\n"
+    '<invoke name="search_knowledge">\n'
+    '<parameter name="query">hotline liên hệ VFIC số điện thoại admin</parameter>\n'
+    "</invoke>"
+)
+
+
+def test_extract_text_tool_calls_reads_the_invoke_block():
+    calls = extract_text_tool_calls(_LEAKED_REPLY)
+    assert calls == [
+        {
+            "name": "search_knowledge",
+            "args": {"query": "hotline liên hệ VFIC số điện thoại admin"},
+            "id": "text-call-1",
+        }
+    ]
+
+
+def test_extract_text_tool_calls_reads_several_calls_in_order():
+    raw = (
+        '<invoke name="search_knowledge"><parameter name="query">a</parameter></invoke>'
+        '<invoke name="list_active_jobs"><parameter name="top_k">5</parameter></invoke>'
+    )
+    calls = extract_text_tool_calls(raw)
+    assert [call["name"] for call in calls] == ["search_knowledge", "list_active_jobs"]
+    assert calls[1]["args"] == {"top_k": 5}  # a JSON-shaped value keeps its type
+
+
+def test_extract_text_tool_calls_ignores_a_nameless_block():
+    assert extract_text_tool_calls('<invoke><parameter name="q">x</parameter></invoke>') == []
+
+
+def test_strip_tool_call_markup_removes_the_block_and_keeps_the_prose():
+    assert strip_tool_call_markup(_LEAKED_REPLY).strip() == (
+        "Dạ, để em kiểm tra thông tin liên hệ của VFIC ngay ạ."
+    )
+
+
+def test_strip_tool_call_markup_drops_an_unclosed_block():
+    """A call cut mid-generation is not a reply: nothing after it may ship."""
+    assert strip_tool_call_markup('Chào anh. <invoke name="search_knowledge"> <param') == "Chào anh. "
+
+
+def test_strip_tool_call_markup_removes_a_lone_closing_tag():
+    assert strip_tool_call_markup("Nội dung\n</invoke>") == "Nội dung\n"
+
+
+def test_strip_provider_artifacts_handles_thinking_and_markup_together():
+    raw = " thinkingdeliberation here</think>" + _LEAKED_REPLY
+    assert strip_provider_artifacts(raw).strip() == (
+        "Dạ, để em kiểm tra thông tin liên hệ của VFIC ngay ạ."
+    )
+
+
+def test_strip_provider_artifacts_keeps_a_plain_reply_untouched():
+    assert strip_provider_artifacts("Dạ có ạ.") == "Dạ có ạ."

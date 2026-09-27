@@ -20,7 +20,7 @@ from typing import Any, TypedDict
 
 from app.graph.message_values import delivery_is, sender_is
 from app.graph.ports import SendOutcome
-from app.graph.think_strip import strip_think_reasoning
+from app.graph.think_strip import strip_provider_artifacts
 from app.graph.types import GraphDeps, TurnOutcome, _now, _speaker
 from app.recruitment.application.ports import ProactiveStatePort
 
@@ -351,7 +351,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         #   - otherwise send as generated (the truncation that used to live here
         #     was removed with the reply-policy layer; a long nudge is sent in
         #     channel-sized bubbles by the sender instead)
-        candidate = strip_think_reasoning(message)
+        candidate = strip_provider_artifacts(message)
 
         if not candidate.strip():
             logger.info("proactive message empty after cleaning: conversation=%s", conv.zalo_chat_id)
