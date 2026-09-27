@@ -93,47 +93,122 @@ const checkDependency = (from, specifier) => {
   errors.push(`unpublished local dependency: ${from} -> ${dependency}`);
 };
 
-for (const file of manifestPaths) {
-  const absolute = path.join(frontendRoot, file);
-  if (!fs.existsSync(absolute)) continue;
+const moduleScriptPattern = /\.(?:ts|tsx|js|jsx|mjs)$/;
+const cssImportPattern = /@import\s+(?:url\()?["']([^"']+)["']/g;
+const cssFilePattern = /\.css$/;
+const packageJson = JSON.parse(
+  fs.readFileSync(path.join(frontendRoot, "package.json"), "utf8"),
+);
 
-  if (/\.(?:ts|tsx|js|jsx|mjs)$/.test(file)) {
-    const source = ts.createSourceFile(
-      file,
-      fs.readFileSync(absolute, "utf8"),
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    const specifiers = [];
+const readModuleSpecifiers = (file, absolute) => {
+  const source = ts.createSourceFile(
+    file,
+    fs.readFileSync(absolute, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const specifiers = [];
 
-    for (const statement of source.statements) {
-      if (
-        (ts.isImportDeclaration(statement) ||
-          ts.isExportDeclaration(statement)) &&
-        statement.moduleSpecifier &&
-        ts.isStringLiteral(statement.moduleSpecifier)
-      ) {
-        specifiers.push(statement.moduleSpecifier.text);
-      }
+  for (const statement of source.statements) {
+    if (
+      (ts.isImportDeclaration(statement) ||
+        ts.isExportDeclaration(statement)) &&
+      statement.moduleSpecifier &&
+      ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      specifiers.push(statement.moduleSpecifier.text);
     }
+  }
 
-    const visit = (node) => {
-      if (
-        ts.isCallExpression(node) &&
-        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-        node.arguments[0] &&
-        ts.isStringLiteral(node.arguments[0])
-      ) {
-        specifiers.push(node.arguments[0].text);
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments[0] &&
+      ts.isStringLiteral(node.arguments[0])
+    ) {
+      specifiers.push(node.arguments[0].text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+
+  return specifiers;
+};
+
+const readCssSpecifiers = (absolute) =>
+  [...fs.readFileSync(absolute, "utf8").matchAll(cssImportPattern)].map(
+    (match) => match[1],
+  );
+
+const readImportSpecifiers = (file) => {
+  const absolute = path.join(frontendRoot, file);
+  if (!fs.existsSync(absolute)) return [];
+  if (moduleScriptPattern.test(file)) {
+    return readModuleSpecifiers(file, absolute);
+  }
+  if (cssFilePattern.test(file)) return readCssSpecifiers(absolute);
+  return [];
+};
+
+for (const file of manifestPaths) {
+  readImportSpecifiers(file).forEach((specifier) =>
+    checkDependency(file, specifier),
+  );
+}
+
+// The install list is the one part of the manifest a merge can silently
+// re-break: the upstream manifest this fork forked from brought back packages
+// package.json no longer carries, and every published consumer installs them.
+// Nothing above inspects it, so the two sources generate-registry.mjs derives
+// it from are re-checked here: every published import has to be declared, and
+// every declared range has to still be the one package.json carries.
+const toPackageName = (specifier) => {
+  if (
+    specifier === "" ||
+    specifier.startsWith(".") ||
+    specifier.startsWith("@/") ||
+    specifier.startsWith("/") ||
+    specifier.startsWith("node:") ||
+    specifier.startsWith("#")
+  ) {
+    return null;
+  }
+
+  const segments = specifier.split("/");
+  return specifier.startsWith("@")
+    ? segments.slice(0, 2).join("/")
+    : segments[0];
+};
+
+for (const item of registry.items) {
+  const declared = new Map();
+
+  for (const entry of item.dependencies ?? []) {
+    const separator = entry.lastIndexOf("@");
+    const name = separator > 0 ? entry.slice(0, separator) : entry;
+    const range = separator > 0 ? entry.slice(separator + 1) : "";
+    declared.set(name, range);
+    const expected = packageJson.dependencies?.[name];
+    if (!expected) {
+      errors.push(
+        `${item.name} declares ${entry}, which package.json does not list in dependencies`,
+      );
+    } else if (expected !== range) {
+      errors.push(
+        `${item.name} pins ${name}@${range} but package.json carries ${expected}`,
+      );
+    }
+  }
+
+  for (const file of (item.files ?? []).map((entry) => entry.path)) {
+    for (const specifier of readImportSpecifiers(file)) {
+      const name = toPackageName(specifier);
+      if (name && !declared.has(name)) {
+        errors.push(
+          `${item.name} does not declare ${name}, imported by ${file}`,
+        );
       }
-      ts.forEachChild(node, visit);
-    };
-    visit(source);
-    specifiers.forEach((specifier) => checkDependency(file, specifier));
-  } else if (file.endsWith(".css")) {
-    const css = fs.readFileSync(absolute, "utf8");
-    for (const match of css.matchAll(/@import\s+(?:url\()?["']([^"']+)["']/g)) {
-      checkDependency(file, match[1]);
     }
   }
 }
