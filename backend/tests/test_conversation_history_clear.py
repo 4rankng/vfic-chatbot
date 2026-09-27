@@ -105,7 +105,7 @@ async def test_admin_clear_history_returns_204(transport, mock_db):
 
     assert resp.status_code == 204
     MockSvc.assert_called_once_with(mock_db)
-    mock_svc_instance.clear_history.assert_called_once()
+    mock_svc_instance.state.clear_history.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -122,7 +122,7 @@ async def test_admin_delete_conversation_returns_204(transport, mock_db):
 
     assert resp.status_code == 204
     MockSvc.assert_called_once_with(mock_db)
-    mock_svc_instance.delete.assert_called_once()
+    mock_svc_instance.state.delete.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -154,7 +154,7 @@ async def test_recruiter_direct_get_hidden_when_not_visible(recruiter_transport,
 
     with patch("app.api.conversations.ConversationService") as MockSvc:
         mock_svc_instance = AsyncMock()
-        mock_svc_instance.get_visible = AsyncMock(return_value=None)
+        mock_svc_instance.repo.get_visible = AsyncMock(return_value=None)
         MockSvc.return_value = mock_svc_instance
 
         async with httpx.AsyncClient(
@@ -164,7 +164,7 @@ async def test_recruiter_direct_get_hidden_when_not_visible(recruiter_transport,
 
     assert resp.status_code == 404
     mock_db.get.assert_not_called()
-    mock_svc_instance.get_visible.assert_awaited_once()
+    mock_svc_instance.repo.get_visible.assert_awaited_once()
 
 
 @pytest.mark.asyncio
