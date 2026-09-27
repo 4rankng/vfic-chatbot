@@ -1,19 +1,16 @@
-"""Unit tests for the deterministic FAQ-bypass cascade (no DB / no LLM / no Redis).
+"""Unit tests for the deterministic FAQ answer cascade (no DB / no LLM / no Redis).
 
-Covers the pure gate logic (``build_exact_map`` / ``rerank`` / ``decide``) and the
-``_FaqBypassAdapter`` composition (a fake repo + a fake cached-embed → hit / miss /
-exception-abstain). Runner-level wiring (hit routes through the send tail, miss /
-exception / None fall through) is pinned in ``test_graph_runner_turn.py``.
+Covers the pure gate logic (``build_exact_map`` / ``rerank`` / ``decide``). The
+graph lane that used to compose this into a zero-LLM short-circuit was removed
+in ARCH-27, so nothing in ``app/`` calls these functions at runtime; they are the
+regression guard for the scoring logic and the golden set's subject under test.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from app.shared.domain.text import normalize_vietnamese_text as norm
-from app.graph.ports import FaqBypassResult
 from app.services.retrieval import faq_bypass as fb
 
 
@@ -169,77 +166,3 @@ def test_decide_abstains_with_no_candidates():
     assert decision.reason == "no_candidates"
 
 
-# --- adapter (composition root glue) ----------------------------------------
-
-
-class _FakeRepo:
-    def __init__(self, vector_rows, lexical_rows, raise_on=None) -> None:
-        self._v = vector_rows
-        self._l = lexical_rows
-        self._raise_on = raise_on
-
-    async def match_faq(self, emb, top_k, floor):
-        if self._raise_on == "vector":
-            raise RuntimeError("boom")
-        return self._v
-
-    async def match_faq_lexical(self, query, top_k, threshold):
-        if self._raise_on == "lexical":
-            raise RuntimeError("boom")
-        return self._l
-
-
-@pytest.mark.asyncio
-async def test_adapter_returns_result_on_confident_hit(monkeypatch):
-    from app.graph.adapters import _FaqBypassAdapter
-
-    vector_rows = [_row(id="1", similarity=0.95, answer="Trả lời 1", questions=["luong"])]
-    lexical_rows = [_row(id="1", similarity=0.8), _row(id="2", similarity=0.5)]
-    monkeypatch.setattr(
-        "app.services.retrieval.RetrievalRepository",
-        lambda db, page_project_ids=None: _FakeRepo(vector_rows, lexical_rows),
-    )
-
-    async def _fake_cached(embedder, query):
-        return [0.1] * 8
-
-    monkeypatch.setattr("app.graph.tools._cached_embed", _fake_cached)
-
-    adapter = _FaqBypassAdapter(db=object(), embedder=object())
-    result = await adapter.try_answer("muon hoi ve muc luong")
-    assert isinstance(result, FaqBypassResult)
-    assert result.answer == "Trả lời 1"
-    assert result.faq_id == "1"
-
-
-@pytest.mark.asyncio
-async def test_adapter_abstains_on_low_score(monkeypatch):
-    from app.graph.adapters import _FaqBypassAdapter
-
-    vector_rows = [_row(id="1", similarity=0.4)]  # below SCORE_FLOOR
-    monkeypatch.setattr(
-        "app.services.retrieval.RetrievalRepository", lambda db, page_project_ids=None: _FakeRepo(vector_rows, [])
-    )
-    monkeypatch.setattr("app.graph.tools._cached_embed", lambda e, q: _async([0.1] * 8))
-
-    adapter = _FaqBypassAdapter(db=object(), embedder=object())
-    assert await adapter.try_answer("câu gì đó") is None
-
-
-@pytest.mark.asyncio
-async def test_adapter_abstains_when_retrieval_raises(monkeypatch):
-    from app.graph.adapters import _FaqBypassAdapter
-
-    monkeypatch.setattr(
-        "app.services.retrieval.RetrievalRepository",
-        lambda db, page_project_ids=None: _FakeRepo([], [], raise_on="vector"),
-    )
-    monkeypatch.setattr("app.graph.tools._cached_embed", lambda e, q: _async([0.1] * 8))
-
-    adapter = _FaqBypassAdapter(db=object(), embedder=object())
-    # Must never raise — abstain so the turn falls through to the agent.
-    assert await adapter.try_answer("câu gì đó") is None
-
-
-async def _async(value):
-    return value

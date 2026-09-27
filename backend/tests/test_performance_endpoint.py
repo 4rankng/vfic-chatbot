@@ -360,7 +360,6 @@ async def test_performance_bundle_shape(monkeypatch):
     assert "safety" not in out["percentiles"]  # stale stage removed
     # New stages in the percentile chart.
     assert "db" in out["percentiles"]
-    assert "faq_bypass" in out["percentiles"]
     assert "outbound_prepare" in out["percentiles"]
     assert "outbound_provider" in out["percentiles"]
     # trend bucket mapped from the trend SQL result

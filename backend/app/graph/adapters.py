@@ -1,18 +1,15 @@
 """Port adapters owned by the graph composition root.
 
-``_DirectContextAdapter`` (focused-project routing + direct-context KB lane),
-``_FaqBypassAdapter`` (deterministic FAQ cascade), and ``_RuntimePolicyAdapter``
-(installation-backed policy stamps) implement the Protocols from
-``graph/ports.py``. They are split out of ``factories.py`` so each composition
-module holds one concern; concrete ``app.models`` / ``app.services`` imports stay
-function-level here, which is exactly what the graph import guard checks for
-composition modules.
+``_DirectContextAdapter`` (focused-project routing + direct-context KB lane) and
+``_RuntimePolicyAdapter`` (installation-backed policy stamps) implement the
+Protocols from ``graph/ports.py``. They are split out of ``factories.py`` so each
+composition module holds one concern; concrete ``app.models`` / ``app.services``
+imports stay function-level here, which is exactly what the graph import guard
+checks for composition modules.
 """
 
 from __future__ import annotations
 
-import logging
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -21,8 +18,6 @@ from app.recruitment.domain.recommendation import (
     is_salary_profile_statement,
     parse_salary_band,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def _asks_to_explore(normalized_message: str) -> bool:
@@ -333,84 +328,6 @@ class _DirectContextAdapter:
             knowledge_mode=selected.mode,
             direct_context=direct_context,
         )
-
-
-class _FaqBypassAdapter:
-    """FaqBypassPort backed by RetrievalRepository + the shared cached embedder.
-
-    Defined in the composition root so the graph layer imports no concrete
-    service module (all ``app.services`` imports are function-level, satisfying
-    the AST import-guard). Runs the deterministic cascade from
-    :mod:`app.services.retrieval.faq_bypass` and logs every decision so the
-    thresholds can be tuned from production logs. Never raises — any failure
-    abstains so the turn falls through to the agent unchanged.
-    """
-
-    def __init__(self, db, embedder, *, page_project_ids=None) -> None:
-        self._db = db
-        self._embedder = embedder
-        self._page_project_ids = page_project_ids
-
-    async def try_answer(self, user_text: str):
-        from app.core.vector import vec_literal
-        from app.graph.ports import FaqBypassResult
-        from app.graph.tools import _cached_embed
-        from app.services.retrieval import RetrievalRepository
-        from app.services.retrieval import faq_bypass as fb
-
-        started = time.perf_counter()
-        repo = RetrievalRepository(self._db, page_project_ids=self._page_project_ids)
-        try:
-            active_project_ids = getattr(repo, "active_project_ids", None)
-            project_ids = await active_project_ids() if active_project_ids is not None else None
-            if project_ids == []:
-                return None
-            emb = vec_literal(await _cached_embed(self._embedder, user_text))
-            # Scope follows active_project_ids: the deployment-wide catalog for
-            # Zalo, or the Page's assigned Projects when the turn arrived on a
-            # scoped Facebook Page. Both arms must carry it — an unscoped FAQ
-            # arm answers from another Page's catalog before retrieval runs.
-            faq_scope = {"project_ids": project_ids} if project_ids is not None else {}
-            vector_rows = await repo.match_faq(
-                emb, top_k=fb.TOP_K, floor=fb.CANDIDATE_VECTOR_FLOOR, **faq_scope
-            )
-            lexical_rows = await repo.match_faq_lexical(
-                user_text, top_k=fb.TOP_K, threshold=fb.TRIGRAM_THRESHOLD, **faq_scope
-            )
-        except Exception:  # noqa: BLE001 — bypass must never break a turn
-            logger.warning("faq_bypass retrieval failed; abstaining", exc_info=True)
-            return None
-
-        candidates = list(vector_rows) + list(lexical_rows)
-        exact_map = fb.build_exact_map(candidates)
-        scored = fb.rerank(list(vector_rows), list(lexical_rows))
-        decision = fb.decide(user_text, exact_map, scored)
-        latency_ms = (time.perf_counter() - started) * 1000.0
-        logger.info(
-            "faq_bypass decision=%s tier=%s score=%.3f top2=%.3f margin=%.3f "
-            "vec=%.3f tri=%.3f reason=%s latency_ms=%.1f faq_id=%s",
-            decision.decision,
-            decision.tier,
-            decision.top1_score,
-            decision.top2_score,
-            decision.margin,
-            decision.scored.vec_sim if decision.scored else 0.0,
-            decision.scored.tri_sim if decision.scored else 0.0,
-            decision.reason,
-            latency_ms,
-            decision.scored.faq_id if decision.scored else None,
-        )
-        if decision.decision == fb.DECISION_ACCEPT and decision.scored and decision.scored.answer:
-            return FaqBypassResult(
-                answer=decision.scored.answer,
-                faq_id=decision.scored.faq_id,
-                tier=decision.tier,
-                score=decision.top1_score,
-                reason=decision.reason,
-                latency_ms=latency_ms,
-                runner_up_score=decision.top2_score if decision.top2_score > 0 else None,
-            )
-        return None
 
 
 class _RuntimePolicyAdapter:

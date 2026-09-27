@@ -13,7 +13,6 @@ from app.graph.message_values import speaker_label
 from app.graph.ports import (
     ConversationPort,
     DirectContextPort,
-    FaqBypassPort,
     LeadContextPort,
     LeadGenderPort,
     GraphRetrievalPort,
@@ -130,8 +129,6 @@ class GraphDeps:
     # parallel tool dispatch (each concurrent tool call gets an isolated session).
     # None → tools run sequentially on the shared ``retrieval`` (tests, legacy).
     make_retrieval: Callable[[], AsyncContextManager[GraphRetrievalPort]] | None = None
-    # Deterministic FAQ short-circuit (runs before the agent node). None in tests.
-    faq_bypass: FaqBypassPort | None = None
     # Proactive follow-up guard: (allowed, reason). None in reactive-only tests.
     followup_allowed: Callable[[Any], Awaitable[tuple[bool, str]]] | None = None
     # Fire-and-forget candidate extraction after a SENT reply.

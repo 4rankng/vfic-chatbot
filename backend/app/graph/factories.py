@@ -22,7 +22,6 @@ from typing import Callable, Sequence
 from app.core.config import get_settings
 from app.graph.adapters import (
     _DirectContextAdapter,
-    _FaqBypassAdapter,
     _RuntimePolicyAdapter,
 )
 from app.graph.client_cache import build_cached_clients as _build_cached_clients
@@ -297,8 +296,8 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
 
     The expensive LLM clients + embedder are cached process-wide (see
     ``_build_cached_clients``); this function only re-binds the per-turn pieces:
-    the db session, retrieval/lead/faq_bypass adapters, the zalo sender (with
-    its token-refresh closure), and the followup gate.
+    the db session, the retrieval/lead/runtime-policy/direct-context adapters, the
+    zalo sender (with its token-refresh closure), and the followup gate.
 
     ``session_factory`` (optional, an ``async_sessionmaker``) enables parallel tool
     dispatch: each concurrent tool call opens its own session via the factory
@@ -414,7 +413,6 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
         make_retrieval=make_retrieval,
         lead=_build_lead_context(db),
         lead_gender=_build_lead_gender(db),
-        faq_bypass=_FaqBypassAdapter(db, clients.embedder, page_project_ids=page_project_ids),
         followup_allowed=_make_followup_allowed(db),
         enrich_oa_profile=_enrich_oa_profile,
         recipient_unreachable=_recipient_unreachable,

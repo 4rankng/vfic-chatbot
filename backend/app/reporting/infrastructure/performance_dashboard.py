@@ -57,7 +57,6 @@ _STAGE_KEYS = [
     "preamble",
     "lead",
     "system_prompt",
-    "faq_bypass",
     "llm_queue",
     "llm_model",
     "db",
@@ -99,7 +98,6 @@ _MEASURED_STAGES = (
     "tool_ms",
     "send_ms",
     "db_ms",
-    "faq_bypass_ms",
 )
 
 
@@ -504,9 +502,6 @@ async def _slow_turns(db: AsyncSession, interval: timedelta) -> list[dict]:
                 # DB path attribution (Proposal 1): aggregate + per-call breakdown.
                 "db_ms": st.get("db_ms"),
                 "db_breakdown": st.get("db_breakdown"),
-                # FAQ bypass latency (Proposal 2) — null when the bypass cascade
-                # didn't run (agent lane or fast lane).
-                "faq_bypass_ms": st.get("faq_bypass_ms"),
                 # Model tier + system-prompt cache hit (Proposal 3).
                 "model_tier": st.get("model_tier"),
                 "system_prompt_cache_hit": st.get("system_prompt_cache_hit"),

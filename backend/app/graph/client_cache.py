@@ -20,8 +20,8 @@ Scope of the win:
 
 ``build_cached_clients`` is the single constructor; ``factories.build_deps``
 reads the cache and only re-binds the per-turn pieces (db session, retrieval
-repo, lead adapter, faq_bypass adapter, zalo config + sender with its refresh
-closure, followup gate).
+repo, lead adapter, zalo config + sender with its refresh closure, followup
+gate).
 
 The candidate-extraction clients (the extractor LLM + an embedder) live in a
 second, independently-keyed bundle built by ``build_cached_extraction``. The

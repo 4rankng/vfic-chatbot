@@ -275,9 +275,9 @@ class Settings(BaseSettings):
     bot_lock_ttl_seconds: int = 180
     # RQ job timeout for chat turns. Must be < bot_lock_ttl_seconds so RQ kills a
     # stuck turn before its per-conversation lock auto-expires. This is a HANG-ONLY
-    # backstop: the agent turn is no longer hard-capped (see agent_max_seconds), so
-    # this must comfortably exceed any realistic LLM turn (~10-30s) — only a truly
-    # wedged provider call is reaped here, and the reconcile sweeper recovers it.
+    # backstop: the agent turn is deliberately uncapped, so this must comfortably
+    # exceed any realistic LLM turn (~10-30s) — only a truly wedged provider call
+    # is reaped here, and the reconcile sweeper recovers it.
     # LOAD-BEARING INVARIANT: reconcile_grace_seconds MUST exceed this value. F6's
     # break_stale_lock force-breaks a lock whose heartbeat is older than this
     # threshold; the grace window guarantees a candidate only appears after RQ has
@@ -291,24 +291,24 @@ class Settings(BaseSettings):
     # ── perceived-responsiveness budget ────────────────────────────────────────
     # The webhook stamps received_at_epoch; the worker sets deadline_at_epoch =
     # received_at_epoch + sla_seconds. The deadline is ADVISORY: it bounds the
-    # FAQ-bypass lookup budget only — it never cancels the agent (cancelling live
+    # pre-agent lookup budget only — it never cancels the agent (cancelling live
     # LLM calls produced excessive TIMEOUT fallbacks in prod). send_margin_seconds
     # reserves time for the Zalo POST + DB commit; soft_fallback_remaining stops
-    # starting expensive bypass work when little time is left.
+    # starting an optional pre-agent lookup when little time is left.
+    # NOTE: there is no agent turn cap of any kind. `AGENT_MAX_SECONDS` used to
+    # define one and was retired when the agent stopped being wrapped in
+    # asyncio.wait_for; the field is gone, and because pydantic-settings is
+    # configured with extra="ignore", a leftover AGENT_MAX_SECONDS env var is
+    # silently accepted-and-dropped rather than rejected. Setting it does nothing.
     sla_seconds: float = 10.0
-    # Retired as a hard cap — the agent is no longer wrapped in asyncio.wait_for
-    # and runs to completion. Kept as an advisory reference / for future use; it
-    # no longer enforces a timeout on the agent turn.
-    agent_max_seconds: float = 8.5
     send_margin_seconds: float = 1.0
     soft_fallback_remaining: float = 2.0
     # Turn time-boxing is deadline-at-epoch ONLY: `deadline_at_epoch` (stamped by
-    # the webhook from `received_at_epoch + sla_seconds`) bounds the FAQ-bypass
-    # lookup and the SLO rollups. There is no per-stage retrieval/rerank budget —
+    # the webhook from `received_at_epoch + sla_seconds`) bounds the pre-agent
+    # lookups and the SLO rollups. There is no per-stage retrieval/rerank budget —
     # the directive-§4 stage budgets were never wired to a production caller and
     # were removed with `app/services/chatbot/{paths,budget,deadlines}.py`
-    # (ARCH-03). The agent LLM generation is deliberately uncapped; see the
-    # `agent_max_seconds` note above.
+    # (ARCH-03). The agent LLM generation is deliberately uncapped.
     # Single-flight request coalescing (Tech-Lead Directive §6): when N concurrent
     # turns ask the same uncached question, only one process calls the model; the
     # others await the same result via Redis pub/sub. Applies ONLY to non-
@@ -339,20 +339,6 @@ class Settings(BaseSettings):
     # Active-status signal (Priority #1 — the psychological bridge). typing_heartbeat_seconds
     # pulses send_chat_action("typing") (real on the Bot channel; a logged no-op on OA).
     typing_heartbeat_seconds: float = 3.5
-    # FAQ/template fast lane (Priority #3). When enabled, common non-factual traffic
-    # (greetings / thanks / goodbye / help) is answered from deterministic tôi/bạn
-    # templates with ZERO LLM calls. Factual questions are never templated here — they
-    # stay on the RAG + agent path.
-    faq_fast_lane_enabled: bool = True
-    # Phase 4 messaging-hardening: when the top FAQ-bypass match is only this much
-    # better than the runner-up (similarity delta < margin), abstain to the LLM
-    # instead of trusting a low-confidence answer. 0.0 = never abstain on margin
-    # (preserve legacy behavior). Tune from the performance dashboard's abstention
-    # rate after a week of production data.
-    faq_abstain_margin: float = 0.03
-    # Minimum time slice required to safely start an LLM call (TTFT + a meaningful token
-    # span). If _remaining() < send_margin_seconds + min_llm_time_budget, skip the LLM and
-    # send a human fallback — a 2-3s slice cannot complete a useful generation.
 
     # Phase 2 scaling knobs (env-tunable). 0 = disabled (pass-through).
     # LLM/embed semaphores are ENABLED by default (see graph/llm_semaphore.py):

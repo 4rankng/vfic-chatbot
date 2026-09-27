@@ -56,7 +56,6 @@ DecisionTraceSummaryCode = Literal[
     "project_clarification",
     "direct_context",
     "focused_rag",
-    "faq_bypass",
     "agent",
     "primary",
     "fast",
@@ -124,9 +123,9 @@ _DECISION_CODE_SUMMARIES: dict[str, frozenset[str]] = {
         }
     ),
     "context_selected": frozenset(
-        {"agent_graph", "project_clarification", "direct_context", "focused_rag", "faq_bypass"}
+        {"agent_graph", "project_clarification", "direct_context", "focused_rag"}
     ),
-    "lane_selected": frozenset({"agent", "project_clarification", "direct_context", "faq_bypass"}),
+    "lane_selected": frozenset({"agent", "project_clarification", "direct_context"}),
     "model_selected": frozenset({"primary", "fast", "direct"}),
     "required_tool_selected": frozenset(
         {

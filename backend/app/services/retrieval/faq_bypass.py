@@ -1,12 +1,21 @@
-"""Deterministic, non-LLM FAQ bypass cascade (exact -> rule -> hybrid -> gate).
+"""Deterministic, non-LLM FAQ answer cascade (exact -> rule -> hybrid -> gate).
 
 Pure functions + tunable code constants. No DB, no embedder, no graph imports —
-trivially unit-testable. The adapter in :mod:`app.graph.factories` composes this
-with :class:`RetrievalRepository` + the shared cached embedder.
+trivially unit-testable. The retrieval half of the cascade lives in
+:class:`app.services.retrieval.RetrievalRepository`; this module is the scoring
+and gating half, exercised directly by the golden set.
+
+NOT WIRED INTO THE TURN PATH. The graph lane that used to call this as a
+zero-LLM short-circuit before the agent node was removed (ARCH-27): no adapter,
+no ``FaqBypassPort``, no ``GraphDeps`` field. Nothing in ``app/`` calls
+``build_exact_map`` / ``rerank`` / ``decide`` at runtime. The functions are kept
+because the golden set and the retrieval benchmarks are the regression guard for
+this scoring logic; a new caller must re-verify the abstention thresholds against
+that golden set before shipping a live answer from it.
 
 Design goal: high *precision*, not recall. A wrong FAQ auto-answer is worse than
-no FAQ hit, so the gate abstains (returns ``None``) unless a candidate clearly
-matches. Tuning happens by editing the constants below, not via env/Settings.
+no FAQ hit, so the gate abstains unless a candidate clearly matches. Tuning
+happens by editing the constants below, not via env/Settings.
 
 Cascade order (per query):
 
