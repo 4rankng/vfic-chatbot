@@ -167,7 +167,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "3ca70805ffb1a4a80565101dcbf27b10717bd203dbc5b5802acb6815e6c3deea"
+# Digest refresh only: webhook.ZaloWebhookService.handle replaced its two
+# post-write `svc.get(conv.id)` re-reads with the column-scoped
+# `db.refresh(conv, _GUARD_REFRESH_COLUMNS)`, so the `get` invocation count at
+# that one reviewed site drops 3→1. No site was added, removed, or moved, so
+# EXPECTED_BROAD_BOUNDARY_COUNTS (distinct call sites) is unchanged.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "644e4ce9284115a594d3d77efcd040f8062246bea5219dcbb2b5f1bdfb5de2b1"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

@@ -290,6 +290,14 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/personas/presentation/persona-presentation.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/personas/presentation/PersonaStudioOverview.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/personas/infrastructure/personaActionsApi.ts",
           "type": "registry:component"
         },
@@ -447,6 +455,10 @@
         },
         {
           "path": "src/components/atomic-crm/knowledge-base/KnowledgeBaseCreate.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/knowledge/usePipelineAutoRefresh.ts",
           "type": "registry:component"
         },
         {
