@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import ANY, AsyncMock, Mock
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -211,9 +211,21 @@ async def test_schedule_followup_conflicts_when_lead_was_modified_concurrently()
     service.repo.create_followup = AsyncMock(return_value=SimpleNamespace(id=1))
     service.repo.optimistic_apply = AsyncMock(return_value=False)
     service.db.refresh = AsyncMock()
+    # The realtime bus is a transport seam; muting it keeps the only possible
+    # regression signal "the action went through" instead of a serialization
+    # error raised downstream of it.
+    service.events.lead_updated = AsyncMock()
 
     with pytest.raises(ConflictError):
         await service.apply_chatops_action(
             lead, "schedule_followup", actor=SimpleNamespace(id=7, full_name="Recruiter")
         )
+
+    # The guard IS the write path: the recruiter's stale version is the
+    # precondition, and the bump it would have applied is what got refused.
+    service.repo.optimistic_apply.assert_awaited_once_with(1, 1, next_action_at=ANY, version=2)
     service.db.refresh.assert_awaited_once_with(lead)
+    # Refused, not applied — the lead still holds the recruiter's snapshot.
+    assert lead.next_action_at is None
+    assert lead.version == 1
+    service.events.lead_updated.assert_not_awaited()
