@@ -195,7 +195,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # graph/embedders.py: the same two reviewed rows, re-keyed to their new home.
 # The count change is the -5 explained above. The digest covers the file key,
 # so it had to be recomputed for the move as well.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "ea240e0c8285ca1f39194c2af92e290dde2c897bd006273a47d7d00e7516a420"
+# The conversation split re-homed three reviewed outbox sites from
+# app/services/conversation/__init__.py into service.py and one from
+# recruiter_path.py into recruiter_receipts.py: same scope, same call, same
+# count, so EXPECTED_BROAD_BOUNDARY_COUNTS is unchanged and only the digest
+# (which covers the file key) moves.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "5bfbad9fa4d2a34fb925010e56954571800c372461dbcc2b3eb9ba0bbc46c8ab"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
