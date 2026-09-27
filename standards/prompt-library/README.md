@@ -177,7 +177,7 @@ Check against standards/ui-guidelines.md:
 - i18n: all user-facing strings in Vietnamese
 - Accessibility: semantic HTML, ARIA labels, keyboard nav, WCAG 2.2 AA
 - Mobile: bottom nav, safe-area insets, touch targets ≥ 44px
-- Virtualization: react-virtuoso for long lists
+- Virtualization: virtua for long lists
 
 Report:
 - [BLOCKER] [issue] — [file:line] — [fix]

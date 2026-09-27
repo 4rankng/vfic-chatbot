@@ -15,7 +15,7 @@ import re
 import time
 import unicodedata
 import uuid
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,6 +109,91 @@ def _is_blank(value: str | None) -> bool:
 
 def _blank_column(column):
     return func.nullif(func.trim(column), "").is_(None)
+
+
+def _messenger_gender(value: str | None) -> str:
+    """Reduce a provider gender string to one the prompt layer may address."""
+    gender = (value or "").strip().lower()
+    return gender if gender in _PROFILE_GENDERS else ""
+
+
+def _messenger_missing_fields(contact, leads: list) -> bool:
+    """True while any contact or lead display field is still blank."""
+    return bool(
+        _is_blank(contact.display_name)
+        or _is_blank(contact.avatar_url)
+        or any(_is_blank(lead.avatar_url) for lead in leads)
+        or any(_is_blank(lead.gender) for lead in leads)
+    )
+
+
+class MessengerFieldWrites(NamedTuple):
+    """Fields one profile write pass touched, per surface."""
+
+    display_name_updated: bool
+    avatar_updated: bool
+    updated_lead_ids: list[int]
+    gender_lead_ids: list[int]
+
+    @property
+    def updated_any(self) -> bool:
+        return bool(
+            self.display_name_updated
+            or self.avatar_updated
+            or self.updated_lead_ids
+            or self.gender_lead_ids
+        )
+
+
+def _messenger_settled(
+    fresh_contact,
+    fresh_leads: list,
+    *,
+    display_name: str,
+    avatar_url: str,
+    gender: str,
+) -> bool:
+    """Settled means "Meta has told us everything it is willing to tell us".
+
+    A field Meta omitted stays blank forever under the current grants, so
+    re-asking on every inbound message would burn a Graph call per turn for
+    nothing. The done key's TTL still retries weekly, which is what picks up a
+    newly-approved permission or a profile the person later made public.
+    """
+    return (
+        fresh_contact is not None
+        and bool(fresh_leads)
+        and (not _is_blank(fresh_contact.display_name) or not display_name)
+        and (not _is_blank(fresh_contact.avatar_url) or not avatar_url)
+        and (
+            all(not _is_blank(lead.avatar_url) for lead in fresh_leads)
+            or not avatar_url
+        )
+        and (
+            all(not _is_blank(lead.gender) for lead in fresh_leads)
+            or not gender
+        )
+    )
+
+
+async def _emit_messenger_lead_updates(
+    fresh_leads: list,
+    updated_lead_ids: list[int],
+    gender_lead_ids: list[int],
+) -> None:
+    """Emit realtime updates for every lead the enrichment touched."""
+    touched_lead_ids = set(updated_lead_ids) | set(gender_lead_ids)
+    if not touched_lead_ids:
+        return
+    leads_by_id = {lead.id: lead for lead in fresh_leads}
+    for lead_id in sorted(touched_lead_ids):
+        saved_lead = leads_by_id.get(lead_id)
+        if saved_lead is None:
+            continue
+        try:
+            await LeadEventBus().lead_updated(saved_lead)
+        except Exception:  # noqa: BLE001 -- realtime is best-effort
+            logger.info("messenger profile enrichment realtime emit failed")
 
 
 async def _claim_profile_lookup(
@@ -449,21 +534,10 @@ class ProfileEnrichmentService:
         contact = conversation.contact if conversation is not None else None
         if contact is None:
             return False
-
         leads = await self._select_leads(contact.id)
         if not leads:
             return False
-
-        missing_display_name = _is_blank(contact.display_name)
-        missing_contact_avatar = _is_blank(contact.avatar_url)
-        missing_lead_avatar = any(_is_blank(lead.avatar_url) for lead in leads)
-        missing_lead_gender = any(_is_blank(lead.gender) for lead in leads)
-        if not (
-            missing_display_name
-            or missing_contact_avatar
-            or missing_lead_avatar
-            or missing_lead_gender
-        ):
+        if not _messenger_missing_fields(contact, leads):
             return False
 
         claimed, lookup_owner = await _claim_profile_lookup(
@@ -486,61 +560,27 @@ class ProfileEnrichmentService:
 
             display_name = normalize_oa_profile_display_name(profile.display_name)
             avatar_url = (profile.profile_pic or "").strip()
-            gender = (profile.gender or "").strip().lower()
-            if gender not in _PROFILE_GENDERS:
-                gender = ""
+            gender = _messenger_gender(profile.gender)
             if not (display_name or avatar_url or gender):
                 return False
 
-            display_name_updated = False
-            avatar_updated = False
-            updated_lead_ids: list[int] = []
-            gender_lead_ids: list[int] = []
-            updated_any = False
-
-            if display_name and missing_display_name:
-                display_name_updated = await self._set_contact_display_name_if_blank(
-                    contact.id, display_name
-                )
-                updated_any = updated_any or display_name_updated
-            if avatar_url:
-                if missing_contact_avatar:
-                    avatar_updated = await self._set_contact_avatar_if_blank(
-                        contact.id, avatar_url
-                    )
-                    updated_any = updated_any or avatar_updated
-                updated_lead_ids = await self._set_lead_avatars_if_blank(
-                    contact.id, avatar_url
-                )
-                updated_any = updated_any or bool(updated_lead_ids)
-            if gender:
-                gender_lead_ids = await self._set_lead_genders_if_blank(contact.id, gender)
-                updated_any = updated_any or bool(gender_lead_ids)
-
-            if updated_any:
+            written = await self._apply_messenger_fields(
+                contact,
+                display_name=display_name,
+                avatar_url=avatar_url,
+                gender=gender,
+            )
+            if written.updated_any:
                 await self.db.commit()
             fresh_contact = await self._select_contact(contact.id, populate_existing=True)
             fresh_leads = await self._select_leads(contact.id, populate_existing=True)
 
-            # Settled means "Meta has told us everything it is willing to tell
-            # us about this person". A field Meta omitted stays blank forever
-            # under the current grants, so re-asking on every inbound message
-            # would burn a Graph call per turn for nothing. The done key's TTL
-            # still retries weekly, which is what picks up a newly-approved
-            # permission or a profile the person later made public.
-            settled = (
-                fresh_contact is not None
-                and bool(fresh_leads)
-                and (not _is_blank(fresh_contact.display_name) or not display_name)
-                and (not _is_blank(fresh_contact.avatar_url) or not avatar_url)
-                and (
-                    all(not _is_blank(lead.avatar_url) for lead in fresh_leads)
-                    or not avatar_url
-                )
-                and (
-                    all(not _is_blank(lead.gender) for lead in fresh_leads)
-                    or not gender
-                )
+            settled = _messenger_settled(
+                fresh_contact,
+                fresh_leads,
+                display_name=display_name,
+                avatar_url=avatar_url,
+                gender=gender,
             )
             if settled:
                 await _mark_profile_lookup_done(
@@ -549,28 +589,57 @@ class ProfileEnrichmentService:
             logger.info(
                 "messenger profile enrichment applied avatar=%s display_name=%s "
                 "gender=%s settled=%s",
-                bool(avatar_updated or updated_lead_ids),
-                display_name_updated,
-                bool(gender_lead_ids),
+                bool(written.avatar_updated or written.updated_lead_ids),
+                written.display_name_updated,
+                bool(written.gender_lead_ids),
                 settled,
             )
-
-            touched_lead_ids = set(updated_lead_ids) | set(gender_lead_ids)
-            if touched_lead_ids:
-                leads_by_id = {lead.id: lead for lead in fresh_leads}
-                for lead_id in sorted(touched_lead_ids):
-                    saved_lead = leads_by_id.get(lead_id)
-                    if saved_lead is None:
-                        continue
-                    try:
-                        await LeadEventBus().lead_updated(saved_lead)
-                    except Exception:  # noqa: BLE001 -- realtime is best-effort
-                        logger.info("messenger profile enrichment realtime emit failed")
-            return updated_any
+            await _emit_messenger_lead_updates(
+                fresh_leads,
+                written.updated_lead_ids,
+                written.gender_lead_ids,
+            )
+            return written.updated_any
         finally:
             await _release_profile_lookup(
                 psid, lookup_owner, namespace=_MESSENGER_PROFILE_NAMESPACE
             )
+
+    async def _apply_messenger_fields(
+        self,
+        contact,
+        *,
+        display_name: str,
+        avatar_url: str,
+        gender: str,
+    ) -> MessengerFieldWrites:
+        """Write each non-blank profile field onto blank contact/lead columns.
+
+        Blank-only by design: a value the candidate stated themselves outranks
+        the channel profile, so nothing here overwrites a non-blank column.
+        """
+        display_name_updated = False
+        avatar_updated = False
+        updated_lead_ids: list[int] = []
+        gender_lead_ids: list[int] = []
+        if display_name and _is_blank(contact.display_name):
+            display_name_updated = await self._set_contact_display_name_if_blank(
+                contact.id, display_name
+            )
+        if avatar_url:
+            if _is_blank(contact.avatar_url):
+                avatar_updated = await self._set_contact_avatar_if_blank(
+                    contact.id, avatar_url
+                )
+            updated_lead_ids = await self._set_lead_avatars_if_blank(contact.id, avatar_url)
+        if gender:
+            gender_lead_ids = await self._set_lead_genders_if_blank(contact.id, gender)
+        return MessengerFieldWrites(
+            display_name_updated=display_name_updated,
+            avatar_updated=avatar_updated,
+            updated_lead_ids=updated_lead_ids,
+            gender_lead_ids=gender_lead_ids,
+        )
 
 
 __all__ = [

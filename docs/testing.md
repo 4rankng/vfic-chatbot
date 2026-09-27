@@ -41,7 +41,7 @@ Performance (RAG benchmark)   ← test_rag_benchmark.py
     the tests never silently skip.
 
 ### Testing Patterns
-- **Protocol-backed fakes.** The graph layer depends on Protocol interfaces (`ports.py`: `ConversationPort`, `RetrievalPort`, `LeadContextPort`, `FaqBypassPort`). Tests inject fakes — no real LLM, DB, or Redis.
+- **Protocol-backed fakes.** The graph layer depends on Protocol interfaces (`ports.py`: `ConversationPort`, `GraphRetrievalPort`, `LeadContextPort`, `FaqBypassPort`, `TurnDecisionsPort`, `RuntimePolicyPort`). Tests inject fakes — no real LLM, DB, or Redis.
 - **Worker tests** call async functions directly (via `asyncio_mode = "auto"`), not through RQ.
 - **No HTTP client tests** for most routes — the API layer is thin (delegates to services), so testing services directly is preferred. A few integration tests exist (`test_integrations_api.py`, `test_webhooks.py`).
 
@@ -49,7 +49,7 @@ Performance (RAG benchmark)   ← test_rag_benchmark.py
 | Area | Example files |
 |---|---|
 | Graph pipeline | `test_graph_router.py`, `test_graph_runner_turn.py`, `test_graph_clients.py`, `test_graph_factories.py`, `test_graph_think_strip.py`, `test_graph_proactive_*.py`, `test_graph_import_guard.py` |
-| Fast lane / FAQ | `test_fast_lane.py`, `test_faq_bypass.py` |
+| Decisions / FAQ | `test_graph_decisions.py`, `test_model_tiering.py`, `test_faq_bypass.py` |
 | Knowledge pipeline | `test_knowledge.py`, `test_knowledge_pipeline.py`, `test_knowledge_coercion.py`, `test_knowledge_text_ingestion.py` |
 | Retrieval / RAG | `test_rag_benchmark.py`, `test_retrieval_fusion.py`, `test_retrieval_ann_gate.py`, `test_reranker.py`, `test_semantic_cache.py` |
 | Lead | `test_lead_extraction.py`, `test_lead_chatops.py` |
@@ -66,7 +66,6 @@ Performance (RAG benchmark)   ← test_rag_benchmark.py
 .venv/bin/pytest -m integration tests/integration/test_harness_smoke.py  # Required PostgreSQL lane
 .venv/bin/pytest                                    # Full suite; requires local PostgreSQL
 .venv/bin/pytest tests/test_graph_runner_turn.py    # Single file
-.venv/bin/pytest -k "test_fast_lane"                # By keyword
 .venv/bin/pytest --tb=short                         # Short tracebacks
 .venv/bin/pytest -x                                 # Stop on first failure
 ```
@@ -96,9 +95,8 @@ docker compose -f docker-compose.dev.yml up -d postgres
 
 ### Setup
 - **Framework:** Vitest 4 + Playwright browser mode
-- **Config:** `frontend/vitest.config.ts` — two projects:
-  - **`app`** project: Headless Chromium environment. React/DOM unit tests. The enforced 80% coverage threshold applies only to the changed/high-risk surface: `src/components/atomic-crm/capabilities/kernel/index.tsx`, `src/components/atomic-crm/integrations/presentation/SecretField.tsx`, and `src/components/atomic-crm/performance/PerformanceTrendChart.tsx`.
-  - **`claude`** project: Node.js environment. Claude Code hook integration tests in `.claude/hooks/test/`.
+- **Config:** `frontend/vitest.config.ts` — one **`app`** project: headless Chromium environment, React/DOM unit tests.
+- **Coverage:** measured over the whole `src/components/atomic-crm` tree under ratchet floors (67 statements / 55 branches / 57 functions / 68 lines — never lowered; raise them as coverage grows), plus 80% per-file gates on the three changed/high-risk files named in the `vitest.config.ts` coverage block.
 
 ### Test Organization (representative app-project files)
 | Location | Tests |
@@ -114,7 +112,6 @@ docker compose -f docker-compose.dev.yml up -d postgres
 ### Commands (from `frontend/`)
 ```bash
 npm run test:unit:app           # App project (Playwright browser mode)
-npm run test:unit:claude        # Claude project (Node mode)
 npm run test:unit:app -- --ui   # Vitest UI
 ```
 
@@ -187,7 +184,7 @@ PostgreSQL/Redis ports being free, no local web server).
   local PostgreSQL + pgvector must be available.
 - **If you touch a shared contract** (Pydantic schema, Protocol interface, API response shape), run tests in all modules that import it — not just the module you changed.
 - Messenger OAuth lifecycle changes are covered by `backend/tests/test_facebook_oauth.py` plus the frontend unit tests in `frontend/src/components/atomic-crm/integrations/FacebookMessengerIntegrationPage.test.tsx` and `frontend/src/components/atomic-crm/integrations/ZaloIntegrationPage.navigation.test.tsx`. Keep the backend and frontend assertions aligned when touching that flow.
-- **Coverage threshold:** Frontend app project requires 80% lines/functions/branches/statements on the three-file enforced surface above; this is not a whole-atomic-crm or whole-frontend threshold.
+- **Coverage threshold:** Frontend coverage is ratcheted over the whole `src/components/atomic-crm` tree (floors 67 statements / 55 branches / 57 functions / 68 lines — never lowered) plus 80% per-file gates on the three changed/high-risk files named in `vitest.config.ts`. Backend coverage is report-only: pytest-cov is a dev dependency, but no threshold is enforced.
 
 ## Phase 1 Characterization Boundary
 

@@ -18,7 +18,7 @@ together*. For deeper detail, follow the links in §5.
 | Framework | **FastAPI** `>=0.115` | async-first; mix of `async def` + thread-offloaded crypto |
 | ASGI server | **Uvicorn `[standard]`** `>=0.32` | single worker by design (Dockerfile CMD) — a second doubled cold-boot RSS and widened the listener gap on the 1.9 GiB host |
 | ORM | **SQLAlchemy 2.x async** (`asyncpg` `>=0.30`) + sync `psycopg` for Alembic/RQ | `AsyncSession(expire_on_commit=False)` |
-| Migrations | **Alembic** `>=1.14` | hand-written (0001–0054, current head `0054_channel_account_projects`), ORM does **not** auto-generate |
+| Migrations | **Alembic** `>=1.14` | hand-written (0001–0056, current head `0056_project_external_api`), ORM does **not** auto-generate |
 | Database | **PostgreSQL 16 + pgvector** (`>=0.3.6`) | HNSW ANN + exact re-rank; `halfvec` for 3072-d embeddings |
 | Cache / queue / pubsub | **Redis** `>=5.2,<8.0` | broker, cache, presence, cross-process Socket.IO fan-out |
 | Job queue | **RQ** `>=2.0` + **rq-scheduler** `>=0.14` | 6 queues (`webhook_high`, `recovery`, `persistence_low`, `ingest`, `followup`, `maintenance`); **offline only** — never on the answer path |
@@ -49,14 +49,14 @@ together*. For deeper detail, follow the links in §5.
 | Virtualization | **virtua** `^0.49` | all long lists (conversation thread, dashboard candidate list); `react-virtuoso` is no longer a dependency |
 | i18n | **ra-i18n-polyglot** — Vietnamese-first | English as base layer |
 | Node | **v22.19.0** (`.nvmrc`), npm + `legacy-peer-deps` | |
-| Tests | **Vitest 4** (two projects: `app` Playwright browser, `claude` Node) | |
+| Tests | **Vitest 4** (one `app` project, Playwright browser mode) | |
 
 ### Infrastructure
 
 | Piece | Choice |
 |---|---|
 | Edge / TLS | **Caddy** (`Caddyfile`) |
-| Orchestration | **Docker Compose** (13 services on prod, plus the profile-gated `oa-profile-backfill` one-shot) |
+| Orchestration | **Docker Compose** (14 services on prod, plus the profile-gated `oa-profile-backfill` one-shot) |
 | Host | **DigitalOcean droplet**, 2 vCPU / 4 GB — the hard constraint that shapes every decision |
 | Backups | Postgres dumps → OneDrive; full-droplet bundle → `backups/<ts>.zip` |
 | Secrets | `.env` (gitignored); integration creds encrypted at rest in `IntegrationSetting` |
@@ -84,8 +84,8 @@ Postgres 16 + pgvector     ⟷     Redis (broker / cache / pubsub)
 ```
 
 **Dependency rule:** API → Services → Models/Core. The graph layer depends on
-Protocol interfaces (`ConversationPort`, `RetrievalPort`, `LeadContextPort`,
-`FaqBypassPort`) — **never** concrete service classes. Wiring happens in
+Protocol interfaces (`ConversationPort`, `GraphRetrievalPort`, `LeadContextPort`,
+`FaqBypassPort`, `TurnDecisionsPort`, `RuntimePolicyPort`) — **never** concrete service classes. Wiring happens in
 `factories.py:build_deps()`. This keeps safety/ownership branches unit-testable
 with fakes (no API keys needed).
 
@@ -102,9 +102,9 @@ load_conversation_state → typing → agent
                            no  → log_suppressed
 ```
 
-There is **no LLM safety judge on the answer path**: `GraphDeps.safety` is an unwired
-seam with no production caller (`MiniMaxSafety` has no call site). The earlier diagram
-in this file showed an `llm_safety_check` node that no longer runs.
+There is **no LLM safety judge on the answer path** and no `GraphDeps.safety` seam —
+the only user-visible reply transform is `graph/think_strip.py:strip_think_reasoning`,
+which strips provider thinking blocks at the reply boundary; the answer ships as generated.
 
 Key invariants:
 - **Turn routing is a Jev fan-out** (`decisions.py` → `router.route_from_decisions`): one ~300 ms calibrated call replaces the keyword router; on any failure it degrades to the neutral `general/agent` route, never blocking a turn.

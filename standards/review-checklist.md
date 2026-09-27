@@ -24,7 +24,7 @@ Before submitting any change (PR, commit, or agent-reported completion), verify 
 
 - [ ] No N+1 queries (eager-load relations with `selectinload` / `joinedload`)
 - [ ] No blocking I/O on the async event loop (crypto on `asyncio.to_thread`)
-- [ ] Long lists virtualized with `react-virtuoso`
+- [ ] Long lists virtualized with `virtua` (`VList`)
 - [ ] No unbounded loops
 - [ ] LLM calls respect the concurrency semaphore
 - [ ] No new DB queries without appropriate indexes

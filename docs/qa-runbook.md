@@ -397,14 +397,14 @@ cd frontend && npm run build:analyze    # ANALYZE=true → rollup output
 ```
 
 Confirm the manual chunk strategy (react-vendor, ra-vendor, tanstack-vendor,
-lucide-vendor, router-vendor, realtime-vendor, forms-vendor, virtuoso-vendor)
+lucide-vendor, router-vendor, realtime-vendor, forms-vendor, virtua-vendor)
 is intact — a vendor chunk that has ballooned usually means a new dependency
 slipped into the wrong chunk.
 
 ### 6.4 Long-list virtualization
 
-`conversations` and `bot_runs` use `react-virtuoso` (per
-[`docs/HLD.md`](HLD.md)). Verify in dev by loading the list and checking the
+`conversations` and `bot_runs` are virtualized with `virtua` (`VList` — see
+`ChatThread.tsx`). Verify in dev by loading the list and checking the
 DOM node count stays roughly constant while scrolling — if thousands of row
 nodes mount, virtualization is broken.
 

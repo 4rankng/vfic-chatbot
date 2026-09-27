@@ -72,5 +72,5 @@ The Layout component (`atomic-crm/layout/Layout.tsx`) detects route-based worksp
 
 - **Bottom navigation** is the primary mobile nav (grid, 4–5 columns, safe-area-aware).
 - **Touch targets** must be at least 44×44px.
-- **Virtualization** required for long lists: use `react-virtuoso` (conversations, messages). Never render unbounded lists.
+- **Virtualization** required for long lists: use `virtua` (`VList`) (conversations, messages). Never render unbounded lists.
 - **Test on mobile viewport** before declaring done.

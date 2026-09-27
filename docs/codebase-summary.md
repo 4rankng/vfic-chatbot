@@ -1,7 +1,7 @@
 # Codebase Summary
 
 **Repo:** `git@github.com:4rankng/vfic-chatbot.git` (branch `main`)
-**Last updated:** 2026-09-24
+**Last updated:** 2026-09-27
 
 A monorepo with two deployable subprojects (`backend/`, `frontend/`) plus
 root-level ops scripts. GHCR images: `ghcr.io/4rankng/tinghire-be:latest`
@@ -20,8 +20,8 @@ ChatBot/
 │   │   │                 ratelimit, embedding, vector,
 │   │   │                 text                              (~2,000 LOC)
 │   │   ├── graph/        runner, clients, factories,
-│   │   │                 tools, safety, prompts,
-│   │   │                 proactive                         (~9,600 LOC)
+│   │   │                 tools/, schemas, think_strip,
+│   │   │                 prompts, proactive                (~9,600 LOC)
 │   │   ├── models/       SQLAlchemy 2.x ORM (65 tables)
 │   │   ├── schemas/      Pydantic v2
 │   │   ├── services/     conversation/, lead/, knowledge/,
@@ -37,13 +37,13 @@ ChatBot/
 │   │   ├── realtime/     Socket.IO server + bridge         (~440 LOC)
 │   │   ├── prompts/
 │   │   └── main.py        FastAPI app + lifespan + ASGI wrap
-│   ├── alembic/          Hand-written migrations through 0054
+│   ├── alembic/          Hand-written migrations through 0056
 │   ├── mock_servers/     zalo_mock.py (local :8788)
 │   ├── scripts/          create_admin, seed_dev, prod-env,
 │   │                     benchmark_models, benchmark_rag,
 │   │                     capture_bus_timetable_golden, loadtest/
 │   ├── tests/            Unit + selected disposable PostgreSQL integration lanes
-│   ├── docker-compose.yml        13-service prod stack
+│   ├── docker-compose.yml        14-service prod stack
 │   ├── docker-compose.dev.yml    Postgres+Redis+Adminer only
 │   ├── Dockerfile        python:3.12-slim, pip install -e .
 │   ├── Caddyfile         edge routes for bot.tingting.vip
@@ -124,7 +124,7 @@ moved.
 | `integrations/` | Integration-layer application services and adapters (admin runtime, Facebook OAuth). |
 | `shared/` | Small inward-facing contracts shared by multiple bounded contexts (`application/`, `domain/`, `infrastructure/`). |
 | `core/` | Cross-cutting infra: config (Pydantic BaseSettings), async DB engine + session, Redis pool, security (JWT/argon2), structured logging + request_id, error handlers, cache, ratelimit, embedding + vector helpers, text utils. |
-| `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools/` the tool implementations; `schemas.py` owns `TOOL_SCHEMAS` + `_dispatch_tool`; `safety.py` structural cleaning; `router.py` the Jev decision router; `prompts.py`; `proactive/`. |
+| `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools/` the per-domain tool modules; `schemas.py` owns `TOOL_SCHEMAS` + `_dispatch_tool`; `think_strip.py` provider-artefact stripping; `router.py` the Jev decision router; `prompts.py`; `proactive/`. |
 | `models/` | SQLAlchemy 2.x ORM mirroring the schema. Retired universal-platform tables remain mapped for historical migration compatibility. **Does not generate migrations** — migrations remain hand-written. |
 | `schemas/` | Pydantic v2 request/response models. |
 | `services/` | Business logic, the largest subpackage. Includes recruitment services, project-owned knowledge modes, and installation lifecycle authority used by the admin Settings surface. |
@@ -175,7 +175,8 @@ moved.
 | `backend/app/graph/types.py` | `BotRunState` and `GraphDeps` dataclasses. |
 | `backend/app/graph/factories.py` | `build_deps(db, ...)` — resolves admin-managed MiniMax/OpenRouter/Zalo creds. |
 | `backend/app/graph/clients.py` | MiniMax / OpenRouter LLM clients; `_chat_for_role` selects one configured provider per client; `_llm_call_with_retry` retries one 429 then fails over across enabled providers; `GeminiEmbedder`. |
-| `backend/app/graph/tools.py` | `TOOL_SCHEMAS` + `_dispatch_tool`. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
+| `backend/app/graph/schemas.py` | `TOOL_SCHEMAS` + `_dispatch_tool`. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
+| `backend/app/graph/tools/` | Per-domain tool modules: `jobs.py`, `knowledge.py`, `memory.py`, `income.py`, `catalog.py`, `tingting_api.py`, `tingting_identity.py`, plus `_shared.py`. |
 | `backend/app/graph/think_strip.py` | Provider-artefact stripping at the reply boundary: `strip_provider_artifacts` drops an inline provider ` thinking…` block (complete or truncated) and any tool-call markup a provider wrote as *content* (`<invoke name=…>`), so neither reasoning nor an internal invocation reaches a candidate. `extract_text_tool_calls` parses that markup so the agent loop can still run the call it describes. The former answer-review layer (`fast_safety_filter`, `DeterministicReplyPolicy`, `truncate_for_chat`) was removed on purpose; the answer ships as generated. |
 | `backend/app/graph/clients.py` (answer-completion guard) | A provider that stops at its output cap (`finish_reason=length`) hands back a half-written answer. `MiniMaxAgent.agent` / `.direct` continue it (`_CUT_ANSWER_CONTINUE_INSTRUCTION`, ≤ `_MAX_ANSWER_CONTINUATIONS`), drop a repeated seam, and, if the provider keeps stopping at the cap, drop the dangling tail (`_drop_dangling_tail`) so a candidate never reads a mid-word fragment. Metrics: `answer_continuations`, `answer_continuation_reason`. |
 | `backend/app/graph/llm_semaphore.py` | Redis-backed cross-process LLM concurrency semaphore; `LLMThrottled`. |
@@ -207,7 +208,7 @@ moved.
 | `backend/alembic/versions/0050_data_ingestion_recovery.py` | Adds durable category processing leases, retry metadata, quality-result storage, and Project cutover snapshot columns. |
 | `backend/alembic/env.py` | Injects `settings.database_url_sync`; registers models on `Base.metadata`; baseline is raw SQL. |
 | `backend/Makefile` | `dev`, `db`, `push`, `deploy`, `deploy-restart`, `deploy-restart-frontend`, `adminer`. |
-| `backend/docker-compose.yml` | 13-service prod stack: postgres, redis, web-blue + web-green (one active colour), worker-chatbot (replicas 3), worker-persistence, worker-ingest, scheduler, worker-followup, worker-maintenance, frontend, adminer, caddy. |
+| `backend/docker-compose.yml` | 14-service prod stack: postgres, redis, web-blue + web-green (one active colour), worker-chatbot (replicas 3), worker-persistence, worker-ingest, scheduler, worker-followup, worker-maintenance, metrics-watch, frontend, adminer, caddy. |
 | `backend/Caddyfile` | Edge routes for `bot.tingting.vip`. |
 | `backend/scripts/create_admin.py` | Bootstrap admin; sync engine psycopg; idempotent `--only-if-no-admins`. |
 | `backend/scripts/seed_dev.py` | Truncate + re-insert Vietnamese dev data (LOCAL only). |

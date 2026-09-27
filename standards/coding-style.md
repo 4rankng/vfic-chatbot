@@ -19,7 +19,7 @@
 - **Async-first.** All DB, Redis, HTTP, and LLM calls are `async def`. Sync wrappers exist only in `workers/async_runner.py` to bridge RQ jobs to asyncio.
 - **SQLAlchemy 2.x async.** Use `select()` statements with `AsyncSession`. Never use legacy `Query` API. Sessions use `expire_on_commit=False`.
 - **Pydantic v2.** All schemas extend `BaseModel`. Use `model_config = ConfigDict(...)` for config. Validators use `@field_validator` / `@model_validator`.
-- **Protocol-based DI.** The graph layer depends on `Protocol` interfaces (`ports.py`: `ConversationPort`, `RetrievalPort`, `LeadContextPort`, `FaqBypassPort`). Concrete wiring in `factories.py:build_deps()`. This enables pure-unit testing with fakes.
+- **Protocol-based DI.** The graph layer depends on `Protocol` interfaces (`ports.py`: `ConversationPort`, `GraphRetrievalPort`, `LeadContextPort`, `FaqBypassPort`, `TurnDecisionsPort`, `RuntimePolicyPort`). Concrete wiring in `factories.py:build_deps()`. This enables pure-unit testing with fakes.
 - **Domain errors, not HTTP exceptions.** Services raise `NotFoundError`, `ConflictError`, `ForbiddenError`, `UpstreamError` (from `services/errors.py`). The API layer (`api/*.py`) catches and maps to `HTTPException`.
 - **Ruff line-length: 100.** Target version: py312. No custom rules — uses ruff defaults.
 - **No `print()`.** Use structured logging via `app/core/logging.py`.

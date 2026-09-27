@@ -133,12 +133,12 @@ Four queues isolate work by priority:
 ## Frontend Performance
 
 ### Virtualization
-- **react-virtuoso** required for long lists: conversations, messages, bot runs.
+- **virtua** (`VList`) required for long lists: conversations, messages, bot runs.
 - **Never render unbounded lists.** If a list can exceed 50 items, virtualize it.
 
 ### Bundle Chunking
 Manual chunks in `vite.config.ts`:
-- `react-vendor`, `ra-vendor`, `tanstack-vendor`, `lucide-vendor`, `router-vendor`, `realtime-vendor`, `forms-vendor`, `virtuoso-vendor`.
+- `react-vendor`, `ra-vendor`, `tanstack-vendor`, `lucide-vendor`, `router-vendor`, `realtime-vendor`, `forms-vendor`, `virtua-vendor`.
 
 ### Code Splitting
 - Secondary routes lazy-loaded: `ProfilePage`, `ForgotPasswordPage` via `React.lazy()`.
@@ -156,7 +156,7 @@ Manual chunks in `vite.config.ts`:
 
 - [ ] No N+1 queries (use `selectinload` / `joinedload` for relations)
 - [ ] No blocking I/O on the async event loop (crypto on `asyncio.to_thread`)
-- [ ] Long lists virtualized with `react-virtuoso`
+- [ ] Long lists virtualized with `virtua` (`VList`)
 - [ ] No unbounded loops or recursive calls without depth limits
 - [ ] LLM calls respect the concurrency semaphore
 - [ ] DB queries use appropriate indexes (check `EXPLAIN ANALYZE` for new queries)

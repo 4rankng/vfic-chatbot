@@ -186,8 +186,7 @@ surrounding code.
 
 ### Virtualization
 - Use **`virtua`** (`VList`) for virtualized lists — the chat thread
-  (`ChatThread.tsx`) depends on it. (Note: `react-virtuoso` is also in deps;
-  `virtua` is the active choice for the inbox.)
+  (`ChatThread.tsx`) depends on it.
 
 ### Styling — Tailwind v4 CSS-first
 - **No `tailwind.config.js`.** Tailwind v4 via `@tailwindcss/vite`, configured
@@ -236,7 +235,7 @@ directly, but treat changes with the weight of an upstream fork:
 - Vite config (`vite.config.ts`): dev proxies `/api`, `/realtime`, `/socket.io`
   (ws: true) → `localhost:8000`. `base: "./"`, sourcemaps on.
 - `manualChunks`: react-vendor, ra-vendor, tanstack-vendor, lucide-vendor,
-  router-vendor, realtime-vendor, forms-vendor, virtuoso-vendor.
+  router-vendor, realtime-vendor, forms-vendor, virtua-vendor.
 - VitePWA autoUpdate with Workbox precache cap ≤5 MiB.
 
 ---
@@ -266,11 +265,9 @@ directly, but treat changes with the weight of an upstream fork:
   `docker compose -f docker-compose.dev.yml up -d postgres`.
 
 ### Frontend
-- **Vitest 4.1** with two projects:
+- **Vitest 4** with one project:
   - `"app"` — React/DOM unit in Chromium via `@vitest/browser-playwright`
     (headless). Run: `npm run test:unit:app`.
-  - `"claude"` — Node integration for `.claude/hooks/*.mjs`. Run:
-    `npm run test:unit:claude`.
 - **Playwright 1.60** e2e in `e2e/` against `build:e2e` dist served by
   `vite preview :4173`. `fullyParallel: false`. Specs: `vfic.spec.ts`,
   `visual.spec.ts` + snapshots. Run: `npx playwright test`.

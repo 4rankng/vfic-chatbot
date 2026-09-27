@@ -139,11 +139,21 @@ class SqlAlchemyCategoryProjectionWriter:
                 )
             )
         ).all()
+        revision_ids = [sibling.active_revision_id for sibling in siblings]
+        revisions_by_id: dict[uuid.UUID, KnowledgeCategoryRevision] = {}
+        if revision_ids:
+            revisions_by_id = {
+                revision.id: revision
+                for revision in (
+                    await self.db.scalars(
+                        select(KnowledgeCategoryRevision).where(
+                            KnowledgeCategoryRevision.id.in_(revision_ids)
+                        )
+                    )
+                ).all()
+            }
         for sibling in siblings:
-            sibling_revision = await self.db.get(
-                KnowledgeCategoryRevision,
-                sibling.active_revision_id,
-            )
+            sibling_revision = revisions_by_id.get(sibling.active_revision_id)
             if sibling_revision is None:
                 continue
             sibling_document = validate_category_payload(

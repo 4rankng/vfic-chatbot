@@ -37,7 +37,7 @@ DONE
 - Frontend: `npm run build` succeeds (from `frontend/`)
 
 ### 2. All tests pass
-- Backend: `.venv/bin/pytest` (from `backend/`) — all 65 test files pass
+- Backend: `.venv/bin/pytest` (from `backend/`) — all unit + integration tests pass
 - Frontend: `npm run test:unit:app` (from `frontend/`) — all vitest app-project tests pass
 - If you touched a shared contract, run tests in modules that depend on it — not just the module you changed
 
@@ -69,7 +69,7 @@ DONE
 ### 8. Performance checked
 - No new N+1 queries (use `selectinload` / `joinedload`)
 - No blocking I/O on the async event loop
-- Long lists virtualized with `react-virtuoso`
+- Long lists virtualized with `virtua` (`VList`)
 - LLM calls respect the concurrency semaphore
 - See [`performance.md`](performance.md) for the full baseline
 
