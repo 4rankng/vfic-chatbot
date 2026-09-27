@@ -196,10 +196,10 @@ if [ -f "$REPO_ROOT/scripts/restore-droplet.sh" ]; then
 else
   log "warn: scripts/restore-droplet.sh missing — bundle restore.sh omitted"
 fi
-if [ -f "$REPO_ROOT/docs/DROPLET-BACKUP-RESTORE.md" ]; then
-  cp "$REPO_ROOT/docs/DROPLET-BACKUP-RESTORE.md" "$BUNDLE/README-RESTORE.md"
+if [ -f "$REPO_ROOT/docs/ops/droplet-backup-restore.md" ]; then
+  cp "$REPO_ROOT/docs/ops/droplet-backup-restore.md" "$BUNDLE/README-RESTORE.md"
 else
-  log "warn: docs/DROPLET-BACKUP-RESTORE.md missing — README-RESTORE.md omitted"
+  log "warn: docs/ops/droplet-backup-restore.md missing — README-RESTORE.md omitted"
 fi
 
 # --- 7. zip + checksum --------------------------------------------------------

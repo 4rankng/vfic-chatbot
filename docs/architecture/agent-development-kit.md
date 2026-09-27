@@ -5,10 +5,9 @@ startup context small and makes safety rules more reliable.
 
 ## Layers
 
-1. **Constitution:** root `AGENTS.md` contains durable repository boundaries,
-   approval gates, and pointers for task-scoped instruction retrieval. Root
-   `CLAUDE.md` imports it so Claude Code and AGENTS-aware tools share the same
-   policy.
+1. **Rules:** `.claude/rules/` holds the durable repository rules (workflow,
+   development, orchestration, review) that the harness loads into context;
+   root `AGENTS.md`/`CLAUDE.md` were removed on 2026-09-27.
 2. **Skills:** `.claude/skills/` contains task-specific workflows that load on
    demand and route to existing source-of-truth documents.
 3. **Hooks:** `.claude/settings.json` is the single registration point for the
@@ -61,8 +60,8 @@ nothing — leaving normal permission handling intact — or a decision:
 The blocking guards fail open: an unexpected error exits without a decision.
 They are workflow guardrails, not a security sandbox. Shell commands can be
 constructed in many ways, and semantic changes such as an incompatible API
-contract cannot be classified reliably from a path alone. The approval rules in
-`AGENTS.md` still apply even when the hook stays silent.
+contract cannot be classified reliably from a path alone. The durable rules in
+`.claude/rules/` still apply even when the hook stays silent.
 
 ## Verification
 

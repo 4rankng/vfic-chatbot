@@ -117,13 +117,13 @@ test refreshes and retries once when Zalo rejects the access token.
 
 | Resource | Purpose |
 |---|---|
-| [`../deployment-guide.md`](../deployment-guide.md) | Production stack, deploy flow, env vars |
-| [`../system-architecture.md`](../system-architecture.md) | Runtime architecture, queue model, data layer |
-| [`../DROPLET-BACKUP-RESTORE.md`](../DROPLET-BACKUP-RESTORE.md) | Full droplet backup/restore runbook |
-| [`../project-roadmap.md`](../project-roadmap.md) | Known issues / tech debt register (K-1 through K-10) |
+| [`../deployment-guide.md`](../ops/deployment-guide.md) | Production stack, deploy flow, env vars |
+| [`../system-architecture.md`](../architecture/system-architecture.md) | Runtime architecture, queue model, data layer |
+| [`../DROPLET-BACKUP-RESTORE.md`](../ops/droplet-backup-restore.md) | Full droplet backup/restore runbook |
+| [`../project-roadmap.md`](../product/roadmap.md) | Known issues / tech debt register (K-1 through K-10) |
 | [`../../backend/docs/architecture-audit-2026-07-08.md`](../../backend/docs/architecture-audit-2026-07-08.md) | Backend architecture audit (findings F-CRIT-1 through F-HIGH-10) |
-| [`../../standards/security.md`](../../standards/security.md) | Security baseline |
-| [`../../standards/performance.md`](../../standards/performance.md) | Performance baseline |
+| [`../development/code-standards.md`](../development/code-standards.md) | Coding standards and gate notes |
+| [`../archive/chatbot-latency-improvement-plan.md`](../archive/chatbot-latency-improvement-plan.md) | Latency goals and constraints (archived plan) |
 
 ## Logging
 

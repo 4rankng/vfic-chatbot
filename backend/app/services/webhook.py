@@ -31,6 +31,26 @@ from app.services.zalo_oa_events import parse_oa_webhook_event
 
 logger = logging.getLogger(__name__)
 
+# The guard columns the webhook ack path re-reads between writes. A full
+# ``db.refresh(conv)`` also re-fetches the ``contact`` and ``channel_identity``
+# selectin relationships — 3–4 extra SELECTs per refresh, and this path used to
+# pay it three times per inbound message on the <1s ack that also stamps
+# webhook_ack_ms (runner.py's _OWNERSHIP_REFRESH_COLUMNS carries the same
+# measurement for the turn path). Keep the list exhaustive for everything the
+# ack-path guards read (mode/status for run_start_guard, taken_over_at/
+# updated_at for the semi-auto branch, version for the worker's ownership
+# recheck) or a takeover could slip past a stale identity-map snapshot.
+_GUARD_REFRESH_COLUMNS = [
+    "mode",
+    "status",
+    "version",
+    "taken_over_at",
+    "assigned_recruiter_id",
+    "updated_at",
+    "bot_locked_until",
+    "bot_lock_owner",
+]
+
 
 @dataclass
 class NormalizedMessage:
@@ -130,7 +150,6 @@ class ZaloWebhookService:
         conv = await svc.ensure(
             norm.zalo_chat_id, zalo_channel=norm.zalo_channel, account_key=account_key
         )
-        await db.refresh(conv)
         await svc.record_inbound(
             conv,
             body=norm.user_text,
@@ -142,11 +161,10 @@ class ZaloWebhookService:
             runtime_fingerprint=(runtime_authority.fingerprint if runtime_authority else None),
         )  # persists candidate message; stamps last_inbound_at; bumps unread if HUMAN
 
-        # Human-only conversations keep every inbound but spend no resources on
-        # candidate extraction or chatbot work. A second guard below closes the
-        # race where a recruiter takes over during deterministic name capture.
-        conv = await svc.get(conv.id)
-        await db.refresh(conv)
+        # One column-scoped reload of the guard columns after the inbound write:
+        # a recruiter takeover during record_inbound must be seen here without
+        # paying the selectin-relationship re-fetch of a full refresh.
+        await db.refresh(conv, _GUARD_REFRESH_COLUMNS)
         if conv.mode == ConversationMode.HUMAN:
             return {"status": "starved_human_mode", "conversation_id": str(conv.id)}
 
@@ -207,9 +225,10 @@ class ZaloWebhookService:
                 )
 
         # Reload and recheck because a recruiter may have taken over while the
-        # deterministic profile write was in progress.
-        conv = await svc.get(conv.id)
-        await db.refresh(conv)
+        # deterministic profile write was in progress. Column-scoped: the guard
+        # chain below reads only _GUARD_REFRESH_COLUMNS, so skip the selectin
+        # relationship re-fetch a full refresh would pay.
+        await db.refresh(conv, _GUARD_REFRESH_COLUMNS)
 
         if not svc.run_start_guard(conv):  # HUMAN/active SEMI_AUTO/CLOSED -> starve the bot
             return {"status": "starved_human_mode", "conversation_id": str(conv.id)}

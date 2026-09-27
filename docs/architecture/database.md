@@ -2,7 +2,7 @@
 
 > Database and Redis reference for the ChatBot (VFIC miniCRM) platform.
 > See [`../docs/system-architecture.md`](system-architecture.md) §6 (Data layer) for runtime details,
-> [`../docs/decisions/0003-postgres-pgvector.md`](decisions/0003-postgres-pgvector.md) for the Postgres+pgvector decision.
+> [`../docs/decisions/0003-postgres-pgvector.md`](../decisions/0003-postgres-pgvector.md) for the Postgres+pgvector decision.
 
 ## PostgreSQL 16 + pgvector
 
@@ -41,8 +41,7 @@ Default (local dev): `postgresql+asyncpg://vfic:vfic@localhost:5432/vfic`
 - **Migrations are hand-written.** ORM models mirror the schema but do **not** auto-generate migrations.
 - **Always write migrations manually** and test locally (`alembic upgrade head` → `alembic downgrade -1` → `alembic upgrade head`).
 - **Reversibility required.** Every `upgrade()` must have a working `downgrade()`.
-- See **Approval required** in [`../AGENTS.md`](../AGENTS.md) — migrations require
-  human approval.
+- Migrations require human approval before they land on `main`.
 
 ### Commands (from `backend/`)
 ```bash
@@ -175,7 +174,7 @@ Redis serves multiple roles — all ephemeral (not backed up):
 
 ### Redis safety rules
 - **Redis is not backed up.** Never store critical state in Redis — if data must survive a Redis flush, it belongs in Postgres.
-- **No password in local dev.** Production config in [`deployment-guide.md`](deployment-guide.md).
+- **No password in local dev.** Production config in [`deployment-guide.md`](../ops/deployment-guide.md).
 - Redis isolation in tests via `conftest.py:_isolate_redis` auto-use fixture (monkeypatches to no-op double).
 
 ## Backup & Restore
@@ -185,4 +184,4 @@ Redis serves multiple roles — all ephemeral (not backed up):
 - **Full droplet backup:** `make backup-full` — env + DB + KB uploads + Caddy TLS → `backups/<ts>.zip`.
 - **Restore to fresh droplet:** `make restore-prod BUNDLE=<path>`.
 
-See [`DROPLET-BACKUP-RESTORE.md`](DROPLET-BACKUP-RESTORE.md) for the full runbook.
+See [`droplet-backup-restore.md`](../ops/droplet-backup-restore.md) for the full runbook.

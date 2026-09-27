@@ -10,8 +10,8 @@
 > **Scope:** The recruiter console (frontend SPA) and the API surface it
 > touches. This runbook covers **visual/UI-UX QA**, **functional/logic QA via
 > browser scripts**, and **latency/perf probing**. It complements
-> [`docs/testing.md`](testing.md) (automated unit/integration tests) and
-> [`frontend/qa/TEST_PLAN.md`](../frontend/qa/TEST_PLAN.md) (manual per-feature
+> [`docs/testing.md`](../development/testing.md) (automated unit/integration tests) and
+> [`frontend/qa/TEST_PLAN.md`](../../frontend/qa/TEST_PLAN.md) (manual per-feature
 > checklist) — it does **not** duplicate them.
 
 ---
@@ -200,7 +200,7 @@ Vietnamese copy, empty/loading/error states.
 - **Layout:** misalignment, overlap, clipped text, z-index stacking, large
   layout shifts on load.
 - **Typography:** wrong font/size/weight (project uses the graphite-cloud token
-  system — see [`docs/design-tokens-graphite-cloud.md`](design-tokens-graphite-cloud.md));
+  system — see [`docs/design-tokens-graphite-cloud.md`](../design/design-tokens-graphite-cloud.md));
   Vietnamese diacritics render correctly.
 - **Color/contrast:** insufficient contrast (WCAG AA = 4.5:1 for body text).
 - **Responsive:** horizontal scroll on mobile, bottom-nav reachability,
@@ -348,8 +348,8 @@ intentional auth check, and any CORS / mixed-content warning.
 ## 6. Latency / Performance QA
 
 The production target is a **2 vCPU droplet** with a sub-second fast-lane bot
-reply budget (see [`docs/HLD.md`](HLD.md) and
-[`standards/performance.md`](../standards/performance.md)). Dev hardware is
+reply budget (see the archived
+[latency plan](../archive/chatbot-latency-improvement-plan.md)). Dev hardware is
 faster, so treat dev numbers as a **lower bound** — if it's slow in dev it will
 be worse in prod.
 
@@ -472,8 +472,8 @@ bugs get a step-by-step repro with a video and per-step screenshots.
 ## 8. When to Escalate (Don't Auto-Fix During QA)
 
 QA's job is to **find and document**, not patch mid-run. Escalate to a code
-change (separate task) when a finding touches **Approval required** in
-[`AGENTS.md`](../AGENTS.md):
+change (separate task) when a finding touches a protected area — auth/JWT/CORS/HMAC,
+DB migrations, or candidate-facing bot behavior:
 
 - **Auth / JWT / CORS / HMAC** — don't tweak; describe and hand off.
 - **Bot pipeline / safety / grounding / prompts** — any candidate-facing

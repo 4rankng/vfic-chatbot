@@ -7,7 +7,7 @@
 #   1. Disk: root filesystem used > 80%  → warn, > 95% → fail.
 #   2. Docker: reclaimable space > 10 GB → warn (dangling images/volumes pile up
 #      because every deploy is a fresh pull of a digest-pinned image).
-#   3. /metrics inside the live web container (the pattern docs/deployment-guide
+#   3. /metrics inside the live web container (the pattern docs/ops/deployment-guide
 #      documents): queue depth vs CHAT_QUEUE_MAX_DEPTH, all workers busy, and
 #      the reconcile failure counters that only ever rise.
 #   4. /health and /health/queue over HTTP from the edge, if curl is available.

@@ -29,7 +29,7 @@ Key reasons:
 
 - **Positive:** Async-first design handles concurrent webhook + LLM calls efficiently. Pydantic v2 gives compile-time-like safety. Auto-docs reduce API documentation burden.
 - **Negative:** Python's GIL means CPU-bound work must use `asyncio.to_thread` (e.g., argon2/JWT crypto). Not as fast as Go for raw throughput, but I/O-bound workload makes this acceptable.
-- **Neutral:** Team must be disciplined about async (no blocking calls on the event loop — enforced by convention, see [`../../standards/coding-style.md`](../../standards/coding-style.md)).
+- **Neutral:** Team must be disciplined about async (no blocking calls on the event loop — enforced by convention, see [`code-standards.md`](../development/code-standards.md)).
 
 ## Related
 
@@ -37,4 +37,4 @@ Key reasons:
 - Config: `backend/app/core/config.py`
 - Async DB engine: `backend/app/core/db.py`
 - [ADR-0004](0004-redis-rq-not-celery.md) — RQ workers for background jobs
-- [docs/system-architecture.md](../system-architecture.md) — full runtime architecture
+- [docs/system-architecture.md](../architecture/system-architecture.md) — full runtime architecture

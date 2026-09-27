@@ -8,8 +8,7 @@
 1. **One decision per file.** Sequential numbering: `NNNN-kebab-case-title.md`.
 2. **Immutable once accepted.** If a decision is superseded, mark it `Superseded by ADR-NNNN` and create a new ADR. Do not edit the original decision.
 3. **Status values:** `Proposed` → `Accepted` → `Deprecated` / `Superseded`.
-4. **Anyone (human or agent) can propose an ADR**, but acceptance requires human
-   approval (see **Approval required** in [`../../AGENTS.md`](../../AGENTS.md)).
+4. **Anyone (human or agent) can propose an ADR**, but acceptance requires human approval.
 5. **Write ADRs for decisions, not features.** "Why FastAPI" yes; "Add login page" no.
 
 ## Template

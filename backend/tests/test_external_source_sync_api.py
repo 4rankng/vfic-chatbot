@@ -41,7 +41,7 @@ def test_last_revision_id_has_no_foreign_key() -> None:
     column = ExternalSourceSyncState.__table__.columns["last_revision_id"]
     assert list(column.foreign_keys) == [], (
         "last_revision_id must NOT have a ForeignKey — see the model comment + "
-        "docs/incident-runbook.md"
+        "docs/ops/incident-runbook.md"
     )
 
 

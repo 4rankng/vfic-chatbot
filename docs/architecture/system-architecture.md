@@ -185,7 +185,7 @@ operational contracts rather than migration scaffolding.
 
 The normative context/package map, inward dependency rules, exact legacy-edge
 baseline, runtime contract inventory, and layer-removal ownership are recorded
-in [`decisions/ddd-context-boundaries.md`](./decisions/ddd-context-boundaries.md).
+in [`decisions/ddd-context-boundaries.md`](../decisions/ddd-context-boundaries.md).
 `backend/tests/test_runtime_surface_inventory.py` scans the complete backend
 application tree and hashes the reviewed HTTP, queue, outbox, and provider
 boundaries. Public routes, schemas, queues, realtime events, worker callable

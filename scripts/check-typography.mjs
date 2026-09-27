@@ -3,7 +3,7 @@
  * check-typography.mjs — Typography drift guard.
  *
  * Scans the frontend for hard-coded font-size values that bypass the centralized
- * token scale (see docs/typography-system.md). Exits non-zero on violations so
+ * token scale (see docs/design/typography-system.md). Exits non-zero on violations so
  * it can gate CI / pre-commit.
  *
  * Allowed:
@@ -38,7 +38,7 @@ const CSS_ALLOWLIST = new Set([
 
 // Branding exceptions — surfaces with a documented reason to hold a fixed
 // font-size that doesn't map cleanly to the scale (e.g. rubber-stamp motif).
-// Keep this list small; every entry needs a line in docs/typography-system.md.
+// Keep this list small; every entry needs a line in docs/design/typography-system.md.
 const BRANDING_ALLOWLIST = new Set([
   // Knowledge-center rubber-stamp motif (Fraunces, 10.5px uppercase).
   "frontend/src/index.css", // .kb-stamp lives here
@@ -173,14 +173,14 @@ for (const rel of files) {
 if (violations.length === 0) {
   console.log(
     "✓ Typography check passed — no hard-coded font sizes found.\n" +
-      "  See docs/typography-system.md for the scale.",
+      "  See docs/design/typography-system.md for the scale.",
   );
   process.exit(0);
 }
 
 console.error(
   `✗ Typography check failed — ${violations.length} hard-coded font size(s) found.\n` +
-    "  Use a token from the scale (docs/typography-system.md) instead.\n",
+    "  Use a token from the scale (docs/design/typography-system.md) instead.\n",
 );
 for (const v of violations) {
   console.error(
@@ -190,6 +190,6 @@ for (const v of violations) {
 }
 console.error(
   "\n  If this is a legitimate exception, add the file to the allowlist in\n" +
-    "  scripts/check-typography.mjs AND document it in docs/typography-system.md.",
+    "  scripts/check-typography.mjs AND document it in docs/design/typography-system.md.",
 );
 process.exit(1);

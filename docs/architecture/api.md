@@ -1,8 +1,7 @@
 # API Reference
 
 > REST API reference for the ChatBot (VFIC miniCRM) backend.
-> See [`../docs/system-architecture.md`](system-architecture.md) for the full runtime architecture,
-> [`../standards/security.md`](../standards/security.md) for auth details.
+> See [`../docs/system-architecture.md`](system-architecture.md) for the full runtime architecture and auth details.
 
 ## Base URL
 

@@ -412,7 +412,7 @@ docker compose exec -T web-$(cat ACTIVE_COLOR) python -c "import urllib.request;
 ## 8. Backup & restore
 
 **Do not duplicate** the finished runbook — see
-[docs/DROPLET-BACKUP-RESTORE.md](./DROPLET-BACKUP-RESTORE.md) for the full
+[docs/ops/droplet-backup-restore.md](./droplet-backup-restore.md for the full
 procedure. Summary of the available targets:
 
 | Target | What it does |

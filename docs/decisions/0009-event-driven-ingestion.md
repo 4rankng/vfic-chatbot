@@ -38,7 +38,7 @@ Use an **event-driven pipeline** via a dedicated RQ queue (`ingest`), with the f
 - Knowledge services: `backend/app/services/knowledge/` (repository, canonical parser, file extraction, coercion, LLM digest)
 - Models: `backend/app/models/knowledge.py` (`KnowledgeDocument`, `KnowledgeChunk`, `KBVersion`, `KBTextFile`)
 - Pipeline UI: `frontend/src/components/atomic-crm/knowledge/` (pipeline timeline, upload config)
-- [docs/system-architecture.md](../system-architecture.md) — KB pipeline in the data layer
-- [docs/HLD.md](../HLD.md) — "Knowledge modeling and storage" section
+- [docs/system-architecture.md](../architecture/system-architecture.md) — KB pipeline in the data layer
+- [docs/HLD.md](../archive/HLD.md) — "Knowledge modeling and storage" section
 - [ADR-0003](0003-postgres-pgvector.md) — vector storage
 - [ADR-0004](0004-redis-rq-not-celery.md) — queue model

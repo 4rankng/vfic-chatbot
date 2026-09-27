@@ -205,7 +205,7 @@ restore:
 	echo "Restore complete!"
 
 # ─── Full droplet backup / restore (delete + spin up later) ────────────────────
-# docs/DROPLET-BACKUP-RESTORE.md has the full runbook. Redis is intentionally
+# docs/ops/droplet-backup-restore.md has the full runbook. Redis is intentionally
 # not backed up (scheduler re-registers its ticks; avoids the orphaned-job OOM).
 BACKUPS_DIR := $(CURDIR)/backups
 

@@ -1,13 +1,12 @@
 # Testing Strategy
 
 > Testing approach for the ChatBot (VFIC miniCRM) platform.
-> See the scoped workflow in [`../AGENTS.md`](../AGENTS.md) and
-> [`../standards/definition-of-done.md`](../standards/definition-of-done.md) for
-> the completion gate.
+> The completion gate (definition of done) lives in
+> [`code-standards.md`](code-standards.md) (Gate notes).
 >
 > **Manual + scripted QA of the dev environment** (visual, functional, perf) is
-> covered in [`qa-runbook.md`](qa-runbook.md). The per-feature manual checklist
-> lives in [`../frontend/qa/TEST_PLAN.md`](../frontend/qa/TEST_PLAN.md).
+> covered in [`qa-runbook.md`](../ops/qa-runbook.md). The per-feature manual checklist
+> lives in [`frontend/qa/TEST_PLAN.md`](../../../frontend/qa/TEST_PLAN.md).
 
 ## Testing Pyramid
 
