@@ -111,6 +111,23 @@ COMPLETIONS: dict[str, dict] = {
             "The two genuinely dead exports were removed: hasPersonaFollowupRules (personaMarkdown.ts) and getEndToEndMetric (performanceDiagnostics.ts); grep now shows zero references. Lesson recorded: repowise in_degree=0 unreachable-file findings require a grep re-check before deletion in this repo.",
         ],
     },
+    # 2026-09-27 fe-knowledge lane — report:
+    # plans/reports/kanban-sweep-260927-1539-fe-knowledge-completion.md
+    "FE-20": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "The knowledge list's inline 5s useRefresh interval became knowledge/usePipelineAutoRefresh.ts: it disarms while document.visibilityState is hidden and re-arms on visibilitychange, mirroring ExternalSourceList's refetchIntervalInBackground: false convention.",
+            "4 hook tests in usePipelineAutoRefresh.test.tsx including the hidden-tab regression; knowledge suite 14 files / 52 tests pass.",
+            "Subject file lives under atomic-crm/knowledge/ (the card's own evidence), not projects/ as the lane brief first assumed — deviation recorded.",
+        ],
+    },
+    "FE-21": {
+        "column": "DEV_COMPLETED",
+        "evidence": [
+            "Epoch-based chain cancellation in projects/presentation/use-project-knowledge-catalog.ts: a second trackRevision cancels the first chain; unmount/project switch kills the live chain and discards in-flight hop results; hidden tabs pause hops; processingKey resets on project change.",
+            "Red-first proof: with the corrected {data,total} mock shape the orphan test failed pre-fix at 22 getCategories calls vs 2 expected (the orphan polled its full 40s budget after unmount); 5 tests green, projects suite 13 files / 77 tests pass.",
+        ],
+    },
     "FE-01": {
         "column": "QA_TESTED",
         "evidence": [

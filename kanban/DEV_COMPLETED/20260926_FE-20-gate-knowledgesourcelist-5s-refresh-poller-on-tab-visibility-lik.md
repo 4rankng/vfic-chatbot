@@ -5,8 +5,8 @@ severity: medium
 area: frontend
 labels: [frontend, polling, regression-risk]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-26
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-26
 
 **Severity:** medium · **Area:** frontend · **Effort:** S · **Labels:** frontend, polling, regression-risk
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -38,6 +38,12 @@ Gate the effect on document.visibilityState (skip scheduling when hidden, add a 
 ## Notes
 
 Same class as the ExternalSourceList poller fixed in wave 1 — this is the missed sibling, i.e. a sweep regression risk.
+
+## Evidence log
+
+- The knowledge list's inline 5s useRefresh interval became knowledge/usePipelineAutoRefresh.ts: it disarms while document.visibilityState is hidden and re-arms on visibilitychange, mirroring ExternalSourceList's refetchIntervalInBackground: false convention.
+- 4 hook tests in usePipelineAutoRefresh.test.tsx including the hidden-tab regression; knowledge suite 14 files / 52 tests pass.
+- Subject file lives under atomic-crm/knowledge/ (the card's own evidence), not projects/ as the lane brief first assumed — deviation recorded.
 
 ---
 

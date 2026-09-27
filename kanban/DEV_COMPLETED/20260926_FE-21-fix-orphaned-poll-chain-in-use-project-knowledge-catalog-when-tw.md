@@ -5,8 +5,8 @@ severity: low
 area: frontend
 labels: [frontend, polling, teardown]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-26
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-26
 
 **Severity:** low · **Area:** frontend · **Effort:** S · **Labels:** frontend, polling, teardown
 
-**Trạng thái:** TODO
+**Trạng thái:** DEV_COMPLETED
 
 ## Problem
 
@@ -38,6 +38,11 @@ Store a generation/epoch counter (or clear pollRef at the top of pollUntilActive
 ## Notes
 
 Bounded (MAX_POLL_ATTEMPTS = 20 at :26), hence low; same visibility-gating family as FE-20 — fix together.
+
+## Evidence log
+
+- Epoch-based chain cancellation in projects/presentation/use-project-knowledge-catalog.ts: a second trackRevision cancels the first chain; unmount/project switch kills the live chain and discards in-flight hop results; hidden tabs pause hops; processingKey resets on project change.
+- Red-first proof: with the corrected {data,total} mock shape the orphan test failed pre-fix at 22 getCategories calls vs 2 expected (the orphan polled its full 40s budget after unmount); 5 tests green, projects suite 13 files / 77 tests pass.
 
 ---
 
