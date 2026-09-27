@@ -16,6 +16,7 @@ The deploy invariants that used to live inline in the Makefile now live in
 
 from __future__ import annotations
 
+import json
 import re
 
 import os
@@ -23,6 +24,7 @@ import subprocess
 from pathlib import Path
 import textwrap
 
+import pytest
 import yaml
 
 
@@ -340,7 +342,41 @@ def _write_executable(path: Path, body: str) -> None:
     path.chmod(0o755)
 
 
-def _prepare_bg_deploy_sandbox(tmp_path: Path, *, active_color: str | None, fail_public_health: bool):
+def _write_docker_state(path: Path, *, replicas: int, tag: str = "previous-tag") -> None:
+    """Seed the stubbed docker's view of the scaled service.
+
+    ``docker compose config`` reports the declared replica count and
+    ``compose ps -q`` the live containers, so a sandbox that answers neither
+    silently collapses the rolling recreate to its "1 replica" early return and
+    the multi-replica path is never executed.
+    """
+    path.write_text(
+        json.dumps(
+            {
+                "seq": replicas,
+                "replicas": {"worker-chatbot": replicas},
+                "containers": {
+                    "worker-chatbot": [
+                        {"cid": f"cid-worker-chatbot-{index}", "tag": tag}
+                        for index in range(1, replicas + 1)
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _prepare_bg_deploy_sandbox(
+    tmp_path: Path,
+    *,
+    active_color: str | None,
+    fail_public_health: bool,
+    turn_worker_replicas: int = 3,
+    rolled_replica_never_healthy: bool = False,
+    fail_turn_pipeline: bool = False,
+    missing_post_flip_service: str | None = None,
+):
     root = tmp_path / "opt" / "vfic"
     scripts_dir = root / "scripts"
     bin_dir = tmp_path / "bin"
@@ -431,14 +467,30 @@ def _prepare_bg_deploy_sandbox(tmp_path: Path, *, active_color: str | None, fail
             with log.open("a", encoding="utf-8") as handle:
                 handle.write("docker " + " ".join(args) + "\\n")
 
+            # The scaled service is answered from a state file: `compose config`
+            # reports its declared replica count, `compose ps -q` its live
+            # containers, `rm -f` removes one stale container and
+            # `compose up --scale` puts one replacement on the new tag — which
+            # is what the real orchestrator does between roll steps. Every other
+            # service comes from a static table (they are never scaled here).
+            state_path = Path(os.environ["VFIC_TEST_STATE"])
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            replicas = state["replicas"]
+            containers = state["containers"]
+            never_healthy = os.environ.get("VFIC_TEST_ROLL_UNHEALTHY") == "1"
+
+            def save():
+                state_path.write_text(json.dumps(state), encoding="utf-8")
+
             service_ps = {
                 "web-blue": "cid-web-blue\\n",
                 "web-green": "cid-web-green\\n",
                 "frontend": "cid-frontend\\n",
-                "worker-chatbot": "cid-worker-chatbot-1\\ncid-worker-chatbot-2\\n",
                 "worker-persistence": "cid-worker-persistence\\n",
                 "worker-ingest": "cid-worker-ingest\\n",
                 "worker-followup": "cid-worker-followup\\n",
+                "worker-maintenance": "cid-worker-maintenance\\n",
+                "metrics-watch": "cid-metrics-watch\\n",
                 "scheduler": "cid-scheduler\\n",
                 "caddy": "cid-caddy\\n",
             }
@@ -448,9 +500,37 @@ def _prepare_bg_deploy_sandbox(tmp_path: Path, *, active_color: str | None, fail
                 "cid-frontend": "franknguyenvd/vfic-frontend:test-image",
             }
 
+            if args[:2] == ["compose", "config"]:
+                print(json.dumps({
+                    "services": {
+                        name: {"deploy": {"replicas": count}} for name, count in replicas.items()
+                    }
+                }))
+                raise SystemExit(0)
             if args[:2] == ["compose", "pull"]:
                 raise SystemExit(0)
             if args[:2] == ["compose", "up"]:
+                scale, values = {}, set()
+                for index, arg in enumerate(args):
+                    if arg == "--scale":
+                        values.add(index + 1)
+                        name, _, count = args[index + 1].partition("=")
+                        scale[name] = int(count)
+                for index, arg in enumerate(args):
+                    if index < 2 or arg.startswith("-") or index in values or "=" in arg:
+                        continue
+                    if arg not in replicas:
+                        continue
+                    current = containers.setdefault(arg, [])
+                    if "--force-recreate" in args:
+                        del current[:]
+                    while len(current) < scale.get(arg, replicas[arg]):
+                        state["seq"] += 1
+                        current.append({
+                            "cid": "cid-{0}-{1}".format(arg, state["seq"]),
+                            "tag": os.environ.get("IMAGE_TAG", ""),
+                        })
+                save()
                 raise SystemExit(0)
             if args[:4] == ["compose", "exec", "-T", "postgres"]:
                 if len(args) >= 5 and args[4] == "pg_dump":
@@ -459,7 +539,13 @@ def _prepare_bg_deploy_sandbox(tmp_path: Path, *, active_color: str | None, fail
                     sys.stdout.write("PGDMP-fake-pre-migration-dump")
                 raise SystemExit(0)
             if len(args) >= 4 and args[:3] == ["compose", "ps", "-q"]:
-                sys.stdout.write(service_ps.get(args[3], ""))
+                service = args[3]
+                if os.environ.get("VFIC_TEST_MISSING_SERVICE") == service:
+                    sys.stdout.write("")  # never created / crashed away
+                elif service in containers:
+                    sys.stdout.write("".join(e["cid"] + "\\n" for e in containers[service]))
+                else:
+                    sys.stdout.write(service_ps.get(service, ""))
                 raise SystemExit(0)
             if len(args) >= 6 and args[:4] == ["compose", "--profile", "maintenance", "ps"]:
                 raise SystemExit(0)
@@ -470,6 +556,22 @@ def _prepare_bg_deploy_sandbox(tmp_path: Path, *, active_color: str | None, fail
             if len(args) >= 2 and args[0] == "inspect":
                 fmt = args[2]
                 cid = args[3]
+                managed = next(
+                    (e for entries in containers.values() for e in entries if e["cid"] == cid),
+                    None,
+                )
+                if managed is not None:
+                    if "Health.Status" in fmt:
+                        print("unhealthy" if never_healthy else "healthy")
+                    elif "RestartCount" in fmt:
+                        print("0")
+                    elif ".State.Status" in fmt:
+                        print("running")
+                    elif ".Config.Image" in fmt:
+                        print("franknguyenvd/vfic-backend:" + managed["tag"])
+                    else:
+                        print("")
+                    raise SystemExit(0)
                 if "Health.Status" in fmt:
                     print("healthy")
                 elif "RestartCount" in fmt:
@@ -485,6 +587,10 @@ def _prepare_bg_deploy_sandbox(tmp_path: Path, *, active_color: str | None, fail
                 service = args[3]
                 command = args[4]
                 if service.startswith("web-") and command == "python" and args[5] == "-m":
+                    if any("turn_pipeline_check" in arg for arg in args):
+                        raise SystemExit(
+                            1 if os.environ.get("VFIC_TEST_FAIL_PIPELINE") == "1" else 0
+                        )
                     raise SystemExit(0)
                 if service.startswith("web-") and command == "python" and args[5] == "-":
                     sys.stdin.read()
@@ -497,18 +603,37 @@ def _prepare_bg_deploy_sandbox(tmp_path: Path, *, active_color: str | None, fail
             if args[:2] == ["logs", "--tail=40"]:
                 raise SystemExit(0)
             if args[:2] == ["rm", "-f"]:
+                for service, entries in containers.items():
+                    containers[service] = [e for e in entries if e["cid"] not in args[2:]]
+                save()
                 raise SystemExit(0)
 
             raise SystemExit(0)
             """
         ),
     )
+    state_path = tmp_path / "docker-state.json"
+    _write_docker_state(state_path, replicas=turn_worker_replicas)
+
     env = os.environ.copy()
     env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]
     env["VFIC_TEST_LOG"] = str(command_log)
+    env["VFIC_TEST_STATE"] = str(state_path)
     env["IMAGE_TAG"] = "test-image"
+    # `sleep` is stubbed out, so the healthy-budget loop is bounded by its
+    # iteration count, not by wall clock: shrink the budget to keep the
+    # exhaustion branch cheap to execute.
+    env["ROLLING_HEALTH_BUDGET"] = "4"
     if fail_public_health:
         env["VFIC_TEST_FAIL_PUBLIC_HEALTH"] = "1"
+    if rolled_replica_never_healthy:
+        env["VFIC_TEST_ROLL_UNHEALTHY"] = "1"
+    if fail_turn_pipeline:
+        env["VFIC_TEST_FAIL_PIPELINE"] = "1"
+    if missing_post_flip_service is not None:
+        env["VFIC_TEST_MISSING_SERVICE"] = missing_post_flip_service
+        # One poll, then give up — the post-flip budget is real wall clock.
+        env["POST_FLIP_WAIT_BUDGET"] = "0"
 
     proc = subprocess.run(
         ["/bin/bash", str(scripts_dir / "bg_deploy.sh")],
@@ -525,6 +650,7 @@ def _prepare_bg_rollback_sandbox(
     tmp_path: Path,
     *,
     fail_public_health: bool,
+    fail_turn_pipeline: bool = False,
     demoted_active_ps: str = "cid-web-green\n",
     demoted_active_image: str = "franknguyenvd/vfic-backend:current-tag",
 ):
@@ -604,6 +730,8 @@ def _prepare_bg_rollback_sandbox(
                 "worker-persistence": "cid-worker-persistence\\n",
                 "worker-ingest": "cid-worker-ingest\\n",
                 "worker-followup": "cid-worker-followup\\n",
+                "worker-maintenance": "cid-worker-maintenance\\n",
+                "metrics-watch": "cid-metrics-watch\\n",
                 "scheduler": "cid-scheduler\\n",
                 "caddy": "cid-caddy\\n",
                 "oa-profile-backfill": "cid-backfill\\n",
@@ -638,6 +766,12 @@ def _prepare_bg_rollback_sandbox(
             if args[:3] == ["compose", "exec", "-T"] and len(args) >= 6:
                 service = args[3]
                 command = args[4]
+                if service.startswith("web-") and command == "python" and args[5] == "-m":
+                    if any("turn_pipeline_check" in arg for arg in args):
+                        raise SystemExit(
+                            1 if os.environ.get("VFIC_TEST_FAIL_PIPELINE") == "1" else 0
+                        )
+                    raise SystemExit(0)
                 if service.startswith("web-") and command == "python" and args[5] == "-":
                     sys.stdin.read()
                     print(json.dumps({"queue_depth": 0, "busy_workers": 0, "total_workers": 5}))
@@ -659,6 +793,8 @@ def _prepare_bg_rollback_sandbox(
     env["VFIC_TEST_DEMOTED_ACTIVE_IMAGE"] = demoted_active_image
     if fail_public_health:
         env["VFIC_TEST_FAIL_PUBLIC_HEALTH"] = "1"
+    if fail_turn_pipeline:
+        env["VFIC_TEST_FAIL_PIPELINE"] = "1"
 
     proc = subprocess.run(
         ["/bin/bash", str(scripts_dir / "bg_rollback.sh")],
@@ -682,17 +818,120 @@ def test_bg_deploy_exec_inaugural_public_verify_failure_keeps_blue_running(tmp_p
     assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "blue"
     assert "web-blue:8000" in (root / "Caddyfile").read_text(encoding="utf-8")
     # The web color and the non-turn workers are recreated outright; the turn
-    # worker goes through the rolling path (which falls back to a single
-    # recreate here, because the stubbed `compose config` cannot report
-    # replicas). See rolling_recreate_service for why they are not one command.
+    # worker is rolled one replica at a time (see
+    # test_bg_deploy_rolls_the_turn_worker_one_replica_at_a_time) and must never
+    # appear in a blunt force-recreate.
     assert (
         "docker compose up -d --no-deps --force-recreate web-blue"
         " worker-persistence worker-ingest worker-followup scheduler worker-maintenance"
         in commands
     )
-    assert "docker compose up -d --no-deps --force-recreate worker-chatbot" in commands
+    assert not [
+        line for line in commands.splitlines() if "--force-recreate" in line and "worker-chatbot" in line
+    ]
     assert "docker compose stop web-blue" not in commands
     assert "bash scripts/bg_rollback.sh" not in commands
+
+
+def test_bg_deploy_rolls_the_turn_worker_one_replica_at_a_time(tmp_path: Path) -> None:
+    """The inbound turn queue must keep a live consumer across the roll.
+
+    A single `--force-recreate` of all three replicas strands every accepted
+    webhook for the whole cold preload while each container still reports
+    healthy (2026-09-26 bot silence), so the sandbox declares 3 replicas and
+    asserts the executed command sequence removes exactly one stale container
+    at a time, topping the service back up to the declared count between
+    removals.
+    """
+    proc, _root, commands = _prepare_bg_deploy_sandbox(
+        tmp_path,
+        active_color="green",
+        fail_public_health=False,
+    )
+
+    lines = commands.splitlines()
+    removals = [i for i, line in enumerate(lines) if line.startswith("docker rm -f cid-worker-chatbot-")]
+    scale_ups = [
+        i
+        for i, line in enumerate(lines)
+        if line.startswith("docker compose up -d --no-deps --no-recreate --scale worker-chatbot=3")
+    ]
+
+    assert proc.returncode == 0
+    assert len(removals) == 3, commands
+    # A replacement is started (and the count converged back to 3) before the
+    # next replica is removed, so at most one consumer is ever down.
+    for position, index in enumerate(removals):
+        following = removals[position + 1] if position + 1 < len(removals) else len(lines)
+        assert any(index < scale_up < following for scale_up in scale_ups), commands
+    assert not [line for line in lines if "--force-recreate" in line and "worker-chatbot" in line]
+    # The roll converged: three containers, all on the new tag, so the post-flip
+    # count check had something to verify.
+    final = json.loads((tmp_path / "docker-state.json").read_text(encoding="utf-8"))
+    assert [entry["tag"] for entry in final["containers"]["worker-chatbot"]] == ["test-image"] * 3
+
+
+def test_bg_deploy_aborts_before_the_flip_when_a_rolled_replica_never_turns_healthy(
+    tmp_path: Path,
+) -> None:
+    """A replacement that never registers must not reach the Caddy flip."""
+    proc, root, commands = _prepare_bg_deploy_sandbox(
+        tmp_path,
+        active_color="green",
+        fail_public_health=False,
+        rolled_replica_never_healthy=True,
+    )
+
+    assert proc.returncode == 1
+    assert "fewer than 2 healthy worker-chatbot replicas" in proc.stderr
+    assert "no healthy worker-chatbot replica before flip" in proc.stderr
+    # The flip never ran, so the old color is still the one in the Caddyfile and
+    # the recorded active color is untouched.
+    assert not (root / "Caddyfile").exists()
+    assert not (root / "PREV_COLOR").exists()
+    assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "green"
+    assert "docker compose stop web-green" not in commands
+
+
+def test_bg_deploy_rolls_back_when_the_turn_pipeline_gate_fails(tmp_path: Path) -> None:
+    """Healthy containers are not proof the queue drains; the gate is."""
+    proc, root, commands = _prepare_bg_deploy_sandbox(
+        tmp_path,
+        active_color="green",
+        fail_public_health=False,
+        fail_turn_pipeline=True,
+    )
+
+    assert proc.returncode == 1
+    assert "turn pipeline stalled" in proc.stderr
+    assert "POST-FLIP VERIFICATION FAILED" in proc.stderr
+    # The flip DID happen, so the only safe exit is the previous color.
+    assert "web-blue:8000" in (root / "Caddyfile").read_text(encoding="utf-8")
+    assert "bash scripts/bg_rollback.sh" in commands
+    assert "docker compose stop web-green" not in commands
+
+
+@pytest.mark.parametrize("service", ["worker-maintenance", "metrics-watch"])
+def test_bg_deploy_post_flip_gate_covers_every_worker_service(tmp_path: Path, service: str) -> None:
+    """A worker that never came up must fail the deploy, not ride along green.
+
+    Both services were missing from the post-flip poll: worker-maintenance is
+    the component that actually pushes bot replies to Zalo, so a deploy could
+    report success while outbound replies silently stopped.
+    """
+    proc, root, commands = _prepare_bg_deploy_sandbox(
+        tmp_path,
+        active_color="green",
+        fail_public_health=False,
+        missing_post_flip_service=service,
+    )
+
+    assert proc.returncode == 1
+    assert f"service {service} has no running container" in proc.stderr
+    assert "POST-FLIP VERIFICATION FAILED" in proc.stderr
+    assert "bash scripts/bg_rollback.sh" in commands
+    assert "docker compose stop web-green" not in commands
+    assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "blue"
 
 
 def test_bg_deploy_exec_success_stops_old_color_only_after_public_checks(tmp_path: Path) -> None:
@@ -758,6 +997,22 @@ def test_bg_rollback_exec_empty_demoted_tag_keeps_state_unswapped(tmp_path: Path
     assert "docker compose stop web-green" not in commands
 
 
+def test_bg_rollback_exec_failed_turn_pipeline_keeps_state_unswapped(tmp_path: Path) -> None:
+    """A stalled pipeline after the revert must abort before the state swap."""
+    proc, root, commands = _prepare_bg_rollback_sandbox(
+        tmp_path,
+        fail_public_health=False,
+        fail_turn_pipeline=True,
+    )
+
+    assert proc.returncode == 1
+    assert "turn pipeline stalled" in proc.stderr
+    assert (root / "ACTIVE_COLOR").read_text(encoding="utf-8").strip() == "green"
+    assert (root / "PREV_COLOR").read_text(encoding="utf-8").strip() == "blue"
+    assert (root / "PREV_TAG").read_text(encoding="utf-8").strip() == "previous-tag"
+    assert "docker compose stop web-green" not in commands
+
+
 def test_bg_rollback_exec_success_swaps_state_only_after_public_checks(tmp_path: Path) -> None:
     proc, root, commands = _prepare_bg_rollback_sandbox(
         tmp_path,
@@ -815,39 +1070,35 @@ def test_deploy_and_rollback_worker_lists_agree() -> None:
     assert set(_worker_list("bg_deploy.sh")) == set(_worker_list("bg_rollback.sh"))
 
 
-def test_turn_workers_are_rolled_not_restarted_together() -> None:
-    # Recreating all chatbot replicas at once stranded inbound turns for the
-    # whole cold preload (~83s) while every container still reported healthy.
-    script = _read("bg_deploy.sh")
-    blunt_recreate = next(
-        line for line in script.splitlines() if '--force-recreate "web-$NEXT"' in line
+# Services this path deliberately never restarts: web-green is the color it
+# drains and leaves stopped (blue/green brings it up, deploy-breaking does not),
+# and oa-profile-backfill is profile-gated maintenance that runs after a
+# successful cutover, not part of the schema swap.
+DEPLOY_BREAKING_EXEMPT = {"web-green", "oa-profile-backfill"}
+
+
+def _compose_service_args(dry_run: str, subcommand: str) -> set[str]:
+    line = next(
+        line for line in dry_run.splitlines() if f"docker compose {subcommand} " in line
     )
-
-    assert 'TURN_WORKERS="worker-chatbot"' in script
-    assert "rolling_recreate_service" in script
-    assert "$NON_TURN_WORKERS" in blunt_recreate
-    assert "$WORKERS" not in blunt_recreate
-    # The roll must leave the surviving replicas alone while it replaces one.
-    roll_body = script.split("rolling_recreate_service() {", 1)[1].split("\n}", 1)[0]
-    assert "--no-recreate" in roll_body
-    assert "--scale" in roll_body
-    assert "--force-recreate" not in roll_body.split("expected\" -le 1")[1].split("return 0")[1]
+    return set(line.split(f"docker compose {subcommand} ", 1)[1].rstrip('"').split())
 
 
-def test_deploy_requires_a_live_turn_consumer_before_the_flip() -> None:
-    script = _read("bg_deploy.sh")
-    consumer_gate = script.rindex("service_healthy_count \"$svc\"")
-    flip = script.index("./scripts/flip_caddy.sh")
+def test_deploy_breaking_recreates_every_service_pinned_to_image_tag() -> None:
+    # On the breaking-migration path nothing drains the old code, so any
+    # ${IMAGE_TAG} service missing from the pull / up lists keeps running a
+    # previous release against the schema the migration just changed.
+    # worker-maintenance and metrics-watch were both missing (OPS-22).
+    dry_run = _make_target_dry_run("deploy-breaking")
+    expected = {
+        name
+        for name, service in _compose_services().items()
+        if "${IMAGE_TAG" in str(service.get("image", ""))
+    } - DEPLOY_BREAKING_EXEMPT
 
-    assert consumer_gate < flip, "a live webhook_high consumer must exist before the flip"
-
-
-def test_deploy_and_rollback_run_the_turn_pipeline_gate() -> None:
-    # /health/queue proves workers exist; the pipeline gate proves work drains.
-    for name in ("bg_deploy.sh", "bg_rollback.sh"):
-        script = _read(name)
-        assert "python -m scripts.turn_pipeline_check" in script, name
-        assert "turn pipeline stalled" in script, name
+    for subcommand in ("pull", "up -d --force-recreate"):
+        listed = _compose_service_args(dry_run, subcommand)
+        assert expected <= listed, f"deploy-breaking {subcommand} omits {expected - listed}"
 
 
 def test_web_healthcheck_budget_survives_deploy_contention() -> None:

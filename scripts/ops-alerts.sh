@@ -17,6 +17,8 @@
 #
 # Install (cron, every minute):
 #   * * * * * root /opt/vfic/scripts/ops-alerts.sh 2>> /var/log/vfic-alerts.log
+# `make deploy` / `make deploy-backend` (backend/Makefile) copy this file to
+# /opt/vfic/scripts/; the cron line above is all that remains to be installed.
 # Wire the output wherever you already read logs — the point is that a disk-full
 # or queue-saturation condition stops being silent (OPS-06: nothing scrapes).
 # =============================================================================
@@ -39,20 +41,60 @@ fi
 
 # --- 2. docker reclaimable ----------------------------------------------------
 if command -v docker >/dev/null 2>&1; then
-  RECLAIM_KB="$(docker system df -v 2>/dev/null | awk '/Total reclaimable/ {print $3}' | head -1)"
-  # `docker system df -v` prints e.g. "Total reclaimable:  12.34GB"; fall back to
-  # the plain table when the verbose header differs across versions.
-  RECLAIM_BYTES="$(docker system df --format '{{.Reclaimable}}' 2>/dev/null | head -1)"
-  if [ -n "${RECLAIM_BYTES:-}" ]; then
-    warn_if="$(echo "$RECLAIM_BYTES" | numfmt --from=iec 2>/dev/null || echo 0)"
-    [ "${warn_if:-0}" -gt 10737418240 ] && warn "docker reclaimable ${RECLAIM_BYTES} (>10GB) — prune dangling images"
+  # `docker system df` reports a human string ("12.34GB (67%)"), not a number, and
+  # piping that into `numfmt --from=iec` errors on the percentage suffix — the
+  # old parse always fell through to 0, so the >10GB warn could never fire. Read
+  # the JSON rows and convert the numeric part of each Reclaimable field (the
+  # per-type rows sum to the same total the verbose table prints).
+  RECLAIM_BYTES="$(docker system df --format '{{json .}}' 2>/dev/null | python3 -c '
+import json
+import re
+import sys
+
+UNITS = {"B": 1, "KB": 10 ** 3, "MB": 10 ** 6, "GB": 10 ** 9, "TB": 10 ** 12}
+total = 0
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        row = json.loads(line)
+    except ValueError:
+        continue
+    match = re.match(r"([0-9]+(?:\.[0-9]+)?)\s*([KMGT]?B)", str(row.get("Reclaimable", "")))
+    if match:
+        total += float(match.group(1)) * UNITS[match.group(2)]
+print(int(total))
+' 2>/dev/null || echo 0)"
+  if [ "${RECLAIM_BYTES:-0}" -gt 10737418240 ] 2>/dev/null; then
+    warn "docker reclaimable $(numfmt --to=iec --suffix=B "$RECLAIM_BYTES" 2>/dev/null || echo "${RECLAIM_BYTES}B") (>10GB) — prune dangling images"
   fi
-  unset RECLAIM_KB
 fi
 
 # --- 3. metrics from inside the live web container ---------------------------
 if command -v docker >/dev/null 2>&1; then
-  COLOR="$(cat ACTIVE_COLOR 2>/dev/null || echo blue)"
+  # Both of these used to be wrong under cron, whose cwd is not /opt/vfic:
+  # ACTIVE_COLOR was read relatively (always falling back to blue, so the check
+  # probed the IDLE color after a cutover), and the compose call ran with no
+  # IMAGE_TAG. /opt/vfic/.env never defines one and the prod compose file guards
+  # it with `${IMAGE_TAG:?}` for EVERY subcommand, so `compose exec` aborted on
+  # interpolation and METRICS was always empty. Resolve both the same way
+  # scripts/backup-droplet.sh and backend/Makefile do: read the color from the
+  # absolute path, take the tag from the image that color actually runs.
+  cd /opt/vfic || true
+  COLOR="$(tr -d "[:space:]" < /opt/vfic/ACTIVE_COLOR 2>/dev/null || echo blue)"
+  case "$COLOR" in
+    blue | green) ;;
+    *) COLOR=blue ;;
+  esac
+  ACTIVE_CID="$(docker ps -q --filter "name=web-$COLOR" | head -1)"
+  if [ -n "$ACTIVE_CID" ]; then
+    IMAGE_TAG="$(docker inspect --format "{{.Config.Image}}" "$ACTIVE_CID" | sed "s/.*://")"
+  else
+    IMAGE_TAG="$(cat /opt/vfic/PREV_TAG 2>/dev/null || echo unknown)"
+  fi
+  [ -n "$IMAGE_TAG" ] || IMAGE_TAG=unknown
+  export IMAGE_TAG
   WEB="web-${COLOR}"
   METRICS="$(docker compose -f /opt/vfic/docker-compose.yml exec -T "$WEB" \
     python -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:8000/metrics', timeout=5).read().decode())" 2>/dev/null || true)"

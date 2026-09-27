@@ -142,9 +142,13 @@ stale_service_container() {
 #
 # Mixed tags across replicas are intended: blue/green already runs old and new
 # code concurrently, and migrations are additive (step 3) before this runs.
+# The 180s healthy budget is overridable (ROLLING_HEALTH_BUDGET) for the same
+# reason POST_FLIP_WAIT_BUDGET is: the exhaustion branch must be reachable in a
+# test run without spending three minutes of wall clock on `sleep`.
 rolling_recreate_service() {
   local service="$1"
-  local expected stale replaced=0 budget=180 waited
+  local expected stale replaced=0 waited
+  local budget="${ROLLING_HEALTH_BUDGET:-180}"
   expected="$(declared_replicas "$service")"
 
   if [ "$expected" -le 1 ]; then
@@ -240,6 +244,13 @@ PY
   # color got a dedicated health wait; their healthchecks (start_period 15s +
   # 5 retries x 30s) legitimately need minutes after boot warmup. Poll within
   # a bounded budget instead of demanding instant health.
+  #
+  # Every service in $WORKERS must appear here, not just the ones the 2026-09-22
+  # incident happened to implicate: this poll is the ONLY post-flip health
+  # assertion, and two services were left out of it (worker-maintenance — the
+  # dispatcher that actually pushes bot replies to Zalo — and metrics-watch),
+  # so a crash-looping dispatcher reported a green deploy. backend/tests/
+  # test_deployment_makefile.py pins the coverage.
   local _deadline=$(( $(date +%s) + ${POST_FLIP_WAIT_BUDGET:-300} ))
   while :; do
     require_running_service_count "frontend" &&
@@ -247,7 +258,9 @@ PY
       require_running_service_count "worker-persistence" &&
       require_running_service_count "worker-ingest" &&
       require_running_service_count "worker-followup" &&
-      require_running_service_count "scheduler" && break
+      require_running_service_count "scheduler" &&
+      require_running_service_count "worker-maintenance" &&
+      require_running_service_count "metrics-watch" && break
     if [ "$(date +%s)" -ge "$_deadline" ]; then
       echo "==> post-flip check: services still not ready after ${POST_FLIP_WAIT_BUDGET:-300}s budget" >&2
       return 1

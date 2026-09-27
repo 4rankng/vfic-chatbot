@@ -110,7 +110,8 @@ stale_service_container() {
 # _count_lines / declared_replicas / require_running_service_count here.
 rolling_recreate_service() {
   local service="$1"
-  local expected stale replaced=0 budget=180 waited
+  local expected stale replaced=0 waited
+  local budget="${ROLLING_HEALTH_BUDGET:-180}"
   expected="$(declared_replicas "$service")"
 
   if [ "$expected" -le 1 ]; then
@@ -189,9 +190,9 @@ PY
     return 1
   }
 
-  # Same rationale as bg_deploy.sh: freshly recreated workers need minutes
-  # (LLM warmup + healthcheck start_period/retries), so poll within a bounded
-  # budget instead of failing on the first health=starting sighting.
+  # Same rationale and the same coverage as bg_deploy.sh: every $WORKERS
+  # service is asserted, including worker-maintenance (the dispatcher that
+  # pushes bot replies to Zalo) and metrics-watch, which were missing here.
   local _deadline=$(( $(date +%s) + ${POST_FLIP_WAIT_BUDGET:-300} ))
   while :; do
     require_running_service_count "frontend" &&
@@ -199,7 +200,9 @@ PY
       require_running_service_count "worker-persistence" &&
       require_running_service_count "worker-ingest" &&
       require_running_service_count "worker-followup" &&
-      require_running_service_count "scheduler" && break
+      require_running_service_count "scheduler" &&
+      require_running_service_count "worker-maintenance" &&
+      require_running_service_count "metrics-watch" && break
     if [ "$(date +%s)" -ge "$_deadline" ]; then
       echo "==> rollback check: services still not ready after ${POST_FLIP_WAIT_BUDGET:-300}s budget" >&2
       return 1

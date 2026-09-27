@@ -15,18 +15,29 @@ dev: bootstrap
 	$(MAKE) -C backend dev FRONTEND_PORT=$(PORT)
 
 ## bootstrap: one-command first run — .env, backend/.venv (Python 3.12 per
-## backend/.python-version) and frontend/node_modules. The venv/npm installs are
-## `test -d`-guarded; repeat runs only re-sync the editable install, which is
-## idempotent and picks up dependency changes (OPS-18).
+## backend/.python-version) and frontend/node_modules. The venv is built from
+## backend/uv.lock, not re-resolved from pyproject ranges: `frontend/
+## playwright.config.ts` points the e2e lane's BACKEND_PYTHON at this same
+## .venv, so an unpinned resolve makes the tested backend unreproducible
+## (TEST-19). Repeat runs are idempotent and pick up dependency changes.
 bootstrap:
 	@test -f backend/.env || { echo "backend/.env: created from .env.example — set real secrets before any deploy"; cp backend/.env.example backend/.env; }
 	@if ! command -v python3.12 >/dev/null 2>&1; then \
 		echo "WARNING: python3.12 not found — falling back to $$(command -v python3)."; \
 		echo "         Production and CI run 3.12; install it (pyenv/mise) to match (OPS-13)."; \
 	fi
-	@test -d backend/.venv || { echo "Creating backend/.venv ..."; python3.12 -m venv backend/.venv 2>/dev/null || python3 -m venv backend/.venv; }
-	@backend/.venv/bin/python -m pip install --quiet --upgrade pip
-	@backend/.venv/bin/python -m pip install --quiet -e "backend/[dev]"
+	@if command -v uv >/dev/null 2>&1; then \
+		echo "Syncing backend/.venv from backend/uv.lock (uv sync --frozen)..."; \
+		cd backend && uv sync --all-extras --frozen; \
+	else \
+		echo "WARNING: uv not found — falling back to an UNPINNED pip resolve from"; \
+		echo "         pyproject ranges. The e2e lane's BACKEND_PYTHON is this venv,"; \
+		echo "         so what it installs is no longer reproducible from uv.lock."; \
+		echo "         Install uv (https://docs.astral.sh/uv/) for a locked venv."; \
+		test -d .venv || { python3.12 -m venv .venv 2>/dev/null || python3 -m venv .venv; }; \
+		.venv/bin/python -m pip install --quiet --upgrade pip; \
+		.venv/bin/python -m pip install --quiet -e ".[dev]"; \
+	fi
 	@test -d frontend/node_modules || { echo "Installing frontend deps (npm ci) ..."; cd frontend && npm ci; }
 	@echo "bootstrap complete — run 'make dev'"
 
@@ -40,7 +51,7 @@ release-check:
 	@cd backend && HEAD_REV="$$(.venv/bin/python -m alembic heads | awk 'NR==1{print $$1}')" && \
 		grep -qF "**HEAD:** \`$$HEAD_REV" ../docs/ops/deployment-guide.md || { \
 			echo "Release blocked: docs/ops/deployment-guide.md's Alembic HEAD no longer matches alembic heads ($$HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
-	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest -m "not integration"
+	@cd backend && .venv/bin/ruff check . && .venv/bin/python -m pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
 	@cd frontend && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build
 	@tmp_raw="$$(mktemp -t release-gate-raw.XXXXXX.json)"; \
 		tmp_gold="$$(mktemp -t release-gate-golden.XXXXXX.json)"; \
@@ -100,6 +111,11 @@ BACKUP_DIR  := $(HOME)/Library/CloudStorage/OneDrive-Personal/backup/vfic_db_bac
 ## alone cannot be decrypted by a restore (OPS-03). Keeps the newest $(BACKUP_KEEP)
 ## dumps; each vfic_env_*.env lives exactly as long as its dump pair (an env copy
 ## holds prod secrets, so an orphan whose dump was pruned is deleted, not kept).
+## The remote step resolves IMAGE_TAG from the running active-color web
+## container before any compose call: /opt/vfic/.env has no IMAGE_TAG and the
+## prod compose file guards it with `${IMAGE_TAG:?}` for EVERY subcommand, so a
+## bare `docker compose ps` aborted on interpolation and the backup never ran
+## (OPS-21). Same recipe as scripts/backup-droplet.sh.
 BACKUP_KEEP := 10
 backup:
 	@echo "=== Starting database backup from production ===" && \
@@ -109,8 +125,13 @@ backup:
 	mkdir -p "$(BACKUP_DIR)" && \
 	echo "Dumping PostgreSQL (container resolved via compose, not a hardcoded name)..." && \
 	ssh root@$(PROD_SERVER) \
-		'cd /opt/vfic && PG=$$(docker compose ps -q postgres) && \
-		 [ -n "$$PG" ] || { echo "ERROR: compose reports no postgres container"; exit 1; } && \
+		'cd /opt/vfic && COLOR="$$(tr -d "[:space:]" < ACTIVE_COLOR 2>/dev/null || echo blue)" && \
+		 CID="$$(docker ps -q --filter name=web-$$COLOR | head -1)" && \
+		 if [ -n "$$CID" ]; then TAG="$$(docker inspect --format "{{.Config.Image}}" "$$CID" | sed "s/.*://")"; \
+		 else TAG="$$(cat PREV_TAG 2>/dev/null || echo unknown)"; fi && \
+		 [ -n "$$TAG" ] || TAG=unknown; \
+		 PG=$$(IMAGE_TAG="$$TAG" docker compose ps -q postgres); \
+		 [ -n "$$PG" ] || { echo "ERROR: compose reports no postgres container"; exit 1; }; \
 		 docker exec "$$PG" pg_dump -U vfic -Fc -Z6 > /tmp/vfic_pg.dump' && \
 	ssh root@$(PROD_SERVER) \
 		'test -s /tmp/vfic_pg.dump || { echo "ERROR: Backup file is empty!"; exit 1; }' && \
