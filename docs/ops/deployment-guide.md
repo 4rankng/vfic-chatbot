@@ -242,7 +242,13 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0056_project_external_api` (26 Sep 2026).
+- **HEAD:** `0057_drop_match_memories_vector_overload` (27 Sep 2026). This line is
+  grepped by the `release-check` docs-drift gate against the live
+  `alembic heads` value, so a new migration that does not update it blocks the
+  release. `0057` drops the unused `match_memories(vector, integer, jsonb)`
+  overload so the memories retrieval path resolves to the `halfvec` signature
+  and uses `memories_embedding_halfvec_hnsw_idx`; its downgrade restores the
+  vector overload verbatim.
 - **Baseline `0001`** is ~58 KB of raw `op.execute` SQL; later revisions are
   normal Alembic. `app/models/` mirrors schema but does **not** generate
   migrations.
