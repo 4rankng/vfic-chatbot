@@ -25,18 +25,57 @@ class TingtingSettingsMixin:
         return await self._tingting_service().runtime()
 
     async def admin_tingting_view(self) -> dict:
-        return await self._tingting_service().admin_view()
+        view = await self._tingting_service().admin_view()
+        view.update(await self._tingting_oa_link_service().view())
+        return view
+
+    def _tingting_oa_link_service(self):
+        from app.services.tingting_oa import TingtingOaLinkService
+
+        return TingtingOaLinkService(self.db, settings=self.settings, cipher=self.cipher)
+
+    async def link_tingting_oa(self, values: dict[str, str | None], *, actor_id) -> dict:
+        """Store the TingTing OA credentials, probe Zalo, register the account."""
+        service = self._tingting_oa_link_service()
+        view = await service.link(values, actor_id=actor_id)
+        merged = await self._tingting_service().admin_view()
+        merged.update(view)
+        return merged
 
     async def update_tingting(
         self, values: dict[str, str | None], *, actor_id
     ) -> dict:
-        """Persist ``api_key`` / ``reset_oa_id`` (tri-state: absent keeps, ``""`` clears)."""
+        """Persist the API key, the reset-OA pin, and/or the support-OA credentials.
+
+        ``reset_oa_id`` is no longer an admin field — it follows the verified
+        link (see :mod:`app.services.tingting_oa`) — but the key stays accepted
+        so existing callers and tests keep their meaning.
+        """
         service = self._tingting_service()
         if "api_key" in values:
             await service.replace_key(values.get("api_key"), actor_id=actor_id)
         if "reset_oa_id" in values:
             await service.replace_reset_oa_id(values.get("reset_oa_id"), actor_id=actor_id)
-        return await service.admin_view()
+        oa_values = {
+            base: values[base]
+            for base in (
+                "zalo_oa_app_id",
+                "zalo_oa_secret_key",
+                "zalo_oa_access_token",
+                "zalo_oa_refresh_token",
+            )
+            if base in values
+        }
+        if oa_values:
+            link_service = self._tingting_oa_link_service()
+            if all(not str(value or "").strip() for value in oa_values.values()):
+                # Every field cleared: the operator is removing the OA, so drop
+                # the credentials and the binding instead of probing an empty
+                # token (which would just report "cần OA Access Token").
+                await link_service.unlink(actor_id=actor_id)
+            else:
+                await link_service.link(oa_values, actor_id=actor_id)
+        return await self.admin_tingting_view()
 
 
 __all__ = ["TingtingSettingsMixin"]

@@ -363,7 +363,14 @@ def _redact(value: str | None) -> str:
     return "*" * (len(value) - 4) + value[-4:]
 
 
+# The employee-support (TingTing) Zalo OA account key. A stable constant, not the
+# OA's id: the id is discovered from Zalo's `getoa` at link time and never typed
+# (see ADR-0013). Kept in this values module so the graph layer can name the
+# account without importing a service module.
+TINGTING_OA_ACCOUNT_KEY = "tingting"
+
 __all__ = [
+    "TINGTING_OA_ACCOUNT_KEY",
     "PROVIDER_ZALO_BOT",
     "PROVIDER_ZALO_OA",
     "PROVIDER_FACEBOOK_MESSENGER",

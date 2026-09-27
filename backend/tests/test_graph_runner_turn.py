@@ -2143,12 +2143,14 @@ async def test_rag_vacancy_salary_followup_scopes_knowledge_query_to_vacancy_thr
 
 
 @pytest.mark.asyncio
-async def test_agent_turn_injects_the_tingting_guide_without_project_focus(monkeypatch):
-    """The reset guide must reach the prompt with no project selected.
+async def test_support_oa_turn_injects_the_guide_and_only_the_reset_tools(monkeypatch):
+    """On the TingTing OA the reset flow is the whole toolset.
 
-    Regression: the API guide was gated behind a FOCUSED project, so an employee
-    asking to reset a TingTing password never saw the endpoints — the turn
-    refused ("ngoài phạm vi") and invented an IT hotline instead.
+    Regression: the API guide used to be gated behind a FOCUSED project, so an
+    employee asking to reset a password never saw the endpoints. Now the support
+    OA always sees the guide — and nothing else: no project catalog, no
+    recruiting knowledge, so a stray route cannot answer a candidate question
+    from the employee channel.
     """
     from app.graph.runner import _agent_turn
 
@@ -2185,12 +2187,13 @@ async def test_agent_turn_injects_the_tingting_guide_without_project_focus(monke
         BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="quên mật khẩu app"),
         deps,
         "quên mật khẩu app",
-        provider="zalo_bot",
-        chat_id="z1",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
         recent_messages=[],
         timings={"lane": "agent"},
         decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92),
         project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=True,
     )
 
     system = str(captured["system"])
@@ -2202,7 +2205,6 @@ async def test_agent_turn_injects_the_tingting_guide_without_project_focus(monke
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
-        "search_knowledge",
     }
 
 
@@ -2244,26 +2246,28 @@ async def test_agent_turn_omits_the_tingting_guide_when_unconfigured(monkeypatch
         BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="quên mật khẩu app"),
         deps,
         "quên mật khẩu app",
-        provider="zalo_bot",
-        chat_id="z1",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
         recent_messages=[],
         timings={"lane": "agent"},
         decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92),
-        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=True,
     )
 
-    assert "API TINGTING" not in str(captured["system"])
+    system = str(captured["system"])
+    assert "=== API TINGTING" not in system
+    assert "/api/v1/integration/password-reset/otp" not in system
 
 
 @pytest.mark.asyncio
-async def test_off_channel_support_turn_gets_the_wrong_channel_reply(monkeypatch):
-    """Account support belongs to the TingTing OA: elsewhere, answer honestly.
+async def test_off_channel_support_turn_gets_the_pointer_to_the_support_oa(monkeypatch):
+    """Off the support OA the answer is a fixed string, not a model output.
 
-    The guide must not be injected and the reset tools must not be bound on the
-    recruitment Bot / Messenger — a flow this channel cannot serve must never be
-    offered, and the reply must not invent a channel to contact instead.
+    The operator approved these exact words: they name the TingTing OA and link
+    to it, and nothing else — no invented hotline, no paraphrase that could drop
+    the link.
     """
-    from app.graph.runner import _agent_turn
+    from app.graph.runner import TINGTING_RESET_REDIRECT_REPLY, _agent_turn
 
     captured: dict[str, object] = {}
     direct_calls: list[dict] = []
@@ -2271,30 +2275,18 @@ async def test_off_channel_support_turn_gets_the_wrong_channel_reply(monkeypatch
     class _FakeAgent:
         async def agent(self, user_text, **kwargs):
             captured.update(kwargs)
-            return "agent reply"
+            return "direct reply"
 
         async def direct(self, user_text, **kwargs):
             direct_calls.append(kwargs)
             return "direct reply"
 
-    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
-        return "fake system prompt", True
-
-    class _Lead:
-        async def context(self, *args, **kwargs):  # noqa: ARG002
-            return "", ""
-
-        def instruction(self, question):  # noqa: ARG002
-            return ""
-
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
-    deps.lead = _Lead()
     deps.retrieval = SimpleNamespace(
         tingting_api_configured=AsyncMock(return_value=True)
     )
 
-    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(
         runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
     )
@@ -2312,21 +2304,69 @@ async def test_off_channel_support_turn_gets_the_wrong_channel_reply(monkeypatch
         tingting_reset_allowed=False,
     )
 
-    assert reply == "direct reply"
-    assert captured == {}  # the tool-calling lane never ran
-    assert len(direct_calls) == 1
-    assert "chỉ được hỗ trợ trên Zalo OA" in str(direct_calls[0]["system"])
-    assert "API TINGTING" not in str(direct_calls[0]["system"])
+    assert reply == TINGTING_RESET_REDIRECT_REPLY
+    assert "Zalo OA Ting Ting Software Solution" in reply
+    assert "https://zalo.me/3383849659955472174" in reply
+    assert captured == {}  # no generation at all
+    assert direct_calls == []
 
 
 @pytest.mark.asyncio
-async def test_focused_support_turn_keeps_the_project_api_tool(monkeypatch):
-    """A focused RAG turn must not collapse an API turn to ``search_knowledge``.
+async def test_a_non_reset_message_on_the_support_oa_hands_off_to_a_human(monkeypatch):
+    """The support OA serves resets only; anything else waits for a consultant."""
+    from app.graph.runner import TINGTING_HANDOFF_REPLY, _agent_turn
 
-    The focused branch binds one Project-owned knowledge authority; an
-    employee-support turn has to keep ``call_tingting_api`` or the verified reset
-    flow can never run. The knowledge tool must also not be *forced*, so the
-    model is free to start with the identity lookup.
+    captured: dict[str, object] = {}
+    escalations: list[dict] = []
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "should not run"
+
+    class _Conversations:
+        async def get(self, _conversation_id):
+            return SimpleNamespace(id=CONV_ID, version=7)
+
+        async def escalate_extracted_intent(self, conv, *, reason, confidence, expected_version):
+            escalations.append(
+                {
+                    "conversation": conv,
+                    "reason": reason,
+                    "confidence": confidence,
+                    "expected_version": expected_version,
+                }
+            )
+            return True
+
+    deps = _deps(_FakeZalo(), conversation=_Conversations())
+    deps.agent = _FakeAgent()
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=7, user_text="dự án nào lương cao"),
+        deps,
+        "dự án nào lương cao",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="general", intent_confidence=0.9),
+        tingting_reset_allowed=True,
+    )
+
+    assert reply == TINGTING_HANDOFF_REPLY
+    assert captured == {}  # the model never answers on this channel
+    assert len(escalations) == 1
+    assert escalations[0]["reason"] == "tingting_support_handoff"
+    assert escalations[0]["expected_version"] == 7
+
+
+@pytest.mark.asyncio
+async def test_focused_support_turn_drops_the_project_knowledge_tool(monkeypatch):
+    """A FOCUSED project turn on the support OA cannot re-add project knowledge.
+
+    The focused branch binds one Project-owned knowledge authority; on the
+    employee OA that must not happen — the reset tools are the whole surface.
     """
     from app.graph.runner import _agent_turn
 
@@ -2363,8 +2403,8 @@ async def test_focused_support_turn_keeps_the_project_api_tool(monkeypatch):
         BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="em quên mật khẩu"),
         deps,
         "em quên mật khẩu",
-        provider="zalo_bot",
-        chat_id="z1",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
         recent_messages=[],
         timings={"lane": "agent"},
         decisions=TurnDecisions(intent="employee_support", intent_confidence=0.95),
@@ -2375,6 +2415,7 @@ async def test_focused_support_turn_keeps_the_project_api_tool(monkeypatch):
             project_name="LG Display",
             knowledge_mode="RAG",
         ),
+        tingting_reset_allowed=True,
     )
 
     assert set(captured["allowed_tools"]) == {
@@ -2383,11 +2424,8 @@ async def test_focused_support_turn_keeps_the_project_api_tool(monkeypatch):
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
-        "search_knowledge",
     }
-    assert captured["forced_project_slug"] == "lg-display"
-    assert "required_tool" not in captured
-
+    assert "search_knowledge" not in captured["allowed_tools"]
 
 @pytest.mark.asyncio
 async def test_agent_turn_does_not_append_collection_question(monkeypatch):

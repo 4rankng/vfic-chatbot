@@ -71,41 +71,6 @@ class ZaloIntegrationSettingsUpdate(BaseModel):
     zalo_oa_refresh_token: str | None = Field(default=None, min_length=1, max_length=4096)
 
 
-class ZaloOaAccountOut(BaseModel):
-    """One linked Zalo OA account (multi-OA settings card).
-
-    Secrets are surfaced as status only (never the value); ``account_key`` is the
-    Zalo OA id, which is also the routing key for that OA's webhook events.
-    """
-
-    account_key: str
-    label: str
-    status: str
-    generation: int
-    is_default: bool
-    app_id: str = ""
-    secret_key: SecretStatus
-    access_token: SecretStatus
-    refresh_token: SecretStatus
-
-
-class ZaloOaAccountsOut(BaseModel):
-    accounts: list[ZaloOaAccountOut]
-
-
-class ZaloOaAccountLinkIn(BaseModel):
-    """Link (or re-credential) a second Zalo OA account."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    oa_id: str = Field(min_length=1, max_length=64)
-    label: str = Field(default="", max_length=255)
-    app_id: str | None = Field(default=None, max_length=128)
-    secret_key: str | None = Field(default=None, max_length=2048)
-    access_token: str = Field(min_length=1, max_length=4096)
-    refresh_token: str | None = Field(default=None, max_length=4096)
-
-
 class ZaloChannelTestOut(BaseModel):
     """Result of probing ONE Zalo channel (Bot Platform or OA).
 
@@ -342,17 +307,39 @@ class TingtingIntegrationSettingsOut(BaseModel):
     configured: bool
     base_url: str
     auth_header: str
-    # The Zalo OA account key allowed to run the reset flow; "" = any connected
-    # OA (the flow is still never offered off the OA channel).
+    # Internal binding: the account key of the verified support OA, set by the
+    # link below. Kept in the response for diagnostics; the settings page shows
+    # the OA name/id instead of this key.
     reset_oa_id: str = ""
+    # The Zalo OA that serves the reset flow. Credentials are status-only; the
+    # OA id and name come from Zalo's `getoa` at link time, never from typing.
+    oa_app_id: str = ""
+    oa_secret_key: SecretStatus = SecretStatus(configured=False)
+    oa_access_token: SecretStatus = SecretStatus(configured=False)
+    oa_refresh_token: SecretStatus = SecretStatus(configured=False)
+    oa_linked: bool = False
+    oa_id: str = ""
+    oa_name: str = ""
+    oa_label: str = ""
+    oa_verified_at: str | None = None
+    oa_last_checked_at: str | None = None
+    # Redacted reason from the last failed `getoa` probe ("" when it passed).
+    oa_last_error: str = ""
 
 
 class TingtingIntegrationSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     api_key: str | None = Field(default=None, min_length=1, max_length=4096)
-    # Tri-state: omitted keeps the pin, "" clears it, a value sets it.
-    reset_oa_id: str | None = Field(default=None, max_length=128)
+    # The support OA's four Zalo credentials. Posting any of them (with the API
+    # key, or alone) stores what was sent and probes Zalo with the effective
+    # access token: on success the OA id/name are discovered and the account is
+    # registered; on failure the values are still stored, the response carries
+    # `oa_last_error`, and the reset flow stays off.
+    zalo_oa_app_id: str | None = Field(default=None, max_length=128)
+    zalo_oa_secret_key: str | None = Field(default=None, max_length=2048)
+    zalo_oa_access_token: str | None = Field(default=None, max_length=4096)
+    zalo_oa_refresh_token: str | None = Field(default=None, max_length=4096)
 
 
 # ─── Facebook / Messenger (Phase 4) ─────────────────────────────────────────

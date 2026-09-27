@@ -136,7 +136,9 @@ class ZaloWebhookService:
             body=norm.user_text,
             zalo_message_id=norm.msg_id,
             runtime_revision_id=(runtime_authority.revision_id if runtime_authority else None),
-            authority_generation=(runtime_authority.authority_generation if runtime_authority else None),
+            authority_generation=(
+                runtime_authority.authority_generation if runtime_authority else None
+            ),
             runtime_fingerprint=(runtime_authority.fingerprint if runtime_authority else None),
         )  # persists candidate message; stamps last_inbound_at; bumps unread if HUMAN
 
@@ -151,51 +153,58 @@ class ZaloWebhookService:
         # An explicit introduction ("mình tên …") is deterministic data, not
         # something that should wait behind the best-effort LLM extraction job.
         # The later job still enriches the rest of the candidate profile.
-        try:
-            from app.services.candidate_extraction import CandidateExtractionService
+        #
+        # The employee-support OA is skipped entirely: its writers are staff
+        # asking for a password reset, not candidates, so nothing about them
+        # belongs in the CRM profile.
+        from app.channels.types import TINGTING_OA_ACCOUNT_KEY
 
-            # A bare reply ("Dũng") to the bot's name request is captured here,
-            # immediately at inbound, so the next turn personalises with it
-            # instead of reverting to the Zalo profile name. Only look back when
-            # the reply is short enough to be a name, to skip a history read on
-            # normal-length messages. Best-effort: a history read failure just
-            # skips this enhancement (name capture is already best-effort).
-            prev_bot_message = None
-            if len((norm.user_text or "").strip()) <= 30:
-                try:
-                    _recent = await svc.last_messages(conv, limit=5)
-                    prev_bot_message = next(
-                        (
-                            m.body
-                            for m in reversed(_recent)
-                            if getattr(m, "sender", None) == "BOT"
-                        ),
-                        None,
-                    )
-                except Exception:
-                    prev_bot_message = None
-
-            await CandidateExtractionService.persist_explicit_name(
-                db,
-                norm.zalo_chat_id,
-                norm.user_text,
-                prev_bot_message=prev_bot_message,
-            )
-        except Exception as exc:
-            # The inbound message is already durable. Do not turn a CRM-profile
-            # write failure into a failed webhook delivery. Error text can carry
-            # DB-bound candidate values, so log only the exception class.
+        if (account_key or "") != TINGTING_OA_ACCOUNT_KEY:
             try:
-                await db.rollback()
-            except Exception as rollback_exc:
-                logger.error(
-                    "explicit candidate name persistence rollback failed error_type=%s",
-                    type(rollback_exc).__name__,
+                from app.services.candidate_extraction import CandidateExtractionService
+
+                # A bare reply ("Dũng") to the bot's name request is captured here,
+                # immediately at inbound, so the next turn personalises with it
+                # instead of reverting to the Zalo profile name. Only look back when
+                # the reply is short enough to be a name, to skip a history read on
+                # normal-length messages. Best-effort: a history read failure just
+                # skips this enhancement (name capture is already best-effort).
+                prev_bot_message = None
+                if len((norm.user_text or "").strip()) <= 30:
+                    try:
+                        _recent = await svc.last_messages(conv, limit=5)
+                        prev_bot_message = next(
+                            (
+                                m.body
+                                for m in reversed(_recent)
+                                if getattr(m, "sender", None) == "BOT"
+                            ),
+                            None,
+                        )
+                    except Exception:
+                        prev_bot_message = None
+
+                await CandidateExtractionService.persist_explicit_name(
+                    db,
+                    norm.zalo_chat_id,
+                    norm.user_text,
+                    prev_bot_message=prev_bot_message,
                 )
-            logger.error(
-                "explicit candidate name persistence failed error_type=%s",
-                type(exc).__name__,
-            )
+            except Exception as exc:
+                # The inbound message is already durable. Do not turn a CRM-profile
+                # write failure into a failed webhook delivery. Error text can carry
+                # DB-bound candidate values, so log only the exception class.
+                try:
+                    await db.rollback()
+                except Exception as rollback_exc:
+                    logger.error(
+                        "explicit candidate name persistence rollback failed error_type=%s",
+                        type(rollback_exc).__name__,
+                    )
+                logger.error(
+                    "explicit candidate name persistence failed error_type=%s",
+                    type(exc).__name__,
+                )
 
         # Reload and recheck because a recruiter may have taken over while the
         # deterministic profile write was in progress.
@@ -302,9 +311,7 @@ def _normalized_from_oa_event(event) -> NormalizedMessage:
     )
 
 
-async def handle_oa_side_event(
-    db: AsyncSession, event, *, account_key: str | None = None
-) -> dict:
+async def handle_oa_side_event(db: AsyncSession, event, *, account_key: str | None = None) -> dict:
     """Dispatch non-text OA events: receipts, follow/unfollow, clicks, media.
 
     None of these start a bot turn, acquire the per-chat lock, or fire typing.
@@ -321,9 +328,7 @@ async def handle_oa_side_event(
     if kind in ("user_seen", "user_received"):
         if not event.message_ids or not event.sender_id:
             return {"status": "ignored"}
-        conv = await svc.ensure(
-            event.scoped_chat_id, zalo_channel="oa", account_key=account_key
-        )
+        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa", account_key=account_key)
         await svc.apply_delivery_receipt_batch(
             conv,
             zalo_message_ids=list(event.message_ids),
@@ -333,24 +338,18 @@ async def handle_oa_side_event(
         return {"status": "receipt"}
 
     if kind == "follow":
-        conv = await svc.ensure(
-            event.scoped_chat_id, zalo_channel="oa", account_key=account_key
-        )
+        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa", account_key=account_key)
         await svc.apply_follow(conv)
         return {"status": "follow"}
 
     if kind == "unfollow":
-        conv = await svc.ensure(
-            event.scoped_chat_id, zalo_channel="oa", account_key=account_key
-        )
+        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa", account_key=account_key)
         await svc.apply_unfollow(conv)
         await svc.record_system_note(conv, body="Người dùng đã bỏ quan tâm (unfollow) OA.")
         return {"status": "unfollow"}
 
     if kind == "click_to_message":
-        conv = await svc.ensure(
-            event.scoped_chat_id, zalo_channel="oa", account_key=account_key
-        )
+        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa", account_key=account_key)
         title = _event_button_title(event.raw)
         body = f"👤 Người dùng đã nhấn nút: {title}" if title else "👤 Người dùng đã nhấn nút."
         await svc.record_system_note(conv, body=body)

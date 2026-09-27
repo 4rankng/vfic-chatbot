@@ -44,8 +44,9 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 2,
     "conversations": 19,
     "dashboard": 2,
-    "integrations": 36,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints
-    # +3 multi-OA account endpoints (list / link / unlink one Zalo OA account)
+    "integrations": 34,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints
+    # +2 the TingTing support OA: save-and-check the four credentials (PUT /tingting)
+    # and a re-probe endpoint (POST /tingting/oa/check)
     # +2 deployment-wide TingTing app API key (GET / PUT, secrets status-only)
     # +2 Meta App credentials UI; +4 multi-Page per-Page project CRUD
     # +1 admin-only credentials reveal (audited, no-store)
@@ -64,7 +65,7 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "4b7121b56005a0d2bed86a0605f0f683e08414beda6c88be7dcbb9d0dbdab608"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "cc5354340f429fbad2427a868840b286474fc72cf840e68991b45b63aced019f"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

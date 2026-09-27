@@ -48,13 +48,11 @@ from app.schemas.integrations import (
     ZaloChannelTestOut,
     ZaloIntegrationSettingsOut,
     ZaloIntegrationSettingsUpdate,
-    ZaloOaAccountLinkIn,
-    ZaloOaAccountOut,
-    ZaloOaAccountsOut,
     ZaloOaSignatureVerifyOut,
     ZaloOaSignatureVerifyRequest,
 )
 from app.services.integration_settings import IntegrationSettingsService
+from app.services.tingting_oa import TingtingOaLinkError
 from app.services.integrations.facebook_oauth_flow import (
     FacebookOAuthCallbackOutcome,
     complete_page_selection,
@@ -112,110 +110,6 @@ async def update_zalo_integration_settings(
     # inbound. Best-effort: the DB write is already committed.
     view["zalo_bot_webhook_sync"] = await sync_bot_webhook(settings_service, changed)
     return ZaloIntegrationSettingsOut.model_validate(view)
-
-
-async def _zalo_oa_accounts_view(db: AsyncSession) -> ZaloOaAccountsOut:
-    """Compose the multi-OA account list with masked credential status."""
-    from app.channels.providers.zalo_account import (
-        ZaloOaAccountLifecycle,
-        default_oa_account_key,
-    )
-
-    lifecycle = ZaloOaAccountLifecycle(db)
-    settings_service = IntegrationSettingsService(db)
-    accounts: list[ZaloOaAccountOut] = []
-    for row in await lifecycle.list_accounts():
-        credentials = await settings_service.oa_account_credentials_view(row.account_key)
-        accounts.append(
-            ZaloOaAccountOut(
-                account_key=row.account_key,
-                label=row.label,
-                status=row.status,
-                generation=int(row.generation or 0),
-                is_default=row.account_key == default_oa_account_key(),
-                app_id=credentials["app_id"],
-                secret_key=credentials["secret_key"],
-                access_token=credentials["access_token"],
-                refresh_token=credentials["refresh_token"],
-            )
-        )
-    return ZaloOaAccountsOut(accounts=accounts)
-
-
-@router.get("/zalo/oa-accounts", response_model=ZaloOaAccountsOut)
-async def list_zalo_oa_accounts(
-    _admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> ZaloOaAccountsOut:
-    """Every Zalo OA account: the seeded original plus each linked OA.
-
-    Linking a second OA is what makes its events routable — an OA that is not
-    listed here still delivers its events, but they are served by the original
-    OA's credentials (see the webhook fallback).
-    """
-    return await _zalo_oa_accounts_view(db)
-
-
-@router.post("/zalo/oa-accounts", response_model=ZaloOaAccountsOut)
-async def link_zalo_oa_account(
-    body: ZaloOaAccountLinkIn,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> ZaloOaAccountsOut:
-    """Link (or re-credential) one additional Zalo OA.
-
-    ``oa_id`` is the OA id Zalo shows in its console — it becomes the account key
-    that routes that OA's webhook events, and its credentials are stored under
-    ``zalo_oa_*:<oa_id>``. Re-posting the same ``oa_id`` rotates those
-    credentials and bumps the account generation, which suppresses outbound work
-    already queued under the previous credentials.
-    """
-    from app.channels.providers.zalo_account import (
-        ZaloOaAccountInvalidError,
-        ZaloOaAccountLifecycle,
-    )
-
-    try:
-        await ZaloOaAccountLifecycle(db).link(
-            oa_id=body.oa_id,
-            label=body.label,
-            actor_id=admin.id,
-            credentials={
-                "zalo_oa_app_id": body.app_id,
-                "zalo_oa_secret_key": body.secret_key,
-                "zalo_oa_access_token": body.access_token,
-                "zalo_oa_refresh_token": body.refresh_token,
-            },
-        )
-    except ZaloOaAccountInvalidError as exc:
-        raise ValidationError(str(exc)) from exc
-    return await _zalo_oa_accounts_view(db)
-
-
-@router.delete("/zalo/oa-accounts/{account_key}", response_model=ZaloOaAccountsOut)
-async def unlink_zalo_oa_account(
-    account_key: str,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> ZaloOaAccountsOut:
-    """Deactivate one OA and destroy its stored credentials.
-
-    History stays readable; the account can no longer send, and its events fall
-    back to the original OA. The seeded original OA cannot be unlinked.
-    """
-    from app.channels.providers.zalo_account import (
-        ZaloOaAccountInvalidError,
-        ZaloOaAccountLifecycle,
-        ZaloOaAccountNotFoundError,
-    )
-
-    try:
-        await ZaloOaAccountLifecycle(db).unlink(account_key, actor_id=admin.id)
-    except ZaloOaAccountNotFoundError as exc:
-        raise NotFoundError(str(exc)) from exc
-    except ZaloOaAccountInvalidError as exc:
-        raise ValidationError(str(exc)) from exc
-    return await _zalo_oa_accounts_view(db)
 
 
 @router.post("/zalo/bot/test", response_model=ZaloChannelTestOut)
@@ -456,12 +350,41 @@ async def update_tingting_integration_settings(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> TingtingIntegrationSettingsOut:
-    await IntegrationSettingsService(db).update_tingting(
-        body.model_dump(exclude_unset=True),
-        actor_id=admin.id,
-    )
+    """Save the TingTing API key and/or the support OA's four Zalo credentials.
+
+    Posting any OA credential also probes Zalo (`getoa`) with the effective
+    access token: on success the OA's own id and name are discovered and the
+    reset flow is bound to it; on failure the values are still stored and the
+    response reports `oa_last_error`, so the flow stays off rather than serving
+    employees from a broken link.
+    """
+    service = IntegrationSettingsService(db)
+    try:
+        await service.update_tingting(body.model_dump(exclude_unset=True), actor_id=admin.id)
+    except TingtingOaLinkError as exc:
+        raise ValidationError(str(exc)) from exc
     return TingtingIntegrationSettingsOut.model_validate(
-        await IntegrationSettingsService(db).admin_tingting_view()
+        await service.admin_tingting_view()
+    )
+
+
+@router.post("/tingting/oa/check", response_model=TingtingIntegrationSettingsOut)
+async def check_tingting_oa(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> TingtingIntegrationSettingsOut:
+    """Re-probe the stored support-OA credentials and refresh the link status.
+
+    Same probe the save runs, without touching the stored values — for the admin
+    who fixed the token in the Zalo console and wants the link (re)established.
+    """
+    service = IntegrationSettingsService(db)
+    try:
+        await service.link_tingting_oa({}, actor_id=admin.id)
+    except TingtingOaLinkError as exc:
+        raise ValidationError(str(exc)) from exc
+    return TingtingIntegrationSettingsOut.model_validate(
+        await service.admin_tingting_view()
     )
 
 

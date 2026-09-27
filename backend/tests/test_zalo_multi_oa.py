@@ -12,11 +12,8 @@ import types
 import pytest
 
 from app.channels import types as ct
-from app.channels.providers import zalo_account as zalo_account_mod
 from app.channels.providers.zalo_account import (
     ZaloOaAccountInvalidError,
-    ZaloOaAccountLifecycle,
-    ZaloOaAccountNotFoundError,
     ZaloOaAccountResolver,
     validate_oa_id,
 )
@@ -27,14 +24,13 @@ from app.services.integration_settings import IntegrationSettingsService
 from app.services.integration_settings.providers.zalo import (
     ZALO_OA_ACCESS_TOKEN,
     ZALO_OA_APP_ID,
-    ZALO_OA_ACCOUNT_SETTING_BASES,
     ZALO_OA_DEFAULT_ACCOUNT_KEY,
     ZALO_OA_REFRESH_TOKEN,
     ZALO_OA_SECRET_KEY,
     is_oa_account_setting_key,
     oa_account_setting_key,
 )
-from app.services.zalo_oa_events import oa_id_from_payload
+from app.services.zalo_oa_events import parse_oa_webhook_event
 
 SECOND_OA_ID = "987654321098765"
 
@@ -112,37 +108,96 @@ class _StoredSettings(IntegrationSettingsService):
 # ---------------------------------------------------------------------------
 
 
-def test_oa_id_reads_root_then_recipient():
-    assert oa_id_from_payload({"oa_id": SECOND_OA_ID}) == SECOND_OA_ID
-    assert oa_id_from_payload({"recipient": {"id": "555"}}) == "555"
-    assert oa_id_from_payload({"recipient_id": "777"}) == "777"
-    assert oa_id_from_payload({"sender": {"id": "user-1"}}) is None
-    assert oa_id_from_payload({"oa_id": ""}) is None
+def _oa_id(payload: dict) -> str:
+    event = parse_oa_webhook_event(payload)
+    return event.oa_id if event is not None else ""
 
 
-async def test_a_linked_active_oa_routes_to_its_own_account_key():
-    db = _ScalarSession([_account(SECOND_OA_ID)])
+def test_the_receiving_oa_is_read_with_the_events_own_roles():
+    # Zalo's root key wins whenever it is present.
+    assert _oa_id({"oa_id": SECOND_OA_ID, "sender": {"id": "user-1"}}) == SECOND_OA_ID
+    # A text event: the user is the sender, the OA the recipient.
+    assert (
+        _oa_id(
+            {
+                "event_name": "user_send_text",
+                "sender": {"id": "user-1"},
+                "recipient": {"id": SECOND_OA_ID},
+            }
+        )
+        == SECOND_OA_ID
+    )
+    # A receipt inverts them: the OA is the sender. Reading the recipient here
+    # would attribute the receipt to the user id.
+    assert (
+        _oa_id(
+            {
+                "event_name": "user_seen_message",
+                "sender": {"id": SECOND_OA_ID},
+                "recipient": {"id": "user-1"},
+                "message": {"msg_ids": ["m-1"]},
+            }
+        )
+        == SECOND_OA_ID
+    )
+    # Follow events carry the user under ``follower``; the OA is the recipient.
+    assert (
+        _oa_id(
+            {
+                "event_name": "follow",
+                "follower": {"id": "user-1"},
+                "recipient": {"id": SECOND_OA_ID},
+            }
+        )
+        == SECOND_OA_ID
+    )
+    assert _oa_id({"event_name": "follow", "follower": {"id": "user-1"}}) == ""
+
+
+def _support_row(oa_id: str = SECOND_OA_ID, *, status: str = "ACTIVE") -> ChannelAccount:
+    """The TingTing support account as `getoa` left it (id in the metadata)."""
+    row = _account("tingting", status=status)
+    row.provider_metadata = {"oa_id": oa_id, "name": "Ting Ting Software Solution"}
+    return row
+
+
+async def test_the_support_oa_routes_to_its_account_key():
+    db = _ScalarSession([_support_row()])
     resolver = ZaloOaAccountResolver(db)  # type: ignore[arg-type]
 
     key = await resolver.account_key_for_payload({"oa_id": SECOND_OA_ID})
 
-    assert key == SECOND_OA_ID
+    assert key == "tingting"
+    # ...and to the same key for a text event, where the OA is the recipient.
+    db = _ScalarSession([_support_row()])
+    resolver = ZaloOaAccountResolver(db)  # type: ignore[arg-type]
+    assert (
+        await resolver.account_key_for_payload(
+            {
+                "event_name": "user_send_text",
+                "sender": {"id": "user-1"},
+                "recipient": {"id": SECOND_OA_ID},
+            }
+        )
+        == "tingting"
+    )
 
 
 async def test_unknown_or_absent_oa_id_falls_back_to_the_default_account():
     for payload in ({"oa_id": "999"}, {"event_name": "follow", "follower": {"id": "u"}}):
-        db = _ScalarSession([None])
+        db = _ScalarSession([_support_row()])
         resolver = ZaloOaAccountResolver(db)  # type: ignore[arg-type]
         assert await resolver.account_key_for_payload(payload) == ZALO_OA_DEFAULT_ACCOUNT_KEY
 
 
-async def test_an_unlinked_oa_falls_back_to_the_default_account():
-    db = _ScalarSession([_account(SECOND_OA_ID, status="INACTIVE")])
-    resolver = ZaloOaAccountResolver(db)  # type: ignore[arg-type]
-
-    assert await resolver.account_key_for_payload({"oa_id": SECOND_OA_ID}) == (
-        ZALO_OA_DEFAULT_ACCOUNT_KEY
-    )
+async def test_an_unlinked_support_oa_falls_back_to_the_default_account():
+    for row in (None, _support_row(status="INACTIVE")):
+        db = _ScalarSession([row])
+        resolver = ZaloOaAccountResolver(db)  # type: ignore[arg-type]
+        assert (
+            await resolver.account_key_for_payload({"oa_id": SECOND_OA_ID})
+            == ZALO_OA_DEFAULT_ACCOUNT_KEY
+        )
 
 
 def test_oa_id_validation_rejects_malformed_and_reserved():
@@ -199,148 +254,6 @@ async def test_the_default_account_still_resolves_singletons_and_env():
     assert (await service.resolve_zalo(ZALO_OA_DEFAULT_ACCOUNT_KEY)).oa_access_token == (
         "stored-access"
     )
-
-
-# ---------------------------------------------------------------------------
-# Link lifecycle
-# ---------------------------------------------------------------------------
-
-
-async def test_link_registers_the_account_and_stores_namespaced_credentials(monkeypatch):
-    db = _ScalarSession([None])
-    written: list[tuple[str, dict]] = []
-
-    async def _write(self, account_key, values, *, actor_id=None):
-        written.append((account_key, dict(values)))
-        return list(values)
-
-    audited: list[dict] = []
-
-    async def _audit(_db, **kwargs):
-        audited.append(kwargs)
-
-    monkeypatch.setattr(
-        IntegrationSettingsService, "write_oa_account_credentials", _write, raising=True
-    )
-    monkeypatch.setattr(zalo_account_mod, "record_audit", _audit)
-
-    row = await ZaloOaAccountLifecycle(db).link(  # type: ignore[arg-type]
-        oa_id=SECOND_OA_ID,
-        label="Ting Ting Software Solution",
-        credentials={
-            ZALO_OA_ACCESS_TOKEN: "second-access",
-            ZALO_OA_SECRET_KEY: "second-secret",
-            ZALO_OA_REFRESH_TOKEN: "",
-        },
-        actor_id="admin-1",
-    )
-
-    assert row.provider == ct.PROVIDER_ZALO_OA
-    assert row.account_key == SECOND_OA_ID
-    assert row.status == "ACTIVE"
-    assert row.generation == 1
-    assert row.label == "Ting Ting Software Solution"
-    assert written == [
-        (
-            SECOND_OA_ID,
-            {
-                ZALO_OA_ACCESS_TOKEN: "second-access",
-                ZALO_OA_SECRET_KEY: "second-secret",
-                ZALO_OA_REFRESH_TOKEN: "",
-            },
-        )
-    ]
-    assert db.commits == 1
-    assert audited[0]["action"] == "link_zalo_oa_account"
-    assert audited[0]["target_id"] == SECOND_OA_ID
-
-
-class _FakeSettingsService:
-    """Settings double: a resolvable original-OA token and no-op writes."""
-
-    default_access_token = ""
-
-    def __init__(self, _db) -> None:
-        self.writes: list[tuple[str, dict]] = []
-
-    async def resolve_zalo(self, account_key=None):
-        return types.SimpleNamespace(oa_access_token=type(self).default_access_token)
-
-    async def write_oa_account_credentials(self, account_key, values, *, actor_id=None):
-        self.writes.append((account_key, dict(values)))
-        return list(values)
-
-    async def clear_oa_account_credentials(self, account_key):
-        return 0
-
-
-def _use_fake_settings(monkeypatch, *, default_access_token: str = ""):
-    import app.services.integration_settings as settings_pkg
-
-    _FakeSettingsService.default_access_token = default_access_token
-    monkeypatch.setattr(settings_pkg, "IntegrationSettingsService", _FakeSettingsService)
-
-
-async def test_relinking_bumps_the_generation_of_an_inactive_account(monkeypatch):
-    existing = _account(SECOND_OA_ID, status="INACTIVE")
-    db = _ScalarSession([existing])
-    _use_fake_settings(monkeypatch)
-
-    row = await ZaloOaAccountLifecycle(db).link(  # type: ignore[arg-type]
-        oa_id=SECOND_OA_ID,
-        label="",
-        credentials={ZALO_OA_ACCESS_TOKEN: "second-access"},
-    )
-
-    assert row is existing
-    assert row.status == "ACTIVE"
-    assert row.generation == 2
-
-
-async def test_link_requires_an_access_token(monkeypatch):
-    db = _ScalarSession([None])
-    _use_fake_settings(monkeypatch)
-
-    with pytest.raises(ZaloOaAccountInvalidError):
-        await ZaloOaAccountLifecycle(db).link(  # type: ignore[arg-type]
-            oa_id=SECOND_OA_ID,
-            label="",
-            credentials={ZALO_OA_SECRET_KEY: "second-secret"},
-        )
-
-    assert db.added == []
-
-
-async def test_unlink_deactivates_and_clears_credentials(monkeypatch):
-    row = _account(SECOND_OA_ID)
-    db = _ScalarSession([row])
-    cleared: list[str] = []
-
-    async def _clear(self, account_key):
-        cleared.append(account_key)
-        return len(ZALO_OA_ACCOUNT_SETTING_BASES)
-
-    monkeypatch.setattr(
-        IntegrationSettingsService, "clear_oa_account_credentials", _clear, raising=True
-    )
-
-    await ZaloOaAccountLifecycle(db).unlink(SECOND_OA_ID, actor_id="admin-1")  # type: ignore[arg-type]
-
-    assert row.status == "INACTIVE"
-    assert row.generation == 2
-    assert cleared == [SECOND_OA_ID]
-    assert db.commits == 1
-
-
-async def test_unlink_refuses_the_default_account_and_unknown_oa():
-    with pytest.raises(ZaloOaAccountNotFoundError):
-        await ZaloOaAccountLifecycle(_ScalarSession([None])).unlink(  # type: ignore[arg-type]
-            SECOND_OA_ID
-        )
-    with pytest.raises(ZaloOaAccountInvalidError):
-        await ZaloOaAccountLifecycle(_ScalarSession([_account(ZALO_OA_DEFAULT_ACCOUNT_KEY)])).unlink(  # type: ignore[arg-type]
-            ZALO_OA_DEFAULT_ACCOUNT_KEY
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -612,18 +525,3 @@ async def test_refresh_needs_that_accounts_refresh_token(monkeypatch):
     # A second OA with no stored refresh token must not redeem the original's.
     assert await service.refresh_oa_access_token(SECOND_OA_ID) is None
     assert redis.locks == []
-
-
-async def test_linking_the_original_oa_again_is_refused(monkeypatch):
-    """Same access token ⇒ same OA ⇒ re-keying its history must not happen."""
-    db = _ScalarSession([None])
-    _use_fake_settings(monkeypatch, default_access_token="original-access")
-
-    with pytest.raises(ZaloOaAccountInvalidError):
-        await ZaloOaAccountLifecycle(db).link(  # type: ignore[arg-type]
-            oa_id=SECOND_OA_ID,
-            label="",
-            credentials={ZALO_OA_ACCESS_TOKEN: "original-access"},
-        )
-
-    assert db.added == []

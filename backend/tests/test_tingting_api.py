@@ -736,12 +736,18 @@ class _ScopeDeps:
 
 
 @pytest.mark.asyncio
-async def test_reset_flow_is_refused_off_the_zalo_oa_channel() -> None:
-    """The recruitment Bot and Messenger must never reach the reset flow."""
+async def test_reset_flow_runs_only_on_the_linked_support_oa() -> None:
+    """The original OA, the recruitment Bot and Messenger must never reach it."""
     from app.graph.runner import _tingting_reset_allowed
+    from app.services.tingting_oa import TINGTING_OA_ACCOUNT_KEY
 
-    deps = _ScopeDeps()
-    assert await _tingting_reset_allowed(deps, _conversation("zalo_oa", "default:zalo_oa")) is True
+    deps = _ScopeDeps(TINGTING_OA_ACCOUNT_KEY)
+    assert (
+        await _tingting_reset_allowed(deps, _conversation("zalo_oa", TINGTING_OA_ACCOUNT_KEY))
+        is True
+    )
+    # The original recruitment OA keeps its own conversations — and no reset flow.
+    assert await _tingting_reset_allowed(deps, _conversation("zalo_oa", "default:zalo_oa")) is False
     assert await _tingting_reset_allowed(deps, _conversation("zalo_bot", "default:zalo_bot")) is False
     assert (
         await _tingting_reset_allowed(deps, _conversation("facebook_messenger", "486833177846024"))
@@ -750,12 +756,27 @@ async def test_reset_flow_is_refused_off_the_zalo_oa_channel() -> None:
 
 
 @pytest.mark.asyncio
-async def test_the_pin_narrows_the_flow_to_one_oa() -> None:
+async def test_an_unlinked_or_mismatched_binding_turns_the_flow_off() -> None:
     from app.graph.runner import _tingting_reset_allowed
+    from app.services.tingting_oa import TINGTING_OA_ACCOUNT_KEY
 
-    deps = _ScopeDeps("tingting-oa-key")
-    assert await _tingting_reset_allowed(deps, _conversation("zalo_oa", "tingting-oa-key")) is True
-    assert await _tingting_reset_allowed(deps, _conversation("zalo_oa", "default:zalo_oa")) is False
+    # Never linked: the pin is empty, so even a support-OA-shaped identity is refused.
+    unlinked = _ScopeDeps("")
+    assert (
+        await _tingting_reset_allowed(
+            unlinked, _conversation("zalo_oa", TINGTING_OA_ACCOUNT_KEY)
+        )
+        is False
+    )
+    # A stale pin pointing somewhere else (e.g. an account key typed in before the
+    # link replaced it) is refused too: only the verified support account counts.
+    stale = _ScopeDeps("default:zalo_oa")
+    assert (
+        await _tingting_reset_allowed(
+            stale, _conversation("zalo_oa", TINGTING_OA_ACCOUNT_KEY)
+        )
+        is False
+    )
 
 
 @pytest.mark.asyncio

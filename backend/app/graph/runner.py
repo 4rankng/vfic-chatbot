@@ -393,28 +393,26 @@ async def _agent_turn(
     project_context=None,
     decisions: TurnDecisions | None = None,
     lead_row: dict | None = None,
-    tingting_reset_allowed: bool = True,
+    tingting_reset_allowed: bool = False,
     on_delta=None,
     on_evidence=None,
 ) -> str:
     route = route_from_decisions(user_text, decisions or TurnDecisions(degraded=True))
     if route.intent == "employee_support" and not tingting_reset_allowed:
         # Employee-account support belongs to the TingTing OA: elsewhere the turn
-        # is answered honestly instead of running a flow this channel cannot
-        # serve (the guide and the reset tools are not bound here either).
+        # is answered with the operator's exact pointer to that OA instead of
+        # running a flow this channel cannot serve (the guide and the reset tools
+        # are not bound here either).
         if trace_sink is not None:
             trace_sink.record_decision("tingting_scope", "channel_not_allowed")
-        return await deps.agent.direct(
-            user_text,
-            **_with_optional_trace(
-                deps.agent.direct,
-                {
-                    "system": _TINGTING_WRONG_CHANNEL_SYSTEM,
-                    "metrics": timings,
-                },
-                trace_sink,
-            ),
-        )
+        return TINGTING_RESET_REDIRECT_REPLY
+    if tingting_reset_allowed and route.intent != "employee_support":
+        # This IS the support OA: it serves the reset flow and nothing else, so
+        # any other message goes to a human rather than being answered by the bot.
+        if trace_sink is not None:
+            trace_sink.record_decision("tingting_scope", "support_only_handoff")
+        await _tingting_support_handoff(state, deps)
+        return TINGTING_HANDOFF_REPLY
     focused_project = bool(
         project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
     )
@@ -569,7 +567,12 @@ async def _agent_turn(
     elif compare_income_required_args is not None:
         allowed_tools = ("compare_income",)
     resolved_tool_registry = None
-    if not tingting_reset_allowed:
+    if tingting_reset_allowed:
+        # The support OA binds the reset flow ONLY: no project catalog, no
+        # recruiting knowledge, no API tools beyond TingTing's. A low-confidence
+        # route cannot widen this back to the full registry.
+        allowed_tools = tuple(sorted(TINGTING_TOOL_NAMES))
+    elif not tingting_reset_allowed:
         # The flow's tools are unreachable on this channel even if the route or a
         # low-confidence turn would otherwise expose the whole registry.
         if allowed_tools is not None:
@@ -579,7 +582,9 @@ async def _agent_turn(
         # tools are still the manifest's immutable allowlist.  A low-confidence
         # route therefore cannot restore the full legacy registry.
         resolved_tool_registry = manifest_policy.tool_registry.names
-        if not tingting_reset_allowed:
+        if tingting_reset_allowed:
+            resolved_tool_registry = frozenset(resolved_tool_registry) & TINGTING_TOOL_NAMES
+        else:
             resolved_tool_registry = frozenset(resolved_tool_registry) - TINGTING_TOOL_NAMES
         if allowed_tools is not None:
             allowed_tools = tuple(
@@ -624,7 +629,10 @@ async def _agent_turn(
                     "send_tingting_otp",
                     "confirm_tingting_otp",
                     "reset_tingting_password",
-                    "search_knowledge",
+                    # Project knowledge rides along only when the turn is NOT the
+                    # employee-support OA: that OA answers the reset flow and
+                    # nothing else, so it never reaches the recruiting catalog.
+                    *(("search_knowledge",) if not tingting_reset_allowed else ()),
                 )
                 if resolved_tool_registry is None or name in resolved_tool_registry
             )
@@ -790,16 +798,44 @@ async def _direct_context_turn(
     )
 
 
-# What the agent is told when an account-support request arrives somewhere the
-# reset flow does not exist. '' marks the OA name the operator linked; when they
-# have not named one, the generic phrasing is honest and invents no channel.
-_TINGTING_WRONG_CHANNEL_SYSTEM = (
-    "Người dùng đang hỏi về đặt lại mật khẩu ứng dụng TingTing. Tính năng này chỉ được hỗ trợ "
-    "trên Zalo OA của TingTing. Hãy trả lời ngắn gọn, lịch sự bằng tiếng Việt: nói rõ chức năng "
-    "đặt lại mật khẩu TingTing chỉ hỗ trợ trên Zalo OA TingTing và mời người dùng nhắn cho OA đó. "
-    "Không hướng dẫn liên hệ nơi khác và không nêu hotline, email hay số điện thoại nào không "
-    "có trong dữ liệu."
+# Both replies are fixed strings, not model output: the operator approved these
+# exact words, and a paraphrase would either drop the OA link or invent a channel
+# the deployment cannot serve. The link is the TingTing OA the operator supplied
+# (its Zalo id is also the routing key inbound events carry).
+TINGTING_SUPPORT_OA_URL = "https://zalo.me/3383849659955472174"
+TINGTING_RESET_REDIRECT_REPLY = (
+    "Chức năng đặt lại mật khẩu chỉ hỗ trợ trên Zalo OA Ting Ting Software Solution. "
+    "Anh/chị vui lòng liên hệ OA đó để được hỗ trợ: "
+    f"{TINGTING_SUPPORT_OA_URL}"
 )
+# The support OA itself serves the reset flow only; every other message hands the
+# employee to a human instead of answering (operator requirement).
+TINGTING_HANDOFF_REPLY = "Vui lòng chờ chuyên viên tư vấn liên hệ."
+TINGTING_HANDOFF_REASON = "tingting_support_handoff"
+
+
+async def _tingting_support_handoff(state: BotRunState, deps: GraphDeps) -> None:
+    """Flag the support-OA conversation for a human.
+
+    The reply tells the employee to wait for a consultant; without this
+    transition nobody would know to contact them. Best-effort: a failure must
+    never swallow the reply the employee is waiting for.
+    """
+    try:
+        conv = await deps.conversation.get(state.conversation_id)
+        if conv is None:
+            return
+        # ``conv`` is loaded fresh here, so its version is the current one: the
+        # transition is guarded against a concurrent write, not against the
+        # version the turn started with (that one moved when the inbound landed).
+        await deps.conversation.escalate_extracted_intent(
+            conv,
+            reason=TINGTING_HANDOFF_REASON,
+            confidence=1.0,
+            expected_version=conv.version,
+        )
+    except Exception:  # noqa: BLE001 — the handoff is bookkeeping, never the answer
+        logger.warning("tingting support handoff failed", exc_info=True)
 
 
 async def _tingting_reset_allowed(deps: GraphDeps, conv) -> bool:
@@ -812,18 +848,26 @@ async def _tingting_reset_allowed(deps: GraphDeps, conv) -> bool:
     on a configuration read error: no guide, no tools, and the honest
     wrong-channel reply.
     """
+    from app.channels.types import TINGTING_OA_ACCOUNT_KEY
+
     identity = getattr(conv, "channel_identity", None)
     if identity is None or str(getattr(identity, "provider", "") or "") != "zalo_oa":
         return False
+    if str(getattr(identity, "account_key", "") or "") != TINGTING_OA_ACCOUNT_KEY:
+        # The flow runs on the linked support OA only. Every other Zalo OA
+        # conversation — including the original recruitment OA — is refused.
+        return False
     reader = getattr(deps.retrieval, "tingting_reset_oa_id", None)
     if reader is None:
-        return True
+        return False
     try:
         pinned = str(await reader() or "").strip()
     except Exception:  # noqa: BLE001 — a config read must not break a turn
         logger.warning("tingting reset scope read failed", exc_info=True)
         return False
-    return not pinned or pinned == str(getattr(identity, "account_key", "") or "")
+    # The pin follows the verified link (TingTingOaLinkService), so a broken or
+    # removed link turns the flow off rather than leaving it open.
+    return pinned == TINGTING_OA_ACCOUNT_KEY
 
 
 def _finalize_user_visible_reply(
@@ -1147,7 +1191,7 @@ async def _resolve_lane(
     status_task,
     t0: float,
     lead_row: dict | None = None,
-    tingting_reset_allowed: bool = True,
+    tingting_reset_allowed: bool = False,
     stream: _ProgressiveStream | None = None,
 ) -> _LaneResolution:
     """Select and run the turn's answer lane: clarification → direct → agent.
@@ -2143,12 +2187,17 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # Candidate extraction remains recruitment-scoped. Final replies do not
         # use a template fast lane: every normal user message reaches the LLM so
         # it can use the current project context and conversation history.
+        # The employee-support OA is not a recruitment channel: no candidate
+        # extraction, no lead state, no memory writes for its threads. The flag
+        # is computed from the conversation, so it is available here.
+        tingting_reset_allowed = await _tingting_reset_allowed(deps, conv)
         allow_recruitment_fast_lane = (
             recruitment_enabled
             and (
                 recruitment_capabilities is None
                 or "candidate_intake" in recruitment_capabilities
             )
+            and not tingting_reset_allowed
         )
         # --- lane: clarification → direct context → agent (see _resolve_lane) ---
         # Progressive send is opt-in (admin ``llm_progressive_send``) and
@@ -2157,7 +2206,6 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # that finishes first — or any non-agent lane — keeps the pre-existing
         # single-message path exactly as it was.
         stream = _ProgressiveStream() if _progressive_send_enabled(deps, svc) else None
-        tingting_reset_allowed = await _tingting_reset_allowed(deps, conv)
         if trace_sink is not None:
             trace_sink.record_decision(
                 "tingting_scope", "allowed" if tingting_reset_allowed else "channel_not_allowed"

@@ -227,10 +227,21 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _provider_prompt)
 
+    # The manifest allowlist still carries the deployment-wide TingTing tools
+    # (they are bound per turn, not per manifest) — but this turn is a knowledge
+    # FAQ off the support OA, so it must not bind them.
+    assert {
+        "call_tingting_api",
+        "verify_tingting_identity",
+        "send_tingting_otp",
+        "confirm_tingting_otp",
+        "reset_tingting_password",
+    } <= set(policy.tool_registry.names)
+
     class _Agent:
         async def agent(self, _text, **kwargs):
-            assert kwargs["resolved_tool_registry"] == {
-                "search_knowledge",
+            assert "search_knowledge" in kwargs["resolved_tool_registry"]
+            assert not set(kwargs["resolved_tool_registry"]) & {
                 "call_tingting_api",
                 "verify_tingting_identity",
                 "send_tingting_otp",
