@@ -39,7 +39,10 @@ from app.services.conversation import ConversationConflict, ConversationService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
-ChannelProvider = Literal["zalo_bot", "zalo_oa", "facebook_messenger"]
+# ``tingting_oa`` is the employee-support OA: the same zalo_oa provider, filtered
+# to the one linked account. It is a separate badge on the conversations page so
+# admins can read those threads without mixing them into the recruitment inbox.
+ChannelProvider = Literal["zalo_bot", "zalo_oa", "facebook_messenger", "tingting_oa"]
 
 
 async def _load(

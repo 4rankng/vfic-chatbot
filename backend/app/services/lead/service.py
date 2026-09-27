@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.conversation import Conversation, ConversationMode, Message, MessageSender
 from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadStage
 from app.models.user import User
-from app.services.viewer_scope import viewer_scope_condition, viewer_scope_filter
+from app.services.viewer_scope import viewer_lead_filter, viewer_scope_condition
 from app.services.audit_service import record_audit
 from app.shared.domain.errors import BadRequestError, ConflictError
 from app.services.lead import tags as _tag_lib
@@ -72,7 +72,7 @@ class LeadService:
         sort_by: str | None = None,
         order: str | None = "desc",
     ) -> tuple[list[Lead], int]:
-        base = viewer_scope_filter(select(Lead), Lead.assigned_recruiter_id, viewer)
+        base = viewer_lead_filter(select(Lead), viewer)
         if stage is not None:
             base = base.where(Lead.lead_stage == stage)
         if zalo_id:

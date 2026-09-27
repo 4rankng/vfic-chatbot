@@ -24,7 +24,11 @@ from app.models.conversation import (
 from app.models.contact import ContactChannelIdentity
 from app.models.user import Role, User
 from app.models.outbox import OutboundOutbox
-from app.services.viewer_scope import viewer_scope_filter, viewer_scope_sql
+from app.services.viewer_scope import (
+    support_account_sql,
+    viewer_conversation_filter,
+    viewer_scope_sql,
+)
 
 # Whitelist of sortable conversation columns. Unknown / absent sort keys fall
 # back to the inbox default.
@@ -154,10 +158,8 @@ class ConversationRepository:
         return await self.db.get(Conversation, conv_id)
 
     async def get_visible(self, conv_id: uuid.UUID, *, viewer: User) -> Conversation | None:
-        stmt = viewer_scope_filter(
-            select(Conversation).where(Conversation.id == conv_id),
-            Conversation.assigned_recruiter_id,
-            viewer,
+        stmt = viewer_conversation_filter(
+            select(Conversation).where(Conversation.id == conv_id), viewer
         )
         return (await self.db.scalars(stmt)).first()
 
@@ -201,10 +203,8 @@ class ConversationRepository:
         """
         if not ids:
             return []
-        stmt = viewer_scope_filter(
-            select(Conversation).where(Conversation.id.in_(ids)),
-            Conversation.assigned_recruiter_id,
-            viewer,
+        stmt = viewer_conversation_filter(
+            select(Conversation).where(Conversation.id.in_(ids)), viewer
         )
         return list((await self.db.scalars(stmt)).all())
 
@@ -233,7 +233,9 @@ class ConversationRepository:
         params: dict = {"ids": ids}
         scope = ""
         if viewer.role != Role.admin:
-            scope = "AND " + viewer_scope_sql("c.")
+            # Same invariant as viewer_conversation_filter, in raw SQL: the
+            # recruiter's own-or-unassigned rule plus the admin-only support OA.
+            scope = "AND " + viewer_scope_sql("c.") + " AND " + support_account_sql("c.")
             params["uid"] = str(viewer.id)
 
         rows = (
@@ -253,6 +255,23 @@ class ConversationRepository:
         ).all()
         return {r.cid: (r.content or "") for r in rows}
 
+    @staticmethod
+    def _channel_filter_condition(channel_provider: str):
+        """Identity predicate for one channel filter value.
+
+        ``tingting_oa`` is not a provider: it is the employee-support OA account
+        (provider ``zalo_oa``), so the badge narrows on the account key.
+        """
+        from app.channels import types as ct
+        from app.channels.types import TINGTING_OA_ACCOUNT_KEY
+
+        if channel_provider == "tingting_oa":
+            return and_(
+                ContactChannelIdentity.provider == ct.PROVIDER_ZALO_OA,
+                ContactChannelIdentity.account_key == TINGTING_OA_ACCOUNT_KEY,
+            )
+        return ContactChannelIdentity.provider == channel_provider
+
     async def list(
         self,
         *,
@@ -268,7 +287,7 @@ class ConversationRepository:
         sort_by: str | None = None,
         order: str | None = "desc",
     ) -> tuple[list[Conversation], int]:
-        base = viewer_scope_filter(select(Conversation), Conversation.assigned_recruiter_id, viewer)
+        base = viewer_conversation_filter(select(Conversation), viewer)
         if mode is not None:
             base = base.where(Conversation.mode == mode)
         if status is not None:
@@ -285,7 +304,7 @@ class ConversationRepository:
                 Conversation.channel_identity_id == ContactChannelIdentity.id,
             )
         if channel_provider is not None:
-            base = base.where(ContactChannelIdentity.provider == channel_provider)
+            base = base.where(self._channel_filter_condition(channel_provider))
         if q:
             # Text search spans the Zalo compat alias and the neutral identity's
             # external_id so channel-neutral conversations remain searchable.
@@ -331,11 +350,9 @@ class ConversationRepository:
     ) -> list[Conversation]:
         if not zalo_chat_ids:
             return []
-        query = viewer_scope_filter(
-            select(Conversation),
-            Conversation.assigned_recruiter_id,
-            viewer,
-        ).where(Conversation.zalo_chat_id.in_(zalo_chat_ids))
+        query = viewer_conversation_filter(select(Conversation), viewer).where(
+            Conversation.zalo_chat_id.in_(zalo_chat_ids)
+        )
         rows = (
             await self.db.scalars(
                 query.order_by(Conversation.updated_at.desc(), Conversation.id.asc())
@@ -355,8 +372,8 @@ class ConversationRepository:
             stmt = stmt.join(
                 ContactChannelIdentity,
                 Conversation.channel_identity_id == ContactChannelIdentity.id,
-            ).where(ContactChannelIdentity.provider == channel_provider)
-        stmt = viewer_scope_filter(stmt, Conversation.assigned_recruiter_id, viewer)
+            ).where(self._channel_filter_condition(channel_provider))
+        stmt = viewer_conversation_filter(stmt, viewer)
         return int((await self.db.scalar(stmt)) or 0)
 
     async def last_messages(self, conv: Conversation, limit: int = 50) -> list[Message]:

@@ -12,7 +12,7 @@ from sqlalchemy import delete, desc, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadTag
-from app.services.viewer_scope import ViewerIdentity, viewer_scope_filter
+from app.services.viewer_scope import ViewerIdentity, viewer_lead_filter
 
 # ── Raw SQL constants ──────────────────────────────────────────────
 
@@ -131,11 +131,7 @@ class LeadRepository:
         get the row, recruiters only their own or unassigned rows. Callers map
         ``None`` to a 404 so the sequential id space is not probeable.
         """
-        stmt = viewer_scope_filter(
-            select(Lead).where(Lead.id == lead_id),
-            Lead.assigned_recruiter_id,
-            viewer,
-        )
+        stmt = viewer_lead_filter(select(Lead).where(Lead.id == lead_id), viewer)
         return (await self.db.scalars(stmt)).first()
 
     async def set_gender_by_id(self, lead_id: int, gender: str, *, override: bool = False) -> bool:

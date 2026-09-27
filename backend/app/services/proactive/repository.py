@@ -148,13 +148,18 @@ async def find_eligible_conversations(db) -> list[Conversation]:
     now_minus_margin = now - margin
     now_minus_cooldown = now - cooldown
 
+    # Employee password threads belong to staff, not candidates: the support OA
+    # never enters the follow-up queue (same exclusion the viewers get).
+    from app.services.viewer_scope import support_account_sql
+
     sql = text(
-        """
+        f"""
         SELECT c.id, l.lead_score::text AS lead_score, l.lead_stage::text AS lead_stage
         FROM conversations c
         JOIN leads l ON l.contact_id = c.contact_id
         WHERE c.mode IN ('BOT', 'SEMI_AUTO')
           AND c.status = 'OPEN'
+          AND {support_account_sql("c.")}
           AND c.followup_opted_out = FALSE
           AND c.last_inbound_at IS NOT NULL
           AND c.last_inbound_at >= :now_minus_margin

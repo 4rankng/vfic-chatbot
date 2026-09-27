@@ -16,7 +16,14 @@ import uuid
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.viewer_scope import viewer_scope_sql
+from app.services.viewer_scope import (
+    support_account_sql,
+    support_leads_sql,
+    viewer_scope_sql,
+)
+
+_SUPPORT_ACCOUNT_SCOPED = support_account_sql("c.")
+_SUPPORT_LEADS_SCOPED = support_leads_sql("l.")
 
 
 class DashboardRepository:
@@ -61,8 +68,10 @@ class DashboardRepository:
         None``) the scope fragments are ``(TRUE)`` no-ops.
         """
         scoped = recruiter_id is not None
-        c_scope = viewer_scope_sql("c.") if scoped else "(TRUE)"
-        l_scope = viewer_scope_sql("l.") if scoped else "(TRUE)"
+        c_scope = (
+            viewer_scope_sql("c.") + " AND " + _SUPPORT_ACCOUNT_SCOPED if scoped else "(TRUE)"
+        )
+        l_scope = viewer_scope_sql("l.") + " AND " + _SUPPORT_LEADS_SCOPED if scoped else "(TRUE)"
         params: dict[str, str] = {}
         if scoped:
             params["uid"] = recruiter_id
@@ -130,7 +139,7 @@ class DashboardRepository:
                 await self.db.execute(
                     text(
                         "SELECT lead_stage, count(*) FROM leads "
-                        "WHERE " + viewer_scope_sql("") + " "
+                        "WHERE " + viewer_scope_sql("") + " AND " + support_leads_sql("") + " "
                         "GROUP BY lead_stage"
                     ),
                     {"uid": recruiter_id},
@@ -142,7 +151,10 @@ class DashboardRepository:
         return await self._scoped_scalar(
             recruiter_id,
             "SELECT count(*) FROM conversations WHERE mode = 'HUMAN'",
-            "SELECT count(*) FROM conversations WHERE mode = 'HUMAN' AND " + viewer_scope_sql(""),
+            "SELECT count(*) FROM conversations WHERE mode = 'HUMAN' AND "
+            + viewer_scope_sql("")
+            + " AND "
+            + support_account_sql(""),
         )
 
     async def knowledge_stage_counts(self) -> dict[str, int]:
@@ -289,8 +301,16 @@ class DashboardRepository:
         """
         # Shared viewer-scope fragments. For admin (recruiter_id is None) these
         # are replaced by "TRUE" so the predicates are no-ops.
-        c_scope = viewer_scope_sql("c.") if recruiter_id is not None else "(TRUE)"
-        l_scope = viewer_scope_sql("l.") if recruiter_id is not None else "(TRUE)"
+        c_scope = (
+            viewer_scope_sql("c.") + " AND " + _SUPPORT_ACCOUNT_SCOPED
+            if recruiter_id is not None
+            else "(TRUE)"
+        )
+        l_scope = (
+            viewer_scope_sql("l.") + " AND " + _SUPPORT_LEADS_SCOPED
+            if recruiter_id is not None
+            else "(TRUE)"
+        )
         params: dict[str, str] = {}
         if recruiter_id is not None:
             params["uid"] = recruiter_id
@@ -436,8 +456,16 @@ class DashboardRepository:
         if queue not in ("immediate", "today"):
             raise ValueError(f"unknown attention queue: {queue!r}")
 
-        c_scope = viewer_scope_sql("c.") if recruiter_id is not None else "(TRUE)"
-        l_scope = viewer_scope_sql("l.") if recruiter_id is not None else "(TRUE)"
+        c_scope = (
+            viewer_scope_sql("c.") + " AND " + _SUPPORT_ACCOUNT_SCOPED
+            if recruiter_id is not None
+            else "(TRUE)"
+        )
+        l_scope = (
+            viewer_scope_sql("l.") + " AND " + _SUPPORT_LEADS_SCOPED
+            if recruiter_id is not None
+            else "(TRUE)"
+        )
         params: dict[str, object] = {"limit": limit}
         if recruiter_id is not None:
             params["uid"] = recruiter_id
@@ -694,8 +722,16 @@ class DashboardRepository:
         dashboard items are intentionally absent because the conversation list
         can open only rows backed by a real, viewer-visible conversation.
         """
-        c_scope = viewer_scope_sql("c.") if recruiter_id is not None else "(TRUE)"
-        l_scope = viewer_scope_sql("l.") if recruiter_id is not None else "(TRUE)"
+        c_scope = (
+            viewer_scope_sql("c.") + " AND " + _SUPPORT_ACCOUNT_SCOPED
+            if recruiter_id is not None
+            else "(TRUE)"
+        )
+        l_scope = (
+            viewer_scope_sql("l.") + " AND " + _SUPPORT_LEADS_SCOPED
+            if recruiter_id is not None
+            else "(TRUE)"
+        )
         provider_scope = (
             "(CAST(:channel_provider AS text) IS NULL "
             "OR ci.provider = CAST(:channel_provider AS text))"

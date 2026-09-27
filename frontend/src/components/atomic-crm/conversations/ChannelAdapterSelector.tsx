@@ -1,6 +1,7 @@
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 
 import messengerIcon from "@/assets/channel-adapters/facebook-messenger.svg";
+import tingtingOaIcon from "@/assets/channel-adapters/tingting-oa.png";
 import zaloChatbotIcon from "@/assets/channel-adapters/zalo-chatbot.png";
 import zaloOaIcon from "@/assets/channel-adapters/zalo-oa.png";
 import { useAttentionCounts } from "@/components/atomic-crm/layout/topbar/useAttentionCounts";
@@ -29,6 +30,11 @@ const ADAPTERS: readonly AdapterDefinition[] = [
     provider: "facebook_messenger",
     label: "Messenger",
     icon: messengerIcon,
+  },
+  {
+    provider: "tingting_oa",
+    label: "Zalo OA TingTing (hỗ trợ nhân viên)",
+    icon: tingtingOaIcon,
   },
 ];
 

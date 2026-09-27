@@ -27,6 +27,7 @@ const ZERO_BY_PROVIDER: Record<ConversationChannelProvider, number> = {
   zalo_bot: 0,
   zalo_oa: 0,
   facebook_messenger: 0,
+  tingting_oa: 0,
 };
 
 const NO_ATTENTION_COUNTS: AttentionCounts = {

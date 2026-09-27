@@ -14,6 +14,9 @@ export const CONVERSATION_CHANNEL_PROVIDERS = [
   "zalo_bot",
   "zalo_oa",
   "facebook_messenger",
+  // The employee-support OA: provider zalo_oa, narrowed to the linked account.
+  // Only admins can read those threads (server-side scope).
+  "tingting_oa",
 ] as const;
 
 export type ConversationChannelProvider =

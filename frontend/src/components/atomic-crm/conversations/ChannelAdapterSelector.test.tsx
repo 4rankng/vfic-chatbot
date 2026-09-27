@@ -56,13 +56,18 @@ describe("ChannelAdapterSelector", () => {
     await expect
       .element(screen.getByRole("radio", { name: "Zalo Chatbot" }))
       .toBeChecked();
-    expect(screen.getByRole("radio").all()).toHaveLength(3);
+    // Zalo Chatbot, Zalo OA, Messenger, and the employee-support TingTing OA.
+    expect(screen.getByRole("radio").all()).toHaveLength(4);
     await expect
       .element(screen.getByRole("radio", { name: "Zalo Chatbot" }))
       .toBeVisible();
-    // Messenger is a selectable scope alongside the Zalo adapters.
+    // Messenger and the TingTing support OA are selectable scopes alongside the
+    // Zalo adapters.
     await expect
       .element(screen.getByRole("radio", { name: "Messenger" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("radio", { name: /Zalo OA TingTing/ }))
       .toBeVisible();
     expect(screen.container.textContent).not.toContain("Kênh đang chọn:");
     await expect.element(screen.getByText("99+")).toBeVisible();
@@ -128,6 +133,9 @@ describe("ChannelAdapterSelector", () => {
     mockApiJson.mockImplementation(async (url: string) => {
       if (!url.includes("channel_provider")) return { count: 9 };
       if (url.includes("zalo_bot")) return { count: 2 };
+      // The support OA is its own bucket: its key matches neither "zalo_bot"
+      // nor the plain "zalo_oa" provider filter.
+      if (url.includes("tingting_oa")) return { count: 1 };
       if (url.includes("zalo_oa")) return { count: 4 };
       return { count: 6 };
     });
@@ -153,8 +161,8 @@ describe("ChannelAdapterSelector", () => {
       name: "Zalo OA — 4 hội thoại cần phản hồi",
     });
     await expect.element(oaRadio).toBeVisible();
-    // Messenger is scoped too, so the shared query must cover all three
-    // adapters without a query of its own.
+    // Messenger and the TingTing OA are scoped too, so the shared query must
+    // cover every badge without a query of its own.
     await expect
       .element(
         screen.getByRole("radio", {
@@ -162,8 +170,12 @@ describe("ChannelAdapterSelector", () => {
         }),
       )
       .toBeVisible();
+    await expect
+      .element(screen.getByRole("radio", { name: /Zalo OA TingTing/ }))
+      .toBeVisible();
 
-    expect(mockApiJson.mock.calls.length).toBe(4);
+    // One unscoped count + one per badge (four now).
+    expect(mockApiJson.mock.calls.length).toBe(5);
     expect(mockApiJson).toHaveBeenCalledWith(
       "/api/v1/conversations/needs-attention",
     );
@@ -176,13 +188,21 @@ describe("ChannelAdapterSelector", () => {
     expect(mockApiJson).toHaveBeenCalledWith(
       "/api/v1/conversations/needs-attention?channel_provider=facebook_messenger",
     );
+    expect(mockApiJson).toHaveBeenCalledWith(
+      "/api/v1/conversations/needs-attention?channel_provider=tingting_oa",
+    );
     // One cache entry holds every counter, and the total stays the server's
-    // unscoped answer rather than the sum of the provider buckets (2 + 4 + 6).
+    // unscoped answer rather than the sum of the provider buckets.
     expect(
       queryClient.getQueryData(["conversations", "needs-attention", "counts"]),
     ).toEqual({
       total: 9,
-      byProvider: { zalo_bot: 2, zalo_oa: 4, facebook_messenger: 6 },
+      byProvider: {
+        zalo_bot: 2,
+        zalo_oa: 4,
+        facebook_messenger: 6,
+        tingting_oa: 1,
+      },
     });
 
     await oaRadio.click();
@@ -263,9 +283,9 @@ describe("ChannelAdapterSelector", () => {
       )
       .toBeVisible();
 
-    // The panel and the bell ride the same query: four requests once per
-    // interval, one cache entry — not one poller each.
-    expect(mockApiJson.mock.calls.length).toBe(4);
+    // The panel and the bell ride the same query: one unscoped count plus one
+    // per badge, once per interval, one cache entry — not one poller each.
+    expect(mockApiJson.mock.calls.length).toBe(5);
     expect(queryClient.getQueryCache().getAll()).toHaveLength(1);
   });
 });
