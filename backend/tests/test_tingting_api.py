@@ -18,7 +18,11 @@ import pytest
 from app.graph.tingting_guide import (
     TINGTING_API_BLOCK_HEADER,
     TINGTING_API_GUIDE,
+    TINGTING_CONFIRM_REPLY,
+    TINGTING_FIELDS_ASK,
+    TINGTING_SUPPORT_PERSONA,
     tingting_api_prompt_block,
+    tingting_support_system_prompt,
 )
 from app.graph.tools.tingting_api import (
     confirm_tingting_otp,
@@ -397,7 +401,7 @@ def test_guide_requires_identity_verification_before_the_otp() -> None:
     guide = TINGTING_API_GUIDE
     assert "CCCD" in guide
     assert "XÁC MINH DANH TÍNH" in guide
-    assert guide.index("1. TRA CỨU + XÁC MINH DANH TÍNH") < guide.index("2. GỬI OTP")
+    assert guide.index("1. THU THẬP + XÁC MINH DANH TÍNH") < guide.index("2. GỬI OTP")
     assert guide.index("verify_tingting_identity") < guide.index("send_tingting_otp")
     assert "ĐÃ XÁC MINH" in guide
     # The session/token is server state: the model is told never to pass it.
@@ -407,6 +411,46 @@ def test_guide_requires_identity_verification_before_the_otp() -> None:
 def test_guide_forbids_inventing_contact_channels() -> None:
     assert "không tự nghĩ ra hotline" in TINGTING_API_GUIDE
     assert TINGTING_API_BLOCK_HEADER in tingting_api_prompt_block()
+
+
+def test_guide_asks_for_all_three_fields_before_the_lookup() -> None:
+    """The three identity fields are one ask, and it precedes the tool call.
+
+    The flow used to leave the model free to collect them one at a time; the ask
+    is now a fixed sentence the guide quotes verbatim, so the employee answers
+    once and the identity tool gets all three on the first call.
+    """
+    guide = TINGTING_API_GUIDE
+    assert TINGTING_FIELDS_ASK in guide
+    assert "CẢ BA" in guide
+    assert guide.index(TINGTING_FIELDS_ASK) < guide.index("verify_tingting_identity")
+
+
+def test_guide_asks_the_fixed_confirm_question_and_never_lists_problems() -> None:
+    """An unclear intent gets the one confirm question, not a problem menu.
+
+    Production returned a menu that included "cần tra cứu thông tin nhân viên" —
+    a capability with no tool behind it — so the menu wording must not survive
+    anywhere in the prompt.
+    """
+    assert TINGTING_CONFIRM_REPLY in TINGTING_API_GUIDE
+    assert TINGTING_CONFIRM_REPLY in TINGTING_SUPPORT_PERSONA
+    assert "tra cứu thông tin nhân viên" not in TINGTING_API_GUIDE
+    assert "tra cứu thông tin nhân viên" not in TINGTING_SUPPORT_PERSONA
+
+
+def test_support_persona_forbids_other_employee_data_and_the_recruitment_role() -> None:
+    """The OA persona is the code-defined password-reset assistant, nothing else."""
+    assert "KHÔNG tra cứu" in TINGTING_SUPPORT_PERSONA
+    assert "KHÔNG phải trợ lý tuyển dụng VFIC" in TINGTING_SUPPORT_PERSONA
+
+    with_guide = tingting_support_system_prompt(include_guide=True)
+    assert TINGTING_SUPPORT_PERSONA in with_guide
+    assert TINGTING_API_BLOCK_HEADER in with_guide
+
+    without_guide = tingting_support_system_prompt(include_guide=False)
+    assert TINGTING_SUPPORT_PERSONA in without_guide
+    assert TINGTING_API_BLOCK_HEADER not in without_guide
 
 
 # ── the tool rendering ──────────────────────────────────────────────────────

@@ -68,7 +68,7 @@ _INTENT_CRITERIA = {
     "faq_detail": "Hỏi chi tiết tuyển dụng: lương, ca làm, ký túc xá, yêu cầu, nội dung công việc",
     "employee_support": "Nhân viên đang làm cần hỗ trợ tài khoản hoặc hệ thống của dự án: quên/quá "
     "hạn mật khẩu, đặt lại hoặc đổi mật khẩu, không nhận được mã OTP, tài khoản không đăng nhập "
-    "được, tra cứu thông tin nhân viên",
+    "được",
     "out_of_scope": "Ngoài phạm vi tuyển dụng và hỗ trợ nhân viên của công ty, và không thuộc "
     "nhóm hỗ trợ tài khoản/hệ thống ở trên",
     "general": "Liên quan đến tuyển dụng nhưng ý định chưa rõ",

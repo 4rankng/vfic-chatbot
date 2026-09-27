@@ -1129,11 +1129,18 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   make the CCCD a distinguishing factor; the tool then requires name + phone only instead of
   deadlocking the employee on a field that can never match.
 - **Routing:** on the support OA the `employee_support` intent binds the TingTing reset tools only
-  (no project knowledge, no catalog) — a focused RAG turn cannot widen it. An employee who has not
+  (no project knowledge, no catalog) — a focused RAG turn cannot widen it. An OA turn's system
+  prompt is the code-defined TingTing persona (`TINGTING_SUPPORT_PERSONA`, plus the embedded guide
+  when the API key is configured), never the recruitment persona, the active-project index or the
+  recruiting rules; the code persona states the fixed confirm question and the one-message
+  three-field ask verbatim. An employee who has not
   named a problem there (a greeting, "tôi cần hỗ trợ", an unreadable or below-floor reading) is
   re-routed to the same `employee_support` branch with reason `employee_support_clarify` so the bot
-  asks which problem they have and keeps the thread; a **confident non-support** intent is answered
-  with "Vui lòng chờ chuyên viên tư vấn liên hệ." and hands the conversation to a human.
+  asks the fixed question «Anh/chị cần đặt lại mật khẩu ứng dụng TingTing phải không ạ?» and keeps
+  the thread; a **confident non-support** intent is answered
+  with "Vui lòng chờ chuyên viên tư vấn liên hệ." and hands the conversation to a human. When the
+  model itself emits that handoff line on the OA, the turn queues a human as well (the line promises
+  a consultant, so the queue write follows the exact reply, not only the routing branch).
   Off the support OA those tools are stripped from the registry. A short follow-up while the assistant's last
   message was mid-flow (`TurnDecisions.recent_account_support`, judged from `bot_last_message`)
   re-routes to `employee_support` with reason `employee_support_continuation`, so "sao rồi" keeps

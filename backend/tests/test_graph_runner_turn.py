@@ -2285,6 +2285,137 @@ async def test_an_unclear_message_on_the_support_oa_makes_the_bot_ask_first(
 
 
 @pytest.mark.asyncio
+async def test_support_oa_turn_uses_the_tingting_prompt_not_the_recruitment_one(monkeypatch):
+    """The OA's system prompt is the code persona — the recruitment prompt is unreachable.
+
+    Regression for the production transcript: the OA inherited ``persona.md``
+    ("nhân viên hỗ trợ tuyển dụng VFIC", mission "LẤY SỐ ĐIỆN THOẠI") plus the
+    active-project index, so a request to look up someone introduced the bot as a
+    VFIC recruiting assistant. ``build_system_prompt`` must not even be consulted
+    on this channel, and the non-OA branch must still reach it unchanged.
+    """
+    from app.graph.runner import _agent_turn
+    from app.graph.tingting_guide import TINGTING_API_BLOCK_HEADER, TINGTING_SUPPORT_PERSONA
+
+    captured: dict[str, object] = {}
+    prompt_calls: list[str] = []
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "safe reply"
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        prompt_calls.append("called")
+        return "RECRUITMENT-PERSONA-MARKER", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(tingting_api_configured=AsyncMock(return_value=True))
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    async def _turn(*, allowed: bool) -> str:
+        captured.clear()
+        await _agent_turn(
+            BotRunState(
+                conversation_id=CONV_ID, version_at_start=1, user_text="tra cứu Nguyễn Văn A"
+            ),
+            deps,
+            "tra cứu Nguyễn Văn A",
+            provider="zalo_oa",
+            chat_id="oa:user-1",
+            recent_messages=[],
+            timings={"lane": "agent"},
+            decisions=TurnDecisions(intent="general", intent_confidence=0.2),
+            tingting_reset_allowed=allowed,
+        )
+        return str(captured["system"])
+
+    system = await _turn(allowed=True)
+    assert system.startswith(TINGTING_SUPPORT_PERSONA)
+    assert TINGTING_API_BLOCK_HEADER in system
+    assert "RECRUITMENT-PERSONA-MARKER" not in system
+    assert prompt_calls == []  # the recruitment prompt was never built for the OA
+
+    off_channel = await _turn(allowed=False)
+    assert "RECRUITMENT-PERSONA-MARKER" in off_channel
+    assert prompt_calls == ["called"]
+
+
+@pytest.mark.asyncio
+async def test_support_oa_queues_a_human_when_the_model_sends_the_handoff_line(monkeypatch):
+    """The handoff line promises a consultant, so the model reaching it queues one.
+
+    The routing branch that returns the line also queues a human, but the model
+    can emit the same line itself (an unclear reading of a non-reset request);
+    the queue write follows the exact reply so the promise is never empty.
+    """
+    from app.graph.runner import TINGTING_HANDOFF_REPLY, _agent_turn
+
+    escalations: list[dict] = []
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            return TINGTING_HANDOFF_REPLY
+
+    class _Conversations:
+        async def get(self, _conversation_id):
+            return SimpleNamespace(id=CONV_ID, version=7)
+
+        async def escalate_extracted_intent(self, conv, **kwargs):
+            escalations.append({"conversation": conv, **kwargs})
+            return True
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=_Conversations())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(tingting_api_configured=AsyncMock(return_value=True))
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=7, user_text="Tôi cần hỗ trợ"),
+        deps,
+        "Tôi cần hỗ trợ",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="general", intent_confidence=0.2),
+        tingting_reset_allowed=True,
+    )
+
+    assert reply == TINGTING_HANDOFF_REPLY
+    assert len(escalations) == 1
+    assert escalations[0]["reason"] == "tingting_support_handoff"
+
+
+@pytest.mark.asyncio
 async def test_focused_support_turn_drops_the_project_knowledge_tool(monkeypatch):
     """A FOCUSED project turn on the support OA cannot re-add project knowledge.
 

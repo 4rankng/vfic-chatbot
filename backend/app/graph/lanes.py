@@ -42,7 +42,7 @@ from app.graph.runtime_policy import TINGTING_TOOL_NAMES
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.tingting_guide import (
     TINGTING_RESET_REDIRECT_REPLY,
-    tingting_api_prompt_block,
+    tingting_support_system_prompt,
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
 from app.recruitment.domain.recommendation import (
@@ -312,8 +312,9 @@ async def _agent_turn(
         # This IS the support OA. It serves the reset flow and no recruitment
         # knowledge, but "the employee wants help here and has not said what"
         # (``general``/``small_talk``, Jev degraded, or a reading below the route
-        # floor) is not a reason to call a person: the bot asks which problem
-        # first and the answer decides — a named problem runs the reset flow
+        # floor) is not a reason to call a person: the bot asks the fixed confirm
+        # question (Anh/chị cần đặt lại mật khẩu ứng dụng TingTing phải không ạ?)
+        # and the answer decides — a named problem runs the reset flow
         # (``employee_support`` on the next turn), anything else lands in the
         # handoff branch below. Only a confident non-support intent (a
         # recruitment/admin question) goes straight to a human.
@@ -346,6 +347,12 @@ async def _agent_turn(
         route_intent=route.intent,
         project_context=project_context,
     )
+    if tingting_reset_allowed:
+        # The OA has no catalog and no income tool: a stale Jev vacancy flag must
+        # not force `list_active_jobs` onto a turn whose only bound tools are the
+        # reset ones.
+        vacancy_catalog_required = False
+        compare_income_required_args = None
     required_authority_tool = (
         "list_active_jobs"
         if vacancy_catalog_required
@@ -410,11 +417,27 @@ async def _agent_turn(
     from app.graph.context import build_system_prompt
 
     sys_t0 = time.monotonic()
-    system, sys_prompt_hit = await build_system_prompt(
-        deps.retrieval,
-        provider=provider,
-    )
-    if project_context is not None:
+    if tingting_reset_allowed:
+        # The support OA is not a recruitment channel: its prompt is the code
+        # persona (+ the reset guide when the key is configured), never the
+        # recruitment persona, the project index, or the recruiting rules.
+        configured_reader = getattr(deps.retrieval, "tingting_api_configured", None)
+        tingting_configured = False
+        if configured_reader is not None:
+            try:
+                tingting_configured = bool(await configured_reader())
+            except Exception as exc:  # noqa: BLE001 — a prompt gate must never break a turn
+                logger.warning(
+                    "tingting api configured-read failed error_type=%s", type(exc).__name__
+                )
+        system = tingting_support_system_prompt(include_guide=tingting_configured)
+        sys_prompt_hit = False
+    else:
+        system, sys_prompt_hit = await build_system_prompt(
+            deps.retrieval,
+            provider=provider,
+        )
+    if project_context is not None and not tingting_reset_allowed:
         if project_context.state == "FOCUSED":
             system += (
                 "\n\n=== DỰ ÁN ĐANG ĐƯỢC CHỌN ===\n"
@@ -431,34 +454,6 @@ async def _agent_turn(
                 "để gợi ý một nhóm nhỏ phù hợp; không tải kiến thức chi tiết của mọi dự án."
             )
 
-    # Never print a guide for a tool this turn cannot bind: an installation
-    # without the knowledge capability lacks the reset tools, and pointing the model
-    # at endpoints it cannot reach reads as an invitation to invent one.
-    api_tool_registry = getattr(manifest_policy, "tool_registry", None)
-
-    # ``tingting_reset_allowed`` rides the turn (see ``run_turn``): the guide and
-    # the reset tools exist only where the flow is reachable.
-    def _api_tool_bindable(name: str) -> bool:
-        if manifest_policy is None:
-            return True
-        return bool(getattr(api_tool_registry, "allows", lambda _name: True)(name))
-
-    # The TingTing reset flow is deployment-wide, so its embedded guide goes in
-    # regardless of project focus — the employee needs no project to reset a
-    # password, and a guide the model never sees is one it will replace with an
-    # invented hotline. One primary-key read per turn; absent port = absent block.
-    if _api_tool_bindable("verify_tingting_identity"):
-        configured_reader = getattr(deps.retrieval, "tingting_api_configured", None)
-        if configured_reader is not None:
-            try:
-                tingting_configured = await configured_reader()
-            except Exception as exc:  # noqa: BLE001 — a prompt gate must never break a turn
-                logger.warning(
-                    "tingting api configured-read failed error_type=%s", type(exc).__name__
-                )
-                tingting_configured = False
-            if tingting_configured and tingting_reset_allowed:
-                system += "\n\n" + tingting_api_prompt_block()
     if timings is not None:
         timings["system_prompt_ms"] = int(round((time.monotonic() - sys_t0) * 1000))
         timings["system_prompt_cache_hit"] = sys_prompt_hit
@@ -593,7 +588,7 @@ async def _agent_turn(
     use_fast = fast_available and should_use_fast_model(route)
     if timings is not None:
         timings["model_tier"] = "fast" if use_fast else "primary"
-    allow_lead_context = (
+    allow_lead_context = not tingting_reset_allowed and (
         manifest_policy is None
         or (
             manifest_policy.pack_key == "recruitment"
@@ -657,7 +652,9 @@ async def _agent_turn(
     # tool); a focused project names its knowledge base exactly, so a turn never
     # has to ask which project a lookup belongs to.
     project_slug = getattr(project_context, "project_slug", None)
-    if project_slug and (employee_support or (focused_rag and not vacancy_catalog_required)):
+    if project_slug and not tingting_reset_allowed and (
+        employee_support or (focused_rag and not vacancy_catalog_required)
+    ):
         agent_kwargs["forced_project_slug"] = project_slug
     if vacancy_catalog_required:
         agent_kwargs["required_tool"] = "list_active_jobs"
@@ -685,6 +682,11 @@ async def _agent_turn(
         contextual_user_text,
         **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
     )
+    if tingting_reset_allowed and reply.strip() == TINGTING_HANDOFF_REPLY:
+        # The line promises a consultant, and the model can reach it (an unclear
+        # reading of a non-reset request), so the queue write follows the exact
+        # reply rather than only the routing branch that also returns it.
+        await _tingting_support_handoff(state, deps)
     return reply
 
 
@@ -769,7 +771,11 @@ async def _resolve_lane(
     # Messenger leads are keyed by contact (NULL zalo_id), so the contact id is
     # the fallback key for the agent's lead context.
     contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
-    if project_context is not None and project_context.clarification:
+    if (
+        project_context is not None
+        and project_context.clarification
+        and not tingting_reset_allowed
+    ):
         trace_sink.record_decision("context_selected", "project_clarification")
         trace_sink.record_decision("lane_selected", "project_clarification")
         timings["lane"] = "project_clarification"
@@ -787,6 +793,7 @@ async def _resolve_lane(
         direct_context is not None
         and turn_route.reason != "vacancy_listing"
         and turn_route.intent != "employee_support"
+        and not tingting_reset_allowed
     ):
         trace_sink.record_decision("context_selected", "direct_context")
         trace_sink.record_decision("lane_selected", "direct_context")

@@ -177,8 +177,9 @@ TURN_INTENTS: frozenset[str] = frozenset(
 
 # Intents that say "the employee wants help here but has not named the problem"
 # (or that Jev could not read at all). On the TingTing support OA these are not a
-# reason to call a human: the bot asks which problem first, so the reset flow can
-# start from the answer (see ``lanes._agent_turn``).
+# reason to call a human: the bot asks the fixed confirm question (Anh/chị cần
+# đặt lại mật khẩu ứng dụng TingTing phải không ạ?), so the reset flow can start
+# from the answer (see ``lanes._agent_turn``).
 _SUPPORT_CLARIFY_INTENTS: frozenset[str] = frozenset({"general", "small_talk"})
 
 
@@ -240,7 +241,7 @@ def routing_instruction(route: TurnRoute) -> str:
     if route.intent == "employee_support":
         return (
             "Ý định: nhân viên đang làm cần hỗ trợ tài khoản/hệ thống của dự án (quên mật khẩu, "
-            "đổi/đặt lại mật khẩu, không nhận được OTP, tra cứu thông tin nhân viên). Phải đọc mục "
+            "đổi/đặt lại mật khẩu, không nhận được OTP). Phải đọc mục "
             "API TINGTING và chạy đúng từng bước trong hướng dẫn, hỏi từng bước một thay vì tự đoán. "
             "XÁC MINH DANH TÍNH BẰNG TOOL: gọi verify_tingting_identity(phone, full_name, cccd) "
             "với đúng những gì nhân viên đã cung cấp — không tự so khớp bằng mắt và không tự "
