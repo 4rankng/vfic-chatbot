@@ -82,8 +82,16 @@ TINGTING_FLOW_KEY_PREFIX = "tingting:flow"
 
 
 def _flow_key(phone: str) -> str:
-    """Redis key for one employee's flow: a phone digest, never the number."""
+    """Redis key for one employee's flow: a phone digest, never the number.
+
+    The digits are canonicalised the same way the identity tool canonicalises a
+    submitted number (``+84`` folded onto the local ``0``), or the same employee
+    would get a different key — and lose the OTP session — by typing the number
+    in the international form.
+    """
     digits = re.sub(r"\D", "", str(phone or ""))
+    if len(digits) > 9 and digits.startswith("84"):
+        digits = "0" + digits[2:]
     return f"{TINGTING_FLOW_KEY_PREFIX}:{hashlib.sha256(digits.encode('utf-8')).hexdigest()[:32]}"
 
 

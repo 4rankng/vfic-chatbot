@@ -8,6 +8,7 @@ origin, one call path, an embedded guide, and truthful outcomes.
 
 from __future__ import annotations
 
+import re
 import uuid
 from types import SimpleNamespace
 
@@ -22,6 +23,7 @@ from app.graph.tingting_guide import (
 from app.graph.tools.tingting_api import (
     call_tingting_api,
     confirm_tingting_otp,
+    generate_simple_password,
     reset_tingting_password,
     send_tingting_otp,
 )
@@ -601,7 +603,9 @@ async def test_confirm_keeps_the_session_when_the_code_is_wrong() -> None:
 async def test_reset_uses_the_stored_token_and_clears_the_flow() -> None:
     retrieval = _FlowRetrieval(_reset_ok(), state={"reset_token": "tok-9"})
     result = await reset_tingting_password(retrieval, phone="0987654321")
-    assert retrieval.calls[0]["params"] == {"reset_token": "tok-9"}
+    first = retrieval.calls[0]["params"]
+    assert first["reset_token"] == "tok-9"
+    assert first["new_password"].startswith(("Matkhau", "Tingting", "Dangnhap", "Congviec", "Thanhcong"))
     assert retrieval.cleared == 1
     assert "nv.dung" in result and "Abc12345" in result
 
@@ -642,3 +646,62 @@ async def test_a_repeated_code_check_explains_the_dedupe() -> None:
     result = await confirm_tingting_otp(retrieval, phone="0987654321", code="123456")
     assert "vừa được kiểm tra" in result
     assert "send_tingting_otp" in result
+
+
+def test_the_flow_key_folds_the_country_code() -> None:
+    """The same employee must keep one flow whether they type 0… or +84…."""
+    from app.services.tingting_api import _flow_key
+
+    assert _flow_key("0987654321") == _flow_key("+84 987 654 321")
+    assert _flow_key("0987654321") == _flow_key("0987 654 321")
+    assert _flow_key("0987654321") != _flow_key("0123456789")
+    assert "0987654321" not in _flow_key("0987654321")  # never the number itself
+
+
+# ── the one-time password the employee has to type ──────────────────────────
+
+
+def test_generated_password_is_memorable_and_policy_shaped() -> None:
+    samples = {generate_simple_password() for _ in range(8)}
+    assert all(
+        re.fullmatch(r"(Matkhau|Tingting|Dangnhap|Congviec|Thanhcong)[@#$][0-9]{6}", value)
+        for value in samples
+    )
+    assert len(samples) > 1  # the digits are random, the shape is fixed
+
+
+@pytest.mark.asyncio
+async def test_reset_sets_a_simple_password_instead_of_the_provider_one() -> None:
+    """The provider minted `PN&&mf6P73x4`; the employee could not type it."""
+    retrieval = _FlowRetrieval(_reset_ok(), state={"reset_token": "tok-9"})
+    await reset_tingting_password(retrieval, phone="0987654321")
+    sent = retrieval.calls[0]["params"]
+    assert re.fullmatch(
+        r"(Matkhau|Tingting|Dangnhap|Congviec|Thanhcong)[@#$][0-9]{6}", sent["new_password"]
+    )
+    assert set(sent) == {"reset_token", "new_password"}
+
+
+@pytest.mark.asyncio
+async def test_reset_keeps_an_employee_supplied_password() -> None:
+    retrieval = _FlowRetrieval(_reset_ok(), state={"reset_token": "tok-9"})
+    await reset_tingting_password(retrieval, phone="0987654321", new_password="Rieng@987")
+    assert retrieval.calls[0]["params"]["new_password"] == "Rieng@987"
+
+
+@pytest.mark.asyncio
+async def test_reset_falls_back_when_the_policy_rejects_the_simple_password() -> None:
+    """An app-side policy our style misses must not fail the employee's reset."""
+    retrieval = _FlowRetrieval(
+        outcomes=[
+            _outcome("error", status=400, detail="status_400"),
+            _reset_ok(),
+        ],
+        state={"reset_token": "tok-9"},
+    )
+    result = await reset_tingting_password(retrieval, phone="0987654321")
+    assert len(retrieval.calls) == 2
+    assert "new_password" in retrieval.calls[0]["params"]
+    assert retrieval.calls[1]["params"] == {"reset_token": "tok-9"}  # system-generated
+    assert "nv.dung" in result and "Abc12345" in result
+    assert "hệ thống tự sinh" in result

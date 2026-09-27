@@ -82,6 +82,11 @@ reset) is identical for all of them.
    CCCD, or a CCCD equal to its own mobile, drops the CCCD requirement instead of
    deadlocking on a field that can never match. A verified phone is recorded and is
    the gate `send_tingting_otp` reads.
+11. **The reset sets a memorable one-time password.** Letting the app generate one produced
+    strings an employee cannot retype from a Zalo bubble (`PN&&mf6P73x4`), so the tool sets its
+    own `Matkhau@482913`-style password (word + symbol + 6 digits: upper, lower, digit and symbol
+    so a policy accepts it) and tells the employee to change it after the first login. A 400
+    from the app falls back to the app's own generator rather than failing the reset.
 10. **A follow-up mid-flow stays on the flow.** `TurnDecisions.recent_account_support`
     (judged from the assistant's last message, newly supplied as `bot_last_message`)
     re-routes a short reply — "sao rồi", "ok", a bare phone number — to

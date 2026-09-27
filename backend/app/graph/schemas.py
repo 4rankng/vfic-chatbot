@@ -370,7 +370,8 @@ TOOL_SCHEMAS = [
                     "new_password": {
                         "type": "string",
                         "description": (
-                            "Mật khẩu mới nếu nhân viên muốn tự đặt; bỏ trống để hệ thống tự sinh."
+                            "Mật khẩu mới nếu chính nhân viên muốn tự đặt; bỏ trống để hệ thống đặt "
+                            'mật khẩu tạm dễ đọc kiểu "Matkhau@482913".'
                         ),
                     },
                 },

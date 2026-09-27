@@ -1058,7 +1058,11 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   `verify_tingting_identity(phone, full_name, cccd)` decides the identity match in code
   (diacritics/case/spacing folded on names, `+84` folded on digits, CCCD compared as digits) and
   records the verified phone; `send_tingting_otp(phone)`; `confirm_tingting_otp(phone, code)`;
-  `reset_tingting_password(phone, new_password?)`. `call_tingting_api(method, path, params)`
+  `reset_tingting_password(phone, new_password?)` — with no employee-supplied password it sets a
+  memorable one-time one (`Matkhau@482913` style: a word + symbol + 6 digits, readable over chat
+  and typeable on a phone, changed after the first login). The app's own generator produced
+  unreadable strings (`PN&&mf6P73x4`); a 400 rejection of our style falls back to that generator
+  instead of failing the reset. `call_tingting_api(method, path, params)`
   remains for the read-only lookup and refuses every mutating path.
 - **Egress boundary:** same as §14 (relative path only, `GET`/`POST`, flat bounded params, 8 s
   timeout, 4 000-char cap, no error body, dedupe + ceiling, one egress site); the read-only

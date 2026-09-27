@@ -26,10 +26,14 @@ read-only lookup but refuses every mutating path with a pointer at these tools.
 from __future__ import annotations
 
 import json
+import logging
 import re
+import secrets
 from typing import Any
 
 from app.graph.ports import GraphRetrievalPort
+
+logger = logging.getLogger(__name__)
 
 # The reset API's read path, named once: the guide, the tool schema and the
 # identity verifier all quote the same path.
@@ -83,6 +87,35 @@ _UNREADABLE = (
 _CODE_FORMAT = (
     "Mã xác minh phải là đúng 6 chữ số. Hãy hỏi lại mã mà nhân viên nhận được trong Zalo."
 )
+
+
+# One-time password style the operator asked for: readable over chat and easy to
+# type on a phone, while still carrying upper + lower + digit + symbol so the
+# app's password policy accepts it. The system-generated one (a real report:
+# ``PN&&mf6P73x4``) was unreadable when an employee had to key it in.
+_PASSWORD_WORDS: tuple[str, ...] = (
+    "Matkhau",
+    "Tingting",
+    "Dangnhap",
+    "Congviec",
+    "Thanhcong",
+)
+_PASSWORD_SYMBOLS: tuple[str, ...] = ("@", "#", "$")
+_PASSWORD_DIGITS = 6
+
+
+def generate_simple_password() -> str:
+    """A memorable one-time password: ``Matkhau@482913``.
+
+    10^6 digit combinations behind a known word: weaker than a random 12-char
+    string, which is the operator's explicit trade for a credential the employee
+    can actually type. It is one-time anyway — every reply that carries it also
+    tells the employee to change it after the first login.
+    """
+    word = secrets.choice(_PASSWORD_WORDS)
+    symbol = secrets.choice(_PASSWORD_SYMBOLS)
+    digits = "".join(str(secrets.randbelow(10)) for _ in range(_PASSWORD_DIGITS))
+    return f"{word}{symbol}{digits}"
 
 
 def _digits(value: Any) -> str:
@@ -267,10 +300,25 @@ async def reset_tingting_password(
     reset_token = str(state.get("reset_token") or "")
     if not reset_token:
         return _NO_RESET_TOKEN
-    params: dict[str, str] = {"reset_token": reset_token}
-    if (new_password or "").strip():
-        params["new_password"] = new_password.strip()
+    requested = (new_password or "").strip()
+    # No explicit password from the employee: set our own memorable one instead
+    # of letting the app mint an unreadable string.
+    generated = "" if requested else generate_simple_password()
+    params: dict[str, str] = {"reset_token": reset_token, "new_password": requested or generated}
     outcome = await retrieval.call_tingting_api(method="POST", path=RESET_PATH, params=params)
+    if (
+        generated
+        and outcome.state == "error"
+        and outcome.status_code == 400
+    ):
+        # The app may enforce a policy our style misses (length/composition).
+        # Fall back to letting it generate one rather than failing the reset; the
+        # reply then warns that the password is the app's own.
+        logger.warning("tingting reset rejected the simple password; retrying without one")
+        outcome = await retrieval.call_tingting_api(
+            method="POST", path=RESET_PATH, params={"reset_token": reset_token}
+        )
+        generated = ""
     if outcome.state != "ok":
         if outcome.state == "error" and outcome.status_code == 401:
             await retrieval.clear_tingting_flow_state(clean_phone)
@@ -289,15 +337,22 @@ async def reset_tingting_password(
     if not username or not password:
         return _UNREADABLE
     label = f" cho {employee}" if employee else ""
+    advice = (
+        "Mật khẩu này do hệ thống tự sinh nên khó nhớ ạ."
+        if not generated
+        else "Mật khẩu này là mật khẩu tạm, anh/chị đổi lại ngay sau khi đăng nhập ạ."
+    )
     return (
         f"Đã đặt lại mật khẩu{label} thành công. Đọc lại cho nhân viên đúng tên đăng nhập và "
-        f"mật khẩu mới sau đây, và nhắc đổi mật khẩu ngay sau lần đăng nhập đầu tiên:\n"
+        f"mật khẩu mới sau đây, đúng từng ký tự, rồi nhắc đổi mật khẩu sau lần đăng nhập đầu "
+        f"tiên. {advice}\n"
         f"- tên đăng nhập: {username}\n- mật khẩu mới: {password}"
     )
 
 
 __all__ = [
     "LOOKUP_PATH",
+    "generate_simple_password",
     "OTP_PATH",
     "RESET_PATH",
     "VERIFY_PATH",
