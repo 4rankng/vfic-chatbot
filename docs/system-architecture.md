@@ -1058,11 +1058,11 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   `verify_tingting_identity(phone, full_name, cccd)` decides the identity match in code
   (diacritics/case/spacing folded on names, `+84` folded on digits, CCCD compared as digits) and
   records the verified phone; `send_tingting_otp(phone)`; `confirm_tingting_otp(phone, code)`;
-  `reset_tingting_password(phone, new_password?)` — with no employee-supplied password it sets a
-  memorable one-time one (`Matkhau@482913` style: a word + symbol + 6 digits, readable over chat
-  and typeable on a phone, changed after the first login). The app's own generator produced
-  unreadable strings (`PN&&mf6P73x4`); a 400 rejection of our style falls back to that generator
-  instead of failing the reset. `call_tingting_api(method, path, params)`
+  `reset_tingting_password(phone)` — it sets the password itself, in the operator's fixed
+  format `Vfic@<OTP>` (the 6-digit code the employee just verified, e.g. `Vfic@123980`): readable
+  over chat, typeable on a phone, changed after the first login, and never chosen by the
+  employee. The app's own generator produced unreadable strings (`PN&&mf6P73x4`); a 400
+  rejection of our style falls back to that generator instead of failing the reset. `call_tingting_api(method, path, params)`
   remains for the read-only lookup and refuses every mutating path.
 - **Egress boundary:** same as §14 (relative path only, `GET`/`POST`, flat bounded params, 8 s
   timeout, 4 000-char cap, no error body, dedupe + ceiling, one egress site); the read-only
@@ -1073,6 +1073,12 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   TTL 15 min, merged per step): the `session_id` and `reset_token` never enter the prompt, so a
   code typed in the next turn is verified against the session the send turn created. A verified
   phone is the gate `send_tingting_otp` reads — identity cannot be skipped.
+- **Channel scope:** the flow exists **only on a Zalo OA conversation**
+  (`_tingting_reset_allowed`): the recruitment Bot channel and Messenger never get the guide, never
+  bind the reset tools, and an account-support turn there is answered honestly instead of starting a
+  flow the channel cannot serve. The optional admin pin `tingting_reset_oa_id` narrows it to one OA
+  account key (the TingTing Software Solution OA the operator links); empty = any connected OA.
+  A configuration-read error fails closed.
 - **Verification precondition:** a record with no CCCD, or a CCCD equal to its own mobile, cannot
   make the CCCD a distinguishing factor; the tool then requires name + phone only instead of
   deadlocking the employee on a field that can never match.

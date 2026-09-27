@@ -99,11 +99,18 @@ export type TingtingSettings = {
   configured: boolean;
   base_url: string;
   auth_header: string;
+  /**
+   * Zalo OA account key allowed to run the reset flow. "" = any connected OA.
+   * The flow is never offered off the OA channel, so the recruitment Bot and
+   * Messenger cannot start it whatever this holds.
+   */
+  reset_oa_id: string;
 };
 
 /** PUT body: omit to keep the stored key, "" to clear it, a value to store it. */
 export type TingtingSettingsUpdate = {
   api_key?: string;
+  reset_oa_id?: string;
 };
 
 export type ZaloChannelTestResult = {

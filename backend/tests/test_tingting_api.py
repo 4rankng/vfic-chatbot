@@ -567,7 +567,11 @@ async def test_confirm_uses_the_stored_session_not_the_model() -> None:
             "params": {"session_id": "sess-42", "code": "123456"},
         }
     ]
-    assert retrieval.saved[-1] == {"reset_token": "tok-9", "otp_verified": True}
+    assert retrieval.saved[-1] == {
+        "reset_token": "tok-9",
+        "otp_verified": True,
+        "otp_code": "123456",
+    }
     assert "reset_tingting_password" in result
 
 
@@ -605,7 +609,7 @@ async def test_reset_uses_the_stored_token_and_clears_the_flow() -> None:
     result = await reset_tingting_password(retrieval, phone="0987654321")
     first = retrieval.calls[0]["params"]
     assert first["reset_token"] == "tok-9"
-    assert first["new_password"].startswith(("Matkhau", "Tingting", "Dangnhap", "Congviec", "Thanhcong"))
+    assert re.fullmatch(r"Vfic@[0-9]{6}", first["new_password"])
     assert retrieval.cleared == 1
     assert "nv.dung" in result and "Abc12345" in result
 
@@ -661,32 +665,35 @@ def test_the_flow_key_folds_the_country_code() -> None:
 # ── the one-time password the employee has to type ──────────────────────────
 
 
-def test_generated_password_is_memorable_and_policy_shaped() -> None:
-    samples = {generate_simple_password() for _ in range(8)}
-    assert all(
-        re.fullmatch(r"(Matkhau|Tingting|Dangnhap|Congviec|Thanhcong)[@#$][0-9]{6}", value)
-        for value in samples
-    )
-    assert len(samples) > 1  # the digits are random, the shape is fixed
+def test_generated_password_uses_the_verified_otp() -> None:
+    """The operator's format: Vfic@<otp>, so the digits are the code just typed."""
+    assert generate_simple_password("123980") == "Vfic@123980"
+    assert generate_simple_password(" 321456 ") == "Vfic@321456"
+    # No usable code (an expired session, a flow started before this format):
+    # keep the shape with random digits rather than failing the reset.
+    fallback = generate_simple_password("")
+    assert re.fullmatch(r"Vfic@[0-9]{6}", fallback)
+    assert generate_simple_password("12ab") != "Vfic@12ab"
 
 
 @pytest.mark.asyncio
-async def test_reset_sets_a_simple_password_instead_of_the_provider_one() -> None:
+async def test_reset_sets_the_otp_shaped_password_not_the_provider_one() -> None:
     """The provider minted `PN&&mf6P73x4`; the employee could not type it."""
-    retrieval = _FlowRetrieval(_reset_ok(), state={"reset_token": "tok-9"})
-    await reset_tingting_password(retrieval, phone="0987654321")
-    sent = retrieval.calls[0]["params"]
-    assert re.fullmatch(
-        r"(Matkhau|Tingting|Dangnhap|Congviec|Thanhcong)[@#$][0-9]{6}", sent["new_password"]
+    retrieval = _FlowRetrieval(
+        _reset_ok(), state={"reset_token": "tok-9", "otp_code": "123980"}
     )
-    assert set(sent) == {"reset_token", "new_password"}
+    result = await reset_tingting_password(retrieval, phone="0987654321")
+    sent = retrieval.calls[0]["params"]
+    assert sent == {"reset_token": "tok-9", "new_password": "Vfic@123980"}
+    # The app echoes the password it stored; that echo is what the model reads out.
+    assert "Abc12345" in result
 
 
 @pytest.mark.asyncio
-async def test_reset_keeps_an_employee_supplied_password() -> None:
-    retrieval = _FlowRetrieval(_reset_ok(), state={"reset_token": "tok-9"})
-    await reset_tingting_password(retrieval, phone="0987654321", new_password="Rieng@987")
-    assert retrieval.calls[0]["params"]["new_password"] == "Rieng@987"
+async def test_confirm_keeps_the_code_for_the_password_shape() -> None:
+    retrieval = _FlowRetrieval(_verify_ok("tok-9"), state={"session_id": "sess-42"})
+    await confirm_tingting_otp(retrieval, phone="0987654321", code="123980")
+    assert retrieval.saved[-1]["otp_code"] == "123980"
 
 
 @pytest.mark.asyncio
@@ -702,6 +709,118 @@ async def test_reset_falls_back_when_the_policy_rejects_the_simple_password() ->
     result = await reset_tingting_password(retrieval, phone="0987654321")
     assert len(retrieval.calls) == 2
     assert "new_password" in retrieval.calls[0]["params"]
-    assert retrieval.calls[1]["params"] == {"reset_token": "tok-9"}  # system-generated
+    assert retrieval.calls[1]["params"] == {"reset_token": "tok-9"}  # app-generated
     assert "nv.dung" in result and "Abc12345" in result
     assert "hệ thống tự sinh" in result
+
+
+# ── the channel scope: the flow belongs to the TingTing Zalo OA ─────────────
+
+
+def _conversation(provider: str, account_key: str):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        channel_identity=SimpleNamespace(provider=provider, account_key=account_key)
+    )
+
+
+class _ScopeDeps:
+    def __init__(self, pin: str = "") -> None:
+        from types import SimpleNamespace
+
+        async def _pin() -> str:
+            return pin
+
+        self.retrieval = SimpleNamespace(tingting_reset_oa_id=_pin, tingting_api_configured=lambda: None)
+
+
+@pytest.mark.asyncio
+async def test_reset_flow_is_refused_off_the_zalo_oa_channel() -> None:
+    """The recruitment Bot and Messenger must never reach the reset flow."""
+    from app.graph.runner import _tingting_reset_allowed
+
+    deps = _ScopeDeps()
+    assert await _tingting_reset_allowed(deps, _conversation("zalo_oa", "default:zalo_oa")) is True
+    assert await _tingting_reset_allowed(deps, _conversation("zalo_bot", "default:zalo_bot")) is False
+    assert (
+        await _tingting_reset_allowed(deps, _conversation("facebook_messenger", "486833177846024"))
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_pin_narrows_the_flow_to_one_oa() -> None:
+    from app.graph.runner import _tingting_reset_allowed
+
+    deps = _ScopeDeps("tingting-oa-key")
+    assert await _tingting_reset_allowed(deps, _conversation("zalo_oa", "tingting-oa-key")) is True
+    assert await _tingting_reset_allowed(deps, _conversation("zalo_oa", "default:zalo_oa")) is False
+
+
+@pytest.mark.asyncio
+async def test_a_scope_read_error_fails_closed() -> None:
+    from types import SimpleNamespace
+
+    from app.graph.runner import _tingting_reset_allowed
+
+    async def _boom() -> str:
+        raise RuntimeError("db down")
+
+    deps = SimpleNamespace(retrieval=SimpleNamespace(tingting_reset_oa_id=_boom))
+    assert await _tingting_reset_allowed(deps, _conversation("zalo_oa", "any")) is False
+
+
+@pytest.mark.asyncio
+async def test_a_conversation_without_an_identity_is_refused() -> None:
+    from types import SimpleNamespace
+
+    from app.graph.runner import _tingting_reset_allowed
+
+    deps = _ScopeDeps()
+    assert await _tingting_reset_allowed(deps, SimpleNamespace(channel_identity=None)) is False
+
+
+# ── the OA pin (admin surface) ──────────────────────────────────────────────
+
+
+class _MultiRowSession:
+    """Session double keyed by integration-setting key (api key + OA pin)."""
+
+    def __init__(self) -> None:
+        self.rows: dict[str, SimpleNamespace] = {}
+
+    async def get(self, _model, key):  # noqa: ANN001
+        return self.rows.get(key)
+
+    def add(self, obj) -> None:  # noqa: ANN001
+        key = getattr(obj, "key", None)
+        if key is not None:
+            self.rows[key] = obj
+
+    async def flush(self) -> None:
+        return None
+
+    async def commit(self) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_the_reset_oa_pin_round_trips_and_clears() -> None:
+    from app.services.tingting_api import TINGTING_RESET_OA_ID_SETTING
+
+    db = _MultiRowSession()
+    service = TingtingApiService(db)
+    assert await service.reset_oa_id() == ""
+
+    view = await service.replace_reset_oa_id("tingting-oa-key", actor_id=None)
+    assert view["reset_oa_id"] == "tingting-oa-key"
+    assert await service.reset_oa_id() == "tingting-oa-key"
+    assert db.rows[TINGTING_RESET_OA_ID_SETTING].is_secret is False
+
+    cleared = await service.replace_reset_oa_id("", actor_id=None)
+    assert cleared["reset_oa_id"] == ""
+    assert await service.reset_oa_id() == ""
+
+    kept = await service.replace_reset_oa_id(None, actor_id=None)
+    assert kept["reset_oa_id"] == ""  # None keeps the stored value

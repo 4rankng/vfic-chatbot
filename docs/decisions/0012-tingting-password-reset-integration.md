@@ -82,11 +82,20 @@ reset) is identical for all of them.
    CCCD, or a CCCD equal to its own mobile, drops the CCCD requirement instead of
    deadlocking on a field that can never match. A verified phone is recorded and is
    the gate `send_tingting_otp` reads.
-11. **The reset sets a memorable one-time password.** Letting the app generate one produced
-    strings an employee cannot retype from a Zalo bubble (`PN&&mf6P73x4`), so the tool sets its
-    own `Matkhau@482913`-style password (word + symbol + 6 digits: upper, lower, digit and symbol
-    so a policy accepts it) and tells the employee to change it after the first login. A 400
-    from the app falls back to the app's own generator rather than failing the reset.
+12. **The flow is bound to the TingTing Zalo OA.** The operator asked that it run only on the
+    OA they link for TingTing Software Solution, so a conversation on any other channel — the
+    recruitment Bot, Messenger — never sees the guide, never binds the reset tools, and gets an
+    honest "this is only supported on the TingTing Zalo OA" reply. An optional admin pin
+    (`tingting_reset_oa_id`, empty = any connected OA) narrows it to that one OA account. The
+    settings section shows the pin field and the TingTing mark
+    (`frontend/public/brand/tingting-oa.png`).
+11. **The reset sets the password itself: `Vfic@<OTP>`.** Letting the app generate one produced
+    strings an employee cannot retype from a Zalo bubble (`PN&&mf6P73x4`), and letting the
+    employee choose one invites weak or reused passwords. The tool therefore sets
+    `Vfic@<the 6-digit code just verified>` (e.g. `Vfic@123980`) — the digits the employee has in
+    hand, in a shape a policy accepts (upper, lower, digit, symbol) — reads it back once, and
+    says to change it after the first login. The code lives in the flow store only; a 400 from
+    the app falls back to its own generator rather than failing the reset.
 10. **A follow-up mid-flow stays on the flow.** `TurnDecisions.recent_account_support`
     (judged from the assistant's last message, newly supplied as `bot_last_message`)
     re-routes a short reply — "sao rồi", "ok", a bare phone number — to

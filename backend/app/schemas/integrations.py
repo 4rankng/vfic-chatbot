@@ -307,12 +307,17 @@ class TingtingIntegrationSettingsOut(BaseModel):
     configured: bool
     base_url: str
     auth_header: str
+    # The Zalo OA account key allowed to run the reset flow; "" = any connected
+    # OA (the flow is still never offered off the OA channel).
+    reset_oa_id: str = ""
 
 
 class TingtingIntegrationSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    # Tri-state: omitted keeps the pin, "" clears it, a value sets it.
+    reset_oa_id: str | None = Field(default=None, max_length=128)
 
 
 # ─── Facebook / Messenger (Phase 4) ─────────────────────────────────────────

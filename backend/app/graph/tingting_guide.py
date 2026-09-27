@@ -54,10 +54,9 @@ Quy trình bắt buộc (theo thứ tự, mỗi lượt một bước, không h�
    - Thành công: sang bước 4 ngay, không xin thêm thông tin nào.
    - Mã sai hoặc hết hạn: hỏi lại mã trong Zalo; nếu nhân viên cần mã mới thì gọi
      send_tingting_otp để gửi lại rồi hỏi mã mới.
-4. ĐẶT LẠI MẬT KHẨU. Gọi reset_tingting_password(phone="<số điện thoại>"). Bỏ trống new_password
-   khi nhân viên không tự chọn mật khẩu: hệ thống đặt một mật khẩu tạm dễ đọc kiểu
-   "Matkhau@482913" (nhân viên gõ lại được trên điện thoại). Chỉ truyền new_password khi chính
-   nhân viên yêu cầu mật khẩu riêng.
+4. ĐẶT LẠI MẬT KHẨU. Gọi reset_tingting_password(phone="<số điện thoại>"). Hệ thống tự đặt mật
+   khẩu tạm theo mã OTP nhân viên vừa xác thực, dạng "Vfic@<mã OTP>" (ví dụ mã 123980 →
+   "Vfic@123980"). KHÔNG hỏi và KHÔNG nhận mật khẩu do nhân viên tự chọn.
    - Đọc lại đúng tên đăng nhập và mật khẩu mới mà tool trả về, đúng từng ký tự và đọc rõ ràng;
      nhắc đăng nhập ngay và đổi mật khẩu sau lần đăng nhập đầu tiên.
 

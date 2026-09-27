@@ -2256,6 +2256,70 @@ async def test_agent_turn_omits_the_tingting_guide_when_unconfigured(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_off_channel_support_turn_gets_the_wrong_channel_reply(monkeypatch):
+    """Account support belongs to the TingTing OA: elsewhere, answer honestly.
+
+    The guide must not be injected and the reset tools must not be bound on the
+    recruitment Bot / Messenger — a flow this channel cannot serve must never be
+    offered, and the reply must not invent a channel to contact instead.
+    """
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str, object] = {}
+    direct_calls: list[dict] = []
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "agent reply"
+
+        async def direct(self, user_text, **kwargs):
+            direct_calls.append(kwargs)
+            return "direct reply"
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True)
+    )
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="quên mật khẩu app"),
+        deps,
+        "quên mật khẩu app",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=False,
+    )
+
+    assert reply == "direct reply"
+    assert captured == {}  # the tool-calling lane never ran
+    assert len(direct_calls) == 1
+    assert "chỉ được hỗ trợ trên Zalo OA" in str(direct_calls[0]["system"])
+    assert "API TINGTING" not in str(direct_calls[0]["system"])
+
+
+@pytest.mark.asyncio
 async def test_focused_support_turn_keeps_the_project_api_tool(monkeypatch):
     """A focused RAG turn must not collapse an API turn to ``search_knowledge``.
 

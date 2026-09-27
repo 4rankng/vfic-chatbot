@@ -30,10 +30,13 @@ class TingtingSettingsMixin:
     async def update_tingting(
         self, values: dict[str, str | None], *, actor_id
     ) -> dict:
-        """Persist ``api_key`` (tri-state: absent keeps, ``""`` clears)."""
-        return await self._tingting_service().replace_key(
-            values.get("api_key"), actor_id=actor_id
-        )
+        """Persist ``api_key`` / ``reset_oa_id`` (tri-state: absent keeps, ``""`` clears)."""
+        service = self._tingting_service()
+        if "api_key" in values:
+            await service.replace_key(values.get("api_key"), actor_id=actor_id)
+        if "reset_oa_id" in values:
+            await service.replace_reset_oa_id(values.get("reset_oa_id"), actor_id=actor_id)
+        return await service.admin_view()
 
 
 __all__ = ["TingtingSettingsMixin"]

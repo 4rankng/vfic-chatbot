@@ -201,6 +201,14 @@ class RetrievalRepository:
         """Drop the flow state once the password has been reset."""
         await TingtingFlowStore().clear(phone)
 
+    async def tingting_reset_oa_id(self) -> str:
+        """The OA account key the reset flow is pinned to (``""`` = any OA)."""
+        try:
+            return await TingtingApiService(self.db).reset_oa_id()
+        except Exception as exc:  # noqa: BLE001 — a config read must not 500 a turn
+            logger.warning("tingting reset scope read failed error_type=%s", type(exc).__name__)
+            return ""
+
     async def income_summary_for_active_projects(self):
         return await self._catalog.income_summary_for_active_projects()
 

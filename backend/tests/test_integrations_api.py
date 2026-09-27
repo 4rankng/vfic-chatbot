@@ -568,6 +568,7 @@ class _TingtingService:
             "configured": False,
             "base_url": "https://tingting.vip",
             "auth_header": "X-API-Key",
+            "reset_oa_id": "",
         }
 
     async def update_tingting(self, values: dict, *, actor_id) -> dict:  # noqa: ANN001
@@ -581,6 +582,7 @@ class _TingtingService:
             "configured": configured,
             "base_url": "https://tingting.vip",
             "auth_header": "X-API-Key",
+            "reset_oa_id": values.get("reset_oa_id") or "",
         }
         return _TingtingService.stored
 
@@ -614,3 +616,19 @@ async def test_tingting_settings_put_stores_the_key_for_the_actor(monkeypatch):
         "values": {"api_key": "ttk_live_key"},
         "actor_id": admin.id,
     }
+
+
+async def test_tingting_settings_put_pins_the_reset_oa(monkeypatch):
+    """The admin names the OA that may run the reset flow."""
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _TingtingService)
+    _TingtingService.stored = None
+    admin = types.SimpleNamespace(id=uuid.uuid4())
+
+    result = await integrations.update_tingting_integration_settings(
+        body=integrations.TingtingIntegrationSettingsUpdate(reset_oa_id="tingting-oa-key"),
+        admin=admin,
+        db=object(),
+    )
+
+    assert result.reset_oa_id == "tingting-oa-key"
+    assert _TingtingService.last_update["values"] == {"reset_oa_id": "tingting-oa-key"}

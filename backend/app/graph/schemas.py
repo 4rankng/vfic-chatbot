@@ -356,8 +356,9 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "reset_tingting_password",
             "description": (
-                "Đặt lại mật khẩu TingTing sau khi mã OTP đã xác thực đúng. Hệ thống dùng phiên "
-                "xác thực đã lưu cho số điện thoại này; không truyền mã phiên hay reset token. "
+                "Đặt lại mật khẩu TingTing sau khi mã OTP đã xác thực đúng. Hệ thống tự đặt mật "
+                "khẩu tạm theo mã OTP nhân viên vừa xác thực (dạng Vfic@<mã OTP>) — không hỏi và "
+                "không nhận mật khẩu do người dùng chọn. Không truyền mã phiên hay reset token. "
                 "Đọc lại đúng tên đăng nhập và mật khẩu mới mà tool trả về."
             ),
             "parameters": {
@@ -366,13 +367,6 @@ TOOL_SCHEMAS = [
                     "phone": {
                         "type": "string",
                         "description": "Số điện thoại đã đăng ký với TingTing của nhân viên.",
-                    },
-                    "new_password": {
-                        "type": "string",
-                        "description": (
-                            "Mật khẩu mới nếu chính nhân viên muốn tự đặt; bỏ trống để hệ thống đặt "
-                            'mật khẩu tạm dễ đọc kiểu "Matkhau@482913".'
-                        ),
                     },
                 },
                 "required": ["phone"],
@@ -517,9 +511,7 @@ async def _dispatch_tool(
             )
         elif name == "reset_tingting_password":
             result = await reset_tingting_password(
-                retrieval,
-                phone=str(args.get("phone") or "").strip(),
-                new_password=str(args.get("new_password") or ""),
+                retrieval, phone=str(args.get("phone") or "").strip()
             )
         else:
             logger.warning("unknown tool dispatched: %s", name)

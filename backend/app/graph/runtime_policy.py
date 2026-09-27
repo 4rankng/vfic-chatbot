@@ -38,6 +38,19 @@ _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
 }
 
 
+# The tools that make up the TingTing reset flow. Named once: the capability map,
+# the per-channel gate in the runner and the channel tests all read this set.
+TINGTING_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "call_tingting_api",
+        "verify_tingting_identity",
+        "send_tingting_otp",
+        "confirm_tingting_otp",
+        "reset_tingting_password",
+    }
+)
+
+
 def build_resolved_runtime_policy(active, *, persona_body: str | None) -> ResolvedRuntimePolicy | None:
     """Build policy only from a validated active-installation projection.
 

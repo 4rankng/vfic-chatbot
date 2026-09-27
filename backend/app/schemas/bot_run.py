@@ -31,6 +31,7 @@ DecisionTraceCode = Literal[
     "ownership_verdict",
     "degradation_reason",
     "recovery_reason",
+    "tingting_scope",
 ]
 
 DecisionTraceSummaryCode = Literal[
@@ -47,6 +48,7 @@ DecisionTraceSummaryCode = Literal[
     "job_detail_terms",
     "employee_support_terms",
     "employee_support_continuation",
+    "channel_not_allowed",
     "phone_number",
     "profile_terms",
     "fallback",
@@ -145,6 +147,9 @@ _DECISION_CODE_SUMMARIES: dict[str, frozenset[str]] = {
     "ownership_verdict": frozenset({"claimed", "suppressed"}),
     "degradation_reason": frozenset({"llm_throttled", "agent_error"}),
     "recovery_reason": frozenset({"outbox_recovery"}),
+    # The TingTing reset flow is bound to the TingTing Zalo OA: the recruitment
+    # Bot channel and Messenger must not offer it (operator requirement).
+    "tingting_scope": frozenset({"allowed", "channel_not_allowed"}),
 }
 
 

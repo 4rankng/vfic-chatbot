@@ -68,6 +68,7 @@ from app.recruitment.domain.provider import (
     provider_from_conversation,
     recipient_from_conversation,
 )
+from app.graph.runtime_policy import TINGTING_TOOL_NAMES
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.think_strip import strip_provider_artifacts, visible_offset
 from app.graph.tingting_guide import tingting_api_prompt_block
@@ -339,6 +340,23 @@ def _stamp_outbound_telemetry(timings: dict | None, send_result) -> None:
         timings.update(telemetry.to_stage_timings())
 
 
+def _optional_policy_kwargs(callable_obj, policy: dict) -> dict:
+    """Keep only the policy kwargs the target function declares.
+
+    The real ``_agent_turn`` accepts them; a test double (or an installation's
+    replacement for it) may predate the keyword, and a missing keyword must not
+    turn a live reply into an error. Production always calls the real function,
+    so this filter can never drop the channel gate from a real turn.
+    """
+    try:
+        parameters = signature(callable_obj).parameters
+    except (TypeError, ValueError):
+        return {}
+    if any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters.values()):
+        return dict(policy)
+    return {name: value for name, value in policy.items() if name in parameters}
+
+
 def _with_optional_trace(callable_obj, kwargs: dict, trace_sink) -> dict:
     """Add the trace sink when the injected agent supports it.
 
@@ -375,10 +393,28 @@ async def _agent_turn(
     project_context=None,
     decisions: TurnDecisions | None = None,
     lead_row: dict | None = None,
+    tingting_reset_allowed: bool = True,
     on_delta=None,
     on_evidence=None,
 ) -> str:
     route = route_from_decisions(user_text, decisions or TurnDecisions(degraded=True))
+    if route.intent == "employee_support" and not tingting_reset_allowed:
+        # Employee-account support belongs to the TingTing OA: elsewhere the turn
+        # is answered honestly instead of running a flow this channel cannot
+        # serve (the guide and the reset tools are not bound here either).
+        if trace_sink is not None:
+            trace_sink.record_decision("tingting_scope", "channel_not_allowed")
+        return await deps.agent.direct(
+            user_text,
+            **_with_optional_trace(
+                deps.agent.direct,
+                {
+                    "system": _TINGTING_WRONG_CHANNEL_SYSTEM,
+                    "metrics": timings,
+                },
+                trace_sink,
+            ),
+        )
     focused_project = bool(
         project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
     )
@@ -486,6 +522,8 @@ async def _agent_turn(
     # at endpoints it cannot reach reads as an invitation to invent one.
     api_tool_registry = getattr(manifest_policy, "tool_registry", None)
 
+    # ``tingting_reset_allowed`` rides the turn (see ``run_turn``): the guide and
+    # the reset tools exist only where the flow is reachable.
     def _api_tool_bindable(name: str) -> bool:
         if manifest_policy is None:
             return True
@@ -505,7 +543,7 @@ async def _agent_turn(
                     "tingting api configured-read failed error_type=%s", type(exc).__name__
                 )
                 tingting_configured = False
-            if tingting_configured:
+            if tingting_configured and tingting_reset_allowed:
                 system += "\n\n" + tingting_api_prompt_block()
     if timings is not None:
         timings["system_prompt_ms"] = int(round((time.monotonic() - sys_t0) * 1000))
@@ -531,11 +569,18 @@ async def _agent_turn(
     elif compare_income_required_args is not None:
         allowed_tools = ("compare_income",)
     resolved_tool_registry = None
+    if not tingting_reset_allowed:
+        # The flow's tools are unreachable on this channel even if the route or a
+        # low-confidence turn would otherwise expose the whole registry.
+        if allowed_tools is not None:
+            allowed_tools = tuple(name for name in allowed_tools if name not in TINGTING_TOOL_NAMES)
     if manifest_policy is not None:
         # Recruitment retains its proven prompt/routing path, but its bound
         # tools are still the manifest's immutable allowlist.  A low-confidence
         # route therefore cannot restore the full legacy registry.
         resolved_tool_registry = manifest_policy.tool_registry.names
+        if not tingting_reset_allowed:
+            resolved_tool_registry = frozenset(resolved_tool_registry) - TINGTING_TOOL_NAMES
         if allowed_tools is not None:
             allowed_tools = tuple(
                 name for name in allowed_tools if name in resolved_tool_registry
@@ -743,6 +788,42 @@ async def _direct_context_turn(
         ),
         **_with_optional_trace(deps.agent.direct, direct_kwargs, trace_sink),
     )
+
+
+# What the agent is told when an account-support request arrives somewhere the
+# reset flow does not exist. '' marks the OA name the operator linked; when they
+# have not named one, the generic phrasing is honest and invents no channel.
+_TINGTING_WRONG_CHANNEL_SYSTEM = (
+    "Người dùng đang hỏi về đặt lại mật khẩu ứng dụng TingTing. Tính năng này chỉ được hỗ trợ "
+    "trên Zalo OA của TingTing. Hãy trả lời ngắn gọn, lịch sự bằng tiếng Việt: nói rõ chức năng "
+    "đặt lại mật khẩu TingTing chỉ hỗ trợ trên Zalo OA TingTing và mời người dùng nhắn cho OA đó. "
+    "Không hướng dẫn liên hệ nơi khác và không nêu hotline, email hay số điện thoại nào không "
+    "có trong dữ liệu."
+)
+
+
+async def _tingting_reset_allowed(deps: GraphDeps, conv) -> bool:
+    """Whether this conversation's channel may run the TingTing reset flow.
+
+    The flow belongs to the TingTing Zalo OA: a message on the recruitment Bot
+    channel or on Messenger must never be offered it (operator requirement), so
+    anything but a ``zalo_oa`` conversation is refused here. The stored
+    ``tingting_reset_oa_id`` pin then narrows it to one OA account. Fail-closed
+    on a configuration read error: no guide, no tools, and the honest
+    wrong-channel reply.
+    """
+    identity = getattr(conv, "channel_identity", None)
+    if identity is None or str(getattr(identity, "provider", "") or "") != "zalo_oa":
+        return False
+    reader = getattr(deps.retrieval, "tingting_reset_oa_id", None)
+    if reader is None:
+        return True
+    try:
+        pinned = str(await reader() or "").strip()
+    except Exception:  # noqa: BLE001 — a config read must not break a turn
+        logger.warning("tingting reset scope read failed", exc_info=True)
+        return False
+    return not pinned or pinned == str(getattr(identity, "account_key", "") or "")
 
 
 def _finalize_user_visible_reply(
@@ -1066,6 +1147,7 @@ async def _resolve_lane(
     status_task,
     t0: float,
     lead_row: dict | None = None,
+    tingting_reset_allowed: bool = True,
     stream: _ProgressiveStream | None = None,
 ) -> _LaneResolution:
     """Select and run the turn's answer lane: clarification → direct → agent.
@@ -1149,6 +1231,11 @@ async def _resolve_lane(
             agent_kwargs["manifest_policy"] = manifest_policy
         if lead_row is not None:
             agent_kwargs["lead_row"] = lead_row
+        agent_kwargs.update(
+            _optional_policy_kwargs(
+                _agent_turn, {"tingting_reset_allowed": tingting_reset_allowed}
+            )
+        )
         if stream is not None:
             # Only the agent lane streams: the hooks are attached here so a
             # clarification/direct lane never opens a stream at all.
@@ -2070,6 +2157,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         # that finishes first — or any non-agent lane — keeps the pre-existing
         # single-message path exactly as it was.
         stream = _ProgressiveStream() if _progressive_send_enabled(deps, svc) else None
+        tingting_reset_allowed = await _tingting_reset_allowed(deps, conv)
+        if trace_sink is not None:
+            trace_sink.record_decision(
+                "tingting_scope", "allowed" if tingting_reset_allowed else "channel_not_allowed"
+            )
         lane_kwargs = {
             "state": state,
             "deps": deps,
@@ -2089,6 +2181,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             "status_task": status_task,
             "t0": t0,
             "lead_row": lead_row,
+            "tingting_reset_allowed": tingting_reset_allowed,
         }
         early: _EarlyBubble | None = None
         if stream is not None:

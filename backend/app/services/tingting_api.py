@@ -54,6 +54,11 @@ logger = logging.getLogger(__name__)
 
 # The integration row the settings page writes. One key, no per-tenant content.
 TINGTING_API_KEY_SETTING = "tingting_api_key"
+# The optional pin naming the one Zalo OA allowed to run the reset flow. The flow
+# is never offered off ``zalo_oa``; this row narrows it to a single OA account
+# (``""`` = any connected OA), which is how the operator keeps it on the
+# TingTing OA and off the recruitment Bot.
+TINGTING_RESET_OA_ID_SETTING = "tingting_reset_oa_id"
 TINGTING_API_CLIENT_NAME = "tingting_api"
 TINGTING_API_AUTH_HEADER = "X-API-Key"
 # The TingTing app's origin only — the ``/api/v1`` prefix belongs to the path
@@ -205,6 +210,13 @@ class TingtingApiService:
             )
             return False
 
+    async def reset_oa_id(self) -> str:
+        """The OA account key allowed to run the reset flow (``""`` = any OA)."""
+        row = await self.db.get(IntegrationSetting, TINGTING_RESET_OA_ID_SETTING)
+        if row is None:
+            return ""
+        return self._decrypt(str(getattr(row, "encrypted_value", "") or "")).strip()
+
     async def admin_view(self) -> dict:
         """Status-only projection — the key itself never appears."""
         api_key = self._decrypt(await self._stored_ciphertext())
@@ -213,7 +225,38 @@ class TingtingApiService:
             "configured": bool(api_key),
             "base_url": resolve_base_url(self.settings),
             "auth_header": TINGTING_API_AUTH_HEADER,
+            "reset_oa_id": await self.reset_oa_id(),
         }
+
+    async def replace_reset_oa_id(self, value: Any, *, actor_id: Any = None) -> dict:
+        """Persist the reset-flow OA pin; ``""`` allows any connected OA."""
+        if value is None:
+            return await self.admin_view()
+        pin = str(value).strip()
+        row = await self.db.get(IntegrationSetting, TINGTING_RESET_OA_ID_SETTING)
+        encrypted = self._cipher.encrypt(pin) if pin else ""
+        if row is None:
+            self.db.add(
+                IntegrationSetting(
+                    key=TINGTING_RESET_OA_ID_SETTING,
+                    encrypted_value=encrypted,
+                    is_secret=False,
+                    updated_by=actor_id,
+                )
+            )
+        else:
+            row.encrypted_value = encrypted
+            row.updated_by = actor_id
+        await record_audit(
+            self.db,
+            action="update_tingting_integration_settings",
+            actor_id=actor_id,
+            target_type="integration_settings",
+            target_id="tingting",
+            payload={"reset_oa_id_configured": bool(pin)},
+        )
+        await self.db.commit()
+        return await self.admin_view()
 
     async def replace_key(self, value: Any, *, actor_id: Any = None) -> dict:
         """Persist the key; ``""`` clears it. ``None`` keeps the stored value."""
@@ -346,6 +389,7 @@ __all__ = [
     "TINGTING_API_CLIENT_NAME",
     "TINGTING_API_KEY_SETTING",
     "TINGTING_API_LABEL",
+    "TINGTING_RESET_OA_ID_SETTING",
     "TINGTING_READ_ONLY_PATHS",
     "TINGTING_FLOW_KEY_PREFIX",
     "TINGTING_FLOW_TTL_SECONDS",

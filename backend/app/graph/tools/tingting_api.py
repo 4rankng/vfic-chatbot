@@ -89,33 +89,29 @@ _CODE_FORMAT = (
 )
 
 
-# One-time password style the operator asked for: readable over chat and easy to
-# type on a phone, while still carrying upper + lower + digit + symbol so the
-# app's password policy accepts it. The system-generated one (a real report:
-# ``PN&&mf6P73x4``) was unreadable when an employee had to key it in.
-_PASSWORD_WORDS: tuple[str, ...] = (
-    "Matkhau",
-    "Tingting",
-    "Dangnhap",
-    "Congviec",
-    "Thanhcong",
-)
-_PASSWORD_SYMBOLS: tuple[str, ...] = ("@", "#", "$")
+# The one-time password style the operator fixed: a fixed word, the symbol and
+# the 6-digit code the employee just verified — ``Vfic@123980``. Readable over
+# chat, typeable on a phone, and it still carries upper + lower + digit + symbol
+# so the app's password policy accepts it. The app's own generator produced
+# strings nobody can retype from a Zalo bubble (a real reply carried
+# ``PN&&mf6P73x4``). The employee never chooses this password.
+_PASSWORD_PREFIX = "Vfic"
 _PASSWORD_DIGITS = 6
 
 
-def generate_simple_password() -> str:
-    """A memorable one-time password: ``Matkhau@482913``.
+def generate_simple_password(otp_code: str = "") -> str:
+    """The reset password: ``Vfic@<otp>``, or 6 random digits without one.
 
-    10^6 digit combinations behind a known word: weaker than a random 12-char
-    string, which is the operator's explicit trade for a credential the employee
-    can actually type. It is one-time anyway — every reply that carries it also
-    tells the employee to change it after the first login.
+    The OTP the employee just typed is the memorable part. When the flow state
+    no longer holds it (an expired session, or a flow that started before this
+    format), the digits fall back to random ones so the password keeps the shape
+    the operator asked for. Either way it is temporary: every reply that carries
+    it tells the employee to change it after the first login.
     """
-    word = secrets.choice(_PASSWORD_WORDS)
-    symbol = secrets.choice(_PASSWORD_SYMBOLS)
-    digits = "".join(str(secrets.randbelow(10)) for _ in range(_PASSWORD_DIGITS))
-    return f"{word}{symbol}{digits}"
+    digits = _digits(otp_code)
+    if len(digits) != _PASSWORD_DIGITS:
+        digits = "".join(str(secrets.randbelow(10)) for _ in range(_PASSWORD_DIGITS))
+    return f"{_PASSWORD_PREFIX}@{digits}"
 
 
 def _digits(value: Any) -> str:
@@ -265,8 +261,11 @@ async def confirm_tingting_otp(
         reset_token = str((data or {}).get("reset_token") or "")
         if not reset_token:
             return _UNREADABLE
+        # The code is kept server-side only, to shape the reset password
+        # (``Vfic@<otp>``); it is never returned to the model or the employee.
         await retrieval.save_tingting_flow_state(
-            clean_phone, {"reset_token": reset_token, "otp_verified": True}
+            clean_phone,
+            {"reset_token": reset_token, "otp_verified": True, "otp_code": clean_code},
         )
         return (
             "Mã đúng. Hãy gọi reset_tingting_password(phone) để đặt lại mật khẩu cho nhân viên; "
@@ -289,10 +288,13 @@ async def confirm_tingting_otp(
     return tingting_state_text(outcome)
 
 
-async def reset_tingting_password(
-    retrieval: GraphRetrievalPort, *, phone: str, new_password: str = ""
-) -> str:
-    """Reset the password with the stored reset token and clear the flow."""
+async def reset_tingting_password(retrieval: GraphRetrievalPort, *, phone: str) -> str:
+    """Reset the password to ``Vfic@<otp>`` with the stored token, then clear the flow.
+
+    The employee never chooses the password: the operator fixed the format, and
+    the digits are the code they just verified, so it is both memorable and read
+    out of the tool result rather than invented by the model.
+    """
     clean_phone = (phone or "").strip()
     if not clean_phone:
         return _NO_PHONE
@@ -300,25 +302,19 @@ async def reset_tingting_password(
     reset_token = str(state.get("reset_token") or "")
     if not reset_token:
         return _NO_RESET_TOKEN
-    requested = (new_password or "").strip()
-    # No explicit password from the employee: set our own memorable one instead
-    # of letting the app mint an unreadable string.
-    generated = "" if requested else generate_simple_password()
-    params: dict[str, str] = {"reset_token": reset_token, "new_password": requested or generated}
+    generated = generate_simple_password(str(state.get("otp_code") or ""))
+    params: dict[str, str] = {"reset_token": reset_token, "new_password": generated}
     outcome = await retrieval.call_tingting_api(method="POST", path=RESET_PATH, params=params)
-    if (
-        generated
-        and outcome.state == "error"
-        and outcome.status_code == 400
-    ):
+    fell_back = False
+    if outcome.state == "error" and outcome.status_code == 400:
         # The app may enforce a policy our style misses (length/composition).
         # Fall back to letting it generate one rather than failing the reset; the
         # reply then warns that the password is the app's own.
-        logger.warning("tingting reset rejected the simple password; retrying without one")
+        logger.warning("tingting reset rejected the generated password; retrying without one")
         outcome = await retrieval.call_tingting_api(
             method="POST", path=RESET_PATH, params={"reset_token": reset_token}
         )
-        generated = ""
+        fell_back = True
     if outcome.state != "ok":
         if outcome.state == "error" and outcome.status_code == 401:
             await retrieval.clear_tingting_flow_state(clean_phone)
@@ -339,8 +335,8 @@ async def reset_tingting_password(
     label = f" cho {employee}" if employee else ""
     advice = (
         "Mật khẩu này do hệ thống tự sinh nên khó nhớ ạ."
-        if not generated
-        else "Mật khẩu này là mật khẩu tạm, anh/chị đổi lại ngay sau khi đăng nhập ạ."
+        if fell_back
+        else "Mật khẩu này là mật khẩu tạm."
     )
     return (
         f"Đã đặt lại mật khẩu{label} thành công. Đọc lại cho nhân viên đúng tên đăng nhập và "
