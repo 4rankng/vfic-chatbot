@@ -1,44 +1,34 @@
 import {
-  forwardRef,
   Fragment,
+  useCallback,
   useEffect,
   useLayoutEffect,
-  useState,
-  useRef,
-  useCallback,
   useMemo,
-  memo,
+  useRef,
+  useState,
   type CSSProperties,
-  type HTMLAttributes,
 } from "react";
 import { VList, type VListHandle } from "virtua";
-import {
-  type DataProvider,
-  useDataProvider,
-  useGetIdentity,
-  useNotify,
-  useTranslate,
-} from "ra-core";
-import type { Conversation, Message } from "../../types";
+import { useGetIdentity, useNotify, useTranslate } from "ra-core";
+import type { Conversation } from "../../types";
 import {
   isHumanReplyFailure,
-  type MarkConversationReadPort,
   markConversationAsRead,
-  type RetryConversationReplyPort,
   retryConversationReply,
-  type SendConversationReplyPort,
   sendConversationReply,
 } from "../application/conversation-operations";
 import { isUnseenWorthyArrival } from "../domain/conversation-thread";
+import { groupConversationMessages } from "../domain/conversation-thread-rows";
 import { useConversationActions } from "./use-conversation-actions";
 import { useConversationRealtime } from "./use-conversation-realtime";
+import { useConversationOperations } from "./use-conversation-operations";
 import {
   useConversationMessages,
   useConversationFlags,
 } from "./conversation-message-state";
-import { LeadAvatar } from "../LeadAvatar";
+import { ChatMessageRow } from "./ChatMessageRow";
 import { LoadingState } from "../../misc/LoadingState";
-import { Bot, Sparkles } from "lucide-react";
+import { Bot } from "lucide-react";
 
 // ChatThread is the reusable message thread + composer. It owns the realtime
 // subscription, the virtualised scroller (with all the snap / load-more arming
@@ -46,25 +36,13 @@ import { Bot, Sparkles } from "lucide-react";
 // FRAGMENT (scroll shell + <footer/>) so the host shell lays out the scroller
 // (1fr) and composer (auto) — the inbox center-panel grid does this. Styling
 // comes from the .inbox-bg-container scope in inbox.css.
-
-const classify = (
-  msg: Message,
-): "user" | "bot" | "agent" | "system" | "event" => {
-  if (msg.type === "system") return "system";
-  if (msg.type === "inbound") return "user";
-  if (msg.data?.recruiter_id) return "agent";
-  return "bot";
-};
-
-const formatTime = (iso?: string) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-};
+//
+// What a message *is* — its grouping run and its bubble variant — belongs to
+// the siblings: `domain/conversation-thread-rows` decides the row per stored
+// message and `presentation/ChatMessageRow` renders one memoized bubble per
+// row. What is left here is thread state: scroll position, history load-more,
+// the composer, and the conversation writes routed through
+// `useConversationOperations`.
 
 const COMPOSER_TEXTAREA_MAX_HEIGHT = 120;
 const DEFAULT_COMPOSER_RESERVE_PX = 104;
@@ -73,243 +51,6 @@ const COMPOSER_RESERVE_GAP_PX = 16;
 const CHAT_AT_BOTTOM_THRESHOLD_PX = 96;
 // Distance from the top (px) within which we trigger history load-more.
 const HISTORY_LOAD_TOP_THRESHOLD_PX = 100;
-const AVATAR_PLACEHOLDER_STYLE: CSSProperties = { width: 32 };
-const MESSAGE_TEXT_CHUNK_CHARS = 320;
-
-type MessageKind = ReturnType<typeof classify>;
-
-type ChatMessageRowProps = {
-  message: Message;
-  kind: MessageKind;
-  isGrouped: boolean;
-  candidateAvatarUrl?: string | null;
-  isRetrying?: boolean;
-  onRetry?: (messageId: string) => void;
-};
-
-const deliveryStatusLabel = (status?: Message["delivery_status"]) => {
-  if (status === "failed") return "Gửi lỗi";
-  if (status === "send_unknown") return "Chưa xác nhận gửi";
-  if (status === "suppressed") return "Đã chặn";
-  if (status === "sent") return "Đã gửi";
-  return "";
-};
-
-const deliveryRetryLabel = (attempts?: number) => {
-  if (attempts == null || attempts <= 1) return "";
-  const retries = attempts - 1;
-  return `Đã thử lại ${retries} lần`;
-};
-
-/**
- * Map a failed/unknown send's backend `external_error` to a short Vietnamese
- * reason, so a "Gửi lỗi" bubble is diagnosable instead of blank when the
- * attempted reply content is empty/unavailable. Mirrors the provider/network
- * taxonomy used elsewhere in the CRM (vietnameseCrmMessages.reply.*), in Vietnamese.
- */
-const failureReasonLabel = (m: Message): string => {
-  if (m.delivery_status !== "failed" && m.delivery_status !== "send_unknown") {
-    return "";
-  }
-  const reason = (m.external_error ?? "").toLowerCase();
-  if (!reason) return "";
-  if (
-    reason.includes("user_id is invalid") ||
-    reason.includes("user_id is not valid")
-  ) {
-    return "Người nhận không liên lạc được qua Zalo — thử lại sẽ không thành công";
-  }
-  if (
-    reason.includes("timeout") ||
-    reason.includes("connect") ||
-    reason.includes("network")
-  ) {
-    return "Lỗi kết nối mạng";
-  }
-  return "Zalo từ chối tin nhắn";
-};
-
-const splitLongTextLine = (line: string) => {
-  if (line.length <= MESSAGE_TEXT_CHUNK_CHARS) return [line];
-
-  const chunks: string[] = [];
-  let remaining = line;
-  while (remaining.length > MESSAGE_TEXT_CHUNK_CHARS) {
-    const windowText = remaining.slice(0, MESSAGE_TEXT_CHUNK_CHARS);
-    const sentenceBreak = Math.max(
-      windowText.lastIndexOf(". "),
-      windowText.lastIndexOf("! "),
-      windowText.lastIndexOf("? "),
-      windowText.lastIndexOf("; "),
-      windowText.lastIndexOf(", "),
-    );
-    const splitAt =
-      sentenceBreak > MESSAGE_TEXT_CHUNK_CHARS * 0.55
-        ? sentenceBreak + 1
-        : MESSAGE_TEXT_CHUNK_CHARS;
-    chunks.push(remaining.slice(0, splitAt).trim());
-    remaining = remaining.slice(splitAt).trim();
-  }
-  if (remaining) chunks.push(remaining);
-  return chunks;
-};
-
-const splitMessageTextBlocks = (content: string) => {
-  const blocks = content
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .flatMap((line) => {
-      const trimmed = line.trim();
-      return trimmed ? splitLongTextLine(trimmed) : [""];
-    });
-
-  return blocks.length > 0 ? blocks : [""];
-};
-
-const ChatItemList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className, children, ...props }, ref) => (
-    <div
-      {...props}
-      ref={ref}
-      className={["chat-item-list", className].filter(Boolean).join(" ")}
-    >
-      {children}
-    </div>
-  ),
-);
-ChatItemList.displayName = "ChatItemList";
-
-const ChatMessageRow = memo(
-  ({
-    message: m,
-    kind,
-    isGrouped,
-    candidateAvatarUrl,
-    isRetrying = false,
-    onRetry,
-  }: ChatMessageRowProps) => {
-    const translate = useTranslate();
-    const textBlocks = useMemo(
-      () => splitMessageTextBlocks(m.content),
-      [m.content],
-    );
-
-    if (kind === "system") {
-      return (
-        <div className="system-message" data-message-id={m.id}>
-          <span>{m.content}</span>
-        </div>
-      );
-    }
-
-    if (kind === "event") {
-      return (
-        <div className="system-event" data-message-id={m.id}>
-          <Sparkles className="icon" />
-          <span>{m.content}</span>
-        </div>
-      );
-    }
-
-    const deliveryLabel = deliveryStatusLabel(m.delivery_status);
-    const retryLabel = deliveryRetryLabel(m.delivery_attempts);
-    const canRetry =
-      kind === "agent" &&
-      m.delivery_status === "failed" &&
-      !m.id.startsWith("optimistic-");
-    // A failed send whose reply body is empty (e.g. an empty candidate that
-    // slipped through) would render a blank bubble. Surface the failure reason
-    // instead so the "Gửi lỗi" row always tells the recruiter what happened.
-    const failureReason = failureReasonLabel(m);
-    const hasText = textBlocks.some((block) => block && block.trim());
-    const avatar =
-      kind === "user" ? (
-        !isGrouped ? (
-          <LeadAvatar
-            src={candidateAvatarUrl}
-            className="message-avatar"
-            iconSize={16}
-            alt="Ảnh đại diện người trò chuyện"
-          />
-        ) : (
-          <span
-            className="message-avatar-placeholder"
-            style={AVATAR_PLACEHOLDER_STYLE}
-          />
-        )
-      ) : null;
-    const bubble = (
-      <div className="bubble tt-chat-bubble">
-        <div className="bubble-content">
-          <div className="message-text">
-            {textBlocks.map((block, index) =>
-              block ? (
-                <p className="message-text-block" key={`${index}-${block}`}>
-                  {block}
-                </p>
-              ) : (
-                <span
-                  aria-hidden="true"
-                  className="message-text-break"
-                  key={`break-${index}`}
-                />
-              ),
-            )}
-            {failureReason && !hasText ? (
-              <p className="message-text-block delivery-error-detail">
-                {failureReason}
-              </p>
-            ) : null}
-          </div>
-          <span className="bubble-meta-inline">
-            {kind !== "user" && deliveryLabel ? (
-              <span
-                className={`delivery-status ${m.delivery_status ?? "sent"}`}
-              >
-                {deliveryLabel}
-              </span>
-            ) : null}
-            {kind !== "user" && retryLabel ? (
-              <span className="delivery-retry-count">{retryLabel}</span>
-            ) : null}
-            {canRetry ? (
-              <button
-                type="button"
-                className="delivery-retry-button"
-                disabled={isRetrying}
-                onClick={() => onRetry?.(m.id)}
-              >
-                {isRetrying
-                  ? translate("crm.common.retrying")
-                  : translate("crm.common.retry")}
-              </button>
-            ) : null}
-            <span className="bubble-time-inline">
-              {formatTime(m.created_at)}
-            </span>
-          </span>
-        </div>
-      </div>
-    );
-
-    return (
-      <div
-        className={`message-row tt-chat ${kind === "user" ? "tt-chat-start" : "tt-chat-end"} ${kind} ${isGrouped ? "grouped" : ""}`}
-        data-message-id={m.id}
-      >
-        {kind === "user" ? (
-          <>
-            {avatar}
-            {bubble}
-          </>
-        ) : (
-          bubble
-        )}
-      </div>
-    );
-  },
-);
-ChatMessageRow.displayName = "ChatMessageRow";
 
 export interface ChatThreadProps {
   conversationId: string;
@@ -350,12 +91,7 @@ export const ChatThread = ({
     retryInitial,
     retryHistory,
   } = useConversationRealtime(conversationId);
-  const operations = useDataProvider<
-    DataProvider &
-      MarkConversationReadPort &
-      SendConversationReplyPort &
-      RetryConversationReplyPort
-  >();
+  const operations = useConversationOperations();
   const { identity } = useGetIdentity();
   const notify = useNotify();
   const translate = useTranslate();
@@ -669,7 +405,7 @@ export const ChatThread = ({
     }
   };
 
-  const handleRetryMessage = useCallback(
+  const retryConversation = useCallback(
     async (messageId: string) => {
       if (messageId.startsWith("optimistic-") || retryingMessageId) return;
       setRetryingMessageId(messageId);
@@ -688,29 +424,25 @@ export const ChatThread = ({
     },
     [conversationId, notify, operations, retryingMessageId, translate],
   );
+  // Stable identity: the memoized bubble compares `onRetry`, so a callback
+  // that changed with the in-flight retry id would re-render every message in
+  // the thread each time one failed send is retried.
+  const retryConversationRef = useRef(retryConversation);
+  useEffect(() => {
+    retryConversationRef.current = retryConversation;
+  }, [retryConversation]);
+  const handleRetryMessage = useCallback(
+    (messageId: string) => retryConversationRef.current(messageId),
+    [],
+  );
+
+  // One row per stored message, derived from the stored array itself. That
+  // array is reused until a message actually changes, so this memo keys on a
+  // value that really changes: an arrival re-derives the rows, while typing a
+  // reply or settling a retry leaves every row's props untouched.
+  const rows = useMemo(() => groupConversationMessages(messages), [messages]);
 
   // --- Render ---
-
-  // Stable itemContent for virtua. Group consecutive same-kind messages.
-  const renderMessage = useCallback(
-    (index: number, m: Message) => {
-      const kind = classify(m);
-      const prevMsg = index > 0 ? messages[index - 1] : null;
-      const prevKind = prevMsg ? classify(prevMsg) : null;
-      const isGrouped = prevKind === kind;
-      return (
-        <ChatMessageRow
-          message={m}
-          kind={kind}
-          isGrouped={isGrouped}
-          candidateAvatarUrl={candidateAvatarUrl}
-          isRetrying={retryingMessageId === m.id}
-          onRetry={handleRetryMessage}
-        />
-      );
-    },
-    [candidateAvatarUrl, handleRetryMessage, messages, retryingMessageId],
-  );
 
   return (
     <>
@@ -783,9 +515,16 @@ export const ChatThread = ({
           ) : messages.length === 0 && isLoading ? (
             <LoadingState className="min-h-full" label="Đang tải tin nhắn…" />
           ) : null}
-          {messages.map((m, i) => (
-            <Fragment key={`${m.conversation_id}:${m.id}`}>
-              {renderMessage(i, m)}
+          {rows.map(({ message, kind, isGrouped }) => (
+            <Fragment key={`${message.conversation_id}:${message.id}`}>
+              <ChatMessageRow
+                message={message}
+                kind={kind}
+                isGrouped={isGrouped}
+                candidateAvatarUrl={candidateAvatarUrl}
+                isRetrying={retryingMessageId === message.id}
+                onRetry={handleRetryMessage}
+              />
             </Fragment>
           ))}
         </VList>

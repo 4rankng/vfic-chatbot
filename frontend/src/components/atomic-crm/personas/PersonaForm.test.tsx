@@ -1,21 +1,21 @@
 import { render } from "vitest-browser-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type TestKnowledgeBase = { id: string; name: string; mode: string };
+
 const mocks = vi.hoisted(() => ({
+  knowledgeBases: [] as TestKnowledgeBase[],
   notify: vi.fn(),
   submit: vi.fn<(values: PersonaValues) => Promise<void>>(),
 }));
 
 vi.mock("ra-core", () => {
-  const knowledgeBases = [
-    { id: "kb-1", name: "KB tuyển dụng", mode: "RAG" },
-    { id: "kb-2", name: "KB trực tiếp", mode: "DIRECT_CONTEXT" },
-  ];
   return {
-    // The form reads its labels from the Vietnamese catalog.
+    // The form reads its labels from the shipped Vietnamese catalog, so these
+    // tests assert the same wording the app renders.
     useTranslate: () => testI18nProvider.translate,
     useNotify: () => mocks.notify,
-    useGetList: () => ({ data: knowledgeBases, isPending: false }),
+    useGetList: () => ({ data: mocks.knowledgeBases, isPending: false }),
   };
 });
 
@@ -27,6 +27,19 @@ import {
 } from "./domain/personaMarkdown";
 import { normalizePersonaFollowupRules } from "./domain/followupRules";
 
+const TWO_KNOWLEDGE_BASES: TestKnowledgeBase[] = [
+  { id: "kb-1", name: "KB tuyển dụng", mode: "RAG" },
+  { id: "kb-2", name: "KB trực tiếp", mode: "DIRECT_CONTEXT" },
+];
+
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
+
 const initialPersonaValues = {
   name: "",
   body_md: "",
@@ -35,98 +48,153 @@ const initialPersonaValues = {
   followup_rules: undefined,
 };
 
-const deferred = <T,>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((done, fail) => {
-    resolve = done;
-    reject = fail;
-  });
-  return { promise, reject, resolve };
-};
+const renderForm = async (initial: PersonaValues) =>
+  render(
+    <PersonaForm
+      initial={initial}
+      submitLabel="Lưu thay đổi"
+      onSubmit={mocks.submit}
+    />,
+  );
+
+const saveButton = (screen: Awaited<ReturnType<typeof renderForm>>) =>
+  screen.getByRole("button", { name: "Lưu thay đổi" });
 
 describe("PersonaForm", () => {
   beforeEach(() => {
+    mocks.knowledgeBases = [...TWO_KNOWLEDGE_BASES];
     mocks.submit.mockReset();
     mocks.notify.mockReset();
   });
 
-  it("blocks the save and renders the required-field errors", async () => {
-    const screen = await render(
-      <PersonaForm
-        initial={initialPersonaValues}
-        submitLabel="Lưu thay đổi"
-        onSubmit={mocks.submit}
-      />,
-    );
+  it("blocks the save and renders the required-field errors in order", async () => {
+    const screen = await renderForm(initialPersonaValues);
 
-    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await saveButton(screen).click();
 
+    // The name gate comes first: it renders its error and takes focus.
     const nameError = screen.getByText("Vui lòng nhập tên Agent.");
     await expect.element(nameError).toBeVisible();
     expect(document.activeElement?.id).toBe("persona-name");
+    expect(
+      screen.container
+        .querySelector("#persona-name")
+        ?.getAttribute("aria-invalid"),
+    ).toBe("true");
     expect(mocks.submit).not.toHaveBeenCalled();
 
+    // Typing clears the name error and moves the gate to the Knowledge Base.
     await screen.getByLabelText("Tên Agent").fill("Agent tuyển dụng");
-
-    // Typing a name clears the error and moves the gate to the Knowledge Base.
     await expect.element(nameError).not.toBeInTheDocument();
-    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await saveButton(screen).click();
     await expect
       .element(screen.getByText("Vui lòng chọn Knowledge Base cho Agent."))
       .toBeVisible();
     expect(mocks.submit).not.toHaveBeenCalled();
+
+    // Whitespace alone is not a name.
+    await screen.getByLabelText("Tên Agent").fill("   ");
+    await saveButton(screen).click();
+    await expect
+      .element(screen.getByText("Vui lòng nhập tên Agent."))
+      .toBeVisible();
+    expect(mocks.submit).not.toHaveBeenCalled();
   });
 
-  it("keeps the save gated while a save is in flight", async () => {
-    const pending = deferred<void>();
-    mocks.submit.mockImplementation(() => pending.promise);
-    const screen = await render(
-      <PersonaForm
-        initial={{
-          ...initialPersonaValues,
-          name: "Agent chính",
-          knowledge_base_id: "kb-1",
-        }}
-        submitLabel="Lưu thay đổi"
-        onSubmit={mocks.submit}
-      />,
+  it("clears the Knowledge Base error and submits the chosen Knowledge Base", async () => {
+    mocks.submit.mockResolvedValue(undefined);
+    const screen = await renderForm({
+      ...initialPersonaValues,
+      name: "Agent tuyển dụng",
+    });
+
+    await saveButton(screen).click();
+    const knowledgeBaseError = screen.getByText(
+      "Vui lòng chọn Knowledge Base cho Agent.",
+    );
+    await expect.element(knowledgeBaseError).toBeVisible();
+
+    await screen.getByRole("combobox", { name: "Knowledge Base" }).click();
+    await screen
+      .getByRole("option", { name: "KB trực tiếp · Ngữ cảnh trực tiếp" })
+      .click();
+
+    await expect.element(knowledgeBaseError).not.toBeInTheDocument();
+    await saveButton(screen).click();
+
+    await vi.waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Agent tuyển dụng",
+        knowledge_base_id: "kb-2",
+      }),
+    );
+  });
+
+  it("tells the editor to create a Knowledge Base before saving one", async () => {
+    mocks.knowledgeBases = [];
+    const screen = await renderForm(initialPersonaValues);
+
+    await expect
+      .element(screen.getByText("Tạo Knowledge Base trước khi tạo Agent."))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("combobox", { name: "Knowledge Base" }))
+      .toBeDisabled();
+  });
+
+  it("gates the save action for the whole in-flight window", async () => {
+    // Held open by hand so the gate window is fully under the test's control
+    // rather than racing a timer.
+    const inFlight = deferred<void>();
+    mocks.submit.mockImplementation(() => inFlight.promise);
+    const screen = await renderForm({
+      ...initialPersonaValues,
+      name: "Agent chính",
+      knowledge_base_id: "kb-1",
+    });
+
+    // Untouched form: the action is live, not busy.
+    await expect.element(saveButton(screen)).toBeEnabled();
+    expect(saveButton(screen).element().getAttribute("aria-busy")).toBe(
+      "false",
     );
 
-    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await saveButton(screen).click();
     await vi.waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(1));
 
+    // While the save is in flight the action is disabled, announces itself
+    // busy, and swaps its Vietnamese label to the saving copy.
     const savingButton = screen.getByRole("button", { name: "Đang lưu…" });
     await expect.element(savingButton).toBeDisabled();
     expect(savingButton.element().getAttribute("aria-busy")).toBe("true");
-
-    pending.resolve(undefined);
-    await vi.waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Lưu thay đổi" }).elements(),
-      ).toHaveLength(1),
-    );
     await expect
-      .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
-      .toBeEnabled();
+      .element(screen.getByText("Lưu thay đổi"))
+      .not.toBeInTheDocument();
+
+    // The form stays readable and editable while the save is in flight.
+    await expect
+      .element(screen.getByLabelText("Tên Agent"))
+      .toHaveValue("Agent chính");
+
+    inFlight.resolve(undefined);
+    await vi.waitFor(() =>
+      expect(saveButton(screen).elements()).toHaveLength(1),
+    );
+    await expect.element(saveButton(screen)).toBeEnabled();
+    expect(saveButton(screen).element().getAttribute("aria-busy")).toBe(
+      "false",
+    );
   });
 
   it("sends the composed persona payload on save", async () => {
-    // Resolve on a macrotask so the disabled save gate stays up for the whole
-    // click, matching how the form behaves against the real backend.
-    mocks.submit.mockImplementation(
-      () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
-    );
-    const screen = await render(
-      <PersonaForm
-        initial={{
-          ...initialPersonaValues,
-          knowledge_base_id: "kb-1",
-        }}
-        submitLabel="Lưu thay đổi"
-        onSubmit={mocks.submit}
-      />,
-    );
+    // Held open by hand so the click is not racing the save's own resolution.
+    const saved = deferred<void>();
+    mocks.submit.mockImplementation(() => saved.promise);
+    const screen = await renderForm({
+      ...initialPersonaValues,
+      knowledge_base_id: "kb-1",
+    });
 
     await screen.getByLabelText("Tên Agent").fill("Agent tuyển dụng");
     // Section textareas live inside closed disclosures; open section 1 first.
@@ -136,7 +204,7 @@ describe("PersonaForm", () => {
       .fill("Tư vấn ứng viên 24/7.");
     await screen.getByLabelText("Ghi chú nội bộ").fill("Pipeline nội bộ.");
 
-    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await saveButton(screen).click();
 
     await vi.waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(1));
     const sections = parsePersonaMarkdown("").sections;
@@ -148,6 +216,7 @@ describe("PersonaForm", () => {
       knowledge_base_id: "kb-1",
       followup_rules: normalizePersonaFollowupRules(undefined),
     });
+    saved.resolve(undefined);
   });
 
   it("re-enables the save action after a failed save", async () => {
@@ -163,29 +232,29 @@ describe("PersonaForm", () => {
 
     try {
       mocks.submit.mockRejectedValue(new Error("Không lưu được Agent."));
-      const screen = await render(
-        <PersonaForm
-          initial={{
-            ...initialPersonaValues,
-            name: "Agent chính",
-            knowledge_base_id: "kb-1",
-          }}
-          submitLabel="Lưu thay đổi"
-          onSubmit={mocks.submit}
-        />,
-      );
+      const screen = await renderForm({
+        ...initialPersonaValues,
+        name: "Agent chính",
+        knowledge_base_id: "kb-1",
+      });
 
-      await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+      await saveButton(screen).click();
 
       await vi.waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: "Lưu thay đổi" }).elements(),
-        ).toHaveLength(1),
+        expect(saveButton(screen).elements()).toHaveLength(1),
       );
-      await expect
-        .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
-        .toBeEnabled();
+      // The failed save is retryable: the action comes back with the same
+      // label, not stuck on the saving copy.
+      await expect.element(saveButton(screen)).toBeEnabled();
+      expect(saveButton(screen).element().getAttribute("aria-busy")).toBe(
+        "false",
+      );
       expect(escapedErrors).toEqual([new Error("Không lưu được Agent.")]);
+
+      // Retrying goes through, so the form is not wedged after a failure.
+      mocks.submit.mockResolvedValue(undefined);
+      await saveButton(screen).click();
+      await vi.waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(2));
     } finally {
       window.removeEventListener("unhandledrejection", tameEscapedRejection);
     }
