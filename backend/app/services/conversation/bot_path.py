@@ -25,6 +25,7 @@ from datetime import timedelta, timezone
 
 from sqlalchemy import and_, select, update
 
+from app.channels.types import ZALO_OA_DEFAULT_ACCOUNT_KEY, oa_user_id
 from app.conversation_messaging.application.ports import (
     ConversationEventsPort,
     DeliveryResultPort,
@@ -96,8 +97,10 @@ class BotConversationState(
         """
         if zalo_channel == "oa":
             provider = "zalo_oa"
-            account_key = account_key or "default:zalo_oa"
-            external_id = zalo_chat_id.removeprefix("oa:") if zalo_chat_id.startswith("oa:") else zalo_chat_id
+            account_key = account_key or ZALO_OA_DEFAULT_ACCOUNT_KEY
+            # The alias carries the receiving OA (``oa:<account_key>:<user_id>``
+            # for a non-original OA); the identity stores the bare user id.
+            external_id = oa_user_id(zalo_chat_id)
         else:
             provider = "zalo_bot"
             account_key = "default:zalo_bot"

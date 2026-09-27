@@ -114,7 +114,7 @@ class ZaloWebhookService:
             if event is None:
                 return {"status": "ignored"}
             if event.can_start_bot_turn:
-                norm = _normalized_from_oa_event(event)
+                norm = _normalized_from_oa_event(event, account_key)
             else:
                 return await handle_oa_side_event(db, event, account_key=account_key)
         else:
@@ -299,14 +299,19 @@ class ZaloWebhookService:
         return {"status": "processing", "conversation_id": str(conv.id)}
 
 
-def _normalized_from_oa_event(event) -> NormalizedMessage:
-    """Build a NormalizedMessage from a bot-turn-eligible OA event."""
+def _normalized_from_oa_event(event, account_key: str | None = None) -> NormalizedMessage:
+    """Build a NormalizedMessage from a bot-turn-eligible OA event.
+
+    ``account_key`` scopes the conversation alias to the receiving OA, so the
+    same person's thread on another OA of ours stays a separate conversation.
+    """
+    chat_id = event.scoped_chat_id_for(account_key)
     return NormalizedMessage(
-        zalo_chat_id=event.scoped_chat_id,
+        zalo_chat_id=chat_id,
         zalo_channel="oa",
         user_text=event.text,
         user_name=_oa_sender_name(event.raw),
-        msg_id=event.message_id or f"{event.scoped_chat_id}:{event.text[:40]}",
+        msg_id=event.message_id or f"{chat_id}:{event.text[:40]}",
         msg_hash=event.dedup_hash,
     )
 
@@ -328,7 +333,11 @@ async def handle_oa_side_event(db: AsyncSession, event, *, account_key: str | No
     if kind in ("user_seen", "user_received"):
         if not event.message_ids or not event.sender_id:
             return {"status": "ignored"}
-        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa", account_key=account_key)
+        conv = await svc.ensure(
+            event.scoped_chat_id_for(account_key),
+            zalo_channel="oa",
+            account_key=account_key,
+        )
         await svc.apply_delivery_receipt_batch(
             conv,
             zalo_message_ids=list(event.message_ids),
@@ -338,18 +347,30 @@ async def handle_oa_side_event(db: AsyncSession, event, *, account_key: str | No
         return {"status": "receipt"}
 
     if kind == "follow":
-        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa", account_key=account_key)
+        conv = await svc.ensure(
+            event.scoped_chat_id_for(account_key),
+            zalo_channel="oa",
+            account_key=account_key,
+        )
         await svc.apply_follow(conv)
         return {"status": "follow"}
 
     if kind == "unfollow":
-        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa", account_key=account_key)
+        conv = await svc.ensure(
+            event.scoped_chat_id_for(account_key),
+            zalo_channel="oa",
+            account_key=account_key,
+        )
         await svc.apply_unfollow(conv)
         await svc.record_system_note(conv, body="Người dùng đã bỏ quan tâm (unfollow) OA.")
         return {"status": "unfollow"}
 
     if kind == "click_to_message":
-        conv = await svc.ensure(event.scoped_chat_id, zalo_channel="oa", account_key=account_key)
+        conv = await svc.ensure(
+            event.scoped_chat_id_for(account_key),
+            zalo_channel="oa",
+            account_key=account_key,
+        )
         title = _event_button_title(event.raw)
         body = f"👤 Người dùng đã nhấn nút: {title}" if title else "👤 Người dùng đã nhấn nút."
         await svc.record_system_note(conv, body=body)

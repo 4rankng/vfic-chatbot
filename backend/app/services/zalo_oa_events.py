@@ -12,6 +12,8 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from app.channels.types import oa_chat_id
+
 OAEventKind = Literal[
     "incoming_text",
     "incoming_media",
@@ -84,16 +86,31 @@ class ZaloOAWebhookEvent:
         return self.recipient_id
 
     @property
+    def user_id(self) -> str:
+        """The *user's* id on this event, or "".
+
+        Receipt events (user_received_message / user_seen_message) invert the
+        sender/recipient roles: Zalo puts the OA under ``sender`` and the user
+        under ``recipient``. Every other event identifies the user as the
+        sender (or ``follower`` for follow/unfollow). The conversation is
+        always keyed by the user's id, so receipts must scope to recipient.
+        """
+        if self.kind in ("user_received", "user_seen"):
+            return self.recipient_id
+        return self.sender_id
+
+    @property
     def scoped_chat_id(self) -> str:
-        # Receipt events (user_received_message / user_seen_message) invert the
-        # sender/recipient roles: Zalo puts the OA under ``sender`` and the user
-        # under ``recipient``. Every other event identifies the user as the
-        # sender (or ``follower`` for follow/unfollow). The conversation is
-        # always keyed by the user's id, so receipts must scope to recipient.
-        user_id = (
-            self.recipient_id if self.kind in ("user_received", "user_seen") else self.sender_id
-        )
-        return f"oa:{user_id}" if user_id else ""
+        """The conversation alias for this event on the *original* OA.
+
+        Account-aware callers use :meth:`scoped_chat_id_for`: the alias carries
+        the receiving OA so one user's two OA threads cannot collide.
+        """
+        return oa_chat_id(None, self.user_id)
+
+    def scoped_chat_id_for(self, account_key: str | None) -> str:
+        """The conversation alias for this event on ``account_key``'s OA."""
+        return oa_chat_id(account_key, self.user_id)
 
     @property
     def can_start_bot_turn(self) -> bool:

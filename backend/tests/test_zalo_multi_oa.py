@@ -257,6 +257,92 @@ async def test_the_default_account_still_resolves_singletons_and_env():
 
 
 # ---------------------------------------------------------------------------
+# Conversation aliases (one user, several OAs)
+# ---------------------------------------------------------------------------
+
+
+def test_one_user_gets_a_distinct_conversation_alias_per_oa():
+    """``conversations.zalo_chat_id`` is unique: the OA must be in the alias.
+
+    Without the account key, one person messaging two of our OAs claims
+    ``oa:<user_id>`` twice and the second ingress dies on the unique index
+    (no thread, no reply) — the original OA keeps the historical spelling.
+    """
+    assert ct.oa_chat_id(None, "u-1") == "oa:u-1"
+    assert ct.oa_chat_id(ct.ZALO_OA_DEFAULT_ACCOUNT_KEY, "u-1") == "oa:u-1"
+    assert ct.oa_chat_id("tingting", "u-1") == "oa:tingting:u-1"
+    assert ct.oa_chat_id("tingting", "u-1") != ct.oa_chat_id(None, "u-1")
+    assert ct.oa_chat_id("tingting", "") == ""
+
+
+def test_the_alias_round_trips_to_the_bare_user_id():
+    """One inverse for every alias spelling, including account keys with colons."""
+    for alias in ("oa:u-1", "oa:tingting:u-1", "oa:default:zalo_oa:u-1", "u-1"):
+        assert ct.oa_user_id(alias) == "u-1"
+    assert ct.oa_user_id("") == ""
+    assert ct.oa_user_id(None) == ""
+    assert ct.oa_chat_id("tingting", ct.oa_user_id("oa:tingting:u-1")) == "oa:tingting:u-1"
+
+
+def test_an_oa_send_addresses_the_bare_user_id():
+    """Both alias spellings reach the OA Send API as the raw user id."""
+    from types import SimpleNamespace
+
+    from app.services.zalo_sender import external_chat_id
+
+    for alias in ("oa:u-1", "oa:tingting:u-1"):
+        conv = SimpleNamespace(zalo_channel="oa", zalo_chat_id=alias)
+        assert external_chat_id(conv) == "u-1"
+    assert (
+        external_chat_id(SimpleNamespace(zalo_channel="bot", zalo_chat_id="u-1")) == "u-1"
+    )
+
+
+async def test_the_adapter_strips_the_account_scoped_alias(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.services.zalo_sender import SendResult
+
+    sender = types.SimpleNamespace(send_message=AsyncMock(return_value=SendResult(ok=True)))
+    adapter = ZaloOAChannelAdapter(sender=sender, account_key="tingting")
+
+    await adapter.send_text(
+        ct.OutboundTextCommand(
+            provider=ct.PROVIDER_ZALO_OA,
+            account_key="tingting",
+            recipient_id="oa:tingting:u-1",
+            text="Chào",
+            channel_account_generation=1,
+        )
+    )
+
+    assert sender.send_message.await_args.args[0] == "u-1"
+
+
+async def test_handle_scopes_the_conversation_alias_to_the_receiving_oa(monkeypatch):
+    """The alias handed to ``ensure`` is the one the unique index sees."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = types.SimpleNamespace(zalo_chat_id="oa:tingting:u-1")
+    svc = MagicMock()
+    svc.ensure = AsyncMock(return_value=conv)
+    svc.apply_follow = AsyncMock()
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)
+
+    await ZaloWebhookService.handle(  # type: ignore[arg-type]
+        MagicMock(),
+        {"event_name": "follow", "follower": {"id": "u-1"}, "oa_id": SECOND_OA_ID},
+        enqueue=lambda _job: True,
+        channel="oa",
+        account_key="tingting",
+    )
+
+    assert svc.ensure.await_args.args[0] == "oa:tingting:u-1"
+
+
+# ---------------------------------------------------------------------------
 # Adapter / receipt scoping
 # ---------------------------------------------------------------------------
 

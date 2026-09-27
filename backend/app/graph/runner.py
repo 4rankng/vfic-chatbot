@@ -1894,7 +1894,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         and conv.zalo_chat_id
     ):
         profile_t0 = time.monotonic()
-        user_id = conv.zalo_chat_id.removeprefix("oa:")
+        from app.channels.types import oa_user_id
+
+        user_id = oa_user_id(conv.zalo_chat_id)
         profile_budget = min(
             OA_PROFILE_LOOKUP_TIMEOUT_SECONDS,
             max(0.0, _remaining(state) - settings.soft_fallback_remaining),

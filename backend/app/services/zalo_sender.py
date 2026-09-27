@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
+from app.channels.types import oa_user_id
 from app.models.conversation import Conversation
 from app.services.integration_settings import ZaloRuntimeConfig
 from app.services.zalo_bot_service import SendResult, ZaloBotSender
@@ -11,11 +12,16 @@ from app.services.zalo_oa_service import ZaloOASender
 
 
 def external_chat_id(conv: Conversation) -> str:
+    """The provider-side recipient for one conversation.
+
+    OA conversations store an alias (``oa:<user_id>`` on the original OA,
+    ``oa:<account_key>:<user_id>`` on any other), while the OA Send API takes
+    the bare user id; Bot/Messenger aliases are already the recipient.
+    """
     channel = getattr(conv, "zalo_channel", None) or "bot"
     chat_id = conv.zalo_chat_id
-    prefix = f"{channel}:"
-    if channel == "oa" and chat_id.startswith(prefix):
-        return chat_id[len(prefix) :]
+    if channel == "oa":
+        return oa_user_id(chat_id)
     return chat_id
 
 
@@ -43,10 +49,8 @@ class ZaloChannelSender:
         if not chat_id or not text:
             return SendResult(ok=False, error="outbound payload is missing chat_id or text")
         if channel == "zalo_oa":
-            if chat_id.startswith("oa:"):
-                chat_id = chat_id.removeprefix("oa:")
             return await self._oa.send_message(
-                chat_id,
+                oa_user_id(chat_id),
                 text,
                 quote_message_id=str(payload.get("quote_message_id") or ""),
             )

@@ -369,8 +369,51 @@ def _redact(value: str | None) -> str:
 # account without importing a service module.
 TINGTING_OA_ACCOUNT_KEY = "tingting"
 
+#: The seeded original OA (Alembic 0047 backfill). Spelling matters: it is the
+#: stored ``account_key`` value, not a display label.
+ZALO_OA_DEFAULT_ACCOUNT_KEY = "default:zalo_oa"
+
+
+def oa_chat_id(account_key: str | None, user_id: str) -> str:
+    """The conversation alias for one OA participant, scoped to the receiving OA.
+
+    ``conversations.zalo_chat_id`` is unique, so the alias must carry the OA:
+    one person messaging two OAs of ours is normal (an employee resets a
+    password on the support OA and applies on the recruiting OA), and both
+    threads would otherwise claim ``oa:<user_id>``.
+
+    The original OA keeps the historical ``oa:<user_id>`` spelling so every
+    existing row, lookup, receipt and display stays byte-compatible; any other
+    OA is prefixed with its account key. Empty ``user_id`` yields "" (an event
+    we cannot key a conversation by).
+    """
+    if not user_id:
+        return ""
+    key = (account_key or "").strip()
+    if not key or key == ZALO_OA_DEFAULT_ACCOUNT_KEY:
+        return f"oa:{user_id}"
+    return f"oa:{key}:{user_id}"
+
+
+def oa_user_id(chat_id: str | None) -> str:
+    """Inverse of :func:`oa_chat_id`: the bare Zalo user id behind an alias.
+
+    The user id is the last colon-separated segment: account keys may contain
+    colons themselves (``default:zalo_oa``) but Zalo user ids never do. A value
+    without the ``oa:`` prefix is returned unchanged, so callers that already
+    hold a bare id keep working.
+    """
+    if not chat_id:
+        return ""
+    if not chat_id.startswith("oa:"):
+        return chat_id
+    return chat_id.rsplit(":", 1)[-1]
+
 __all__ = [
     "TINGTING_OA_ACCOUNT_KEY",
+    "ZALO_OA_DEFAULT_ACCOUNT_KEY",
+    "oa_chat_id",
+    "oa_user_id",
     "PROVIDER_ZALO_BOT",
     "PROVIDER_ZALO_OA",
     "PROVIDER_FACEBOOK_MESSENGER",
