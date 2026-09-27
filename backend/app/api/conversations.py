@@ -53,7 +53,9 @@ async def _load(
     if user is None:
         conv = await load_conversation_record(db, conv_id)
     else:
-        conv = await ConversationService(db).get_visible(conv_id, viewer=user)
+        # The inbox's viewer scoping is a repository concern (admin = all,
+        # recruiter = own + unassigned), so the read goes to the part that owns it.
+        conv = await ConversationService(db).repo.get_visible(conv_id, viewer=user)
     if conv is None:
         raise NotFoundError("conversation not found")
     return conv
@@ -102,7 +104,7 @@ async def list_conversations(
         return ConversationListResponse(
             data=[ConversationOut.model_validate(r) for r in rows], total=total
         )
-    rows, total = await svc.list(
+    rows, total = await svc.repo.list(
         viewer=user,
         page=page,
         per_page=per_page,
@@ -129,7 +131,7 @@ async def list_conversations_by_zalo_ids(
     zalo_chat_ids = list(dict.fromkeys(value for value in ids.split(",") if value))
     if not zalo_chat_ids or len(zalo_chat_ids) > 200:
         raise ValidationError("ids must contain between 1 and 200 Zalo chat ids")
-    rows = await ConversationService(db).list_by_zalo_ids(
+    rows = await ConversationService(db).repo.list_by_zalo_ids(
         viewer=user,
         zalo_chat_ids=zalo_chat_ids,
     )
@@ -155,7 +157,7 @@ async def last_messages_batch(
     segment can never be shadowed by the uuid path param (defensive against a
     future retyping of conv_id to str).
     """
-    snippets = await ConversationService(db).last_messages_batch(viewer=user, ids_str=ids)
+    snippets = await ConversationService(db).repo.last_messages_batch(viewer=user, ids_str=ids)
     return {"snippets": snippets}
 
 
@@ -172,7 +174,7 @@ async def needs_attention(
     Registered BEFORE the ``/{conv_id}`` routes so the literal ``needs-attention``
     segment is never shadowed by the uuid path param.
     """
-    count = await ConversationService(db).needs_attention_count(
+    count = await ConversationService(db).repo.needs_attention_count(
         viewer=user, channel_provider=channel_provider
     )
     return {"count": count}
@@ -215,7 +217,7 @@ async def delete_conversation(
     Database foreign keys cascade to messages and bot runs. The candidate lead is
     intentionally retained so a future Zalo message can start a clean thread.
     """
-    await ConversationService(db).delete(await _load(conv_id, db), admin)
+    await ConversationService(db).state.delete(await _load(conv_id, db), admin)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -228,7 +230,7 @@ async def last_messages(
 ) -> list[MessageOut]:
     conv = await _load(conv_id, db, user)
     svc = ConversationService(db)
-    return [MessageOut.model_validate(m) for m in await svc.last_messages(conv, limit)]
+    return [MessageOut.model_validate(m) for m in await svc.repo.last_messages(conv, limit)]
 
 
 @router.get("/{conv_id}/messages", response_model=MessageListResponse)
@@ -256,12 +258,12 @@ async def list_messages(
     page_size = limit if limit is not None else per_page
     if since_id is not None:
         # Gap-fill path: fetch everything newer than the client's newest known msg.
-        msgs = await svc.messages_since(conv, since_id=since_id, limit=200)
+        msgs = await svc.repo.messages_since(conv, since_id=since_id, limit=200)
         return MessageListResponse(
             data=[MessageOut.model_validate(m) for m in msgs], total=len(msgs)
         )
     cursor = before if before is not None else before_id
-    msgs = await svc.messages_page(conv, limit=page_size, before_id=cursor)
+    msgs = await svc.repo.messages_page(conv, limit=page_size, before_id=cursor)
     return MessageListResponse(data=[MessageOut.model_validate(m) for m in msgs], total=len(msgs))
 
 
@@ -273,7 +275,7 @@ async def take_over(
 ) -> ConversationOut:
     conv = await _load(conv_id, db, user)
     try:
-        conv = await ConversationService(db).take_over(conv, user)
+        conv = await ConversationService(db).state.take_over(conv, user)
     except ConversationConflict as exc:
         who = exc.owner_name or "nhân viên khác"
         raise ConflictError(f"Đã được {who} tiếp nhận")
@@ -309,7 +311,7 @@ async def semi_auto(
 ) -> ConversationOut:
     conv = await _load(conv_id, db, user)
     try:
-        conv = await ConversationService(db).semi_auto(conv, user)
+        conv = await ConversationService(db).state.semi_auto(conv, user)
     except ConversationConflict as exc:
         who = exc.owner_name or "nhân viên khác"
         raise ConflictError(f"Đã được {who} tiếp nhận")
@@ -323,7 +325,7 @@ async def close(
     db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     return ConversationOut.model_validate(
-        await ConversationService(db).close(await _load(conv_id, db, user), user)
+        await ConversationService(db).state.close(await _load(conv_id, db, user), user)
     )
 
 
@@ -334,7 +336,7 @@ async def reopen(
     db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     return ConversationOut.model_validate(
-        await ConversationService(db).reopen(await _load(conv_id, db, user), user)
+        await ConversationService(db).state.reopen(await _load(conv_id, db, user), user)
     )
 
 
@@ -345,7 +347,7 @@ async def mark_read(
     db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     return ConversationOut.model_validate(
-        await ConversationService(db).mark_read(await _load(conv_id, db, user))
+        await ConversationService(db).state.mark_read(await _load(conv_id, db, user))
     )
 
 
@@ -356,7 +358,7 @@ async def clear_conversation_history(
     db: AsyncSession = Depends(get_request_db),
 ) -> Response:
     conv = await _load(conv_id, db)
-    await ConversationService(db).clear_history(conv, admin)
+    await ConversationService(db).state.clear_history(conv, admin)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

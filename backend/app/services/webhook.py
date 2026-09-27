@@ -148,11 +148,17 @@ class ZaloWebhookService:
         if not await MessageDedupService.claim(db, norm.zalo_chat_id, norm.msg_hash):
             return {"status": "duplicate"}
 
+        # ``state`` owns the conversation lifecycle (create-or-fetch, inbound
+        # persistence, the takeover guard and the per-chat mutex); ``repo`` owns
+        # the reads. Naming the part keeps the guard chain below readable
+        # against the state machine it actually consults.
         svc = ConversationService(db)
-        conv = await svc.ensure(
+        state = svc.state
+        repo = svc.repo
+        conv = await state.ensure(
             norm.zalo_chat_id, zalo_channel=norm.zalo_channel, account_key=account_key
         )
-        await svc.record_inbound(
+        await state.record_inbound(
             conv,
             body=norm.user_text,
             zalo_message_id=norm.msg_id,
@@ -194,7 +200,7 @@ class ZaloWebhookService:
                 prev_bot_message = None
                 if len((norm.user_text or "").strip()) <= 30:
                     try:
-                        _recent = await svc.last_messages(conv, limit=5)
+                        _recent = await repo.last_messages(conv, limit=5)
                         prev_bot_message = next(
                             (
                                 m.body
@@ -240,11 +246,11 @@ class ZaloWebhookService:
         # webhook_ack_ms.
         await db.refresh(conv, _GUARD_REFRESH_COLUMNS)
 
-        if not svc.run_start_guard(conv):  # HUMAN/active SEMI_AUTO/CLOSED -> starve the bot
+        if not state.run_start_guard(conv):  # HUMAN/active SEMI_AUTO/CLOSED -> starve the bot
             return {"status": "starved_human_mode", "conversation_id": str(conv.id)}
 
         version_at_start = conv.version
-        lock_owner = await svc.acquire_lock(conv.id)
+        lock_owner = await state.acquire_lock(conv.id)
         if lock_owner is None:  # another run holds the per-chat mutex
             return {"status": "locked", "conversation_id": str(conv.id)}
 
@@ -298,7 +304,7 @@ class ZaloWebhookService:
         if asyncio.iscoroutine(result):
             result = await result
         if result is False:
-            await svc.release_lock(conv, lock_owner=lock_owner)  # no worker will clear it
+            await state.release_lock(conv, lock_owner=lock_owner)  # no worker will clear it
             return {"status": "start_failed", "conversation_id": str(conv.id)}
 
         # Best-effort OA profile (avatar/name) enrichment. Fire-and-forget on the
@@ -357,17 +363,18 @@ async def handle_oa_side_event(db: AsyncSession, event, *, account_key: str | No
     event, so a receipt on one OA can never advance another OA's message.
     """
     kind = event.kind
-    svc = ConversationService(db)
+    # Receipts, follow/unfollow and notes are all conversation-state transitions.
+    state = ConversationService(db).state
 
     if kind in ("user_seen", "user_received"):
         if not event.message_ids or not event.sender_id:
             return {"status": "ignored"}
-        conv = await svc.ensure(
+        conv = await state.ensure(
             event.scoped_chat_id_for(account_key),
             zalo_channel="oa",
             account_key=account_key,
         )
-        await svc.apply_delivery_receipt_batch(
+        await state.apply_delivery_receipt_batch(
             conv,
             zalo_message_ids=list(event.message_ids),
             delivered=(kind == "user_received"),
@@ -376,33 +383,33 @@ async def handle_oa_side_event(db: AsyncSession, event, *, account_key: str | No
         return {"status": "receipt"}
 
     if kind == "follow":
-        conv = await svc.ensure(
+        conv = await state.ensure(
             event.scoped_chat_id_for(account_key),
             zalo_channel="oa",
             account_key=account_key,
         )
-        await svc.apply_follow(conv)
+        await state.apply_follow(conv)
         return {"status": "follow"}
 
     if kind == "unfollow":
-        conv = await svc.ensure(
+        conv = await state.ensure(
             event.scoped_chat_id_for(account_key),
             zalo_channel="oa",
             account_key=account_key,
         )
-        await svc.apply_unfollow(conv)
-        await svc.record_system_note(conv, body="Người dùng đã bỏ quan tâm (unfollow) OA.")
+        await state.apply_unfollow(conv)
+        await state.record_system_note(conv, body="Người dùng đã bỏ quan tâm (unfollow) OA.")
         return {"status": "unfollow"}
 
     if kind == "click_to_message":
-        conv = await svc.ensure(
+        conv = await state.ensure(
             event.scoped_chat_id_for(account_key),
             zalo_channel="oa",
             account_key=account_key,
         )
         title = _event_button_title(event.raw)
         body = f"👤 Người dùng đã nhấn nút: {title}" if title else "👤 Người dùng đã nhấn nút."
-        await svc.record_system_note(conv, body=body)
+        await state.record_system_note(conv, body=body)
         return {"status": "button_click"}
 
     # incoming_media / reaction / oa_sent / oa_sent_anonymous / unknown
