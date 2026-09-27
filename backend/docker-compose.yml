@@ -81,10 +81,29 @@ services:
     # LLM semaphore token lists and cachever:* counters carry no TTL, so memory
     # pressure can never evict them and suppress every turn or resurrect stale
     # cache generations.
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
-    volumes: [vfic_redisdata:/data]
+    # SEC-11: `--requirepass "$REDIS_PASSWORD"` interpolated the secret into the
+    # container's argv, where `docker inspect` and `ps` both expose it. There is no
+    # env channel for redis-server's own password, so the shell expands it from
+    # REDIS_PASSWORD at start instead — argv then holds the literal `$REDIS_PASSWORD`
+    # and the secret only ever lives in the environment. `exec` keeps redis-server
+    # as PID 1, so signals and restart semantics are unchanged.
+    # (Verified against redis:7-alpine: the wrapper boots, requires the password,
+    # and `REDISCLI_AUTH=<same> redis-cli ping` answers PONG.)
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD" --maxmemory 256mb --maxmemory-policy volatile-lru
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      # SEC-11: the healthcheck password also reached argv via `redis-cli -a`,
+      # so it was readable in `docker inspect` and in `ps` inside the container.
+      # REDISCLI_AUTH is the documented env channel for exactly this — the probe
+      # authenticates without the credential ever entering the command line.
+      # (Verified: REDISCLI_AUTH=... redis-cli ping -> PONG on redis:7-alpine;
+      # without it the server answers NOAUTH, so the probe still fails closed.)
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -245,7 +264,10 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     volumes: [vfic_kb_uploads:/data/kb_uploads]
-    command: ["rq", "worker", "ingest", "--url", "${REDIS_URL}"]
+    # SEC-11: no `--url` — rq 2.10 falls back to os.environ["REDIS_URL"] when the
+    # flag is absent (rq/cli/helpers.py:388 -> get_redis_from_config), so env_file
+    # already supplies the broker and the credential stops appearing in argv.
+    command: ["rq", "worker", "ingest"]
     healthcheck:
       # Loop liveness via the RQ worker registry — see worker-chatbot.
       test: ["CMD-SHELL", "python -c \"import os,socket,sys;from rq import Worker;import redis as r;c=r.from_url(os.environ['REDIS_URL'],socket_connect_timeout=3,socket_timeout=3);sys.exit(0 if any(w.hostname==socket.gethostname() for w in Worker.all(connection=c)) else 1)\""]
@@ -266,9 +288,17 @@ services:
     logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
+    environment:
+      # SEC-11: rqscheduler does NOT read REDIS_URL — its --url flag defaults from
+      # RQ_REDIS_URL (rq_scheduler/scripts/rqscheduler.py:22), and with no URL it
+      # falls back to host/port/db/password (line 47), i.e. localhost. So dropping
+      # `--url` alone would silently disconnect the scheduler from the broker.
+      # Exporting the same value under the name rqscheduler actually reads keeps
+      # the credential out of argv without changing where it connects.
+      RQ_REDIS_URL: ${REDIS_URL}
     depends_on:
       redis: { condition: service_healthy }
-    command: ["rqscheduler", "--url", "${REDIS_URL}"]
+    command: ["rqscheduler"]
     healthcheck:
       # Loop liveness: the scheduler's run loop re-expires its
       # rq:scheduler_instance:* birth key (TTL = poll interval + 10s, default
@@ -302,7 +332,10 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    command: ["rq", "worker", "followup", "--url", "${REDIS_URL}"]
+    # SEC-11: no `--url` — rq 2.10 falls back to os.environ["REDIS_URL"] when the
+    # flag is absent (rq/cli/helpers.py:388 -> get_redis_from_config), so env_file
+    # already supplies the broker and the credential stops appearing in argv.
+    command: ["rq", "worker", "followup"]
     healthcheck:
       # Loop liveness via the RQ worker registry — see worker-chatbot.
       test: ["CMD-SHELL", "python -c \"import os,socket,sys;from rq import Worker;import redis as r;c=r.from_url(os.environ['REDIS_URL'],socket_connect_timeout=3,socket_timeout=3);sys.exit(0 if any(w.hostname==socket.gethostname() for w in Worker.all(connection=c)) else 1)\""]
@@ -332,7 +365,8 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    command: ["rq", "worker", "maintenance", "--url", "${REDIS_URL}"]
+    # SEC-11: no `--url` — see worker-ingest; rq reads REDIS_URL from the env.
+    command: ["rq", "worker", "maintenance"]
     deploy:
       resources:
         limits:
@@ -458,6 +492,19 @@ services:
         limits:
           # nginx serving a static SPA: a few MB of heap plus buffers.
           memory: 64M
+    healthcheck:
+      # OPS-24: the edge was only ever probed at deploy time, so a frontend that
+      # came up broken (or a bad nginx.conf in the pushed image) stayed invisible
+      # until a human hit the site. wget is guaranteed here: the base is
+      # nginx:alpine, whose busybox ships /usr/bin/wget (verified in the image).
+      # try_files falls back to /index.html, so / is the SPA's real entrypoint.
+      test: ["CMD-SHELL", "wget -q --spider -T 4 http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # nginx binds :80 in well under a second; 5s only covers the image's own
+      # start-up ordering (workers + config load) on a cold, loaded host.
+      start_period: 5s
     restart: unless-stopped
 
   # DB UI — bound to loopback only. Reach via `make adminer` SSH tunnel.
@@ -484,6 +531,22 @@ services:
       # brief cold-boot 502 window is unchanged from the single-web era.
       frontend: { condition: service_started }
     ports: ["80:80", "443:443"]
+    healthcheck:
+      # OPS-24: the edge had no in-stack probe either, so a Caddy that failed to
+      # load the rendered Caddyfile kept reporting "up" to compose while 502ing
+      # every request. Probe the rendered listener and accept 200 OR 308: with
+      # auto-TLS the site only answers :80 with a permanent redirect to :443
+      # (verified against caddy:2 — `curl -w %{http_code}` returns 308), and that
+      # redirect IS the proof the listener and the site block loaded. Deliberately
+      # NOT busybox `wget --spider`: it follows the 308 out to the public host, so
+      # the probe would leave the container and depend on public DNS/egress.
+      test: ["CMD-SHELL", "code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 http://127.0.0.1/); [ \"$$code\" = 200 ] || [ \"$$code\" = 308 ]"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # ACME issuance for the apex cert can take several seconds on first boot;
+      # a probe firing before :443 serves would flap the edge to unhealthy.
+      start_period: 30s
     deploy:
       resources:
         limits:
