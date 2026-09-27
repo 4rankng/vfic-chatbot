@@ -566,7 +566,7 @@ class _TingtingService:
         return _TingtingService.stored or {
             "api_key": {"configured": False, "preview": None},
             "configured": False,
-            "base_url": "https://tingting.vip/api/v1",
+            "base_url": "https://tingting.vip",
             "auth_header": "X-API-Key",
         }
 
@@ -579,7 +579,7 @@ class _TingtingService:
                 "preview": f"{len(values['api_key'])} ký tự" if configured else None,
             },
             "configured": configured,
-            "base_url": "https://tingting.vip/api/v1",
+            "base_url": "https://tingting.vip",
             "auth_header": "X-API-Key",
         }
         return _TingtingService.stored

@@ -197,6 +197,9 @@ async def test_invoke_posts_to_the_fixed_origin_with_the_api_key(monkeypatch) ->
     assert outcome.text == '{"status":"success"}'
     call = http.calls[0]
     assert call["url"] == f"{TINGTING_API_BASE_DEFAULT}/api/v1/integration/password-reset/otp"
+    # The origin must not also carry the guide's ``/api/v1`` prefix, or every
+    # call requests ``/api/v1/api/v1/...`` and the whole reset flow 404s.
+    assert call["url"] == "https://tingting.vip/api/v1/integration/password-reset/otp"
     assert call["headers"] == {"X-API-Key": _KEY}
     assert call["json"] == {"phone": "0987654321"}
     # The key is never sent as a query parameter (logs/URLs stay clean).

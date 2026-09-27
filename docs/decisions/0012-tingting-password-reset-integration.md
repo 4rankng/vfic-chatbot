@@ -36,7 +36,8 @@ reset) is identical for all of them.
    maintains it. It is appended to the system prompt whenever a usable key is
    configured — independent of project focus.
 3. The origin is fixed in code (`TINGTING_API_BASE_DEFAULT`,
-   `https://tingting.vip/api/v1`) with a validated operator override on
+   `https://tingting.vip` — origin only, since the `/api/v1` prefix is part of the guide's paths)
+   with a validated operator override on
    `Settings` (`tingting_api_base`) for dev/smoke deployments. The model supplies
    only a relative path plus the method.
 4. One new tool `call_tingting_api(method, path, params)` shares the

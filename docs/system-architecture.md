@@ -1044,9 +1044,11 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   response: `{api_key: {configured, preview}, configured, base_url, auth_header}`); an audit row
   `update_tingting_integration_settings` is written on every replace. UI: the TingTing section in
   the settings console (`frontend/src/components/atomic-crm/integrations/presentation/TingtingSection.tsx`).
-- **Origin:** `TINGTING_API_BASE_DEFAULT` (`https://tingting.vip/api/v1`) in
-  `app/services/tingting_api.py`, with a validated `Settings.tingting_api_base` override for
-  dev/smoke (a bad override falls back to the default). Never model-supplied.
+- **Origin:** `TINGTING_API_BASE_DEFAULT` (`https://tingting.vip`) in
+  `app/services/tingting_api.py` — origin only; the `/api/v1` prefix belongs to the guide's paths
+  (`/api/v1/integration/...`), so it must not be repeated in the base. A validated
+  `Settings.tingting_api_base` override exists for dev/smoke (a bad override falls back to the
+  default). Never model-supplied.
 - **Prompt:** `runner` appends the embedded `=== API TINGTING: ĐẶT LẠI MẬT KHẨU NHÂN VIÊN ===`
   block (`app/graph/tingting_guide.py`) whenever a usable key is stored — **independent of project
   focus**, since no project is involved. The key never enters the prompt.

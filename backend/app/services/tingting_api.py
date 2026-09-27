@@ -52,10 +52,12 @@ logger = logging.getLogger(__name__)
 TINGTING_API_KEY_SETTING = "tingting_api_key"
 TINGTING_API_CLIENT_NAME = "tingting_api"
 TINGTING_API_AUTH_HEADER = "X-API-Key"
-# Where the TingTing app serves the reset API. An operator may point a dev or
-# smoke deployment elsewhere by setting ``tingting_api_base``; the value is
-# re-validated on read, so a bad override falls back to this origin.
-TINGTING_API_BASE_DEFAULT = "https://tingting.vip/api/v1"
+# The TingTing app's origin only — the ``/api/v1`` prefix belongs to the path
+# the guide documents (``/api/v1/integration/...``), so carrying it here too
+# would request ``/api/v1/api/v1/...`` and every call would 404. An operator may
+# point a dev or smoke deployment elsewhere by setting ``tingting_api_base``;
+# the value is re-validated on read, so a bad override falls back to this origin.
+TINGTING_API_BASE_DEFAULT = "https://tingting.vip"
 TINGTING_API_LABEL = "TingTing"
 
 # The reset API's only read-only endpoint. Everything else the model can reach
