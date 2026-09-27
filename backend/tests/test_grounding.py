@@ -7,10 +7,14 @@ existing graph client integration path (requires langchain).
 from __future__ import annotations
 
 from app.graph.grounding import (
+    UNVERIFIED_CONTACT_REPLY,
     extract_asserted_entities,
     extract_cited_job_ids,
+    extract_contact_channels,
     extract_surfaced_entities,
     extract_surfaced_job_ids,
+    ground_reply,
+    validate_contact_grounding,
     validate_entity_grounding,
     validate_grounding,
 )
@@ -61,6 +65,69 @@ def test_extract_cited_ids_catches_tagged_form():
 def test_extract_ids_empty_on_no_match():
     assert extract_surfaced_job_ids(["no ids here"]) == set()
     assert extract_cited_job_ids("just text") == set()
+
+
+# --- contact-channel grounding ----------------------------------------------
+
+
+_INVENTED_HOTLINE_REPLY = (
+    "Dạ em xin lỗi ạ, việc reset mật khẩu tài khoản payroll LG Display nằm ngoài "
+    "phạm vi hỗ trợ tuyển dụng của em ạ.\n\n"
+    "Chị vui lòng liên hệ trực tiếp bộ phận IT tại nhà máy LG Display qua:\n"
+    "- Hotline nội bộ IT: (0251) 543-6789 (máy lẻ 2345)\n"
+    "- Email IT: it-helpdesk@lgdisplay.com"
+)
+
+
+def test_extract_contact_channels_normalizes_phones_and_emails():
+    channels = extract_contact_channels("Gọi 0357210888 hoặc +84 987 654 321, mail A@B.VN")
+    assert channels == {"0357210888", "0987654321", "a@b.vn"}
+
+
+def test_contact_grounding_flags_the_invented_hotline():
+    """The observed LG Display payroll refusal invented both a hotline and an e-mail."""
+    unverified = validate_contact_grounding(_INVENTED_HOTLINE_REPLY, "Anh cho em số điện thoại")
+    assert unverified == {"02515436789", "it-helpdesk@lgdisplay.com"}
+
+
+def test_contact_grounding_allows_numbers_from_evidence():
+    evidence = "Liên hệ VFIC: 0987 654 321 — hotline@vfic.vn"
+    reply = "Anh/chị gọi 0987654321 hoặc gửi mail hotline@vfic.vn nhé ạ."
+    assert validate_contact_grounding(reply, evidence) == frozenset()
+
+
+def test_contact_grounding_allows_the_candidates_own_number():
+    assert (
+        validate_contact_grounding("Em sẽ liên hệ lại số 0357210888 ạ.", "số của em 0357210888")
+        == frozenset()
+    )
+
+
+def test_contact_grounding_ignores_non_phone_numbers():
+    """Salary figures and job counts are not contact channels."""
+    assert extract_contact_channels("Lương 15.000.000đ, 3 vị trí, id=1234") == frozenset()
+
+
+def test_ground_reply_replaces_an_invented_contact_reply():
+    result = ground_reply(
+        _INVENTED_HOTLINE_REPLY,
+        [],
+        allowed_text="Anh cần reset mật khẩu payroll LG Display ạ",
+    )
+    assert result == UNVERIFIED_CONTACT_REPLY
+    assert "0251" not in result
+    assert "it-helpdesk@" not in result
+
+
+def test_ground_reply_keeps_a_contact_answer_sourced_from_a_tool_result():
+    tool_results = ["Liên hệ bộ phận tuyển dụng: 0225 123 456"]
+    reply = "Anh/chị liên hệ số 0225 123 456 để được hỗ trợ ạ."
+    assert ground_reply(reply, tool_results, allowed_text="cho em xin số liên hệ") == reply
+
+
+def test_ground_reply_contact_guard_is_off_without_prompt_text():
+    """Callers that do not pass the prompt keep the previous behaviour."""
+    assert ground_reply(_INVENTED_HOTLINE_REPLY, []) == _INVENTED_HOTLINE_REPLY
 
 
 # --- validate_grounding ------------------------------------------------------

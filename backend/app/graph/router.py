@@ -21,6 +21,7 @@ TurnIntent = Literal[
     "timetable",
     "contact",
     "faq_detail",
+    "employee_support",
     "out_of_scope",
     "general",
 ]
@@ -131,8 +132,16 @@ _INTENT_ROUTES = {
     "contact": ("knowledge_lookup", ("search_knowledge",), "contact_terms"),
     "faq_detail": (
         "knowledge_lookup",
-        ("get_product_features", "search_knowledge", "call_project_api"),
+        ("get_product_features", "search_knowledge"),
         "job_detail_terms",
+    ),
+    # Employees locked out of the TingTing app (forgot/reset password, no OTP)
+    # must reach the reset API, never a refusal. ``search_knowledge`` rides along
+    # so the turn can still cite published policy alongside the mechanic.
+    "employee_support": (
+        "knowledge_lookup",
+        ("call_tingting_api", "search_knowledge"),
+        "employee_support_terms",
     ),
     "out_of_scope": ("safe_redirect", (), "off_domain_terms"),
     "general": ("agent", (), "fallback"),
@@ -182,10 +191,26 @@ def routing_instruction(route: TurnRoute) -> str:
             "Ý định: hỏi chi tiết tuyển dụng. Nếu đã xác định dự án, ưu tiên get_product_features; "
             "nếu cần dẫn chứng rộng hơn thì dùng search_knowledge. Dữ liệu chưa có thì nói chưa ghi rõ."
         )
+    if route.intent == "employee_support":
+        return (
+            "Ý định: nhân viên đang làm cần hỗ trợ tài khoản/hệ thống của dự án (quên mật khẩu, "
+            "không nhận được OTP, đặt lại mật khẩu, tra cứu thông tin nhân viên). Phải đọc mục "
+            "API TINGTING và gọi call_tingting_api theo đúng từng bước trong hướng dẫn, "
+            "hỏi ứng viên/nhân viên từng bước một thay vì tự đoán. "
+            "BẮT BUỘC XÁC MINH DANH TÍNH TRƯỚC KHI GỬI OTP: tra cứu nhân viên theo số điện thoại "
+            "rồi đối chiếu họ tên đầy đủ, số CCCD và số điện thoại mà nhân viên cung cấp với kết "
+            "quả tra cứu; chỉ khi khớp hoàn toàn mới được gọi endpoint gửi OTP. Không khớp hoặc "
+            "thiếu thông tin thì hỏi lại, tuyệt đối không gửi OTP trước khi xác minh. "
+            "Không được nói việc này ngoài phạm vi khi hướng dẫn đã có endpoint phù hợp. "
+            "Chỉ nói lại đúng kết quả tool trả về; không tự nghĩ ra hotline, email hay mã."
+        )
     if route.intent == "out_of_scope":
         return (
             "Ý định ngoài phạm vi hỗ trợ của VFIC (tuyển dụng + hỗ trợ nhân viên đang làm). "
-            "Từ chối nhẹ nhàng và kéo cuộc trò chuyện về tìm việc, hồ sơ, lịch xe, hoặc vấn đề "
-            "của nhân viên tại dự án VFIC."
+            "TRƯỚC KHI TỪ CHỐI: nếu mục API TINGTING đang có sẵn cho việc đang được hỏi thì phải "
+            "gọi call_tingting_api theo hướng dẫn và trả lời theo kết quả tool, không từ chối. "
+            "Chỉ khi không có hướng dẫn phù hợp mới từ chối nhẹ nhàng và kéo cuộc trò chuyện về "
+            "tìm việc, hồ sơ, lịch xe, hoặc vấn đề của nhân viên tại dự án VFIC. "
+            "Không nêu hotline, email hay người liên hệ không có trong dữ liệu tool trả về."
         )
     return "Ý định chưa rõ. Trả lời theo mạch hội thoại và dùng công cụ tra cứu khi có câu hỏi tuyển dụng."

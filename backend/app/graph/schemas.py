@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 from app.graph.tools import (
-    call_project_api,
+    call_tingting_api,
     compare_income,
     get_product_features,
     list_active_jobs,
@@ -234,14 +234,13 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
-            "name": "call_project_api",
+            "name": "call_tingting_api",
             "description": (
-                "Gọi API của hệ thống ngoài đã được cấu hình cho một dự án, theo đúng hướng dẫn trong "
-                "mục API NGOÀI CỦA DỰ ÁN (ví dụ: tra cứu nhân viên, gửi lại mã OTP đặt lại mật khẩu, "
-                "xác thực mã, đặt lại mật khẩu). Đọc hướng dẫn trước rồi truyền đúng method và path của "
-                "bước cần làm, tham số theo mô tả. Chỉ dùng method GET hoặc POST, path bắt đầu bằng dấu / "
-                "và nằm trong hệ thống ngoài của dự án; không tự bịa path khác hướng dẫn. Kết quả trả về là "
-                "dữ liệu thật từ hệ thống ngoài; chỉ được nói lại đúng những gì tool trả về."
+                "Gọi API đặt lại mật khẩu của ứng dụng TingTing theo đúng hướng dẫn trong mục "
+                "API TINGTING (tra cứu nhân viên theo số điện thoại, xác minh họ tên/CCCD, gửi "
+                "OTP, xác thực mã, đặt lại mật khẩu). Chỉ dùng method GET hoặc POST và path bắt "
+                "đầu bằng dấu / theo đúng hướng dẫn; không tự bịa path khác. Kết quả trả về là "
+                "dữ liệu thật từ hệ thống TingTing; chỉ được nói lại đúng những gì tool trả về."
             ),
             "parameters": {
                 "type": "object",
@@ -253,16 +252,15 @@ TOOL_SCHEMAS = [
                     },
                     "path": {
                         "type": "string",
-                        "description": "Đường dẫn tương đối bắt đầu bằng /, ví dụ /api/v1/integration/password-reset/otp.",
+                        "description": (
+                            "Đường dẫn tương đối bắt đầu bằng /, ví dụ "
+                            "/api/v1/integration/password-reset/otp."
+                        ),
                     },
                     "params": {
                         "type": "object",
                         "additionalProperties": {"type": "string"},
                         "description": "Tham số theo hướng dẫn (ví dụ phone, session_id, code).",
-                    },
-                    "project_slug": {
-                        "type": "string",
-                        "description": "Slug dự án; để trống khi hội thoại đã chọn dự án.",
                     },
                 },
                 "required": ["method", "path"],
@@ -381,10 +379,9 @@ async def _dispatch_tool(
             )
         elif name == "get_product_features":
             result = await get_product_features(retrieval, args.get("project_slug", ""))
-        elif name == "call_project_api":
-            result = await call_project_api(
+        elif name == "call_tingting_api":
+            result = await call_tingting_api(
                 retrieval,
-                project_slug=args.get("project_slug"),
                 method=str(args.get("method") or "").strip(),
                 path=str(args.get("path") or "").strip(),
                 params=args.get("params"),

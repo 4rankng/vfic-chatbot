@@ -44,7 +44,9 @@ JEV_RETRY_BACKOFF_S = 0.25
 # frame. Kept short — irrelevant state degrades accuracy (context rot).
 _BOT_CONTEXT = (
     "Tro ly tuyen dung tren Zalo cho cac du an cong nghiep/nha may. "
-    "Ung vien hoi ve viec lam, luong, ca lam, ky tuc xa, xe dua don, ho so ung tuyen."
+    "Ung vien hoi ve viec lam, luong, ca lam, ky tuc xa, xe dua don, ho so ung tuyen. "
+    "Nhan vien dang lam cua du an hoi ve tai khoan/he thong cua chinh du an (quen mat khau, "
+    "khong nhan duoc OTP, khong dang nhap duoc) la trong pham vi ho tro."
 )
 
 # 300 chars keeps a history message meaningful without letting old turns
@@ -64,7 +66,11 @@ _INTENT_CRITERIA = {
     "timetable": "Hỏi về xe đưa đón, tuyến xe, điểm đón, giờ đón",
     "contact": "Hỏi số điện thoại, admin, hotline, cách thức liên hệ",
     "faq_detail": "Hỏi chi tiết tuyển dụng: lương, ca làm, ký túc xá, yêu cầu, nội dung công việc",
-    "out_of_scope": "Ngoài phạm vi tuyển dụng và hỗ trợ nhân viên của công ty",
+    "employee_support": "Nhân viên đang làm cần hỗ trợ tài khoản hoặc hệ thống của dự án: quên/quá "
+    "hạn mật khẩu, đặt lại mật khẩu, không nhận được mã OTP, tài khoản không đăng nhập được, "
+    "tra cứu thông tin nhân viên",
+    "out_of_scope": "Ngoài phạm vi tuyển dụng và hỗ trợ nhân viên của công ty, và không thuộc "
+    "nhóm hỗ trợ tài khoản/hệ thống ở trên",
     "general": "Liên quan đến tuyển dụng nhưng ý định chưa rõ",
 }
 

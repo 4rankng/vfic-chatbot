@@ -374,6 +374,11 @@ class MiniMaxAgent:
                 metrics.setdefault(key, 0)
             metrics.setdefault("llm_call_ms", [])
         effective_query = lookup_query or user_text
+        # Everything the model was shown before it wrote the reply: the system
+        # prompt (persona + admin API guide) and the candidate's own message
+        # (history included). The contact guard treats a phone number or e-mail
+        # outside this text as an invention.
+        contact_evidence = f"{system}\n{user_text}"
 
         def scoped_args(name: str, args: dict) -> dict:
             return _scope_project_tool_args(name, args, forced_project_slug)
@@ -831,6 +836,7 @@ class MiniMaxAgent:
                 return _ground_reply(
                     answer,
                     tool_results,
+                    allowed_text=contact_evidence,
                     trace_sink=trace_sink,
                 )
             if not calls:
@@ -884,7 +890,12 @@ class MiniMaxAgent:
                     final_reply = _drop_dangling_tail(final_reply)
                 if authority_tool_dispatched:
                     final_reply = _ground_active_job_reply(final_reply, tool_results)
-                return _ground_reply(final_reply, tool_results, trace_sink=trace_sink)
+                return _ground_reply(
+                    final_reply,
+                    tool_results,
+                    allowed_text=contact_evidence,
+                    trace_sink=trace_sink,
+                )
             if metrics is not None:
                 metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
                 metrics["tool_rounds"] = metrics.get("tool_rounds", 0) + 1
@@ -1037,7 +1048,12 @@ class MiniMaxAgent:
             final = _ground_active_job_reply(str(final or ""), tool_results)
         # Apply the same deterministic authority boundary on loop exhaustion;
         # no third LLM rewrite call is needed.
-        return _ground_reply(final, tool_results, trace_sink=trace_sink)
+        return _ground_reply(
+            final,
+            tool_results,
+            allowed_text=contact_evidence,
+            trace_sink=trace_sink,
+        )
 
     async def direct(
         self,

@@ -14,6 +14,7 @@ from app.core.config import Settings, get_settings
 from app.services.integration_settings.cipher import IntegrationSettingsCipher
 from app.services.integration_settings.providers.facebook import FacebookSettingsMixin
 from app.services.integration_settings.providers.llm import LlmSettingsMixin
+from app.services.integration_settings.providers.tingting import TingtingSettingsMixin
 from app.services.integration_settings.providers.zalo import ZaloSettingsMixin
 from app.services.integration_settings.storage import StorageMixin
 
@@ -23,6 +24,7 @@ class IntegrationSettingsService(
     ZaloSettingsMixin,
     LlmSettingsMixin,
     FacebookSettingsMixin,
+    TingtingSettingsMixin,
 ):
     """Resolve / admin-view / persist integration credentials per provider group."""
 

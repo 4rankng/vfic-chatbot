@@ -1,6 +1,7 @@
 import {
   Bot,
   Brain,
+  KeyRound,
   MessageCircle,
   MessagesSquare,
   UsersRound,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react";
 
 /**
- * Settings navigation: the six entries of the console rail and the header copy
+ * Settings navigation: the seven entries of the console rail and the header copy
  * each one shows. Kept free of JSX so the rail, the mobile drawer and the
  * header all read one source.
  */
@@ -19,6 +20,7 @@ export type SettingsItemId =
   | "settings-facebook-messenger"
   | "settings-llm-providers"
   | "settings-jev"
+  | "settings-tingting"
   | "settings-agents"
   | "settings-users";
 
@@ -53,6 +55,12 @@ export const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     label: "Jev",
     description: "Mô hình quyết định",
     Icon: Brain,
+  },
+  {
+    itemId: "settings-tingting",
+    label: "TingTing",
+    description: "Đặt lại mật khẩu",
+    Icon: KeyRound,
   },
   {
     itemId: "settings-agents",
@@ -92,6 +100,12 @@ export const SETTINGS_VIEW_COPY: Record<
     kicker: "Nhà cung cấp AI",
     title: "Jev",
     description: "Mô hình quyết định System One cho bot.",
+  },
+  "settings-tingting": {
+    kicker: "Tích hợp",
+    title: "TingTing · Đặt lại mật khẩu",
+    description:
+      "API key dùng để tra cứu nhân sự và gửi OTP đặt lại mật khẩu qua TingTing.",
   },
   "settings-agents": {
     kicker: "Không gian cài đặt",

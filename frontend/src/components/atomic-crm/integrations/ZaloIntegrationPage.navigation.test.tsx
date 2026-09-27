@@ -126,6 +126,15 @@ vi.mock("./api", () => ({
     testCustomLlmConnection: vi.fn(),
     saveJevSettings: vi.fn(),
     testJevConnection: vi.fn(),
+    loadTingtingSettings: vi.fn(() =>
+      Promise.resolve({
+        api_key: { configured: false, preview: null },
+        configured: false,
+        base_url: "https://api.tingting.vn",
+        auth_header: "X-API-Key",
+      }),
+    ),
+    saveTingtingSettings: vi.fn(),
   },
   facebookIntegrationGateway: {
     loadStatus: mocks.loadFacebookStatus,
@@ -764,6 +773,46 @@ describe("ZaloIntegrationPage provider sections", () => {
       .poll(() => mocks.notify.mock.calls)
       .toEqual([["Đã lưu thay đổi", { type: "success" }]]);
     // The saved response is the panel's new truth: no pending edit remains.
+    await expect
+      .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
+      .toBeDisabled();
+  });
+
+  it("opens the TingTing panel so an admin can save the reset API key", async () => {
+    mocks.isMobile = false;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <ZaloIntegrationPage />
+      </QueryClientProvider>,
+    );
+
+    await expect
+      .element(screen.getByRole("button", { name: "Zalo", exact: true }))
+      .toBeVisible();
+    const tingtingButton = Array.from(
+      screen.container.querySelectorAll<HTMLButtonElement>(
+        ".settings-side-nav-link",
+      ),
+    ).find((button) => button.textContent?.includes("TingTing"));
+    expect(tingtingButton).toBeDefined();
+    tingtingButton?.click();
+
+    await expect
+      .element(
+        screen.getByRole("heading", {
+          name: "TingTing · Đặt lại mật khẩu",
+          exact: true,
+        }),
+      )
+      .toBeVisible();
+    // The key field is the only configuration surface for the reset flow, and a
+    // blank field means "keep stored", so saving stays disabled until it is typed.
+    await expect
+      .element(screen.getByRole("textbox", { name: "API key TingTing" }))
+      .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Lưu thay đổi" }))
       .toBeDisabled();

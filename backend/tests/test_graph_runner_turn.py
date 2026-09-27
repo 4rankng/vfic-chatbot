@@ -2136,10 +2136,178 @@ async def test_rag_vacancy_salary_followup_scopes_knowledge_query_to_vacancy_thr
     assert captured["allowed_tools"] == (
         "get_product_features",
         "search_knowledge",
-        "call_project_api",
     )
     assert "lG tràng duệ" in str(captured["lookup_query"])
     assert query in str(captured["lookup_query"])
+    assert "required_tool" not in captured
+
+
+@pytest.mark.asyncio
+async def test_agent_turn_injects_the_tingting_guide_without_project_focus(monkeypatch):
+    """The reset guide must reach the prompt with no project selected.
+
+    Regression: the API guide was gated behind a FOCUSED project, so an employee
+    asking to reset a TingTing password never saw the endpoints — the turn
+    refused ("ngoài phạm vi") and invented an IT hotline instead.
+    """
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "safe reply"
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True)
+    )
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="quên mật khẩu app"),
+        deps,
+        "quên mật khẩu app",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+    )
+
+    system = str(captured["system"])
+    assert "=== API TINGTING" in system
+    assert "/api/v1/integration/password-reset/otp" in system
+    assert captured["allowed_tools"] == ("call_tingting_api", "search_knowledge")
+
+
+@pytest.mark.asyncio
+async def test_agent_turn_omits_the_tingting_guide_when_unconfigured(monkeypatch):
+    """No key configured → no endpoint instructions, so no unfulfillable promise."""
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "safe reply"
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=False)
+    )
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="quên mật khẩu app"),
+        deps,
+        "quên mật khẩu app",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+    )
+
+    assert "API TINGTING" not in str(captured["system"])
+
+
+@pytest.mark.asyncio
+async def test_focused_support_turn_keeps_the_project_api_tool(monkeypatch):
+    """A focused RAG turn must not collapse an API turn to ``search_knowledge``.
+
+    The focused branch binds one Project-owned knowledge authority; an
+    employee-support turn has to keep ``call_tingting_api`` or the verified reset
+    flow can never run. The knowledge tool must also not be *forced*, so the
+    model is free to start with the identity lookup.
+    """
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "safe reply"
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True)
+    )
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="em quên mật khẩu"),
+        deps,
+        "em quên mật khẩu",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.95),
+        project_context=ProjectTurnContext(
+            state="FOCUSED",
+            project_id="p1",
+            project_slug="lg-display",
+            project_name="LG Display",
+            knowledge_mode="RAG",
+        ),
+    )
+
+    assert captured["allowed_tools"] == ("call_tingting_api", "search_knowledge")
+    assert captured["forced_project_slug"] == "lg-display"
     assert "required_tool" not in captured
 
 

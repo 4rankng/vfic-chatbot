@@ -235,16 +235,13 @@ class GraphRetrievalPort(
     async def job_features_for_project(self, project_id: Any) -> list[Any]: ...
     async def income_summary_for_active_projects(self) -> list[Any]: ...
 
-    # Per-project external API integration (admin-managed). The catalog is the
-    # admin-written guide the agent reads; the call method resolves the project
-    # and performs exactly one outbound request against that project's fixed
-    # origin. Declared here because the external API is project surface, not a
-    # bounded-context knowledge query.
-    async def project_external_api_catalog(self, project_slug: str | None) -> list[Any]: ...
-    async def call_project_external_api(
+    # Deployment-wide TingTing password-reset integration (settings-managed).
+    # Not project surface: the origin and key come from the integration settings
+    # and one workflow serves every tenant, so the tool takes no project scope.
+    async def tingting_api_configured(self) -> bool: ...
+    async def call_tingting_api(
         self,
         *,
-        project_slug: str | None,
         method: str,
         path: str,
         params: dict | None,

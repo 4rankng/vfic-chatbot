@@ -45,6 +45,7 @@ DecisionTraceSummaryCode = Literal[
     "vacancy_terms",
     "recommendation_terms",
     "job_detail_terms",
+    "employee_support_terms",
     "phone_number",
     "profile_terms",
     "fallback",
@@ -112,6 +113,7 @@ _DECISION_CODE_SUMMARIES: dict[str, frozenset[str]] = {
             "vacancy_terms",
             "recommendation_terms",
             "job_detail_terms",
+            "employee_support_terms",
             "phone_number",
             "profile_terms",
             "fallback",
@@ -132,7 +134,7 @@ _DECISION_CODE_SUMMARIES: dict[str, frozenset[str]] = {
             "recommend_jobs",
             "search_bus_timetable",
             "get_product_features",
-        }
+                }
     ),
     "safety_verdict": frozenset(
         {"passed", "blocklist_redirect", "risk_redirect", "truncated", "empty_after_clean"}

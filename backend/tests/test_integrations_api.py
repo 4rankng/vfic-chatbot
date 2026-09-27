@@ -547,3 +547,70 @@ async def test_custom_llm_test_error_is_never_raised_only_reported(monkeypatch):
     # otherwise the operator cannot tell which credential was rejected.
     assert result.error and result.error.startswith("HTTP 401: bad sk-stored-secret")
     assert "Access Token đã lưu" in result.error
+
+
+# ---------------------------------------------------------------------------
+# TingTing app API: GET/PUT /tingting
+# ---------------------------------------------------------------------------
+
+
+class _TingtingService:
+    settings = Settings(app_env="development")
+    stored: dict | None = None
+    last_update: dict | None = None
+
+    def __init__(self, _db) -> None:
+        pass
+
+    async def admin_tingting_view(self) -> dict:
+        return _TingtingService.stored or {
+            "api_key": {"configured": False, "preview": None},
+            "configured": False,
+            "base_url": "https://tingting.vip/api/v1",
+            "auth_header": "X-API-Key",
+        }
+
+    async def update_tingting(self, values: dict, *, actor_id) -> dict:  # noqa: ANN001
+        _TingtingService.last_update = {"values": values, "actor_id": actor_id}
+        configured = bool(values.get("api_key"))
+        _TingtingService.stored = {
+            "api_key": {
+                "configured": configured,
+                "preview": f"{len(values['api_key'])} ký tự" if configured else None,
+            },
+            "configured": configured,
+            "base_url": "https://tingting.vip/api/v1",
+            "auth_header": "X-API-Key",
+        }
+        return _TingtingService.stored
+
+
+async def test_tingting_settings_get_reports_status_only(monkeypatch):
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _TingtingService)
+    _TingtingService.stored = None
+
+    result = await integrations.get_tingting_integration_settings(
+        _admin=object(), db=object()
+    )
+
+    assert result.configured is False
+    assert result.api_key.configured is False
+    assert result.auth_header == "X-API-Key"
+
+
+async def test_tingting_settings_put_stores_the_key_for_the_actor(monkeypatch):
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _TingtingService)
+    admin = types.SimpleNamespace(id=uuid.uuid4())
+
+    result = await integrations.update_tingting_integration_settings(
+        body=integrations.TingtingIntegrationSettingsUpdate(api_key="ttk_live_key"),
+        admin=admin,
+        db=object(),
+    )
+
+    assert result.configured is True
+    assert result.api_key.configured is True
+    assert _TingtingService.last_update == {
+        "values": {"api_key": "ttk_live_key"},
+        "actor_id": admin.id,
+    }

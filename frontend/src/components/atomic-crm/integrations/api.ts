@@ -89,6 +89,23 @@ export type JevSettings = {
   jev_usable: boolean;
 };
 
+/**
+ * TingTing password-reset integration: one deployment-wide API key sent as the
+ * `auth_header` (X-API-Key) on every lookup/OTP request. `configured` is the
+ * overall readiness flag; `api_key.configured` states the key itself.
+ */
+export type TingtingSettings = {
+  api_key: SecretStatus;
+  configured: boolean;
+  base_url: string;
+  auth_header: string;
+};
+
+/** PUT body: omit to keep the stored key, "" to clear it, a value to store it. */
+export type TingtingSettingsUpdate = {
+  api_key?: string;
+};
+
 export type ZaloChannelTestResult = {
   configured: boolean;
   connected: boolean;
@@ -296,6 +313,17 @@ export const zaloIntegrationGateway = {
   testJevConnection: async (): Promise<ProviderTestResult> =>
     apiJson<ProviderTestResult>(`${ADMIN_INTEGRATIONS_BASE_PATH}/jev/test`, {
       method: "POST",
+    }),
+
+  loadTingtingSettings: async (): Promise<TingtingSettings> =>
+    apiJson<TingtingSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/tingting`),
+
+  saveTingtingSettings: async (
+    body: TingtingSettingsUpdate,
+  ): Promise<TingtingSettings> =>
+    apiJson<TingtingSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/tingting`, {
+      method: "PUT",
+      body,
     }),
 } as const;
 

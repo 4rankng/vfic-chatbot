@@ -43,6 +43,8 @@ from app.schemas.integrations import (
     OpenRouterIntegrationSettingsOut,
     OpenRouterIntegrationSettingsUpdate,
     OpenRouterIntegrationTestOut,
+    TingtingIntegrationSettingsOut,
+    TingtingIntegrationSettingsUpdate,
     ZaloChannelTestOut,
     ZaloIntegrationSettingsOut,
     ZaloIntegrationSettingsUpdate,
@@ -328,6 +330,32 @@ async def test_jev_integration_settings(
     being saved; anything omitted falls back to the stored configuration.
     """
     return await probe_jev(body, db)
+
+
+@router.get("/tingting", response_model=TingtingIntegrationSettingsOut)
+async def get_tingting_integration_settings(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> TingtingIntegrationSettingsOut:
+    """The deployment-wide TingTing app API key (status only, never the value)."""
+    return TingtingIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_tingting_view()
+    )
+
+
+@router.put("/tingting", response_model=TingtingIntegrationSettingsOut)
+async def update_tingting_integration_settings(
+    body: TingtingIntegrationSettingsUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> TingtingIntegrationSettingsOut:
+    await IntegrationSettingsService(db).update_tingting(
+        body.model_dump(exclude_unset=True),
+        actor_id=admin.id,
+    )
+    return TingtingIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_tingting_view()
+    )
 
 
 @router.post("/custom-llm/test", response_model=CustomLlmIntegrationTestOut)

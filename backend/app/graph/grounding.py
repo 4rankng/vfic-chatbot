@@ -352,6 +352,60 @@ def validate_entity_grounding(
     return unsupported, reply
 
 
+# ── Contact-channel grounding ───────────────────────────────────────────────
+# A wrong phone number costs more than a missing one: a candidate who calls an
+# invented hotline is worse served than one who reads "chưa có thông tin". The
+# prompt forbids inventing contact channels; this is the deterministic backstop
+# for the observed failure where an off-scope refusal fabricated an "internal IT
+# hotline" and an IT e-mail that no source ever contained.
+# Separator runs are allowed between digit groups — "(0251) 543-6789" is one
+# number, and a single separator slot would stop the match at "(0251)".
+_PHONE_CANDIDATE_RE = re.compile(
+    r"(?<![\d])(?:\+?84|0)(?:[\s.\-()]{0,3}\d){8,11}(?!\d)"
+)
+_EMAIL_CANDIDATE_RE = re.compile(r"(?<![\w.\-])[\w.\-+]+@[\w\-]+(?:\.[\w\-]+)+")
+# Replaces the whole reply, not the offending line: an answer built on an
+# invented channel is unusable even after the number is removed.
+UNVERIFIED_CONTACT_REPLY = (
+    "Dạ phần này em chưa có thông tin đã xác minh để gửi anh/chị ạ. "
+    "Anh/chị để lại số điện thoại, em kiểm tra rồi liên hệ hỗ trợ ngay ạ."
+)
+
+
+def _normalize_phone(raw: str) -> str:
+    """Digits only, with the ``+84`` country code folded onto the local ``0``."""
+    digits = re.sub(r"\D", "", raw or "")
+    if digits.startswith("84") and len(digits) > 9:
+        digits = "0" + digits[2:]
+    return digits
+
+
+def extract_contact_channels(text: str) -> frozenset[str]:
+    """Phone numbers (normalized to digits) and lowercased e-mail addresses."""
+    channels: set[str] = set()
+    for match in _PHONE_CANDIDATE_RE.finditer(text or ""):
+        digits = _normalize_phone(match.group(0))
+        if len(digits) >= 9:
+            channels.add(digits)
+    for match in _EMAIL_CANDIDATE_RE.finditer(text or ""):
+        channels.add(match.group(0).lower())
+    return frozenset(channels)
+
+
+def validate_contact_grounding(reply: str, evidence: str) -> frozenset[str]:
+    """Contact channels the reply states that the turn's evidence never contained.
+
+    ``evidence`` is the text the model was actually given: tool results plus the
+    system prompt and the candidate's own message. A channel present there (a KB
+    hotline, the API guide's support e-mail, the candidate's number) passes; any
+    other number or address in the reply is an invention.
+    """
+    stated = extract_contact_channels(reply)
+    if not stated:
+        return frozenset()
+    return frozenset(stated - extract_contact_channels(evidence))
+
+
 # ── Active-job authority replies ─────────────────────────────────────────────
 # The single owner of reply authority for ``list_active_jobs`` turns: trusted
 # payload validation plus the fail-closed renderers the agent loop calls. Moved
@@ -389,12 +443,24 @@ def active_job_safe_reply(tool_result: object) -> str | None:
     return safe_reply.strip()
 
 
-def ground_reply(reply: str, tool_results: list[str], *, trace_sink=None) -> str:
+def ground_reply(
+    reply: str,
+    tool_results: list[str],
+    *,
+    allowed_text: str = "",
+    trace_sink=None,
+) -> str:
     """Validate LLM prose against surfaced evidence without replacing it.
 
     Structured job payloads inform the model but never become a separately
     rendered final answer. This keeps every normal recruitment answer on the
     LLM route while retaining the job-ID hallucination guard.
+
+    ``allowed_text`` is the prompt text the model worked from (system prompt +
+    the candidate's message). Callers that pass it also arm the contact-channel
+    guard: a phone number or e-mail the reply states without support in the tool
+    results or that prompt text is an invention and the reply is replaced by
+    :data:`UNVERIFIED_CONTACT_REPLY`.
     """
     for tool_result in reversed(tool_results or []):
         first_line = str(tool_result).partition("\n")[0]
@@ -413,17 +479,29 @@ def ground_reply(reply: str, tool_results: list[str], *, trace_sink=None) -> str
         surfaced = extract_surfaced_job_ids(tool_results)
         surfaced_entities = extract_surfaced_entities(tool_results)
         result = validate_grounding(reply, surfaced, surfaced_entities)
+        sanitized = False
         if not result.is_grounded:
-            if trace_sink is not None:
-                trace_sink.record_decision("grounding_verdict", "sanitized")
+            sanitized = True
             logger.warning(
                 "grounding_hallucination_stripped: %s cited ids, %s unsupported entities",
                 len(result.hallucinated_ids),
                 len(result.unsupported_entities),
             )
-            return result.sanitized_reply
+            reply = result.sanitized_reply
+        if allowed_text:
+            evidence = "\n".join(str(r or "") for r in tool_results or []) + "\n" + allowed_text
+            unverified = validate_contact_grounding(reply, evidence)
+            if unverified:
+                if trace_sink is not None:
+                    trace_sink.record_decision("grounding_verdict", "sanitized")
+                logger.warning(
+                    "grounding_contact_unverified: %s channel(s)", len(unverified)
+                )
+                return UNVERIFIED_CONTACT_REPLY
         if trace_sink is not None:
-            trace_sink.record_decision("grounding_verdict", "grounded")
+            trace_sink.record_decision(
+                "grounding_verdict", "sanitized" if sanitized else "grounded"
+            )
         return reply
     except Exception:  # noqa: BLE001
         if trace_sink is not None:

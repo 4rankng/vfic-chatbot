@@ -44,7 +44,8 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 2,
     "conversations": 19,
     "dashboard": 2,
-    "integrations": 31,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints
+    "integrations": 33,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints
+    # +2 deployment-wide TingTing app API key (GET / PUT, secrets status-only)
     # +2 Meta App credentials UI; +4 multi-Page per-Page project CRUD
     # +1 admin-only credentials reveal (audited, no-store)
     "installation": 8,
@@ -58,11 +59,11 @@ EXPECTED_ROUTE_COUNTS = {
     # +4 single-page external-source-sync endpoints
     # +2 project external-API endpoints (get / put)
     # +1 project external-API admin test-call endpoint (post)
-    "projects": 31,
+    "projects": 28,
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "4cab676955f026b833b42d51b7ede0152ed35b86b096a5961b028ea94ecf757d"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "7c5bca34cfa801802a344a2b35f429d4434e25b7713b8e7374fa05f9442c84a3"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -112,7 +113,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # single `client.request`). The module imports `get_http_client`, so the
     # whole file is classified provider transport; keeping the outbound call in
     # one private method is what keeps this at one reviewed row.
-    "provider_boundary": 83,
+    # +2: the deployment-wide TingTing integration adds app/services/tingting_api.py.
+    # That module imports get_http_client, so the whole file is provider transport:
+    # one reviewed egress row (TingtingApiService._send's single `client.request`)
+    # plus its two `db.get` configuration reads — but the per-project integration
+    # (-1 row: its egress site) was retired with the section it configured.
+    "provider_boundary": 85,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -150,7 +156,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "7cb23af470ca285a82cd3da3a74e13fd01a1aa802739421cf4be326692e14250"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "eed2897dfa4a0a099c499650e9ae0353fa860580ce89b89602e4af810b9e3dbf"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

@@ -9,6 +9,6 @@ permissions belong in `.claude/settings.local.json` and must not be committed.
 
 ## OpenWiki
 
-See [AGENTS.md](AGENTS.md) for OpenWiki agent instructions.
+@AGENTS.md
 
 <!-- OPENWIKI:END -->

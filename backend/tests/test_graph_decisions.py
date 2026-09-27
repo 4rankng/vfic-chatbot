@@ -22,7 +22,7 @@ from app.graph.decisions import (
     build_turn_state,
 )
 from app.graph.ports import TurnDecisions
-from app.graph.router import route_from_decisions, should_use_fast_model
+from app.graph.router import routing_instruction, route_from_decisions, should_use_fast_model
 from app.services.integration_settings import JevRuntimeConfig
 
 _KEY = "test-key"
@@ -109,6 +109,7 @@ async def test_questions_match_contract() -> None:
         "timetable",
         "contact",
         "faq_detail",
+        "employee_support",
         "out_of_scope",
         "general",
     }
@@ -143,6 +144,33 @@ async def test_route_contact_info_upgrades_general() -> None:
     route = route_from_decisions("0901234567", decisions)
     assert route.intent == "profile_update"
     assert route.reason == "phone_number"
+
+
+async def test_route_employee_support_binds_the_tingting_api_tool() -> None:
+    """A payroll password reset must reach the TingTing API tool, not a refusal."""
+    route = route_from_decisions(
+        "em quên mật khẩu payroll, không nhận được OTP",
+        TurnDecisions(intent="employee_support", intent_confidence=0.93),
+    )
+    assert route.strategy == "knowledge_lookup"
+    assert route.tools == ("call_tingting_api", "search_knowledge")
+    assert route.reason == "employee_support_terms"
+    hint = routing_instruction(route)
+    assert "API TINGTING" in hint
+    assert "call_tingting_api" in hint
+    assert "XÁC MINH DANH TÍNH" in hint
+    # The refusal script must not survive into an in-scope support turn.
+    assert "Từ chối" not in hint
+
+
+async def test_out_of_scope_hint_checks_the_tingting_guide_before_refusing() -> None:
+    route = route_from_decisions(
+        "anh cần đổi mật khẩu hệ thống nhà máy", TurnDecisions(intent="out_of_scope")
+    )
+    hint = routing_instruction(route)
+    assert "API TINGTING" in hint
+    assert "call_tingting_api" in hint
+    assert "TRƯỚC KHI TỪ CHỐI" in hint
 
 
 async def test_route_out_of_scope() -> None:

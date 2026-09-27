@@ -65,6 +65,7 @@ _DISPATCHED = {
     "search_bus_timetable",
     "get_product_features",
     "call_project_api",
+    "call_tingting_api",
 }
 
 

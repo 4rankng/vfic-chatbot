@@ -295,6 +295,26 @@ class JevIntegrationTestOut(BaseModel):
     error: str | None = None
 
 
+# ─── TingTing app API (employee password reset) ─────────────────────────────
+# Deployment-wide, not per-project: one API key authenticates the reset flow for
+# every tenant, and the workflow guide is embedded in the backend, so the admin
+# configures exactly one secret.
+
+
+class TingtingIntegrationSettingsOut(BaseModel):
+    api_key: SecretStatus
+    # True only when a usable key is stored — the gate for the embedded guide.
+    configured: bool
+    base_url: str
+    auth_header: str
+
+
+class TingtingIntegrationSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+
+
 # ─── Facebook / Messenger (Phase 4) ─────────────────────────────────────────
 # Privacy contract: no Page token, app secret, or raw PSID ever appears in
 # these responses. Page ids are surfaced as a masked suffix only; the safe

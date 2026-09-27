@@ -11,6 +11,7 @@ import {
 } from "./presentation/EmbeddedSettingsSections";
 import { JevSection } from "./presentation/JevSection";
 import { LlmProvidersSection } from "./presentation/LlmProvidersSection";
+import { TingtingSection } from "./presentation/TingtingSection";
 import {
   SettingsChrome,
   SettingsWorkspace,
@@ -22,7 +23,7 @@ import {
 } from "./presentation/settingsNav";
 
 /**
- * The Settings resource: a console shell that switches between six section
+ * The Settings resource: a console shell that switches between seven section
  * views. Each view owns its own state and actions; this page only decides which
  * one is on screen and where the OAuth callback should land.
  */
@@ -81,6 +82,8 @@ export const ZaloIntegrationPage = () => {
             statusState={settings.statusState}
           />
         );
+      case "settings-tingting":
+        return <TingtingSection />;
       case "settings-agents":
         return <AgentsSettingsSection />;
       case "settings-users":

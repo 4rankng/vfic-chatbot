@@ -6,6 +6,7 @@ import jevSource from "./presentation/JevSection.tsx?raw";
 import llmProvidersSource from "./presentation/LlmProvidersSection.tsx?raw";
 import providerFieldSource from "./presentation/ProviderField.tsx?raw";
 import secretFieldSource from "./presentation/SecretField.tsx?raw";
+import tingtingSource from "./presentation/TingtingSection.tsx?raw";
 import chromeSource from "./presentation/SettingsChrome.tsx?raw";
 import groupSource from "./presentation/SettingsGroup.tsx?raw";
 import zaloChannelSource from "./presentation/ZaloChannelSection.tsx?raw";
@@ -25,6 +26,7 @@ const settingsSource = [
   zaloChannelSource,
   llmProvidersSource,
   jevSource,
+  tingtingSource,
   embeddedSectionsSource,
 ].join("\n");
 

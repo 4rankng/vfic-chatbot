@@ -62,7 +62,6 @@ def _scope_project_tool_args(name: str, args: dict, project_slug: str | None) ->
         "search_knowledge",
         "list_active_jobs",
         "get_product_features",
-        "call_project_api",
     }:
         scoped["project_slug"] = project_slug
     return scoped

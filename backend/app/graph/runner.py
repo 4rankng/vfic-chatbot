@@ -68,8 +68,9 @@ from app.recruitment.domain.provider import (
     provider_from_conversation,
     recipient_from_conversation,
 )
-from app.graph.think_strip import strip_think_reasoning, visible_offset
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
+from app.graph.think_strip import strip_think_reasoning, visible_offset
+from app.graph.tingting_guide import tingting_api_prompt_block
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
 from app.shared.domain.text import normalize_vietnamese_text
 
@@ -250,26 +251,6 @@ def _remaining(state: BotRunState) -> float:
     if state.deadline_at_epoch <= 0:
         return float("inf")
     return state.deadline_at_epoch - time.time()
-
-
-def _external_api_prompt_block(catalog: list[Any]) -> str:
-    """Render the admin-written external API guide for the prompt.
-
-    The base URL, auth header and sealed key never enter the prompt: the model
-    only needs the guide (which endpoints exist and how to call them) plus the
-    tool contract, and the origin is fixed on this side.
-    """
-    lines = [
-        "=== API NGOÀI CỦA DỰ ÁN ===",
-        "Khi người dùng cần thao tác với hệ thống ngoài của dự án (ví dụ không nhận được mã "
-        "OTP đặt lại mật khẩu), hãy đọc hướng dẫn dưới đây rồi gọi "
-        "call_project_api(method, path, params) theo đúng bước cần làm. Chỉ dùng method GET "
-        "hoặc POST và path bắt đầu bằng /; chỉ nói lại đúng kết quả tool trả về.",
-    ]
-    for row in catalog:
-        lines.append(f"--- Dự án: {row.name} (slug: {row.slug}) ---")
-        lines.append(row.guide.strip())
-    return "\n".join(lines)
 
 
 def _zalo_for_conversation(deps: GraphDeps, conv):
@@ -493,23 +474,39 @@ async def _agent_turn(
                 "Không được dùng dữ liệu chi tiết của dự án khác. Câu trả lời cuối cùng "
                 "phải do bạn diễn đạt từ bằng chứng tool trả về."
             )
-            # One indexed read, no cache: an admin edit takes effect next turn.
-            # Optional enrichment — the concrete port always implements it, but
-            # the unit lane's runner doubles are bare objects, so a missing
-            # reader just leaves the block out instead of failing the turn.
-            catalog_reader = getattr(
-                deps.retrieval, "project_external_api_catalog", None
-            )
-            if catalog_reader is not None:
-                external_api_catalog = await catalog_reader(project_context.project_slug)
-                if external_api_catalog:
-                    system += "\n\n" + _external_api_prompt_block(external_api_catalog)
         else:
             system += (
                 "\n\n=== CHẾ ĐỘ KHÁM PHÁ ===\n"
                 "Ứng viên chưa chọn dự án. Chỉ dùng danh mục dự án và việc làm đang hoạt động "
                 "để gợi ý một nhóm nhỏ phù hợp; không tải kiến thức chi tiết của mọi dự án."
             )
+
+    # Never print a guide for a tool this turn cannot bind: an installation
+    # without the knowledge capability lacks the API tools, and pointing the model
+    # at endpoints it cannot reach reads as an invitation to invent one.
+    api_tool_registry = getattr(manifest_policy, "tool_registry", None)
+
+    def _api_tool_bindable(name: str) -> bool:
+        if manifest_policy is None:
+            return True
+        return bool(getattr(api_tool_registry, "allows", lambda _name: True)(name))
+
+    # The TingTing reset flow is deployment-wide, so its embedded guide goes in
+    # regardless of project focus — the employee needs no project to reset a
+    # password, and a guide the model never sees is one it will replace with an
+    # invented hotline. One primary-key read per turn; absent port = absent block.
+    if _api_tool_bindable("call_tingting_api"):
+        configured_reader = getattr(deps.retrieval, "tingting_api_configured", None)
+        if configured_reader is not None:
+            try:
+                tingting_configured = await configured_reader()
+            except Exception as exc:  # noqa: BLE001 — a prompt gate must never break a turn
+                logger.warning(
+                    "tingting api configured-read failed error_type=%s", type(exc).__name__
+                )
+                tingting_configured = False
+            if tingting_configured:
+                system += "\n\n" + tingting_api_prompt_block()
     if timings is not None:
         timings["system_prompt_ms"] = int(round((time.monotonic() - sys_t0) * 1000))
         timings["system_prompt_cache_hit"] = sys_prompt_hit
@@ -568,11 +565,27 @@ async def _agent_turn(
         and project_context.state == "FOCUSED"
         and project_context.knowledge_mode == "RAG"
     )
+    employee_support = route.intent == "employee_support"
     if focused_rag:
+        # An employee-support turn is a tool turn, never a knowledge-only turn:
+        # keep ``call_tingting_api`` bound instead of collapsing to the project
+        # knowledge authority, or the reset flow can never start.
+        if employee_support:
+            allowed_tools = tuple(
+                name
+                for name in ("call_tingting_api", "search_knowledge")
+                if resolved_tool_registry is None or name in resolved_tool_registry
+            )
         authority_tool = (
-            "list_active_jobs" if vacancy_catalog_required else "search_knowledge"
+            None
+            if employee_support
+            else "list_active_jobs" if vacancy_catalog_required else "search_knowledge"
         )
-        if resolved_tool_registry is not None and authority_tool not in resolved_tool_registry:
+        if (
+            authority_tool is not None
+            and resolved_tool_registry is not None
+            and authority_tool not in resolved_tool_registry
+        ):
             return await deps.agent.direct(
                 user_text,
                 **_with_optional_trace(
@@ -588,9 +601,10 @@ async def _agent_turn(
                     trace_sink,
                 ),
             )
-        # Detailed Project answers use only the Project-owned category authority.
-        # This also keeps legacy global timetable/project tools out of a focused turn.
-        allowed_tools = (authority_tool,)
+        if authority_tool is not None:
+            # Detailed Project answers use only the Project-owned category authority.
+            # This also keeps legacy global timetable/project tools out of a focused turn.
+            allowed_tools = (authority_tool,)
     # Model tier (Phase 5): low-complexity strategies use the fast model when one
     # is configured. ``should_use_fast_model`` encodes eligibility; the agent no-ops
     # the switch when no fast model was injected (tests / un-configured deployments).
@@ -664,8 +678,12 @@ async def _agent_turn(
         "lookup_query": evidence_query or user_text,
         "metrics": timings,
     }
-    if focused_rag and not vacancy_catalog_required:
-        agent_kwargs["forced_project_slug"] = project_context.project_slug
+    # ``forced_project_slug`` scopes the knowledge prefetch (and any project-keyed
+    # tool); a focused project names its knowledge base exactly, so a turn never
+    # has to ask which project a lookup belongs to.
+    project_slug = getattr(project_context, "project_slug", None)
+    if project_slug and (employee_support or (focused_rag and not vacancy_catalog_required)):
+        agent_kwargs["forced_project_slug"] = project_slug
     if vacancy_catalog_required:
         agent_kwargs["required_tool"] = "list_active_jobs"
         required_args = _vacancy_required_args(decisions)
@@ -673,7 +691,7 @@ async def _agent_turn(
     elif compare_income_required_args is not None:
         agent_kwargs["required_tool"] = "compare_income"
         agent_kwargs["required_tool_args"] = compare_income_required_args
-    elif focused_rag:
+    elif focused_rag and not employee_support:
         agent_kwargs["required_tool"] = "search_knowledge"
         agent_kwargs["required_tool_args"] = {
             "query": evidence_query or user_text,
@@ -1065,7 +1083,13 @@ async def _resolve_lane(
         )
 
     direct_context = project_context.direct_context if project_context is not None else None
-    if direct_context is not None and turn_route.reason != "vacancy_listing":
+    # The direct-context lane carries no tool calls, so it can never reach the
+    # project's API: an employee-support turn must run on the agent lane.
+    if (
+        direct_context is not None
+        and turn_route.reason != "vacancy_listing"
+        and turn_route.intent != "employee_support"
+    ):
         trace_sink.record_decision("context_selected", "direct_context")
         trace_sink.record_decision("lane_selected", "direct_context")
         raw = await _direct_context_turn(
@@ -1437,7 +1461,16 @@ async def _await_first_bubble(
             continue
         first_bubble_ms = int(round((time.monotonic() - t0) * 1000))
         bubble_text = _finalize_user_visible_reply(
-            ground_reply(visible_bubble, list(stream.evidence), trace_sink=trace_sink),
+            ground_reply(
+                visible_bubble,
+                list(stream.evidence),
+                # The system prompt is not in scope on this path, so only the
+                # candidate's own message whitelists contact channels. A channel
+                # the persona or the API guide contained is re-stated only after
+                # the tool that surfaced it, which is in ``stream.evidence``.
+                allowed_text=state.user_text,
+                trace_sink=trace_sink,
+            ),
             deps=deps,
             generated=True,
             user_text=state.user_text,
@@ -1615,7 +1648,15 @@ async def _complete_progressive_prefix(
     timings["progressive_bubbles"] = 2
     # Ground the remainder against the full evidence exactly as the bubble was
     # grounded: each part passes the same job-id/entity guard, independently.
-    return ground_reply(remainder_raw, list(stream.evidence), trace_sink=trace_sink), None
+    return (
+        ground_reply(
+            remainder_raw,
+            list(stream.evidence),
+            allowed_text=state.user_text,
+            trace_sink=trace_sink,
+        ),
+        None,
+    )
 
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:

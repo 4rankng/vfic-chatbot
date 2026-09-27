@@ -44,11 +44,11 @@ class Project(Base):
         Boolean, nullable=False, default=False, server_default=text("false")
     )
     category_cutover_snapshot: Mapped[dict | None] = mapped_column(JSONB)
-    # Per-project external API integration (admin-managed): base URL, auth
-    # header/scheme, an AES-GCM sealed API key, and the callable endpoint
-    # catalog the bot may reach through ``call_project_api``. Nullable — no row
-    # means "not configured". Never exposed through the project CRUD routes
-    # (``ProjectOut``/``ProjectUpdate`` carry no field for it).
+    # RETIRED COLUMN: the per-project integration that wrote it (and the
+    # ``call_project_api`` tool that read it) was removed when the employee
+    # password-reset flow moved to the deployment-wide TingTing integration
+    # (ADR-0012). The nullable column stays because dropping it would be a
+    # destructive migration; nothing reads or writes it.
     external_api: Mapped[dict | None] = mapped_column(JSONB)
     category_cutover_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     active_kb_version_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -28,7 +28,7 @@ from app.graph.tools.catalog import (
     recommend_projects,
     search_bus_timetable,
 )
-from app.graph.tools.external_api import call_project_api
+from app.graph.tools.tingting_api import call_tingting_api
 from app.graph.tools.income import compare_income
 from app.graph.tools.jobs import (
     _active_job_tool_result,
@@ -51,12 +51,12 @@ TOOLS_REGISTRY = {
     "recommend_jobs": recommend_jobs,
     "search_bus_timetable": search_bus_timetable,
     "get_product_features": get_product_features,
-    "call_project_api": call_project_api,
+    "call_tingting_api": call_tingting_api,
 }
 
 __all__ = [
     "TOOLS_REGISTRY",
-    "call_project_api",
+    "call_tingting_api",
     "compare_income",
     "format_salary_range",
     "get_product_features",

@@ -1,6 +1,11 @@
 # ADR-0011: Per-project external API integration driven by an admin-written guide
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-0012. The employee password-reset flow this ADR was written for
+  turned out to be deployment-wide (the TingTing app API), so it moved to a global integration
+  with an embedded guide. The per-project mechanism was then removed at the product owner's
+  direction (settings panel deleted, then the endpoints/service/tool and its prompt injection) —
+  no project-scoped external API remains. `projects.external_api` survives as an unread column
+  because dropping it would be a destructive migration.
 - **Date:** 2026-09-26
 - **Decider:** Product owner / operator
 

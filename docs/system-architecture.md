@@ -1023,34 +1023,43 @@ No external APM (no Sentry/Datadog). Structured JSON logs to stdout with
 
 ---
 
-## 14. Per-project external API (outbound, admin-configured)
+## 14. Per-project external API — RETIRED
 
-The bot can perform one business operation against an employer's own system — today, resending a
-password-reset OTP — without any vendor code path. See ADR-0011 for the decision record.
+The per-project external API integration (ADR-0011) was removed when the employee password-reset
+flow became the deployment-wide TingTing integration of §14b: its project settings panel, the
+`GET`/`PUT`/`POST .../{id}/external-api` routes, `ProjectExternalApiService`, `call_project_api`
+(tool schema, registry entry, knowledge-capability grant, decision-trace literal, prefetch
+scoping) and its FOCUSED-turn prompt block are all gone. The shared boundary primitives now live
+in `app/services/external_api_core.py`, and `projects.external_api` survives only as an unread
+nullable column (dropping it would be a destructive migration).
 
-- **Storage:** one nullable JSONB column `projects.external_api` (migration `0056`): `enabled`,
-  `base_url`, `auth_header`, `auth_scheme`, the AES-GCM sealed key (`v2:` bound to
-  `project-external-api:<project id>`), and the admin-written `guide` (≤ 16 000 characters).
-- **Admin surface:** `GET`/`PUT /api/v1/knowledge/projects/{id}/external-api` plus
-  `POST /api/v1/knowledge/projects/{id}/external-api/test` — one real call through the stored
-  integration (same validation, dedupe/throttle and egress as the bot, rate-limited per admin) —
-  (admin only, `backend/app/api/projects.py` → `app.services.project.external_api`). The key is
-  write-only; the read surface returns `{configured, preview}` plus the `chatbot_readiness`
-  projection (`ready` + stable blocker codes) only, and `ProjectOut` carries no field for it. An
-  audit row `project_external_api_updated` is written on every replace.
-- **UI:** `frontend/src/components/atomic-crm/projects/ProjectExternalApiPanel.tsx`, rendered by
-  `ProjectEdit` for admins. The guide can be pasted or loaded from a `.md`/`.txt` file.
-- **Prompt:** `runner._external_api_prompt_block` appends `=== API NGOÀI CỦA DỰ ÁN ===` (name, slug,
-  guide) to the system prompt of a **FOCUSED** turn. The base URL, auth header and key never enter
-  the prompt.
-- **Tool:** `call_project_api(method, path, params)` (`app/graph/tools/external_api.py`) →
-  `RetrievalRepository.call_project_external_api` → `ProjectExternalApiService.invoke`. Project
-  scope: the focused slug, else the only enabled project, else `ambiguous` (the tool asks the
-  candidate which project), else `not_configured`.
-- **Boundary:** the origin is fixed by the admin and the model supplies only a relative path
-  (`/`-prefixed, no scheme, no `//`, no `..`, no `?`/`#`); methods are `GET`/`POST`; params are a
-  flat `str → str` map (≤ 10 × 200 chars). 8 s timeout, 4 000-character response cap, no response
-  body on a status ≥ 400, and a 60 s identical-params dedupe window plus a 60/60 s ceiling on
-  non-GET calls (fail-open when Redis is down).
-- **Capability:** `call_project_api` is granted through the `knowledge` capability, which is not
-  covered by `pack_contract_hash` — no revision re-pin is required.
+## 14b. TingTing app password reset (deployment-wide, embedded guide)
+
+The employee password-reset flow belongs to the TingTing app, not to a project, so it is its own
+deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this flow).
+
+- **Storage:** one encrypted `integration_settings` row `tingting_api_key` (AES-GCM). That is the
+  *only* thing the admin configures.
+- **Admin surface:** `GET`/`PUT /api/v1/admin/integrations/tingting` (admin only, status-only
+  response: `{api_key: {configured, preview}, configured, base_url, auth_header}`); an audit row
+  `update_tingting_integration_settings` is written on every replace. UI: the TingTing section in
+  the settings console (`frontend/src/components/atomic-crm/integrations/presentation/TingtingSection.tsx`).
+- **Origin:** `TINGTING_API_BASE_DEFAULT` (`https://tingting.vip/api/v1`) in
+  `app/services/tingting_api.py`, with a validated `Settings.tingting_api_base` override for
+  dev/smoke (a bad override falls back to the default). Never model-supplied.
+- **Prompt:** `runner` appends the embedded `=== API TINGTING: ĐẶT LẠI MẬT KHẨU NHÂN VIÊN ===`
+  block (`app/graph/tingting_guide.py`) whenever a usable key is stored — **independent of project
+  focus**, since no project is involved. The key never enters the prompt.
+- **Tool:** `call_tingting_api(method, path, params)` (`app/graph/tools/tingting_api.py`) →
+  `RetrievalRepository.call_tingting_api` → `TingtingApiService.invoke`; the `X-API-Key` header is
+  attached server-side. Same boundary as §14 (relative path only, `GET`/`POST`, flat bounded
+  params, 8 s timeout, 4 000-char cap, no error body, dedupe + ceiling, one egress site).
+- **Verification precondition:** the guide requires the employee's full name **and** CCCD **and**
+  mobile to match the `employee/lookup` response before the OTP endpoint may be called.
+- **Routing:** the `employee_support` intent binds `call_tingting_api` and instructs the model to
+  run the guide's steps instead of refusing; a focused RAG turn keeps the API tool bound rather
+  than collapsing to `search_knowledge`, and a direct-context project no longer captures an
+  employee-support turn (that lane has no tools).
+- **Contact honesty:** a reply that states a phone number or e-mail absent from the turn's tool
+  results and prompt text is replaced by `grounding.UNVERIFIED_CONTACT_REPLY`, so a refusal can
+  never route a candidate to an invented hotline.
