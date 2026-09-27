@@ -45,8 +45,8 @@ describe("usePipelineAutoRefresh", () => {
 
   it("refreshes every 5s while a source is in the pipeline and the tab is visible", async () => {
     const hook = await renderHook(
-      (props: { sources: KnowledgeSource[] }) =>
-        usePipelineAutoRefresh(props.sources),
+      (props?: { sources: KnowledgeSource[] }) =>
+        usePipelineAutoRefresh(props?.sources ?? []),
       { initialProps: { sources: [activeSource()] } },
     );
     await hook.act(async () => {
@@ -65,8 +65,8 @@ describe("usePipelineAutoRefresh", () => {
 
   it("does not poll when no source is moving through the pipeline", async () => {
     const hook = await renderHook(
-      (props: { sources: KnowledgeSource[] }) =>
-        usePipelineAutoRefresh(props.sources),
+      (props?: { sources: KnowledgeSource[] }) =>
+        usePipelineAutoRefresh(props?.sources ?? []),
       { initialProps: { sources: [publishedSource()] } },
     );
     await hook.act(async () => {
@@ -80,8 +80,8 @@ describe("usePipelineAutoRefresh", () => {
       .spyOn(document, "visibilityState", "get")
       .mockReturnValue("visible");
     const hook = await renderHook(
-      (props: { sources: KnowledgeSource[] }) =>
-        usePipelineAutoRefresh(props.sources),
+      (props?: { sources: KnowledgeSource[] }) =>
+        usePipelineAutoRefresh(props?.sources ?? []),
       { initialProps: { sources: [activeSource()] } },
     );
     await hook.act(async () => {
@@ -110,8 +110,8 @@ describe("usePipelineAutoRefresh", () => {
       .spyOn(document, "visibilityState", "get")
       .mockReturnValue("hidden");
     const hook = await renderHook(
-      (props: { sources: KnowledgeSource[] }) =>
-        usePipelineAutoRefresh(props.sources),
+      (props?: { sources: KnowledgeSource[] }) =>
+        usePipelineAutoRefresh(props?.sources ?? []),
       { initialProps: { sources: [activeSource()] } },
     );
     await hook.act(async () => {

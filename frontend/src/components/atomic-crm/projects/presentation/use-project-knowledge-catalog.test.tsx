@@ -81,7 +81,8 @@ describe("useProjectKnowledgeCatalog", () => {
     mocks.uploadCategory.mockResolvedValue({ revision: { id: "rev-x" } });
 
     const hook = await renderHook(
-      (projectId: string) => useProjectKnowledgeCatalog(projectId),
+      (projectId?: string) =>
+        useProjectKnowledgeCatalog(projectId ?? "project-1"),
       { initialProps: "project-1" },
     );
     await hook.act(async () => {
@@ -133,7 +134,8 @@ describe("useProjectKnowledgeCatalog", () => {
     mocks.uploadCategory.mockResolvedValue({ revision: { id: "rev-f" } });
 
     const hook = await renderHook(
-      (projectId: string) => useProjectKnowledgeCatalog(projectId),
+      (projectId?: string) =>
+        useProjectKnowledgeCatalog(projectId ?? "project-1"),
       { initialProps: "project-1" },
     );
     await hook.act(async () => {
@@ -162,7 +164,8 @@ describe("useProjectKnowledgeCatalog", () => {
       .mockResolvedValueOnce({ revision: { id: "rev-b" } });
 
     const hook = await renderHook(
-      (projectId: string) => useProjectKnowledgeCatalog(projectId),
+      (projectId?: string) =>
+        useProjectKnowledgeCatalog(projectId ?? "project-1"),
       { initialProps: "project-1" },
     );
     await hook.act(async () => {
@@ -200,7 +203,8 @@ describe("useProjectKnowledgeCatalog", () => {
     mocks.uploadCategory.mockResolvedValue({ revision: { id: "rev-p" } });
 
     const hook = await renderHook(
-      (projectId: string) => useProjectKnowledgeCatalog(projectId),
+      (projectId?: string) =>
+        useProjectKnowledgeCatalog(projectId ?? "project-1"),
       { initialProps: "project-1" },
     );
     await hook.act(async () => {
@@ -230,7 +234,8 @@ describe("useProjectKnowledgeCatalog", () => {
     mocks.uploadCategory.mockResolvedValue({ revision: { id: "rev-h" } });
 
     const hook = await renderHook(
-      (projectId: string) => useProjectKnowledgeCatalog(projectId),
+      (projectId?: string) =>
+        useProjectKnowledgeCatalog(projectId ?? "project-1"),
       { initialProps: "project-1" },
     );
     await hook.act(async () => {
