@@ -1,8 +1,11 @@
 # Backend coverage configuration.
 #
-# Consumed by the CI backend-unit job via:
+# Read by the release gate's backend lane (root Makefile `release-check`) when
+# that lane measures coverage — keep the two in sync:
 #   .venv/bin/pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
-# pytest-cov is declared in pyproject.toml's dev extra.
+# `--cov` carries no path, so the measured tree is `source = app` below.
+# pytest-cov is declared in pyproject.toml's dev extra and reads
+# `report:fail_under` from this file when it computes the total.
 
 [run]
 source = app
@@ -12,8 +15,24 @@ omit =
     app/workers/run_worker.py
 
 [report]
-# Report-only for now: no fail_under yet. The first CI run's measured number
-# becomes the ratchet floor; raise it only, never lower.
-fail_under = 0
+# Ratchet floor, enforced rather than reported: pytest-cov fails the run when
+# the measured total falls below it (coverage.results.should_fail_under), so a
+# regression in the backend test suite turns the gate red. Raise this as
+# coverage grows; never lower it.
+#
+# Bootstrap value, derived without a full-suite run. The last recorded
+# measurement of this exact config was 74.8% over 24,840 statements (2026-09-24,
+# plans/reports/sweep-tests-260924-1845-test-infra.md:92). The same config
+# measures 26,672 statements today and 830 lines have been deleted from app/
+# since that run, so even if every added statement were uncovered the total
+# cannot drop below (0.748 * 24840 - 830) / 26672 = 66.5%. 65 sits under that
+# worst case.
+#
+# To raise it: run the gate's own invocation, read the TOTAL row, and set
+# fail_under to that number minus ~1pt (the absorption margin the frontend
+# floors in frontend/vitest.config.ts use):
+#   cd backend && .venv/bin/pytest -m "not integration" --cov \
+#       --cov-config=.coveragerc --cov-report=term-missing
+fail_under = 65
 precision = 1
 show_missing = true

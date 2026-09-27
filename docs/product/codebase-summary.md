@@ -45,7 +45,7 @@ ChatBot/
 │   ├── tests/            Unit + selected disposable PostgreSQL integration lanes
 │   ├── docker-compose.yml        14-service prod stack
 │   ├── docker-compose.dev.yml    Postgres+Redis+Adminer only
-│   ├── Dockerfile        python:3.12-slim, pip install -e .
+│   ├── Dockerfile        python:3.12-slim, deps from uv.lock (uv export --frozen)
 │   ├── Caddyfile         edge routes for bot.tingting.vip
 │   ├── .env.example      committed env template (values blank/dev)
 │   └── Makefile          dev / db / push / deploy / rollback / adminer
