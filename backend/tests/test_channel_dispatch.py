@@ -304,7 +304,7 @@ async def test_try_neutral_dispatch_routes_oa_with_stripped_recipient():
 
     original_build = dispatch_mod.build_zalo_registry_from_config
 
-    def _fake_build(cfg, *, oa_refresh=None):
+    def _fake_build(cfg, *, oa_refresh=None, oa_account_key=""):
         from app.channels.registry import ChannelAdapterRegistry
 
         reg = ChannelAdapterRegistry()

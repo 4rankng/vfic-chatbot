@@ -68,7 +68,7 @@ async def test_provider_acceptance_survives_caller_rollback_as_sending(
             await db.commit()
             outbox_id = outbox.id
 
-        async def fake_resolve_zalo(_service):
+        async def fake_resolve_zalo(_service, account_key=None):
             return SimpleNamespace()
 
         async def fake_provider_dispatch(
@@ -78,6 +78,8 @@ async def test_provider_acceptance_survives_caller_rollback_as_sending(
             _cfg,
             _settings,
             _oa_refresh,
+            *,
+            account_key=None,
         ):
             provider_calls.append(candidate.outbox_id)
             async with sessions() as observer:
@@ -127,7 +129,7 @@ async def test_oa_refresh_reacquires_dispatch_authority_lock_after_commit(
     engine = create_async_engine(integration_database.async_url, pool_pre_ping=True)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
 
-    async def committed_refresh(service) -> str:
+    async def committed_refresh(service, account_key=None) -> str:
         await service.db.execute(text("SELECT 1"))
         await service.db.commit()
         return "rotated-access-token"

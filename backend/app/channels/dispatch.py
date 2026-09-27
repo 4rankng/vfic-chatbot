@@ -117,7 +117,9 @@ class ChannelDispatchService:
         return None
 
 
-def build_zalo_registry_from_config(cfg, *, oa_refresh=None) -> ChannelAdapterRegistry:
+def build_zalo_registry_from_config(
+    cfg, *, oa_refresh=None, oa_account_key: str = ""
+) -> ChannelAdapterRegistry:
     """Synchronously build a registry with Zalo adapters from a resolved config.
 
     The caller resolves :class:`ZaloRuntimeConfig` (Redis-cached, per-turn or
@@ -125,13 +127,22 @@ def build_zalo_registry_from_config(cfg, *, oa_refresh=None) -> ChannelAdapterRe
     keeps each adapter pinned to one config snapshot. ``oa_refresh`` is the
     zero-arg awaitable that refreshes the OA access token on demand; the caller
     is responsible for closing over the right settings-service instance.
+
+    ``oa_account_key`` names the OA the config was resolved for, so the adapter
+    scopes receipts to that account (multi-OA). The registry itself stays keyed
+    by provider: one dispatch resolves one account's config and therefore needs
+    exactly one OA adapter.
     """
     from app.channels.providers.zalo_bot import ZaloBotChannelAdapter
     from app.channels.providers.zalo_oa import ZaloOAChannelAdapter
 
     registry = ChannelAdapterRegistry()
     registry.register(ZaloBotChannelAdapter.from_config(cfg))
-    registry.register(ZaloOAChannelAdapter.from_config(cfg, refresh=oa_refresh))
+    registry.register(
+        ZaloOAChannelAdapter.from_config(
+            cfg, refresh=oa_refresh, account_key=oa_account_key
+        )
+    )
     return registry
 
 

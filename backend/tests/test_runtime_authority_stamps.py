@@ -216,11 +216,18 @@ async def test_runtime_change_during_oa_refresh_is_policy_suppressed(monkeypatch
         channel="zalo_oa",
         payload={"chat_id": "oa:user", "text": "hello"},
     )
-    db = SimpleNamespace(get=AsyncMock(return_value=outbox), commit=AsyncMock())
+    db = SimpleNamespace(
+        get=AsyncMock(return_value=outbox),
+        commit=AsyncMock(),
+        # The OA channel resolves its account key from the message's conversation.
+        execute=AsyncMock(return_value=SimpleNamespace(first=lambda: None)),
+    )
     acquire_lock = AsyncMock()
     current = AsyncMock(side_effect=[True, True, False])
 
-    async def provider_dispatch(_db, _candidate, _outbox, _cfg, _settings, refresh):
+    async def provider_dispatch(
+        _db, _candidate, _outbox, _cfg, _settings, refresh, *, account_key=None
+    ):
         await refresh()
         raise AssertionError("refresh must suppress before provider retry")
 

@@ -99,7 +99,9 @@ async def test_inline_sender_resumes_its_own_claim(
 
     dispatched: list[int] = []
 
-    async def fake_provider_dispatch(_db, candidate, _outbox, _cfg, _settings, _oa_refresh):
+    async def fake_provider_dispatch(
+        _db, candidate, _outbox, _cfg, _settings, _oa_refresh, *, account_key=None
+    ):
         dispatched.append(candidate.message_id)
         return DispatchResult(
             outbox_id=candidate.outbox_id,

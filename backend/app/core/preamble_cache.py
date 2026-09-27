@@ -213,10 +213,17 @@ async def cached_custom_llm_config(loader: Callable[[], Awaitable[dict]]) -> dic
     )
 
 
-async def cached_zalo_config(loader: Callable[[], Awaitable[dict]]) -> dict:
-    """Cache the zalo runtime config dict (keyed by the zalo namespace)."""
+async def cached_zalo_config(
+    loader: Callable[[], Awaitable[dict]], *, account_key: str | None = None
+) -> dict:
+    """Cache the zalo runtime config dict (keyed by the zalo namespace).
+
+    ``account_key`` gives each OA account its own entry inside the same
+    namespace, so a credential write for one OA invalidates every account's
+    cache through the shared version bump.
+    """
     return await cached_value(
-        key_prefix="preamble:zalo",
+        key_prefix="preamble:zalo" if not account_key else f"preamble:zalo:{account_key}",
         namespace=NS_INTEGRATION_ZALO,
         ttl_seconds=_INTEGRATION_TTL_SECONDS,
         loader=loader,

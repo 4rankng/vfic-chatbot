@@ -30,16 +30,23 @@ class ZaloOAChannelAdapter(TextChannelAdapter, ReceiptCapability):
 
     provider = ct.PROVIDER_ZALO_OA
 
-    def __init__(self, sender: "ZaloOASender") -> None:
+    def __init__(self, sender: "ZaloOASender", *, account_key: str = "") -> None:
         self._sender = sender
+        # The account whose credentials this adapter sends with. Receipts are
+        # scoped to it so a message id from one OA can never advance another's
+        # row (multi-OA). Empty means the seeded original OA.
+        self._account_key = account_key or "default:zalo_oa"
 
     @classmethod
     def from_config(
-        cls, config: "ZaloRuntimeConfig", *, refresh
+        cls, config: "ZaloRuntimeConfig", *, refresh, account_key: str = ""
     ) -> "ZaloOAChannelAdapter":
         from app.services.zalo_oa_service import ZaloOASender
 
-        return cls(ZaloOASender(access_token=config.oa_access_token, refresh=refresh))
+        return cls(
+            ZaloOASender(access_token=config.oa_access_token, refresh=refresh),
+            account_key=account_key,
+        )
 
     async def send_text(self, command: ct.OutboundTextCommand) -> ct.ChannelSendResult:
         # OA conversations store the scoped chat id as "oa:<user_id>"; the OA
@@ -85,7 +92,7 @@ class ZaloOAChannelAdapter(TextChannelAdapter, ReceiptCapability):
             return None
         return ct.ChannelReceipt(
             provider=self.provider,
-            account_key="default:zalo_oa",
+            account_key=self._account_key,
             provider_message_ids=tuple(ids),
             kind=receipt_kind,  # type: ignore[arg-type]
             occurred_at=datetime.now(timezone.utc),

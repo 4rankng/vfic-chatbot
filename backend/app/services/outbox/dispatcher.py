@@ -46,15 +46,18 @@ async def _refresh_oa_access_token_for_dispatch(
     integration_settings,
     *,
     revalidate=None,
+    account_key: str | None = None,
 ) -> str | None:
-    """Rotate OA credentials and restore any transaction-scoped send fence.
+    """Rotate one OA account's credentials and restore the send fence.
 
     Token rotation commits its database session. Runtime-bound callers therefore
     supply a revalidator that reacquires the shared authority lock and checks the
-    stamp before the OA adapter is allowed to retry provider I/O.
+    stamp before the OA adapter is allowed to retry provider I/O. ``account_key``
+    selects the OA whose single-use refresh token is redeemed; the original OA
+    is the default.
     """
 
-    new_token = await integration_settings.refresh_oa_access_token()
+    new_token = await integration_settings.refresh_oa_access_token(account_key)
     if new_token is None:
         return None
     if revalidate is not None and not await revalidate():
@@ -139,12 +142,21 @@ async def _dispatch_claimed_command(
     from app.services.zalo_sender import ZaloChannelSender
 
     integration_settings = IntegrationSettingsService(db)
-    cfg = await integration_settings.resolve_zalo()
+    # Multi-OA: send as the OA that owns this conversation's identity. Only the
+    # OA channel has accounts to resolve — the Bot and Messenger paths skip the
+    # lookup entirely and keep their behaviour (and their query count).
+    account_key = (
+        await _zalo_account_key_for_message(db, candidate.message_id)
+        if candidate.channel == "zalo_oa"
+        else None
+    )
+    cfg = await integration_settings.resolve_zalo(account_key)
 
     async def refresh_oa_access_token() -> str | None:
         return await _refresh_oa_access_token_for_dispatch(
             integration_settings,
             revalidate=authority.reacquire_and_verify,
+            account_key=account_key,
         )
 
     # Channel-neutral dispatch path (Phase 3): route through the registry when
@@ -158,6 +170,7 @@ async def _dispatch_claimed_command(
             cfg,
             integration_settings,
             refresh_oa_access_token,
+            account_key=account_key,
         )
         if dispatch_result is not None:
             await _mark_unreachable_recipient(candidate, dispatch_result.error_class)
@@ -280,6 +293,37 @@ def _suppressed_dispatch_result(
     )
 
 
+async def _zalo_account_key_for_message(db: AsyncSession, message_id: int | None) -> str | None:
+    """The ``zalo_oa`` account key owning one message's conversation, or ``None``.
+
+    ``None`` means "not an OA conversation" (Bot, Messenger, unresolved) and
+    makes every caller fall back to the original OA's credentials.
+    """
+    if message_id is None:
+        return None
+    from sqlalchemy import select
+
+    from app.channels import types as ct
+    from app.models.contact import ContactChannelIdentity
+    from app.models.conversation import Conversation, Message
+
+    row = (
+        await db.execute(
+            select(ContactChannelIdentity.provider, ContactChannelIdentity.account_key)
+            .select_from(Message)
+            .join(Conversation, Conversation.id == Message.conversation_id)
+            .join(
+                ContactChannelIdentity,
+                Conversation.channel_identity_id == ContactChannelIdentity.id,
+            )
+            .where(Message.id == message_id)
+        )
+    ).first()
+    if row is None or row.provider != ct.PROVIDER_ZALO_OA:
+        return None
+    return row.account_key
+
+
 async def _try_neutral_dispatch(
     db: AsyncSession,
     candidate: DispatchCandidate,
@@ -287,6 +331,8 @@ async def _try_neutral_dispatch(
     cfg,
     integration_settings,
     oa_refresh,
+    *,
+    account_key: str | None = None,
 ) -> DispatchResult | None:
     """Attempt registry-driven dispatch; return None to fall back to legacy.
 
@@ -314,10 +360,13 @@ async def _try_neutral_dispatch(
             db, candidate, outbox, integration_settings
         )
 
-    # Zalo path: build a Zalo registry + hardcode the stable account keys.
+    # Zalo path: build a Zalo registry from the resolved config. Its OA adapter
+    # carries the token of the account the caller resolved (the conversation's
+    # own OA on a multi-OA deployment; the original OA otherwise).
     registry: ChannelAdapterRegistry = build_zalo_registry_from_config(
         cfg,
         oa_refresh=oa_refresh,
+        oa_account_key=account_key or "",
     )
     if registry.get(provider) is None:
         return None  # adapter not registered → legacy path
@@ -333,7 +382,10 @@ async def _try_neutral_dispatch(
             error_class="provider_error",
         )
 
-    account_key = "default:zalo_oa" if provider == ct.PROVIDER_ZALO_OA else "default:zalo_bot"
+    if provider == ct.PROVIDER_ZALO_OA:
+        account_key = account_key or "default:zalo_oa"
+    else:
+        account_key = "default:zalo_bot"
 
     # NOTE(Phase 4): legacy rows have channel_account_generation = NULL → coerced
     # to 0 here. That is safe today because ChannelDispatchService is wired with

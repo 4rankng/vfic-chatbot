@@ -267,6 +267,31 @@ async def resolve_page_project_scope(db, conversation_id) -> tuple[str, ...] | N
     return tuple(project_ids) or None
 
 
+async def resolve_zalo_account_key(db, conversation_id) -> str | None:
+    """The ``zalo_oa`` account key this conversation belongs to, or ``None``.
+
+    Multi-OA turns must answer as the OA that received the message: the key
+    selects whose access token sends the reply. A non-OA conversation (or an
+    unresolved id) returns ``None``, which resolves the original OA.
+    """
+    from sqlalchemy import select
+
+    from app.channels.types import PROVIDER_ZALO_OA
+    from app.models.contact import ContactChannelIdentity
+    from app.models.conversation import Conversation
+
+    row = (
+        await db.execute(
+            select(ContactChannelIdentity.provider, ContactChannelIdentity.account_key)
+            .join(Conversation, Conversation.channel_identity_id == ContactChannelIdentity.id)
+            .where(Conversation.id == conversation_id)
+        )
+    ).first()
+    if row is None or row.provider != PROVIDER_ZALO_OA:
+        return None
+    return row.account_key
+
+
 async def build_deps(db, *, session_factory=None, conversation_id=None, page_project_ids=None):
     """Wire the full GraphDeps for one chatbot turn (agent + embedder + zalo).
 
@@ -300,11 +325,18 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
 
     # Zalo config is resolved per-turn (cheap — Redis-cached via cached_zalo_config)
     # so a rotated OA token takes effect on the very next turn without invalidating
-    # the expensive LLM client cache.
-    zalo_config = await integration_settings.resolve_zalo()
+    # the expensive LLM client cache. The OA credentials are resolved for the OA
+    # that received this conversation's message: on a linked second OA the reply
+    # must leave with that OA's own token, never the original OA's.
+    zalo_account_key = (
+        await resolve_zalo_account_key(db, conversation_id)
+        if conversation_id is not None
+        else None
+    )
+    zalo_config = await integration_settings.resolve_zalo(zalo_account_key)
     zalo_sender = ZaloChannelSender(
         zalo_config,
-        refresh=lambda: integration_settings.refresh_oa_access_token(),
+        refresh=lambda: integration_settings.refresh_oa_access_token(zalo_account_key),
     )
     # The inline profile lookup is hard-bounded by run_turn. Never attach the
     # single-use refresh-token flow to a cancellable task: a cancellation after
