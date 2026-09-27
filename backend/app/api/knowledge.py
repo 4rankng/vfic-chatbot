@@ -15,7 +15,7 @@ import uuid
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,11 +41,7 @@ from app.schemas.knowledge import (
     UploadRequest,
 )
 from app.services.audit_service import record_audit
-from app.services.ingestion.limits import (
-    MAX_UPLOAD_BYTES,
-    IngestionLimitError,
-    assert_upload_size,
-)
+from app.services.ingestion.limits import read_upload_within_limit
 from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeService
 from app.services.knowledge.canonical import (
     CanonicalValidationError,
@@ -65,21 +61,6 @@ from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 _project_knowledge_jobs = build_project_knowledge_jobs()
-
-
-def _reject_oversized_upload(data: bytes) -> None:
-    """Map the code-owned upload ceiling onto 413 (SEC-05).
-
-    Called immediately after every ``file.read()``, before any parse, persist, or
-    service call — the 20 MiB cap existed but had no production call site.
-    """
-    try:
-        assert_upload_size(len(data))
-    except IngestionLimitError as exc:
-        raise HTTPException(
-            status.HTTP_413_CONTENT_TOO_LARGE,
-            f"Tệp vượt quá giới hạn {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
-        ) from exc
 
 
 @router.get("/format/template", response_class=PlainTextResponse)
@@ -167,8 +148,7 @@ async def upload_kb_version_file(
     admin: Any = Depends(require_admin),
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KBTextFileOut:
-    data = await file.read()
-    _reject_oversized_upload(data)
+    data = await read_upload_within_limit(file)
     try:
         uploaded = await KnowledgeService(db).upload_text_file(
             project_id=project_id,
@@ -393,8 +373,7 @@ async def upload_file(
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     """Multipart upload: extract text, store original, enqueue the training pipeline."""
-    data = await file.read()
-    _reject_oversized_upload(data)
+    data = await read_upload_within_limit(file)
     try:
         doc = await KnowledgeService(db).upload_bytes(
             file.filename or "upload",

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,11 +27,7 @@ from app.schemas.personas import (
     PersonaVersionListResponse,
     PersonaVersionMetadataOut,
 )
-from app.services.ingestion.limits import (
-    MAX_UPLOAD_BYTES,
-    IngestionLimitError,
-    assert_upload_size,
-)
+from app.services.ingestion.limits import read_upload_within_limit
 from app.services.personas import (
     PersonaService,
     load_persona_template,
@@ -158,16 +154,10 @@ async def import_persona(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> PersonaOut:
-    data = await file.read()
-    try:
-        # A persona is markdown; the shared 20 MiB upload ceiling keeps a
-        # multi-gigabyte body from being buffered and parsed (SEC-05).
-        assert_upload_size(len(data))
-    except IngestionLimitError as exc:
-        raise HTTPException(
-            status.HTTP_413_CONTENT_TOO_LARGE,
-            f"Tệp vượt quá giới hạn {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
-        ) from exc
+    # A persona is markdown; the shared 20 MiB upload ceiling keeps a
+    # multi-gigabyte body from being buffered and parsed (SEC-05). The read is
+    # bounded by that same ceiling, so an oversized body is never materialized.
+    data = await read_upload_within_limit(file)
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:

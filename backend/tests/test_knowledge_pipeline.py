@@ -88,12 +88,22 @@ def test_extract_text_docx():
 
 
 def test_release_upload_extracts_docx_text():
-    from app.services.knowledge.service import _extract_kb_upload_text
+    from app.services.knowledge.file_extraction import (
+        KB_RELEASE_FORMATS,
+        _detect_upload_format,
+    )
 
-    text, file_format = _extract_kb_upload_text(
+    file_format = _detect_upload_format(
+        "tuyen-dung.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        allowed_formats=KB_RELEASE_FORMATS,
+    )
+    text = extract_text(
         "tuyen-dung.docx",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         _docx_bytes("Yêu cầu tuyển dụng có xe đưa đón"),
+        allowed_formats=KB_RELEASE_FORMATS,
+        decode_errors="replace",
     )
 
     assert file_format == "docx"

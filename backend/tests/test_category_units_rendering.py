@@ -1,5 +1,5 @@
-"""Tests for ``category_service._render_units`` — the chunk-construction path
-that turns a validated ``CategoryDocument`` into the embedder input plus chunk
+"""Tests for ``category_projections.render_category_units`` — the chunk-construction
+path that turns a validated ``CategoryDocument`` into the embedder input plus chunk
 metadata.
 
 These pin the FAQ tag-forwarding contract: per-item tags (section /
@@ -13,7 +13,7 @@ preserved, not re-sorted.
 from __future__ import annotations
 
 from app.schemas.knowledge_categories import FaqDocument, JobsDocument
-from app.services.knowledge.category_service import _render_units
+from app.services.knowledge.category_projections import render_category_units
 
 
 def _faq_doc(tags: list[str]) -> FaqDocument:
@@ -23,13 +23,13 @@ def _faq_doc(tags: list[str]) -> FaqDocument:
 
 
 def test_render_units_forwards_tags_into_chunk_metadata() -> None:
-    units = _render_units(_faq_doc(["alpha", "beta"]))
+    units = render_category_units(_faq_doc(["alpha", "beta"]))
 
     assert units[0]["metadata"]["chunk_metadata"]["tags"] == ["alpha", "beta"]
 
 
 def test_render_units_appends_tags_line_to_content() -> None:
-    units = _render_units(_faq_doc(["alpha", "beta"]))
+    units = render_category_units(_faq_doc(["alpha", "beta"]))
     content = units[0]["content"]
 
     assert "Tags: alpha, beta" in content
@@ -40,10 +40,10 @@ def test_render_units_appends_tags_line_to_content() -> None:
 
 
 def test_render_units_preserves_tag_order() -> None:
-    """Tag order is preserved as-is; _render_units does NOT re-sort. Re-sorting
+    """Tag order is preserved as-is; render_category_units does NOT re-sort. Re-sorting
     would discard the parser's semantic broad→specific ordering, and the parser
     output is already deterministic."""
-    units = _render_units(_faq_doc(["zeta", "alpha"]))
+    units = render_category_units(_faq_doc(["zeta", "alpha"]))
 
     assert units[0]["metadata"]["chunk_metadata"]["tags"] == ["zeta", "alpha"]
     assert "Tags: zeta, alpha" in units[0]["content"]
@@ -52,7 +52,7 @@ def test_render_units_preserves_tag_order() -> None:
 def test_render_units_omits_tags_line_when_empty() -> None:
     """An FAQ item with no tags renders with no ``Tags:`` line and an empty
     ``chunk_metadata.tags`` list."""
-    units = _render_units(_faq_doc([]))
+    units = render_category_units(_faq_doc([]))
 
     assert "Tags:" not in units[0]["content"]
     assert units[0]["metadata"]["chunk_metadata"]["tags"] == []
@@ -62,7 +62,7 @@ def test_render_units_leaves_non_faq_categories_untouched() -> None:
     """Non-FAQ categories have no ``tags`` field: no ``Tags:`` line in content
     and no ``chunk_metadata`` key (only the FAQ branch adds one)."""
     doc = JobsDocument(jobs=[{"id": "j1", "title": "Nhân viên"}])
-    units = _render_units(doc)
+    units = render_category_units(doc)
 
     assert len(units) == 1
     assert "Tags:" not in units[0]["content"]
@@ -77,7 +77,7 @@ def test_render_units_supports_multiple_faq_items() -> None:
             {"id": "q2", "question": "Q2?", "answer": "A2", "tags": []},
         ]
     )
-    units = _render_units(doc)
+    units = render_category_units(doc)
 
     assert units[0]["metadata"]["chunk_metadata"]["tags"] == ["Độ tuổi"]
     assert "Tags: Độ tuổi" in units[0]["content"]

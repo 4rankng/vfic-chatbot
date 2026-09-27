@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from sqlalchemy import func, select, text
@@ -48,9 +47,11 @@ from app.services.knowledge.canonical import (
 from app.services.knowledge.bus_timetable.repair import repair_canonical_markdown
 from app.services.knowledge.file_extraction import (
     DOCX_MIME_TYPE,
+    KB_RELEASE_FORMATS,
     KnowledgeFileExtractionError,
     _detect_upload_format,
-    _extract_docx_text,
+    extract_text,
+    mime_type_for_format,
 )
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.services.knowledge.document_repository import KnowledgeDocumentRepo
@@ -145,7 +146,18 @@ class KnowledgeService:
         version = await self.require_version(project_id, version_id)
         if version.status not in {KBVersionStatus.DRAFT, KBVersionStatus.FAILED}:
             raise ValueError("Only DRAFT or FAILED KB versions accept uploads.")
-        raw, upload_format = _extract_kb_upload_text(file_name, content_type, data)
+        upload_format = _detect_upload_format(
+            file_name, content_type, allowed_formats=KB_RELEASE_FORMATS
+        )
+        raw = extract_text(
+            file_name,
+            content_type,
+            data,
+            allowed_formats=KB_RELEASE_FORMATS,
+            decode_errors="replace",
+        )
+        if upload_format == "docx" and not raw.strip():
+            raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
         stats = kb_text_stats(raw)
         if not stats.normalized_text:
             raise ValueError("Uploaded knowledge file is empty.")
@@ -165,7 +177,7 @@ class KnowledgeService:
             file_name=file_name,
             source="kb_version",
             version=source_version,
-            mime_type=_mime_type_for_format(upload_format, content_type),
+            mime_type=mime_type_for_format(upload_format, content_type),
             raw_text=stats.normalized_text,
             project_id=project_id,
             status=KnowledgeStatus.UPLOADED,
@@ -396,10 +408,14 @@ class KnowledgeService:
 
     @staticmethod
     def _extract_upload_text(file_name: str, content_type: str, data: bytes) -> tuple[str, dict]:
-        """Return ingestable text plus source-file metadata for an upload."""
+        """Return ingestable text plus source-file metadata for an upload.
+
+        The decode itself belongs to ``file_extraction``; this only assembles
+        the ``source_file`` metadata the document carries.
+        """
         file_format = _detect_upload_format(file_name, content_type)
+        text = extract_text(file_name, content_type, data, decode_errors="replace")
         if file_format == "docx":
-            text = _extract_docx_text(data)
             if not text.strip():
                 raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
             return text, {
@@ -408,12 +424,11 @@ class KnowledgeService:
                 "extraction": "word_ooxml",
                 "text_checksum": checksum_text(text),
             }
-        text_value = data.decode("utf-8", errors="replace")
-        return text_value, {
+        return text, {
             "format": file_format,
             "mime_type": content_type or None,
             "extraction": "utf8_decode",
-            "text_checksum": checksum_text(text_value),
+            "text_checksum": checksum_text(text),
         }
 
     @staticmethod
@@ -672,41 +687,3 @@ class KnowledgeService:
             raise ConflictError(
                 "Project knowledge is managed only through its Single-page or category YAML API"
             )
-
-
-def _detect_upload_text_format(file_name: str, content_type: str) -> str:
-    suffix = Path(file_name or "").suffix.lower()
-    normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if suffix == ".docx" or normalized_type == DOCX_MIME_TYPE:
-        return "docx"
-    if suffix == ".md":
-        return "markdown"
-    if suffix == ".txt":
-        return "text"
-    if suffix == "" and normalized_type in {"text/plain", "text/markdown", "text/x-markdown"}:
-        return "markdown" if "markdown" in normalized_type else "text"
-    if normalized_type not in {"text/plain", "text/markdown", "text/x-markdown"}:
-        raise ValueError("Only .txt and .md knowledge files are supported.")
-    raise ValueError("Knowledge filenames must end in .txt or .md.")
-
-
-def _mime_type_for_format(file_format: str, content_type: str) -> str:
-    if file_format == "docx":
-        return DOCX_MIME_TYPE
-    normalized = (content_type or "").split(";", 1)[0].strip().lower()
-    if normalized.startswith("text/"):
-        return normalized
-    return "text/markdown" if file_format == "markdown" else "text/plain"
-
-
-def _extract_kb_upload_text(
-    file_name: str, content_type: str, data: bytes
-) -> tuple[str, str]:
-    """Extract supported release-file text without falling back to direct ingest."""
-    file_format = _detect_upload_text_format(file_name, content_type)
-    if file_format != "docx":
-        return data.decode("utf-8", errors="replace"), file_format
-    raw = _extract_docx_text(data)
-    if not raw.strip():
-        raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
-    return raw, file_format

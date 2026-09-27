@@ -1,11 +1,15 @@
 """Deterministic Project projections for RAG knowledge categories.
 
-The revision lifecycle in ``category_service`` (staging, activation, cutover,
-rollback) composes a :class:`CategoryProjectionWriter` instead of owning the
-Job / BusRoute / BusStop writes inline: the lifecycle decides WHEN projections
-run (post-cutover activation, cutover rebuild, a rollback restore, or an
-explicit clear), the writer decides HOW rows change. The seam lets activation
-tests supply a recording adapter instead of a live database.
+The revision lifecycle in ``category_service`` (staging, activation) and the
+authority transitions in ``category_authority`` (cutover, rollback) compose a
+:class:`CategoryProjectionWriter` instead of owning the Job / BusRoute / BusStop
+writes inline: the lifecycle decides WHEN projections run (post-cutover
+activation, cutover rebuild, a rollback restore, or an explicit clear), the
+writer decides HOW rows change. The seam lets activation tests supply a
+recording adapter instead of a live database.
+
+:func:`render_category_units` is the other half of a revision's projection — the
+embedder input units an activation embeds and stores as chunks.
 """
 
 from __future__ import annotations
@@ -58,6 +62,52 @@ class CategoryProjectionWriter(Protocol):
         project_id: uuid.UUID,
         categories: list[KnowledgeCategory],
     ) -> None: ...
+
+
+def render_category_units(document: CategoryDocument) -> list[dict]:
+    """Build the embedder input units (content + chunk metadata) for a document."""
+    definition = get_category_definition(document.category)
+    units: list[dict] = []
+    for record in getattr(document, definition.list_field):
+        payload = record.model_dump(mode="json", exclude_none=True)
+        stable_id = str(payload.get("id"))
+        # FaqItem carries per-item tags (section / sub-category from the source
+        # sheet). Pop them out of the generic field dump so they do not appear
+        # as a mid-payload JSON array in arbitrary field order, then re-attach
+        # as a deterministic trailing "Tags:" line in the embedder input. The
+        # parser already emits tags in a stable order (broad section → specific
+        # sub-category); that order is preserved as-is, not re-sorted. Other
+        # categories have no ``tags`` field, so the pop is a harmless no-op.
+        tags = payload.pop("tags", [])
+        content = f"{definition.label_vi}\n" + "\n".join(
+            f"{field}: {json.dumps(value, ensure_ascii=False)}"
+            for field, value in payload.items()
+        )
+        if tags:
+            content += f"\nTags: {', '.join(tags)}"
+        unit = {
+            "content": content,
+            "source_quote": content,
+            "summary": str(payload.get("title") or payload.get("name") or "") or None,
+            "questions": [],
+            "entities": {"stable_id": stable_id},
+            "metadata": {
+                "category": document.category.value,
+                "stable_id": stable_id,
+            },
+        }
+        if document.category is KnowledgeCategoryKey.JOBS:
+            unit["entities"]["job_title"] = payload.get("title")
+        if document.category is KnowledgeCategoryKey.FAQ:
+            unit["questions"] = [payload["question"], *payload.get("question_variants", [])]
+            unit["required_terms"] = payload.get("required_terms", [])
+            unit["forbidden_terms"] = payload.get("forbidden_terms", [])
+            # Mirror tags into chunk metadata — same chunk_metadata.tags shape
+            # canonical.to_unit uses — so a future pgvector metadata-filter
+            # consumer can target them. No consumer reads this today.
+            unit["metadata"]["chunk_metadata"] = {"tags": tags}
+        units.append(unit)
+    return units
 
 
 class SqlAlchemyCategoryProjectionWriter:

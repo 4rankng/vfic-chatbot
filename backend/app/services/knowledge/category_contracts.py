@@ -1,16 +1,25 @@
-"""Deterministic validation helpers for project-owned RAG category documents."""
+"""Deterministic validation helpers for project-owned RAG category documents.
+
+The job-reference rule has two halves that belong together: the pure check
+(:func:`validate_job_references`) and the project-scoped lookup of which job ids
+the *sibling* active revisions currently publish (:func:`validate_active_job_references`).
+"""
 
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from yaml.constructor import ConstructorError
 from yaml.events import AliasEvent, CollectionEndEvent, CollectionStartEvent, ScalarEvent
 
+from app.models.knowledge import KnowledgeCategory, KnowledgeCategoryRevision
 from app.schemas.knowledge_categories import (
     CATEGORY_DOCUMENT_MODELS,
     MAX_CATEGORY_RECORDS,
@@ -243,6 +252,62 @@ def validate_job_references(
         raise UnknownJobReferenceError(
             f"unknown job reference(s) in this project: {', '.join(sorted(unknown))}"
         )
+
+
+async def validate_active_job_references(
+    db: AsyncSession,
+    project_id: uuid.UUID,
+    document: CategoryDocument,
+) -> None:
+    """Check ``document``'s job references against the project's *active* content.
+
+    The JOBS category is checked in the other direction: every other category's
+    active revision must still resolve against the job ids this document
+    publishes. Anything else is checked against the active JOBS revision.
+    """
+    if document.category is KnowledgeCategoryKey.JOBS:
+        new_job_ids = {item.id for item in document.jobs}
+        sibling_categories = (
+            await db.scalars(
+                select(KnowledgeCategory).where(
+                    KnowledgeCategory.project_id == project_id,
+                    KnowledgeCategory.category_key != KnowledgeCategoryKey.JOBS.value,
+                    KnowledgeCategory.active_revision_id.is_not(None),
+                )
+            )
+        ).all()
+        for sibling in sibling_categories:
+            revision = await db.get(
+                KnowledgeCategoryRevision,
+                sibling.active_revision_id,
+            )
+            if revision is None:
+                continue
+            sibling_document = validate_category_payload(
+                sibling.category_key,
+                revision.normalized_payload,
+            )
+            validate_job_references(sibling_document, new_job_ids)
+        return
+    jobs_category = await db.scalar(
+        select(KnowledgeCategory).where(
+            KnowledgeCategory.project_id == project_id,
+            KnowledgeCategory.category_key == KnowledgeCategoryKey.JOBS.value,
+        )
+    )
+    known_ids: set[str] = set()
+    if jobs_category and jobs_category.active_revision_id:
+        revision = await db.get(
+            KnowledgeCategoryRevision,
+            jobs_category.active_revision_id,
+        )
+        if revision:
+            known_ids = {
+                str(item["id"])
+                for item in revision.normalized_payload.get("jobs", [])
+                if isinstance(item, dict) and item.get("id")
+            }
+    validate_job_references(document, known_ids)
 
 
 def canonical_category_json(document: CategoryDocument) -> str:

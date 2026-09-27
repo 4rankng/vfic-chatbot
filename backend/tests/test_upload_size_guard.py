@@ -1,9 +1,11 @@
-"""SEC-05: the code-owned upload/body ceilings must actually be enforced.
+"""SEC-05 + SEC-10: the code-owned upload/body ceilings must actually be enforced.
 
 The defect: ``assert_upload_size`` and the zip-bomb guard had no production call
 site, and every upload route read the whole file into memory first, so the 20 MiB
-cap was dead code. These tests pin the ceilings' values and prove the routes map
-an over-limit upload to 413 *before* any extraction, persistence, or service work.
+cap was dead code. SEC-10 closed the second half: even with the guard in place,
+``await file.read()`` pulled the entire body into one allocation *before* the
+length was compared. The routes now read through ``read_upload_within_limit``,
+which reads at most ceiling+1 bytes.
 
 The routes are driven over HTTP on a bare app with a tiny ceiling patched into
 ``app.services.ingestion.limits`` (the value itself is pinned separately) so the
@@ -17,7 +19,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.api import knowledge as knowledge_api
@@ -115,3 +117,58 @@ def test_an_upload_at_the_ceiling_is_not_rejected_for_size(
 def test_ingestion_limit_error_is_a_value_error():
     # The API layer relies on this to map the guard onto 413 without a wrapper.
     assert issubclass(ingestion.limits.IngestionLimitError, ValueError)
+
+
+class _RecordingUpload:
+    """UploadFile double that records the size argument of every ``read``."""
+
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+        self.read_sizes: list[int] = []
+
+    async def read(self, size: int = -1) -> bytes:
+        self.read_sizes.append(size)
+        return self.payload if size < 0 else self.payload[:size]
+
+
+@pytest.mark.asyncio
+async def test_a_body_one_byte_over_the_ceiling_is_rejected_without_reading_it_whole(
+    tiny_upload_ceiling,
+) -> None:
+    # SEC-10: the old `await file.read()` pulled the entire body into one
+    # allocation and only then compared its length. The bounded read asks for
+    # ceiling+1 bytes, so the oversized payload is never materialized whole.
+    upload = _RecordingUpload(b"x" * (tiny_upload_ceiling + 10_000))
+
+    with pytest.raises(HTTPException) as exc:
+        await limits.read_upload_within_limit(upload)
+
+    assert exc.value.status_code == 413
+    assert upload.read_sizes == [tiny_upload_ceiling + 1]
+
+
+@pytest.mark.asyncio
+async def test_a_body_exactly_at_the_ceiling_is_read_and_returned(tiny_upload_ceiling) -> None:
+    upload = _RecordingUpload(b"x" * tiny_upload_ceiling)
+
+    data = await limits.read_upload_within_limit(upload)
+
+    assert data == b"x" * tiny_upload_ceiling
+    assert upload.read_sizes == [tiny_upload_ceiling + 1]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/knowledge/documents/upload-file",
+        "/api/v1/knowledge/personas/import",
+    ],
+)
+def test_the_rejection_detail_is_the_same_on_every_upload_route(path, tiny_upload_ceiling) -> None:
+    response = _client().post(
+        path,
+        files={"file": ("doc.md", b"x" * (tiny_upload_ceiling + 1), "text/markdown")},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == limits.upload_too_large_detail()

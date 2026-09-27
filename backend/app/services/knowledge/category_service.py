@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from time import monotonic
@@ -13,8 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
 from app.models.knowledge import (
-    KnowledgeBase,
-    KnowledgeBaseMode,
     KnowledgeCategory,
     KnowledgeCategoryRevision,
     KnowledgeCategoryRevisionStatus,
@@ -22,22 +19,30 @@ from app.models.knowledge import (
     KnowledgeStatus,
 )
 from app.models.user import User
-from app.schemas.knowledge_categories import CategoryDocument, KnowledgeCategoryKey
+from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.schemas.project_knowledge import CategoryCatalogItemOut, CategorySourceOut
 from app.services.audit_service import record_audit
 from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
+from app.services.knowledge.category_authority import (
+    cutover_category_authority,
+    locked_category,
+    locked_project,
+    require_rag_project,
+    rollback_category_authority,
+)
 from app.services.knowledge.category_contracts import (
     CATEGORY_DEFINITIONS,
     canonical_category_json,
     category_checksum,
     get_category_definition,
     parse_category_yaml,
+    validate_active_job_references,
     validate_category_payload,
-    validate_job_references,
 )
 from app.services.knowledge.category_projections import (
     CategoryProjectionWriter,
     SqlAlchemyCategoryProjectionWriter,
+    render_category_units,
 )
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.project_knowledge.application.jobs import (
@@ -94,7 +99,7 @@ class KnowledgeCategoryService:
         return self._cache_repair
 
     async def list_catalog(self, project_id: uuid.UUID) -> list[CategoryCatalogItemOut]:
-        await self._require_rag_project(project_id)
+        await require_rag_project(self.db, project_id)
         categories = list(
             (
                 await self.db.scalars(
@@ -178,13 +183,13 @@ class KnowledgeCategoryService:
         source_yaml: str,
         actor: User,
     ) -> tuple[KnowledgeCategoryRevision, str]:
-        await self._require_rag_project(project_id)
+        await require_rag_project(self.db, project_id)
         try:
             document = parse_category_yaml(category_key, source_yaml)
-            await self._validate_active_job_references(project_id, document)
+            await validate_active_job_references(self.db, project_id, document)
         except ValueError as exc:
             raise ConflictError("Category YAML failed validation") from exc
-        category = await self._locked_category(project_id, category_key)
+        category = await locked_category(self.db, project_id, category_key)
         checksum = category_checksum(document)
         existing = await self.db.scalar(
             select(KnowledgeCategoryRevision)
@@ -279,7 +284,7 @@ class KnowledgeCategoryService:
         project_id: uuid.UUID,
         category_key: KnowledgeCategoryKey,
     ) -> CategorySourceOut:
-        await self._require_rag_project(project_id)
+        await require_rag_project(self.db, project_id)
         category = await self.db.scalar(
             select(KnowledgeCategory).where(
                 KnowledgeCategory.project_id == project_id,
@@ -374,19 +379,20 @@ class KnowledgeCategoryService:
                 category.category_key,
                 revision.normalized_payload,
             )
-            units = _render_units(document)
+            units = render_category_units(document)
             embedding_started_at = monotonic()
             vectors = await embedder.batch([unit["content"] for unit in units])
             embedding_duration_ms = round((monotonic() - embedding_started_at) * 1000)
             if len(vectors) != len(units):
                 raise RuntimeError("embedding provider returned an incomplete category batch")
 
-            project = await self._locked_project(category.project_id)
-            category = await self._locked_category(
+            project = await locked_project(self.db, category.project_id)
+            category = await locked_category(
+                self.db,
                 category.project_id,
                 KnowledgeCategoryKey(category.category_key),
             )
-            await self._validate_active_job_references(category.project_id, document)
+            await validate_active_job_references(self.db, category.project_id, document)
             revision = await self.db.get(KnowledgeCategoryRevision, revision_id)
             if revision is None:
                 raise NotFoundError("Category revision not found")
@@ -566,73 +572,14 @@ class KnowledgeCategoryService:
         project_id: uuid.UUID,
         actor: User,
     ) -> Project:
-        await self._require_rag_project(project_id)
-        project = await self._locked_project(project_id)
-        if project.category_authority_started and project.category_cutover_snapshot:
-            await self.db.commit()
-            await self._repair_caches()
-            return project
-        categories = list(
-            (
-                await self.db.scalars(
-                    select(KnowledgeCategory)
-                    .where(KnowledgeCategory.project_id == project_id)
-                    .order_by(KnowledgeCategory.category_key)
-                    .with_for_update()
-                )
-            ).all()
-        )
-        missing: list[str] = []
-        for category in categories:
-            if category.active_revision_id is not None:
-                continue
-            latest = await self.db.scalar(
-                select(KnowledgeCategoryRevision)
-                .where(KnowledgeCategoryRevision.category_id == category.id)
-                .order_by(KnowledgeCategoryRevision.revision_no.desc())
-                .limit(1)
-            )
-            if latest is None or latest.status is not KnowledgeCategoryRevisionStatus.CLEARED:
-                missing.append(category.category_key)
-        expected = {definition.key.value for definition in CATEGORY_DEFINITIONS}
-        missing.extend(sorted(expected - {category.category_key for category in categories}))
-        if missing:
-            raise ConflictError(
-                "Category cutover is not ready; prepare or explicitly clear: "
-                + ", ".join(sorted(set(missing)))
-            )
-        project.category_cutover_snapshot = {
-            "category_authority_started": project.category_authority_started,
-            "active_kb_version_id": (
-                str(project.active_kb_version_id) if project.active_kb_version_id else None
-            ),
-            "category_pointers": {
-                category.category_key: (
-                    str(category.active_revision_id) if category.active_revision_id else None
-                )
-                for category in categories
-            },
-            "project_projection": {
-                "summary": project.summary,
-                "index_card": project.index_card,
-                "is_active": project.is_active,
-                "discovery_revision": project.discovery_revision,
-            },
-        }
-        await self._projection_writer.rebuild(project_id, categories)
-        project.category_authority_started = True
-        project.category_cutover_at = datetime.now(UTC)
-        await record_audit(
+        """Hand the project's knowledge authority to its category revisions."""
+        return await cutover_category_authority(
             self.db,
-            action="cutover_project_category_authority",
-            actor_id=actor.id,
-            target_type="project",
-            target_id=str(project.id),
-            payload={"ready_category_count": len(categories)},
+            project_id=project_id,
+            actor=actor,
+            projection_writer=self._projection_writer,
+            repair_caches=self._repair_caches,
         )
-        await self.db.commit()
-        await self._repair_caches()
-        return project
 
     async def rollback_category_authority(
         self,
@@ -640,194 +587,15 @@ class KnowledgeCategoryService:
         project_id: uuid.UUID,
         actor: User,
     ) -> Project:
-        await self._require_rag_project(project_id)
-        project = await self._locked_project(project_id)
-        snapshot = project.category_cutover_snapshot
-        if not snapshot:
-            raise ConflictError("Project has no category cutover snapshot to restore")
-        categories = list(
-            (
-                await self.db.scalars(
-                    select(KnowledgeCategory)
-                    .where(KnowledgeCategory.project_id == project_id)
-                    .with_for_update()
-                )
-            ).all()
-        )
-        snapshot_pointers = snapshot.get("category_pointers") or {}
-        for category in categories:
-            target_value = snapshot_pointers.get(category.category_key)
-            target_id = uuid.UUID(target_value) if target_value else None
-            if category.active_revision_id == target_id:
-                continue
-            if category.active_revision_id is not None:
-                current_revision = await self.db.get(
-                    KnowledgeCategoryRevision,
-                    category.active_revision_id,
-                )
-                if current_revision is not None:
-                    current_revision.status = KnowledgeCategoryRevisionStatus.ARCHIVED
-            if target_id is not None:
-                target_revision = await self.db.get(KnowledgeCategoryRevision, target_id)
-                if target_revision is None or target_revision.category_id != category.id:
-                    raise ConflictError("Category rollback snapshot is no longer restorable")
-                target_revision.status = KnowledgeCategoryRevisionStatus.ACTIVE
-            category.active_revision_id = target_id
-            category.updated_at = func.now()
-        project.category_authority_started = bool(snapshot["category_authority_started"])
-        active_version = snapshot.get("active_kb_version_id")
-        project.active_kb_version_id = uuid.UUID(active_version) if active_version else None
-        await self._projection_writer.delete_all(project_id)
-        project_projection = snapshot.get("project_projection") or {}
-        project.summary = project_projection.get("summary")
-        project.index_card = project_projection.get("index_card") or {}
-        project.is_active = bool(project_projection.get("is_active"))
-        project.discovery_revision = int(project_projection.get("discovery_revision") or 0)
-        project.category_cutover_at = None
-        project.category_cutover_snapshot = None
-        await record_audit(
+        """Restore the authority captured by the project's last cutover."""
+        return await rollback_category_authority(
             self.db,
-            action="rollback_project_category_authority",
-            actor_id=actor.id,
-            target_type="project",
-            target_id=str(project.id),
-            payload={"restored_legacy_authority": not project.category_authority_started},
+            project_id=project_id,
+            actor=actor,
+            projection_writer=self._projection_writer,
+            repair_caches=self._repair_caches,
         )
-        await self.db.commit()
-        await self._repair_caches()
-        return project
 
-    async def _require_rag_project(self, project_id: uuid.UUID) -> Project:
-        project = await self.db.get(Project, project_id)
-        if project is None:
-            raise NotFoundError("Project not found")
-        knowledge_base = (
-            await self.db.get(KnowledgeBase, project.knowledge_base_id)
-            if project.knowledge_base_id
-            else None
-        )
-        if knowledge_base is None or knowledge_base.mode is not KnowledgeBaseMode.RAG:
-            raise ConflictError("This operation is available only for RAG Projects")
-        return project
-
-    async def _locked_category(
-        self,
-        project_id: uuid.UUID,
-        category_key: KnowledgeCategoryKey,
-    ) -> KnowledgeCategory:
-        category = await self.db.scalar(
-            select(KnowledgeCategory)
-            .where(
-                KnowledgeCategory.project_id == project_id,
-                KnowledgeCategory.category_key == category_key.value,
-            )
-            .with_for_update()
-        )
-        if category is None:
-            raise NotFoundError("Knowledge category not found")
-        return category
-
-    async def _locked_project(self, project_id: uuid.UUID) -> Project:
-        project = await self.db.scalar(
-            select(Project).where(Project.id == project_id).with_for_update()
-        )
-        if project is None:
-            raise NotFoundError("Project not found")
-        return project
 
     async def _repair_caches(self) -> None:
         await self._cache_repairer().repair_knowledge_and_jobs()
-
-    async def _validate_active_job_references(
-        self,
-        project_id: uuid.UUID,
-        document: CategoryDocument,
-    ) -> None:
-        if document.category is KnowledgeCategoryKey.JOBS:
-            new_job_ids = {item.id for item in document.jobs}
-            sibling_categories = (
-                await self.db.scalars(
-                    select(KnowledgeCategory).where(
-                        KnowledgeCategory.project_id == project_id,
-                        KnowledgeCategory.category_key != KnowledgeCategoryKey.JOBS.value,
-                        KnowledgeCategory.active_revision_id.is_not(None),
-                    )
-                )
-            ).all()
-            for sibling in sibling_categories:
-                revision = await self.db.get(
-                    KnowledgeCategoryRevision,
-                    sibling.active_revision_id,
-                )
-                if revision is None:
-                    continue
-                sibling_document = validate_category_payload(
-                    sibling.category_key,
-                    revision.normalized_payload,
-                )
-                validate_job_references(sibling_document, new_job_ids)
-            return
-        jobs_category = await self.db.scalar(
-            select(KnowledgeCategory).where(
-                KnowledgeCategory.project_id == project_id,
-                KnowledgeCategory.category_key == KnowledgeCategoryKey.JOBS.value,
-            )
-        )
-        known_ids: set[str] = set()
-        if jobs_category and jobs_category.active_revision_id:
-            revision = await self.db.get(
-                KnowledgeCategoryRevision,
-                jobs_category.active_revision_id,
-            )
-            if revision:
-                known_ids = {
-                    str(item["id"])
-                    for item in revision.normalized_payload.get("jobs", [])
-                    if isinstance(item, dict) and item.get("id")
-                }
-        validate_job_references(document, known_ids)
-
-
-def _render_units(document: CategoryDocument) -> list[dict]:
-    definition = get_category_definition(document.category)
-    units: list[dict] = []
-    for record in getattr(document, definition.list_field):
-        payload = record.model_dump(mode="json", exclude_none=True)
-        stable_id = str(payload.get("id"))
-        # FaqItem carries per-item tags (section / sub-category from the source
-        # sheet). Pop them out of the generic field dump so they do not appear
-        # as a mid-payload JSON array in arbitrary field order, then re-attach
-        # as a deterministic trailing "Tags:" line in the embedder input. The
-        # parser already emits tags in a stable order (broad section → specific
-        # sub-category); that order is preserved as-is, not re-sorted. Other
-        # categories have no ``tags`` field, so the pop is a harmless no-op.
-        tags = payload.pop("tags", [])
-        content = f"{definition.label_vi}\n" + "\n".join(
-            f"{field}: {json.dumps(value, ensure_ascii=False)}"
-            for field, value in payload.items()
-        )
-        if tags:
-            content += f"\nTags: {', '.join(tags)}"
-        unit = {
-            "content": content,
-            "source_quote": content,
-            "summary": str(payload.get("title") or payload.get("name") or "") or None,
-            "questions": [],
-            "entities": {"stable_id": stable_id},
-            "metadata": {
-                "category": document.category.value,
-                "stable_id": stable_id,
-            },
-        }
-        if document.category is KnowledgeCategoryKey.JOBS:
-            unit["entities"]["job_title"] = payload.get("title")
-        if document.category is KnowledgeCategoryKey.FAQ:
-            unit["questions"] = [payload["question"], *payload.get("question_variants", [])]
-            unit["required_terms"] = payload.get("required_terms", [])
-            unit["forbidden_terms"] = payload.get("forbidden_terms", [])
-            # Mirror tags into chunk metadata — same chunk_metadata.tags shape
-            # canonical.to_unit uses — so a future pgvector metadata-filter
-            # consumer can target them. No consumer reads this today.
-            unit["metadata"]["chunk_metadata"] = {"tags": tags}
-        units.append(unit)
-    return units
