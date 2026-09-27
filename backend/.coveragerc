@@ -19,20 +19,18 @@ omit =
 # the measured total falls below it (coverage.results.should_fail_under), so a
 # regression in the backend test suite turns the gate red. Raise this as
 # coverage grows; never lower it.
+# Measured, not projected. First full run of this exact config after the
+# 2026-09-27 sweep: TOTAL 76.2% over 26,780 statements, 6,387 missed, with
+# 2,642 tests passing and 24 skipped. The floor is that number minus the ~1pt
+# absorption margin the frontend floors in frontend/vitest.config.ts use, so
+# ordinary skip-count and test-selection drift does not red the gate.
 #
-# Bootstrap value, derived without a full-suite run. The last recorded
-# measurement of this exact config was 74.8% over 24,840 statements (2026-09-24,
-# plans/reports/sweep-tests-260924-1845-test-infra.md:92). The same config
-# measures 26,672 statements today and 830 lines have been deleted from app/
-# since that run, so even if every added statement were uncovered the total
-# cannot drop below (0.748 * 24840 - 830) / 26672 = 66.5%. 65 sits under that
-# worst case.
-#
-# To raise it: run the gate's own invocation, read the TOTAL row, and set
-# fail_under to that number minus ~1pt (the absorption margin the frontend
-# floors in frontend/vitest.config.ts use):
+# To raise it: run the gate's own invocation, read the TOTAL row, and repeat
+# the same minus-1pt step:
 #   cd backend && .venv/bin/pytest -m "not integration" --cov \
 #       --cov-config=.coveragerc --cov-report=term-missing
-fail_under = 65
+#
+# Never lower it. If the floor is ever wrong, raise the tests, not the floor.
+fail_under = 75
 precision = 1
 show_missing = true
