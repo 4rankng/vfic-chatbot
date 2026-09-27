@@ -2140,8 +2140,8 @@ async def test_off_channel_support_turn_gets_the_pointer_to_the_support_oa(monke
 
 
 @pytest.mark.asyncio
-async def test_a_non_reset_message_on_the_support_oa_hands_off_to_a_human(monkeypatch):
-    """The support OA serves resets only; anything else waits for a consultant."""
+async def test_a_recruitment_question_on_the_support_oa_hands_off_to_a_human(monkeypatch):
+    """A confident non-support question on the support OA waits for a consultant."""
     from app.graph.runner import TINGTING_HANDOFF_REPLY, _agent_turn
 
     captured: dict[str, object] = {}
@@ -2156,13 +2156,16 @@ async def test_a_non_reset_message_on_the_support_oa_hands_off_to_a_human(monkey
         async def get(self, _conversation_id):
             return SimpleNamespace(id=CONV_ID, version=7)
 
-        async def escalate_extracted_intent(self, conv, *, reason, confidence, expected_version):
+        async def escalate_extracted_intent(
+            self, conv, *, reason, confidence, expected_version, preserve_turn_ownership=False
+        ):
             escalations.append(
                 {
                     "conversation": conv,
                     "reason": reason,
                     "confidence": confidence,
                     "expected_version": expected_version,
+                    "preserve_turn_ownership": preserve_turn_ownership,
                 }
             )
             return True
@@ -2178,7 +2181,7 @@ async def test_a_non_reset_message_on_the_support_oa_hands_off_to_a_human(monkey
         chat_id="oa:user-1",
         recent_messages=[],
         timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="general", intent_confidence=0.9),
+        decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9),
         tingting_reset_allowed=True,
     )
 
@@ -2187,6 +2190,98 @@ async def test_a_non_reset_message_on_the_support_oa_hands_off_to_a_human(monkey
     assert len(escalations) == 1
     assert escalations[0]["reason"] == "tingting_support_handoff"
     assert escalations[0]["expected_version"] == 7
+    # The handoff runs inside the turn that must still deliver this reply: the
+    # escalation may not bump the version or release the lock it is about to
+    # claim (see tests/integration/test_support_handoff_reply_send.py).
+    assert escalations[0]["preserve_turn_ownership"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "decisions",
+    [
+        # "Tôi cần hỗ trợ" — the employee wants help and has not said with what.
+        pytest.param(TurnDecisions(intent="general", intent_confidence=0.9), id="unspecified"),
+        # Jev read it as something else, but with nothing behind the reading.
+        pytest.param(TurnDecisions(intent="faq_detail", intent_confidence=0.2), id="low-confidence"),
+        # "Chào bạn" — a conversation opener, not a request for a person.
+        pytest.param(
+            TurnDecisions(intent="small_talk", intent_confidence=0.9, pleasantry=True),
+            id="greeting",
+        ),
+    ],
+)
+async def test_an_unclear_message_on_the_support_oa_makes_the_bot_ask_first(
+    monkeypatch, decisions
+):
+    """An employee who has not named a problem gets a question, not a queue slot.
+
+    The agent runs on the reset toolset and asks which problem they have; nothing
+    is escalated, so the answer to that question starts the reset flow on the
+    next turn instead of leaving them parked in the human queue.
+    """
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str, object] = {}
+    escalations: list[dict] = []
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "Dạ anh/chị đang gặp vấn đề gì ạ?"
+
+    class _Conversations:
+        async def get(self, _conversation_id):
+            return SimpleNamespace(id=CONV_ID, version=7)
+
+        async def escalate_extracted_intent(self, conv, **_kwargs):
+            escalations.append(conv)
+            return True
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=_Conversations())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(tingting_api_configured=AsyncMock(return_value=True))
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    timings: dict = {"lane": "agent"}
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=7, user_text="Tôi cần hỗ trợ"),
+        deps,
+        "Tôi cần hỗ trợ",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings=timings,
+        decisions=decisions,
+        tingting_reset_allowed=True,
+    )
+
+    assert reply == "Dạ anh/chị đang gặp vấn đề gì ạ?"
+    assert set(captured["allowed_tools"]) == {
+        "verify_tingting_identity",
+        "send_tingting_otp",
+        "confirm_tingting_otp",
+        "reset_tingting_password",
+    }
+    # The turn is served as the reset flow (so the next message can continue it)…
+    assert timings["intent"] == "employee_support"
+    # …and nobody was called in.
+    assert escalations == []
 
 
 @pytest.mark.asyncio

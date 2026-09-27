@@ -1017,12 +1017,15 @@ reset (ADR-0012) is a second channel account, `zalo_oa / tingting`.
   event's OA id (from `ZaloOAWebhookEvent.oa_id`, kind-aware: root `oa_id`, else
   the sender on receipt events, else the recipient) with the registered one →
   `tingting`, otherwise `default:zalo_oa`. Events are never dropped.
-- **Serving:** on `tingting` the turn binds only the five TingTing tools (no
-  project knowledge) and the guide; a non-reset message is answered with the fixed
-  line "Vui lòng chờ chuyên viên tư vấn liên hệ." and the conversation is flagged
-  for a human. Everywhere else an employee-support intent gets the fixed pointer to
-  the support OA (`https://zalo.me/3383849659955472174`). Off the support OA the
-  TingTing tools are stripped from the registry.
+- **Serving:** on `tingting` the turn binds only the TingTing reset tools (no
+  project knowledge) and the guide. An employee who has not named a problem
+  (greeting, "tôi cần hỗ trợ", an unreadable or low-confidence reading) is asked
+  which problem they have, on the reset toolset, and keeps the thread with the
+  bot; only a confident non-support question is answered with the fixed line
+  "Vui lòng chờ chuyên viên tư vấn liên hệ." and flagged for a human. Everywhere
+  else an employee-support intent gets the fixed pointer to the support OA
+  (`https://zalo.me/3383849659955472174`). Off the support OA the TingTing tools
+  are stripped from the registry.
 - **Flow binding:** `runner._tingting_reset_allowed` requires provider `zalo_oa`,
   `account_key == "tingting"` and the pin `tingting_reset_oa_id == "tingting"`;
   the original OA, the Bot channel and Messenger can never run it.
@@ -1125,10 +1128,13 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
 - **Verification precondition:** a record with no CCCD, or a CCCD equal to its own mobile, cannot
   make the CCCD a distinguishing factor; the tool then requires name + phone only instead of
   deadlocking the employee on a field that can never match.
-- **Routing:** on the support OA the `employee_support` intent binds the five TingTing tools only
-  (no project knowledge, no catalog) — a focused RAG turn cannot widen it; any other intent there is
-  answered with "Vui lòng chờ chuyên viên tư vấn liên hệ." and hands the conversation to a human.
-  Off the support OA those five tools are stripped from the registry. A short follow-up while the assistant's last
+- **Routing:** on the support OA the `employee_support` intent binds the TingTing reset tools only
+  (no project knowledge, no catalog) — a focused RAG turn cannot widen it. An employee who has not
+  named a problem there (a greeting, "tôi cần hỗ trợ", an unreadable or below-floor reading) is
+  re-routed to the same `employee_support` branch with reason `employee_support_clarify` so the bot
+  asks which problem they have and keeps the thread; a **confident non-support** intent is answered
+  with "Vui lòng chờ chuyên viên tư vấn liên hệ." and hands the conversation to a human.
+  Off the support OA those tools are stripped from the registry. A short follow-up while the assistant's last
   message was mid-flow (`TurnDecisions.recent_account_support`, judged from `bot_last_message`)
   re-routes to `employee_support` with reason `employee_support_continuation`, so "sao rồi" keeps
   the tools and answers with the current step.

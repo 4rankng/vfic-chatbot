@@ -32,6 +32,8 @@ from app.graph.progressive import _ProgressiveStream
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.router import (
     TurnRoute,
+    _SUPPORT_CLARIFY_INTENTS,
+    employee_support_route,
     route_from_decisions,
     routing_instruction,
     should_use_fast_model,
@@ -113,6 +115,11 @@ async def _tingting_support_handoff(state: BotRunState, deps: GraphDeps) -> None
     The reply tells the employee to wait for a consultant; without this
     transition nobody would know to contact them. Best-effort: a failure must
     never swallow the reply the employee is waiting for.
+
+    ``preserve_turn_ownership`` keeps the escalation from invalidating THIS
+    turn's send claim: the claim re-checks ``version`` and the live
+    ``bot_lock_owner`` server-side at commit time, so a version bump or an early
+    lock release here would suppress the very reply the employee is waiting for.
     """
     try:
         conv = await deps.conversation.get(state.conversation_id)
@@ -126,6 +133,7 @@ async def _tingting_support_handoff(state: BotRunState, deps: GraphDeps) -> None
             reason=TINGTING_HANDOFF_REASON,
             confidence=1.0,
             expected_version=conv.version,
+            preserve_turn_ownership=True,
         )
     except Exception:  # noqa: BLE001 — the handoff is bookkeeping, never the answer
         logger.warning("tingting support handoff failed", exc_info=True)
@@ -301,12 +309,26 @@ async def _agent_turn(
             trace_sink.record_decision("tingting_scope", "channel_not_allowed")
         return TINGTING_RESET_REDIRECT_REPLY
     if tingting_reset_allowed and route.intent != "employee_support":
-        # This IS the support OA: it serves the reset flow and nothing else, so
-        # any other message goes to a human rather than being answered by the bot.
-        if trace_sink is not None:
-            trace_sink.record_decision("tingting_scope", "support_only_handoff")
-        await _tingting_support_handoff(state, deps)
-        return TINGTING_HANDOFF_REPLY
+        # This IS the support OA. It serves the reset flow and no recruitment
+        # knowledge, but "the employee wants help here and has not said what"
+        # (``general``/``small_talk``, Jev degraded, or a reading below the route
+        # floor) is not a reason to call a person: the bot asks which problem
+        # first and the answer decides — a named problem runs the reset flow
+        # (``employee_support`` on the next turn), anything else lands in the
+        # handoff branch below. Only a confident non-support intent (a
+        # recruitment/admin question) goes straight to a human.
+        if route.intent in _SUPPORT_CLARIFY_INTENTS or route.confidence < ROUTE_CONFIDENCE_FLOOR:
+            if trace_sink is not None:
+                trace_sink.record_decision("tingting_scope", "support_clarify")
+            route = employee_support_route(
+                reason="employee_support_clarify",
+                confidence=max(route.confidence, ROUTE_CONFIDENCE_FLOOR),
+            )
+        else:
+            if trace_sink is not None:
+                trace_sink.record_decision("tingting_scope", "support_only_handoff")
+            await _tingting_support_handoff(state, deps)
+            return TINGTING_HANDOFF_REPLY
     focused_project = bool(
         project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
     )

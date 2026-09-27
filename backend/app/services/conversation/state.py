@@ -131,12 +131,14 @@ class ConversationState:
         reason: str,
         confidence: float,
         expected_version: int,
+        preserve_turn_ownership: bool = False,
     ) -> bool:
         return await self._bot.escalate_extracted_intent(
             conv,
             reason=reason,
             confidence=confidence,
             expected_version=expected_version,
+            preserve_turn_ownership=preserve_turn_ownership,
         )
 
     async def acquire_lock(

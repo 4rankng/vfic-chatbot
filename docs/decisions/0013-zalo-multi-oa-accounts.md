@@ -1,6 +1,6 @@
 # ADR-0013: A second Zalo OA is a first-class channel account
 
-- **Status:** Accepted
+- **Status:** Accepted (serving policy in point 6 amended 2026-09-27)
 - **Date:** 2026-09-27
 - **Decider:** Product owner / operator
 
@@ -57,13 +57,18 @@ replies would leave with the original OA's token.
    the original OA, the recruitment Bot and Messenger can never serve the flow.
    The pin is no longer an admin field.
 6. **Serving policy split.** On the support OA the bot serves the reset flow and
-   nothing else: the bound tools are the five TingTing tools (no project
-   knowledge, no recruiting catalog), and any non-reset message gets the fixed
-   line "Vui lòng chờ chuyên viên tư vấn liên hệ." plus a handoff that flags the
-   conversation for a human. Everywhere else, a reset request gets the fixed
-   pointer to the support OA (`https://zalo.me/3383849659955472174`). Both strings
-   are returned verbatim, never generated, so a paraphrase cannot drop the link or
-   invent a hotline.
+   nothing else: the bound tools are the TingTing reset tools (no project
+   knowledge, no recruiting catalog). An employee who has **not said what they
+   need** — only a greeting, "tôi cần hỗ trợ", "app bị lỗi", or a reading Jev
+   could not stand behind (`general`/`small_talk` below the route confidence
+   floor) — is **asked which problem they have** by the bot, on the reset
+   toolset, and stays with the bot so their answer starts the flow. Only a
+   **confident non-support** question (recruitment/admin: pay, vacancies,
+   shuttle, contact, out of scope) gets the fixed line "Vui lòng chờ chuyên viên
+   tư vấn liên hệ." plus a handoff that flags the conversation for a human.
+   Everywhere else, a reset request gets the fixed pointer to the support OA
+   (`https://zalo.me/3383849659955472174`). Both strings are returned verbatim,
+   never generated, so a paraphrase cannot drop the link or invent a hotline.
 7. **Admin-only threads, out of the pipeline.** The support OA carries staff
    password resets, not candidates: `viewer_scope.py` gains a correlated
    `NOT EXISTS` on the canonical identity, applied through
@@ -96,3 +101,11 @@ replies would leave with the original OA's token.
   the account key.
 - Previewing/receiving on the linked OA requires that OA's own credentials from the
   Zalo console; the flow cannot be exercised end-to-end without them.
+- **Amendment (point 6, 2026-09-27).** The original "any non-reset message waits for
+  a consultant" rule queued employees who had not yet said what they needed, and the
+  escalation it performed invalidated the send claim of its own turn, so the line
+  never reached them either (console: "Đã chặn"). Now the bot asks an unclear
+  employee which problem they have and keeps the thread, so their answer starts the
+  reset flow; only a confident non-support question still hands off, with the
+  escalation demoted to a claim-preserving form
+  (``escalate_extracted_intent(preserve_turn_ownership=True)``).

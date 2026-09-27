@@ -147,8 +147,12 @@ _DECISION_CODE_SUMMARIES: dict[str, frozenset[str]] = {
     "degradation_reason": frozenset({"llm_throttled", "agent_error"}),
     "recovery_reason": frozenset({"outbox_recovery"}),
     # The TingTing reset flow is bound to the TingTing Zalo OA: the recruitment
-    # Bot channel and Messenger must not offer it (operator requirement).
-    "tingting_scope": frozenset({"allowed", "channel_not_allowed"}),
+    # Bot channel and Messenger must not offer it (operator requirement). On the
+    # OA an unreadable message is clarified by the bot; only a confident
+    # non-support intent goes to a human.
+    "tingting_scope": frozenset(
+        {"allowed", "channel_not_allowed", "support_clarify", "support_only_handoff"}
+    ),
 }
 
 

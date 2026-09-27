@@ -122,12 +122,14 @@ class ConversationService:
         reason: str,
         confidence: float,
         expected_version: int,
+        preserve_turn_ownership: bool = False,
     ) -> bool:
         return await self.state.escalate_extracted_intent(
             conv,
             reason=reason,
             confidence=confidence,
             expected_version=expected_version,
+            preserve_turn_ownership=preserve_turn_ownership,
         )
 
     # --- per-chat lock lifecycle (the graph port's surface) ---
@@ -154,7 +156,7 @@ class ConversationService:
         version_at_start: int,
         lock_owner: uuid.UUID | str | None = None,
     ) -> bool:
-        return self.state.recheck_ownership(conv, version_at_start, lock_owner)
+        return await self.state.recheck_ownership(conv, version_at_start, lock_owner)
 
     # --- the turn's send claim + durable outbound command ---
 

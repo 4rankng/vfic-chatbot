@@ -51,6 +51,11 @@ from app.services.conversation.send_claim import SendClaimMixin
 
 _SEMI_AUTO_INACTIVITY = timedelta(minutes=5)
 
+# The human-visible note an escalation leaves in the transcript, next to the
+# handoff reply. Kept as a constant so the deploy smoke gate can assert the
+# operator-visible artifact without duplicating the literal.
+ESCALATION_SYSTEM_NOTE = "Luồng trích xuất đề nghị nhân viên xác minh ý định liên hệ."
+
 logger = logging.getLogger(__name__)
 
 
@@ -285,6 +290,7 @@ class BotConversationState(
         reason: str,
         confidence: float,
         expected_version: int,
+        preserve_turn_ownership: bool = False,
     ) -> bool:
         """Move an extraction-classified contact to human-only review.
 
@@ -293,11 +299,37 @@ class BotConversationState(
         update makes concurrent persistence jobs create one note and audit event,
         while the expected version prevents stale results from overriding a newer
         inbound or recruiter decision.
+
+        ``preserve_turn_ownership`` is for the one caller that runs INSIDE the
+        bot turn it is escalating — the support-OA handoff (``lanes``). That
+        turn's ``claim_send`` re-checks ``version`` and a live ``bot_lock_owner``
+        server-side at commit time, so bumping the version or releasing the lock
+        here makes the claim lose and the handoff reply never reaches the
+        employee (the reply the employee is waiting for is recorded SUPPRESSED,
+        the console's "Đã chặn" badge). With the flag the transition writes only
+        ``mode``/``status``/``needs_human`` (+ the monotonic ``conversation_seq``)
+        and leaves ``version`` and the ``bot_lock_*`` trio to the owning turn,
+        which releases the lock in ``record_bot_outcome`` once the reply is out.
+        The claim is not weakened: a takeover or a newer inbound still loses it
+        on the lock owner / version check.
         """
         target_state = and_(
             Conversation.mode == ConversationMode.HUMAN,
             Conversation.needs_human.is_(True),
         )
+        values: dict = {
+            "mode": ConversationMode.HUMAN,
+            "status": ConversationStatus.OPEN,
+            "needs_human": True,
+            "conversation_seq": Conversation.conversation_seq + 1,
+        }
+        if not preserve_turn_ownership:
+            values.update(
+                bot_locked_until=None,
+                bot_lock_owner=None,
+                bot_lock_heartbeat_at=None,
+                version=Conversation.version + 1,
+            )
         transition = await self.db.execute(
             update(Conversation)
             .where(
@@ -306,16 +338,7 @@ class BotConversationState(
                 Conversation.status != ConversationStatus.CLOSED,
                 ~target_state,
             )
-            .values(
-                mode=ConversationMode.HUMAN,
-                status=ConversationStatus.OPEN,
-                needs_human=True,
-                bot_locked_until=None,
-                bot_lock_owner=None,
-                bot_lock_heartbeat_at=None,
-                version=Conversation.version + 1,
-                conversation_seq=Conversation.conversation_seq + 1,
-            )
+            .values(**values)
             .returning(Conversation.version)
             .execution_options(synchronize_session=False)
         )
@@ -327,7 +350,7 @@ class BotConversationState(
         system_note = Message(
             conversation_id=conv.id,
             sender=MessageSender.SYSTEM,
-            body="Luồng trích xuất đề nghị nhân viên xác minh ý định liên hệ.",
+            body=ESCALATION_SYSTEM_NOTE,
         )
         self.db.add(system_note)
         await record_audit(

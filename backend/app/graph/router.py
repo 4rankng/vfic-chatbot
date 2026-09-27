@@ -97,11 +97,7 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
         "out_of_scope",
         "profile_update",
     }:
-        strategy, tools, _reason = _INTENT_ROUTES["employee_support"]
-        return TurnRoute(
-            "employee_support",
-            strategy,
-            tools=tools,
+        return employee_support_route(
             reason="employee_support_continuation",
             confidence=max(decisions.intent_confidence, 0.6),
         )
@@ -178,6 +174,29 @@ _INTENT_ROUTES = {
 TURN_INTENTS: frozenset[str] = frozenset(
     TurnIntent.__metadata__[0].__args__  # type: ignore[attr-defined]
 ) if hasattr(TurnIntent, "__metadata__") else frozenset(_INTENT_ROUTES) | {"small_talk"}
+
+# Intents that say "the employee wants help here but has not named the problem"
+# (or that Jev could not read at all). On the TingTing support OA these are not a
+# reason to call a human: the bot asks which problem first, so the reset flow can
+# start from the answer (see ``lanes._agent_turn``).
+_SUPPORT_CLARIFY_INTENTS: frozenset[str] = frozenset({"general", "small_talk"})
+
+
+def employee_support_route(*, reason: str, confidence: float) -> TurnRoute:
+    """The employee-support route with the caller's own trace reason.
+
+    Shared by the mid-flow continuation (``route_from_decisions``) and the
+    support OA's clarifying turn (``lanes._agent_turn``) so the reset tool set
+    and strategy live in exactly one place.
+    """
+    strategy, tools, _reason = _INTENT_ROUTES["employee_support"]
+    return TurnRoute(
+        "employee_support",
+        strategy,
+        tools=tools,
+        reason=reason,
+        confidence=confidence,
+    )
 
 
 # Vietnamese prompt hint per intent for the tool-calling agent (consumed by

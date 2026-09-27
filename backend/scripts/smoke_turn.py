@@ -28,6 +28,12 @@ gated on the same delivery machinery a candidate receives:
     reading must never be blanked: the row stays SENT with its own text and its
     outbox command is terminalized (REL-13), never overwritten with the
     "nothing was sent" empty reply the failure paths used to record.
+  * ``support-oa-handoff`` -- a thread on the TingTing support OA (which serves
+    the reset flow only). The turn hands the employee to a human; the handoff
+    line itself must still be DELIVERED. Both halves are asserted, because the
+    escalation note appears in the console even when the reply is suppressed
+    (2026-09-27: the escalation invalidated its own turn's send claim and the
+    employee waited for a message the console showed as "Đã chặn").
 
 Why the stubs are safe: the smoke dependencies wire the REAL
 ``ConversationService(db)`` and ``RetrievalRepository(db)``. The former delegates
@@ -60,7 +66,7 @@ import asyncio
 import sys
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
@@ -225,6 +231,63 @@ def _build_smoke_deps(db) -> GraphDeps:
     return _smoke_graph_deps(db, agent=_StubAgent(), progressive_send=False)
 
 
+class _SupportOaRetrieval:
+    """Real retrieval with the TingTing reset flow pinned to the support OA.
+
+    ``_tingting_reset_allowed`` consults exactly one retrieval read
+    (``tingting_reset_oa_id``) and fails closed on a read error, so pinning that
+    single answer is what puts the turn on the support-OA handoff branch; every
+    other call delegates to the real repository.
+    """
+
+    def __init__(self, inner: object) -> None:
+        self._inner = inner
+
+    async def tingting_reset_oa_id(self) -> str:
+        from app.channels.types import TINGTING_OA_ACCOUNT_KEY
+
+        return TINGTING_OA_ACCOUNT_KEY
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+class _StubTurnDecisions:
+    """Jev stand-in: one fixed intent, no network, no provider client.
+
+    The support-OA probes need a *readable* message on purpose: the OA hands a
+    confident non-support question to a human and asks its own question when the
+    intent is unclear, and which of the two happens must not depend on whether a
+    real Jev call was reachable from the smoke environment.
+    """
+
+    def __init__(self, intent: str, *, confidence: float = 0.95) -> None:
+        self._intent = intent
+        self._confidence = confidence
+
+    async def decide_turn(
+        self, *, user_text, recent_messages, profile_name="", include_gender=True
+    ):
+        from app.graph.ports import TurnDecisions
+
+        return TurnDecisions(intent=self._intent, intent_confidence=self._confidence)
+
+
+def _build_support_oa_deps(db, *, intent: str) -> GraphDeps:
+    """The support OA, with Jev's verdict for the inbound pinned by ``intent``.
+
+    The agent is a stub: it answers the clarifying turn (the bot asks which
+    problem) and would answer a non-support question too, which is exactly what
+    the handoff probe must never see.
+    """
+    deps = _smoke_graph_deps(db, agent=_StubAgent(), progressive_send=False)
+    return replace(
+        deps,
+        retrieval=_SupportOaRetrieval(deps.retrieval),
+        turn_decisions=_StubTurnDecisions(intent),
+    )
+
+
 def _build_progressive_smoke_deps(db) -> GraphDeps:
     """Progressive send ON with a streaming agent: early bubble plus remainder."""
     return _smoke_graph_deps(db, agent=_StubStreamingAgent(), progressive_send=True)
@@ -289,6 +352,48 @@ async def _seed_smoke_conversation(
     await db.flush()
     # Refresh so server defaults (notably ``version``) materialize before we read
     # them for the optimistic-lock token.
+    await db.refresh(conv)
+    return conv, identity, contact, owner
+
+
+async def _seed_support_oa_conversation(
+    db,
+) -> tuple[Conversation, ContactChannelIdentity, Contact, uuid.UUID]:
+    """Seed a TingTing support-OA thread, pre-locked exactly as the webhook leaves it.
+
+    Same triple as ``_seed_smoke_conversation``, but on the linked support OA:
+    the channel identity is ``zalo_oa``/``tingting`` and the alias carries the OA
+    (``oa:<account_key>:<user_id>``), which is what ``_tingting_reset_allowed``
+    reads to decide this channel serves the reset flow.
+    """
+    from app.channels.types import TINGTING_OA_ACCOUNT_KEY, oa_chat_id
+
+    owner = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    external_id = f"{SMOKE_MARKER}{uuid.uuid4().hex[:8]}"
+    contact = Contact()
+    db.add(contact)
+    await db.flush()
+    identity = ContactChannelIdentity(
+        contact_id=contact.id,
+        provider="zalo_oa",
+        account_key=TINGTING_OA_ACCOUNT_KEY,
+        external_id=external_id,
+    )
+    db.add(identity)
+    await db.flush()
+    conv = Conversation(
+        zalo_chat_id=oa_chat_id(TINGTING_OA_ACCOUNT_KEY, external_id),
+        zalo_channel="oa",
+        contact_id=identity.contact_id,
+        channel_identity_id=identity.id,
+        mode=ConversationMode.BOT,
+        bot_lock_owner=owner,
+        bot_locked_until=now + timedelta(seconds=300),
+        bot_lock_heartbeat_at=now,
+    )
+    db.add(conv)
+    await db.flush()
     await db.refresh(conv)
     return conv, identity, contact, owner
 
@@ -578,7 +683,7 @@ async def _run_probe(probe: "_SmokeProbe", *, inject_failure: bool) -> int:
         # in one session pollutes the identity map and returns a bare object,
         # which then MissingGreenlets when ``ConversationOut`` walks the graph.
         async with session_factory() as seed_db:
-            conv, identity, contact, owner = await _seed_smoke_conversation(seed_db)
+            conv, identity, contact, owner = await probe.seed(seed_db)
             await seed_db.commit()
             conv_id, identity_id, contact_id = conv.id, identity.id, contact.id
             version_at_start = int(conv.version or 0)
@@ -705,20 +810,94 @@ async def _check_delivered_bubble(db, *, conv_id, state) -> None:
     )
 
 
+async def _check_support_oa_handoff(db, *, conv_id, state) -> None:
+    """The handoff reply reached the employee AND the thread is with a human.
+
+    Both halves matter and they are not the same assertion: the escalation note
+    appears in the console even when the reply is suppressed (the production bug
+    this probe exists for), so a probe that only checked ``mode == HUMAN`` would
+    have passed while the employee waited for a message that never came.
+    """
+    from app.graph.lanes import TINGTING_HANDOFF_REPLY
+    from app.services.conversation.bot_path import ESCALATION_SYSTEM_NOTE
+
+    await _assert_persisted_delivery_invariant(
+        db,
+        conv_id=conv_id,
+        message_id=state.pending_message_id,
+        expected_reply=TINGTING_HANDOFF_REPLY,
+    )
+    conv = await db.get(Conversation, conv_id)
+    if conv is None:
+        raise AssertionError("support-OA handoff probe lost its conversation")
+    if conv.mode != ConversationMode.HUMAN:
+        raise AssertionError(f"support OA handoff left the conversation in {conv.mode!s}")
+    if not conv.needs_human:
+        raise AssertionError("support OA handoff did not flag the conversation for a human")
+    if conv.bot_lock_owner is not None:
+        raise AssertionError("support OA handoff left the per-chat bot lock held")
+    notes = (
+        await db.scalars(
+            select(Message.body).where(
+                Message.conversation_id == conv_id,
+                Message.sender == MessageSender.SYSTEM,
+            )
+        )
+    ).all()
+    if list(notes) != [ESCALATION_SYSTEM_NOTE]:
+        raise AssertionError(
+            f"expected the single escalation note {ESCALATION_SYSTEM_NOTE!r}, found {notes!r}"
+        )
+
+
+async def _check_support_oa_clarify(db, *, conv_id, state) -> None:
+    """The bot asked the employee what they need, and kept the thread to answer.
+
+    Asserted together: the question was really delivered, and the thread was NOT
+    parked in the human queue (`mode`/`needs_human` untouched, no escalation
+    note) — that is what lets the employee's answer start the reset flow.
+    """
+    await _assert_persisted_delivery_invariant(
+        db,
+        conv_id=conv_id,
+        message_id=state.pending_message_id,
+        expected_reply=SMOKE_REPLY,
+    )
+    conv = await db.get(Conversation, conv_id)
+    if conv is None:
+        raise AssertionError("support-OA clarify probe lost its conversation")
+    if conv.mode != ConversationMode.BOT:
+        raise AssertionError(f"support OA clarify left the conversation in {conv.mode!s}")
+    if conv.needs_human:
+        raise AssertionError("support OA clarify queued a human for an unclear message")
+    notes = (
+        await db.scalars(
+            select(Message.body).where(
+                Message.conversation_id == conv_id,
+                Message.sender == MessageSender.SYSTEM,
+            )
+        )
+    ).all()
+    if list(notes):
+        raise AssertionError(f"support OA clarify wrote an escalation note: {notes!r}")
+
+
 @dataclass(frozen=True)
 class _SmokeProbe:
     """One end-to-end turn variant the pre-flip gate runs.
 
     Every probe wires the real services and the real runner; only the delivery
     path under test differs, so a regression in any of them aborts the flip.
-    ``build_deps`` is resolved by name at call time, which is what lets a test
-    substitute the deps builder.
+    ``build_deps`` and ``seed`` are resolved by name at call time (the seed
+    through a lambda over the module global), which is what lets a test
+    substitute either one.
     """
 
     label: str
     build_deps: Callable[[object], GraphDeps]
     expected_outcome: str
     check: Callable[..., Awaitable[None]]
+    seed: Callable[[object], Awaitable[tuple]] = lambda db: _seed_smoke_conversation(db)
 
 
 # The flip is gated on every probe below. Order matters only for reporting: the
@@ -745,7 +924,37 @@ _PROGRESSIVE_FAILURE_PROBE = _SmokeProbe(
     check=_check_delivered_bubble,
 )
 
-SMOKE_PROBES = (_SINGLE_MESSAGE_PROBE, _PROGRESSIVE_PROBE, _PROGRESSIVE_FAILURE_PROBE)
+# The support OA answers the reset flow only; a confident non-support question
+# must tell the employee to wait for a consultant AND keep that reply
+# (2026-09-27: the escalation used to invalidate its own turn's send claim, so
+# the reply was recorded SUPPRESSED — "Đã chặn" in the console — and the employee
+# got silence).
+_SUPPORT_OA_HANDOFF_PROBE = _SmokeProbe(
+    label="support-oa-handoff",
+    build_deps=lambda db: _build_support_oa_deps(db, intent="faq_detail"),
+    expected_outcome="sent",
+    check=_check_support_oa_handoff,
+    seed=lambda db: _seed_support_oa_conversation(db),
+)
+
+# The other half of the same policy: an employee who has NOT said what they need
+# must be asked, not queued — the bot keeps the thread so their answer can start
+# the reset flow.
+_SUPPORT_OA_CLARIFY_PROBE = _SmokeProbe(
+    label="support-oa-clarify",
+    build_deps=lambda db: _build_support_oa_deps(db, intent="general"),
+    expected_outcome="sent",
+    check=_check_support_oa_clarify,
+    seed=lambda db: _seed_support_oa_conversation(db),
+)
+
+SMOKE_PROBES = (
+    _SINGLE_MESSAGE_PROBE,
+    _PROGRESSIVE_PROBE,
+    _PROGRESSIVE_FAILURE_PROBE,
+    _SUPPORT_OA_HANDOFF_PROBE,
+    _SUPPORT_OA_CLARIFY_PROBE,
+)
 
 
 async def _run_smoke(*, inject_failure: bool) -> int:
@@ -758,6 +967,10 @@ async def _run_progressive_smoke(*, inject_failure: bool) -> int:
 
 async def _run_progressive_failure_smoke(*, inject_failure: bool) -> int:
     return await _run_probe(_PROGRESSIVE_FAILURE_PROBE, inject_failure=inject_failure)
+
+
+async def _run_support_oa_handoff_smoke(*, inject_failure: bool) -> int:
+    return await _run_probe(_SUPPORT_OA_HANDOFF_PROBE, inject_failure=inject_failure)
 
 
 async def _run_smoke_gate(*, inject_failure: bool) -> int:
