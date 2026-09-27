@@ -994,6 +994,41 @@ be shared by another Project.
   local disconnect, and the live channel runtime is documented elsewhere in
   this section.
 
+### 11.2 Multi-OA accounts (a second Zalo OA)
+
+See ADR-0013. A deployment runs one Zalo OA out of the box (`default:zalo_oa`,
+the row Alembic 0047 seeded, with the singleton `zalo_oa_*` credentials).
+Additional OAs become first-class channel accounts:
+
+- **Storage:** an extra OA keeps its four credentials under
+  `zalo_oa_*:<oa id>`; `IntegrationSettingsService.resolve_zalo(account_key)`
+  returns that account's own values and a **non-default account never inherits the
+  singletons or the env fallback** (missing credentials resolve empty and the
+  senders fail closed, rather than a reply leaving as the wrong brand).
+  `refresh_oa_access_token(account_key)` scopes both the rotated keys and the
+  Redis lock (`zalo:oa:token:refresh:<oa id>`) — each OA holds its own
+  single-use refresh token.
+- **Routing:** `POST /webhooks/zalo/oa` resolves the receiving OA from the body
+  (`oa_id`, else the recipient id) via
+  `ZaloOaAccountResolver.account_key_for_payload` to a linked, ACTIVE `zalo_oa`
+  channel account. An absent or unknown id falls back to `default:zalo_oa`
+  (today's behaviour) instead of dropping the event. The key threads through
+  `run_zalo_ingress` → `ZaloWebhookService.handle` → `BotConversationState.ensure`
+  and `handle_oa_side_event`, so identity, conversation, receipts and OA profile
+  enrichment all belong to the receiving OA.
+- **Sending:** the graph turn resolves the conversation's account key
+  (`app/graph/factories.py:resolve_zalo_account_key`) and binds the Zalo config and
+  refresh closure to it; the outbox dispatcher resolves the same key from the
+  message's conversation identity (`_zalo_account_key_for_message`) and stamps it
+  on the outbound command; `ZaloOAChannelAdapter` scopes receipts to its account.
+- **Admin surface:** `GET`/`POST /api/v1/admin/integrations/zalo/oa-accounts` and
+  `DELETE .../{account_key}` (admin only, status-only credentials). Linking writes
+  the channel account + credentials in one transaction and bumps the generation
+  (which fences outbound work queued under the previous credentials); unlinking
+  marks the row INACTIVE and deletes the stored credentials. The seeded original OA
+  cannot be unlinked. UI: the "Zalo OA đã liên kết" block in
+  `ZaloChannelSection.tsx`.
+
 ---
 
 ## 12. Proactive follow-up
