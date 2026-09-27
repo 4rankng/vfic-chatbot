@@ -62,11 +62,6 @@ frontend `Makefile`s. See `docs/agent-development-kit.md` for hook behavior.
    `PASS`, `N/A`, or `BLOCKED` plus evidence before declaring completion.
 6. Update docs only for user-visible behavior, setup, commands, architecture,
    security posture, public contracts, or durable maintainer decisions.
-7. Refresh the OpenWiki index as the last step of the task: `make openwiki`
-   (needs `OPENROUTER_API_KEY` in the environment or `backend/.env`). There is
-   no scheduled job — the GitHub Actions workflows were removed on 2026-09-26 —
-   so the index only stays current if this actually runs. Skip it when the task
-   changed nothing the index documents, and say so.
 
 Do not deploy, commit, push, merge, open a PR, or create a branch unless asked.
 When asked to commit, work directly on `main` per the repository workflow.
@@ -86,15 +81,3 @@ When asked to commit, work directly on `main` per the repository workflow.
 Use `standards/definition-of-done.md` and `standards/review-checklist.md` only
 when their detailed gates apply to the task.
 
-<!-- OPENWIKI:START -->
-
-## OpenWiki
-
-This repository has a generated `openwiki/` evidence index. It is optional just-in-time context, not required startup reading.
-
-- Treat source code and tests as authoritative. A brief's unknowns and review items are verification gaps, not automatic requirements.
-- Prefer the narrowest quiet validation that proves the changed behavior. Preserve complete failure output.
-
-The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
-
-<!-- OPENWIKI:END -->

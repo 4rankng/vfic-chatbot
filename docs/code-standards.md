@@ -312,8 +312,10 @@ directly, but treat changes with the weight of an upstream fork:
 - The GitHub Actions workflows (`quality-gates.yml`, `openwiki-update.yml`) were
   removed on 2026-09-26 — deploys are manual anyway, and the gates are the same
   commands run by hand.
-- The generated OpenWiki evidence index is refreshed locally with
-  `make openwiki` (at the end of a task), never by CI.
+- The generated OpenWiki evidence index and its `make openwiki` target were
+  removed on 2026-09-27 (operator decision): the index was never used as an
+  input, and its generation needed a paid provider key the repo does not
+  carry.
 - The inherited Atomic CRM workflows under `frontend/.github/` were removed
   (2026-09-13): GitHub only reads root-level workflows, so they never ran for
   this repository.

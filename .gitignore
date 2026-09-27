@@ -114,7 +114,3 @@ backups/
 .mcp.json
 .agentsroom/
 .agents/mcp_config.json
-
-# --- OpenWiki run state (machine-local; rewritten by every `make openwiki`) ---
-openwiki/.run.json
-openwiki/.last-update.json

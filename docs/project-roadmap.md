@@ -263,9 +263,10 @@ as candidate work items; confirm with the owner before scheduling.
 - **Trade-off accepted:** a release now has no third-party record of the gates
   having passed. `make deploy` still aborts on the first failing lane, and the
   blue/green smoke turn + turn-pipeline gate remain the production-side proof.
-- **OpenWiki:** the index is refreshed locally with `make openwiki` at the end
-  of a task (needs `OPENROUTER_API_KEY`). Nothing regenerates it otherwise, so
-  it only stays current if that step is actually run.
+- **OpenWiki (superseded 2026-09-27):** the generated index, the
+  `make openwiki` target, `.openwikiignore` and the AGENTS/CLAUDE pointers were
+  removed — nothing consumed the index, and it had drifted (its brief described a
+  different product). Source code, tests and `docs/` are the only context now.
 
 ---
 

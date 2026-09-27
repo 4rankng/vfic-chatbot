@@ -1,4 +1,4 @@
-.PHONY: dev bootstrap deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod release-check openwiki
+.PHONY: dev bootstrap deploy deploy-backend deploy-frontend adminer seed backup restore backup-full restore-prod release-check
 
 # Ports are owned by backend/Makefile (BACKEND_PORT / FRONTEND_PORT /
 # ZALO_MOCK_PORT). This file only forwards the frontend one, so
@@ -68,22 +68,6 @@ deploy: release-check
 
 # Adminer over an SSH tunnel -> http://localhost:18081 (no public exposure).
 # Ctrl-C closes the tunnel.
-## openwiki: refresh the generated OpenWiki evidence index (run at the end of a task).
-## Reads OPENROUTER_API_KEY from the environment, falling back to backend/.env.
-openwiki:
-	@set -eu; \
-		key="$${OPENROUTER_API_KEY:-}"; \
-		if [ -z "$$key" ] && [ -f backend/.env ]; then \
-			key="$$(sed -n 's/^OPENROUTER_API_KEY=//p' backend/.env | tail -1)"; \
-		fi; \
-		command -v openwiki >/dev/null 2>&1 || { \
-			echo "OpenWiki blocked: 'openwiki' CLI not found — npm install -g openwiki@0.5.0 mermaid@11.16.0 jsdom@29.1.1"; exit 1; }; \
-		test -n "$$key" || { \
-			echo "OpenWiki blocked: no OpenRouter key. Export OPENROUTER_API_KEY or fill it in backend/.env."; exit 1; }; \
-		OPENWIKI_PROVIDER=openrouter OPENWIKI_MODEL_ID="z-ai/glm-5.2" OPENROUTER_API_KEY="$$key" \
-			openwiki code --update --print; \
-		rm -f -- openwiki/.run.json
-
 adminer:
 	$(MAKE) -C backend adminer
 

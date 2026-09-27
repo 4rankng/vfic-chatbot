@@ -1,0 +1,267 @@
+{
+  "schemaVersion": 1,
+  "runId": "b09ed958-965e-42f8-bb1c-12cff2e0e275",
+  "mode": "update",
+  "phase": "planning",
+  "startedAt": "2026-09-27T01:16:44.425Z",
+  "language": "en",
+  "languageChanged": false,
+  "requiredRewritePages": [],
+  "initialPages": [
+    "/openwiki/access/integrations-credentials.md",
+    "/openwiki/access/rbac-and-capabilities.md",
+    "/openwiki/architecture/deployment.md",
+    "/openwiki/architecture/system-overview.md",
+    "/openwiki/bot/decision-trace.md",
+    "/openwiki/bot/pipeline.md",
+    "/openwiki/bot/safety-and-routing.md",
+    "/openwiki/channels/facebook-messenger.md",
+    "/openwiki/channels/zalo-adapters.md",
+    "/openwiki/database/persistence.md",
+    "/openwiki/database/schema-and-migrations.md",
+    "/openwiki/frontend/architecture.md",
+    "/openwiki/frontend/recruitment-console.md",
+    "/openwiki/knowledge/ingestion.md",
+    "/openwiki/knowledge/rag.md",
+    "/openwiki/knowledge/single-page-sync.md",
+    "/openwiki/messaging/conversation-lifecycle.md",
+    "/openwiki/messaging/realtime-socketio.md",
+    "/openwiki/operations/configuration.md",
+    "/openwiki/operations/observability.md",
+    "/openwiki/operations/testing-strategy.md",
+    "/openwiki/quickstart.md",
+    "/openwiki/recruitment/lead-lifecycle.md",
+    "/openwiki/recruitment/proactive-followup.md",
+    "/openwiki/recruitment/recommendation.md",
+    "/openwiki/workers/pipeline-and-recovery.md"
+  ],
+  "sourceFingerprint": "sha256:e313c5010ca7044b9bf8a7b1e7d6a9a651d4099571550903d83dbeb8702e010f",
+  "targetGitHead": "62f041dd34239cadf17c06706466f672e2f7115e",
+  "actor": {
+    "producerActor": "openwiki/0.5.2",
+    "metadataModel": "glm-5.3"
+  },
+  "previousLastUpdate": {
+    "updatedAt": "2026-09-21T12:39:13.304Z",
+    "command": "update",
+    "gitHead": "6dc7e8e2d7f80bda6b064e831ae4723944da0174",
+    "model": "host-agent/opencode",
+    "status": "interrupted",
+    "language": "en"
+  },
+  "baseGitHead": "6dc7e8e2d7f80bda6b064e831ae4723944da0174",
+  "wikiGoal": "# OpenWiki brief — TingHire\n\nThis brief steers OpenWiki when documenting TingHire. It is owned by the team;\nOpenWiki reads it but never rewrites it during normal runs.\n\n## What TingHire is\n\nTingHire (formerly Ting Ting / VFIC miniCRM) is a Vietnamese recruiting\nchatbot + recruiter console built on Zalo. Candidates chat with an LLM agent\nabout job openings; recruiters take over conversations, manage the job board,\nand monitor the bot from a web console. Production runs on a single\nDigitalOcean 2 vCPU / 4 GB droplet (`bot.tingting.vip`) — the hard constraint\nthat shapes every capacity decision.\n\nThe repo is a two-package project, not a monorepo:\n\n- `backend/` — Python 3.12 / FastAPI, async-first. SQLAlchemy 2.x async over\n  PostgreSQL 16 + pgvector; Redis (broker, cache, presence, Socket.IO fan-out);\n  RQ job queue strictly off the synchronous answer path; JWT auth (PyJWT) +\n  passlib[argon2]; bot turns run through a LangGraph-style manual pipeline in\n  `backend/app/graph/` with LLM calls funneled through `backend/app/graph/clients.py`.\n- `frontend/` — React 19 + ra-core 5 (react-admin headless) + Vite +\n  TypeScript strict; TailwindCSS v4 + shadcn/ui; TanStack Query v5; Socket.IO\n  client. Vietnamese-first UI copy.\n\nThere is no `shared/` package; cross-cutting types live per package.\n\n## Roles\n\n| Role | Vietnamese | Scope |\n|------|-----------|-------|\n| admin | Quản trị | Full access |\n| recruiter | Tuyển dụng | Recruiter console: conversations, job board, KB |\n\nCandidates are leads (`leads` table), not users — they authenticate by Zalo\nuser ID, never by password.\n\n## Where to look first\n\n- `AGENTS.md` (root) — the always-loaded agent constitution; `TECH.md` —\n  system map and stack.\n- `docs/codebase-summary.md` — repository map.\n- `docs/system-architecture.md` — architecture, request lifecycle, queue model.\n- `docs/code-standards.md` — code conventions (`standards/coding-style.md`\n  holds project-specific preferences and points there).\n- `docs/testing.md` — testing approach.\n- `docs/deployment-guide.md` — production stack, deploy, backup/restore.\n- `standards/agent-completion-checklist.md` — completion record template.\n\n## Key boundaries to preserve\n\n- API transport lives in `backend/app/api/`; business logic lives in\n  `backend/app/services/`. Do not collapse them in the docs.\n- Bot-turn behavior lives in `backend/app/graph/` and depends on Protocols\n  from `graph/ports.py`; concrete dependencies are wired in `factories.py`.\n- Models mirror the hand-written Alembic schema (`backend/alembic/versions/`);\n  ORM models do not generate migrations.\n- Frontend dependency direction is `atomic-crm` → `admin` → `ui`; product code\n  lives in `frontend/src/components/atomic-crm/`.\n- Keep I/O async; avoid raw SQL and circular imports; offload blocking crypto.\n- LLM calls go through `backend/app/graph/clients.py`.\n- Structured logging only — never log secrets, PII, or message content.\n\n## Conventions\n\n- Python ≥ 3.12, Ruff (line 100), pytest with `asyncio_mode = \"auto\"`.\n- TypeScript strict (`noUnusedLocals`/`noUnusedParameters`), no `any` in\n  `admin/`, `hooks/`, `lib/` (ESLint error).\n- REST API under `/api/v1`; asyncpg for the app, sync psycopg for Alembic/RQ.\n- Vietnamese-first UI copy; the answer language follows the candidate.\n- pydantic-settings refuses prod boot on default `JWT_SECRET` or `*` CORS.\n\n## What to emphasize in pages\n\n- System responsibility and ownership, not just symbol inventories.\n- Runtime/build entrypoints (`backend/app/main.py`, `frontend/src/main.tsx`).\n- Mechanisms and control/data flow across the API → services → graph → data\n  layering.\n- The bot turn: routing (TypeSafe Jev fan-out), grounding, pre-send ownership\n  guard, deadline-aware execution, LLM semaphore throttling.\n- Retrieval: hybrid PG full-text + pgvector ANN, RRF merge, section-based\n  chunking, semantic response cache, prompt-prefix caching, honesty policy.\n- Upstream/downstream relationships (Zalo OA, OpenRouter/Gemini/MiniMax, PG,\n  Redis, Resend).\n- Invariants and failure behavior (safety filter, suppression on recruiter\n  takeover, grounded refusal when data is missing).\n- Configuration, security, and operational consequences on the 2 vCPU box.\n\n## What to omit\n\n- Pages that only mirror a directory or list symbols without explaining a\n  system.\n- Pages that repeat `docs/codebase-summary.md` verbatim — cross-link instead.\n- Speculative behavior not present in the current source.\n- Lockfiles, generated bundles, and any path matched by `.openwikiignore`.\n\n## Language\n\nGenerate factual pages in English. Keep Vietnamese domain terms (tuyển dụng,\nứng viên, anh/chị, etc.) in italics on first use and use them consistently\nacross pages.",
+  "beforeContentSnapshot": "02d720fd3e8e22e51da039dfa4949e561af239e14ad7467f2829a33455dfb273",
+  "preparedWiki": {
+    "generatedProvenance": [
+      {
+        "page": "/openwiki/access/integrations-credentials.md",
+        "bodyHash": "87ffd41be5f33e3014bc4888fdf33428d511153b72a0073716ccc1366f1bcd15",
+        "generated": {
+          "by": "opencode",
+          "at": "2026-09-21T02:42:43.794Z"
+        }
+      },
+      {
+        "page": "/openwiki/access/rbac-and-capabilities.md",
+        "bodyHash": "e21b885d705f18a151cdd597725b4f44c45b7df3853a1a80b87b64354fcb2992",
+        "generated": {
+          "by": "opencode",
+          "at": "2026-09-21T12:36:52.415Z"
+        }
+      },
+      {
+        "page": "/openwiki/architecture/deployment.md",
+        "bodyHash": "d1821187e37badf2145dc003c2c612006557c5b2fcf8544e7c2852fff90e7ee0",
+        "generated": {
+          "by": "opencode",
+          "at": "2026-09-21T02:42:43.794Z"
+        }
+      },
+      {
+        "page": "/openwiki/architecture/system-overview.md",
+        "bodyHash": "581f549787b207e401f2554d71999ab9f7ca4c3fc3a522de138e522a6dfbde0d",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/bot/decision-trace.md",
+        "bodyHash": "e185324b0794c8a6e8006c873cc0e06dcd9e86afa6ac49a10106aeed16a0ae81",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/bot/pipeline.md",
+        "bodyHash": "8d13364019601f8ba93c2bdc82940931ec776c3ddcb8085d2fba5eb8ada34d5f",
+        "generated": {
+          "by": "opencode",
+          "at": "2026-09-21T02:42:43.794Z"
+        }
+      },
+      {
+        "page": "/openwiki/bot/safety-and-routing.md",
+        "bodyHash": "d44e46ae9659e4e5844f93a5b3cb03ceba9a372f0257c8c7e117e0baacdac322",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/channels/facebook-messenger.md",
+        "bodyHash": "f9934c2db73bd30221eeac8a71dc4805566c35f975a5792b36eb17880164b23e",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/channels/zalo-adapters.md",
+        "bodyHash": "fd3013938bef1cb34f5d6ebdd190c1373d5f8d3fdd72fdd01c296b91259f8909",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/database/persistence.md",
+        "bodyHash": "35f105af02a1561684145883a20c28c1478758f8e31727b9ec30030abafc5f37",
+        "generated": {
+          "by": "opencode",
+          "at": "2026-09-21T02:42:43.794Z"
+        }
+      },
+      {
+        "page": "/openwiki/database/schema-and-migrations.md",
+        "bodyHash": "c94ead3ab658f3dcfc89a429e66c1c6fc1d34d6bb2adc19f8ef2fffd1e1c57bd",
+        "generated": {
+          "by": "opencode",
+          "at": "2026-09-21T12:36:52.415Z"
+        }
+      },
+      {
+        "page": "/openwiki/frontend/architecture.md",
+        "bodyHash": "b52441e5cdb5d391d72991de93c56df5afd1e38cc2cd460822058f03abb15f4d",
+        "generated": {
+          "by": "opencode",
+          "at": "2026-09-21T02:42:43.794Z"
+        }
+      },
+      {
+        "page": "/openwiki/frontend/recruitment-console.md",
+        "bodyHash": "586bab6a52af21dac71a021cdf57345d9f4d6fe9de2a389850fcb1bbdf1756c0",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/knowledge/ingestion.md",
+        "bodyHash": "6b4e787c0ab8bc9aa8592a490d407d5b054847ac2886f58d3b99a6def60af437",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/knowledge/rag.md",
+        "bodyHash": "2aec1a79e57df4925064497d46ff924b268a8aaa6311eb31cf85b5098ee495f1",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/knowledge/single-page-sync.md",
+        "bodyHash": "c43efbfe4ea0d6a7735492dee9aba620d3b93eadf9971c4b4233f04ae9381ca9",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/messaging/conversation-lifecycle.md",
+        "bodyHash": "ebdd58f753191747031715e0dc79c2140143384a416f339fed48e181ff65411c",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/messaging/realtime-socketio.md",
+        "bodyHash": "d15d67d3a9c9cce7e234db42a1d1c6448dc8f0f40f9ced51269f1002a372a547",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/operations/configuration.md",
+        "bodyHash": "89e993d3175c501f4033ac09f90a187153a22b2e0484dd48c3873dafae42815b",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/operations/observability.md",
+        "bodyHash": "392892f1b48e5d1d0b296db30acb90aaa062db817be94d4af5466f667ea31cfc",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/operations/testing-strategy.md",
+        "bodyHash": "738baf60908eecd75df7aa39fa0dd379893db00d027fa8664468ff5567513c34",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/quickstart.md",
+        "bodyHash": "f1173225f8ebed44bea69515be2a45f56bc4310ce6eaaf42cc034e4ed17ef27d",
+        "generated": {
+          "by": "opencode",
+          "at": "2026-09-21T12:36:52.415Z"
+        }
+      },
+      {
+        "page": "/openwiki/recruitment/lead-lifecycle.md",
+        "bodyHash": "47d96562062d76d9464f4796c6ae72a9db0dec2260170a1e11c9ba4b8e007c2f",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/recruitment/proactive-followup.md",
+        "bodyHash": "579a1b1bd3d779eb960c315b1e718f8599d1e33f9f1400f7e96eb5526b2ff698",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/recruitment/recommendation.md",
+        "bodyHash": "2f32e8167b3985e7e89a790662cf7f1bc89904ecd507d6f8004c1a8c167004a6",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      },
+      {
+        "page": "/openwiki/workers/pipeline-and-recovery.md",
+        "bodyHash": "3ed6221ae762c1336d831fcf8136acfa4e6b60881b3bb18676fe576f4379b333",
+        "generated": {
+          "by": "claude-code",
+          "at": "2026-09-08T09:17:45.993Z"
+        }
+      }
+    ]
+  }
+}
