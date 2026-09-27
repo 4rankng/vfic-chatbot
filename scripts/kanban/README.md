@@ -37,6 +37,27 @@ rebuild — do not hand-move files, and do not hand-edit a generated card.
 
 ## Origin
 
+### Wave 3 — 2026-09-27 (HEAD `d2e8889f`)
+
+9 cards (`ARCH-29`…`ARCH-32`, `FE-27`…`FE-29`, `PERF-18`, `TEST-23`), all starting in
+`TODO/`. Source: a read-only repowise pass (`get_health` production-scope dashboard, the
+top performance opportunity and its stored plan, `get_dead_code` at min_confidence 0.5)
+at this HEAD. Data module: `tickets_f.py`. Ids continue each area sequence from wave 2
+(TEST-22 was consumed by its retirement, so testing resumes at TEST-23).
+
+Deduped against the live board before carding: subjects already carded were skipped
+(runner.py → ARCH-20, KnowledgeCategoryService → ARCH-23, graph/clients.py → ARCH-05);
+`ConversationList.tsx` is excluded by a standing split decision; the files flagged
+change-entropy only (`RecruitingCommandCenter.tsx`, `ConversationContextPanel.tsx`,
+`FacebookMessengerIntegrationPage.tsx` — recently reshaped by FE-14) are recorded as
+context, not carded; the two unused exports repowise flags in
+`.claude/skills/ak-webmcp/assets/` are skill fixtures, not product code.
+
+The dead-code set (ARCH-30) was grep-re-verified at zero references in the working tree
+because the TypeScript call-edge basis runs 44% guessed. Baseline caveat: the working
+tree carries the uncommitted multi-OA work, so every `path:line` anchor cites HEAD
+`d2e8889f`, not the dirty tree.
+
 ### Wave 2 — 2026-09-26 (HEAD `31d30377`)
 
 49 cards (`ARCH-20`…`ARCH-28`, `DOC-14`…`DOC-18`, `FE-20`…`FE-26`, `OPS-21`…`OPS-27`,

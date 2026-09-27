@@ -39,6 +39,7 @@ import tickets_b  # noqa: E402
 import tickets_c  # noqa: E402
 import tickets_d  # noqa: E402
 import tickets_e  # noqa: E402
+import tickets_f  # noqa: E402
 
 TICKET_DATE = "20260924"
 COLUMNS = ["TODO", "IN_PROGRESS", "DEV_COMPLETED", "QA_TESTED"]
@@ -267,7 +268,7 @@ def _existing_column(ticket_id: str, date: str) -> str | None:
 
 def tickets():
     out = []
-    for mod in (tickets_a, tickets_b, tickets_c, tickets_d, tickets_e):
+    for mod in (tickets_a, tickets_b, tickets_c, tickets_d, tickets_e, tickets_f):
         out.extend(mod.TICKETS)
     seen = set()
     for t in out:
