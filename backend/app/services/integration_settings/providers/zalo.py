@@ -57,6 +57,29 @@ ZALO_SETTING_KEYS = (
     ZALO_OA_REFRESH_TOKEN,
 )
 
+# The original OA (the one Alembic 0047 seeded) keeps the singleton keys above.
+# Every additional OA stores the same four credentials under ``<key>:<oa_id>``,
+# mirroring ``facebook_page_token:<page id>`` for multi-Page Messenger.
+ZALO_OA_DEFAULT_ACCOUNT_KEY = "default:zalo_oa"
+ZALO_OA_ACCOUNT_SETTING_BASES = (
+    ZALO_OA_APP_ID,
+    ZALO_OA_SECRET_KEY,
+    ZALO_OA_ACCESS_TOKEN,
+    ZALO_OA_REFRESH_TOKEN,
+)
+
+
+def oa_account_setting_key(base: str, account_key: str) -> str:
+    """Storage key for one OA account's credential (``zalo_oa_access_token:<oa id>``)."""
+    return f"{base}:{account_key}"
+
+
+def is_oa_account_setting_key(key: str) -> bool:
+    """True for a per-OA credential key (never the singleton or a Bot key)."""
+    return any(
+        key.startswith(f"{base}:") and key != base for base in ZALO_OA_ACCOUNT_SETTING_BASES
+    )
+
 
 @dataclass(frozen=True)
 class ZaloRuntimeConfig:
@@ -73,25 +96,46 @@ class ZaloRuntimeConfig:
 class ZaloSettingsMixin:
     """Resolve/admin/persist for the two Zalo channels (Bot + OA)."""
 
-    async def resolve_zalo(self) -> ZaloRuntimeConfig:
+    async def resolve_zalo(self, account_key: str | None = None) -> ZaloRuntimeConfig:
+        """Resolve the Zalo Bot + OA runtime config.
+
+        ``account_key`` selects one OA account: a second OA keeps its own four
+        credentials under ``zalo_oa_*:<oa id>``. A non-default account resolves
+        ONLY its own stored values — it must never inherit the original OA's
+        token, or replies would leave as the wrong brand. An account with no
+        stored credentials resolves empty and the senders fail closed. The
+        default account (and every caller that omits the key) resolves the
+        singleton keys exactly as before.
+        """
+        account_key = account_key or ZALO_OA_DEFAULT_ACCOUNT_KEY
+        is_default = account_key == ZALO_OA_DEFAULT_ACCOUNT_KEY
+
         async def _load() -> dict:
-            stored = await self._stored_values(ZALO_SETTING_KEYS)
+            keys = list(ZALO_SETTING_KEYS)
+            if not is_default:
+                keys += [
+                    oa_account_setting_key(base, account_key)
+                    for base in ZALO_OA_ACCOUNT_SETTING_BASES
+                ]
+            stored = await self._stored_values(keys)
+
+            def _oa(base: str, env_fallback: str) -> str:
+                if not is_default:
+                    return stored.get(oa_account_setting_key(base, account_key), "")
+                return stored.get(base) or env_fallback
+
             return ZaloRuntimeConfig(
                 bot_token=stored.get(ZALO_BOT_TOKEN) or self.settings.zalo_bot_token,
                 bot_webhook_secret=(
                     stored.get(ZALO_BOT_WEBHOOK_SECRET) or self.settings.zalo_bot_webhook_secret
                 ),
-                oa_app_id=stored.get(ZALO_OA_APP_ID) or self.settings.zalo_oa_app_id,
-                oa_secret_key=stored.get(ZALO_OA_SECRET_KEY) or self.settings.zalo_oa_secret_key,
-                oa_access_token=(
-                    stored.get(ZALO_OA_ACCESS_TOKEN) or self.settings.zalo_oa_access_token
-                ),
-                oa_refresh_token=(
-                    stored.get(ZALO_OA_REFRESH_TOKEN) or self.settings.zalo_oa_refresh_token
-                ),
+                oa_app_id=_oa(ZALO_OA_APP_ID, self.settings.zalo_oa_app_id),
+                oa_secret_key=_oa(ZALO_OA_SECRET_KEY, self.settings.zalo_oa_secret_key),
+                oa_access_token=_oa(ZALO_OA_ACCESS_TOKEN, self.settings.zalo_oa_access_token),
+                oa_refresh_token=_oa(ZALO_OA_REFRESH_TOKEN, self.settings.zalo_oa_refresh_token),
             ).__dict__
 
-        cached = await cached_zalo_config(_load)
+        cached = await cached_zalo_config(_load, account_key=account_key)
         return ZaloRuntimeConfig(**cached)
 
     async def admin_view(self) -> dict:
@@ -118,24 +162,27 @@ class ZaloSettingsMixin:
         Only stages the write; the caller commits (and records audit) so multi-key
         updates and token refresh can batch their persistence.
         """
-        if key not in ZALO_SETTING_KEYS or value is None:
+        if key not in ZALO_SETTING_KEYS and not is_oa_account_setting_key(key):
+            return False
+        if value is None:
             return False
         cleaned = value.strip()
         if not cleaned:
             return False
         encrypted = self.cipher.encrypt(cleaned)
+        is_secret = key.split(":", 1)[0] != ZALO_OA_APP_ID
         row = await self.db.get(IntegrationSetting, key)
         if row is None:
             row = IntegrationSetting(
                 key=key,
                 encrypted_value=encrypted,
-                is_secret=key != ZALO_OA_APP_ID,
+                is_secret=is_secret,
                 updated_by=actor_id,
             )
             self.db.add(row)
         else:
             row.encrypted_value = encrypted
-            row.is_secret = key != ZALO_OA_APP_ID
+            row.is_secret = is_secret
             row.updated_by = actor_id
         return True
 
@@ -161,8 +208,54 @@ class ZaloSettingsMixin:
             await bump_cache_version(NS_INTEGRATION_ZALO)
         return changed
 
-    async def refresh_oa_access_token(self) -> str | None:
-        """Refresh the OA access_token from the stored refresh_token.
+    async def oa_account_credentials_view(self, account_key: str) -> dict:
+        """Masked credential status for one OA account (never a raw secret)."""
+        cfg = await self.resolve_zalo(account_key)
+        return {
+            "account_key": account_key,
+            "app_id": cfg.oa_app_id or "",
+            "app_id_configured": bool(cfg.oa_app_id),
+            "secret_key": _secret_status(cfg.oa_secret_key),
+            "access_token": _secret_status(cfg.oa_access_token),
+            "refresh_token": _secret_status(cfg.oa_refresh_token),
+        }
+
+    async def write_oa_account_credentials(
+        self, account_key: str, values: dict[str, str | None], *, actor_id
+    ) -> list[str]:
+        """Stage one OA account's namespaced credentials. The caller commits.
+
+        ``values`` is keyed by the base setting name (``zalo_oa_access_token``
+        …). Only the four OA credential bases are accepted: a typo cannot write
+        an arbitrary integration row.
+        """
+        changed: list[str] = []
+        for base, value in values.items():
+            if base not in ZALO_OA_ACCOUNT_SETTING_BASES:
+                continue
+            if await self._write_secret(
+                oa_account_setting_key(base, account_key), value, actor_id=actor_id
+            ):
+                changed.append(base)
+        return changed
+
+    async def clear_oa_account_credentials(self, account_key: str) -> int:
+        """Delete one OA account's namespaced credential rows. The caller commits."""
+        from sqlalchemy import delete
+
+        from app.models.integration import IntegrationSetting
+
+        keys = [
+            oa_account_setting_key(base, account_key)
+            for base in ZALO_OA_ACCOUNT_SETTING_BASES
+        ]
+        result = await self.db.execute(
+            delete(IntegrationSetting).where(IntegrationSetting.key.in_(keys))
+        )
+        return int(result.rowcount or 0)
+
+    async def refresh_oa_access_token(self, account_key: str | None = None) -> str | None:
+        """Refresh one OA account's access_token from its stored refresh_token.
 
         Called lazily by ``ZaloOASender`` when a send reports the token invalid.
         A Redis ``SET NX EX`` lock prevents RQ workers from refreshing in
@@ -172,16 +265,30 @@ class ZaloSettingsMixin:
         admit a third redeemer of the single-use refresh token (REL-03). Returns
         the new access_token, or ``None`` on any failure — the caller then
         surfaces the original send error.
+
+        ``account_key`` scopes both the credentials and the lock: each OA has
+        its own single-use refresh token, so two OAs must never share a lock
+        (one would block the other's legitimate refresh).
         """
 
         from app.core.redis import get_redis
 
-        cfg = await self.resolve_zalo()
+        account_key = account_key or ZALO_OA_DEFAULT_ACCOUNT_KEY
+        is_default = account_key == ZALO_OA_DEFAULT_ACCOUNT_KEY
+
+        def _key(base: str) -> str:
+            return base if is_default else oa_account_setting_key(base, account_key)
+
+        cfg = await self.resolve_zalo(account_key)
         if not cfg.oa_refresh_token:
             return None
 
         redis = get_redis()
-        lock_key = ZALO_OA_REFRESH_LOCK_KEY
+        lock_key = (
+            ZALO_OA_REFRESH_LOCK_KEY
+            if is_default
+            else f"{ZALO_OA_REFRESH_LOCK_KEY}:{account_key}"
+        )
         leader_id = uuid.uuid4().hex
         try:
             acquired = await redis.set(
@@ -197,10 +304,11 @@ class ZaloSettingsMixin:
             # Another worker owns the single-use refresh token. Wait briefly for
             # it to persist the rotated pair, reading Postgres directly so the
             # integration cache cannot hand back our stale access token.
+            access_key = _key(ZALO_OA_ACCESS_TOKEN)
             for _ in range(20):
                 await asyncio.sleep(0.1)
-                stored = await self._stored_values((ZALO_OA_ACCESS_TOKEN,))
-                refreshed = stored.get(ZALO_OA_ACCESS_TOKEN)
+                stored = await self._stored_values((access_key,))
+                refreshed = stored.get(access_key)
                 if refreshed and refreshed != cfg.oa_access_token:
                     return refreshed
             return None
@@ -234,9 +342,9 @@ class ZaloSettingsMixin:
                 return None
 
             new_access = str(data["access_token"])
-            await self._write_secret(ZALO_OA_ACCESS_TOKEN, new_access)
+            await self._write_secret(_key(ZALO_OA_ACCESS_TOKEN), new_access)
             if data.get("refresh_token"):
-                await self._write_secret(ZALO_OA_REFRESH_TOKEN, str(data["refresh_token"]))
+                await self._write_secret(_key(ZALO_OA_REFRESH_TOKEN), str(data["refresh_token"]))
             # Persist the rotated credential pair before nonessential audit/cache
             # work. Zalo refresh tokens are single-use; losing the new token due
             # to an audit failure would require manual re-authorization.
@@ -249,7 +357,10 @@ class ZaloSettingsMixin:
                     actor_id=None,
                     target_type="integration_settings",
                     target_id="zalo",
-                    payload={"rotated_refresh_token": bool(data.get("refresh_token"))},
+                    payload={
+                        "rotated_refresh_token": bool(data.get("refresh_token")),
+                        "account_key": account_key,
+                    },
                 )
                 await self.db.commit()
             except Exception:  # noqa: BLE001

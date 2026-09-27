@@ -71,6 +71,41 @@ class ZaloIntegrationSettingsUpdate(BaseModel):
     zalo_oa_refresh_token: str | None = Field(default=None, min_length=1, max_length=4096)
 
 
+class ZaloOaAccountOut(BaseModel):
+    """One linked Zalo OA account (multi-OA settings card).
+
+    Secrets are surfaced as status only (never the value); ``account_key`` is the
+    Zalo OA id, which is also the routing key for that OA's webhook events.
+    """
+
+    account_key: str
+    label: str
+    status: str
+    generation: int
+    is_default: bool
+    app_id: str = ""
+    secret_key: SecretStatus
+    access_token: SecretStatus
+    refresh_token: SecretStatus
+
+
+class ZaloOaAccountsOut(BaseModel):
+    accounts: list[ZaloOaAccountOut]
+
+
+class ZaloOaAccountLinkIn(BaseModel):
+    """Link (or re-credential) a second Zalo OA account."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    oa_id: str = Field(min_length=1, max_length=64)
+    label: str = Field(default="", max_length=255)
+    app_id: str | None = Field(default=None, max_length=128)
+    secret_key: str | None = Field(default=None, max_length=2048)
+    access_token: str = Field(min_length=1, max_length=4096)
+    refresh_token: str | None = Field(default=None, max_length=4096)
+
+
 class ZaloChannelTestOut(BaseModel):
     """Result of probing ONE Zalo channel (Bot Platform or OA).
 

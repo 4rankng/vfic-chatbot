@@ -44,7 +44,8 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 2,
     "conversations": 19,
     "dashboard": 2,
-    "integrations": 33,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints
+    "integrations": 36,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints
+    # +3 multi-OA account endpoints (list / link / unlink one Zalo OA account)
     # +2 deployment-wide TingTing app API key (GET / PUT, secrets status-only)
     # +2 Meta App credentials UI; +4 multi-Page per-Page project CRUD
     # +1 admin-only credentials reveal (audited, no-store)
@@ -63,7 +64,7 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "7c5bca34cfa801802a344a2b35f429d4434e25b7713b8e7374fa05f9442c84a3"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "4b7121b56005a0d2bed86a0605f0f683e08414beda6c88be7dcbb9d0dbdab608"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -118,6 +119,8 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # one reviewed egress row (TingtingApiService._send's single `client.request`)
     # plus its two `db.get` configuration reads — but the per-project integration
     # (-1 row: its egress site) was retired with the section it configured.
+    # +2: multi-OA adds the per-account credential read (resolve_zalo) and the
+    # account-scoped credential delete (clear_oa_account_credentials).
     # +2: the reset flow's channel scope reads the stored OA pin
     # (TingtingApiService.reset_oa_id's db.get) and the runner resolves the
     # conversation's channel account through the same provider-transport file.
@@ -125,7 +128,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # app/services/tingting_api.py gains a Redis `get` in load() plus the
     # `delete` in clear(), and the dispatcher names the send_tingting_otp tool
     # call — the flow tools themselves open no new egress site.
-    "provider_boundary": 90,
+    "provider_boundary": 92,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -163,7 +166,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "d3b0bf7f7a3409e97681af9c4a7585aca38ff1be7b899318c8391211fc7175d3"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "3ca70805ffb1a4a80565101dcbf27b10717bd203dbc5b5802acb6815e6c3deea"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

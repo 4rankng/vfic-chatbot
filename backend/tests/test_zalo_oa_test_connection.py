@@ -25,7 +25,7 @@ class _IntSvc:
     def __init__(self, _db) -> None:
         pass
 
-    async def resolve_zalo(self):
+    async def resolve_zalo(self, account_key=None):
         return self.config
 
 

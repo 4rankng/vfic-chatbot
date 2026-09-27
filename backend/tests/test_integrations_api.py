@@ -3,12 +3,15 @@ from __future__ import annotations
 import types
 import uuid
 
+import pytest
+
 from app.api import integrations
 from app.core.config import ZALO_BOT_WEBHOOK_URL, Settings
 from app.services.integrations import llm_diagnostics, zalo_diagnostics
 from app.schemas.integrations import ZaloIntegrationSettingsUpdate
 from app.services.integration_settings import ZaloRuntimeConfig
 from app.services.zalo_bot_service import SendResult
+from app.shared.domain.errors import NotFoundError, ValidationError
 
 
 class _Service:
@@ -18,10 +21,10 @@ class _Service:
     def __init__(self, _db) -> None:
         pass
 
-    async def resolve_zalo(self) -> ZaloRuntimeConfig:
+    async def resolve_zalo(self, account_key=None) -> ZaloRuntimeConfig:
         return self.config
 
-    async def refresh_oa_access_token(self) -> str | None:
+    async def refresh_oa_access_token(self, account_key=None) -> str | None:
         return None
 
 
@@ -183,7 +186,7 @@ async def test_zalo_oa_refreshes_invalid_access_token_and_retries(monkeypatch):
     calls: list[str] = []
 
     class _RefreshService(_Service):
-        async def refresh_oa_access_token(self) -> str | None:
+        async def refresh_oa_access_token(self, account_key=None) -> str | None:
             calls.append("refresh")
             return "oa-token-new"
 
@@ -302,7 +305,7 @@ class _PutService:
     async def admin_view(self) -> dict:
         return _admin_view_dict()
 
-    async def resolve_zalo(self) -> ZaloRuntimeConfig:
+    async def resolve_zalo(self, account_key=None) -> ZaloRuntimeConfig:
         return self.config
 
 
@@ -632,3 +635,157 @@ async def test_tingting_settings_put_pins_the_reset_oa(monkeypatch):
 
     assert result.reset_oa_id == "tingting-oa-key"
     assert _TingtingService.last_update["values"] == {"reset_oa_id": "tingting-oa-key"}
+
+
+# ---------------------------------------------------------------------------
+# Multi-OA: /zalo/oa-accounts
+# ---------------------------------------------------------------------------
+
+
+class _OaAccountRow:
+    def __init__(self, account_key, label, status="ACTIVE", generation=1):
+        self.account_key = account_key
+        self.label = label
+        self.status = status
+        self.generation = generation
+
+
+class _OaLifecycle:
+    rows: list = []
+    linked: dict | None = None
+    unlinked: list[str] = []
+    link_error: Exception | None = None
+    unlink_error: Exception | None = None
+
+    def __init__(self, _db) -> None:
+        pass
+
+    async def list_accounts(self):
+        return list(self.rows)
+
+    async def link(self, *, oa_id, label, credentials, actor_id=None):
+        if type(self).link_error is not None:
+            raise type(self).link_error
+        type(self).linked = {
+            "oa_id": oa_id,
+            "label": label,
+            "credentials": dict(credentials),
+            "actor_id": actor_id,
+        }
+        return _OaAccountRow(oa_id, label)
+
+    async def unlink(self, account_key, *, actor_id=None):
+        if type(self).unlink_error is not None:
+            raise type(self).unlink_error
+        type(self).unlinked.append(account_key)
+
+
+class _OaCredentialsView:
+    settings = Settings(app_env="development", zalo_bot_request_timeout=5)
+
+    def __init__(self, _db) -> None:
+        pass
+
+    async def oa_account_credentials_view(self, account_key):
+        return {
+            "account_key": account_key,
+            "app_id": "" if account_key == "default:zalo_oa" else "app-1",
+            "app_id_configured": account_key != "default:zalo_oa",
+            "secret_key": {"configured": True, "preview": "…abcd"},
+            "access_token": {"configured": True, "preview": "…1234"},
+            "refresh_token": {"configured": False, "preview": None},
+        }
+
+
+def _patch_oa_accounts(monkeypatch, lifecycle=_OaLifecycle):
+    import app.channels.providers.zalo_account as zalo_account_mod
+
+    monkeypatch.setattr(integrations, "IntegrationSettingsService", _OaCredentialsView)
+    monkeypatch.setattr(zalo_account_mod, "ZaloOaAccountLifecycle", lifecycle)
+
+
+async def test_list_zalo_oa_accounts_flags_the_default(monkeypatch):
+    _OaLifecycle.rows = [
+        _OaAccountRow("default:zalo_oa", "OA gốc"),
+        _OaAccountRow("123456", "Ting Ting Software Solution"),
+    ]
+    _patch_oa_accounts(monkeypatch)
+
+    result = await integrations.list_zalo_oa_accounts(_admin=object(), db=object())
+
+    assert [a.account_key for a in result.accounts] == ["default:zalo_oa", "123456"]
+    assert result.accounts[0].is_default is True
+    assert result.accounts[1].is_default is False
+    assert result.accounts[1].app_id == "app-1"
+    assert result.accounts[1].access_token.preview == "…1234"
+
+
+async def test_link_zalo_oa_account_sends_every_credential(monkeypatch):
+    _OaLifecycle.rows = []
+    _OaLifecycle.linked = None
+    _patch_oa_accounts(monkeypatch)
+    admin = types.SimpleNamespace(id=uuid.uuid4())
+
+    await integrations.link_zalo_oa_account(
+        body=integrations.ZaloOaAccountLinkIn(
+            oa_id="123456",
+            label="Ting Ting Software Solution",
+            app_id="app-1",
+            secret_key="secret-1",
+            access_token="access-1",
+            refresh_token="refresh-1",
+        ),
+        admin=admin,
+        db=object(),
+    )
+
+    assert _OaLifecycle.linked == {
+        "oa_id": "123456",
+        "label": "Ting Ting Software Solution",
+        "credentials": {
+            "zalo_oa_app_id": "app-1",
+            "zalo_oa_secret_key": "secret-1",
+            "zalo_oa_access_token": "access-1",
+            "zalo_oa_refresh_token": "refresh-1",
+        },
+        "actor_id": admin.id,
+    }
+
+
+async def test_link_zalo_oa_account_maps_an_invalid_id_to_422(monkeypatch):
+    from app.channels.providers.zalo_account import ZaloOaAccountInvalidError
+
+    _OaLifecycle.rows = []
+    _OaLifecycle.link_error = ZaloOaAccountInvalidError("mã OA phải là dãy số")
+    _patch_oa_accounts(monkeypatch)
+    try:
+        with pytest.raises(ValidationError):
+            await integrations.link_zalo_oa_account(
+                body=integrations.ZaloOaAccountLinkIn(oa_id="abc", access_token="access-1"),
+                admin=types.SimpleNamespace(id=uuid.uuid4()),
+                db=object(),
+            )
+    finally:
+        _OaLifecycle.link_error = None
+
+
+async def test_unlink_zalo_oa_account_maps_a_missing_oa_to_404(monkeypatch):
+    from app.channels.providers.zalo_account import ZaloOaAccountNotFoundError
+
+    _OaLifecycle.rows = []
+    _OaLifecycle.unlinked = []
+    _OaLifecycle.unlink_error = ZaloOaAccountNotFoundError("chưa liên kết OA này")
+    _patch_oa_accounts(monkeypatch)
+    try:
+        with pytest.raises(NotFoundError):
+            await integrations.unlink_zalo_oa_account(
+                account_key="123456", admin=types.SimpleNamespace(id=uuid.uuid4()), db=object()
+            )
+    finally:
+        _OaLifecycle.unlink_error = None
+
+    _OaLifecycle.rows = [_OaAccountRow("123456", "Ting Ting")]
+    await integrations.unlink_zalo_oa_account(
+        account_key="123456", admin=types.SimpleNamespace(id=uuid.uuid4()), db=object()
+    )
+    assert _OaLifecycle.unlinked == ["123456"]
