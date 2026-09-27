@@ -111,20 +111,41 @@ def test_release_upload_extracts_docx_text():
 
 
 def test_extract_text_xlsx():
-    openpyxl = pytest.importorskip("openpyxl")
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.append(["vị trí", "lương"])
-    ws.append(["operator", "9000000"])
-    buf = io.BytesIO()
-    wb.save(buf)
+    # Builds the workbook by hand rather than via a spreadsheet library: the
+    # extractor reads the OOXML parts with the standard library, so this test
+    # runs (and can fail) on any environment. It was previously parked behind
+    # ``importorskip("openpyxl")``, which is why the xlsx route went untested
+    # even though openpyxl is not a declared dependency at all.
+    sheet_rows = [
+        '<row><c r="A1" t="inlineStr"><is><t>vị trí</t></is></c>'
+        '<c r="B1" t="inlineStr"><is><t>lương</t></is></c></row>',
+        '<row><c r="A2" t="inlineStr"><is><t>operator</t></is></c>'
+        '<c r="B2"><v>9000000</v></c></row>',
+    ]
+    buffer = io.BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "xl/workbook.xml",
+            '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+            ' xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>',
+        )
+        archive.writestr(
+            "xl/_rels/workbook.xml.rels",
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+        )
+        archive.writestr(
+            "xl/worksheets/sheet1.xml",
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            f"<sheetData>{''.join(sheet_rows)}</sheetData></worksheet>",
+        )
     txt = extract_text(
         "a.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        buf.getvalue(),
+        buffer.getvalue(),
     )
-    assert "operator" in txt and "9000000" in txt
+    assert txt.splitlines() == ["vị trí\tlương", "operator\t9000000"]
 
 
 def test_split_for_digest_respects_size():

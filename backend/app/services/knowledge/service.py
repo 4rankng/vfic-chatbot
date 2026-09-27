@@ -50,6 +50,7 @@ from app.services.knowledge.file_extraction import (
     KB_RELEASE_FORMATS,
     KnowledgeFileExtractionError,
     _detect_upload_format,
+    extraction_method_for_format,
     extract_text,
     mime_type_for_format,
 )
@@ -172,7 +173,11 @@ class KnowledgeService:
             )
         metadata["kb_version_id"] = str(version.id)
         metadata["content_sha256"] = stats.content_sha256
-        metadata["source_file"] = {"format": upload_format, "filename": file_name}
+        metadata["source_file"] = {
+            "format": upload_format,
+            "filename": file_name,
+            "extraction": extraction_method_for_format(upload_format),
+        }
         doc = KnowledgeDocument(
             file_name=file_name,
             source="kb_version",
@@ -411,23 +416,19 @@ class KnowledgeService:
         """Return ingestable text plus source-file metadata for an upload.
 
         The decode itself belongs to ``file_extraction``; this only assembles
-        the ``source_file`` metadata the document carries.
+        the ``source_file`` metadata the document carries. ``extraction`` names
+        the mechanism ``extract_text`` actually used for the resolved format —
+        it is read from the same table that drives the dispatch, so the
+        recorded provenance cannot drift from what the code did.
         """
         file_format = _detect_upload_format(file_name, content_type)
         text = extract_text(file_name, content_type, data, decode_errors="replace")
-        if file_format == "docx":
-            if not text.strip():
-                raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
-            return text, {
-                "format": "docx",
-                "mime_type": content_type or DOCX_MIME_TYPE,
-                "extraction": "word_ooxml",
-                "text_checksum": checksum_text(text),
-            }
+        if file_format == "docx" and not text.strip():
+            raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
         return text, {
             "format": file_format,
-            "mime_type": content_type or None,
-            "extraction": "utf8_decode",
+            "mime_type": content_type or (DOCX_MIME_TYPE if file_format == "docx" else None),
+            "extraction": extraction_method_for_format(file_format),
             "text_checksum": checksum_text(text),
         }
 
