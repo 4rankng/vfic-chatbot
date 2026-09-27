@@ -268,6 +268,20 @@ as candidate work items; confirm with the owner before scheduling.
   removed — nothing consumed the index, and it had drifted (its brief described a
   different product). Source code, tests and `docs/` are the only context now.
 
+### K-14. Repowise adopted as the agent-facing codebase index
+
+- **Decided:** 2026-09-27 (operator).
+- **What:** repowise (uv-tool CLI) indexes the repo for agents and serves it over
+  MCP (`.mcp.json`, gitignored) with a managed pointer in `.claude/CLAUDE.md`; the
+  generated `.repowise/` store is gitignored and refreshed by a repowise post-commit
+  hook. OpenWiki removal (K-13) is final; its `openwiki` skill remains installed
+  globally and uninstalled only affects other projects.
+- **Why:** the removed OpenWiki index was never consumed and had drifted; repowise
+  is deterministic and keyless at its core (no paid key on this machine), refreshes
+  incrementally (`repowise update`), and its analysis needs no LLM spend.
+- **Trade-off accepted:** another generated store on disk (~40 MB) plus a git hook;
+  wiki prose is structural only until a provider key is configured.
+
 ---
 
 ## 4. Deferred / out of scope

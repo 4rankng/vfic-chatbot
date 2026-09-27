@@ -48,7 +48,9 @@ tree left by the swept wave-1 board. Data module: `tickets_e.py`. Ids continue e
 area sequence from wave 1. Known/deferred items (SEC-01, K-4/K-10/K-11/K-12, the
 sweep-ledger holds, the FE-02/FE-08 QA-blocked edges) were excluded from carding;
 audit-time baseline: ruff clean, backend unit `2397 passed / 24 skipped`, frontend
-tsc + eslint clean.
+tsc + eslint clean. `TEST-22` was retired on 2026-09-27 with the OpenWiki teardown:
+its subject workflow (`.github/workflows/openwiki-update.yml`) no longer exists, so
+the card and its `tickets_e.py` entry were removed together.
 
 ### Wave 1 — 2026-09-24 (HEAD `923b1d3f`)
 
