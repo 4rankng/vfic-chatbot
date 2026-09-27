@@ -27,21 +27,6 @@ import pytest
 import app.services.integrations.facebook_oauth_flow as flow
 
 
-@pytest.fixture(autouse=True)
-def _reset_local_secret_cache():
-    """Isolate the process-local secret cache between tests.
-
-    The reveal endpoint resolves credentials through the cached facebook OAuth
-    config, so a cached value from another test file otherwise shadows this
-    module's env-backed stubs.
-    """
-    from app.core import preamble_cache
-
-    preamble_cache._reset_local_secret_cache()
-    yield
-    preamble_cache._reset_local_secret_cache()
-
-
 def _oauth_flow_capsule(
     *, admin_id: UUID, token_version: int, pages: list[dict[str, str]] | None = None
 ) -> str:

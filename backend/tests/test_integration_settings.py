@@ -4,7 +4,6 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
-from app.core import preamble_cache
 from app.services.integration_settings import (
     CUSTOM_LLM_API_KEY,
     CUSTOM_LLM_BASE_URL,
@@ -71,13 +70,6 @@ class _Settings:
     meta_webhook_verify_token = ""
     meta_graph_api_version = "v25.0"
     meta_graph_api_base = "https://graph.facebook.com"
-
-
-@pytest.fixture(autouse=True)
-def _reset_local_secret_cache():
-    preamble_cache._reset_local_secret_cache()
-    yield
-    preamble_cache._reset_local_secret_cache()
 
 
 class _Row:

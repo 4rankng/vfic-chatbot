@@ -1,4 +1,4 @@
-"""Best-effort fixed-window rate limiting backed by Redis.
+"""Best-effort request-rate limiting backed by Redis.
 
 Used to shield expensive auth endpoints (Argon2 password verify on login) from
 credential-stuffing / brute-force DoS on the 1-vCPU droplet, and the
@@ -48,12 +48,24 @@ async def _enforce_bucket(
     window: int,
     fail_open: bool,
 ) -> None:
-    """Increment ``key`` and reject with 429 once it exceeds ``limit``/``window``s."""
+    """Increment ``key`` and reject with 429 once it exceeds ``limit``/``window``s.
+
+    The window TTL is re-armed on *every* increment, not only on the first
+    one. The counter and its expiry are two separate Redis commands, so a
+    process death or a dropped connection between them leaves a counter that
+    no later request will ever reset: every subsequent hit pushes it further
+    past ``limit`` and the caller is 429'd until an operator deletes the key
+    by hand — on the auth path this module exists to keep available.
+    Re-arming on every hit makes that state self-healing, at the cost of one
+    extra round trip per request, which is noise next to the Argon2 verify or
+    LLM call the limiter is shielding. It is also never more permissive than
+    a fixed window: a bucket still admits at most ``limit`` requests per
+    ``window`` seconds, just measured from its most recent hit.
+    """
     try:
         redis = get_redis()
         count = await redis.incr(key)
-        if count == 1:
-            await redis.expire(key, window)
+        await redis.expire(key, window)
         if count > limit:
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, _TOO_MANY_REQUESTS)
     except HTTPException:

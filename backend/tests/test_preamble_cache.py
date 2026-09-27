@@ -18,13 +18,6 @@ from app.core.preamble_cache import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _reset_local_secret_cache():
-    preamble_cache._reset_local_secret_cache()
-    yield
-    preamble_cache._reset_local_secret_cache()
-
-
 # ── Test doubles ─────────────────────────────────────────────────────────
 
 

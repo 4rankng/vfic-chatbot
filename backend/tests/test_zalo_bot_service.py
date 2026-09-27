@@ -264,6 +264,122 @@ async def test_split_never_exceeds_provider_cap_on_giant_input() -> None:
     assert all(len(chunk) <= svc.ZALO_MAX_TEXT_CHARS for chunk in chunks)
 
 
+# ---------------------------------------------------------------------------
+# _split_long_plain_text boundaries — the splitter ladder's exact edge cases
+# ---------------------------------------------------------------------------
+
+
+async def test_split_empty_and_whitespace_only_text_yields_no_bubbles() -> None:
+    """Nothing to send means no bubbles — not one empty bubble, not two."""
+    assert svc._split_long_plain_text("") == []
+    assert svc._split_long_plain_text("   \n\t  ") == []
+    assert svc._split_long_plain_text("\n\n\n") == []
+    # Same verdict at the real cap: whitespace-only is not "under the limit".
+    assert svc._split_long_plain_text(" " * (svc.ZALO_VISIBLE_BUBBLE_CHARS + 5)) == []
+
+
+async def test_split_text_exactly_at_limit_stays_one_bubble() -> None:
+    """``len == max_chars`` is inside the limit: one bubble, unmodified."""
+    exact = "a" * svc.ZALO_VISIBLE_BUBBLE_CHARS
+
+    assert svc._split_long_plain_text(exact) == [exact]
+    # Internal spacing at the cap is untouched, not re-wrapped.
+    assert svc._split_long_plain_text("aa. bb.", max_chars=7) == ["aa. bb."]
+    assert svc._split_long_plain_text("a bb cc", max_chars=7) == ["a bb cc"]
+
+
+async def test_split_one_char_over_limit_makes_a_second_bubble() -> None:
+    """``len == max_chars + 1`` is the first case that actually chunks."""
+    over = "a" * (svc.ZALO_VISIBLE_BUBBLE_CHARS + 1)
+    chunks = svc._split_long_plain_text(over)
+
+    assert len(chunks) == 2
+    assert [len(chunk) for chunk in chunks] == [svc.ZALO_VISIBLE_BUBBLE_CHARS, 1]
+    assert "".join(chunks) == over
+
+
+async def test_split_text_without_any_separator_is_chopped_by_char() -> None:
+    """No paragraph, sentence, or word break: fixed-width slices are the floor."""
+    word = "x" * 25
+    chunks = svc._split_long_plain_text(word, max_chars=10)
+
+    assert chunks == ["x" * 10, "x" * 10, "x" * 5]
+    # An exact multiple of the cap does not gain a trailing empty bubble.
+    assert svc._split_long_plain_text("y" * 30, max_chars=10) == ["y" * 10] * 3
+
+
+async def test_split_paragraph_at_limit_is_never_rechunked() -> None:
+    """A paragraph that already fits is emitted whole, punctuation and all."""
+    # Sentence punctuation *would* be a break, but the paragraph is exactly at
+    # the cap, so the ladder stops at the first rung.
+    assert svc._split_long_plain_text("aa. bb. cc. dd.", max_chars=15) == ["aa. bb. cc. dd."]
+    # One char over: the sentence rungs become parts, and the packer re-joins
+    # them with the "\n\n" separator until the cap blocks the next one.
+    assert svc._split_long_plain_text("aa. bb. cc. dd.", max_chars=14) == [
+        "aa.\n\nbb.\n\ncc.",
+        "dd.",
+    ]
+
+
+async def test_split_paragraph_one_over_limit_falls_back_to_words() -> None:
+    """One char over the cap drops to word boundaries, not character chop."""
+    chunks = svc._split_long_plain_text("abcde fghijk", max_chars=10)
+
+    assert chunks == ["abcde", "fghijk"]
+    assert " ".join(chunks) == "abcde fghijk"
+
+
+async def test_split_prefers_sentence_boundaries_before_words() -> None:
+    """Sentence punctuation is a break even when the words alone would fit."""
+    chunks = svc._split_long_plain_text("aaaaa. bbbbb.", max_chars=10)
+
+    assert chunks == ["aaaaa.", "bbbbb."]
+
+
+async def test_split_packs_words_up_to_the_cap_before_starting_a_bubble() -> None:
+    """Word fallback fills a bubble greedily and only then starts the next."""
+    chunks = svc._split_long_plain_text("a bb ccc dddd", max_chars=10)
+
+    assert chunks == ["a bb ccc", "dddd"]
+    # Adding one char to the last word overflows it into the second bubble.
+    assert svc._split_long_plain_text("a bb ccc ddddd", max_chars=10) == ["a bb ccc", "ddddd"]
+
+
+async def test_split_oversized_word_is_sliced_and_never_merged_back() -> None:
+    """A word longer than a bubble is chopped; its slices stay separate parts."""
+    chunks = svc._split_long_plain_text("aaa " + "z" * 15 + " bbb", max_chars=10)
+
+    assert chunks == ["aaa", "z" * 10, "z" * 5 + "\n\nbbb"]
+    assert all(len(chunk) <= 10 for chunk in chunks)
+    assert " ".join(chunks).replace("\n\n", " ").split() == ["aaa", "z" * 10, "z" * 5, "bbb"]
+
+
+async def test_split_strips_outer_whitespace_but_keeps_inner_spacing() -> None:
+    """Trimming happens at the edges only — internal runs survive verbatim."""
+    assert svc._split_long_plain_text("  aaa   bbb  ") == ["aaa   bbb"]
+    assert svc._split_long_plain_text("  aaa\n\n   bbb  ", max_chars=6) == ["aaa", "bbb"]
+
+
+async def test_split_never_emits_an_empty_bubble_for_long_text() -> None:
+    """Blank lines between paragraphs never become their own bubble."""
+    chunks = svc._split_long_plain_text("aaaa\n\n\n\nbb cc dd", max_chars=6)
+
+    assert chunks == ["aaaa", "bb cc", "dd"]
+    assert all(chunk.strip() for chunk in chunks)
+
+
+async def test_split_every_bubble_respects_the_cap_at_the_real_limit() -> None:
+    """A run of words past the real cap fills full bubbles, then a remainder."""
+    run = "w " * (svc.ZALO_VISIBLE_BUBBLE_CHARS + 1)
+    chunks = svc._split_long_plain_text(run)
+
+    assert len(chunks) == 3
+    assert [len(chunk) for chunk in chunks] == [1599, 1599, 1]
+    assert all(1 <= len(chunk) <= svc.ZALO_VISIBLE_BUBBLE_CHARS for chunk in chunks)
+    # No word is lost or duplicated; only the separator spacing is rebuilt.
+    assert " ".join(chunks).split() == run.split()
+
+
 async def test_send_message_invalid_recipient_is_stamped_unreachable(
     monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:

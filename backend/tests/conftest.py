@@ -72,6 +72,27 @@ async def _reset_http_singleton_registry():
 
 
 @pytest.fixture(autouse=True)
+def _reset_local_secret_cache() -> None:
+    """Clear the process-local secret cache around every unit test.
+
+    ``app.core.preamble_cache`` keeps decrypted secrets in module-level dicts
+    that outlive a single test, so a value cached by one test file shadows the
+    env-backed stubs another file installs — the facebook reveal endpoint, for
+    one, resolves its credentials through the cached OAuth config and would
+    happily return another test's ciphertext-decrypted token. That protection
+    used to live as a hand-pasted copy in the three files that hit secrets, so
+    any new one had to remember the incantation; it is autouse here so
+    secret-touching tests are covered without remembering anything. It is two
+    dict clears, so it costs nothing to run everywhere.
+    """
+    from app.core import preamble_cache
+
+    preamble_cache._reset_local_secret_cache()
+    yield
+    preamble_cache._reset_local_secret_cache()
+
+
+@pytest.fixture(autouse=True)
 def _block_external_http(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fail loudly on an unstubbed outbound connection.
 
