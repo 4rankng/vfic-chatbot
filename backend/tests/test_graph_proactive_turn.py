@@ -427,3 +427,59 @@ async def test_send_exception_is_reported_as_send_failed(monkeypatch):
     # candidate is no longer replaced with a fallback redirect.
     assert res["reply"] == "Theo dõi lại nhé?"
     assert recorded == [{"message": res["reply"], "ok": False}]
+
+
+@pytest.mark.asyncio
+async def test_llm_failure_still_finalizes_and_releases_lock(monkeypatch):
+    """A provider failure before any candidate exists must not crash the finalizer.
+
+    The finalizer reads ``candidate`` unconditionally; before the pre-try
+    initialization, a failure inside the agent call crashed with
+    UnboundLocalError instead of recording the outcome, so the per-chat lock
+    leaked until its TTL expired.
+    """
+    svc, recorded = _stub_svc()
+    _patch_lazy_helpers(monkeypatch)
+
+    class _RaisingAgent:
+        async def agent(self, *args, **kwargs):
+            raise RuntimeError("provider unavailable")
+
+    zalo = _FakeZalo()
+    conv = _FakeConv()
+
+    # Model the production acquire_lock: the lock is stamped on the row after
+    # the guards pass; the finalizer's record_proactive_outcome call must clear
+    # it again.
+    async def _acquire_and_stamp(conv_id, ttl_seconds=None):
+        conv.bot_locked_until = datetime.now(timezone.utc) + timedelta(seconds=180)
+        conv.bot_lock_owner = "lock-owner-1"
+        conv.bot_lock_heartbeat_at = datetime.now(timezone.utc)
+        return True
+
+    svc.acquire_lock = _acquire_and_stamp
+
+    class _State:
+        async def record_proactive_outcome(self, conv, *, message, result, lock_owner=None):
+            recorded.append({"message": message, "ok": result.ok, "lock_owner": lock_owner})
+            # Mirror the real record_proactive_outcome lock-release contract.
+            conv.bot_locked_until = None
+            conv.bot_lock_owner = None
+            conv.bot_lock_heartbeat_at = None
+            return object()
+
+    svc.state = _State()
+
+    res = await run_proactive_turn(
+        conv,
+        _deps(_RaisingAgent(), zalo, conversation=svc),
+    )
+
+    assert res == {"outcome": "send_failed", "reply": ""}
+    # The failure is durably recorded (not swallowed by a finalizer crash) and
+    # the lock columns are released, so the reactive bot path is not blocked.
+    assert recorded == [{"message": "", "ok": False, "lock_owner": None}]
+    assert conv.bot_locked_until is None
+    assert conv.bot_lock_owner is None
+    assert conv.bot_lock_heartbeat_at is None
+    assert zalo.sent == []

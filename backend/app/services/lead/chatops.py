@@ -11,14 +11,16 @@ collaborators through it. ``LeadService`` forwards via thin delegates.
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from app.models.conversation import MessageSender
 from app.models.lead import Lead, LeadEvent, LeadScore, LeadStage
 from app.models.user import User
 from app.services.audit_service import record_audit
 from app.services.lead import viewmodels as _vm_lib
+from app.shared.domain.errors import ConflictError
 
 if TYPE_CHECKING:
     from app.services.lead.service import LeadService
@@ -83,9 +85,13 @@ class ChatopsService:
             if conversation is not None:
                 conversation.followup_opted_out = True
         elif action == "schedule_followup":
+            # Follow-up mornings live on the Vietnam business calendar — the
+            # same calendar the dashboard's FOLLOWUP_TODAY counter mandates
+            # (see _vn_today_predicate) — not 09:00 UTC (16:00 ICT).
+            vn_tz = ZoneInfo("Asia/Ho_Chi_Minh")
             due_at = datetime.combine(
-                datetime.now(timezone.utc).date() + timedelta(days=1),
-                time(hour=9, tzinfo=timezone.utc),
+                datetime.now(vn_tz).date() + timedelta(days=1),
+                time(hour=9, tzinfo=vn_tz),
             )
             await self.leads.repo.create_followup(
                 lead.id,
@@ -93,9 +99,11 @@ class ChatopsService:
                 "Theo dõi lại từ màn hình chat.",
                 created_by=actor.id,
             )
-            lead.next_action_at = due_at
-            lead.updated_at = datetime.now(timezone.utc)
-            lead.version += 1
+            if not await self.leads.repo.optimistic_apply(
+                lead.id, lead.version, next_action_at=due_at, version=lead.version + 1
+            ):
+                await self.leads.db.refresh(lead)
+                raise ConflictError("lead was modified by another recruiter")
 
         self.leads.db.add(
             LeadEvent(

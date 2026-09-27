@@ -38,8 +38,8 @@ release-check:
 	@if command -v uv >/dev/null 2>&1; then (cd backend && uv lock --check); else echo "WARNING: uv not found — skipped uv lock --check"; fi
 	@cd backend && test "$$(.venv/bin/python -m alembic heads | wc -l | tr -d ' ')" = 1
 	@cd backend && HEAD_REV="$$(.venv/bin/python -m alembic heads | awk 'NR==1{print $$1}')" && \
-		grep -qF "**HEAD:** \`$$HEAD_REV" ../docs/deployment-guide.md || { \
-			echo "Release blocked: docs/deployment-guide.md's Alembic HEAD no longer matches alembic heads ($$HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
+		grep -qF "**HEAD:** \`$$HEAD_REV" ../docs/ops/deployment-guide.md || { \
+			echo "Release blocked: docs/ops/deployment-guide.md's Alembic HEAD no longer matches alembic heads ($$HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
 	@cd backend && .venv/bin/ruff check . && .venv/bin/pytest -m "not integration"
 	@cd frontend && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build
 	@tmp_raw="$$(mktemp -t release-gate-raw.XXXXXX.json)"; \

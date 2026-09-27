@@ -253,6 +253,10 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         return _outcome("suppressed", reason="locked")
     lock_owner = None if acquired is True else acquired
     version_at_start = conv.version
+    # Initialized before the try so a failure during context build / LLM call
+    # still reaches the finalizer: record_proactive_outcome clears the lock and
+    # durably records the failure instead of crashing on UnboundLocalError.
+    candidate = ""
     pending_message_id: int | None = None
     outbox_channel: str | None = None
     outbox_payload: dict | None = None
