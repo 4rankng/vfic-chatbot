@@ -765,6 +765,13 @@ async def test_build_deps_caches_llm_clients_across_turns(monkeypatch):
     the langchain_openai import it triggers on a cold process) happens once per
     worker process, not once per turn. We count constructions by counting
     _chat_for_role invocations.
+
+    The LLM client cache key is derived from cache_version(), which falls back
+    to a fresh epoch-second generation when Redis is unreachable — so without a
+    pinned version the two build_deps calls land on different keys whenever
+    they straddle a second boundary, and the test fails roughly once a run
+    happens to take that second. Pin the version so the key is stable; what is
+    under test is the cache HIT, not the version source.
     """
     reset_client_cache()
 
@@ -781,6 +788,11 @@ async def test_build_deps_caches_llm_clients_across_turns(monkeypatch):
     monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.graph.client_cache.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
+
+    async def _fake_cache_version(namespace):
+        return "1"
+
+    monkeypatch.setattr("app.core.cache.cache_version", _fake_cache_version)
 
     await build_deps(object())
     first_count = call_count["n"]
