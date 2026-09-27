@@ -28,7 +28,7 @@ from app.services.retrieval.catalog_repository import CatalogRepository, Recomme
 from app.services.retrieval.document_repository import DocumentRepository
 from app.services.retrieval.faq_repository import FaqRepository
 from app.services.retrieval.timetable_repository import TimetableRepository
-from app.services.tingting_api import TingtingApiService
+from app.services.tingting_api import TingtingApiService, TingtingFlowStore
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +188,18 @@ class RetrievalRepository:
             )
             runtime = None
         return await service.invoke(runtime, method=method, path=path, params=params)
+
+    async def tingting_flow_state(self, phone: str) -> dict:
+        """The stored reset-flow state for a phone (empty when none/expired)."""
+        return await TingtingFlowStore().load(phone)
+
+    async def save_tingting_flow_state(self, phone: str, state: dict) -> dict:
+        """Merge one step's state into the phone's flow key."""
+        return await TingtingFlowStore().save(phone, state)
+
+    async def clear_tingting_flow_state(self, phone: str) -> None:
+        """Drop the flow state once the password has been reset."""
+        await TingtingFlowStore().clear(phone)
 
     async def income_summary_for_active_projects(self):
         return await self._catalog.income_summary_for_active_projects()

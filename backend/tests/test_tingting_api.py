@@ -19,7 +19,12 @@ from app.graph.tingting_guide import (
     TINGTING_API_GUIDE,
     tingting_api_prompt_block,
 )
-from app.graph.tools.tingting_api import call_tingting_api
+from app.graph.tools.tingting_api import (
+    call_tingting_api,
+    confirm_tingting_otp,
+    reset_tingting_password,
+    send_tingting_otp,
+)
 from app.services import tingting_api as mod
 from app.services.external_api_core import QuotaDecision
 from app.services.integration_settings.cipher import IntegrationSettingsCipher
@@ -387,11 +392,15 @@ def test_guide_documents_every_reset_endpoint_in_order() -> None:
 
 
 def test_guide_requires_identity_verification_before_the_otp() -> None:
-    """The three-field check is a hard precondition, not a suggestion."""
+    """The identity check is a hard precondition and it is the tool's call."""
     guide = TINGTING_API_GUIDE
     assert "CCCD" in guide
     assert "XÁC MINH DANH TÍNH" in guide
-    assert guide.index("XÁC MINH DANH TÍNH") < guide.index("3. GỬI OTP")
+    assert guide.index("1. TRA CỨU + XÁC MINH DANH TÍNH") < guide.index("2. GỬI OTP")
+    assert guide.index("verify_tingting_identity") < guide.index("send_tingting_otp")
+    assert "ĐÃ XÁC MINH" in guide
+    # The session/token is server state: the model is told never to pass it.
+    assert "KHÔNG truyền" in guide
 
 
 def test_guide_forbids_inventing_contact_channels() -> None:
@@ -419,53 +428,54 @@ def _outcome(state: str, **kwargs):
 
 
 @pytest.mark.asyncio
-async def test_tool_hands_back_the_real_body_for_ok() -> None:
+async def test_lookup_tool_hands_back_the_real_body() -> None:
     retrieval = _StubRetrieval(
-        _outcome("ok", label="TingTing", text='{"data":{"otp_sent":true}}')
+        _outcome("ok", label="TingTing", text='{"data":{"found":true}}')
     )
     result = await call_tingting_api(
-        retrieval, method="POST", path="/api/v1/integration/password-reset/otp", params={}
+        retrieval,
+        method="POST",
+        path="/api/v1/integration/employee/lookup",
+        params={"phone": "0987654321"},
     )
-    assert '{"data":{"otp_sent":true}}' in result
-    assert "session_id" in result  # the confidentiality instruction rides along
-    assert retrieval.calls[0]["path"] == "/api/v1/integration/password-reset/otp"
+    assert '{"data":{"found":true}}' in result
+    assert retrieval.calls[0]["path"] == "/api/v1/integration/employee/lookup"
 
 
 @pytest.mark.asyncio
-async def test_tool_tells_the_model_to_stay_honest_on_errors() -> None:
+async def test_lookup_tool_refuses_every_mutating_path() -> None:
+    """The reset steps carry flow state; the raw tool must not run them."""
+    retrieval = _StubRetrieval(_outcome("ok", text="body"))
+    for path in (
+        "/api/v1/integration/password-reset/otp",
+        "/api/v1/integration/password-reset/verify",
+        "/api/v1/integration/password-reset/reset",
+    ):
+        result = await call_tingting_api(
+            retrieval, method="POST", path=path, params={"phone": "0987654321"}
+        )
+        assert "send_tingting_otp" in result
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_lookup_tool_tells_the_model_to_stay_honest_on_errors() -> None:
     not_configured = await call_tingting_api(
-        _StubRetrieval(_outcome("not_configured")), method="POST", path="/x", params={}
+        _StubRetrieval(_outcome("not_configured")),
+        method="POST",
+        path="/api/v1/integration/employee/lookup",
+        params={},
     )
     assert "chưa được cấu hình" in not_configured
 
     errored = await call_tingting_api(
         _StubRetrieval(_outcome("error", status=500, detail="status_500")),
         method="POST",
-        path="/x",
+        path="/api/v1/integration/employee/lookup",
         params={},
     )
     assert "HTTP 500" in errored
     assert "chưa thực hiện được" in errored
-
-
-@pytest.mark.asyncio
-async def test_tool_distinguishes_a_duplicate_from_a_rate_limit() -> None:
-    duplicate = await call_tingting_api(
-        _StubRetrieval(_outcome("duplicate_request")),
-        method="POST",
-        path="/api/v1/integration/password-reset/otp",
-        params={"phone": "0987654321"},
-    )
-    assert "Không gửi lại" in duplicate
-    assert "giới hạn tần suất" not in duplicate
-
-    limited = await call_tingting_api(
-        _StubRetrieval(_outcome("rate_limited")),
-        method="POST",
-        path="/api/v1/integration/password-reset/otp",
-        params={"phone": "0987654321"},
-    )
-    assert "giới hạn tần suất" in limited
 
 
 @pytest.mark.asyncio
@@ -474,3 +484,161 @@ async def test_tool_requires_a_path_before_calling_the_port() -> None:
     result = await call_tingting_api(retrieval, method="POST", path="   ", params={})
     assert "Thiếu đường dẫn" in result
     assert retrieval.calls == []
+
+# ── the reset flow: state lives server-side ─────────────────────────────────
+
+
+class _FlowRetrieval:
+    """Retrieval stub with the flow-state seam and a scripted API answer."""
+
+    def __init__(self, outcome=None, *, state=None, outcomes=None) -> None:
+        self.outcome = outcome
+        self.state = dict(state or {})
+        self.outcomes = list(outcomes or [])
+        self.calls: list[dict] = []
+        self.saved: list[dict] = []
+        self.cleared = 0
+
+    async def call_tingting_api(self, *, method, path, params):  # noqa: ANN001
+        self.calls.append({"method": method, "path": path, "params": params})
+        if self.outcomes:
+            return self.outcomes.pop(0)
+        return self.outcome
+
+    async def tingting_flow_state(self, _phone: str) -> dict:
+        return dict(self.state)
+
+    async def save_tingting_flow_state(self, _phone: str, state: dict) -> dict:
+        self.saved.append(dict(state))
+        self.state.update(state)
+        return dict(self.state)
+
+    async def clear_tingting_flow_state(self, _phone: str) -> None:
+        self.cleared += 1
+        self.state = {}
+
+
+def _otp_ok(session_id: str = "sess-1"):
+    return _outcome(
+        "ok", label="TingTing", text=f'{{"data":{{"otp_sent":true,"session_id":"{session_id}"}}}}'
+    )
+
+
+def _verify_ok(reset_token: str = "tok-1"):
+    return _outcome("ok", label="TingTing", text=f'{{"data":{{"reset_token":"{reset_token}"}}}}')
+
+
+def _reset_ok():
+    return _outcome(
+        "ok",
+        label="TingTing",
+        text='{"data":{"username":"nv.dung","new_password":"Abc12345","employee_name":"Nguyễn Việt Dũng"}}',
+    )
+
+
+@pytest.mark.asyncio
+async def test_otp_is_refused_until_the_phone_is_verified() -> None:
+    retrieval = _FlowRetrieval(_otp_ok())
+    result = await send_tingting_otp(retrieval, phone="0987654321")
+    assert "chưa được xác minh" in result
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_otp_send_stores_the_session_and_never_returns_it() -> None:
+    retrieval = _FlowRetrieval(_otp_ok("sess-42"), state={"verified": True})
+    result = await send_tingting_otp(retrieval, phone="0987654321")
+    assert retrieval.saved[-1] == {"session_id": "sess-42"}
+    assert "sess-42" not in result
+    assert "confirm_tingting_otp" in result
+
+
+@pytest.mark.asyncio
+async def test_confirm_uses_the_stored_session_not_the_model() -> None:
+    """Regression: the code turn must reuse the session the send turn stored."""
+    retrieval = _FlowRetrieval(_verify_ok("tok-9"), state={"session_id": "sess-42"})
+    result = await confirm_tingting_otp(retrieval, phone="0987654321", code="123456")
+    assert retrieval.calls == [
+        {
+            "method": "POST",
+            "path": "/api/v1/integration/password-reset/verify",
+            "params": {"session_id": "sess-42", "code": "123456"},
+        }
+    ]
+    assert retrieval.saved[-1] == {"reset_token": "tok-9", "otp_verified": True}
+    assert "reset_tingting_password" in result
+
+
+@pytest.mark.asyncio
+async def test_confirm_without_a_session_asks_for_a_fresh_otp() -> None:
+    retrieval = _FlowRetrieval(_verify_ok())
+    result = await confirm_tingting_otp(retrieval, phone="0987654321", code="123456")
+    assert "Chưa có phiên OTP" in result
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_confirm_rejects_a_code_that_is_not_six_digits() -> None:
+    retrieval = _FlowRetrieval(_verify_ok(), state={"session_id": "sess-42"})
+    result = await confirm_tingting_otp(retrieval, phone="0987654321", code="12ab")
+    assert "6 chữ số" in result
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_confirm_keeps_the_session_when_the_code_is_wrong() -> None:
+    """A 401 means wrong/expired code: retry the same session, don't ask for the phone."""
+    retrieval = _FlowRetrieval(
+        _outcome("error", status=401, detail="status_401"), state={"session_id": "sess-42"}
+    )
+    result = await confirm_tingting_otp(retrieval, phone="0987654321", code="000000")
+    assert "không đúng hoặc đã hết hạn" in result
+    assert "send_tingting_otp" in result
+    assert retrieval.saved == []
+
+
+@pytest.mark.asyncio
+async def test_reset_uses_the_stored_token_and_clears_the_flow() -> None:
+    retrieval = _FlowRetrieval(_reset_ok(), state={"reset_token": "tok-9"})
+    result = await reset_tingting_password(retrieval, phone="0987654321")
+    assert retrieval.calls[0]["params"] == {"reset_token": "tok-9"}
+    assert retrieval.cleared == 1
+    assert "nv.dung" in result and "Abc12345" in result
+
+
+@pytest.mark.asyncio
+async def test_reset_without_a_verified_code_restarts_the_flow() -> None:
+    retrieval = _FlowRetrieval(_reset_ok())
+    result = await reset_tingting_password(retrieval, phone="0987654321")
+    assert "Chưa xác thực được mã OTP" in result
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_otp_failure_reasons_map_to_the_next_step() -> None:
+    delivery = _FlowRetrieval(
+        _outcome(
+            "ok",
+            text='{"data":{"otp_sent":false,"failure_reason":"delivery_failed","delivery_error_code":-118}}',
+        ),
+        state={"verified": True},
+    )
+    result = await send_tingting_otp(delivery, phone="0987654321")
+    assert "chưa liên kết Zalo" in result
+    assert delivery.saved == []
+
+
+@pytest.mark.asyncio
+async def test_a_resend_within_the_dedupe_window_does_not_claim_a_new_session() -> None:
+    retrieval = _FlowRetrieval(_outcome("duplicate_request"), state={"verified": True})
+    result = await send_tingting_otp(retrieval, phone="0987654321")
+    assert "vừa được gửi" in result
+    assert retrieval.saved == []
+
+
+@pytest.mark.asyncio
+async def test_a_repeated_code_check_explains_the_dedupe() -> None:
+    retrieval = _FlowRetrieval(_outcome("duplicate_request"), state={"session_id": "sess-1"})
+    result = await confirm_tingting_otp(retrieval, phone="0987654321", code="123456")
+    assert "vừa được kiểm tra" in result
+    assert "send_tingting_otp" in result

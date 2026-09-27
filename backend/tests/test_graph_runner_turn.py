@@ -2196,7 +2196,14 @@ async def test_agent_turn_injects_the_tingting_guide_without_project_focus(monke
     system = str(captured["system"])
     assert "=== API TINGTING" in system
     assert "/api/v1/integration/password-reset/otp" in system
-    assert captured["allowed_tools"] == ("call_tingting_api", "search_knowledge")
+    assert set(captured["allowed_tools"]) == {
+        "call_tingting_api",
+        "verify_tingting_identity",
+        "send_tingting_otp",
+        "confirm_tingting_otp",
+        "reset_tingting_password",
+        "search_knowledge",
+    }
 
 
 @pytest.mark.asyncio
@@ -2306,7 +2313,14 @@ async def test_focused_support_turn_keeps_the_project_api_tool(monkeypatch):
         ),
     )
 
-    assert captured["allowed_tools"] == ("call_tingting_api", "search_knowledge")
+    assert set(captured["allowed_tools"]) == {
+        "call_tingting_api",
+        "verify_tingting_identity",
+        "send_tingting_otp",
+        "confirm_tingting_otp",
+        "reset_tingting_password",
+        "search_knowledge",
+    }
     assert captured["forced_project_slug"] == "lg-display"
     assert "required_tool" not in captured
 

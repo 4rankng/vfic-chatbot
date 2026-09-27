@@ -84,6 +84,28 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
     if text.startswith(_INTERNAL_RETRY_PREFIX):
         return TurnRoute("general", "agent", reason="internal_retry_prompt", confidence=0.1)
 
+    intent = decisions.intent if decisions.intent in TURN_INTENTS else "general"
+
+    # Mid-flow continuity outranks the per-message reading: while the assistant's
+    # last reply was part-way through an account-support step, a short follow-up
+    # ("sao rồi", "ok", a bare phone number, or a restated profile detail) is an
+    # answer to that step, not small talk and not a new lead — routing it as such
+    # dropped the TingTing tools and left the employee with "vẫn đang chờ".
+    if decisions.recent_account_support and intent in {
+        "small_talk",
+        "general",
+        "out_of_scope",
+        "profile_update",
+    }:
+        strategy, tools, _reason = _INTENT_ROUTES["employee_support"]
+        return TurnRoute(
+            "employee_support",
+            strategy,
+            tools=tools,
+            reason="employee_support_continuation",
+            confidence=max(decisions.intent_confidence, 0.6),
+        )
+
     if decisions.pleasantry or decisions.intent == "small_talk":
         return TurnRoute(
             "small_talk",
@@ -92,7 +114,6 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
             confidence=max(decisions.intent_confidence, 0.9 if decisions.pleasantry else 0.0),
         )
 
-    intent = decisions.intent if decisions.intent in TURN_INTENTS else "general"
     if intent in {"general", "out_of_scope"} and decisions.contact_info:
         return TurnRoute(
             "profile_update",
@@ -140,7 +161,14 @@ _INTENT_ROUTES = {
     # so the turn can still cite published policy alongside the mechanic.
     "employee_support": (
         "knowledge_lookup",
-        ("call_tingting_api", "search_knowledge"),
+        (
+            "call_tingting_api",
+            "verify_tingting_identity",
+            "send_tingting_otp",
+            "confirm_tingting_otp",
+            "reset_tingting_password",
+            "search_knowledge",
+        ),
         "employee_support_terms",
     ),
     "out_of_scope": ("safe_redirect", (), "off_domain_terms"),
@@ -195,12 +223,14 @@ def routing_instruction(route: TurnRoute) -> str:
         return (
             "Ý định: nhân viên đang làm cần hỗ trợ tài khoản/hệ thống của dự án (quên mật khẩu, "
             "đổi/đặt lại mật khẩu, không nhận được OTP, tra cứu thông tin nhân viên). Phải đọc mục "
-            "API TINGTING và gọi call_tingting_api theo đúng từng bước trong hướng dẫn, "
-            "hỏi ứng viên/nhân viên từng bước một thay vì tự đoán. "
-            "BẮT BUỘC XÁC MINH DANH TÍNH TRƯỚC KHI GỬI OTP: tra cứu nhân viên theo số điện thoại "
-            "rồi đối chiếu họ tên đầy đủ, số CCCD và số điện thoại mà nhân viên cung cấp với kết "
-            "quả tra cứu; chỉ khi khớp hoàn toàn mới được gọi endpoint gửi OTP. Không khớp hoặc "
-            "thiếu thông tin thì hỏi lại, tuyệt đối không gửi OTP trước khi xác minh. "
+            "API TINGTING và chạy đúng từng bước trong hướng dẫn, hỏi từng bước một thay vì tự đoán. "
+            "XÁC MINH DANH TÍNH BẰNG TOOL: gọi verify_tingting_identity(phone, full_name, cccd) "
+            "với đúng những gì nhân viên đã cung cấp — không tự so khớp bằng mắt và không tự "
+            "kết luận trường nào khớp. Chỉ gửi OTP khi tool trả về ĐÃ XÁC MINH. Chưa xác minh thì "
+            "hỏi đúng những trường ở mục 'cần hỏi lại' của tool: không hỏi lại trường đã khớp, "
+            "không hỏi lại số điện thoại đã có trong hội thoại. "
+            "Mỗi lượt phải nói rõ đang ở bước nào và cần gì tiếp theo; không trả lời chung chung "
+            "kiểu 'đang chờ' và không hỏi lại thông tin đã có. "
             "Không được nói việc này ngoài phạm vi khi hướng dẫn đã có endpoint phù hợp. "
             "Chỉ nói lại đúng kết quả tool trả về; không tự nghĩ ra hotline, email hay mã."
         )

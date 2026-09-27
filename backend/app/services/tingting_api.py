@@ -20,7 +20,10 @@ the Redis quota come from ``app.services.project.external_api``):
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -31,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.http import get_http_client
+from app.core.redis import get_redis
 from app.models.integration import IntegrationSetting
 from app.services.audit_service import record_audit
 from app.services.external_api_core import (
@@ -66,6 +70,63 @@ TINGTING_API_LABEL = "TingTing"
 # model re-read the record to compare the employee's name/CCCD before an OTP is
 # sent — a second identical lookup is a legitimate retry, not a duplicate write.
 TINGTING_READ_ONLY_PATHS: frozenset[str] = frozenset({"/api/v1/integration/employee/lookup"})
+
+# The reset flow spans several turns, but the agent's message list does not: a
+# ``session_id`` handed to the model on the OTP turn is gone by the turn the
+# employee replies with the code, and the model then guesses — production sent
+# ``password-reset/verify`` with a stale session and got HTTP 400. The session
+# therefore lives server-side, keyed by the employee's phone digits, for the life
+# of the flow. 15 minutes covers a 600 s session plus the employee's reading time.
+TINGTING_FLOW_TTL_SECONDS = 900
+TINGTING_FLOW_KEY_PREFIX = "tingting:flow"
+
+
+def _flow_key(phone: str) -> str:
+    """Redis key for one employee's flow: a phone digest, never the number."""
+    digits = re.sub(r"\D", "", str(phone or ""))
+    return f"{TINGTING_FLOW_KEY_PREFIX}:{hashlib.sha256(digits.encode('utf-8')).hexdigest()[:32]}"
+
+
+class TingtingFlowStore:
+    """Per-employee reset-flow state: verified flag, OTP session, reset token.
+
+    Read-modify-write on one Redis key; ``save`` merges so a step cannot drop
+    what an earlier step stored. Fail-open like the egress throttle: a Redis
+    outage degrades to "no session", which every caller reports honestly instead
+    of guessing a session id.
+    """
+
+    async def load(self, phone: str) -> dict[str, Any]:
+        try:
+            raw = await get_redis().get(_flow_key(phone))
+        except Exception as exc:  # noqa: BLE001 — state read must not break a turn
+            logger.warning("tingting flow read skipped error_type=%s", type(exc).__name__)
+            return {}
+        if not raw:
+            return {}
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    async def save(self, phone: str, state: dict[str, Any]) -> dict[str, Any]:
+        merged = {**await self.load(phone), **state}
+        try:
+            await get_redis().set(
+                _flow_key(phone),
+                json.dumps(merged, ensure_ascii=False),
+                ex=TINGTING_FLOW_TTL_SECONDS,
+            )
+        except Exception as exc:  # noqa: BLE001 — a cache write must not 500 a turn
+            logger.warning("tingting flow write skipped error_type=%s", type(exc).__name__)
+        return merged
+
+    async def clear(self, phone: str) -> None:
+        try:
+            await get_redis().delete(_flow_key(phone))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tingting flow clear skipped error_type=%s", type(exc).__name__)
 
 
 @dataclass(frozen=True)
@@ -278,7 +339,10 @@ __all__ = [
     "TINGTING_API_KEY_SETTING",
     "TINGTING_API_LABEL",
     "TINGTING_READ_ONLY_PATHS",
+    "TINGTING_FLOW_KEY_PREFIX",
+    "TINGTING_FLOW_TTL_SECONDS",
     "TingtingApiRuntime",
     "TingtingApiService",
+    "TingtingFlowStore",
     "resolve_base_url",
 ]

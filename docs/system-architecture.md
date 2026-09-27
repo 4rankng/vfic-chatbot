@@ -1052,18 +1052,32 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
 - **Prompt:** `runner` appends the embedded `=== API TINGTING: ĐẶT LẠI MẬT KHẨU NHÂN VIÊN ===`
   block (`app/graph/tingting_guide.py`) whenever a usable key is stored — **independent of project
   focus**, since no project is involved. The key never enters the prompt.
-- **Tool:** `call_tingting_api(method, path, params)` (`app/graph/tools/tingting_api.py`) →
-  `RetrievalRepository.call_tingting_api` → `TingtingApiService.invoke`; the `X-API-Key` header is
-  attached server-side. Same boundary as §14 (relative path only, `GET`/`POST`, flat bounded
-  params, 8 s timeout, 4 000-char cap, no error body, dedupe + ceiling, one egress site);
-  the read-only employee lookup skips the dedupe bucket (ceiling only), so a repeated
-  identity re-read is not refused as a duplicate).
-- **Verification precondition:** the guide requires the employee's full name **and** CCCD **and**
-  mobile to match the `employee/lookup` response before the OTP endpoint may be called.
-- **Routing:** the `employee_support` intent binds `call_tingting_api` and instructs the model to
-  run the guide's steps instead of refusing; a focused RAG turn keeps the API tool bound rather
-  than collapsing to `search_knowledge`, and a direct-context project no longer captures an
-  employee-support turn (that lane has no tools).
+- **Tools:** four step tools (`app/graph/tools/tingting_api.py`,
+  `app/graph/tools/tingting_identity.py`):
+  `verify_tingting_identity(phone, full_name, cccd)` decides the identity match in code
+  (diacritics/case/spacing folded on names, `+84` folded on digits, CCCD compared as digits) and
+  records the verified phone; `send_tingting_otp(phone)`; `confirm_tingting_otp(phone, code)`;
+  `reset_tingting_password(phone, new_password?)`. `call_tingting_api(method, path, params)`
+  remains for the read-only lookup and refuses every mutating path.
+- **Egress boundary:** same as §14 (relative path only, `GET`/`POST`, flat bounded params, 8 s
+  timeout, 4 000-char cap, no error body, dedupe + ceiling, one egress site); the read-only
+  employee lookup skips the dedupe bucket (ceiling only), so a repeated identity re-read is not
+  refused as a duplicate. `call_tingting_api` → `RetrievalRepository.call_tingting_api` →
+  `TingtingApiService.invoke`; the `X-API-Key` header is attached server-side.
+- **Flow state is server-side** (`TingtingFlowStore`, Redis `tingting:flow:<phone digest>`,
+  TTL 15 min, merged per step): the `session_id` and `reset_token` never enter the prompt, so a
+  code typed in the next turn is verified against the session the send turn created. A verified
+  phone is the gate `send_tingting_otp` reads — identity cannot be skipped.
+- **Verification precondition:** a record with no CCCD, or a CCCD equal to its own mobile, cannot
+  make the CCCD a distinguishing factor; the tool then requires name + phone only instead of
+  deadlocking the employee on a field that can never match.
+- **Routing:** the `employee_support` intent binds all four step tools (plus `call_tingting_api`
+  and `search_knowledge`) instead of refusing; a focused RAG turn keeps them bound rather than
+  collapsing to `search_knowledge`, and a direct-context project no longer captures an
+  employee-support turn (that lane has no tools). A short follow-up while the assistant's last
+  message was mid-flow (`TurnDecisions.recent_account_support`, judged from `bot_last_message`)
+  re-routes to `employee_support` with reason `employee_support_continuation`, so "sao rồi" keeps
+  the tools and answers with the current step.
 - **Contact honesty:** a reply that states a phone number or e-mail absent from the turn's tool
   results and prompt text is replaced by `grounding.UNVERIFIED_CONTACT_REPLY`, so a refusal can
   never route a candidate to an invented hotline.

@@ -190,6 +190,20 @@ def build_turn_questions(
             ),
             "criteria": _NOUL_CRITERIA,
         },
+        # A support flow spans turns and the answer to "which step are we on" is a
+        # question about the *assistant's* last message, which is why the state
+        # carries `bot_last_message`. Without this flag a bare "sao rồi" between
+        # two support turns classifies as small talk, loses the TingTing tools and
+        # the bot stalls the employee with "vẫn đang chờ".
+        "recent_account_support": {
+            "type": "noul",
+            "instructions": (
+                "Tin nhắn cuối của trợ lý trong `bot_last_message` có đang dở một quy trình hỗ "
+                "trợ tài khoản/hệ thống (đặt lại mật khẩu TingTing, hỏi họ tên/CCCD, xin mã "
+                "OTP) mà chưa hoàn tất không?"
+            ),
+            "criteria": _NOUL_CRITERIA,
+        },
     }
     if include_profile_name:
         questions["profile_name_is_name"] = {
@@ -232,18 +246,25 @@ def build_turn_state(
     ``recent`` carries only the candidate's own messages (``sender == WORKER``):
     bot and recruiter replies are excluded so the gender judgment reads the
     candidate's self-reference, never the bot's neutral "anh/chị" phrasing.
+    ``bot_last_message`` is the last assistant reply on its own key: the support
+    continuation judgment needs it, and keeping it out of ``recent`` keeps the
+    gender inference unpolluted.
     """
     recent: list[str] = []
+    bot_last_message = ""
     for message in recent_messages or []:
-        if not sender_is(message, "WORKER"):
-            continue
         body = str(getattr(message, "body", "") or "")
-        if body:
+        if not body:
+            continue
+        if sender_is(message, "WORKER"):
             recent.append(body[:_RECENT_MESSAGE_MAX_CHARS])
+        else:
+            bot_last_message = body[:_RECENT_MESSAGE_MAX_CHARS]
     return {
         "context": _BOT_CONTEXT,
         "message": user_text or "",
         "recent": recent[-_RECENT_MESSAGE_LIMIT:],
+        "bot_last_message": bot_last_message,
         "profile_name": str(profile_name or "")[:_PROFILE_NAME_MAX_CHARS],
     }
 
@@ -316,6 +337,7 @@ class JevDecisionClient:
             profile_name_is_name=self._noul(answers.get("profile_name_is_name")),
             recent_vacancy=self._noul(answers.get("recent_vacancy")),
             contact_info=self._noul(answers.get("contact_info")),
+            recent_account_support=self._noul(answers.get("recent_account_support")),
             model=str((payload or {}).get("model") or self._model),
             input_tokens=int(usage.get("input_tokens") or 0),
             output_tokens=int(usage.get("output_tokens") or 0),

@@ -118,7 +118,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # one reviewed egress row (TingtingApiService._send's single `client.request`)
     # plus its two `db.get` configuration reads — but the per-project integration
     # (-1 row: its egress site) was retired with the section it configured.
-    "provider_boundary": 85,
+    # +3: the reset flow keeps its state server-side (TingtingFlowStore), so
+    # app/services/tingting_api.py gains a Redis `get` in load() plus the
+    # `delete` in clear(), and the dispatcher names the send_tingting_otp tool
+    # call — the flow tools themselves open no new egress site.
+    "provider_boundary": 88,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -156,7 +160,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: recovered turns go to their own low-priority queue, so the sweep's
     # enqueue site is enqueue_recovery_chat_run instead of enqueue_chat_run.
 }
-EXPECTED_BROAD_BOUNDARY_SHA256 = "eed2897dfa4a0a099c499650e9ae0353fa860580ce89b89602e4af810b9e3dbf"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "08b8a8799cab466b24f18b820bb403727c8fcf54455ba64394502e31e0a38f79"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

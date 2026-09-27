@@ -573,7 +573,14 @@ async def _agent_turn(
         if employee_support:
             allowed_tools = tuple(
                 name
-                for name in ("call_tingting_api", "search_knowledge")
+                for name in (
+                    "call_tingting_api",
+                    "verify_tingting_identity",
+                    "send_tingting_otp",
+                    "confirm_tingting_otp",
+                    "reset_tingting_password",
+                    "search_knowledge",
+                )
                 if resolved_tool_registry is None or name in resolved_tool_registry
             )
         authority_tool = (
@@ -1389,6 +1396,23 @@ async def _record_dispatched_outcome(
     return {"outcome": outcome_label, "reply": candidate}
 
 
+def _contact_evidence_text(recent_messages, user_text: str) -> str:
+    """The contact-channel whitelist for a turn's reply: history + current text.
+
+    The agent is handed the bounded chat history plus the current message, so a
+    phone number or CCCD the employee typed in an *earlier* turn is text the model
+    legitimately saw. Grading a bubble against the current message alone read
+    those as invented channels and replaced a correct reply with the abstention
+    template (seen in production on the TingTing reset flow). The system prompt
+    carries no channel of its own, so the history is what was missing here.
+    """
+    bodies = [
+        str(getattr(message, "body", "") or "").strip()
+        for message in (recent_messages or [])
+    ]
+    return "\n".join([*[body for body in bodies if body], str(user_text or "")])
+
+
 async def _await_first_bubble(
     *,
     state: BotRunState,
@@ -1402,6 +1426,7 @@ async def _await_first_bubble(
     trace_sink: DecisionTraceBuilder,
     lock_owner: str | None,
     recipient_id: str | None,
+    allowed_text: str,
     status_task,
     t0: float,
 ) -> _EarlyBubble | None:
@@ -1464,11 +1489,10 @@ async def _await_first_bubble(
             ground_reply(
                 visible_bubble,
                 list(stream.evidence),
-                # The system prompt is not in scope on this path, so only the
-                # candidate's own message whitelists contact channels. A channel
-                # the persona or the API guide contained is re-stated only after
-                # the tool that surfaced it, which is in ``stream.evidence``.
-                allowed_text=state.user_text,
+                # The same text the agent was given (history + current message):
+                # a channel the employee already typed in an earlier turn is not
+                # an invention, and the system prompt carries none of its own.
+                allowed_text=allowed_text,
                 trace_sink=trace_sink,
             ),
             deps=deps,
@@ -1550,6 +1574,7 @@ async def _complete_progressive_prefix(
     trace_sink: DecisionTraceBuilder,
     lock_owner: str | None,
     recipient_id: str | None,
+    allowed_text: str,
     started,
     outcome_label: str,
     faq_metadata: dict | None,
@@ -1652,7 +1677,7 @@ async def _complete_progressive_prefix(
         ground_reply(
             remainder_raw,
             list(stream.evidence),
-            allowed_text=state.user_text,
+            allowed_text=allowed_text,
             trace_sink=trace_sink,
         ),
         None,
@@ -1800,6 +1825,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     db_t0 = time.monotonic()
     recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
     _stamp_db(timings, "last_messages", db_t0)
+    contact_evidence = _contact_evidence_text(recent_messages, state.user_text)
     started = _now()
 
     # Per-stage timing accumulator. The enqueue/preamble slice is derived from
@@ -2080,6 +2106,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     trace_sink=trace_sink,
                     lock_owner=lock_owner,
                     recipient_id=recipient_id,
+                    allowed_text=contact_evidence,
                     status_task=status_task,
                     t0=t0,
                 )
@@ -2119,6 +2146,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 trace_sink=trace_sink,
                 lock_owner=lock_owner,
                 recipient_id=recipient_id,
+                allowed_text=contact_evidence,
                 started=started,
                 outcome_label=outcome_label,
                 faq_metadata=faq_metadata,

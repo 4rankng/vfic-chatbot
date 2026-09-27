@@ -75,6 +75,7 @@ async def test_questions_match_contract() -> None:
         "sort_by",
         "pleasantry",
         "recent_vacancy",
+        "recent_account_support",
         "contact_info",
         "gender",
         "gender_stated",
@@ -85,6 +86,7 @@ async def test_questions_match_contract() -> None:
         "sort_by",
         "pleasantry",
         "recent_vacancy",
+        "recent_account_support",
         "contact_info",
     }
     # The profile-name question is opt-in: only a non-blank profile_name asks it.
@@ -96,6 +98,7 @@ async def test_questions_match_contract() -> None:
         "sort_by",
         "pleasantry",
         "recent_vacancy",
+        "recent_account_support",
         "contact_info",
         "gender",
         "gender_stated",
@@ -153,14 +156,43 @@ async def test_route_employee_support_binds_the_tingting_api_tool() -> None:
         TurnDecisions(intent="employee_support", intent_confidence=0.93),
     )
     assert route.strategy == "knowledge_lookup"
-    assert route.tools == ("call_tingting_api", "search_knowledge")
+    assert route.tools == (
+        "call_tingting_api",
+        "verify_tingting_identity",
+        "send_tingting_otp",
+        "confirm_tingting_otp",
+        "reset_tingting_password",
+        "search_knowledge",
+    )
     assert route.reason == "employee_support_terms"
     hint = routing_instruction(route)
     assert "API TINGTING" in hint
-    assert "call_tingting_api" in hint
+    assert "verify_tingting_identity" in hint
     assert "XÁC MINH DANH TÍNH" in hint
     # The refusal script must not survive into an in-scope support turn.
     assert "Từ chối" not in hint
+
+
+async def test_route_keeps_an_unfinished_support_flow_on_its_tools() -> None:
+    """A "sao rồi" between support turns must not fall back to small talk."""
+    decisions = TurnDecisions(
+        intent="small_talk",
+        intent_confidence=0.8,
+        pleasantry=True,
+        recent_account_support=True,
+    )
+    route = route_from_decisions("Sao rồi", decisions)
+    assert route.intent == "employee_support"
+    assert route.reason == "employee_support_continuation"
+    assert "verify_tingting_identity" in route.tools
+
+
+async def test_route_continuation_does_not_hijack_a_job_question() -> None:
+    decisions = TurnDecisions(
+        intent="faq_detail", intent_confidence=0.9, recent_account_support=True
+    )
+    route = route_from_decisions("LG Display lương bao nhiêu", decisions)
+    assert route.intent == "faq_detail"
 
 
 async def test_out_of_scope_hint_checks_the_tingting_guide_before_refusing() -> None:

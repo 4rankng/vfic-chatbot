@@ -11,6 +11,10 @@ import logging
 
 from app.graph.tools import (
     call_tingting_api,
+    confirm_tingting_otp,
+    reset_tingting_password,
+    send_tingting_otp,
+    verify_tingting_identity,
     compare_income,
     get_product_features,
     list_active_jobs,
@@ -267,6 +271,113 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "verify_tingting_identity",
+            "description": (
+                "Tra cứu tài khoản TingTing theo số điện thoại và đối chiếu danh tính bằng "
+                "mã (bỏ dấu/hoa-thường, chuẩn hoá số điện thoại) thay vì tự so bằng mắt. "
+                "BẮT BUỘC dùng trước khi gửi OTP: truyền những gì nhân viên đã cung cấp; kết "
+                "quả trả về verified, các trường còn thiếu và việc phải làm tiếp theo. "
+                "Chỉ được nói lại đúng kết quả tool trả về; không tự đoán trường nào khớp."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": "Số điện thoại đã đăng ký với TingTing của nhân viên.",
+                    },
+                    "full_name": {
+                        "type": "string",
+                        "description": "Họ tên đầy đủ nhân viên đã cung cấp (bỏ trống nếu chưa có).",
+                    },
+                    "cccd": {
+                        "type": "string",
+                        "description": (
+                            "Số CCCD/CMND nhân viên đã cung cấp (bỏ trống nếu chưa có). "
+                            "Không truyền lại số điện thoại ở đây."
+                        ),
+                    },
+                },
+                "required": ["phone"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_tingting_otp",
+            "description": (
+                "Gửi mã OTP đặt lại mật khẩu TingTing tới số điện thoại đã đăng ký. Chỉ gọi "
+                "sau khi verify_tingting_identity trả về ĐÃ XÁC MINH — hệ thống từ chối nếu số "
+                "chưa được xác minh. Phiên OTP do hệ thống giữ: không hỏi và không truyền mã "
+                "phiên cho người dùng."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": "Số điện thoại đã đăng ký với TingTing của nhân viên.",
+                    },
+                },
+                "required": ["phone"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "confirm_tingting_otp",
+            "description": (
+                "Xác thực mã OTP 6 số nhân viên nhận được qua Zalo. Dùng phiên OTP mà hệ thống "
+                "đã lưu cho số điện thoại này; không truyền và không đọc mã phiên."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": "Số điện thoại đã đăng ký với TingTing của nhân viên.",
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "Đúng 6 chữ số nhân viên nhận được trong Zalo.",
+                    },
+                },
+                "required": ["phone", "code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reset_tingting_password",
+            "description": (
+                "Đặt lại mật khẩu TingTing sau khi mã OTP đã xác thực đúng. Hệ thống dùng phiên "
+                "xác thực đã lưu cho số điện thoại này; không truyền mã phiên hay reset token. "
+                "Đọc lại đúng tên đăng nhập và mật khẩu mới mà tool trả về."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": "Số điện thoại đã đăng ký với TingTing của nhân viên.",
+                    },
+                    "new_password": {
+                        "type": "string",
+                        "description": (
+                            "Mật khẩu mới nếu nhân viên muốn tự đặt; bỏ trống để hệ thống tự sinh."
+                        ),
+                    },
+                },
+                "required": ["phone"],
+            },
+        },
+    },
 ]
 
 
@@ -385,6 +496,29 @@ async def _dispatch_tool(
                 method=str(args.get("method") or "").strip(),
                 path=str(args.get("path") or "").strip(),
                 params=args.get("params"),
+            )
+        elif name == "verify_tingting_identity":
+            result = await verify_tingting_identity(
+                retrieval,
+                phone=str(args.get("phone") or "").strip(),
+                full_name=str(args.get("full_name") or ""),
+                cccd=str(args.get("cccd") or ""),
+            )
+        elif name == "send_tingting_otp":
+            result = await send_tingting_otp(
+                retrieval, phone=str(args.get("phone") or "").strip()
+            )
+        elif name == "confirm_tingting_otp":
+            result = await confirm_tingting_otp(
+                retrieval,
+                phone=str(args.get("phone") or "").strip(),
+                code=str(args.get("code") or "").strip(),
+            )
+        elif name == "reset_tingting_password":
+            result = await reset_tingting_password(
+                retrieval,
+                phone=str(args.get("phone") or "").strip(),
+                new_password=str(args.get("new_password") or ""),
             )
         else:
             logger.warning("unknown tool dispatched: %s", name)

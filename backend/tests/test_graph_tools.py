@@ -139,6 +139,10 @@ def test_tools_registry_exposes_expected_tools():
         "search_bus_timetable",
         "get_product_features",
         "call_tingting_api",
+        "verify_tingting_identity",
+        "send_tingting_otp",
+        "confirm_tingting_otp",
+        "reset_tingting_password",
     }
     assert all(callable(fn) for fn in TOOLS_REGISTRY.values())
 

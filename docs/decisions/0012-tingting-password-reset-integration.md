@@ -61,12 +61,44 @@ reset) is identical for all of them.
    or e-mail absent from the turn's tool results and prompt text is replaced by
    an honest abstention (`grounding.UNVERIFIED_CONTACT_REPLY`).
 
+8. **The reset flow is step tools with server-side state, not raw endpoints.** The
+   first cut let the model drive `call_tingting_api` for all four endpoints, which
+   cannot work across turns: an agent turn's message list does not carry the
+   previous turn's tool results, so the `session_id` from the OTP turn was gone
+   when the employee replied with the code — production sent
+   `password-reset/verify` with a stale session and got HTTP 400, and a "resend the
+   OTP" minted a new session while the model held the old one ("phiên đã hết hiệu
+   lực" although the code had just arrived). The steps are therefore
+   `verify_tingting_identity` / `send_tingting_otp` / `confirm_tingting_otp` /
+   `reset_tingting_password`, with `session_id` and `reset_token` held by
+   `TingtingFlowStore` under the employee's phone digest (Redis, 15 min, merged per
+   step). `call_tingting_api` stays bound for the read-only lookup only and refuses
+   mutating paths.
+9. **Identity is decided in code.** The guide's prose comparison looped: the model
+   re-asked for a field the employee had already given, rejected an unaccented name
+   (`Nguyen Viet Dung` vs `Nguyễn Việt Dũng`), and could not tell a phone re-entered
+   in the CCCD slot from a CCCD. Matching now folds diacritics/case/spacing on
+   names, folds `+84` on digits and compares the CCCD as digits; a record with no
+   CCCD, or a CCCD equal to its own mobile, drops the CCCD requirement instead of
+   deadlocking on a field that can never match. A verified phone is recorded and is
+   the gate `send_tingting_otp` reads.
+10. **A follow-up mid-flow stays on the flow.** `TurnDecisions.recent_account_support`
+    (judged from the assistant's last message, newly supplied as `bot_last_message`)
+    re-routes a short reply — "sao rồi", "ok", a bare phone number — to
+    `employee_support` with reason `employee_support_continuation`; without it a
+    progress nudge classified as small talk, lost the tools and answered "vẫn đang
+    chờ". The progressive-bubble contact guard also now grades against the history
+    the model was actually shown, not the current message alone.
+
 ## Consequences
 
 - The admin configures one key; rotating it takes effect on the next turn (no
   cache on the configuration read).
 - Adding a second employee-facing integration means adding another settings group
   + an embedded guide, not another per-project panel.
+- The reset flow survives whatever the model forgets: the verified phone, the OTP
+  session and the reset token live in Redis, and the model owns only the phone, the
+  6-digit code and an optional new password.
 - ADR-0011's per-project integration remains for **project-specific** systems; it
   keeps its FOCUSED-only prompt injection and gained an `api_key_missing`
   readiness blocker so an enabled-without-key row cannot report "ready".

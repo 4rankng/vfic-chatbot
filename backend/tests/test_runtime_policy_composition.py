@@ -37,7 +37,14 @@ def test_runtime_policy_resolves_only_capability_owned_tools_and_neutral_prompt(
     assert policy is not None
     # The knowledge capability grants the TingTing reset tool alongside
     # retrieval: the map is not part of pack_contract_hash, so no re-pin.
-    assert policy.tool_registry.names == {"search_knowledge", "call_tingting_api"}
+    assert policy.tool_registry.names == {
+        "search_knowledge",
+        "call_tingting_api",
+        "verify_tingting_identity",
+        "send_tingting_otp",
+        "confirm_tingting_otp",
+        "reset_tingting_password",
+    }
     assert not policy.tool_registry.allows("recommend_jobs")
     assert not policy.tool_registry.allows("search_user_memory")
     prompt = build_policy_system_prompt(policy)
@@ -195,7 +202,14 @@ async def test_manifest_composed_agent_passes_the_immutable_tool_registry():
 
     assert await run_manifest_composed_agent("hello", deps) == "ok"
     assert calls[0]["resolved_tool_registry"] == policy.tool_registry.names
-    assert calls[0]["allowed_tools"] == ("call_tingting_api", "search_knowledge")
+    assert set(calls[0]["allowed_tools"]) == {
+        "call_tingting_api",
+        "verify_tingting_identity",
+        "send_tingting_otp",
+        "confirm_tingting_otp",
+        "reset_tingting_password",
+        "search_knowledge",
+    }
 
 
 async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(monkeypatch):
@@ -218,6 +232,10 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
             assert kwargs["resolved_tool_registry"] == {
                 "search_knowledge",
                 "call_tingting_api",
+                "verify_tingting_identity",
+                "send_tingting_otp",
+                "confirm_tingting_otp",
+                "reset_tingting_password",
             }
             assert kwargs["allowed_tools"] == ("search_knowledge",)
             return "Thông tin có trong tài liệu."

@@ -8,12 +8,21 @@ from app.graph.types import ResolvedRuntimePolicy, ResolvedToolRegistry
 # A plain conversation grants no data authority: retrieval and profile-aware
 # recruitment actions must be explicitly selected by the active manifest.
 _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
-    # ``call_tingting_api`` rides the knowledge capability deliberately: the map
+    # The two TingTing tools ride the knowledge capability deliberately: the map
     # is not part of ``pack_contract_hash`` (only CapabilityDefinition metadata
-    # is), so adding it here needs no contract-hash bump and no re-pinning of
+    # is), so adding them here needs no contract-hash bump and no re-pinning of
     # installed revisions. A new capability id would bump
     # recruitment_v1_contract.json and strand every installed revision.
-    "knowledge": frozenset({"search_knowledge", "call_tingting_api"}),
+    "knowledge": frozenset(
+        {
+            "search_knowledge",
+            "call_tingting_api",
+            "verify_tingting_identity",
+            "send_tingting_otp",
+            "confirm_tingting_otp",
+            "reset_tingting_password",
+        }
+    ),
     "candidate_intake": frozenset({"search_user_memory"}),
     "job_advisory": frozenset(
         {

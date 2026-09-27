@@ -89,6 +89,11 @@ class TurnDecisions:
     pleasantry: bool = False
     recent_vacancy: bool = False
     contact_info: bool = False
+    # The assistant's previous reply was mid-way through an account/system
+    # support flow (the TingTing reset steps). Lets a short follow-up — "sao
+    # rồi", "ok", a bare phone number — stay on that flow and keep its tools
+    # instead of being routed as small talk and stalling the employee.
+    recent_account_support: bool = False
     # Candidate gender judged from the profile display name plus the candidate's
     # own messages: "male" | "female" | "unknown". Only a stored value changes how
     # the bot addresses the candidate (services/lead/normalizers.address_form).
@@ -246,6 +251,12 @@ class GraphRetrievalPort(
         path: str,
         params: dict | None,
     ) -> Any: ...
+    # Server-side reset-flow state, keyed by the employee's phone digits. The
+    # OTP session and the reset token must outlive the turn that produced them:
+    # the agent's message list does not, so the model can never carry them.
+    async def tingting_flow_state(self, phone: str) -> dict: ...
+    async def save_tingting_flow_state(self, phone: str, state: dict) -> dict: ...
+    async def clear_tingting_flow_state(self, phone: str) -> None: ...
 
 
 class FaqBypassPort(Protocol):

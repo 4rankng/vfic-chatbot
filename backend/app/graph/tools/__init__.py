@@ -28,7 +28,13 @@ from app.graph.tools.catalog import (
     recommend_projects,
     search_bus_timetable,
 )
-from app.graph.tools.tingting_api import call_tingting_api
+from app.graph.tools.tingting_api import (
+    call_tingting_api,
+    confirm_tingting_otp,
+    reset_tingting_password,
+    send_tingting_otp,
+)
+from app.graph.tools.tingting_identity import verify_tingting_identity
 from app.graph.tools.income import compare_income
 from app.graph.tools.jobs import (
     _active_job_tool_result,
@@ -52,6 +58,10 @@ TOOLS_REGISTRY = {
     "search_bus_timetable": search_bus_timetable,
     "get_product_features": get_product_features,
     "call_tingting_api": call_tingting_api,
+    "verify_tingting_identity": verify_tingting_identity,
+    "send_tingting_otp": send_tingting_otp,
+    "confirm_tingting_otp": confirm_tingting_otp,
+    "reset_tingting_password": reset_tingting_password,
 }
 
 __all__ = [
@@ -67,6 +77,10 @@ __all__ = [
     "search_bus_timetable",
     "search_knowledge",
     "search_user_memory",
+    "verify_tingting_identity",
+    "send_tingting_otp",
+    "confirm_tingting_otp",
+    "reset_tingting_password",
     "_active_job_tool_result",
     "_cache_digest",
     "_cached_embed",
