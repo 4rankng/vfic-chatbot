@@ -64,10 +64,19 @@ def _strip_stale_refusal_rules(persona: str) -> str:
     return "\n".join(lines).strip()
 
 
-async def resolve_persona(
+async def resolve_effective_persona(
     retrieval: GraphRetrievalPort, *, provider: str | None = None
 ) -> str:
-    """Return the effective provider persona body, or persona.md if none is active."""
+    """The one owner of the effective persona body: fetch, then strip.
+
+    Every lane that needs a persona resolves it here — the agent lane through
+    :func:`build_system_prompt`, the direct-context lane through
+    ``adapters._DirectContextAdapter`` — so a DB persona still carrying the
+    legacy privacy/refusal lines the strip exists to remove cannot make the bot
+    hedge on one lane and answer normally on the other. Any lookup failure
+    collapses to the committed ``persona.md``, which is this module's
+    best-effort contract.
+    """
     try:
         body = await retrieval.active_persona_body(provider=provider)
         if body and body.strip():
@@ -130,7 +139,7 @@ async def build_system_prompt(
     """
 
     async def _assemble() -> str:
-        persona = _strip_stale_refusal_rules(await resolve_persona(retrieval, provider=provider))
+        persona = await resolve_effective_persona(retrieval, provider=provider)
         index = await active_projects_index(retrieval)
         return (
             persona

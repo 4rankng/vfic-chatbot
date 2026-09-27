@@ -1490,3 +1490,183 @@ async def test_zalo_route_awaits_async_enqueue_and_maps_backpressure_to_503(monk
 
     assert response.status_code == 503
     service.release_lock.assert_awaited_once_with(conv, lock_owner=lock_owner)
+
+# ─── the ack path's conversation reloads (PERF-15) ───────────────────────────
+#
+# ``Conversation.contact`` / ``.channel_identity`` are ``lazy="selectin"``, so a
+# full ``db.refresh(conv)`` re-fetches two extra rows on top of the conversation
+# itself. The ingress path used to pay that three times per inbound message, on
+# the <1s ack that also stamps webhook_ack_ms. Exactly one column-scoped reload
+# remains — the one immediately before the guard chain and ``acquire_lock``,
+# which is what makes the takeover race guard correct.
+
+
+def _ack_path_service(conv):
+    service = MagicMock()
+    service.ensure = AsyncMock(return_value=conv)
+    service.record_inbound = AsyncMock()
+    service.run_start_guard = MagicMock(return_value=True)
+    service.acquire_lock = AsyncMock(
+        return_value=uuid.UUID("00000000-0000-0000-8000-000000000002")
+    )
+    return service
+
+
+def _ack_conv():
+    return SimpleNamespace(
+        id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+        zalo_chat_id="bot-user-1",
+        zalo_channel="bot",
+        version=3,
+        mode="BOT",
+    )
+
+
+@pytest.mark.asyncio
+async def test_ack_path_refreshes_the_conversation_exactly_once(monkeypatch):
+    """One column-scoped reload per inbound message, not three full ones."""
+    from app.services.webhook import ZaloWebhookService
+
+    conv = _ack_conv()
+    service = _ack_path_service(conv)
+    order: list[str] = []
+
+    async def _acquire_lock(_conv_id):
+        order.append("acquire_lock")
+        return uuid.UUID("00000000-0000-4000-8000-000000000002")
+
+    service.acquire_lock = AsyncMock(side_effect=_acquire_lock)
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        AsyncMock(return_value=None),
+    )
+    db = MagicMock()
+
+    async def _refresh(_conv, attribute_names=None):
+        order.append("refresh")
+
+    db.refresh = AsyncMock(side_effect=_refresh)
+    jobs: list[dict] = []
+
+    result = await ZaloWebhookService.handle(
+        db,
+        {"message": {"message_id": "msg-1", "chat": {"id": "bot-user-1"}, "text": "Xin chào"}},
+        enqueue=lambda job: jobs.append(job) or True,
+        runtime_authority=_runtime_authority(),
+    )
+
+    assert result == {"status": "processing", "conversation_id": str(conv.id)}
+    # Exactly one reload on the ingress path.
+    assert order.count("refresh") == 1
+    # ...and it is the one that guards the lock acquisition, not a duplicate.
+    assert order == ["refresh", "acquire_lock"]
+    assert db.refresh.await_args.args[1] == [
+        "mode",
+        "status",
+        "version",
+        "taken_over_at",
+        "assigned_recruiter_id",
+        "updated_at",
+        "bot_locked_until",
+        "bot_lock_owner",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ack_path_does_not_re_read_the_conversation_through_the_service(
+    monkeypatch,
+):
+    """The identity-map ``svc.get`` hits the reload replaced are gone."""
+    from app.services.webhook import ZaloWebhookService
+
+    conv = _ack_conv()
+    service = _ack_path_service(conv)
+    service.get = AsyncMock(return_value=conv)
+    monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        AsyncMock(return_value=None),
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+
+    await ZaloWebhookService.handle(
+        db,
+        {"message": {"message_id": "msg-1", "chat": {"id": "bot-user-1"}, "text": "Xin chào"}},
+        enqueue=lambda _job: True,
+        runtime_authority=_runtime_authority(),
+    )
+
+    service.get.assert_not_called()
+
+
+# ─── the dormant runtime-authority gate (OPS-26) ─────────────────────────────
+#
+# ``resolve_active()`` returns None on every production message until the
+# installation tables are populated, so the line that announces it fired on 100%
+# of traffic. At INFO it drowned every real signal, and an alert on it would
+# page on all traffic while a genuine regression of the authority rollout stayed
+# invisible behind the noise.
+
+
+@pytest.mark.asyncio
+async def test_inactive_runtime_authority_is_debug_after_the_first_summary(
+    monkeypatch, caplog
+):
+    """The per-message line is DEBUG; only the first is an INFO summary."""
+    import logging
+
+    from app.api import webhooks
+
+    webhooks._RUNTIME_INACTIVE.reset()
+    monkeypatch.setattr(
+        webhooks,
+        "InstallationService",
+        lambda _db: SimpleNamespace(resolve_active=AsyncMock(return_value=None)),
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="app.api.webhooks"):
+        for _ in range(3):
+            assert await webhooks._runtime_authority_or_inactive(
+                AsyncMock(), channel="bot"
+            ) is None
+
+    records = [r for r in caplog.records if "runtime inactive" in r.getMessage()]
+    # One INFO summary for the process; the rest never reach an INFO handler.
+    assert [r.levelno for r in records] == [logging.INFO, logging.DEBUG, logging.DEBUG]
+    assert records[-1].getMessage().endswith("seen=3")
+    # The counter is the once-per-process summary an operator can read instead.
+    assert webhooks._RUNTIME_INACTIVE.seen == 3
+    webhooks._RUNTIME_INACTIVE.reset()
+
+
+@pytest.mark.asyncio
+async def test_active_runtime_authority_is_untouched_by_the_tally(monkeypatch):
+    """A deployment WITH an active installation never touches the summary."""
+    from app.api import webhooks
+
+    webhooks._RUNTIME_INACTIVE.reset()
+    authority = _runtime_authority()
+    monkeypatch.setattr(
+        webhooks,
+        "InstallationService",
+        lambda _db: SimpleNamespace(
+            resolve_active=AsyncMock(
+                return_value=SimpleNamespace(
+                    fingerprint=SimpleNamespace(stamp=lambda: authority)
+                )
+            )
+        ),
+    )
+
+    stamp = await webhooks._runtime_authority_or_inactive(AsyncMock(), channel="bot")
+
+    assert stamp is authority
+    assert webhooks._RUNTIME_INACTIVE.seen == 0

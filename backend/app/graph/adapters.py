@@ -188,6 +188,23 @@ async def _load_direct_context_catalog(db):
     return entries
 
 
+class _PersonaRepositoryRetrieval:
+    """``GraphRetrievalPort``'s persona read, backed by the persona repository.
+
+    Exists so the direct-context lane can call the same
+    ``resolve_effective_persona`` the agent lane does instead of re-implementing
+    (and drifting from) the fetch-and-strip step.
+    """
+
+    def __init__(self, db) -> None:
+        self._db = db
+
+    async def active_persona_body(self, provider: str | None = None) -> str | None:
+        from app.services.personas.repository import PersonaRepository
+
+        return await PersonaRepository(self._db).active_persona_body(provider)
+
+
 class _DirectContextAdapter:
     """Route the turn to one active project's knowledge base.
 
@@ -211,11 +228,9 @@ class _DirectContextAdapter:
         from app.shared.domain.text import normalize_vietnamese_text
         from app.graph.direct_context import DirectContext, ProjectTurnContext
         from app.recruitment.domain.provider import provider_from_conversation
-        from app.graph.prompts import AGENT_SYSTEM_PROMPT
         from app.models.knowledge import KnowledgeBaseDirectFile, KnowledgeBaseMode
         from app.models.conversation import ConversationProjectState
         from app.services.knowledge_base_capacity import ensure_direct_context_fits
-        from app.services.personas.repository import PersonaRepository
 
         normalized_message = normalize_vietnamese_text(user_text)
         entries = await _load_direct_context_catalog(self._db)
@@ -281,10 +296,15 @@ class _DirectContextAdapter:
 
         direct_context = None
         if selected.mode == KnowledgeBaseMode.DIRECT_CONTEXT.value:
+            # Same resolver the agent lane uses (graph.context), so both lanes
+            # build their persona the same way — including the strip of the
+            # legacy privacy/refusal rules a DB persona may still carry.
+            from app.graph.context import resolve_effective_persona
+
             provider = provider_from_conversation(conversation)
-            persona_body = (
-                await PersonaRepository(self._db).active_persona_body(provider)
-            ) or AGENT_SYSTEM_PROMPT
+            persona_body = await resolve_effective_persona(
+                _PersonaRepositoryRetrieval(self._db), provider=provider
+            )
             direct_file = await self._db.scalar(
                 select(KnowledgeBaseDirectFile)
                 .options(load_only(KnowledgeBaseDirectFile.normalized_text))

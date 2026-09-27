@@ -57,21 +57,9 @@ def run_persist_candidate_job(job: dict) -> None:
     run_async(_persist_candidate_async(job))
 
 
-def _build_extractor():
-    """MiniMax extractor for candidate extraction.
-
-    Thin wrapper over the shared factory so candidate extraction reuses the same
-    LLM wiring as the chatbot agent.
-    """
-    from app.graph.factories import build_minimax_extractor
-
-    return build_minimax_extractor()
-
-
 async def _persist_candidate_async(job: dict) -> None:
     from app.composition.recruitment import run_candidate_persistence
-    from app.graph.clients import build_embedder
-    from app.services.integration_settings import IntegrationSettingsService
+    from app.graph.client_cache import build_cached_extraction
     from app.services.installation.service import InstallationService
     from app.workers._db import worker_session
 
@@ -93,13 +81,15 @@ async def _persist_candidate_async(job: dict) -> None:
                 if not is_current:
                     logger.info("candidate extraction suppressed by runtime authority")
                     return
-            openrouter_config = await IntegrationSettingsService(db).resolve_openrouter()
+            # One process-wide extractor + embedder, reused by every job on this
+            # queue. Building them per job meant a fresh langchain client (and
+            # its TLS handshake) for every SENT reply; the bundle is torn down
+            # by aclose_client_cache at worker shutdown.
+            clients = await build_cached_extraction(db)
             await run_candidate_persistence(
                 db,
-                embed_batch=build_embedder(
-                    openrouter_api_key=openrouter_config.api_key
-                ).batch,
-                extractor=_build_extractor(),
+                embed_batch=clients.embedder.batch,
+                extractor=clients.extractor,
                 chat_id=job["chat_id"],
                 user_text=job.get("user_text", ""),
                 bot_output=job.get("bot_output", ""),

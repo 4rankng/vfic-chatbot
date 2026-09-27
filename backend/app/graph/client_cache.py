@@ -22,6 +22,13 @@ Scope of the win:
 reads the cache and only re-binds the per-turn pieces (db session, retrieval
 repo, lead adapter, faq_bypass adapter, zalo config + sender with its refresh
 closure, followup gate).
+
+The candidate-extraction clients (the extractor LLM + an embedder) live in a
+second, independently-keyed bundle built by ``build_cached_extraction``. The
+persistence queue runs one job per SENT reply and used to construct both per
+job — a fresh langchain client (with its own httpx pool) and TLS handshake for
+every reply. ``aclose_client_cache`` tears that bundle down on the same
+shutdown path as the turn bundle, so no pool is leaked at exit.
 """
 
 from __future__ import annotations
@@ -47,18 +54,42 @@ class _CachedClients:
     failover_llms: list = field(default_factory=list)
 
 
+@dataclass
+class _CachedExtraction:
+    """Process-wide candidate-extraction clients (extractor LLM + embedder).
+
+    Same lifecycle as :class:`_CachedClients` and closed by the same
+    ``aclose_client_cache`` sweep; cached separately so the persistence queue
+    never pays to build the agent/fast/failover chain it does not use.
+    """
+
+    extractor_llm: object
+    extractor: object
+    embedder: object
+
+
 _client_cache: dict[str, _CachedClients] = {}
+_extraction_cache: dict[str, _CachedExtraction] = {}
 _client_cache_lock = asyncio.Lock()
-_retired_client_bundles: list[_CachedClients] = []
+_retired_client_bundles: list[_CachedClients | _CachedExtraction] = []
 _client_retirement_tasks: set[asyncio.Task[None]] = set()
 _CLIENT_RETIREMENT_GRACE_SECONDS = 600.0
 
 
-async def _close_client_bundles(bundles: list[_CachedClients]) -> None:
+async def _close_client_bundles(bundles: list[_CachedClients | _CachedExtraction]) -> None:
     cancellation: asyncio.CancelledError | None = None
     close_callbacks: list[tuple[str, object, object]] = []
     for bundle in bundles:
-        for name, client in (("agent LLM", bundle.agent_llm), ("fast LLM", bundle.fast_llm)):
+        if isinstance(bundle, _CachedExtraction):
+            chat_clients: list[tuple[str, object]] = [
+                ("extractor LLM", bundle.extractor_llm)
+            ]
+        else:
+            chat_clients = [
+                ("agent LLM", bundle.agent_llm),
+                ("fast LLM", bundle.fast_llm),
+            ]
+        for name, client in chat_clients:
             root = getattr(client, "root_async_client", None)
             close = getattr(root, "close", None)
             if close is not None:
@@ -87,7 +118,9 @@ async def _close_client_bundles(bundles: list[_CachedClients]) -> None:
         raise cancellation
 
 
-def _schedule_client_retirement(bundles: list[_CachedClients]) -> None:
+def _schedule_client_retirement(
+    bundles: list[_CachedClients] | list[_CachedExtraction],
+) -> None:
     if not bundles:
         return
     _retired_client_bundles.extend(bundles)
@@ -104,25 +137,30 @@ def _schedule_client_retirement(bundles: list[_CachedClients]) -> None:
     task.add_done_callback(_client_retirement_tasks.discard)
 
 
-async def build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for lock)
-    """Return the cached LLM client bundle, building it once per settings version.
+async def _provider_cache_key(db) -> str:
+    """The settings-version key both bundles are invalidated by.
 
-    The cache key covers only the LLM providers (minimax + openrouter) whose
-    settings actually drive ``agent_llm`` / ``embedder`` / ``fast_llm``
-    construction. Zalo config is deliberately excluded — it feeds only the
-    per-turn ``ZaloChannelSender`` (resolved separately in ``build_deps``), so
-    a Zalo OA token refresh must NOT invalidate the expensive LLM clients.
+    Covers only the LLM providers (minimax + openrouter + custom LLM) whose
+    settings drive client construction. Zalo is deliberately excluded — it
+    feeds only the per-turn ``ZaloChannelSender`` (resolved separately in
+    ``build_deps``), so a Zalo OA token refresh must NOT invalidate the
+    expensive LLM clients.
     """
     from app.core.cache import cache_version
-    from app.services.integration_settings import IntegrationSettingsService
-
-    s = get_settings()
-    integration_settings = IntegrationSettingsService(db, settings=s)
 
     mm_version = await cache_version("integration_minimax")
     or_version = await cache_version("integration_openrouter")
     fb_version = await cache_version("integration_custom_llm")
-    cache_key = f"mm:{mm_version}|or:{or_version}|fb:{fb_version}"
+    return f"mm:{mm_version}|or:{or_version}|fb:{fb_version}"
+
+
+async def build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for lock)
+    """Return the cached LLM client bundle, building it once per settings version."""
+    from app.services.integration_settings import IntegrationSettingsService
+
+    s = get_settings()
+    integration_settings = IntegrationSettingsService(db, settings=s)
+    cache_key = await _provider_cache_key(db)
 
     cached = _client_cache.get(cache_key)
     if cached is not None:
@@ -193,10 +231,50 @@ async def build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for
 def reset_client_cache() -> None:
     """Clear the LLM client cache. Tests use this between cases."""
     _client_cache.clear()
+    _extraction_cache.clear()
     _retired_client_bundles.clear()
     for task in _client_retirement_tasks:
         task.cancel()
     _client_retirement_tasks.clear()
+
+
+async def build_cached_extraction(db) -> _CachedExtraction:  # noqa: RUF029 (async for lock)
+    """Return the cached candidate-extraction bundle, built once per settings version.
+
+    The persistence queue runs one job per SENT reply, so building the extractor
+    LLM and an embedder per job meant a fresh langchain client (with its own
+    httpx pool) plus a fresh TLS handshake for every reply. Keyed by the same
+    provider-settings version as :func:`build_cached_clients`, so a rotated
+    provider key still takes effect on the next job.
+    """
+    from app.graph.factories import build_minimax_extractor
+    from app.services.integration_settings import IntegrationSettingsService
+
+    s = get_settings()
+    cache_key = await _provider_cache_key(db)
+
+    cached = _extraction_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    async with _client_cache_lock:
+        cached = _extraction_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        openrouter_config = await IntegrationSettingsService(db, settings=s).resolve_openrouter()
+        # The extractor callable closes over the langchain client it builds, so
+        # both are cached together and closed together.
+        bundle = _CachedExtraction(
+            extractor_llm=_chat_for_role("extractor", temperature=0.0),
+            extractor=build_minimax_extractor(),
+            embedder=build_embedder(s, openrouter_api_key=openrouter_config.api_key),
+        )
+        displaced = list(_extraction_cache.values())
+        _extraction_cache.clear()  # only one active version at a time
+        _extraction_cache[cache_key] = bundle
+        _schedule_client_retirement(displaced)
+        logger.info("extraction_client_cache built key=%s", cache_key)
+        return bundle
 
 
 async def aclose_client_cache() -> None:
@@ -207,8 +285,13 @@ async def aclose_client_cache() -> None:
     if retirement_tasks:
         await asyncio.gather(*retirement_tasks, return_exceptions=True)
     _client_retirement_tasks.clear()
-    bundles = list(_client_cache.values()) + list(_retired_client_bundles)
+    bundles = (
+        list(_client_cache.values())
+        + list(_extraction_cache.values())
+        + list(_retired_client_bundles)
+    )
     _client_cache.clear()
+    _extraction_cache.clear()
     _retired_client_bundles.clear()
     unique_bundles = list({id(bundle): bundle for bundle in bundles}.values())
     await _close_client_bundles(unique_bundles)

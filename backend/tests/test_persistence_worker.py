@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -21,24 +22,17 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
     fake_embedder = AsyncMock()
     fake_extractor = AsyncMock()
 
-    class _FakeIntegrationSettings:
-        def __init__(self, _db) -> None:
-            pass
-
-        async def resolve_openrouter(self):
-            return type("_Config", (), {"api_key": "sk-or-test"})()
-
     class _FakeEmbedder:
         batch = fake_embedder
 
+    clients = SimpleNamespace(embedder=_FakeEmbedder(), extractor=fake_extractor)
+
     with (
         patch("app.workers._db.worker_session", fake_worker_session),
-        patch("app.graph.clients.build_embedder", return_value=_FakeEmbedder()),
         patch(
-            "app.services.integration_settings.IntegrationSettingsService",
-            _FakeIntegrationSettings,
-        ),
-        patch("app.workers.persistence_worker._build_extractor", return_value=fake_extractor),
+            "app.graph.client_cache.build_cached_extraction",
+            AsyncMock(return_value=clients),
+        ) as build_clients,
         patch(
             "app.composition.recruitment.run_candidate_persistence",
             new_callable=AsyncMock,
@@ -53,6 +47,7 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
             }
         )
 
+    build_clients.assert_awaited_once_with(db)
     persist.assert_awaited_once_with(
         db,
         embed_batch=fake_embedder,
@@ -62,6 +57,90 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
         bot_output="Chào Mai",
         expected_conversation_version=7,
     )
+
+
+@pytest.mark.asyncio
+async def test_repeated_persist_jobs_reuse_one_cached_client_bundle(monkeypatch):
+    """The extractor and embedder are built once per process, not once per job.
+
+    Every SENT reply used to construct a fresh langchain client (and its own httpx
+    pool) plus a TLS handshake, on a queue that shares the same droplet as the
+    chat worker that deliberately caches these.
+    """
+    from app.graph import client_cache
+
+    built: list[str] = []
+
+    class _FakeEmbedder:
+        def __init__(self) -> None:
+            self.batch = AsyncMock()
+
+    class _FakeLLM:
+        def __init__(self, role: str) -> None:
+            self.root_async_client = SimpleNamespace(
+                close=lambda: built.append(f"closed:{role}")
+            )
+
+    def _chat_for_role(role, **_kwargs):
+        built.append(f"llm:{role}")
+        return _FakeLLM(role)
+
+    def _build_minimax_extractor():
+        built.append("extractor")
+        return AsyncMock()
+
+    def _build_embedder(_settings=None, **_kwargs):
+        built.append("embedder")
+        embedder = _FakeEmbedder()
+        embedder._client = SimpleNamespace(
+            aio=SimpleNamespace(aclose=AsyncMock(side_effect=lambda: built.append("closed:embedder")))
+        )
+        return embedder
+
+    async def _cache_version(_name):
+        return "v1"
+
+    monkeypatch.setattr(client_cache, "_chat_for_role", _chat_for_role)
+    monkeypatch.setattr(client_cache, "build_embedder", _build_embedder)
+    monkeypatch.setattr("app.core.cache.cache_version", _cache_version)
+    monkeypatch.setattr(
+        "app.services.integration_settings.IntegrationSettingsService",
+        lambda _db, **_kwargs: SimpleNamespace(
+            resolve_openrouter=AsyncMock(
+                return_value=SimpleNamespace(api_key="sk-or-test")
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "app.graph.factories.build_minimax_extractor", _build_minimax_extractor
+    )
+    monkeypatch.setattr(
+        "app.composition.recruitment.run_candidate_persistence", AsyncMock()
+    )
+    db = AsyncMock()
+
+    @asynccontextmanager
+    async def fake_worker_session():
+        yield db
+
+    monkeypatch.setattr("app.workers._db.worker_session", fake_worker_session)
+    client_cache.reset_client_cache()
+    try:
+        bundles = [
+            await client_cache.build_cached_extraction(db) for _ in range(4)
+        ]
+        # One construction, four reads of the same bundle.
+        assert built.count("extractor") == 1
+        assert built.count("embedder") == 1
+        assert built.count("llm:extractor") == 1
+        assert all(bundle is bundles[0] for bundle in bundles)
+
+        # Shutdown still closes the extraction bundle's pools.
+        await client_cache.aclose_client_cache()
+        assert "closed:extractor" in built
+        assert "closed:embedder" in built
+    finally:
+        client_cache.reset_client_cache()
 
 
 @pytest.mark.asyncio

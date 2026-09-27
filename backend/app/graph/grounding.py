@@ -372,6 +372,23 @@ UNVERIFIED_CONTACT_REPLY = (
 )
 
 
+# ── Lane-unavailable replies ─────────────────────────────────────────────────
+# The only text the agent lane may return when it has no answer to give. Owned
+# here beside the other reply constants because the alternative — falling back to
+# ``messages[-1].content`` when the tool loop runs out of rounds — ships the raw
+# ToolMessage payload (an ACTIVE_JOB_LOOKUP_JSON dump or a KB chunk) to the
+# candidate: ``ground_reply`` waves it through precisely because the ids inside
+# tool output are by definition in the surfaced set.
+LANE_UNAVAILABLE_REPLY = (
+    "Hiện tôi chưa thể kiểm tra thông tin này. Bạn vui lòng thử lại sau nhé."
+)
+# Vacancy turns have their own wording; the turn path used to carry a private
+# copy of this string that nothing referenced.
+VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
+    "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
+)
+
+
 def _normalize_phone(raw: str) -> str:
     """Digits only, with the ``+84`` country code folded onto the local ``0``."""
     digits = re.sub(r"\D", "", raw or "")

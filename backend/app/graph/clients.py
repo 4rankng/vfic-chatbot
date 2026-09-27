@@ -19,6 +19,8 @@ from typing import Literal
 
 from app.core.config import get_settings
 from app.graph.grounding import (
+    LANE_UNAVAILABLE_REPLY,
+    VACANCY_LOOKUP_UNAVAILABLE_REPLY,
     active_job_safe_reply as _active_job_safe_reply,
     ground_active_job_reply as _ground_active_job_reply,
     ground_reply as _ground_reply,
@@ -351,7 +353,6 @@ class MiniMaxAgent:
         if trace_sink is not None and required_tool is not None:
             trace_sink.record_decision("required_tool_selected", required_tool)
         schemas = filter_tool_schemas(allowed_tools, resolved_registry=resolved_tool_registry)
-        sem = get_llm_semaphore()
         messages = [SystemMessage(content=system)]
         tool_results: list[str] = []  # captured for post-generation grounding cross-check
         if metrics is not None:
@@ -764,7 +765,13 @@ class MiniMaxAgent:
             # ambiguous between a slow model and self-inflicted throttle wait.
             sem_t0 = time.monotonic()
             try:
-                async with sem:
+                # Re-acquired every round on purpose. The deployment-wide Redis
+                # cap is the only bound that survives a tool round, so a local
+                # name resolved once at entry — or rebound by the parallel tool
+                # dispatcher below — would silently drop every later round of
+                # this turn out of the cap (and out of the fail-fast that turns
+                # saturation into a clean suppressed turn).
+                async with get_llm_semaphore():
                     sem_wait_ms = int((time.monotonic() - sem_t0) * 1000)
                     model_t0 = time.monotonic()
                     # The failover client must carry the same tool bindings as
@@ -1006,10 +1013,10 @@ class MiniMaxAgent:
             # the latency is max(t1..tN) instead of t1+t2+..+tN. Sequential
             # fallback when there's only one call or no factory is wired (tests).
             if len(calls) > 1 and make_retrieval is not None:
-                sem = asyncio.Semaphore(get_settings().parallel_tool_max_concurrency)
+                tool_sem = asyncio.Semaphore(get_settings().parallel_tool_max_concurrency)
 
                 async def _bounded(tc: dict) -> str:
-                    async with sem:
+                    async with tool_sem:
                         return await _dispatch_one(tc)
 
                 outs = await asyncio.gather(*[_bounded(tc) for tc in calls])
@@ -1087,7 +1094,22 @@ class MiniMaxAgent:
             if last_round_cut:
                 final = _drop_dangling_tail(final)
         else:
-            final = messages[-1].content if hasattr(messages[-1], "content") else ""
+            # The loop spent every round on tool calls and never produced a text
+            # answer. ``messages[-1].content`` is the raw ToolMessage payload
+            # here (an ACTIVE_JOB_LOOKUP_JSON dump or a KB chunk) and must never
+            # reach a candidate: the grounding cross-check below waves it through
+            # precisely because the ids inside tool output are by definition in
+            # the surfaced set. The lane's neutral unavailable line is the only
+            # honest reply, and the trace records the degradation.
+            if trace_sink is not None:
+                trace_sink.record_decision("degradation_reason", "tool_loop_exhausted")
+            if metrics is not None:
+                metrics["tool_loop_exhausted"] = True
+            final = (
+                VACANCY_LOOKUP_UNAVAILABLE_REPLY
+                if required_tool == "list_active_jobs" or authority_tool_dispatched
+                else LANE_UNAVAILABLE_REPLY
+            )
         if authority_tool_dispatched:
             final = _ground_active_job_reply(str(final or ""), tool_results)
         # Apply the same deterministic authority boundary on loop exhaustion;

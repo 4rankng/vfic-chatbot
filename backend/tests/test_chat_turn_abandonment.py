@@ -128,6 +128,211 @@ async def test_cancellation_still_propagates():
     svc.record_bot_outcome.assert_not_called()
 
 
+# ─── a bubble the dead turn had already delivered ────────────────────────────
+#
+# Progressive send can put a first bubble with the candidate before the turn
+# dies. The bubble's message row is then SENDING with the real text stamped in.
+# Recording the crash against it with reply="" blanked that row and left it
+# PENDING for the sweep, which answered the candidate a second time.
+
+
+def _delivered_bubble_job() -> dict:
+    job = _job()
+    job["pending_message_id"] = 41
+    job["delivered_bubble"] = {
+        "text": "Về thu nhập, lương cơ bản của công nhân là 6 triệu đồng mỗi tháng.",
+        "message_id": 41,
+        "outbox_id": 41,
+        "ok": True,
+        "provider_message_id": "zalo-msg-41",
+        "error": None,
+        "error_class": None,
+        "suppressed": False,
+    }
+    return job
+
+
+@pytest.mark.asyncio
+async def test_dead_turn_after_a_delivered_bubble_records_the_bubble():
+    """The delivered text survives the crash record instead of being blanked."""
+    svc = _mock_service()
+    svc.finalize_outbound_dispatch = AsyncMock()
+    job = _delivered_bubble_job()
+
+    with patch(_PATCH_INNER, new=AsyncMock(side_effect=JobTimeoutException("slow"))):
+        with patch(_PATCH_SESSION, return_value=_mock_session()):
+            with patch(_PATCH_SERVICE, return_value=svc):
+                await _run_job_async(job)
+
+    # The bubble's own outbox row is terminalized first, with no recovery BotRun.
+    svc.finalize_outbound_dispatch.assert_awaited_once()
+    finalize = svc.finalize_outbound_dispatch.call_args.kwargs
+    assert finalize["message_id"] == 41
+    assert finalize["outbox_id"] == 41
+    assert finalize["delivered"] is True
+    assert finalize["telemetry"] is None
+
+    kwargs = svc.record_bot_outcome.call_args.kwargs
+    assert kwargs["reply"] == job["delivered_bubble"]["text"]
+    assert kwargs["sent"] is True
+    assert kwargs["pending_message_id"] == 41
+    assert kwargs["zalo_message_id"] == "zalo-msg-41"
+    # Terminal, not PENDING: leaving it PENDING is what made the sweep re-answer.
+    assert kwargs["delivery_status"] is None
+    assert kwargs["stage_timings"]["progressive_bubble_finalized"] is True
+
+
+@pytest.mark.asyncio
+async def test_failed_bubble_keeps_its_own_delivery_error():
+    """A bubble whose send failed records that failure, not the crash reason.
+
+    The crash and the delivery failure are different facts: the row must say the
+    transport failed so the reconciler can treat it as retriable, and it must not
+    borrow the job-timeout text that belonged to the turn.
+    """
+    svc = _mock_service()
+    svc.finalize_outbound_dispatch = AsyncMock()
+    job = _delivered_bubble_job()
+    job["delivered_bubble"].update(
+        {"ok": False, "error": "connection reset", "error_class": "timeout"}
+    )
+
+    with patch(_PATCH_INNER, new=AsyncMock(side_effect=JobTimeoutException("slow"))):
+        with patch(_PATCH_SESSION, return_value=_mock_session()):
+            with patch(_PATCH_SERVICE, return_value=svc):
+                await _run_job_async(job)
+
+    finalize = svc.finalize_outbound_dispatch.call_args.kwargs
+    assert finalize["delivered"] is False
+    assert finalize["external_error"] == "connection reset"
+    assert finalize["error_class"] == "timeout"
+
+    kwargs = svc.record_bot_outcome.call_args.kwargs
+    assert kwargs["sent"] is False
+    assert kwargs["reply"] == job["delivered_bubble"]["text"]
+    assert kwargs["external_error"] == "connection reset"
+
+
+@pytest.mark.asyncio
+async def test_undelivered_turn_keeps_the_pending_recovery_status():
+    """Without a delivered bubble the old lost-turn contract is unchanged."""
+    svc = _mock_service()
+    svc.finalize_outbound_dispatch = AsyncMock()
+
+    with patch(_PATCH_INNER, new=AsyncMock(side_effect=JobTimeoutException("slow"))):
+        with patch(_PATCH_SESSION, return_value=_mock_session()):
+            with patch(_PATCH_SERVICE, return_value=svc):
+                await _run_job_async(_job())
+
+    svc.finalize_outbound_dispatch.assert_not_awaited()
+    kwargs = svc.record_bot_outcome.call_args.kwargs
+    assert kwargs["reply"] == ""
+    assert kwargs["sent"] is False
+    assert kwargs["delivery_status"] == DeliveryStatus.PENDING
+    assert "timeout" in kwargs["external_error"]
+
+
+# ─── the throttled handler after a delivered bubble ──────────────────────────
+#
+# When every provider dies the worker records the turn itself. A bubble that
+# progressive send already delivered belongs to that record: recording it as
+# "nothing sent" blanked the row the candidate is reading.
+
+
+@pytest.mark.asyncio
+async def test_llm_throttled_after_a_delivered_bubble_records_the_bubble(monkeypatch):
+    """Provider exhaustion after progressive send must not erase the bubble."""
+    from types import SimpleNamespace
+
+    from app.graph.llm_semaphore import LLMThrottled
+    from app.graph.runner import DeliveredBubble
+    from app.workers.chatbot_worker import _run_job_async_inner
+
+    bubble = DeliveredBubble(
+        text="Về thu nhập, lương cơ bản của công nhân là 6 triệu đồng mỗi tháng.",
+        message_id=41,
+        outbox_id=41,
+        ok=True,
+        provider_message_id="zalo-msg-41",
+        error=None,
+        error_class=None,
+        suppressed=False,
+    )
+
+    async def _throttled(state, _deps):
+        # What run_turn does on a real turn: the bubble is on the state by the
+        # time the lane gives up.
+        setattr(state, "delivered_bubble", bubble)
+        raise LLMThrottled("all providers exhausted")
+
+    svc = _mock_service()
+    svc.finalize_outbound_dispatch = AsyncMock()
+    job = {
+        "conversation_id": str(uuid.uuid4()),
+        "version_at_start": 7,
+        "user_text": "xin chào",
+    }
+
+    async def _fake_build_deps(_db, **_kwargs):
+        return SimpleNamespace(persist=None)
+
+    monkeypatch.setattr("app.workers._db.worker_session", lambda: _mock_session())
+    monkeypatch.setattr("app.graph.factories.build_deps", _fake_build_deps)
+    monkeypatch.setattr("app.graph.runner.run_turn", _throttled)
+    monkeypatch.setattr("app.services.conversation.ConversationService", lambda _db: svc)
+
+    await _run_job_async_inner(job, source="direct")
+
+    # The publisher hands the crash guard the same bubble in plain form.
+    assert job["delivered_bubble"]["message_id"] == 41
+
+    svc.finalize_outbound_dispatch.assert_awaited_once()
+    assert svc.finalize_outbound_dispatch.call_args.kwargs["delivered"] is True
+
+    kwargs = svc.record_bot_outcome.call_args.kwargs
+    assert kwargs["reply"] == bubble.text
+    assert kwargs["sent"] is True
+    assert kwargs["pending_message_id"] == 41
+    assert kwargs["stage_timings"]["progressive_bubble_finalized"] is True
+
+
+@pytest.mark.asyncio
+async def test_llm_throttled_without_a_bubble_stays_suppressed(monkeypatch):
+    """The ordinary throttle path is unchanged: nothing sent, nothing recorded."""
+    from types import SimpleNamespace
+
+    from app.graph.llm_semaphore import LLMThrottled
+    from app.workers.chatbot_worker import _run_job_async_inner
+
+    async def _throttled(_state, _deps):
+        raise LLMThrottled("all providers exhausted")
+
+    svc = _mock_service()
+    svc.finalize_outbound_dispatch = AsyncMock()
+
+    async def _fake_build_deps(_db, **_kwargs):
+        return SimpleNamespace(persist=None)
+
+    monkeypatch.setattr("app.workers._db.worker_session", lambda: _mock_session())
+    monkeypatch.setattr("app.graph.factories.build_deps", _fake_build_deps)
+    monkeypatch.setattr("app.graph.runner.run_turn", _throttled)
+    monkeypatch.setattr("app.services.conversation.ConversationService", lambda _db: svc)
+
+    await _run_job_async_inner(
+        {
+            "conversation_id": str(uuid.uuid4()),
+            "version_at_start": 7,
+            "user_text": "xin chào",
+        },
+        source="direct",
+    )
+
+    svc.finalize_outbound_dispatch.assert_not_awaited()
+    kwargs = svc.record_bot_outcome.call_args.kwargs
+    assert kwargs["reply"] == ""
+    assert kwargs["sent"] is False
+
+
 # ─── the dead turn's placeholder row ────────────────────────────────────────
 #
 # ``run_turn`` publishes the "Đang soạn trả lời..." row before the answer exists,

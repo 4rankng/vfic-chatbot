@@ -6,7 +6,7 @@ global default. Project selection remains an independent knowledge concern.
 
 from __future__ import annotations
 
-from app.graph.context import resolve_persona
+from app.graph.context import resolve_effective_persona
 
 
 async def test_inbound_agent_selection_uses_active_global_persona() -> None:
@@ -15,7 +15,7 @@ async def test_inbound_agent_selection_uses_active_global_persona() -> None:
             assert provider == "zalo_bot"
             return "Global agent body"
 
-    assert await resolve_persona(_Retrieval(), provider="zalo_bot") == "Global agent body"
+    assert await resolve_effective_persona(_Retrieval(), provider="zalo_bot") == "Global agent body"
 
 
 async def test_inbound_agent_selection_does_not_require_project_assignment() -> None:
@@ -27,4 +27,4 @@ async def test_inbound_agent_selection_does_not_require_project_assignment() -> 
         async def active_projects_with_card(self) -> list[object]:
             raise AssertionError("Persona selection must not inspect Project defaults")
 
-    assert await resolve_persona(_Retrieval(), provider="zalo_oa") == "Global agent body"
+    assert await resolve_effective_persona(_Retrieval(), provider="zalo_oa") == "Global agent body"

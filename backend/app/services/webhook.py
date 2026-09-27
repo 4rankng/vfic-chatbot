@@ -31,15 +31,17 @@ from app.services.zalo_oa_events import parse_oa_webhook_event
 
 logger = logging.getLogger(__name__)
 
-# The guard columns the webhook ack path re-reads between writes. A full
+# The guard columns the webhook ack path re-reads after its writes. A full
 # ``db.refresh(conv)`` also re-fetches the ``contact`` and ``channel_identity``
 # selectin relationships — 3–4 extra SELECTs per refresh, and this path used to
 # pay it three times per inbound message on the <1s ack that also stamps
 # webhook_ack_ms (runner.py's _OWNERSHIP_REFRESH_COLUMNS carries the same
-# measurement for the turn path). Keep the list exhaustive for everything the
-# ack-path guards read (mode/status for run_start_guard, taken_over_at/
-# updated_at for the semi-auto branch, version for the worker's ownership
-# recheck) or a takeover could slip past a stale identity-map snapshot.
+# measurement for the turn path). Exactly one column-scoped refresh remains,
+# immediately before ``run_start_guard`` / ``acquire_lock``. Keep the list
+# exhaustive for everything the ack-path guards read (mode/status for
+# run_start_guard, taken_over_at/updated_at for the semi-auto branch, version
+# for the worker's ownership recheck) or a takeover could slip past a stale
+# identity-map snapshot.
 _GUARD_REFRESH_COLUMNS = [
     "mode",
     "status",
@@ -161,10 +163,12 @@ class ZaloWebhookService:
             runtime_fingerprint=(runtime_authority.fingerprint if runtime_authority else None),
         )  # persists candidate message; stamps last_inbound_at; bumps unread if HUMAN
 
-        # One column-scoped reload of the guard columns after the inbound write:
-        # a recruiter takeover during record_inbound must be seen here without
-        # paying the selectin-relationship re-fetch of a full refresh.
-        await db.refresh(conv, _GUARD_REFRESH_COLUMNS)
+        # The guard chain below runs against ONE column-scoped reload placed
+        # immediately before it (see the refresh above ``run_start_guard``).
+        # The HUMAN check here reads the row ``ensure`` loaded: it is a cheap
+        # short-circuit for the deterministic-profile block, not a takeover
+        # guard — a recruiter who flipped the mode mid-flight is caught by the
+        # authoritative reload further down.
         if conv.mode == ConversationMode.HUMAN:
             return {"status": "starved_human_mode", "conversation_id": str(conv.id)}
 
@@ -224,10 +228,16 @@ class ZaloWebhookService:
                     type(exc).__name__,
                 )
 
-        # Reload and recheck because a recruiter may have taken over while the
-        # deterministic profile write was in progress. Column-scoped: the guard
-        # chain below reads only _GUARD_REFRESH_COLUMNS, so skip the selectin
-        # relationship re-fetch a full refresh would pay.
+        # One column-scoped reload of the guard columns, taken after the
+        # deterministic profile write and immediately before the guard chain
+        # and ``acquire_lock``. This is the one that makes the takeover race
+        # guard correct: a recruiter who claimed the conversation while the
+        # profile write was in flight must be seen by ``run_start_guard`` and by
+        # the version the worker re-checks. Reload only
+        # ``_GUARD_REFRESH_COLUMNS`` — a full ``db.refresh(conv)`` would also
+        # re-fetch the ``contact`` and ``channel_identity`` selectin
+        # relationships (3–4 extra SELECTs) on the <1s ack that also stamps
+        # webhook_ack_ms.
         await db.refresh(conv, _GUARD_REFRESH_COLUMNS)
 
         if not svc.run_start_guard(conv):  # HUMAN/active SEMI_AUTO/CLOSED -> starve the bot

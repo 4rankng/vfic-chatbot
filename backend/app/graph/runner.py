@@ -105,9 +105,6 @@ _OWNERSHIP_REFRESH_COLUMNS = [
     "bot_locked_until",
     "bot_lock_heartbeat_at",
 ]
-VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
-    "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
-)
 _INCOME_COMPARE_HINT = (
     "Ý định: hỏi mốc thu nhập chung khi chưa chốt dự án. Phải dùng compare_income trước, "
     "trả lời theo từng dự án bằng đúng cơ sở dữ liệu (thu nhập tháng, bình quân năm chia 12, "
@@ -224,6 +221,109 @@ class _EarlyBubble(NamedTuple):
     outbox_id: int | None
     send_result: Any
     first_bubble_ms: int
+
+
+class DeliveredBubble(NamedTuple):
+    """A progressive early bubble that already reached (or attempted) the channel.
+
+    Recorded on the turn state the instant ``_await_first_bubble`` dispatches it.
+    Before this existed, only the success path terminalized that pair, so every
+    failure path recorded the SAME ``pending_message_id`` as "nothing was sent":
+    ``record_bot_outcome`` matched the SENDING row, stamped ``body = ''`` over
+    the text the candidate was already reading, and the delivery-rank tie let
+    the empty status win.
+
+    ``BotRunState`` is a plain (non-slots) dataclass, so the turn state is the
+    carrier: the worker reads it back after ``run_turn`` returns or raises. The
+    attribute is written and read through ``setattr``/``getattr`` so the channel
+    name lives in one place instead of a magic string per caller.
+    """
+
+    text: str
+    message_id: int | None
+    outbox_id: int | None
+    ok: bool
+    provider_message_id: str | None
+    error: str | None
+    error_class: str | None
+    suppressed: bool
+
+
+_DELIVERED_BUBBLE_ATTR = "delivered_bubble"
+
+
+def _note_delivered_bubble(state: BotRunState, bubble: _EarlyBubble) -> DeliveredBubble:
+    """Record the dispatched early bubble on the turn state."""
+    send_result = bubble.send_result
+    delivered = DeliveredBubble(
+        text=bubble.text,
+        message_id=bubble.message_id,
+        outbox_id=bubble.outbox_id,
+        ok=bool(send_result.ok),
+        provider_message_id=getattr(send_result, "msg_id", None),
+        error=None if send_result.ok else getattr(send_result, "error", None),
+        error_class=None if send_result.ok else getattr(send_result, "error_class", None),
+        suppressed=bool(getattr(send_result, "suppressed", False)),
+    )
+    setattr(state, _DELIVERED_BUBBLE_ATTR, delivered)
+    return delivered
+
+
+def delivered_bubble(state: Any) -> DeliveredBubble | None:
+    """The early bubble this turn already delivered, if any."""
+    bubble = getattr(state, _DELIVERED_BUBBLE_ATTR, None)
+    return bubble if isinstance(bubble, DeliveredBubble) else None
+
+
+def delivered_bubble_payload(bubble: DeliveredBubble | None) -> dict | None:
+    """Plain-data form for the RQ job dict (the crash guard reads it by key)."""
+    if bubble is None:
+        return None
+    return dict(bubble._asdict())
+
+
+async def finalize_delivered_bubble(
+    *,
+    bubble: DeliveredBubble,
+    conv,
+    svc,
+    timings: dict | None = None,
+) -> bool:
+    """Terminalize the early bubble's own outbox row before the failure record.
+
+    Runs first so ``record_bot_outcome`` matches a row that is already terminal:
+    the body it stamps is the bubble text, and the delivery-rank tie can no
+    longer demote a delivered row to a suppressed one. ``telemetry=None`` keeps
+    this from writing a second BotRun for the turn.
+
+    Best-effort: a finalization failure must not stop the turn from recording
+    what the candidate actually received.
+    """
+    if bubble.message_id is None or bubble.outbox_id is None:
+        return False
+    try:
+        await svc.finalize_outbound_dispatch(
+            conv,
+            message_id=bubble.message_id,
+            outbox_id=bubble.outbox_id,
+            delivered=bubble.ok,
+            zalo_message_id=bubble.provider_message_id,
+            external_error=bubble.error,
+            error_class=bubble.error_class,
+            suppressed=bubble.suppressed,
+            telemetry=None,
+        )
+    except Exception:  # noqa: BLE001 — the outcome row matters more than the outbox row
+        logger.warning(
+            "progressive bubble finalization failed conversation_id=%s message_id=%s",
+            getattr(conv, "id", None),
+            bubble.message_id,
+            exc_info=True,
+        )
+        return False
+    if timings is not None:
+        timings["progressive_bubble_finalized"] = True
+    return True
 
 
 def _delivery_status_for_send_error(
@@ -968,30 +1068,44 @@ async def _record_silent_terminal(
     trace_sink=None,
     lock_owner=None,
 ):
-    """Record a turn that produced no reply — and send nothing to the customer.
+    """Record a turn that produced no answer — and send nothing more to the customer.
 
     The silent terminal path: when the bot cannot produce
     an answer (agent crash, exhausted provider chain), an error text would read
     as a broken bot and leak internals, so the turn goes quiet. The outcome is
     SUPPRESSED so the per-chat mutex clears and the dashboard keeps the
     degraded-turn audit row; the failure lives in the structured logs instead.
+
+    "Nothing more" is literal. When progressive send already put a bubble with
+    the candidate, that bubble IS this turn's answer: its outbox row is
+    finalized first and the outcome records the bubble text with
+    ``sent=send_result.ok``. Recording ``reply=''`` against the same
+    ``pending_message_id`` would match the bubble's own row and blank a message
+    the candidate is already reading.
     """
     _stamp_end_to_end(state, stage_timings)
-    # No explicit delivery_status: sent=False with no external_error derives
-    # SUPPRESSED inside record_bot_outcome.
+    bubble = delivered_bubble(state)
+    if bubble is not None:
+        await finalize_delivered_bubble(
+            bubble=bubble, conv=conv, svc=svc, timings=stage_timings
+        )
     await svc.record_bot_outcome(
         conv,
         version_at_start=state.version_at_start,
-        reply="",  # nothing was sent — the audit row stays empty
+        reply=bubble.text if bubble is not None else "",
         started_at=started,
-        sent=False,
-        pending_message_id=state.pending_message_id,
+        sent=bubble.ok if bubble is not None else False,
+        pending_message_id=(
+            bubble.message_id if bubble is not None else state.pending_message_id
+        ),
+        external_error=bubble.error if bubble is not None else None,
+        zalo_message_id=bubble.provider_message_id if bubble is not None else None,
         stage_timings=stage_timings,
         lock_owner=lock_owner,
         trace_id=state.trace_id or None,
         decision_trace=trace_sink.snapshot_payload() if trace_sink is not None else None,
     )
-    return {"outcome": base_outcome, "reply": ""}
+    return {"outcome": base_outcome, "reply": bubble.text if bubble is not None else ""}
 
 
 async def _authority_gate(
@@ -1673,7 +1787,7 @@ async def _await_first_bubble(
         # Bubbles this turn's progressive path produced: 1 = the early bubble was
         # the whole answer, 2 = a remainder followed through the normal path.
         timings["progressive_bubbles"] = 1
-        return _EarlyBubble(
+        bubble = _EarlyBubble(
             text=bubble_text,
             raw=bubble_raw,
             offset=offset,
@@ -1682,6 +1796,10 @@ async def _await_first_bubble(
             send_result=send_result,
             first_bubble_ms=first_bubble_ms,
         )
+        # The text is with the candidate now: every terminal path from here on
+        # must finalize THIS row and record the bubble, not an empty reply.
+        _note_delivered_bubble(state, bubble)
+        return bubble
 
 
 async def _complete_progressive_prefix(
@@ -1727,10 +1845,16 @@ async def _complete_progressive_prefix(
     if full_text != raw_stream:
         # The model retried or failed over mid-stream, so the streamed text is no
         # longer the text the agent returned. The offset split remains the honest
-        # record of what the candidate saw; surface the frequency instead of
-        # silently trusting or discarding it.
+        # record of what the candidate saw. This is alarmable, not informational:
+        # it is the only place a turn records that progressive delivery and the
+        # returned answer disagreed, and its frequency is the health signal for
+        # mid-stream provider replacement.
         timings["progressive_stream_mismatch"] = True
-        logger.warning(
+        timings["progressive_stream_mismatch_chars"] = abs(
+            len(raw_stream) - len(full_text)
+        )
+        trace_sink.record_decision("degradation_reason", "progressive_stream_mismatch")
+        logger.error(
             "progressive streamed text differs from the returned reply "
             "conversation=%s trace=%s streamed=%d returned=%d",
             state.conversation_id,

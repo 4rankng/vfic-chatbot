@@ -405,6 +405,12 @@ async def _record_abandoned_turn(job: dict, *, exc: BaseException) -> None:
     candidate-visible "Đang soạn trả lời..." bubble must not leave the bubble
     behind, nor add a second PENDING row beside it.
 
+    ``delivered_bubble`` (same publisher) is the progressive early bubble the
+    turn already put with the candidate. Its row is terminalized and recorded
+    as the delivered answer it is: writing ``reply=''`` against it, or leaving
+    it PENDING for the sweep, both produced the duplicate answer this guard was
+    meant to stop.
+
     Best-effort by design: the guard exists so a bad job cannot kill the worker,
     so a recording failure must never raise either.
     """
@@ -415,6 +421,7 @@ async def _record_abandoned_turn(job: dict, *, exc: BaseException) -> None:
     from rq.timeouts import JobTimeoutException
 
     from app.core.config import get_settings
+    from app.graph.runner import DeliveredBubble, finalize_delivered_bubble
     from app.models.conversation import DeliveryStatus
     from app.services.conversation import ConversationService
     from app.workers._db import worker_session
@@ -437,24 +444,41 @@ async def _record_abandoned_turn(job: dict, *, exc: BaseException) -> None:
                 )
                 return
             await db.refresh(conv)
+            timings = _abandoned_turn_timings(job)
+            bubble_payload = job.get("delivered_bubble")
+            bubble = DeliveredBubble(**bubble_payload) if bubble_payload else None
+            if bubble is not None:
+                await finalize_delivered_bubble(
+                    bubble=bubble, conv=conv, svc=svc, timings=timings
+                )
             await svc.record_bot_outcome(
                 conv,
                 version_at_start=int(job.get("version_at_start") or conv.version),
-                reply="",  # nothing reached the customer
+                # The candidate already has this text when a bubble was
+                # delivered; ``reply=''`` would blank the very row it reads.
+                reply=bubble.text if bubble is not None else "",
                 started_at=_now(),
-                sent=False,
-                # PENDING, not FAILED: this is the "turn started but never
-                # completed" state, which keeps the reconcile sweep's fast
-                # crash-recovery path (~2-4 min) instead of a delivery-failure
-                # retry. The ERROR outcome + external_error still surface the
-                # failure on the dashboard and in the console.
-                delivery_status=DeliveryStatus.PENDING,
-                external_error=reason,
-                stage_timings=_abandoned_turn_timings(job),
+                sent=bubble.ok if bubble is not None else False,
+                # PENDING, not FAILED, when nothing reached them: this is the
+                # "turn started but never completed" state, which keeps the
+                # reconcile sweep's fast crash-recovery path (~2-4 min) instead
+                # of a delivery-failure retry. A delivered bubble is terminal —
+                # leaving it PENDING is what made the sweep answer the candidate
+                # twice. The crash reason below stays on the log line and, for
+                # the delivered case, on the bubble's own external_error.
+                delivery_status=None if bubble is not None else DeliveryStatus.PENDING,
+                external_error=bubble.error if bubble is not None else reason,
+                stage_timings=timings,
                 lock_owner=job.get("lock_owner") or None,
-                # Resolve the dead turn's own placeholder row in place (None when
+                # Resolve the dead turn's own placeholder row in place (the
+                # bubble's row when one was delivered, the placeholder's when
                 # it died before creating one).
-                pending_message_id=job.get("pending_message_id"),
+                pending_message_id=(
+                    bubble.message_id
+                    if bubble is not None
+                    else job.get("pending_message_id")
+                ),
+                zalo_message_id=bubble.provider_message_id if bubble is not None else None,
                 trace_id=str(job.get("trace_id") or "") or None,
             )
         logger.error(
@@ -498,7 +522,13 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
     # heavy LLM/Google deps — those are only needed for a real run.
     from app.workers._db import worker_session, worker_session_factory
     from app.graph.factories import build_deps
-    from app.graph.runner import BotRunState, run_turn
+    from app.graph.runner import (
+        BotRunState,
+        delivered_bubble,
+        delivered_bubble_payload,
+        finalize_delivered_bubble,
+        run_turn,
+    )
 
     # Wall-clock at job entry (epoch) so run_turn can split the enqueue→turn-start
     # preamble (build_deps + Phase-0 scan) from the webhook→pickup gap. Both are
@@ -589,12 +619,14 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                 # Every provider failed (quota/rate-limit/concurrency gate). The
                 # failure is for engineers, not customers: an internal-capacity
                 # apology reads as a broken bot and was never true (the cause is
-                # quota, not traffic). Nothing is SENT — log the full diagnostics
-                # and record the turn as SUPPRESSED so the lock clears, the
+                # quota, not traffic). Nothing NEW is sent — log the full
+                # diagnostics and record the turn so the lock clears, the
                 # dashboard shows the degraded turn, and the conversation stays
-                # available for the next inbound message.
+                # available for the next inbound message. A progressive bubble
+                # already delivered mid-generation is the exception: it is
+                # recorded as the sent answer it is, never blanked.
                 logger.error(
-                    "llm_throttled: all LLM providers exhausted, no reply sent "
+                    "llm_throttled: all LLM providers exhausted, no new reply sent "
                     "conversation=%s trace=%s reason=%s",
                     job.get("conversation_id", "?"),
                     trace_id or "-",
@@ -617,13 +649,32 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                         throttle_timings = _preamble_timings(
                             state, started_at, lane="agent", throttle=True
                         )
+                        # A progressive bubble may already be with the candidate.
+                        # Its row is terminalized first and recorded as what it
+                        # is: a delivered answer whose turn then lost the
+                        # provider chain. Blanking that row is what left the
+                        # candidate reading a cut-off answer under an empty
+                        # suppressed message.
+                        bubble = delivered_bubble(state)
+                        if bubble is not None:
+                            await finalize_delivered_bubble(
+                                bubble=bubble, conv=conv, svc=svc, timings=throttle_timings
+                            )
                         await svc.record_bot_outcome(
                             conv,
                             version_at_start=state.version_at_start,
-                            reply="",  # nothing was sent — the audit row stays empty
+                            reply=bubble.text if bubble is not None else "",
                             started_at=started_at,
-                            sent=False,
-                            pending_message_id=state.pending_message_id,
+                            sent=bubble.ok if bubble is not None else False,
+                            pending_message_id=(
+                                bubble.message_id
+                                if bubble is not None
+                                else state.pending_message_id
+                            ),
+                            external_error=bubble.error if bubble is not None else None,
+                            zalo_message_id=(
+                                bubble.provider_message_id if bubble is not None else None
+                            ),
                             stage_timings=throttle_timings,
                             lock_owner=lock_owner,
                             trace_id=state.trace_id or None,
@@ -633,8 +684,13 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                     logger.error("failed to record degraded turn outcome", exc_info=True)
             finally:
                 # Publish the turn's PENDING row onto the job so the crash guard
-                # above can resolve it when the turn dies after creating it.
+                # above can resolve it when the turn dies after creating it, and
+                # any progressive bubble it already delivered (plain data — the
+                # guard outlives this scope and only has the job).
                 job["pending_message_id"] = state.pending_message_id
+                job["delivered_bubble"] = delivered_bubble_payload(
+                    delivered_bubble(state)
+                )
 
             # The ingress guard refuses an inbound that arrives while this turn
             # holds the per-chat mutex; hand the conversation over to it so the

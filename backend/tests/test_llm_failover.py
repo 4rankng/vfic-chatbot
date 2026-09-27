@@ -454,3 +454,116 @@ async def test_generic_mid_stream_failure_still_propagates():
             primary, ["m"], on_delta=on_delta, metrics=metrics, fallback_bounds=[spare]
         )
     assert metrics == {}
+
+
+async def test_mid_stream_failover_does_not_re_emit_the_already_delivered_prefix():
+    """The replacement re-runs the whole completion, so its prefix is dropped.
+
+    This is the case a per-chunk ``startswith`` check gets wrong: the
+    replacement's first chunk ("Dạ em") is only a PARTIAL repeat of what the
+    dead provider already emitted ("Dạ em kiểm tra thông tin"), and the repeat
+    straddles three of its chunks. Overlap is therefore measured against the
+    concatenated emitted text, not against the previous chunk.
+    """
+    primary = _Streaming(
+        ["Dạ em kiểm tra ", "thông tin", " tuyển dụng"],
+        fail_after=2,
+        fail_with="insufficient balance",
+    )
+    spare = _Streaming(
+        ["Dạ em", " kiểm tra thông tin", " tuyển dụng cho anh/chị ngay ạ."]
+    )
+    seen: list[str] = []
+    metrics: dict = {}
+
+    async def on_delta(text):
+        seen.append(text)
+
+    message, _ = await _llm_call_streaming_with_retry(
+        primary, ["m"], on_delta=on_delta, metrics=metrics, fallback_bounds=[spare]
+    )
+
+    # The candidate-visible transcript is the concatenation of the deltas: the
+    # dead provider's prefix followed by ONLY what the replacement added.
+    transcript = "".join(seen)
+    assert transcript == "Dạ em kiểm tra thông tin tuyển dụng cho anh/chị ngay ạ."
+    assert transcript == message.content
+    assert transcript.count("Dạ em kiểm tra thông tin") == 1
+    assert metrics["stream_overlap_suppressed"] == len("Dạ em kiểm tra thông tin")
+    assert metrics["stream_partial"] is True
+
+
+async def test_mid_stream_failover_forwards_a_genuinely_different_answer():
+    """No overlap means no suppression: the replacement's answer is forwarded whole.
+
+    The dead provider's text cannot be recalled, so the only remaining honest
+    outcome is the replacement's own answer appended after it — dropping it
+    would leave the candidate with a dead provider's fragment and no reply.
+    """
+    primary = _Streaming(
+        ["Công ty nào đang tuyển", " ở Hà Nội?"],
+        fail_after=1,
+        fail_with="insufficient balance",
+    )
+    spare = _Streaming(["Hiện tôi chưa kiểm tra được thông tin tuyển dụng ạ."])
+    seen: list[str] = []
+    metrics: dict = {}
+
+    async def on_delta(text):
+        seen.append(text)
+
+    message, _ = await _llm_call_streaming_with_retry(
+        primary, ["m"], on_delta=on_delta, metrics=metrics, fallback_bounds=[spare]
+    )
+
+    # The candidate's transcript keeps the dead provider's text (it cannot be
+    # recalled) and then the replacement's whole answer — nothing dropped.
+    assert "".join(seen) == (
+        "Công ty nào đang tuyển" + "Hiện tôi chưa kiểm tra được thông tin tuyển dụng ạ."
+    )
+    # The merged message is the REPLACEMENT's answer, which is what the agent
+    # loop returns as the turn's reply.
+    assert message.content == "Hiện tôi chưa kiểm tra được thông tin tuyển dụng ạ."
+    assert "stream_overlap_suppressed" not in metrics
+
+
+async def test_429_retry_after_partial_stream_does_not_re_emit_the_prefix():
+    """A same-provider 429 retry re-runs the completion too, and is de-duped the same.
+
+    The retry path had the identical duplication: the second ``astream`` replays
+    the whole answer, so a mid-stream 429 re-sent the already-delivered prefix.
+    """
+
+    class _RetryAfterPrefix:
+        """Streams a prefix, fails with a 429, then replays a completed answer."""
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def astream(self, _messages):
+            from langchain_core.messages import AIMessageChunk
+
+            self.calls += 1
+            if self.calls == 1:
+                yield AIMessageChunk(content="Lương thỏa thuận ")
+                yield AIMessageChunk(content="từ 10 triệu")
+                raise RuntimeError("429 rate limit")
+            # The retry replays the same completion and then continues it.
+            yield AIMessageChunk(content="Lương thỏa thuận ")
+            yield AIMessageChunk(content="từ 10 triệu trở lên ạ.")
+
+    seen: list[str] = []
+    metrics: dict = {}
+
+    async def on_delta(text):
+        seen.append(text)
+
+    provider = _RetryAfterPrefix()
+    message, backoff_ms = await _llm_call_streaming_with_retry(
+        provider, ["m"], on_delta=on_delta, metrics=metrics
+    )
+
+    assert provider.calls == 2
+    assert backoff_ms >= 0
+    assert "".join(seen) == "Lương thỏa thuận từ 10 triệu trở lên ạ."
+    assert "".join(seen) == message.content

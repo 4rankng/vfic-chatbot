@@ -3582,3 +3582,151 @@ def test_agent_rules_quote_the_redirect_reply_when_reset_tools_are_absent():
 
     assert TINGTING_RESET_REDIRECT_REPLY in _RUNTIME_RETRIEVAL_RULES
 
+
+
+# ─── progressive bubbles on terminal paths ───────────────────────────────────
+#
+# Once the early bubble is dispatched, that message row is SENDING with the real
+# text stamped into it. Only the success path used to terminalize it, so every
+# failure path recorded the SAME pending_message_id with reply="" — which matched
+# the row, blanked its body, and (through the delivery-rank tie) let the empty
+# status win. The candidate kept a cut-off answer under an empty suppressed
+# message, and the timeout variant made the sweep answer them twice.
+
+
+def _aborting_after_bubble(svc, parts):
+    """A streaming agent that ships its bubble, then crashes.
+
+    This is the shape of a provider dying after progressive send: the early
+    sender dispatches the bubble, and the lane then raises so the runner's
+    stand-down exit records the turn.
+    """
+
+    async def _fake(
+        state,
+        deps,
+        user_text,
+        *,
+        provider=None,
+        chat_id,
+        recent_messages,
+        contact_id=None,
+        timings=None,
+        decisions=None,
+        lead_row=None,
+        on_delta=None,
+        on_evidence=None,
+        **kwargs,
+    ):  # noqa: ARG001
+        for part in parts:
+            await on_delta(part)
+        # Give the concurrent early sender every chance to dispatch the bubble
+        # before the crash (deterministic: no wall-clock wait).
+        for _ in range(40):
+            await asyncio.sleep(0)
+        assert svc.early_dispatched.is_set(), "the early bubble never went out"
+        raise RuntimeError("provider died after the early bubble")
+
+    return _fake
+
+
+@pytest.mark.asyncio
+async def test_dispatched_early_bubble_is_recorded_on_the_turn_state(monkeypatch):
+    """The bubble is on the turn state the moment it is dispatched.
+
+    Everything downstream — the silent record, the worker's LLMThrottled
+    handler, the crash guard — reads the turn state; nothing else can see the
+    bubble.
+    """
+    conv = _FakeConv()
+    svc, _recorded = _stub_svc(conv=conv, durable=True)
+    _stub_streaming_agent(monkeypatch, _ANSWER_SENTENCES, svc=svc, pause_after=2)
+    offset = runner._next_sendable_offset(_ANSWER)
+    state = _state()
+
+    await run_turn(state, _deps(_FakeZalo(), conversation=svc, progressive_send=True))
+
+    bubble = runner.delivered_bubble(state)
+    assert bubble is not None
+    assert bubble.text == _ANSWER[:offset]
+    assert bubble.message_id == 777
+    assert bubble.outbox_id == 777
+    assert bubble.ok is True
+    assert runner.delivered_bubble_payload(bubble)["text"] == _ANSWER[:offset]
+
+
+@pytest.mark.asyncio
+async def test_turn_without_progressive_send_records_no_bubble(monkeypatch):
+    """The channel stays empty when nothing was delivered early.
+
+    Flag off means no stream and no early sender at all, so there is nothing to
+    record — the terminal paths must keep reading "nothing was sent".
+    """
+    conv = _FakeConv()
+    svc, _recorded = _stub_svc(conv=conv)
+    _stub_streaming_agent(monkeypatch, _ANSWER_SENTENCES, svc=svc)
+    state = _state()
+
+    await run_turn(state, _deps(_FakeZalo(), conversation=svc, progressive_send=False))
+
+    assert runner.delivered_bubble(state) is None
+    assert runner.delivered_bubble_payload(None) is None
+
+
+@pytest.mark.asyncio
+async def test_agent_crash_after_the_early_bubble_never_records_an_empty_reply(monkeypatch):
+    """A lane that dies AFTER the bubble shipped records the bubble, not "".
+
+    The bubble's outbox row is finalized FIRST, so ``record_bot_outcome`` matches
+    an already-terminal row: the body it stamps is the text the candidate is
+    reading, and the delivery-rank tie cannot demote a delivered row to a
+    suppressed one.
+    """
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    # Four sentences so the raw stream clears the 250-char bubble floor.
+    parts = _ANSWER_SENTENCES[:4]
+    offset = runner._next_sendable_offset("".join(parts))
+    monkeypatch.setattr(runner, "_agent_turn", _aborting_after_bubble(svc, parts))
+
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, progressive_send=True))
+
+    # The bubble is terminalized on its own outbox row, with no recovery BotRun.
+    assert svc.finalized[0]["message_id"] == 777
+    assert svc.finalized[0]["outbox_id"] == 777
+    assert svc.finalized[0]["delivered"] is True
+    assert svc.finalized[0]["telemetry"] is None
+    # ...and the turn's own audit row carries the delivered text, sent=True.
+    assert len(recorded) == 1
+    assert recorded[0]["reply"] == "".join(parts)[:offset]
+    assert recorded[0]["reply"] != ""
+    assert recorded[0]["sent"] is True
+    assert recorded[0]["pending_message_id"] == 777
+    assert recorded[0]["stage_timings"]["progressive_bubble_finalized"] is True
+    # Nothing was sent after the bubble: no second dispatch, no second placeholder.
+    assert len(svc.dispatched) == 1
+    assert res["reply"] == "".join(parts)[:offset]
+
+
+@pytest.mark.asyncio
+async def test_progressive_stream_mismatch_is_recorded_as_alarmable(monkeypatch):
+    """A mid-stream provider replacement is a dashboard+alarm signal, not a note.
+
+    ``stream.raw`` is the accumulation of every delta, so it IS the transcript the
+    candidate's messages are built from; when it no longer equals the returned
+    answer the turn is structurally partial, and the frequency is the health
+    signal for mid-stream replacement.
+    """
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    replacement = "Một câu trả lời hoàn toàn khác do nhà cung cấp dự phòng sinh ra."
+    _stub_streaming_agent(monkeypatch, _ANSWER_SENTENCES, svc=svc, full=replacement)
+
+    res = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, progressive_send=True))
+
+    assert res["outcome"] == "sent"
+    stage = recorded[0]["stage_timings"]
+    assert stage["progressive_stream_mismatch"] is True
+    assert stage["progressive_stream_mismatch_chars"] == abs(
+        len(_ANSWER) - len(replacement)
+    )

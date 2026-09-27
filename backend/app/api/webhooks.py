@@ -91,11 +91,52 @@ async def _read_body_within_limit(request: Request) -> bytes:
     return raw
 
 
+class _RuntimeInactiveTally:
+    """Once-per-process summary of the dormant runtime-authority gate.
+
+    ``InstallationService.resolve_active()`` returns ``None`` for every message
+    until the installation tables are populated in a deployment, so the
+    "webhook accepted while runtime inactive" line fired on 100% of production
+    traffic. Logged per message at INFO it drowns every real signal, and an
+    alert on it would page on all traffic while a genuine regression of the
+    installation/authority rollout stayed invisible behind the noise. The line
+    is therefore DEBUG, with a single INFO summary per process: the counter is
+    operational context, never an alert condition (see docs/ops/incident-runbook.md).
+    """
+
+    def __init__(self) -> None:
+        self.seen = 0
+
+    def note(self, channel: str) -> int:
+        self.seen += 1
+        if self.seen == 1:
+            logger.info(
+                "webhook accepted while runtime inactive: no active installation; "
+                "the runtime-authority gate is dormant for this process. Summary only — "
+                "this signal must never alert. channel=%s",
+                channel,
+            )
+        else:
+            logger.debug(
+                "webhook accepted while runtime inactive channel=%s seen=%d",
+                channel,
+                self.seen,
+            )
+        return self.seen
+
+    def reset(self) -> None:
+        """Clear the tally. Tests call this between cases."""
+        self.seen = 0
+
+
+_RUNTIME_INACTIVE = _RuntimeInactiveTally()
+
+
 async def _runtime_authority_or_inactive(db: AsyncSession, *, channel: str):
     """Resolve active authority after signature verification and before any business write."""
     active = await InstallationService(db).resolve_active()
     if active is None:
-        logger.info("webhook accepted while runtime inactive channel=%s", channel)
+        _RUNTIME_INACTIVE.note(channel)
         return None
     return active.fingerprint.stamp()
 

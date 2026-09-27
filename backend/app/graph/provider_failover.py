@@ -211,6 +211,62 @@ async def _stream_collect(bound, messages, on_delta):
     return assembled
 
 
+class _OverlapSuppressor:
+    """Drops a replacement attempt's re-emission of text already handed over.
+
+    A mid-stream capacity failure makes the next attempt re-run the WHOLE
+    completion from the same messages, so it re-emits the prefix the dead
+    provider already produced. Text that reached ``on_delta`` cannot be
+    recalled, so forwarding the re-emission would show the candidate the same
+    opening content twice.
+
+    The comparison is against the CONCATENATED emitted text, never per chunk: a
+    provider's chunk boundaries have nothing to do with the boundaries of the
+    attempt that failed, so the replacement's first chunk is typically only a
+    partial repeat of the last chunk emitted before the failure. Feeding chunk
+    by chunk and asking "does this chunk repeat what came before" misses exactly
+    that case and duplicates text.
+
+    The rule is all-or-nothing: the replacement's text is dropped only when it
+    genuinely RE-EMITS the delivered prefix (it starts with it, verbatim). When
+    it is a different answer, nothing is dropped — cutting at the point where
+    the two texts happen to diverge would splice one answer onto the other and
+    ship nonsense. Nothing is forwarded until the replacement has produced at
+    least ``len(target)`` characters, because only then is the question
+    decidable; a replacement that ends before that point is a shorter, different
+    answer and is forwarded whole.
+    """
+
+    def __init__(self, target: str) -> None:
+        self._target = target
+        self._buffer = ""
+        self._resolved = False
+        self.suppressed = 0
+
+    def _resolve(self) -> str:
+        if self._buffer.startswith(self._target):
+            self.suppressed = len(self._target)
+        self._resolved = True
+        remainder = self._buffer[self.suppressed :]
+        self._buffer = ""
+        return remainder
+
+    def feed(self, text: str) -> str:
+        """Buffer ``text`` and return whatever of it is genuinely new."""
+        if self._resolved:
+            return text
+        self._buffer += text
+        if len(self._buffer) < len(self._target):
+            return ""
+        return self._resolve()
+
+    def flush(self) -> str:
+        """Release whatever the replacement produced, minus any re-emission."""
+        if self._resolved:
+            return ""
+        return self._resolve()
+
+
 async def _llm_call_streaming_with_retry(
     bound,
     messages,
@@ -229,33 +285,60 @@ async def _llm_call_streaming_with_retry(
     before the walk continues: the same partially-delivered state the chunked
     sender already tolerates for a multi-bubble answer. A non-capacity failure
     mid-stream still propagates (unchanged contract) and the turn degrades.
+
+    Any attempt that starts after text was already emitted suppresses the
+    re-emission of that text (:class:`_OverlapSuppressor`), so the candidate
+    reads the answer once. The merged message still carries the replacement's
+    FULL text, which is what the agent loop returns as the turn's answer.
     Returns ``(merged_message, backoff_ms)``.
     """
     from app.core.config import get_settings
     from app.graph.llm_semaphore import LLMThrottled
 
-    # Text the *primary* already handed to the caller. Once true, the candidate
-    # has seen a prefix that no later attempt can recall, so the turn is partial
-    # no matter which provider finishes it. Emission by the replacement provider
-    # is normal and must not be mistaken for a partial delivery.
-    emitted_before_failover = False
+    # Every fragment handed to ``on_delta`` on this call, concatenated. Once
+    # non-empty the candidate has seen a prefix that no later attempt can
+    # recall, so the turn is partial no matter which provider finishes it.
+    emitted: list[str] = []
 
-    async def _attempt(client) -> object:
-        async def _tap(text: str) -> None:
-            nonlocal emitted_before_failover
-            emitted_before_failover = True
-            await on_delta(text)
+    async def _attempt(client, *, suppress_overlap: bool = False) -> object:
+        suppressor = _OverlapSuppressor("".join(emitted)) if suppress_overlap else None
 
-        return await _stream_collect(client, messages, _tap)
+        if suppressor is None:
+
+            async def _tap(text: str) -> None:
+                emitted.append(text)
+                await on_delta(text)
+
+        else:
+
+            async def _tap(text: str) -> None:
+                fresh = suppressor.feed(text)
+                if fresh:
+                    emitted.append(fresh)
+                    await on_delta(fresh)
+
+        merged = await _stream_collect(client, messages, _tap)
+        if suppressor is not None:
+            tail = suppressor.flush()
+            if tail:
+                emitted.append(tail)
+                await on_delta(tail)
+            if suppressor.suppressed and metrics is not None:
+                metrics["stream_overlap_suppressed"] = suppressor.suppressed
+        return merged
 
     async def _failover_stream(reason: str, backoff_ms: int):
         candidates = [client for client in (fallback_bounds or []) if client is not None]
         if not candidates:
             raise LLMThrottled(f"LLM unavailable ({reason}) and no failover provider configured")
-        partial = emitted_before_failover
+        # Frozen once: whether the turn was already partial when the failover
+        # began. The overlap decision below is re-made per attempt, because a
+        # replacement that itself dies mid-stream leaves the NEXT one with
+        # something new to suppress.
+        partial = bool(emitted)
         for index, client in enumerate(candidates):
             try:
-                result = await _attempt(client)
+                result = await _attempt(client, suppress_overlap=bool(emitted))
             except Exception:  # noqa: BLE001 — try the next provider, whatever failed
                 logger.warning(
                     "llm_failover provider %d/%d failed; trying next",
@@ -290,7 +373,7 @@ async def _llm_call_streaming_with_retry(
             if metrics is not None:
                 metrics["retried_429"] = True
             try:
-                return await _attempt(bound), backoff_ms
+                return await _attempt(bound, suppress_overlap=bool(emitted)), backoff_ms
             except Exception as exc2:
                 if _is_quota_exhausted(exc2):
                     return await _failover_stream("quota_exhausted", backoff_ms)
