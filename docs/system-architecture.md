@@ -1053,7 +1053,9 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
 - **Tool:** `call_tingting_api(method, path, params)` (`app/graph/tools/tingting_api.py`) →
   `RetrievalRepository.call_tingting_api` → `TingtingApiService.invoke`; the `X-API-Key` header is
   attached server-side. Same boundary as §14 (relative path only, `GET`/`POST`, flat bounded
-  params, 8 s timeout, 4 000-char cap, no error body, dedupe + ceiling, one egress site).
+  params, 8 s timeout, 4 000-char cap, no error body, dedupe + ceiling, one egress site);
+  the read-only employee lookup skips the dedupe bucket (ceiling only), so a repeated
+  identity re-read is not refused as a duplicate).
 - **Verification precondition:** the guide requires the employee's full name **and** CCCD **and**
   mobile to match the `employee/lookup` response before the OTP endpoint may be called.
 - **Routing:** the `employee_support` intent binds `call_tingting_api` and instructs the model to

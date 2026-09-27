@@ -58,6 +58,13 @@ TINGTING_API_AUTH_HEADER = "X-API-Key"
 TINGTING_API_BASE_DEFAULT = "https://tingting.vip/api/v1"
 TINGTING_API_LABEL = "TingTing"
 
+# The reset API's only read-only endpoint. Everything else the model can reach
+# (otp / verify / reset) mutates account state and keeps the identical-params
+# dedupe; the lookup must stay repeatable, because step 2 of the guide has the
+# model re-read the record to compare the employee's name/CCCD before an OTP is
+# sent — a second identical lookup is a legitimate retry, not a duplicate write.
+TINGTING_READ_ONLY_PATHS: frozenset[str] = frozenset({"/api/v1/integration/employee/lookup"})
+
 
 @dataclass(frozen=True)
 class TingtingApiRuntime:
@@ -192,10 +199,14 @@ class TingtingApiService:
         sanitized = sanitize_params(params)
         if sanitized is None:
             return ExternalApiOutcome("invalid_request", None, clean_path, None, "", "invalid_params")
-        if clean_method != "GET" and not await consume_write_quota(
-            f"tingting:{clean_method}:{clean_path}", sanitized
-        ):
-            return ExternalApiOutcome("rate_limited", None, clean_path, None, "")
+        decision = await consume_write_quota(
+            f"tingting:{clean_method}:{clean_path}",
+            sanitized,
+            dedupe=clean_method != "GET" and clean_path not in TINGTING_READ_ONLY_PATHS,
+        )
+        if not decision.allowed:
+            state = "duplicate_request" if decision.reason == "duplicate" else "rate_limited"
+            return ExternalApiOutcome(state, None, clean_path, None, "")
         started = time.monotonic()
         try:
             response = await self._send(runtime, clean_method, clean_path, sanitized)
@@ -264,6 +275,7 @@ __all__ = [
     "TINGTING_API_CLIENT_NAME",
     "TINGTING_API_KEY_SETTING",
     "TINGTING_API_LABEL",
+    "TINGTING_READ_ONLY_PATHS",
     "TingtingApiRuntime",
     "TingtingApiService",
     "resolve_base_url",

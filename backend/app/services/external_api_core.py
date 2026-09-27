@@ -126,29 +126,44 @@ def sanitize_params(params: object) -> dict[str, str] | None:
     return clean
 
 
-async def consume_write_quota(scope: str, params: dict[str, Any]) -> bool:
+class QuotaDecision(NamedTuple):
+    """Admission result: allowed, or the bucket that refused and why."""
+
+    allowed: bool
+    reason: str = ""  # "duplicate" | "ceiling"
+
+
+async def consume_write_quota(
+    scope: str, params: dict[str, Any], *, dedupe: bool = True
+) -> QuotaDecision:
     """Two buckets for a mutating call: identical-params dedupe, then ceiling.
 
     ``scope`` names the integration and the target (method + path), never a
     secret: the dedupe key is a digest of the parameters, so no plaintext value
     (a phone number, an OTP code) reaches Redis.
+
+    ``dedupe=False`` keeps only the ceiling. A read-only call the model may
+    legitimately repeat — re-reading a record to compare an identity — must not
+    be refused as a duplicate; the ceiling still bounds egress.
     """
     digest = hashlib.sha256(
         json.dumps(params, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
             "utf-8"
         )
     ).hexdigest()
-    if not await _consume_window(
+    if dedupe and not await _consume_window(
         f"extapi:dedupe:{scope}:{digest}",
         limit=1,
         window=EXTERNAL_API_DEDUPE_SECONDS,
     ):
-        return False
-    return await _consume_window(
+        return QuotaDecision(False, "duplicate")
+    if not await _consume_window(
         f"extapi:ceiling:{scope}",
         limit=EXTERNAL_API_ENDPOINT_CEILING,
         window=EXTERNAL_API_ENDPOINT_WINDOW_SECONDS,
-    )
+    ):
+        return QuotaDecision(False, "ceiling")
+    return QuotaDecision(True)
 
 
 async def _consume_window(key: str, *, limit: int, window: int) -> bool:
@@ -175,6 +190,7 @@ __all__ = [
     "EXTERNAL_API_MAX_RESPONSE_CHARS",
     "EXTERNAL_API_TIMEOUT_SECONDS",
     "ExternalApiOutcome",
+    "QuotaDecision",
     "consume_write_quota",
     "normalize_base_url",
     "normalize_endpoint_path",

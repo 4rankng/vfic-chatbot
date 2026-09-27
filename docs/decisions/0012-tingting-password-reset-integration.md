@@ -43,7 +43,13 @@ reset) is identical for all of them.
    per-project integration's guards: relative-path validation, `GET`/`POST`
    only, flat bounded `str -> str` params, identical-params dedupe plus an
    hourly ceiling, no response body on error statuses, and exactly one outbound
-   request site (`app/services/tingting_api.py`).
+   request site (`app/services/tingting_api.py`). The read-only employee lookup
+   is **exempt from the dedupe bucket** (ceiling only): step 2 of the guide has
+   the model re-read the record to compare the employee's identity, and a second
+   identical lookup is a legitimate retry — refusing it as a duplicate stalled
+   the flow in production and was reported to the employee as a false rate
+   limit. A refusal now surfaces as `duplicate_request`, distinct from a genuine
+   `rate_limited`.
 5. **Identity is a hard precondition.** The guide requires full name + CCCD +
    mobile from the employee to match the lookup response before the OTP endpoint
    may be called.

@@ -194,7 +194,7 @@ def routing_instruction(route: TurnRoute) -> str:
     if route.intent == "employee_support":
         return (
             "Ý định: nhân viên đang làm cần hỗ trợ tài khoản/hệ thống của dự án (quên mật khẩu, "
-            "không nhận được OTP, đặt lại mật khẩu, tra cứu thông tin nhân viên). Phải đọc mục "
+            "đổi/đặt lại mật khẩu, không nhận được OTP, tra cứu thông tin nhân viên). Phải đọc mục "
             "API TINGTING và gọi call_tingting_api theo đúng từng bước trong hướng dẫn, "
             "hỏi ứng viên/nhân viên từng bước một thay vì tự đoán. "
             "BẮT BUỘC XÁC MINH DANH TÍNH TRƯỚC KHI GỬI OTP: tra cứu nhân viên theo số điện thoại "

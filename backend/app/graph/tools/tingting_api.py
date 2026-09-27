@@ -22,7 +22,11 @@ _NOT_CONFIGURED = (
     "và mời người dùng để lại số điện thoại để được hỗ trợ."
 )
 _RATE_LIMITED = (
-    "Yêu cầu tương tự vừa được gửi trong vòng 1 phút. Hãy đề nghị người dùng chờ rồi thử lại."
+    "Hệ thống TingTing đang giới hạn tần suất. Hãy đề nghị người dùng chờ một lát rồi thử lại."
+)
+_DUPLICATE_REQUEST = (
+    "Yêu cầu y hệt vừa được gửi trong ít giây trước. Không gửi lại; hãy dùng kết quả của "
+    "lần gọi trước đó, hoặc hỏi người dùng thêm thông tin rồi tiếp tục."
 )
 _MISSING_PATH = (
     "Thiếu đường dẫn API. Hãy đọc hướng dẫn API TINGTING và gọi lại kèm method và path."
@@ -65,6 +69,8 @@ async def call_tingting_api(
         )
     if outcome.state == "invalid_request":
         return _INVALID_REQUEST.format(detail=outcome.detail or "sai định dạng")
+    if outcome.state == "duplicate_request":
+        return _DUPLICATE_REQUEST
     if outcome.state == "rate_limited":
         return _RATE_LIMITED
     # ``not_configured`` and any unexpected state: the honest answer is the same.

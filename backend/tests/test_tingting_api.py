@@ -21,6 +21,7 @@ from app.graph.tingting_guide import (
 )
 from app.graph.tools.tingting_api import call_tingting_api
 from app.services import tingting_api as mod
+from app.services.external_api_core import QuotaDecision
 from app.services.integration_settings.cipher import IntegrationSettingsCipher
 from app.services.tingting_api import (
     TINGTING_API_BASE_DEFAULT,
@@ -86,8 +87,8 @@ class _FakeHttp:
 def _no_redis(monkeypatch: pytest.MonkeyPatch) -> None:
     """Admission checks pass without Redis (the service fails open by design)."""
 
-    async def _allow(_scope: str, _params: dict) -> bool:
-        return True
+    async def _allow(_scope: str, _params: dict, **_kwargs: object) -> QuotaDecision:
+        return QuotaDecision(True)
 
     monkeypatch.setattr(mod, "consume_write_quota", _allow)
 
@@ -266,28 +267,110 @@ async def test_invoke_never_repeats_an_error_body(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_invoke_returns_rate_limited_when_admission_refuses(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("reason", "expected_state"),
+    [("duplicate", "duplicate_request"), ("ceiling", "rate_limited")],
+)
+async def test_invoke_surfaces_the_bucket_that_refused(
+    monkeypatch, reason, expected_state
+) -> None:
     http = _FakeHttp()
     service = TingtingApiService(_FakeSession(_stored_row()))
 
     async def _client(_name, timeout=None):  # noqa: ANN001, ARG001
         return http
 
-    async def _refuse(_scope: str, _params: dict) -> bool:
-        return False
+    async def _refuse(_scope: str, _params: dict, **_kwargs: object) -> QuotaDecision:
+        return QuotaDecision(False, reason)
 
     monkeypatch.setattr(mod, "get_http_client", _client)
     monkeypatch.setattr(mod, "consume_write_quota", _refuse)
     outcome = await service.invoke(
-        await service.runtime(), method="POST", path="/api/v1/x", params={}
+        await service.runtime(),
+        method="POST",
+        path="/api/v1/integration/password-reset/otp",
+        params={"phone": "0987654321"},
     )
 
-    assert outcome.state == "rate_limited"
+    assert outcome.state == expected_state
     assert http.calls == []
 
 
-# ── the embedded guide ──────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_invoke_exempts_the_read_only_lookup_from_dedupe(monkeypatch) -> None:
+    """A repeated lookup is a legitimate retry; only the ceiling still applies."""
+    http = _FakeHttp()
+    service = TingtingApiService(_FakeSession(_stored_row()))
+    seen_dedupe: list[bool] = []
 
+    async def _quota(_scope: str, _params: dict, *, dedupe: bool = True) -> QuotaDecision:
+        seen_dedupe.append(dedupe)
+        return QuotaDecision(True)
+
+    async def _client(_name, timeout=None):  # noqa: ANN001, ARG001
+        return http
+
+    monkeypatch.setattr(mod, "get_http_client", _client)
+    monkeypatch.setattr(mod, "consume_write_quota", _quota)
+    outcome = await service.invoke(
+        await service.runtime(),
+        method="POST",
+        path="/api/v1/integration/employee/lookup",
+        params={"phone": "0987654321"},
+    )
+
+    assert outcome.state == "ok"
+    assert seen_dedupe == [False]
+    assert len(http.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_repeated_lookup_succeeds_while_repeated_otp_is_a_duplicate(monkeypatch) -> None:
+    """Regression for the production report: two identical lookups must both reach
+    the API, and the dedupe bucket still refuses a repeated OTP send."""
+    from app.services import external_api_core
+
+    class _Redis:
+        def __init__(self) -> None:
+            self.counts: dict[str, int] = {}
+
+        async def incr(self, key: str) -> int:
+            self.counts[key] = self.counts.get(key, 0) + 1
+            return self.counts[key]
+
+        async def expire(self, key: str, window: int) -> None:
+            return None
+
+    redis = _Redis()
+    monkeypatch.setattr(external_api_core, "get_redis", lambda: redis)
+    monkeypatch.setattr(mod, "consume_write_quota", external_api_core.consume_write_quota)
+
+    http = _FakeHttp()
+    service = TingtingApiService(_FakeSession(_stored_row()))
+
+    async def _client(_name, timeout=None):  # noqa: ANN001, ARG001
+        return http
+
+    monkeypatch.setattr(mod, "get_http_client", _client)
+    runtime = await service.runtime()
+
+    async def _call(path: str):
+        return await service.invoke(
+            runtime, method="POST", path=path, params={"phone": "0987654321"}
+        )
+
+    first_lookup = await _call("/api/v1/integration/employee/lookup")
+    second_lookup = await _call("/api/v1/integration/employee/lookup")
+    first_otp = await _call("/api/v1/integration/password-reset/otp")
+    second_otp = await _call("/api/v1/integration/password-reset/otp")
+
+    assert [first_lookup.state, second_lookup.state] == ["ok", "ok"]
+    assert first_otp.state == "ok"
+    assert second_otp.state == "duplicate_request"
+    assert len(http.calls) == 3
+
+
+# ── the embedded guide ──────────────────────────────────────────────────────
 
 def test_guide_documents_every_reset_endpoint_in_order() -> None:
     guide = TINGTING_API_GUIDE
@@ -360,6 +443,26 @@ async def test_tool_tells_the_model_to_stay_honest_on_errors() -> None:
     )
     assert "HTTP 500" in errored
     assert "chưa thực hiện được" in errored
+
+
+@pytest.mark.asyncio
+async def test_tool_distinguishes_a_duplicate_from_a_rate_limit() -> None:
+    duplicate = await call_tingting_api(
+        _StubRetrieval(_outcome("duplicate_request")),
+        method="POST",
+        path="/api/v1/integration/password-reset/otp",
+        params={"phone": "0987654321"},
+    )
+    assert "Không gửi lại" in duplicate
+    assert "giới hạn tần suất" not in duplicate
+
+    limited = await call_tingting_api(
+        _StubRetrieval(_outcome("rate_limited")),
+        method="POST",
+        path="/api/v1/integration/password-reset/otp",
+        params={"phone": "0987654321"},
+    )
+    assert "giới hạn tần suất" in limited
 
 
 @pytest.mark.asyncio
