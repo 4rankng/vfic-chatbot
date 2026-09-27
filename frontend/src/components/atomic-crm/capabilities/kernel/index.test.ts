@@ -19,9 +19,15 @@ const kernelTestState = vi.hoisted(() => {
 
   createDeferred();
 
+  let performanceModuleEvaluations = 0;
+
   return {
     releasePerformance: () => release?.(),
     isPerformanceReady: () => settled,
+    markPerformanceModuleEvaluated: () => {
+      performanceModuleEvaluations += 1;
+    },
+    performanceModuleEvaluations: () => performanceModuleEvaluations,
     resetPerformance: () => {
       settled = false;
       createDeferred();
@@ -41,18 +47,30 @@ vi.mock("ra-core", () => ({
   }),
 }));
 
-vi.mock("../../performance/PerformancePage", () => ({
-  PerformancePage: () => {
-    if (!kernelTestState.isPerformanceReady()) {
-      throw kernelTestState.pending;
-    }
+vi.mock("../../performance/PerformancePage", () => {
+  // Counts module *evaluation*, not import resolution: a static import would
+  // run this factory while the kernel graph loads, which is exactly the eager
+  // chunk the lazy() boundary exists to keep out.
+  kernelTestState.markPerformanceModuleEvaluated();
 
-    return createElement("h1", null, "Trang hiệu suất");
-  },
-}));
+  return {
+    PerformancePage: () => {
+      if (!kernelTestState.isPerformanceReady()) {
+        throw kernelTestState.pending;
+      }
 
-import componentsSource from "./components.tsx?raw";
+      return createElement("h1", null, "Trang hiệu suất");
+    },
+  };
+});
+
+import { AdminPerformanceRoute, RouteBoundary } from "./components";
 import { contributions } from "./index";
+
+// Captured at module load: the imports above have already evaluated the eager
+// kernel graph, exactly as the app does at startup.
+const eagerGraphPerformanceEvaluations =
+  kernelTestState.performanceModuleEvaluations();
 
 afterEach(async () => {
   await cleanup();
@@ -73,12 +91,58 @@ describe("kernel capability routes", () => {
     expect(performance.destination.rail).toBe(true);
   });
 
-  it("lazy-loads the Performance page behind a non-blank suspense fallback", () => {
-    expect(componentsSource).not.toContain(
-      'import { PerformancePage } from "../../performance/PerformancePage";',
+  it("keeps the performance page module out of the eager kernel import graph", async () => {
+    // `./index` is imported eagerly at module load, so this is the same load
+    // the app pays for. It must not drag the performance chunk in.
+    expect(eagerGraphPerformanceEvaluations).toBe(0);
+
+    // The eager graph is live, not a stub: its boundary still renders.
+    const eagerScreen = await render(
+      createElement(
+        RouteBoundary,
+        null,
+        createElement("p", null, "kernel graph ok"),
+      ),
     );
-    expect(componentsSource).not.toContain("<Suspense fallback={null}>");
-    expect(componentsSource).toContain('role="status"');
+    await expect
+      .element(eagerScreen.getByText("kernel graph ok"))
+      .toBeVisible();
+    expect(kernelTestState.performanceModuleEvaluations()).toBe(0);
+
+    // Non-vacuity guard: the counter has exactly one other way to move, and
+    // the counter only proves something because rendering the deferred route
+    // does move it.
+    kernelTestState.resetPerformance();
+    kernelTestState.releasePerformance();
+    const deferredScreen = await render(
+      createElement(AdminPerformanceRoute),
+    );
+    await expect
+      .element(deferredScreen.getByRole("heading", { name: "Trang hiệu suất" }))
+      .toBeVisible();
+    expect(kernelTestState.performanceModuleEvaluations()).toBe(1);
+  });
+
+  it("keeps a non-blank, announced loading state on the route boundary", async () => {
+    const neverResolves = new Promise<never>(() => {});
+    const screen = await render(
+      createElement(
+        RouteBoundary,
+        null,
+        createElement(() => {
+          throw neverResolves;
+        }),
+      ),
+    );
+
+    const status = screen.getByRole("status");
+    await expect.element(status).toBeVisible();
+    await expect.element(status).toHaveTextContent("Đang tải trang...");
+
+    // A blank or silent fallback leaves a screen reader with nothing while the
+    // chunk downloads, so the text must be non-empty and the region live.
+    expect(status.element().textContent?.trim()).not.toBe("");
+    expect(status.element().getAttribute("aria-live")).toBe("polite");
   });
 
   it("shows the live route fallback while the lazy Performance route is deferred, then resolves", async () => {
