@@ -26,6 +26,30 @@ _RECORD = {
 }
 
 
+def test_no_verdict_shape_ever_renders_a_record_value() -> None:
+    """Every shape of the block is checked, because the leak is one branch deep.
+
+    ``render_verdict`` output is what the model reads before it speaks; a value
+    from the record anywhere in it (or in the verdict dict a future caller might
+    format) is an answer key handed to the party being verified.
+    """
+    submitted = (
+        {"full_name": "Trần Văn A", "cccd": "99998888", "phone": "0000000000"},
+        {"full_name": "Nguyễn Việt Dũng", "cccd": "", "phone": "0357210887"},
+        {"full_name": "", "cccd": "", "phone": ""},
+        {"full_name": "Nguyen Viet Dung", "cccd": "0357210887", "phone": "0357210887"},
+        {"full_name": "Nguyễn Việt Dũng", "cccd": "11112222", "phone": "0357210887"},
+    )
+    records = (_RECORD, {"found": False}, {"found": True}, {}, None)
+    secrets = ("Nguyễn Việt Dũng", "Nguyen Viet Dung", "11112222", "0357210887")
+    for record in records:
+        for case in submitted:
+            verdict = evaluate_identity(record, **case)
+            haystacks = [render_verdict(verdict), repr(verdict)]
+            for secret in secrets:
+                assert all(secret not in text for text in haystacks), (record, case, secret)
+
+
 def test_name_normalisation_folds_diacritics_case_and_spacing() -> None:
     assert normalize_name("Nguyễn Việt Dũng") == "nguyen viet dung"
     assert normalize_name("  nguyen   VIET dung ") == "nguyen viet dung"
@@ -81,13 +105,20 @@ def test_the_phone_typed_in_the_cccd_slot_is_named_as_the_phone() -> None:
     assert "11112222" not in rendered  # the record's CCCD is never echoed
 
 
-def test_a_wrong_name_asks_only_for_the_name() -> None:
+def test_a_wrong_name_asks_only_for_the_name_without_leaking_it() -> None:
+    """The employee is the one being verified: the record is an answer key.
+
+    Any value from the record in the model's context could be read back to
+    whoever holds the phone number, and a wrong-name turn is exactly where a
+    helpful model would quote it.
+    """
     verdict = evaluate_identity(
         _RECORD, full_name="Trần Văn A", cccd="11112222", phone="0357210887"
     )
     assert verdict["missing"] == ["full_name"]
     rendered = render_verdict(verdict)
-    assert "Nguyễn Việt Dũng" in rendered  # the registered name is the evidence
+    assert "Nguyễn Việt Dũng" not in rendered
+    assert "registered_name" not in verdict
     assert "cần hỏi lại: họ tên đầy đủ" in rendered
 
 

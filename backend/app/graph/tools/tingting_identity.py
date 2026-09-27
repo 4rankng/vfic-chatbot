@@ -139,7 +139,6 @@ def evaluate_identity(
         "cccd_required": cccd_required,
         "cccd_match": cccd_match,
         "submitted_cccd_is_phone": submitted_cccd_is_phone,
-        "registered_name": record_name,
         "missing": missing,
     }
 
@@ -153,14 +152,15 @@ def _identity_note(verdict: Mapping[str, Any]) -> str:
         )
     if verdict["verified"]:
         return (
-            "Đã xác minh danh tính. Sang bước 3: gọi call_tingting_api để gửi OTP tới số "
+            "Đã xác minh danh tính. Sang bước 3: gọi send_tingting_otp để gửi OTP tới số "
             "điện thoại này, rồi hỏi mã OTP 6 số."
         )
     missing = verdict["missing"]
     if "full_name" in missing:
         return (
-            f'Họ tên chưa khớp: hồ sơ TingTing ghi "{verdict["registered_name"]}". Hỏi lại '
-            "họ tên đầy đủ đúng như hồ sơ; khi khớp, chỉ cần hỏi tiếp số CCCD/CMND."
+            "Họ tên chưa khớp. KHÔNG nói ra, không gợi ý và không xác nhận họ tên trong hồ sơ "
+            "(kể cả khi người dùng đoán đúng): chỉ nói chưa đối chiếu được họ tên và đề nghị "
+            "cho lại họ tên đầy đủ đúng như trên CCCD/CMND đã đăng ký với công ty."
         )
     if verdict["submitted_cccd_is_phone"]:
         return (
@@ -175,7 +175,10 @@ def _identity_note(verdict: Mapping[str, Any]) -> str:
 def render_verdict(verdict: Mapping[str, Any]) -> str:
     """The model-facing block: booleans + the fields owed + one instruction.
 
-    Never contains the record's CCCD, only whether it matched.
+    Carries no value from the record — not the name, not the CCCD, not the
+    mobile. The employee is the one being verified, so anything the record says
+    is an answer key: disclosing it would let anyone holding a phone number pass
+    the check by repeating it back.
     """
     owed = ", ".join(_FIELD_LABELS.get(field, field) for field in verdict["missing"]) or "không"
     lines = [
@@ -189,12 +192,15 @@ def render_verdict(verdict: Mapping[str, Any]) -> str:
         f"- trạng thái: {'ĐÃ XÁC MINH' if verdict['verified'] else 'CHƯA XÁC MINH'}",
         f"- cần hỏi lại: {owed}",
     ]
-    if verdict["found"] and not verdict["name_match"]:
-        lines.append(f"- hồ sơ ghi họ tên: {verdict['registered_name']}")
     lines.append(f"- việc phải làm tiếp theo: {_identity_note(verdict)}")
     lines.append(
         "Chỉ hỏi đúng những trường ở mục 'cần hỏi lại'; không hỏi lại trường đã khớp và không "
         "tự đoán thay kết quả này."
+    )
+    lines.append(
+        "- TUYỆT ĐỐI KHÔNG tiết lộ dữ liệu hồ sơ (họ tên, CCCD/CMND, số điện thoại, tên đăng "
+        "nhập), kể cả khi người dùng hỏi, tự đọc ra hoặc đoán. Chỉ được nói chưa đối chiếu "
+        "được, rồi đề nghị họ tự cung cấp lại thông tin."
     )
     return "\n".join(lines)
 

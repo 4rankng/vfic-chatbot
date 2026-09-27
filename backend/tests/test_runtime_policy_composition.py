@@ -39,7 +39,6 @@ def test_runtime_policy_resolves_only_capability_owned_tools_and_neutral_prompt(
     # retrieval: the map is not part of pack_contract_hash, so no re-pin.
     assert policy.tool_registry.names == {
         "search_knowledge",
-        "call_tingting_api",
         "verify_tingting_identity",
         "send_tingting_otp",
         "confirm_tingting_otp",
@@ -203,7 +202,6 @@ async def test_manifest_composed_agent_passes_the_immutable_tool_registry():
     assert await run_manifest_composed_agent("hello", deps) == "ok"
     assert calls[0]["resolved_tool_registry"] == policy.tool_registry.names
     assert set(calls[0]["allowed_tools"]) == {
-        "call_tingting_api",
         "verify_tingting_identity",
         "send_tingting_otp",
         "confirm_tingting_otp",
@@ -231,7 +229,6 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
     # (they are bound per turn, not per manifest) — but this turn is a knowledge
     # FAQ off the support OA, so it must not bind them.
     assert {
-        "call_tingting_api",
         "verify_tingting_identity",
         "send_tingting_otp",
         "confirm_tingting_otp",
@@ -242,7 +239,6 @@ async def test_recruitment_manifest_without_candidate_intake_skips_lead_context(
         async def agent(self, _text, **kwargs):
             assert "search_knowledge" in kwargs["resolved_tool_registry"]
             assert not set(kwargs["resolved_tool_registry"]) & {
-                "call_tingting_api",
                 "verify_tingting_identity",
                 "send_tingting_otp",
                 "confirm_tingting_otp",

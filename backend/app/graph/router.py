@@ -162,7 +162,6 @@ _INTENT_ROUTES = {
     "employee_support": (
         "knowledge_lookup",
         (
-            "call_tingting_api",
             "verify_tingting_identity",
             "send_tingting_otp",
             "confirm_tingting_otp",
@@ -238,7 +237,8 @@ def routing_instruction(route: TurnRoute) -> str:
         return (
             "Ý định ngoài phạm vi hỗ trợ của VFIC (tuyển dụng + hỗ trợ nhân viên đang làm). "
             "TRƯỚC KHI TỪ CHỐI: nếu mục API TINGTING đang có sẵn cho việc đang được hỏi thì phải "
-            "gọi call_tingting_api theo hướng dẫn và trả lời theo kết quả tool, không từ chối. "
+            "gọi verify_tingting_identity theo hướng dẫn và trả lời theo kết quả tool, không "
+            "từ chối. "
             "Chỉ khi không có hướng dẫn phù hợp mới từ chối nhẹ nhàng và kéo cuộc trò chuyện về "
             "tìm việc, hồ sơ, lịch xe, hoặc vấn đề của nhân viên tại dự án VFIC. "
             "Không nêu hotline, email hay người liên hệ không có trong dữ liệu tool trả về."

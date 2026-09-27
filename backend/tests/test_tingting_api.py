@@ -21,7 +21,6 @@ from app.graph.tingting_guide import (
     tingting_api_prompt_block,
 )
 from app.graph.tools.tingting_api import (
-    call_tingting_api,
     confirm_tingting_otp,
     generate_simple_password,
     reset_tingting_password,
@@ -430,62 +429,24 @@ def _outcome(state: str, **kwargs):
 
 
 @pytest.mark.asyncio
-async def test_lookup_tool_hands_back_the_real_body() -> None:
-    retrieval = _StubRetrieval(
-        _outcome("ok", label="TingTing", text='{"data":{"found":true}}')
+async def test_no_agent_tool_returns_the_employee_record() -> None:
+    """The employee is the party being verified, so the record is an answer key.
+
+    The lookup answers only through ``verify_tingting_identity`` verdict booleans;
+    a tool that hands the model the record body would let anyone holding the
+    phone number have it read back to them.
+    """
+    from app.graph.runtime_policy import TINGTING_TOOL_NAMES
+    from app.graph.schemas import TOOL_SCHEMAS
+    from app.graph.tools import TOOLS_REGISTRY
+    from app.graph import tools as tool_package
+
+    assert "call_tingting_api" not in TINGTING_TOOL_NAMES
+    assert "call_tingting_api" not in TOOLS_REGISTRY
+    assert not hasattr(tool_package, "call_tingting_api")
+    assert all(
+        schema["function"]["name"] != "call_tingting_api" for schema in TOOL_SCHEMAS
     )
-    result = await call_tingting_api(
-        retrieval,
-        method="POST",
-        path="/api/v1/integration/employee/lookup",
-        params={"phone": "0987654321"},
-    )
-    assert '{"data":{"found":true}}' in result
-    assert retrieval.calls[0]["path"] == "/api/v1/integration/employee/lookup"
-
-
-@pytest.mark.asyncio
-async def test_lookup_tool_refuses_every_mutating_path() -> None:
-    """The reset steps carry flow state; the raw tool must not run them."""
-    retrieval = _StubRetrieval(_outcome("ok", text="body"))
-    for path in (
-        "/api/v1/integration/password-reset/otp",
-        "/api/v1/integration/password-reset/verify",
-        "/api/v1/integration/password-reset/reset",
-    ):
-        result = await call_tingting_api(
-            retrieval, method="POST", path=path, params={"phone": "0987654321"}
-        )
-        assert "send_tingting_otp" in result
-    assert retrieval.calls == []
-
-
-@pytest.mark.asyncio
-async def test_lookup_tool_tells_the_model_to_stay_honest_on_errors() -> None:
-    not_configured = await call_tingting_api(
-        _StubRetrieval(_outcome("not_configured")),
-        method="POST",
-        path="/api/v1/integration/employee/lookup",
-        params={},
-    )
-    assert "chưa được cấu hình" in not_configured
-
-    errored = await call_tingting_api(
-        _StubRetrieval(_outcome("error", status=500, detail="status_500")),
-        method="POST",
-        path="/api/v1/integration/employee/lookup",
-        params={},
-    )
-    assert "HTTP 500" in errored
-    assert "chưa thực hiện được" in errored
-
-
-@pytest.mark.asyncio
-async def test_tool_requires_a_path_before_calling_the_port() -> None:
-    retrieval = _StubRetrieval(_outcome("ok", text="body"))
-    result = await call_tingting_api(retrieval, method="POST", path="   ", params={})
-    assert "Thiếu đường dẫn" in result
-    assert retrieval.calls == []
 
 # ── the reset flow: state lives server-side ─────────────────────────────────
 
@@ -611,7 +572,12 @@ async def test_reset_uses_the_stored_token_and_clears_the_flow() -> None:
     assert first["reset_token"] == "tok-9"
     assert re.fullmatch(r"Vfic@[0-9]{6}", first["new_password"])
     assert retrieval.cleared == 1
-    assert "nv.dung" in result and "Abc12345" in result
+    assert "Abc12345" in result
+    # The login name the employee is told is the registered mobile/CCCD, and the
+    # record's own username/name never reach the reply.
+    assert "số điện thoại hoặc CCCD/CMND đã đăng ký với công ty" in result
+    assert "nv.dung" not in result
+    assert "Nguyễn Việt Dũng" not in result
 
 
 @pytest.mark.asyncio
@@ -710,8 +676,10 @@ async def test_reset_falls_back_when_the_policy_rejects_the_simple_password() ->
     assert len(retrieval.calls) == 2
     assert "new_password" in retrieval.calls[0]["params"]
     assert retrieval.calls[1]["params"] == {"reset_token": "tok-9"}  # app-generated
-    assert "nv.dung" in result and "Abc12345" in result
+    assert "Abc12345" in result
     assert "hệ thống tự sinh" in result
+    assert "nv.dung" not in result
+    assert "Nguyễn Việt Dũng" not in result
 
 
 # ── the channel scope: the flow belongs to the TingTing Zalo OA ─────────────

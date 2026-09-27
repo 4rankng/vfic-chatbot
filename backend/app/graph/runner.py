@@ -519,7 +519,7 @@ async def _agent_turn(
             )
 
     # Never print a guide for a tool this turn cannot bind: an installation
-    # without the knowledge capability lacks the API tools, and pointing the model
+    # without the knowledge capability lacks the reset tools, and pointing the model
     # at endpoints it cannot reach reads as an invitation to invent one.
     api_tool_registry = getattr(manifest_policy, "tool_registry", None)
 
@@ -534,7 +534,7 @@ async def _agent_turn(
     # regardless of project focus — the employee needs no project to reset a
     # password, and a guide the model never sees is one it will replace with an
     # invented hotline. One primary-key read per turn; absent port = absent block.
-    if _api_tool_bindable("call_tingting_api"):
+    if _api_tool_bindable("verify_tingting_identity"):
         configured_reader = getattr(deps.retrieval, "tingting_api_configured", None)
         if configured_reader is not None:
             try:
@@ -621,13 +621,12 @@ async def _agent_turn(
     employee_support = route.intent == "employee_support"
     if focused_rag:
         # An employee-support turn is a tool turn, never a knowledge-only turn:
-        # keep ``call_tingting_api`` bound instead of collapsing to the project
+        # keep the reset tools bound instead of collapsing to the project
         # knowledge authority, or the reset flow can never start.
         if employee_support:
             allowed_tools = tuple(
                 name
                 for name in (
-                    "call_tingting_api",
                     "verify_tingting_identity",
                     "send_tingting_otp",
                     "confirm_tingting_otp",

@@ -149,7 +149,7 @@ async def test_route_contact_info_upgrades_general() -> None:
     assert route.reason == "phone_number"
 
 
-async def test_route_employee_support_binds_the_tingting_api_tool() -> None:
+async def test_route_employee_support_binds_the_tingting_reset_tools() -> None:
     """A payroll password reset must reach the TingTing API tool, not a refusal."""
     route = route_from_decisions(
         "em quên mật khẩu payroll, không nhận được OTP",
@@ -157,7 +157,6 @@ async def test_route_employee_support_binds_the_tingting_api_tool() -> None:
     )
     assert route.strategy == "knowledge_lookup"
     assert route.tools == (
-        "call_tingting_api",
         "verify_tingting_identity",
         "send_tingting_otp",
         "confirm_tingting_otp",
@@ -201,7 +200,7 @@ async def test_out_of_scope_hint_checks_the_tingting_guide_before_refusing() -> 
     )
     hint = routing_instruction(route)
     assert "API TINGTING" in hint
-    assert "call_tingting_api" in hint
+    assert "verify_tingting_identity" in hint
     assert "TRƯỚC KHI TỪ CHỐI" in hint
 
 

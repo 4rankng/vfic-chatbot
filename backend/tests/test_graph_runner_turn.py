@@ -2200,7 +2200,6 @@ async def test_support_oa_turn_injects_the_guide_and_only_the_reset_tools(monkey
     assert "=== API TINGTING" in system
     assert "/api/v1/integration/password-reset/otp" in system
     assert set(captured["allowed_tools"]) == {
-        "call_tingting_api",
         "verify_tingting_identity",
         "send_tingting_otp",
         "confirm_tingting_otp",
@@ -2419,7 +2418,6 @@ async def test_focused_support_turn_drops_the_project_knowledge_tool(monkeypatch
     )
 
     assert set(captured["allowed_tools"]) == {
-        "call_tingting_api",
         "verify_tingting_identity",
         "send_tingting_otp",
         "confirm_tingting_otp",

@@ -8,7 +8,7 @@ from app.graph.types import ResolvedRuntimePolicy, ResolvedToolRegistry
 # A plain conversation grants no data authority: retrieval and profile-aware
 # recruitment actions must be explicitly selected by the active manifest.
 _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
-    # The two TingTing tools ride the knowledge capability deliberately: the map
+    # The TingTing tools ride the knowledge capability deliberately: the map
     # is not part of ``pack_contract_hash`` (only CapabilityDefinition metadata
     # is), so adding them here needs no contract-hash bump and no re-pinning of
     # installed revisions. A new capability id would bump
@@ -16,7 +16,6 @@ _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
     "knowledge": frozenset(
         {
             "search_knowledge",
-            "call_tingting_api",
             "verify_tingting_identity",
             "send_tingting_otp",
             "confirm_tingting_otp",
@@ -42,7 +41,6 @@ _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
 # the per-channel gate in the runner and the channel tests all read this set.
 TINGTING_TOOL_NAMES: frozenset[str] = frozenset(
     {
-        "call_tingting_api",
         "verify_tingting_identity",
         "send_tingting_otp",
         "confirm_tingting_otp",

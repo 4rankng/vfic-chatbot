@@ -19,8 +19,13 @@ The steps therefore live in code, keyed by the employee's phone digits:
 
 ``session_id`` and ``reset_token`` never enter the prompt, and the model cannot
 supply them: the only param it owns is the employee's phone, the 6-digit code and
-an optional new password. :func:`call_tingting_api` stays available for the
-read-only lookup but refuses every mutating path with a pointer at these tools.
+an optional new password.
+
+The employee record never enters the prompt either. The lookup answers only
+through :func:`verify_tingting_identity`'s booleans, and there is no agent tool
+that returns the record itself: the employee is the party being verified, so a
+record value in the model's context is an answer key it could be talked into
+reading back.
 """
 
 from __future__ import annotations
@@ -56,14 +61,6 @@ _RATE_LIMITED = (
 _DUPLICATE_REQUEST = (
     "Yêu cầu y hệt vừa được gửi trong ít giây trước. Không gửi lại; hãy dùng kết quả của "
     "lần gọi trước đó, hoặc hỏi người dùng thêm thông tin rồi tiếp tục."
-)
-_MISSING_PATH = (
-    "Thiếu đường dẫn API. Hãy đọc hướng dẫn API TINGTING và gọi lại kèm method và path."
-)
-_MUTATING_PATH_REFUSED = (
-    "Không gọi trực tiếp endpoint này: các bước gửi OTP / xác thực mã / đặt lại mật khẩu phải "
-    "dùng send_tingting_otp, confirm_tingting_otp và reset_tingting_password để hệ thống giữ "
-    "phiên xác minh. call_tingting_api chỉ dùng để tra cứu nhân viên."
 )
 _NO_PHONE = (
     "Thiếu số điện thoại. Hãy hỏi số điện thoại đã đăng ký với công ty rồi gọi lại tool."
@@ -153,38 +150,6 @@ def tingting_state_text(outcome: Any) -> str:
         return _RATE_LIMITED
     # ``not_configured`` and any unexpected state: the honest answer is the same.
     return _NOT_CONFIGURED
-
-
-async def call_tingting_api(
-    retrieval: GraphRetrievalPort,
-    *,
-    method: str,
-    path: str,
-    params: dict[str, Any] | None = None,
-) -> str:
-    """Read the employee record. Mutating paths are refused here.
-
-    Only the lookup is reachable through this tool: the reset steps carry flow
-    state that must not depend on the model, so they have their own tools.
-    """
-    requested_path = (path or "").strip()
-    if not requested_path:
-        return _MISSING_PATH
-    if requested_path not in {LOOKUP_PATH}:
-        return _MUTATING_PATH_REFUSED
-    outcome = await retrieval.call_tingting_api(
-        method=method,
-        path=requested_path,
-        params=params,
-    )
-    if outcome.state == "ok":
-        return (
-            "Kết quả từ hệ thống TingTing:\n"
-            f"{outcome.text}\n"
-            "Chỉ trả lời người dùng dựa trên nội dung trên; không thêm thông tin không có "
-            "trong đó và không đọc lại mã API hay mã định danh nội bộ."
-        )
-    return tingting_state_text(outcome)
 
 
 def _otp_failure_text(data: dict[str, Any]) -> str:
@@ -327,22 +292,23 @@ async def reset_tingting_password(retrieval: GraphRetrievalPort, *, phone: str) 
     if data is None:
         return _UNREADABLE
     await retrieval.clear_tingting_flow_state(clean_phone)
-    username = str(data.get("username") or "")
+    # The record's ``username`` and ``employee_name`` are deliberately not read:
+    # the employee logs in with the registered mobile number or CCCD, and the
+    # name on file is not ours to read back to whoever holds this phone.
     password = str(data.get("new_password") or "")
-    employee = str(data.get("employee_name") or "")
-    if not username or not password:
+    if not password:
         return _UNREADABLE
-    label = f" cho {employee}" if employee else ""
     advice = (
         "Mật khẩu này do hệ thống tự sinh nên khó nhớ ạ."
         if fell_back
         else "Mật khẩu này là mật khẩu tạm."
     )
     return (
-        f"Đã đặt lại mật khẩu{label} thành công. Đọc lại cho nhân viên đúng tên đăng nhập và "
-        f"mật khẩu mới sau đây, đúng từng ký tự, rồi nhắc đổi mật khẩu sau lần đăng nhập đầu "
-        f"tiên. {advice}\n"
-        f"- tên đăng nhập: {username}\n- mật khẩu mới: {password}"
+        "Đã đặt lại mật khẩu thành công. Trả lời nhân viên đúng các ý sau, không thêm tên "
+        "riêng và không đọc tên đăng nhập nội bộ:\n"
+        "- tên đăng nhập: số điện thoại hoặc CCCD/CMND đã đăng ký với công ty\n"
+        f"- mật khẩu mới: {password}\n"
+        f"Nhắc đăng nhập ngay và đổi mật khẩu sau lần đăng nhập đầu tiên. {advice}"
     )
 
 
@@ -352,7 +318,6 @@ __all__ = [
     "OTP_PATH",
     "RESET_PATH",
     "VERIFY_PATH",
-    "call_tingting_api",
     "confirm_tingting_otp",
     "reset_tingting_password",
     "send_tingting_otp",

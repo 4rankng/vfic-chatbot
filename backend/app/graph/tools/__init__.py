@@ -29,7 +29,6 @@ from app.graph.tools.catalog import (
     search_bus_timetable,
 )
 from app.graph.tools.tingting_api import (
-    call_tingting_api,
     confirm_tingting_otp,
     reset_tingting_password,
     send_tingting_otp,
@@ -57,7 +56,6 @@ TOOLS_REGISTRY = {
     "recommend_jobs": recommend_jobs,
     "search_bus_timetable": search_bus_timetable,
     "get_product_features": get_product_features,
-    "call_tingting_api": call_tingting_api,
     "verify_tingting_identity": verify_tingting_identity,
     "send_tingting_otp": send_tingting_otp,
     "confirm_tingting_otp": confirm_tingting_otp,
@@ -66,7 +64,6 @@ TOOLS_REGISTRY = {
 
 __all__ = [
     "TOOLS_REGISTRY",
-    "call_tingting_api",
     "compare_income",
     "format_salary_range",
     "get_product_features",
