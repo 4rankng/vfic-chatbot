@@ -7,7 +7,6 @@ labels: [security, ops, hygiene]
 effort: S
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

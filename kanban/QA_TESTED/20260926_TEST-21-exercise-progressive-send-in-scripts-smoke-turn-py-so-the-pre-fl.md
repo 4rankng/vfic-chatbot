@@ -7,7 +7,6 @@ labels: [testing, release-gate, progressive-send]
 effort: M
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

@@ -7,7 +7,6 @@ labels: [architecture, frontend, enforcement-gap]
 effort: M
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

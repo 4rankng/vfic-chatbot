@@ -7,7 +7,6 @@ labels: [dead-code, config-sprawl]
 effort: S
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

@@ -7,7 +7,6 @@ labels: [duplication, knowledge]
 effort: M
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

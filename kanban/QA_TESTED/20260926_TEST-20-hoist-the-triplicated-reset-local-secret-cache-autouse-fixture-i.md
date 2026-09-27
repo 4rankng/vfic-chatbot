@@ -7,7 +7,6 @@ labels: [fixtures, flake-risk, isolation]
 effort: S
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

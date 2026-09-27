@@ -7,7 +7,6 @@ labels: [untested-hotspot, personas]
 effort: S
 status: done
 column: QA_TESTED
-
 opened: 2026-09-27
 ---
 

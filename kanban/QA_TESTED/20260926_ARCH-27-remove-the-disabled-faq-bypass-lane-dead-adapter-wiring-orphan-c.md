@@ -7,7 +7,6 @@ labels: [dead-code, observability]
 effort: M
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

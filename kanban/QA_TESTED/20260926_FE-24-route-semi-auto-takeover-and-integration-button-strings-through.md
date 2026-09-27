@@ -7,7 +7,6 @@ labels: [frontend, i18n, consistency]
 effort: S
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

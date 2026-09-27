@@ -7,7 +7,6 @@ labels: [ops, registry, dead-config]
 effort: S
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

@@ -7,7 +7,6 @@ labels: [god-module, chat-hot-path]
 effort: L
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

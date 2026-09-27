@@ -7,7 +7,6 @@ labels: [raw-source-assertions, frontend, test-debt]
 effort: L
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 

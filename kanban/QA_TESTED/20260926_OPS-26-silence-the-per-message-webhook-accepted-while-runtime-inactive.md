@@ -7,7 +7,6 @@ labels: [telemetry, alerting, log-noise]
 effort: S
 status: done
 column: QA_TESTED
-
 opened: 2026-09-26
 ---
 
