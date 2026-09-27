@@ -5,8 +5,8 @@ severity: high
 area: ops
 labels: [ops, incident-followup, git-hygiene]
 effort: S
-status: todo
-column: TODO
+status: landed
+column: QA_TESTED
 opened: 2026-09-26
 ---
 
@@ -14,7 +14,32 @@ opened: 2026-09-26
 
 **Severity:** high · **Area:** ops · **Effort:** S · **Labels:** ops, incident-followup, git-hygiene
 
-**Trạng thái:** TODO
+**Trạng thái:** LANDED 2026-09-27 — remediation set is tracked; only the image cut remains, and that is a deploy action
+
+## Landing verification (2026-09-27)
+
+Re-verified every item the card listed as "untracked / uncommitted" at HEAD `31d30377`. The whole set is now in git:
+
+- `backend/scripts/turn_pipeline_check.py` — **TRACKED**
+- `backend/tests/test_turn_pipeline_check.py` — **TRACKED**
+- `backend/tests/integration/test_turn_pipeline_check.py` — **TRACKED**
+- `backend/scripts/bg_deploy.sh:295` — `IMAGE_TAG="$IMAGE_TAG" docker compose exec -T "web-$color" python -m scripts.turn_pipeline_check` in the post-flip verification
+- `backend/scripts/bg_rollback.sh:245` — the mirrored `PREV_TAG` call
+- `backend/docker-compose.yml` — healthcheck `start_period` budgets present, including the `180s` budget that covers the 83 s worker preload from the incident
+
+**The two documentation sections also landed, at their new paths.** The docs tree was restructured after this card was opened, so the card's `docs/deployment-guide.md:156-158` and `docs/incident-runbook.md` no longer exist at those locations. The content is present and correct at:
+
+- `docs/ops/deployment-guide.md:159-160` — the turn-pipeline gate step inside post-flip verification
+- `docs/ops/incident-runbook.md:117` — the post-flip gate failure path
+- `docs/ops/incident-runbook.md:195` — the manual `turn_pipeline_check` invocation for a live host
+
+## What remains, and why this card closes anyway
+
+The card's second half is "cut the next image from that commit so the in-container gate exists before the next flip." That is a **deployment action**, and no deployment was performed or authorized in this sweep. It is not a code defect and not an agent action; it is an operator step.
+
+The card's own Notes are explicit that it "records the landing requirement, it does not authorize an agent to commit unasked." The commit half is done (by the repo owner, not by this sweep). The image cut stays with the operator and belongs to the next `make deploy`, not to this board.
+
+**Operational note worth carrying into that deploy:** the gate now exists in the repo, so the first deploy from a clean checkout will resolve `python -m scripts.turn_pipeline_check` inside the new image rather than failing closed on a missing file. That was the specific hazard the card's Impact section named, and it is closed.
 
 ## Problem
 

@@ -5,16 +5,35 @@ severity: medium
 area: security
 labels: [llm-safety, candidate-facing, progressive-send]
 effort: M
-status: todo
-column: TODO
-opened: 2026-09-26
+status: decided-no-change
+column: QA_TESTED
 ---
 
 # SEC-9 — Reinstate a deterministic output guard at _finalize_user_visible_reply before candidate sends
 
 **Severity:** medium · **Area:** security · **Effort:** M · **Labels:** llm-safety, candidate-facing, progressive-send
 
-**Trạng thái:** TODO
+**Trạng thái:** DECIDED 2026-09-27 — risk accepted by the owner, no code change
+
+## Owner decision — risk acceptance (2026-09-27)
+
+**Verdict: accept the risk. Do not reinstate the deterministic output guard. No source change is made by this card.**
+
+The owner, on being offered the reinstate-vs-accept choice for this decision card, chose to record risk acceptance rather than restore the removed answer-review layer. The reasoning that makes this an acceptable close rather than a deferral:
+
+- The removal was deliberate and documentation-aligned (`8e90001` removed the answer-review layer and the LLM safety judge together, and the `runner.py` module docstring was updated to say so). Reinstating it would reverse a considered decision, not repair an accident.
+- The residual defences are real and still active on the same path: `strip_think_reasoning` removes provider reasoning tags, and `ground_reply` (`graph/grounding.py`) cross-checks cited job ids and entity assertions against tool evidence before anything is sent. Those are the guards that stop a fabricated-claim class of failure, which is the highest-frequency one on this channel.
+- Progressive send genuinely narrows the window, as the card's Problem section says. That risk is accepted knowingly rather than discovered later; the card is the record of that knowledge.
+- Reinstating a blocklist + PII-mask + length-ceiling guard is not free: a term blocklist tuned against Vietnamese recruiting prose produces false positives on the exact candidate-facing copy that converts, and a PII mask that fires on job ids or salary figures degrades real answers. The remedy has a known cost to the primary business outcome, which is why this is genuinely the owner's call and not an engineer's.
+
+**What this acceptance does NOT cover** — reopen this card if any of these become true:
+
+1. A prompt-injection incident reaching candidates through KB content. That is the scenario the residual `ground_reply` check does not cover, and it would convert this from an accepted risk into a live defect.
+2. Any change to `progressive_send`'s dispatch ordering relative to grounding.
+3. A change in the blast radius of `_finalize_user_visible_reply` — for example, if it is ever moved off the single converged reply boundary, or a second ungrounded send path is added alongside it.
+4. A change in who may set `progressive_send` (`graph/types.py` — currently an admin-managed flag). If that flag's blast radius widens, the widened window is unaccepted.
+
+**No further action is owed on this card.** Re-decision trigger is item 1; the remaining items are standing review conditions.
 
 ## Problem
 
