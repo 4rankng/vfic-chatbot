@@ -89,12 +89,65 @@ async def test_run_job_async_invokes_orchestrator_and_bumps_success(
     assert w.COUNTER_SUCCESS in counters
 
 
-def test_worker_uses_worker_session_not_web_pool() -> None:
-    """Finding 21: the worker must use worker_session, never the web pool's async_session."""
-    source = Path(w.__file__).read_text(encoding="utf-8")
-    assert "from app.workers._db import worker_session" in source
-    assert "from app.core.db import" not in source
-    assert "async_session" not in source or "worker_session" in source
+def _pool_recording_session(pool: str, opened: list[str], db):
+    class _RecordingSessionCM:
+        async def __aenter__(self):
+            opened.append(pool)
+            return db
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    return _RecordingSessionCM()
+
+
+@pytest.mark.asyncio
+async def test_worker_tick_uses_worker_pool_never_the_web_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Finding 21: the tick must run on worker_session, never the web pool's
+    async_session — the web pool is sized for request latency and saturates when
+    a full auto-sync backlog drains through it.
+
+    This used to read the worker module's source and grep it for the import,
+    which passes while the worker actually opens the web pool and fails on any
+    reformat of the import block. It now installs a tripwire on both session
+    factories and asserts which one the real code path entered.
+    """
+    opened: list[str] = []
+    db = _db_returning_state_ids([])
+    monkeypatch.setattr("app.workers._db.worker_session", lambda: _pool_recording_session("worker", opened, db))
+    monkeypatch.setattr("app.core.db.async_session", lambda: _pool_recording_session("web", opened, db))
+    monkeypatch.setattr(w, "enqueue_one_shot", lambda *a, **k: "job-id")
+
+    await w._tick_async()
+
+    assert opened == ["worker"], f"the sync tick opened the {opened} pool"
+
+
+@pytest.mark.asyncio
+async def test_worker_job_uses_worker_pool_never_the_web_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The per-row RQ job shares the tick's pool contract (Finding 21)."""
+    opened: list[str] = []
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4(), created_by=uuid.uuid4(), category_key="faq"))
+    monkeypatch.setattr("app.workers._db.worker_session", lambda: _pool_recording_session("worker", opened, db))
+    monkeypatch.setattr("app.core.db.async_session", lambda: _pool_recording_session("web", opened, db))
+    monkeypatch.setattr(w, "_resolve_actor", AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4())))
+    monkeypatch.setattr(
+        "app.services.knowledge.external_source_sync.sync_external_source",
+        AsyncMock(
+            return_value=ExternalSourceSyncOutcome(
+                status="STAGED", category_key="faq", content_hash="abcd1234"
+            )
+        ),
+    )
+
+    await w._run_job_async(uuid.uuid4())
+
+    assert opened == ["worker"], f"the sync job opened the {opened} pool"
 
 
 @pytest.mark.asyncio

@@ -595,7 +595,7 @@ def test_minimax_json_missing_key_names_minimax(monkeypatch):
     class _NoKeySettings(_Settings):
         minimax_api_key = ""
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _NoKeySettings())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _NoKeySettings())
     with pytest.raises(RuntimeError, match="MINIMAX_API_KEY"):
         make_minimax_llm_json()
 
@@ -604,7 +604,7 @@ def test_active_provider_no_xor_when_both_enabled(monkeypatch):
     """_active_llm_provider returns the configured default when both are enabled."""
     from app.graph.clients import _active_llm_provider
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _SettingsWithBothProviders())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _SettingsWithBothProviders())
     assert _active_llm_provider() == "minimax"
 
 
@@ -615,7 +615,7 @@ def test_active_provider_openrouter_default_when_both_enabled(monkeypatch):
     class _OpenRouterDefault(_SettingsWithBothProviders):
         llm_default_provider = "openrouter"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouterDefault())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _OpenRouterDefault())
     assert _active_llm_provider() == "openrouter"
 
 
@@ -625,7 +625,7 @@ def test_active_provider_openrouter_only(monkeypatch):
 
     s = _SettingsWithBothProviders()
     s.minimax_enable = False
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: s)
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: s)
     assert _active_llm_provider() == "openrouter"
 
 
@@ -635,7 +635,7 @@ def test_chat_for_role_returns_plain_client_default_minimax(monkeypatch):
 
     from app.graph.clients import _chat_for_role
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _SettingsWithBothProviders())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _SettingsWithBothProviders())
     llm = _chat_for_role("agent", temperature=0.3)
     # A plain ChatOpenAI is used for the selected provider.
     assert isinstance(llm, ChatOpenAI)
@@ -650,7 +650,7 @@ def test_chat_for_role_returns_openrouter_client_when_default(monkeypatch):
     class _OpenRouterDefault(_SettingsWithBothProviders):
         llm_default_provider = "openrouter"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouterDefault())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _OpenRouterDefault())
     llm = _chat_for_role("agent", temperature=0.3)
     assert isinstance(llm, ChatOpenAI)
     # The model name reflects the openrouter config, proving provider selection.
@@ -669,7 +669,7 @@ def test_agent_role_carries_output_cap_and_reasoning_mode(monkeypatch):
         llm_agent_max_tokens = 400
         llm_reasoning_mode = "off"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Capped())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _Capped())
 
     agent_llm = _chat_for_role("agent", temperature=0.3)
     assert agent_llm.max_tokens == 400
@@ -685,7 +685,7 @@ def test_agent_output_cap_unset_keeps_current_behaviour(monkeypatch):
         llm_agent_max_tokens = 0
         llm_reasoning_mode = "off"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Uncapped())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _Uncapped())
 
     assert _chat_for_role("agent", temperature=0.3).max_tokens is None
 
@@ -706,7 +706,7 @@ def test_openrouter_fast_tier_gets_reasoning_and_cap_settings(monkeypatch):
         llm_agent_max_tokens=400,
     )
     monkeypatch.setattr("app.graph.factories.get_settings", lambda: fake_settings)
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: fake_settings)
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: fake_settings)
     monkeypatch.setattr("app.graph.factories._openrouter_chat", fake_openrouter_chat)
 
     result = _build_fast_llm(

@@ -385,7 +385,7 @@ def test_build_embedder_uses_openrouter_by_default():
 
 
 def test_minimax_chat_missing_key_names_minimax(monkeypatch):
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _Settings())
     with pytest.raises(RuntimeError, match="MINIMAX_API_KEY"):
         _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
 
@@ -412,7 +412,7 @@ def test_openrouter_chat_missing_key_names_openrouter(monkeypatch):
         minimax_enable = False
         openrouter_enable = True
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouter())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _OpenRouter())
     with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
         _chat_for_role("agent", temperature=0.1)
 
@@ -513,7 +513,7 @@ def test_openrouter_agent_client_disables_reasoning_by_default(monkeypatch):
     class _OpenRouter(_Settings):
         openrouter_api_key = "test-key"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouter())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _OpenRouter())
 
     chat = _openrouter_chat(
         "deepseek/deepseek-v4-flash",
@@ -529,7 +529,7 @@ def test_openrouter_agent_client_supports_low_reasoning(monkeypatch):
     class _OpenRouter(_Settings):
         openrouter_api_key = "test-key"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouter())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _OpenRouter())
 
     chat = _openrouter_chat(
         "deepseek/deepseek-v4-flash",
@@ -546,7 +546,7 @@ def test_openrouter_agent_client_default_mode_sends_no_reasoning_field(monkeypat
     class _OpenRouter(_Settings):
         openrouter_api_key = "test-key"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouter())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _OpenRouter())
 
     chat = _openrouter_chat("deepseek/deepseek-v4-flash", temperature=0.0, reasoning_mode="default")
 
@@ -557,7 +557,7 @@ def test_openrouter_chat_marks_stable_system_block_as_cacheable_prefix(monkeypat
     class _OpenRouter(_Settings):
         openrouter_api_key = "test-key"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _OpenRouter())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _OpenRouter())
 
     chat = _openrouter_chat("deepseek/deepseek-v4-flash", temperature=0.1)
     langchain_core = pytest.importorskip("langchain_core.messages")
@@ -587,7 +587,7 @@ def test_minimax_chat_sends_no_cache_marker_on_openai_compatible_endpoint(monkey
     class _MiniMax(_Settings):
         minimax_api_key = "test-key"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _MiniMax())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _MiniMax())
 
     chat = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
     langchain_core = pytest.importorskip("langchain_core.messages")
@@ -616,7 +616,7 @@ def test_minimax_chat_sends_no_reasoning_field(monkeypatch):
     class _MiniMax(_Settings):
         minimax_api_key = "test-key"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _MiniMax())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _MiniMax())
 
     chat = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
     langchain_core = pytest.importorskip("langchain_core.messages")
@@ -633,7 +633,7 @@ def test_minimax_chat_applies_output_cap(monkeypatch):
     class _MiniMax(_Settings):
         minimax_api_key = "test-key"
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _MiniMax())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _MiniMax())
 
     capped = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1, max_tokens=400)
     uncapped = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
@@ -648,7 +648,7 @@ def test_custom_chat_disables_thinking_on_known_token_plan(monkeypatch):
     class _Custom(_Settings):
         custom_llm_request_timeout = 60
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Custom())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _Custom())
 
     from app.graph.clients import _custom_chat
 
@@ -669,7 +669,7 @@ def test_custom_chat_leaves_unknown_vendor_reasoning_untouched(monkeypatch):
     class _Custom(_Settings):
         custom_llm_request_timeout = 60
 
-    monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Custom())
+    monkeypatch.setattr("app.graph.providers.get_settings", lambda: _Custom())
 
     from app.graph.clients import _custom_chat
 

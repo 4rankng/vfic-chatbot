@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import importlib.util
+import io
+import re
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 
 from app.models.conversation import BotRun, Message
 from app.models.outbox import OutboundOutbox, OutboxFenceScope, OutboxOriginKind
@@ -47,22 +53,113 @@ def test_bot_and_outbound_models_carry_the_same_runtime_authority_columns():
     assert OutboxFenceScope.RUNTIME.value == "RUNTIME"
 
 
-def test_authority_stamp_migration_requires_complete_stamps_and_origin_specific_fences():
-    migration = (
-        Path(__file__).parents[1]
-        / "alembic"
-        / "versions"
-        / "0045_runtime_authority_stamps.py"
-    ).read_text(encoding="utf-8")
+STAMP_TABLES = ("messages", "bot_runs", "outbound_outbox")
+MIGRATION = (
+    Path(__file__).parents[1] / "alembic" / "versions" / "0045_runtime_authority_stamps.py"
+)
+_ADD_CONSTRAINT = re.compile(r"^ALTER TABLE (?P<table>\w+) ADD CONSTRAINT (?P<name>\w+) (?P<body>.*)$", re.S)
+_ADD_COLUMN = re.compile(r"^ALTER TABLE (?P<table>\w+) ADD COLUMN (?P<name>\w+) (?P<body>.*)$", re.S)
+_CREATE_INDEX = re.compile(
+    r"^CREATE INDEX (?P<name>\w+) ON (?P<table>\w+) \((?P<columns>.*?)\)(?P<predicate>.*)$", re.S
+)
+_DROP = re.compile(r"DROP (?:CONSTRAINT|INDEX|COLUMN) (?P<name>\w+)")
 
-    assert 'f"ck_{table}_runtime_stamp_complete"' in migration
-    assert "authority_generation IS NOT NULL" in migration
-    assert "runtime_fingerprint IS NOT NULL" in migration
-    assert "origin_kind IN ('BOT','PROACTIVE','MANUAL')" in migration
-    assert "fence_scope IN ('RUNTIME','CHANNEL')" in migration
-    assert "origin_kind IS NOT NULL AND fence_scope IS NOT NULL" in migration
-    assert "ix_outbound_outbox_pending_runtime_authority" in migration
-    assert "def downgrade" in migration
+
+def _rendered_statements(direction: str) -> list[str]:
+    """Run the real `upgrade`/`downgrade` offline and return the SQL it emits.
+
+    Alembic's offline mode compiles every `op.*` call against the PostgreSQL
+    dialect without a server, so callers read the schema the migration actually
+    produces instead of the source text that spells it.
+    """
+    spec = importlib.util.spec_from_file_location("_stamp_migration_0045", MIGRATION)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    buffer = io.StringIO()
+    context = MigrationContext.configure(
+        dialect_name="postgresql",
+        opts={"as_sql": True, "output_buffer": buffer},
+    )
+    with Operations.context(context):
+        getattr(module, direction)()
+    return [chunk.strip() for chunk in buffer.getvalue().split(";") if chunk.strip()]
+
+
+def _constraints(statements: list[str]) -> dict[str, tuple[str, str]]:
+    return {m["name"]: (m["table"], m["body"]) for m in map(_ADD_CONSTRAINT.match, statements) if m}
+
+
+def _columns(statements: list[str]) -> dict[tuple[str, str], str]:
+    return {(m["table"], m["name"]): m["body"] for m in map(_ADD_COLUMN.match, statements) if m}
+
+
+def test_authority_stamp_migration_requires_complete_stamps_and_origin_specific_fences():
+    """The upgrade really creates the stamp-completeness and origin/fence guards.
+
+    This used to grep the migration file for its own string literals, so
+    dropping or renaming a column in the DDL left the test green. Rendering the
+    migration runs the production `upgrade()` and pins the schema it emits. The
+    Postgres round-trip that proves the constraints actually reject a partial
+    stamp lives in tests/integration/test_runtime_authority_stamp_migration.py.
+    """
+    statements = _rendered_statements("upgrade")
+    constraints = _constraints(statements)
+    columns = _columns(statements)
+
+    for table in STAMP_TABLES:
+        name = f"ck_{table}_runtime_stamp_complete"
+        assert name in constraints, f"{name} was never created"
+        constraint_table, body = constraints[name]
+        assert constraint_table == table
+        assert columns[(table, "runtime_revision_id")] == "UUID"
+        assert columns[(table, "authority_generation")] == "BIGINT"
+        assert columns[(table, "runtime_fingerprint")] == "VARCHAR(64)"
+        # A stamp is all-or-nothing, non-negative, and a lowercase hex digest.
+        assert "runtime_revision_id IS NULL AND authority_generation IS NULL" in body
+        assert "runtime_fingerprint IS NULL" in body
+        assert "authority_generation IS NOT NULL" in body
+        assert "runtime_fingerprint IS NOT NULL" in body
+        assert "authority_generation >= 0" in body
+        assert "runtime_fingerprint ~ '^[0-9a-f]{64}$'" in body
+
+    _, origin_kind = constraints["ck_outbound_outbox_origin_kind"]
+    assert "origin_kind IS NULL OR origin_kind IN ('BOT','PROACTIVE','MANUAL')" in origin_kind
+    _, fence_scope = constraints["ck_outbound_outbox_fence_scope"]
+    assert "fence_scope IS NULL OR fence_scope IN ('RUNTIME','CHANNEL')" in fence_scope
+    _, authority_origin = constraints["ck_outbound_outbox_authority_origin"]
+    assert "origin_kind IS NULL AND fence_scope IS NULL" in authority_origin
+    assert "origin_kind IS NOT NULL AND fence_scope IS NOT NULL" in authority_origin
+    assert "origin_kind IN ('BOT','PROACTIVE') AND fence_scope = 'RUNTIME'" in authority_origin
+    assert "origin_kind = 'MANUAL' AND fence_scope = 'CHANNEL'" in authority_origin
+
+    indexes = [m for m in map(_CREATE_INDEX.match, statements) if m]
+    pending = [m for m in indexes if m["name"] == "ix_outbound_outbox_pending_runtime_authority"]
+    assert pending, "the pending-runtime-authority index was never created"
+    assert pending[0]["table"] == "outbound_outbox"
+    assert pending[0]["columns"] == "runtime_revision_id, authority_generation, created_at"
+    assert "WHERE status = 'PENDING'" in pending[0]["predicate"]
+
+
+def test_authority_stamp_migration_downgrade_reverses_the_whole_upgrade():
+    """Every object the upgrade names is dropped again — a downgrade that
+    forgets the index or a constraint would strand it on rollback."""
+    upgrade = _rendered_statements("upgrade")
+    dropped = {
+        match["name"]
+        for statement in _rendered_statements("downgrade")
+        for match in map(_DROP.search, [statement])
+        if match
+    }
+    created = (
+        set(_constraints(upgrade))
+        | {column for _table, column in _columns(upgrade)}
+        | {m["name"] for m in map(_CREATE_INDEX.match, upgrade) if m}
+    )
+
+    assert created, "the upgrade created nothing to reverse"
+    assert created <= dropped, f"downgrade leaves behind: {sorted(created - dropped)}"
 
 
 async def test_stale_runtime_outbox_is_suppressed_before_provider_dispatch(monkeypatch):

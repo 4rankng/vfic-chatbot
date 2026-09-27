@@ -106,10 +106,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # fields to tell a permanently invalid recipient (`user_id is invalid`) from
     # a transient failure — the bot-channel twin of the OA site above, and the
     # gate for the terminal-recipient mark.
-    # +1: the answer-completion guard added clients._answer_was_cut, which reads
-    # the provider response metadata (`finish_reason` / `stop_reason`) to tell a
-    # generation cut at the output cap from a finished one. clients.py is a
-    # provider-transport file, so both reads land in one reviewed row.
+    # +1 (since reversed by ARCH-21 below): the answer-completion guard added
+    # _answer_was_cut, which reads the provider response metadata
+    # (`finish_reason` / `stop_reason`) to tell a generation cut at the output
+    # cap from a finished one. It landed in clients.py, which was a
+    # provider-transport file, so both reads became one reviewed row.
     # +1: the per-project external API integration opens one egress site in
     # app/services/project/external_api.py (ProjectExternalApiService._send's
     # single `client.request`). The module imports `get_http_client`, so the
@@ -129,7 +130,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # app/services/tingting_api.py gains a Redis `get` in load() plus the
     # `delete` in clear(), and the dispatcher names the send_tingting_otp tool
     # call — the flow tools themselves open no new egress site.
-    "provider_boundary": 92,
+    "provider_boundary": 87,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -150,6 +151,18 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # job-authority readers (dict `.get` rows) into prefetch.py / grounding.py,
     # which are not provider-transport files; the call sites themselves are
     # unchanged, only their home module moved.
+    # -5: the clients.py split moved the embedding transport into
+    # graph/embedders.py, which is still a provider-transport file and keeps the
+    # one real egress site (`OpenRouterEmbedder.batch`'s `client.post` plus its
+    # three response reads) under the same two reviewed rows — only the home
+    # module changed. What dropped is the collateral: clients.py carried the
+    # `get_http_client` marker only because the embedder lived there, so every
+    # dict `.get` in the agent loop (`agent`, `agent._dispatch_one`, `direct`),
+    # the provider default lookup (`_active_llm_provider`, now in providers.py)
+    # and the finish-reason reads (`_answer_was_cut`, now in answer_repair.py)
+    # were being scanned as egress. None of those modules is provider transport,
+    # so five reviewed rows go away and no egress site left the inventory — the
+    # same treatment the earlier prefetch.py / grounding.py moves got.
     # +3 for the Messenger profile-enrichment chain, which fetches the sender's
     # gender so replies can address them as anh / chị:
     # webhooks.facebook_webhook -> composition.enqueue_messenger_profile_enrichment
@@ -172,7 +185,17 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # `db.refresh(conv, _GUARD_REFRESH_COLUMNS)`, so the `get` invocation count at
 # that one reviewed site drops 3→1. No site was added, removed, or moved, so
 # EXPECTED_BROAD_BOUNDARY_COUNTS (distinct call sites) is unchanged.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "644e4ce9284115a594d3d77efcd040f8062246bea5219dcbb2b5f1bdfb5de2b1"
+# ARCH-20 moved graph/runner.py's outbound half into graph/dispatch.py:
+# _dispatch_claimed_message's two `send_message` calls and _status_heartbeat's
+# `send_chat_action` are the same reviewed sites, re-keyed from
+# `app/graph/runner.py` to `app/graph/dispatch.py` (same scope, same count), so
+# EXPECTED_BROAD_BOUNDARY_COUNTS is unchanged by that split. The digest covers
+# the file key, so it must be recomputed whenever a call site changes home.
+# ARCH-21 moved the OpenRouter embedding POST out of clients.py into
+# graph/embedders.py: the same two reviewed rows, re-keyed to their new home.
+# The count change is the -5 explained above. The digest covers the file key,
+# so it had to be recomputed for the move as well.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "ea240e0c8285ca1f39194c2af92e290dde2c897bd006273a47d7d00e7516a420"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

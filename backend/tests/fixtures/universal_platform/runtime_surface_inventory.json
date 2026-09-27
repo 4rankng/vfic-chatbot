@@ -93,23 +93,23 @@
  {
   "call": "send_message",
   "category": "provider_boundary",
-  "count": 1,
-  "file": "app/graph/proactive.py",
-  "scope": "run_proactive_turn"
- },
- {
-  "call": "send_message",
-  "category": "provider_boundary",
   "count": 2,
-  "file": "app/graph/runner.py",
+  "file": "app/graph/dispatch.py",
   "scope": "_dispatch_claimed_message"
  },
  {
   "call": "send_chat_action",
   "category": "provider_boundary",
   "count": 1,
-  "file": "app/graph/runner.py",
+  "file": "app/graph/dispatch.py",
   "scope": "_status_heartbeat"
+ },
+ {
+  "call": "send_message",
+  "category": "provider_boundary",
+  "count": 1,
+  "file": "app/graph/proactive.py",
+  "scope": "run_proactive_turn"
  },
  {
   "call": "send_payload",

@@ -25,7 +25,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.graph import runner
+from app.graph import lanes, runner
 from app.graph.direct_context import DirectContext, ProjectTurnContext
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.ports import TurnDecisions
@@ -1725,7 +1725,7 @@ async def test_agent_turn_stamps_system_prompt_ms(monkeypatch):
             return ""
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kw: kw["current_user_text"])
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kw: kw["current_user_text"])
 
     state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="hi")
     deps = _deps(_FakeZalo(), conversation=object())
@@ -1783,8 +1783,8 @@ async def test_model_tier_metric_follows_the_configured_fast_client(monkeypatch)
         return TurnRoute("out_of_scope", "safe_redirect", reason="off_topic", confidence=0.9)
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kw: kw["current_user_text"])
-    monkeypatch.setattr(runner, "route_from_decisions", _route_without_fast_tier)
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kw: kw["current_user_text"])
+    monkeypatch.setattr(lanes, "route_from_decisions", _route_without_fast_tier)
 
     state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="hi")
 
@@ -1852,7 +1852,7 @@ async def test_rag_vacancy_turn_requires_active_job_catalog_for_exact_reported_m
             return ""
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
 
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
@@ -1898,7 +1898,7 @@ async def test_focused_rag_detail_forces_project_scoped_category_search(monkeypa
             return ""
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
     deps.lead = _FakeLead()
@@ -1954,7 +1954,7 @@ async def test_cross_project_salary_target_requires_compare_income(monkeypatch):
             return ""
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
 
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
@@ -2007,7 +2007,7 @@ async def test_generic_vacancy_listing_requires_active_job_catalog(monkeypatch):
             return ""
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
 
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
@@ -2059,7 +2059,7 @@ async def test_terse_vacancy_followup_keeps_active_job_catalog_authority(monkeyp
             return ""
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
 
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
@@ -2117,7 +2117,7 @@ async def test_rag_vacancy_salary_followup_scopes_knowledge_query_to_vacancy_thr
             return ""
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
 
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
@@ -2180,7 +2180,7 @@ async def test_support_oa_turn_injects_the_guide_and_only_the_reset_tools(monkey
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(
-        runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
     )
 
     await _agent_turn(
@@ -2238,7 +2238,7 @@ async def test_agent_turn_omits_the_tingting_guide_when_unconfigured(monkeypatch
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(
-        runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
     )
 
     await _agent_turn(
@@ -2287,7 +2287,7 @@ async def test_off_channel_support_turn_gets_the_pointer_to_the_support_oa(monke
     )
 
     monkeypatch.setattr(
-        runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
     )
 
     reply = await _agent_turn(
@@ -2395,7 +2395,7 @@ async def test_focused_support_turn_drops_the_project_knowledge_tool(monkeypatch
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(
-        runner, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
     )
 
     await _agent_turn(
@@ -2456,7 +2456,7 @@ async def test_agent_turn_does_not_append_collection_question(monkeypatch):
             return ""
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kw: kw["current_user_text"])
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kw: kw["current_user_text"])
 
     state = BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="hi")
     deps = _deps(_FakeZalo(), conversation=object())
@@ -3072,7 +3072,7 @@ async def test_agent_turn_passes_the_resolved_lead_row_to_context(monkeypatch):
     monkeypatch.setattr(
         "app.graph.context.build_system_prompt", _fake_build_system_prompt
     )
-    monkeypatch.setattr(runner, "build_agent_user_text", lambda **kw: kw["current_user_text"])
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kw: kw["current_user_text"])
 
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()

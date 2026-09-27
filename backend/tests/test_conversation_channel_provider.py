@@ -58,9 +58,9 @@ async def test_messenger_is_an_accepted_channel_scope(transport, path: str) -> N
     """The inbox can scope to Messenger, not just the two Zalo adapters."""
     http_transport, _db = transport
     with patch("app.api.conversations.ConversationService") as service_class:
-        service = service_class.return_value
-        service.list = AsyncMock(return_value=([], 0))
-        service.needs_attention_count = AsyncMock(return_value=0)
+        repo = service_class.return_value.repo
+        repo.list = AsyncMock(return_value=([], 0))
+        repo.needs_attention_count = AsyncMock(return_value=0)
         async with httpx.AsyncClient(
             transport=http_transport, base_url="http://test"
         ) as client:
@@ -82,8 +82,8 @@ async def test_list_threads_provider_through_normal_and_reason_paths(transport) 
             return_value=([], 0),
         ) as attention_query,
     ):
-        service = service_class.return_value
-        service.list = AsyncMock(return_value=([], 0))
+        repo = service_class.return_value.repo
+        repo.list = AsyncMock(return_value=([], 0))
         async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             normal = await client.get(
                 "/api/v1/conversations",
@@ -96,7 +96,7 @@ async def test_list_threads_provider_through_normal_and_reason_paths(transport) 
 
     assert normal.status_code == 200
     assert reason.status_code == 200
-    assert service.list.await_args.kwargs["channel_provider"] == "zalo_oa"
+    assert repo.list.await_args.kwargs["channel_provider"] == "zalo_oa"
     assert attention_query.await_args.kwargs["channel_provider"] == "zalo_bot"
 
 
@@ -104,12 +104,13 @@ async def test_list_threads_provider_through_normal_and_reason_paths(transport) 
 async def test_omitted_provider_preserves_aggregate_count_call(transport) -> None:
     http_transport, _db = transport
     with patch("app.api.conversations.ConversationService") as service_class:
-        service_class.return_value.needs_attention_count = AsyncMock(return_value=7)
+        repo = service_class.return_value.repo
+        repo.needs_attention_count = AsyncMock(return_value=7)
         async with httpx.AsyncClient(transport=http_transport, base_url="http://test") as client:
             response = await client.get("/api/v1/conversations/needs-attention")
 
     assert response.json() == {"count": 7}
-    assert service_class.return_value.needs_attention_count.await_args.kwargs == {
+    assert repo.needs_attention_count.await_args.kwargs == {
         "viewer": ANY,
         "channel_provider": None,
     }
@@ -119,7 +120,8 @@ async def test_omitted_provider_preserves_aggregate_count_call(transport) -> Non
 async def test_batch_zalo_lookup_deduplicates_exact_requested_ids(transport) -> None:
     http_transport, _db = transport
     with patch("app.api.conversations.ConversationService") as service_class:
-        service_class.return_value.list_by_zalo_ids = AsyncMock(return_value=[])
+        repo = service_class.return_value.repo
+        repo.list_by_zalo_ids = AsyncMock(return_value=[])
         async with httpx.AsyncClient(
             transport=http_transport,
             base_url="http://test",
@@ -131,7 +133,7 @@ async def test_batch_zalo_lookup_deduplicates_exact_requested_ids(transport) -> 
 
     assert response.status_code == 200
     assert response.json() == {"data": [], "total": 0}
-    assert service_class.return_value.list_by_zalo_ids.await_args.kwargs == {
+    assert repo.list_by_zalo_ids.await_args.kwargs == {
         "viewer": ANY,
         "zalo_chat_ids": ["oa:user-1", "bot:user-2"],
     }

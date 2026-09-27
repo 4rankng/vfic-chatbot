@@ -661,12 +661,39 @@ async def test_sync_returns_noop_when_active_revision_hash_matches(
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_source_never_calls_activate_revision() -> None:
-    """Finding 4: activation is enqueued by stage_replacement, never an inline call."""
-    source = Path(ess.__file__).read_text(encoding="utf-8")
-    # A bare mention in a docstring is fine; an actual call (``.activate_revision(``)
-    # or ``activate_revision(...)``) is the violation.
-    assert "activate_revision(" not in source
+async def test_orchestrator_never_activates_a_revision_inline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Finding 4: activation is enqueued by stage_replacement, never an inline call.
+
+    An inline activation flips the live KB to a revision the ingest worker has
+    not embedded yet, so callers see an empty knowledge base mid-deploy.
+
+    This used to read the orchestrator's source and reject the substring
+    ``activate_revision(``, which passes while the module really does call it
+    (a call spelled across lines, or reached through an alias, slipped through)
+    and fails on any reformat. It now runs the orchestrator end to end with
+    both service methods instrumented and asserts on the calls that happened.
+    """
+    fake_redis = _FakeRedis()
+    monkeypatch.setattr(ess, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(SheetClient, "fetch_csv", AsyncMock(return_value=_read("faq_sheet_synthetic.csv")))
+    monkeypatch.setattr(ess, "_reject_private_host", lambda _host: None)
+    monkeypatch.setattr(ess, "_active_revision_checksum", AsyncMock(return_value=None))
+
+    stage = AsyncMock(return_value=(SimpleNamespace(id=uuid.uuid4()), "category-revision-staged"))
+    activate = AsyncMock()
+    monkeypatch.setattr(ess.KnowledgeCategoryService, "stage_replacement", stage)
+    monkeypatch.setattr(ess.KnowledgeCategoryService, "activate_revision", activate)
+
+    state = _make_state()
+    outcome = await sync_external_source(
+        _mock_db(state), state_id=state.id, actor=SimpleNamespace(id=uuid.uuid4())
+    )
+
+    assert outcome.status == "STAGED"
+    stage.assert_awaited_once()
+    activate.assert_not_awaited()
 
 
 @pytest.mark.asyncio
