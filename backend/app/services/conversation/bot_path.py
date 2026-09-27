@@ -24,6 +24,8 @@ import uuid
 from datetime import timedelta, timezone
 
 from sqlalchemy import and_, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.channels.types import ZALO_OA_DEFAULT_ACCOUNT_KEY, oa_user_id
 from app.conversation_messaging.application.ports import (
@@ -147,8 +149,6 @@ class BotConversationState(
         compatibility columns for Zalo rows so legacy reads keep working during
         the migration. They stay NULL for Messenger (no Zalo equivalent).
         """
-        from sqlalchemy.exc import IntegrityError
-
         from app.models.contact import Contact, ContactChannelIdentity
 
         conv = await self.repo.get_by_identity(
@@ -197,6 +197,14 @@ class BotConversationState(
             )
             self.db.add(conv)
             await self.db.flush()
+            # A created conversation carries unloaded relationships: the first
+            # message's realtime events serialize this instance, and the lazy
+            # load of channel_identity outside the async greenlet raised
+            # MissingGreenlet, 500ing the webhook AFTER the inbound commit —
+            # the first message was durable but never enqueued or answered
+            # (2026-09-28 prod). Fetched conversations already carry both
+            # relationships via selectin loading; the create path must too.
+            await self.db.refresh(conv, ["contact", "channel_identity"])
             return conv
         except IntegrityError:
             # A concurrent ensure_by_identity won the identity/conversation
@@ -249,19 +257,72 @@ class BotConversationState(
         0047). ``zalo_message_id`` remains as a compatibility alias; when only
         ``zalo_message_id`` is supplied, it is copied to ``provider_message_id``
         so the durable inbound idempotency index applies to Zalo rows too.
+
+        Idempotent on ``(conversation_id, provider_message_id)``: a redelivery
+        whose dedup row has expired returns the already-durable row instead of
+        raising, so the caller continues toward lock+enqueue and the redelivery
+        recovers a first message whose original attempt died after commit.
         """
         neutral_id = provider_message_id or zalo_message_id
-        msg = Message(
-            conversation_id=conv.id,
-            sender=MessageSender.WORKER,
-            body=body,
-            zalo_message_id=zalo_message_id,
-            provider_message_id=neutral_id,
-            runtime_revision_id=runtime_revision_id,
-            authority_generation=authority_generation,
-            runtime_fingerprint=runtime_fingerprint,
-        )
-        self.db.add(msg)
+        conv_id = conv.id
+        if neutral_id is not None:
+            # Durable idempotency (Alembic 0047's partial unique index): the
+            # INSERT is a no-op when this inbound already exists, so a Zalo
+            # redelivery beyond the 8s dedup window returns the durable row
+            # instead of 500ing into an endless retry loop (2026-09-28 prod:
+            # a first message whose original attempt committed the inbound
+            # and then died before enqueueing stayed unanswered forever).
+            # The returned existing row lets the caller continue toward
+            # lock+enqueue — the redelivery itself recovers the message in
+            # seconds; the per-chat mutex serializes it against any turn the
+            # original delivery did manage to enqueue.
+            inserted_id = await self.db.scalar(
+                pg_insert(Message)
+                .values(
+                    conversation_id=conv.id,
+                    sender=MessageSender.WORKER,
+                    body=body,
+                    zalo_message_id=zalo_message_id,
+                    provider_message_id=neutral_id,
+                    runtime_revision_id=runtime_revision_id,
+                    authority_generation=authority_generation,
+                    runtime_fingerprint=runtime_fingerprint,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=["conversation_id", "provider_message_id"],
+                    index_where=Message.provider_message_id.is_not(None),
+                )
+                .returning(Message.id)
+            )
+            if inserted_id is None:
+                existing = await self.db.scalar(
+                    select(Message).where(
+                        Message.conversation_id == conv_id,
+                        Message.provider_message_id == neutral_id,
+                    )
+                )
+                if existing is None:  # pragma: no cover - defensive
+                    raise IntegrityError(
+                        "duplicate inbound insert vanished", None, None
+                    )
+                logger.info(
+                    "duplicate inbound delivery ignored conversation=%s",
+                    conv_id,
+                )
+                return existing
+            msg = await self.db.get(Message, inserted_id)
+        else:
+            msg = Message(
+                conversation_id=conv.id,
+                sender=MessageSender.WORKER,
+                body=body,
+                zalo_message_id=zalo_message_id,
+                provider_message_id=neutral_id,
+                runtime_revision_id=runtime_revision_id,
+                authority_generation=authority_generation,
+                runtime_fingerprint=runtime_fingerprint,
+            )
+            self.db.add(msg)
         conv.last_inbound_at = utcnow()
         # Proactive opt-out: cheap substring scan on the hot path. Accepted
         # tradeoff (A7) — atomicity with the inbound txn outweighs purity.
@@ -276,11 +337,20 @@ class BotConversationState(
             conv.unread_count = (conv.unread_count or 0) + 1
         conv.version += 1
         conv.conversation_seq += 1
-        await self.db.flush()
         await self.db.commit()
-        await self.db.refresh(msg)
-        await self.events.message_created(msg, conv)
-        await self.events.conversation_updated(conv)
+        # Post-commit bookkeeping must never fail the webhook: the inbound is
+        # durable, so a realtime hiccup loses a UI update, never a message
+        # (same contract as schedule_realtime's serialization armor).
+        try:
+            await self.db.refresh(msg)
+            await self.events.message_created(msg, conv)
+            await self.events.conversation_updated(conv)
+        except Exception:  # noqa: BLE001 — the ack outranks the UI update
+            logger.warning(
+                "inbound realtime events failed; message is durable conversation=%s",
+                conv_id,
+                exc_info=True,
+            )
         return msg
 
     async def escalate_extracted_intent(

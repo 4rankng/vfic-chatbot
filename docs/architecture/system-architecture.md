@@ -310,9 +310,9 @@ sequenceDiagram
     Note over H: ── normalize and dedup ──<br/>(msg_hash is computed during normalize)
     H->>H: normalize → NormalizedMessage<br/>(return "ignored" if non-text)
     H->>DB: dedup.claim(chat_id, msg_hash)<br/>message_dedup table, 8s window<br/>return "duplicate" if seen
-    H->>DB: ensure conversation (upsert Conversation)
-    H->>DB: record_inbound → Message WORKER row<br/>bump unread, opt-out check
-    H-->>RT: message.created + conversation.updated
+    H->>DB: ensure conversation (upsert Conversation;<br/>created rows eagerly load contact +<br/>channel_identity for realtime serialization)
+    H->>DB: record_inbound → Message WORKER row<br/>INSERT .. ON CONFLICT DO NOTHING:<br/>a redelivery past the dedup window returns<br/>the durable row instead of 500ing<br/>bump unread, opt-out check
+    H-->>RT: message.created + conversation.updated<br/>(post-commit, failure-armored — a realtime<br/>hiccup never 500s the webhook after the<br/>inbound is durable)
     H->>DB: refresh conversation mode<br/>existing HUMAN → stop before extraction
     H->>DB: capture explicit self-reported name<br/>existing lead upsert; no LLM or queue
     H-->>RT: lead.updated (when captured)
@@ -483,6 +483,7 @@ release clears the review flag and restores chatbot processing.
 | `apply mode policy` (one step) | Four layers: webhook gate, lock, recheck, atomic `claim_send` (`webhook.py:130`, `:134`, `runner.py:273`, `state.py:329`) |
 | `worker: retrieve → generate → policy` | Ten stages incl. two no-LLM fast paths (template + FAQ bypass), routing, lead context, grounding, safety (`runner.py:259-515`) |
 | `enqueue → Zalo Send API` | Bot, OA, proactive, and recruiter replies first persist one immutable outbox command, then dispatch it. OA commands retain the inbound quote id; a retry reuses the original message and command. |
+| (missing) | **First-message resilience (2026-09-28 outage):** a webhook failure AFTER `record_inbound` commits (a realtime serialization `MissingGreenlet` on a just-created conversation) left the message durable but never enqueued; Zalo's redeliveries then hit `uq_messages_conv_provider_message` and 500'd forever. Three guards now close the loop: the conversation create-path eagerly loads `contact`/`channel_identity` for event serialization, `record_inbound` inserts with `ON CONFLICT DO NOTHING` against the partial unique index (a redelivery past the dedup window returns the durable row and re-drives it toward lock+enqueue), and the post-commit event fan-out is failure-armored — a realtime hiccup can no longer turn a persisted message into a 500. |
 | (missing) | The outbound dispatcher recovers PENDING commands (~60s). Retryable failures may be explicitly retried from the same recruiter bubble; terminal `SEND_UNKNOWN` is never resent, including a stale SENDING command after a worker crash. |
 
 ### Durable outbound delivery states
