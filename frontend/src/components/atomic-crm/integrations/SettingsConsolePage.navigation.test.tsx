@@ -150,7 +150,7 @@ vi.mock("./api", () => ({
 vi.mock("../personas/PersonaList", () => ({ PersonaList: () => null }));
 vi.mock("../users/UserList", () => ({ UserList: () => null }));
 
-import { ZaloIntegrationPage } from "./ZaloIntegrationPage";
+import { SettingsConsolePage } from "./SettingsConsolePage";
 import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 afterEach(async () => {
@@ -170,7 +170,7 @@ afterEach(async () => {
   window.history.replaceState(null, "", "/#/settings");
 });
 
-describe("ZaloIntegrationPage navigation", () => {
+describe("SettingsConsolePage navigation", () => {
   it("keeps desktop reveal controls available and reports clipboard copy success", async () => {
     mocks.isMobile = false;
     const clipboardWrite = vi.fn().mockResolvedValue(undefined);
@@ -184,7 +184,7 @@ describe("ZaloIntegrationPage navigation", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -225,7 +225,7 @@ describe("ZaloIntegrationPage navigation", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -257,7 +257,7 @@ describe("ZaloIntegrationPage navigation", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -295,7 +295,7 @@ describe("ZaloIntegrationPage navigation", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -318,7 +318,7 @@ describe("ZaloIntegrationPage navigation", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -353,7 +353,7 @@ describe("ZaloIntegrationPage navigation", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -406,7 +406,7 @@ describe("ZaloIntegrationPage navigation", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -433,7 +433,7 @@ describe("ZaloIntegrationPage navigation", () => {
 
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -462,7 +462,7 @@ describe("ZaloIntegrationPage navigation", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -507,7 +507,7 @@ describe("ZaloIntegrationPage navigation", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -532,7 +532,7 @@ describe("ZaloIntegrationPage navigation", () => {
   });
 });
 
-describe("ZaloIntegrationPage provider sections", () => {
+describe("SettingsConsolePage provider sections", () => {
   it("opens the AI Providers panel with the failover chain and all three cards", async () => {
     mocks.isMobile = false;
     const queryClient = new QueryClient({
@@ -540,7 +540,7 @@ describe("ZaloIntegrationPage provider sections", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -598,7 +598,7 @@ describe("ZaloIntegrationPage provider sections", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -678,7 +678,7 @@ describe("ZaloIntegrationPage provider sections", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -736,7 +736,7 @@ describe("ZaloIntegrationPage provider sections", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 
@@ -785,7 +785,7 @@ describe("ZaloIntegrationPage provider sections", () => {
     });
     const screen = await render(
       <QueryClientProvider client={queryClient}>
-        <ZaloIntegrationPage />
+        <SettingsConsolePage />
       </QueryClientProvider>,
     );
 

@@ -11,7 +11,7 @@ import chromeSource from "./presentation/SettingsChrome.tsx?raw";
 import groupSource from "./presentation/SettingsGroup.tsx?raw";
 import zaloChannelSource from "./presentation/ZaloChannelSection.tsx?raw";
 import messengerSource from "./FacebookMessengerIntegrationPage.tsx?raw";
-import pageSource from "./ZaloIntegrationPage.tsx?raw";
+import pageSource from "./SettingsConsolePage.tsx?raw";
 import stylesheet from "./settings.css?raw";
 
 // Every module that renders the settings console, not just the resource entry

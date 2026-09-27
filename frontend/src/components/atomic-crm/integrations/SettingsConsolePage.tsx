@@ -27,7 +27,7 @@ import {
  * views. Each view owns its own state and actions; this page only decides which
  * one is on screen and where the OAuth callback should land.
  */
-export const ZaloIntegrationPage = () => {
+export const SettingsConsolePage = () => {
   const translate = useTranslate();
   const { permissions, isPending: permissionsPending } = usePermissions();
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(

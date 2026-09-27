@@ -1,13 +1,13 @@
 import { lazy } from "react";
 import { KeyRound } from "lucide-react";
 
-const ZaloIntegrationPage = lazy(() =>
-  import("./ZaloIntegrationPage").then((m) => ({
-    default: m.ZaloIntegrationPage,
+const SettingsConsolePage = lazy(() =>
+  import("./SettingsConsolePage").then((m) => ({
+    default: m.SettingsConsolePage,
   })),
 );
 
 export default {
-  list: ZaloIntegrationPage,
+  list: SettingsConsolePage,
   icon: KeyRound,
 };
