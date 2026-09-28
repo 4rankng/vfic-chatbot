@@ -437,6 +437,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/leads/domain/leadLookupKey.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/leads/application/ports.ts",
           "type": "registry:component"
         },
