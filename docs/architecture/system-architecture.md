@@ -909,7 +909,7 @@ be shared by another Project.
   `EXPLORE` or one `FOCUSED` Project. Focused tool arguments are server-forced to
   that Project slug; model-supplied cross-Project arguments are ignored.
 - The cached agent preamble always carries a compact index of every active Project
-  (name, slug, aliases, discovery summary, roles, and location). Current-hiring
+  (name, slug, aliases, discovery summary, roles, location, and highlights). Current-hiring
   questions never rely on that index or semantic search as vacancy authority:
   generic lists/counts, named factories, named roles, and terse follow-ups in an
   active vacancy thread all require the complete `list_active_jobs(top_k=10)`

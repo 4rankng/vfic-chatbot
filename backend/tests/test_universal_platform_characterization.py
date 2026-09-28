@@ -254,7 +254,9 @@ async def test_current_system_prompt_uses_database_persona_but_appends_recruitme
     monkeypatch: pytest.MonkeyPatch,
 ):
     async def uncached(assemble, *, key_suffix="default"):
-        assert key_suffix == "zalo_bot"
+        from app.graph.context import _PROMPT_TEXT_REVISION
+
+        assert key_suffix == f"zalo_bot:r{_PROMPT_TEXT_REVISION}"
         return await assemble(), False
 
     retrieval = SimpleNamespace(

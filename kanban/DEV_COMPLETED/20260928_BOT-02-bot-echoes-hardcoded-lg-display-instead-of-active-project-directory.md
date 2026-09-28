@@ -5,8 +5,8 @@ severity: medium
 area: backend
 labels: [chatbot, prompt, projects, advertising, grounding]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-28
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-28
 
 **Severity:** medium · **Area:** backend · **Labels:** chatbot, prompt, projects, advertising, grounding
 
-**Trạng thái:** TODO — design settled in the 2026-09-28 lead interview; implementation approved by the owner.
+**Trạng thái:** DEV_COMPLETED — 2026-09-28: LG example stripped from the fixed-facts block, directory line renders `index_card.highlights`, vague-seeker rule added with strict grounding, `_PROMPT_TEXT_REVISION` cache bump, seed slug fixed. TingTing exclusion verified already-existing at the lane gate (support prompt, never `build_system_prompt`) with a new exclusion test; residual edge (recruitment prompt if the admin link pin is unset) is pre-existing documented fail-closed behavior. 175 tests green, pyright 0, ruff clean.
 
 ## Problem
 
