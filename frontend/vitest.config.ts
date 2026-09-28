@@ -77,6 +77,15 @@ export default defineConfig({
         test: {
           name: "app",
           globals: true,
+          // Browser-mode tests render in real Chromium, and `make release-check`
+          // runs this suite concurrently with two other CPU-heavy lanes (backend
+          // pytest with coverage, the migration walk). At the 15s default a
+          // render test starved by that load fails as a timeout -- observed on
+          // 2026-09-29 in RecruitingCommandCenter.render.test.tsx, which took
+          // 18.4s while all three lanes ran and passes in ~2s alone. The extra
+          // headroom does not weaken an assertion; a genuine hang still fails.
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
           browser: {
             headless: true,
             provider: playwright(),
