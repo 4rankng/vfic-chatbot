@@ -6,12 +6,52 @@ import {
   useRedirect,
 } from "ra-core";
 import { useState } from "react";
+import { useController } from "react-hook-form";
+import { Input as UntitledInput } from "@/components/base/input/input";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
 import { ArrowLeft, BookOpen, Check, LoaderCircle } from "lucide-react";
 import { Link } from "react-router";
 import { PageHeading, PageShell } from "../kit";
+
+/**
+ * The name field renders an Untitled UI v8 (React Aria) input instead of the
+ * react-admin one, to prove the library's components participate in a
+ * react-admin form.
+ *
+ * `useController` is react-admin's own form engine (its `Form` is a
+ * react-hook-form `FormProvider`), so this field is registered, validated and
+ * submitted exactly like `TextInput` would be — no parallel form state.
+ *
+ * `uu-scope` is required, not decorative: outside it the four utility names the
+ * console and Untitled UI both define (`bg-primary`, `bg-secondary`,
+ * `text-primary`, `border-primary`) keep the console's meaning, and the field
+ * would render with the brand coral fill instead of a white surface. See
+ * `src/styles/untitledui-theme.css`.
+ */
+const KnowledgeBaseNameField = () => {
+  const { field, fieldState } = useController({
+    name: "name",
+    rules: { required: true },
+  });
+
+  return (
+    <UntitledInput
+      className="uu-scope"
+      name={field.name}
+      ref={field.ref}
+      value={typeof field.value === "string" ? field.value : ""}
+      onChange={(value: string) => field.onChange(value)}
+      onBlur={field.onBlur}
+      label="Tên"
+      placeholder="Ví dụ: VFIC tuyển dụng"
+      isRequired
+      isInvalid={fieldState.invalid}
+      hint={fieldState.error ? "Tên kho là bắt buộc." : undefined}
+    />
+  );
+};
 
 export const KnowledgeBaseCreate = () => {
   const dataProvider = useDataProvider();
@@ -71,7 +111,7 @@ export const KnowledgeBaseCreate = () => {
 
           <Form onSubmit={submit}>
             <div className="space-y-4 px-4 py-4">
-              <TextInput source="name" label="Tên" isRequired />
+              <KnowledgeBaseNameField />
               <TextInput source="slug" label="Slug" isRequired />
               <SelectInput
                 source="mode"

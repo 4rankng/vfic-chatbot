@@ -52,10 +52,23 @@ export default defineConfig({
           // mid-run it forced an optimizer reload that failed the file being
           // imported (zustand itself arrives through the app graph, the
           // /middleware entry does not).
-          include: ["zustand/middleware"],
+          //
+          // React Aria is listed for the same reason plus a sharper one:
+          // pre-bundled without them it resolved a SECOND copy of React and
+          // every React Aria component threw "Cannot read properties of null
+          // (reading 'useContext')" in this browser project. Bundling the React
+          // Aria entry points together keeps one React across the graph.
+          include: [
+            "zustand/middleware",
+            "react-aria-components",
+            "react-aria",
+            "react-stately",
+          ],
           exclude: ["playwright", "playwright-core"],
         },
         resolve: {
+          // Belt and braces for the same duplicate-React failure.
+          dedupe: ["react", "react-dom"],
           preserveSymlinks: true,
           alias: {
             "@": path.resolve(import.meta.dirname, "./src"),

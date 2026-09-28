@@ -1,4 +1,4 @@
-import type { FormEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
@@ -14,57 +14,89 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("ra-core", () => ({
-  CreateBase: ({ children }: { children: ReactNode }) => children,
-  Form: ({
-    children,
-    onSubmit,
-  }: {
-    children: ReactNode;
-    onSubmit: (data: Record<string, unknown>) => void;
-  }) => (
-    <form
-      onSubmit={(event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        onSubmit({
-          name: "Kho dùng chung",
-          slug: "shared",
-          mode: "RAG",
-        });
-      }}
-    >
-      {children}
-    </form>
-  ),
-  ListBase: ({ children }: { children: ReactNode }) => children,
-  useDataProvider: () => ({ create: mocks.create }),
-  useListContext: () => mocks.list,
-  useNotify: () => mocks.notify,
-  useRedirect: () => mocks.redirect,
-}));
+vi.mock("ra-core", async () => {
+  // react-admin's `Form` is a react-hook-form `FormProvider`. The stub has to be
+  // one too: a field built on `useController` (such as the Untitled UI input in
+  // KnowledgeBaseCreate) joins that context, and a stub without it would either
+  // throw or, worse, let this test pass against a form the app cannot have.
+  const { FormProvider, useForm } = await import("react-hook-form");
 
-vi.mock("@/components/admin/text-input", () => ({
-  TextInput: ({ label, multiline }: { label: string; multiline?: boolean }) =>
-    multiline ? <textarea aria-label={label} /> : <input aria-label={label} />,
-}));
+  return {
+    CreateBase: ({ children }: { children: ReactNode }) => children,
+    Form: ({
+      children,
+      onSubmit,
+    }: {
+      children: ReactNode;
+      onSubmit: (data: Record<string, unknown>) => void;
+    }) => {
+      const form = useForm();
 
-vi.mock("@/components/admin/select-input", () => ({
-  SelectInput: ({
-    label,
-    choices,
-  }: {
-    label: string;
-    choices: { id: string; name: string }[];
-  }) => (
-    <select aria-label={label}>
-      {choices.map((choice) => (
-        <option key={choice.id} value={choice.id}>
-          {choice.name}
-        </option>
-      ))}
-    </select>
-  ),
-}));
+      return (
+        <FormProvider {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)}>{children}</form>
+        </FormProvider>
+      );
+    },
+    ListBase: ({ children }: { children: ReactNode }) => children,
+    useDataProvider: () => ({ create: mocks.create }),
+    useListContext: () => mocks.list,
+    useNotify: () => mocks.notify,
+    useRedirect: () => mocks.redirect,
+  };
+});
+
+vi.mock("@/components/admin/text-input", async () => {
+  const { useFormContext } = await import("react-hook-form");
+
+  return {
+    TextInput: ({
+      source,
+      label,
+      multiline,
+    }: {
+      source: string;
+      label: string;
+      multiline?: boolean;
+    }) => {
+      const { register } = useFormContext();
+
+      return multiline ? (
+        <textarea aria-label={label} {...register(source)} />
+      ) : (
+        <input aria-label={label} {...register(source)} />
+      );
+    },
+  };
+});
+
+vi.mock("@/components/admin/select-input", async () => {
+  const { useFormContext } = await import("react-hook-form");
+
+  return {
+    SelectInput: ({
+      source,
+      label,
+      choices,
+    }: {
+      source: string;
+      label: string;
+      choices: { id: string; name: string }[];
+    }) => {
+      const { register } = useFormContext();
+
+      return (
+        <select aria-label={label} {...register(source)}>
+          {choices.map((choice) => (
+            <option key={choice.id} value={choice.id}>
+              {choice.name}
+            </option>
+          ))}
+        </select>
+      );
+    },
+  };
+});
 
 vi.mock("react-router", () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) => (
@@ -131,5 +163,35 @@ describe("Knowledge Base pages", () => {
 
     await screen.getByRole("button", { name: "Hủy" }).click();
     expect(mocks.redirect).toHaveBeenCalledWith("list", "knowledge_bases");
+  });
+
+  it("submits the Untitled UI name field through the react-admin form", async () => {
+    const screen = await render(<KnowledgeBaseCreate />);
+
+    const name = screen.getByRole("textbox", { name: "Tên" });
+    // Labelled by RAC, marked required (React Aria emits the native `required`
+    // attribute under its default validation behaviour and `aria-required`
+    // under `validationBehavior="aria"`), and inside the scope that re-binds
+    // the four utility names Untitled UI shares with the console.
+    const requiredSignal =
+      name.element().hasAttribute("required") ||
+      name.element().getAttribute("aria-required") === "true";
+    expect(requiredSignal).toBe(true);
+    expect(name.element().closest(".uu-scope")).not.toBeNull();
+
+    await name.fill("Kho dùng chung");
+    await screen.getByLabelText("Slug").fill("shared");
+    await screen.getByLabelText("Chế độ").selectOptions("RAG");
+    await screen.getByRole("button", { name: "Tạo kho kiến thức" }).click();
+
+    await expect.poll(() => mocks.create.mock.calls.length).toBe(1);
+    expect(mocks.create).toHaveBeenCalledWith("knowledge_bases", {
+      data: {
+        name: "Kho dùng chung",
+        slug: "shared",
+        mode: "RAG",
+        description: "",
+      },
+    });
   });
 });
