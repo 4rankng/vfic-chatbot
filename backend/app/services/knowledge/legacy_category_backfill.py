@@ -400,17 +400,31 @@ def build_legacy_category_documents(
             )
         support = str(contact_json.get("vfic_support") or "").strip()
         if support:
+            office_address = str(contact_json.get("office_address") or "").strip()
+            hotline = str(contact_json.get("hotline") or "").strip()
+            company_legal_name = str(contact_json.get("company_legal_name") or "").strip()
+            company_tax_code = str(contact_json.get("company_tax_code") or "").strip()
+            company_facts = " ".join(
+                part
+                for part in (
+                    company_legal_name,
+                    f"MST {company_tax_code}" if company_tax_code else "",
+                    f"Văn phòng công ty: {office_address}." if office_address else "",
+                    "(văn phòng công ty, khác với nơi làm việc nhà máy)" if office_address else "",
+                )
+                if part
+            )
             contact_rows.append(
                 {
                     "id": "legacy-vfic-support",
                     "name": "Nhân viên tuyển dụng VFIC",
                     "role": "Hỗ trợ ứng viên",
-                    "phone": None,
+                    "phone": hotline or None,
                     "zalo": None,
                     "email": None,
-                    "address": None,
+                    "address": office_address or None,
                     "working_hours": None,
-                    "notes": _join_unique([support, contact_json.get("fee_note"), contact.value_text]),
+                    "notes": _join_unique([support, contact_json.get("fee_note"), company_facts, contact.value_text]),
                 }
             )
         if contact_rows:
