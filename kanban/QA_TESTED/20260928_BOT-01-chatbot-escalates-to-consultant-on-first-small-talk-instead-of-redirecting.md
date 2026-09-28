@@ -14,7 +14,7 @@ opened: 2026-09-28
 
 **Severity:** medium · **Area:** bot · **Labels:** bot-behavior, escalation, tingting-support, conversation-flow
 
-**Trạng thái:** QA_TESTED — fix implemented 2026-09-28 (owner blanket-approved), unit + turn suites green (168 passed). **NOT YET DEPLOYED** — needs a backend image build + `make deploy` to reach prod.
+**Trạng thái:** QA_TESTED — fix implemented 2026-09-28 (owner blanket-approved), unit + turn suites green. **LIVE IN PROD** since the 20:55 batch deploy (`10366b03`, web-green): shipped via `03c87147` (redirect budget + reply) and `4435efe9` (login-trouble → reset-flow routing; zalo refresh observability). The 20:55 batch also closed the graph package's Pyright baseline (`42303a08`), which includes the gendered-addressing helper (`_tingting_addressing`) and its regression tests (`test_tingting_addressing.py`, `5ce11967`). OPS-31 (OA refresh token) remains operator-blocked: re-link the Ting Ting Software Solution OA with a fresh Zalo pair, then hit "Thử lại" on the failed bubbles (messages 5398/5402/5404, conversation `79fb0634-22bc-48c7-a2fd-a0560b2f664d`).
 
 ## Problem
 
