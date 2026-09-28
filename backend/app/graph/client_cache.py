@@ -42,6 +42,7 @@ from typing import cast
 
 from app.core.config import get_settings
 from app.graph.clients import _chat_for_role, build_embedder
+from app.graph.embedders import BatchEmbedder
 from app.graph.llm import Embedder
 from app.graph.providers import LlmProvider
 
@@ -71,7 +72,9 @@ class _CachedExtraction:
 
     extractor_llm: object
     extractor: object
-    embedder: object
+    # The persistence path calls ``embedder.batch`` directly, so this is typed
+    # to that capability rather than left as ``object``.
+    embedder: BatchEmbedder
 
 
 _client_cache: dict[str, _CachedClients] = {}

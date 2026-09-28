@@ -13,7 +13,20 @@ caller needs is the one on this module.
 
 from __future__ import annotations
 
+from typing import Protocol
+
 from app.core.config import get_settings
+
+
+class BatchEmbedder(Protocol):
+    """The slice of an embedding client the cached extraction bundle exposes.
+
+    Both transports implement it, and the candidate-persistence path only ever
+    calls ``batch``, so the bundle is typed to that capability rather than to a
+    union a third provider would silently widen.
+    """
+
+    async def batch(self, texts: list[str]) -> list[list[float]]: ...
 
 
 class GeminiEmbedder:
@@ -33,6 +46,41 @@ class GeminiEmbedder:
     async def __call__(self, text: str) -> list[float]:
         return await self.embed(text)
 
+    def _ensure_client(self):
+        """The Gemini client, constructed once per instance on first use."""
+        if self._client is None:
+            from google import genai
+
+            self._client = genai.Client(api_key=self.s.gemini_api_key)
+        return self._client
+
+    async def _provider_call(self, chunk: list[str]):
+        """One semaphore-bounded Gemini call for a chunk of texts."""
+        from app.graph.llm_semaphore import get_embed_semaphore
+
+        async with get_embed_semaphore():
+            return await self._ensure_client().aio.models.embed_content(
+                model=self.s.gemini_embedding_model,
+                contents=chunk,
+            )
+
+    async def _embed_chunk(self, chunk: list[str]) -> list[list[float]]:
+        """One provider call, returning exactly one vector per input text.
+
+        An embedding whose ``values`` the SDK reports as ``None`` pads like an
+        absent one rather than raising on ``list(None)``.
+        """
+        resp = await self._provider_call(chunk)
+        dim = self.s.embedding_dim or 768
+        if not resp.embeddings:
+            # API returned no embeddings — pad with zero vectors so the caller
+            # (embed_with_fallback) can retry one-by-one.
+            return [[0.0] * dim for _ in chunk]
+        return [
+            list(item.values) if item.values else [0.0] * dim
+            for item in resp.embeddings
+        ]
+
     async def batch(self, texts: list[str]) -> list[list[float]]:
         """Embed many texts in chunked SDK calls.
 
@@ -45,26 +93,10 @@ class GeminiEmbedder:
             return []
         if not self.s.gemini_api_key:
             raise RuntimeError("GEMINI_API_KEY is required for Gemini embeddings")
-        from app.graph.llm_semaphore import get_embed_semaphore
-        from google import genai
-
-        embed_sem = get_embed_semaphore()
-        if self._client is None:
-            self._client = genai.Client(api_key=self.s.gemini_api_key)
         all_vectors: list[list[float]] = []
         for i in range(0, len(texts), self._EMBED_BATCH_SIZE):
             chunk = texts[i : i + self._EMBED_BATCH_SIZE]
-            async with embed_sem:
-                resp = await self._client.aio.models.embed_content(
-                    model=self.s.gemini_embedding_model,
-                    contents=chunk,
-                )
-            if resp.embeddings:
-                all_vectors.extend(list(e.values) for e in resp.embeddings)
-            else:
-                # API returned no embeddings — pad with zero vectors so the
-                # caller (embed_with_fallback) can retry one-by-one.
-                all_vectors.extend([0.0] * (self.s.embedding_dim or 768) for _ in chunk)
+            all_vectors.extend(await self._embed_chunk(chunk))
         return all_vectors
 
 

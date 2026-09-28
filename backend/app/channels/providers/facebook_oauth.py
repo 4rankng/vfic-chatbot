@@ -54,6 +54,18 @@ MESSENGER_PERMISSIONS = (
 # outcome for that user — not a transport failure worth logging as an error.
 _NO_PROFILE_AVAILABLE_ERROR_CODE = 2018218
 
+# Meta's answer when the token cannot read the object at all: code 100 with
+# subcode 33, "Object with ID ... does not exist, cannot be loaded due to
+# missing permissions, or does not support this operation". For the Messenger
+# User Profile API this is what an app without Business Asset User Profile
+# Access (and a Page token without ``pages_read_engagement``) gets for EVERY
+# PSID — measured on production 2026-09-28 across a full Page's contacts, where
+# ``/me`` on the same token reports the missing permission outright. Subcode 33
+# is the narrow signal; code 100 alone also covers a malformed request, which
+# must keep raising.
+_UNREADABLE_OBJECT_ERROR_CODE = 100
+_UNREADABLE_OBJECT_ERROR_SUBCODE = 33
+
 
 @dataclass(frozen=True)
 class FacebookPageSummary:
@@ -119,6 +131,31 @@ def _error_code_from_envelope(data: dict) -> int | None:
         return int(code) if code is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _error_subcode_from_envelope(data: dict) -> int | None:
+    """Extract Meta's ``error_subcode``, which narrows what a coarse code means.
+
+    Code 100 is Meta's catch-all for a request it will not serve; only the
+    subcode separates "this token cannot read this object" (33) from a genuinely
+    malformed request.
+    """
+    error = data.get("error")
+    if not isinstance(error, dict):
+        return None
+    subcode = error.get("error_subcode")
+    try:
+        return int(subcode) if subcode is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_unreadable_object(data: dict) -> bool:
+    """Whether Meta refused an object read for this token rather than the request."""
+    return (
+        _error_code_from_envelope(data) == _UNREADABLE_OBJECT_ERROR_CODE
+        and _error_subcode_from_envelope(data) == _UNREADABLE_OBJECT_ERROR_SUBCODE
+    )
 
 
 def _graph_base() -> str:
@@ -387,9 +424,11 @@ async def get_user_profile(
 
     ``None`` covers every "we simply do not get to know this person" outcome:
     an empty object (the app lacks Business Asset User Profile Access, or the
-    person made nothing public), a phone-number account (error 2018218), and a
-    blank payload. Callers treat all of them the same way — keep whatever is
-    already known and address the person neutrally.
+    person made nothing public), a phone-number account (error 2018218), a
+    token that is refused the object outright (code 100 / subcode 33, which is
+    what a Page token without ``pages_read_engagement`` gets for every PSID),
+    and a blank payload. Callers treat all of them the same way — keep whatever
+    is already known and address the person neutrally.
 
     A genuine provider rejection still raises :class:`FacebookOAuthError` so
     token revocation stays distinguishable from missing profile data. As
@@ -405,6 +444,21 @@ async def get_user_profile(
     if isinstance(data.get("error"), dict):
         code = _error_code_from_envelope(data)
         if code == _NO_PROFILE_AVAILABLE_ERROR_CODE:
+            return None
+        if _is_unreadable_object(data):
+            # The token cannot read this person's profile at all — the app lacks
+            # Business Asset User Profile Access, or the Page token lacks
+            # ``pages_read_engagement``. That is the same "we simply do not get
+            # to know this person" outcome as an empty object, so it takes the
+            # same path: keep what is already known and stay neutral. Raising
+            # here made a standing permission gap look like a transport fault
+            # and logged it on every enrichment attempt.
+            logger.info(
+                "messenger profile lookup refused for this token "
+                "(code=%s subcode=%s) — no Business Asset User Profile Access",
+                code,
+                _error_subcode_from_envelope(data),
+            )
             return None
         raise FacebookOAuthError("messenger user profile lookup rejected", code=code)
 

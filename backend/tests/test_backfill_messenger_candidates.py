@@ -58,6 +58,32 @@ def test_two_adjacent_candidate_messages_keep_only_the_later_one():
     assert skipped_no_bot == 1
 
 
+def test_unanswered_messages_are_kept_when_the_caller_asks_for_them():
+    """The detail backfill mines the candidate's own words, reply or not.
+
+    A message the bot never answered is where a phone number or a name most
+    often arrives — production skipped 1262 such messages against 933 that had
+    a reply — and the extraction reads ``user_text``, rendering an absent reply
+    as empty.
+    """
+    found, skipped_no_bot, _ = _turn_pairs(
+        [(W, "0566866899"), (B, "Cho em xin tên ạ"), (W, "Hoàng sóng"), (W, "0912345678")],
+        include_unanswered=True,
+    )
+    assert [(p.user_text, p.bot_output) for p in found] == [
+        ("0566866899", "Cho em xin tên ạ"),
+        ("Hoàng sóng", ""),
+        ("0912345678", ""),
+    ]
+    assert skipped_no_bot == 0
+
+
+def test_unanswered_pairing_leaves_a_blank_body_alone():
+    found, _, skipped_blank = _turn_pairs([(W, "   ")], include_unanswered=True)
+    assert found == []
+    assert skipped_blank == 1
+
+
 def test_a_blank_candidate_message_is_not_a_turn():
     found, skipped_no_bot, skipped_blank = _turn_pairs([(W, "   "), (B, "chào bạn")])
     assert found == []

@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from types import TracebackType
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -199,8 +201,21 @@ class RedisLlmSemaphore:
         self._acquired = True
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
-        """Release the token back to the pool (off the event loop)."""
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]:
+        """Release the token back to the pool (off the event loop).
+
+        ``Literal[False]`` is load-bearing, not decoration: it tells the type
+        checker that the guard never swallows an exception, so a value bound
+        inside ``async with get_llm_semaphore():`` is known to be bound after
+        the block. A plain ``bool`` return makes every such block look like it
+        might be skipped, which is what turned each one into a false
+        "possibly unbound".
+        """
         if self._limit > 0 and self._acquired:
             await asyncio.to_thread(self._release_token)
         self._acquired = False

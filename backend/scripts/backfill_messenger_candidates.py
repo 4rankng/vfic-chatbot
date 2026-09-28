@@ -155,13 +155,25 @@ async def _eligible_count(session: AsyncSession) -> int:
     return total
 
 
-def _turn_pairs(messages: list[tuple[MessageSender, str]]) -> tuple[list[TurnPair], int, int]:
+def _turn_pairs(
+    messages: list[tuple[MessageSender, str]], *, include_unanswered: bool = False
+) -> tuple[list[TurnPair], int, int]:
     """Pair each candidate message with the next bot reply.
 
     A candidate message with no following bot reply has no turn to extract
     from and is skipped; so is a blank body. When two candidate messages are
     adjacent the earlier one has no bot reply after it either, so it is
     skipped and the later one keeps the slot.
+
+    ``include_unanswered`` keeps those messages, pairing them with an empty bot
+    reply. The extraction reads the candidate's own words — the reply is only
+    context, and the prompt already renders an absent one as empty — and a
+    message the bot never answered is exactly where a phone number or a name
+    tends to arrive. The replay sweep leaves it off so it reproduces only the
+    turns that really happened; a detail backfill turns it on because the
+    candidate's text is the whole point. Production confirms the cost of the
+    default: the Messenger history skipped 1262 candidate messages for want of
+    a reply, against 933 that had one.
     """
     pairs: list[TurnPair] = []
     skipped_no_bot = 0
@@ -176,17 +188,23 @@ def _turn_pairs(messages: list[tuple[MessageSender, str]]) -> tuple[list[TurnPai
         if sender != MessageSender.WORKER:
             continue
         if pending is not None:
-            skipped_no_bot += 1
+            if include_unanswered:
+                pairs.append(TurnPair(user_text=pending, bot_output=""))
+            else:
+                skipped_no_bot += 1
         pending = body.strip() or None
         if pending is None:
             skipped_blank += 1
     if pending is not None:
-        skipped_no_bot += 1
+        if include_unanswered:
+            pairs.append(TurnPair(user_text=pending, bot_output=""))
+        else:
+            skipped_no_bot += 1
     return pairs, skipped_no_bot, skipped_blank
 
 
 async def _conversation_turns(
-    session: AsyncSession, conversation_id: uuid.UUID
+    session: AsyncSession, conversation_id: uuid.UUID, *, include_unanswered: bool = False
 ) -> tuple[list[TurnPair], int, int]:
     statement = (
         select(Message.sender, Message.body)
@@ -194,7 +212,9 @@ async def _conversation_turns(
         .order_by(Message.created_at, Message.id)
     )
     rows = (await session.execute(statement)).all()
-    return _turn_pairs([(sender, body) for sender, body in rows])
+    return _turn_pairs(
+        [(sender, body) for sender, body in rows], include_unanswered=include_unanswered
+    )
 
 
 @asynccontextmanager

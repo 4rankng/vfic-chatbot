@@ -204,6 +204,101 @@ async def test_page_is_app_subscribed_true_when_app_in_list(monkeypatch):
     )
 
 
+# ─── Messenger User Profile API: what "unavailable" means ───────────────────
+
+
+def _profile_cfg():
+    from app.services.integration_settings import FacebookRuntimeConfig
+
+    return FacebookRuntimeConfig(
+        app_id="123",
+        app_secret="secret",
+        page_id="page-1",
+        page_access_token="EAAB-token",
+        verify_token="verify",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        # A phone-number account: no retrievable profile, permanently.
+        {"error": {"code": 2018218, "message": "no profile"}},
+        # What a Page token without ``pages_read_engagement`` gets for EVERY
+        # PSID — measured on production 2026-09-28. A standing permission gap
+        # must read as "we do not get to know this person", not as a failure.
+        {
+            "error": {
+                "code": 100,
+                "error_subcode": 33,
+                "type": "GraphMethodException",
+                "message": "cannot be loaded due to missing permissions",
+            }
+        },
+        # No profile data: the person made nothing public.
+        {},
+        {"first_name": "", "last_name": "", "profile_pic": "", "gender": ""},
+    ],
+)
+async def test_get_user_profile_returns_none_when_unavailable(monkeypatch, response):
+    import app.channels.providers.facebook_oauth as oauth
+
+    monkeypatch.setattr(oauth, "_bounded_get", AsyncMock(return_value=response))
+
+    assert await oauth.get_user_profile(_profile_cfg(), psid="28225543490450146") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        # Expired/revoked token stays distinguishable from missing profile data.
+        {"error": {"code": 190, "message": "token expired"}},
+        # Code 100 WITHOUT subcode 33 is a malformed request, not a refusal:
+        # the classification has to stay narrow enough to keep surfacing it.
+        {"error": {"code": 100, "message": "Unknown path components"}},
+        {"error": {"code": 100, "error_subcode": 458, "message": "bad field"}},
+    ],
+)
+async def test_get_user_profile_still_raises_on_a_genuine_rejection(
+    monkeypatch, response
+):
+    import app.channels.providers.facebook_oauth as oauth
+
+    monkeypatch.setattr(oauth, "_bounded_get", AsyncMock(return_value=response))
+
+    with pytest.raises(oauth.FacebookOAuthError) as exc_info:
+        await oauth.get_user_profile(_profile_cfg(), psid="28225543490450146")
+
+    assert exc_info.value.code == response["error"]["code"]
+
+
+@pytest.mark.asyncio
+async def test_get_user_profile_maps_a_readable_payload(monkeypatch):
+    import app.channels.providers.facebook_oauth as oauth
+
+    monkeypatch.setattr(
+        oauth,
+        "_bounded_get",
+        AsyncMock(
+            return_value={
+                "first_name": "Mai",
+                "last_name": "Nguyễn",
+                "profile_pic": "https://cdn.example/pic.jpg",
+                "gender": "female",
+            }
+        ),
+    )
+
+    profile = await oauth.get_user_profile(_profile_cfg(), psid="28225543490450146")
+
+    assert profile is not None
+    assert profile.display_name == "Mai Nguyễn"
+    assert profile.gender == "female"
+    assert profile.profile_pic == "https://cdn.example/pic.jpg"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "response",

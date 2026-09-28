@@ -134,7 +134,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # provider-transport file) adds a Redis `get` in count() and a `delete` in
     # reset(); record_failure's incr/expire are not scanned verbs — two
     # reviewed rows, no new egress site.
-    "provider_boundary": 89,
+    # +1: the Messenger profile lookup now separates a refused object read
+    # (code 100 / subcode 33) from a genuine rejection, so facebook_oauth gains
+    # _error_subcode_from_envelope. Its envelope read is a dict `.get`, which
+    # the provider_transport heuristic counts — the same treatment the sibling
+    # _error_code_from_envelope already gets above.
+    "provider_boundary": 90,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -204,7 +209,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # recruiter_path.py into recruiter_receipts.py: same scope, same call, same
 # count, so EXPECTED_BROAD_BOUNDARY_COUNTS is unchanged and only the digest
 # (which covers the file key) moves.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "4460ca85fe32c8d982f1842bbb72d133e8a593b404dca614fa70b8e35191013d"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "8bc2071f90b7a46dffeb0dc3fd93d9ed13b95dc2b5c425d7f083b296a7cabfa7"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

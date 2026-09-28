@@ -44,15 +44,10 @@ ehthumbs.db
 .codex/
 
 # --- AI agent runtime & orchestration state ---
-# Version root shared policy/hooks/skills; keep nested and personal state local.
-**/.claude/
-!/.claude/
-# Every layer of the root .claude/ tree is tracked (agents/, rules/,
-# output-styles/, hooks/, skills/); only machine-local state is excluded.
-# Hook runtime logs mutate on every hook fire; never track them.
-/.claude/hooks/.logs/
-/.claude/settings.local.json
-/.claude/agent-memory/
+# .claude/ is machine-local: hooks, skills and rules are installed per machine,
+# so this tree is deliberately not tracked. Nothing in the release gate may
+# depend on a path under it — a fresh clone has none.
+.claude/
 .omc/
 CLAUDE.local.md
 
