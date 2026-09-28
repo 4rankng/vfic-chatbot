@@ -55,7 +55,48 @@
 | Documentation impact handled (includes `node scripts/check-doc-links.mjs` when agent routing changed) | PASS | `node scripts/check-doc-links.mjs` → "Agent routing OK: 55 paths and 4 make targets across 4 documents all resolve", exit 0. `frontend/AGENTS.md` now documents the installed Untitled UI layer, the CLI, the dependency-owned paths, `.uu-scope`, the token-layer contract, `npm run typecheck:node`, the tsconfig duplicate-key hazard, and the pre-commit hook install. The stale `frontend-quality` CI reference is corrected (GitHub Actions was removed in `e7010b22`). |
 | No new unlinked `TODO`, `FIXME`, or `HACK` | PASS | `git diff -U0 \| grep -E "^\+.*(TODO\|FIXME\|HACK)"` → no matches. |
 | Final `git diff --check` passes | PASS | `git diff --check` → clean. |
-| Final `git status --short` reviewed | PASS | 44 modified, 6 untracked, all intended; `frontend/makefile` is the other session's. Nothing committed, pushed, or deployed. |
+| Final `git status --short` reviewed | PASS | Working tree clean; every change in this set is committed and pushed to `origin/main` (HEAD `f4d878f5`), and the frontend is deployed to production (see the incident section below). |
+
+## Production incident, 2026-09-29 (and the gate that now prevents it)
+
+- **What happened:** `make deploy-frontend` replaced the production frontend
+  container with a bundle that could not boot. `https://bot.tingting.vip/` served
+  its "Đang tải…" shell, and the console showed
+  `Uncaught TypeError: D is not a function`. All assets returned 200; the failure
+  was in the bundle, not the deploy plumbing.
+- **Root cause:** `codeSplitting.includeDependenciesRecursively: false` in
+  `vite.config.ts`. Rolldown documents that disabling it can generate chunks with
+  invalid execution order unless it is paired with
+  `preserveEntrySignatures: false | 'allow-extension'` and
+  `strictExecutionOrder: true`. It had been disabled to stop `ra-vendor`
+  swallowing `@tanstack/react-query`/`react-router`, which was the right problem
+  and the wrong tool.
+- **Why every gate was green:** nothing tested the built artifact. The unit suite
+  runs Vitest, and all three Playwright lanes run the **dev** server
+  (`npx vite --mode e2e`), so `dist/` was only ever inspected for the presence of
+  chunk files.
+- **Recovery:** rolled the container back to the previous image tag within
+  minutes (`IMAGE_TAG=0c1618c4 docker compose up -d --force-recreate frontend` on
+  the droplet) and confirmed the login screen returned.
+- **Fix:** recursive capture restored (the default) and `priority` now keeps the
+  nine vendor chunks separate — `tanstack-vendor`, `router-vendor` and
+  `forms-vendor` get priority 30 so they are matched before `ra-vendor` (0) can
+  absorb them as part of its dependency closure. Vendor sizes are back in line
+  with the Rollup-era split.
+- **New gate:** `frontend/scripts/smoke-built-bundle.mjs` (`npm run smoke:built`)
+  serves `dist/` with `vite preview`, opens it in Chromium and fails unless the
+  login screen renders with no uncaught errors. `release-check`'s frontend lane
+  runs it after the build, so a bundle that cannot boot blocks the release rather
+  than the deploy. That is a root-`Makefile` change: one clause added to the
+  frontend lane.
+- **Second failure in the same deploy:** the re-run's `release-check` failed on
+  `RecruitingCommandCenter.render.test.tsx` timing out at 15s — the browser-mode
+  suite running concurrently with the backend pytest lane and the migration walk
+  (the test takes ~2s alone, 18.4s under that load). The browser-mode project now
+  allows 30s per test and per hook; no assertion is weakened.
+- **Verified after deploy:** `https://bot.tingting.vip/#/login` renders with zero
+  page errors, and the served CSS carries the Untitled UI token layer
+  (`--color-utility-*`), so the new frontend is live. Prod tag: `f4d878f5`.
 
 ## Result
 
