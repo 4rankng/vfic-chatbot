@@ -223,8 +223,33 @@ async def _fill_one(
         )
 
 
+def _bounded_concurrency(requested: int) -> int:
+    """Clamp in-flight conversations to the DB pool this process actually has.
+
+    ``_fill_one`` holds one session for a conversation's whole history, so N in
+    flight means N checked-out connections. Asking for more than the pool holds
+    does not merely slow the run down, it ends it: every task past the ceiling
+    raises QueuePool TimeoutError and the run dies mid-backfill. One connection
+    is reserved so the page query that feeds the next batch can still be served.
+    """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    capacity = settings.db_pool_size + settings.db_max_overflow
+    bounded = max(1, min(requested, capacity - 1))
+    if bounded != requested:
+        logger.warning(
+            "concurrency %d exceeds the %d-connection pool; using %d",
+            requested,
+            capacity,
+            bounded,
+        )
+    return bounded
+
+
 async def _run(args: argparse.Namespace) -> _RunReport:
     only = list(args.conversation_ids) or None
+    concurrency = _bounded_concurrency(args.concurrency)
     async with get_session_factory()() as session:
         eligible_at_start = await _blank_lead_count(session, only=only)
     report = _RunReport(
@@ -268,7 +293,7 @@ async def _run(args: argparse.Namespace) -> _RunReport:
                 # Keep a bounded number in flight: the Redis semaphores cap the
                 # provider calls, but an unbounded task list would still open a
                 # session and hold a conversation's turns in memory per entry.
-                if len(pending) >= args.concurrency:
+                if len(pending) >= concurrency:
                     await asyncio.gather(*pending)
                     pending.clear()
             cursor = page[-1].conversation_id
