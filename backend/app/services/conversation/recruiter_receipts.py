@@ -15,6 +15,7 @@ then stamped from the attempt's real outcome. Never the other way round.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from app.conversation_messaging.application.ports import DeliveryResultPort
@@ -39,12 +40,23 @@ from app.services.conversation.unreachable import (
 from app.services.tingting_api import TingtingVerifyAttemptsStore
 
 
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.conversation_messaging.application.ports import ConversationEventsPort
+
 class RecruiterReceiptsMixin:
     """Human replies, their delivery finalization, and Zalo delivery receipts.
 
     Needs only the ``db``/``events`` pair ``RecruiterMessagingState`` already
     holds; no dependency back on the lifecycle transitions.
     """
+
+    # Assigned by the composing state class. Declared so ``self.db``
+    # resolves here — the mixin reads it but never owns it.
+    db: AsyncSession
+    events: ConversationEventsPort
 
     async def record_recruiter_message(
         self, conv: Conversation, recruiter: User, body: str, result: DeliveryResultPort

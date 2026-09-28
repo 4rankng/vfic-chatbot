@@ -8,6 +8,7 @@ command. Mixed into ``BotConversationState``.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 import uuid
 
 from sqlalchemy import or_, text, update
@@ -28,6 +29,7 @@ from app.models.conversation import (
 from app.services.conversation._shared import (
     _delivery_status_for_send_error,
     utcnow,
+    affected_rows,
 )
 from app.services.conversation.unreachable import (
     USER_UNREACHABLE_SEND_CLASS,
@@ -36,8 +38,23 @@ from app.services.conversation.unreachable import (
 from app.shared.application.outbound import OutboundTelemetry
 
 
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.conversation_messaging.application.ports import ConversationEventsPort
+
 class SendClaimMixin:
     """Ownership recheck, the atomic send claim, and command finalization."""
+
+    # Assigned by the composing state class. Declared so ``self.db``
+    # resolves here — the mixin reads it but never owns it.
+    db: AsyncSession
+    events: ConversationEventsPort
+
+    def run_start_guard(self, conv: Conversation) -> bool:
+        """Provided by the composing state class, which owns the mode policy."""
+        raise NotImplementedError
 
     async def recheck_ownership(
         self,
@@ -135,7 +152,7 @@ class SendClaimMixin:
                 "reply": reply,
             },
         )
-        if res.rowcount == 1 and outbox_channel is not None and outbox_payload is not None:
+        if affected_rows(res) == 1 and outbox_channel is not None and outbox_payload is not None:
             from app.models.outbox import OutboxStatus
             from app.services.outbox_service import create_pending_outbox
 
@@ -162,7 +179,7 @@ class SendClaimMixin:
                 status=OutboxStatus.SENDING,
             )
         await self.db.commit()
-        return res.rowcount == 1
+        return affected_rows(res) == 1
 
     async def finalize_outbound_dispatch(
         self,
@@ -276,7 +293,7 @@ class SendClaimMixin:
                 )
                 .execution_options(synchronize_session=False)
             )
-            if clear_lock.rowcount == 1:
+            if affected_rows(clear_lock) == 1:
                 conv.bot_locked_until = None
                 conv.bot_lock_owner = None
                 conv.bot_lock_heartbeat_at = None

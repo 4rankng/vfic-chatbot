@@ -8,6 +8,7 @@ placeholder and its stale-predecessor cleanup. Mixed into
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 import uuid
 from datetime import datetime
 
@@ -26,11 +27,22 @@ from app.models.conversation import (
     MessageSender,
 )
 from app.schemas.bot_run import parse_decision_trace
-from app.services.conversation._shared import utcnow
+from app.services.conversation._shared import affected_rows, utcnow
 
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.conversation_messaging.application.ports import ConversationEventsPort
 
 class BotOutcomeMixin:
     """bot_run + BOT message outcome recording."""
+
+    # Assigned by the composing state class. Declared so ``self.db``
+    # resolves here — the mixin reads it but never owns it.
+    db: AsyncSession
+    events: ConversationEventsPort
 
     async def record_bot_outcome(
         self,
@@ -187,7 +199,7 @@ class BotOutcomeMixin:
                 )
                 .execution_options(synchronize_session=False)
             )
-            if clear_res.rowcount == 1:
+            if affected_rows(clear_res) == 1:
                 conv.bot_locked_until = None
                 conv.bot_lock_owner = None
                 conv.bot_lock_heartbeat_at = None
@@ -300,4 +312,4 @@ class BotOutcomeMixin:
             .execution_options(synchronize_session=False)
         )
         await self.db.commit()
-        return res.rowcount
+        return affected_rows(res)

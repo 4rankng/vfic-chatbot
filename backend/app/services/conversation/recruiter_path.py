@@ -23,7 +23,7 @@ from app.models.conversation import (
 )
 from app.models.user import Role, User
 from app.services.audit_service import record_audit
-from app.services.conversation._shared import utcnow
+from app.services.conversation._shared import affected_rows, utcnow
 from app.services.conversation.recruiter_receipts import RecruiterReceiptsMixin
 
 
@@ -97,7 +97,7 @@ class RecruiterMessagingState(RecruiterReceiptsMixin):
             .execution_options(synchronize_session=False)
         )
         await self.db.commit()
-        if res.rowcount == 0:
+        if affected_rows(res) == 0:
             await self.db.refresh(conv)
             raise ConversationConflict(
                 "conversation is owned by another recruiter",
@@ -152,7 +152,7 @@ class RecruiterMessagingState(RecruiterReceiptsMixin):
             )
             .execution_options(synchronize_session=False)
         )
-        if released.rowcount == 0:
+        if affected_rows(released) == 0:
             await self.db.rollback()
             await self.db.refresh(conv)
             owner_name = (
@@ -212,7 +212,7 @@ class RecruiterMessagingState(RecruiterReceiptsMixin):
             .execution_options(synchronize_session=False)
         )
         await self.db.commit()
-        if res.rowcount == 0:
+        if affected_rows(res) == 0:
             await self.db.refresh(conv)
             raise ConversationConflict(
                 "conversation is owned by another recruiter",

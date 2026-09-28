@@ -45,7 +45,7 @@ from app.models.conversation import (
 )
 from app.recruitment.domain.proactive_policy import PROACTIVE_OPTOUT_PHRASES
 from app.services.audit_service import record_audit
-from app.services.conversation._shared import utcnow
+from app.services.conversation._shared import affected_rows, utcnow
 from app.services.conversation.bot_outcome import BotOutcomeMixin
 from app.services.conversation.locking import LockingMixin
 from app.services.conversation.reconcile import ReconcileMixin
@@ -512,7 +512,7 @@ class BotConversationState(
                 )
                 .execution_options(synchronize_session=False)
             )
-            if clear_res.rowcount == 1:
+            if affected_rows(clear_res) == 1:
                 conv.bot_locked_until = None
                 conv.bot_lock_owner = None
                 conv.bot_lock_heartbeat_at = None

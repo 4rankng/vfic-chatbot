@@ -7,6 +7,7 @@ dependency on the send path. Mixed into ``BotConversationState``.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 import uuid
 from datetime import timedelta
 
@@ -17,11 +18,19 @@ from app.conversation_messaging.domain.ownership import (
 )
 from app.core.config import get_settings
 from app.models.conversation import Conversation, ConversationMode
-from app.services.conversation._shared import utcnow
+from app.services.conversation._shared import affected_rows, utcnow
 
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 class LockingMixin:
     """Per-chat mutex lifecycle for the bot-send path."""
+
+    # Assigned by the composing state class. Declared so ``self.db``
+    # resolves here — the mixin reads it but never owns it.
+    db: AsyncSession
 
     async def acquire_lock(
         self,
@@ -57,7 +66,7 @@ class LockingMixin:
             .execution_options(synchronize_session=False)
         )
         await self.db.commit()
-        return owner if res.rowcount == 1 else None
+        return owner if affected_rows(res) == 1 else None
 
     async def release_lock(
         self, conv: Conversation, lock_owner: uuid.UUID | str | None = None
@@ -81,7 +90,7 @@ class LockingMixin:
             .execution_options(synchronize_session=False)
         )
         await self.db.commit()
-        if res.rowcount == 1:
+        if affected_rows(res) == 1:
             conv.bot_locked_until = None
             conv.bot_lock_owner = None
             conv.bot_lock_heartbeat_at = None
@@ -109,7 +118,7 @@ class LockingMixin:
             .execution_options(synchronize_session=False)
         )
         await self.db.commit()
-        return res.rowcount == 1
+        return affected_rows(res) == 1
 
     async def break_stale_lock(self, conv_id: uuid.UUID, *, stale_after_seconds: int) -> bool:
         """Force-clear a per-chat mutex whose owner heartbeat is stale (older than
@@ -144,4 +153,4 @@ class LockingMixin:
             .execution_options(synchronize_session=False)
         )
         await self.db.commit()
-        return res.rowcount == 1
+        return affected_rows(res) == 1

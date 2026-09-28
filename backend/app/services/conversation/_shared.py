@@ -14,6 +14,9 @@ separate runner ticket; this module is the canonical owner.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, cast
+
+from sqlalchemy import CursorResult, Result
 
 from app.models.conversation import DeliveryStatus
 from app.shared.application.outbound import is_ambiguous_send
@@ -21,6 +24,17 @@ from app.shared.application.outbound import is_ambiguous_send
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def affected_rows(result: Result[Any]) -> int:
+    """How many rows a DML statement actually touched.
+
+    ``Session.execute`` is declared ``Result[Any]``, which carries no
+    ``rowcount``, yet every caller in this package runs a conditional UPDATE
+    and branches on whether it matched. The narrowing lives here so the
+    conditionals stay readable and the cast is not repeated at each call.
+    """
+    return cast(CursorResult[Any], result).rowcount
 
 
 def _delivery_status_for_send_error(error_class: str | None, *, ok: bool):

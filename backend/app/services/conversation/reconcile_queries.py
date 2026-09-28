@@ -14,6 +14,7 @@ of this SQL is a correctness bug, not a refactor.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from datetime import datetime, timedelta
 
 from sqlalchemy import select, text
@@ -113,12 +114,20 @@ _MASKED_INBOUND_SQL = f"""
 """
 
 
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 class ReconcileQueriesMixin:
     """The reconcile sweep's candidate scan and its per-conversation re-check.
 
     Mixed into :class:`~app.services.conversation.repository.ConversationRepository`
     so the sweep keeps one entry-point type; it needs only ``self.db``.
     """
+
+    # Assigned by the composing state class. Declared so ``self.db``
+    # resolves here — the mixin reads it but never owns it.
+    db: AsyncSession
 
     async def find_reconcile_candidates(
         self,
