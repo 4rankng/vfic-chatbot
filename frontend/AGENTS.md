@@ -168,3 +168,89 @@ and uses `vietnameseCrmMessages.ts`. Do not wire other locales into the app.
   comments are English.
 - Auth tokens live in `localStorage` under `RaStore.auth.*` (access + refresh);
   a 401 triggers one transparent refresh.
+
+## UI/UX Component Sourcing
+
+For any UI/UX design problem — a new screen, a component, a layout, an empty
+state, a table, a form, a dashboard, or a "this looks wrong" complaint —
+**consult the Untitled UI and Tailkit MCPs before hand-writing Tailwind or
+inventing markup.** That is the default, not an escalation path.
+
+### Tailkit — the drop-in system for console anatomy
+
+Tailkit is plain React JSX + Tailwind utilities + inline Heroicons SVG. **It
+needs no installed package**, so it works today.
+
+```
+mcp__tailkit__browse_catalog  (level=categories → subcategories → components)
+mcp__tailkit__search_components / get_component_code (tech: "react")
+```
+
+Identifiers are `<letter>-c-<subcategory>-<nn>`; the recruiter console is the
+`application-ui` package, so `a-c-tables-08`, `a-c-empty-states-03`,
+`a-c-form-layouts-04`, `a-c-statistics-11`, `a-c-navigation-*`. Paste with
+`get_page_templates`-free, direct retrieval; the response is ready JSX.
+
+**Drop-in obligations — the pasted component is not the deliverable:**
+
+1. Keep the JSX; **bind the demo rows to real react-admin data** instead of the
+   hard-coded `Nansi Hart` / `$49,00` placeholders.
+2. **Translate every user-facing string to Vietnamese.** Code, identifiers, and
+   comments stay English.
+3. **Swap demo `hi-*` inline SVGs** for `lucide-react` (the app's icon library)
+   or `@untitledui/icons` once Phase 2 lands, where an equivalent already exists.
+4. **Scope feature CSS under the feature's own workspace class.** Do not add to
+   the unscoped backlog, and do not lower `MAX_UNSCOPED_RULES` in
+   `css-scoping.test.ts` — that number may only go down.
+5. Light theme only. `dark:` variants compile but never match; strip them when
+   they add noise rather than styling a mode that does not exist.
+
+### Untitled UI — design direction today, components after Phase 3
+
+Use freely, no install required:
+
+- `mcp__untitledui__search_components`, `get_page_templates`,
+  `get_component_suggestions`, `get_latest_components` — layout, hierarchy, and
+  interaction patterns. This is its main value right now.
+- `mcp__untitledui__search_icons` — `@untitledui/icons` is installed (1181
+  exports). **Pass `category`**: free-text queries return 0 results, so
+  `search_icons(query: "user")` finds nothing while
+  `search_icons(query: "user", category: "users")` returns `User01`, `User02`,
+  `UserCheck01`, … 41 results. Use the `importName` it returns verbatim as the
+  import. Round-trip is covered by
+  `src/components/atomic-crm/ui-design-dependencies.test.tsx`.
+
+**Its React components are NOT yet installable.** Every base component and every
+page template declares `react-aria-components@^1.21.1` + `@untitledui/icons`,
+and Untitled UI v8 sets minimums of Tailwind `^4.2.2`, React `^19.2.4`, and
+**Vite `^8.0.0`**. This app is on Tailwind 4.1.18 / React 19.1.0 / Vite 7.3.6, and
+`@vitejs/plugin-react@4.7.0` peer-excludes Vite 8. Do not paste React Aria markup
+until that migration lands.
+
+**Never run `npx untitledui upgrade` in this repository.** It rewrites
+`tsconfig.json` and `package.json` and drops `upgrade-report.json` and
+`UPGRADE-INSTRUCTIONS.md` at the project root. Only `npx untitledui add …` is
+safe, and only after Phase 3. Keep any generated component out of
+`src/components/ui/` and `src/components/admin/` — those are `dependencyOwnedPaths`
+owned by the external shadcn registry.
+
+### The token contract (load-bearing)
+
+A pasted Tailkit component only renders correctly because
+`src/styles/tailkit-tokens.css` defines the numeric `--color-secondary-50…950`
+scale, the default palette stays intact, `ring-3`/`shadow-xs` compile, and
+`hi-*` needs no CSS. Treat these as protected:
+
+- **Never declare `--color-secondary` (no numeric suffix)** in
+  `src/styles/tailkit-tokens.css`. It is a different utility from
+  `--color-secondary-50` in Tailwind v4, but the flat slot is a live shadcn
+  semantic that `src/index.css` redefines five times. A pasted component
+  rendering unstyled is almost always a missing *shaded* token — add the shade
+  to the token file, never an `!important` override in a feature sheet.
+- Do not redefine `--radius` or the `--shadow-*` names the console owns.
+- Tailwind emits `@theme` variables **on use**, not eagerly, so a fresh build
+  will not contain `--color-secondary-*` until a component actually references
+  one. That is correct behaviour, not a broken import.
+- `src/components/atomic-crm/tailkit-contract.test.ts` asserts the scale, the
+  single import, and the "never override `--color-secondary`" rule. Extend it
+  when a Tailkit component needs a shade that does not exist yet.

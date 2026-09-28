@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./styles/untitledui.css";
+@import "./styles/tailkit-tokens.css";
 
 /* Load only the Latin and Vietnamese WOFF2 subsets used by the console. The
    package's aggregate CSS also references Latin Extended and legacy WOFF

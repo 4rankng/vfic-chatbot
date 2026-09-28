@@ -107,6 +107,9 @@ When asked to commit, work directly on `main` per the repository workflow.
 - Implementation: `docs/development/code-standards.md`
 - Verification: `standards/review-checklist.md`
 - Dev-environment QA: `standards/agent-completion-checklist.md` (record only)
+- UI/UX design problems: `frontend/AGENTS.md` → "UI/UX Component Sourcing".
+  Consult the Untitled UI and Tailkit MCPs before hand-writing markup; Tailkit
+  drops in today, Untitled UI React components await the Phase 3 toolchain work.
 - Bot diagnosis: `docs/troubleshooting/chatbot-response-path.html`
 - Deployment: read `docs/ops/deployment-guide.md` in full, then obtain approval.
   `make deploy` is blue/green + smoke-gated (zero-downtime Caddy flip); the old
