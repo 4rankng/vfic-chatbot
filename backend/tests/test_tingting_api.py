@@ -474,12 +474,13 @@ def test_resolved_conversation_gets_the_closer_not_another_pitch() -> None:
     login worked, then sent a casual closer twice — and both times got the
     unclear-intent redirect pitching the reset flow. Both prompt sections must
     quote the fixed closer verbatim, forbid re-pitching in the resolved state,
-    and cap the confirm question at one ask after resolution.
+    and let the once-asked confirm question die after a non-engaging reply
+    instead of being asked a second time.
     """
     for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
         assert TINGTING_RESOLVED_CLOSER_REPLY in prompt
         assert "ĐÃ GIẢI QUYẾT XONG" in prompt
-        assert "chỉ được hỏi TỐI ĐA MỘT LẦN" in prompt
+        assert "KHÔNG hỏi lại lần thứ hai" in prompt
         assert "TỰ nhắc lại rắc rối đăng nhập" in prompt
     # the escalation hook (lanes.py) keys on the handoff line inside the reply:
     # a closer containing it would write needs_human on a polite goodbye.
