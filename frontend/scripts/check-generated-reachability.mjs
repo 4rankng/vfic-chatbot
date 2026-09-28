@@ -78,7 +78,11 @@ const readStaticImports = (file) =>
   [
     ...fs
       .readFileSync(file, "utf8")
-      .matchAll(/(?:^|\n)\s*import[^;]*?from\s+["']([^"']+)["']/g),
+      // `import … from` AND `export … from` / `export * from`: a barrel that only
+      // re-exports its siblings is a live edge, and missing it makes the barrel's
+      // dependencies look unreachable. That gap once deleted four avatar
+      // base-components; the build caught it, this report did not.
+      .matchAll(/(?:^|\n)\s*(?:import|export)[^;]*?from\s+["']([^"']+)["']/g),
   ].map((match) => match[1]);
 
 const generated = [];

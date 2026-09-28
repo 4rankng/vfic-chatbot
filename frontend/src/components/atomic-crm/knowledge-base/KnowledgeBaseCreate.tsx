@@ -8,9 +8,10 @@ import {
 import { useState } from "react";
 import { useController } from "react-hook-form";
 import { Input as UntitledInput } from "@/components/base/input/input";
+import { Select as UntitledSelect } from "@/components/base/select/select";
+import type { SelectItemType } from "@/components/base/select/select-shared";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/admin/text-input";
-import { SelectInput } from "@/components/admin/select-input";
 import { ArrowLeft, BookOpen, Check, LoaderCircle } from "lucide-react";
 import { Link } from "react-router";
 import { PageHeading, PageShell } from "../kit";
@@ -50,6 +51,46 @@ const KnowledgeBaseNameField = () => {
       isInvalid={fieldState.invalid}
       hint={fieldState.error ? "Tên kho là bắt buộc." : undefined}
     />
+  );
+};
+
+/** The two access modes, as Untitled UI select items. Copy is unchanged. */
+const KNOWLEDGE_BASE_MODES: SelectItemType[] = [
+  { id: "RAG", label: "RAG — nhiều dự án" },
+  { id: "DIRECT_CONTEXT", label: "Trực tiếp — một tệp" },
+];
+
+/**
+ * The mode field renders Untitled UI v8's `Select` (React Aria list box in a
+ * popover) instead of the react-admin select, wired through `useController` so
+ * it registers and submits like any other field. `uu-scope` is required for the
+ * same reason as the name field.
+ */
+const KnowledgeBaseModeField = () => {
+  const { field, fieldState } = useController({
+    name: "mode",
+    rules: { required: true },
+  });
+
+  return (
+    <UntitledSelect
+      className="uu-scope"
+      name={field.name}
+      ref={field.ref}
+      label="Chế độ"
+      placeholder="Chọn chế độ"
+      items={KNOWLEDGE_BASE_MODES}
+      selectedKey={typeof field.value === "string" ? field.value : null}
+      onSelectionChange={(key) => field.onChange(String(key))}
+      onBlur={field.onBlur}
+      isRequired
+      isInvalid={fieldState.invalid}
+      hint={fieldState.error ? "Chọn chế độ truy cập dữ liệu." : undefined}
+    >
+      {(item: SelectItemType) => (
+        <UntitledSelect.Item id={item.id} label={item.label} />
+      )}
+    </UntitledSelect>
   );
 };
 
@@ -113,19 +154,7 @@ export const KnowledgeBaseCreate = () => {
             <div className="space-y-4 px-4 py-4">
               <KnowledgeBaseNameField />
               <TextInput source="slug" label="Slug" isRequired />
-              <SelectInput
-                source="mode"
-                label="Chế độ"
-                emptyText="Chọn chế độ"
-                choices={[
-                  { id: "RAG", name: "RAG — nhiều dự án" },
-                  {
-                    id: "DIRECT_CONTEXT",
-                    name: "Trực tiếp — một tệp",
-                  },
-                ]}
-                isRequired
-              />
+              <KnowledgeBaseModeField />
               <TextInput source="description" label="Mô tả" multiline />
               <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--tt-border)] pt-4">
                 <Button

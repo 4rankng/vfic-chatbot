@@ -70,34 +70,6 @@ vi.mock("@/components/admin/text-input", async () => {
   };
 });
 
-vi.mock("@/components/admin/select-input", async () => {
-  const { useFormContext } = await import("react-hook-form");
-
-  return {
-    SelectInput: ({
-      source,
-      label,
-      choices,
-    }: {
-      source: string;
-      label: string;
-      choices: { id: string; name: string }[];
-    }) => {
-      const { register } = useFormContext();
-
-      return (
-        <select aria-label={label} {...register(source)}>
-          {choices.map((choice) => (
-            <option key={choice.id} value={choice.id}>
-              {choice.name}
-            </option>
-          ))}
-        </select>
-      );
-    },
-  };
-});
-
 vi.mock("react-router", () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) => (
     <a href={to}>{children}</a>
@@ -152,12 +124,21 @@ describe("Knowledge Base pages", () => {
     await expect
       .element(screen.getByRole("heading", { name: "Thông tin kho" }))
       .toBeVisible();
-    expect(
-      screen.getByRole("option", { name: "RAG — nhiều dự án" }).element(),
-    ).toBeInstanceOf(HTMLOptionElement);
-    expect(
-      screen.getByRole("option", { name: "Trực tiếp — một tệp" }).element(),
-    ).toBeInstanceOf(HTMLOptionElement);
+
+    // The mode choices live in a React Aria list box inside a popover now, so
+    // they are asserted the way a user reaches them: open the select, read the
+    // options, then pick one. Picking also closes the popover -- an open
+    // popover covers the page and would intercept the next click, which is how
+    // this test first failed.
+    await screen.getByRole("button", { name: /Chế độ/ }).click();
+    await expect
+      .element(screen.getByRole("option", { name: "RAG — nhiều dự án" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("option", { name: "Trực tiếp — một tệp" }))
+      .toBeVisible();
+    await screen.getByRole("option", { name: "RAG — nhiều dự án" }).click();
+
     expect(screen.container.querySelector("[data-slot='card']")).toBeNull();
     expect(screen.container.querySelector(".tt-alternate-card")).toBeNull();
 
@@ -181,7 +162,8 @@ describe("Knowledge Base pages", () => {
 
     await name.fill("Kho dùng chung");
     await screen.getByLabelText("Slug").fill("shared");
-    await screen.getByLabelText("Chế độ").selectOptions("RAG");
+    await screen.getByRole("button", { name: /Chế độ/ }).click();
+    await screen.getByRole("option", { name: "RAG — nhiều dự án" }).click();
     await screen.getByRole("button", { name: "Tạo kho kiến thức" }).click();
 
     await expect.poll(() => mocks.create.mock.calls.length).toBe(1);

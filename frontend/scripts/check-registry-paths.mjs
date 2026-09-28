@@ -42,6 +42,8 @@ const dependencyOwnedPaths = [
   "src/components/base/",
   "src/components/foundations/",
   "src/utils/",
+  // Installed by the Untitled UI CLI for its popover/select positioning.
+  "src/hooks/use-resize-observer.ts",
   "src/hooks/use-mobile.ts",
   "src/lib/utils.ts",
 ];
