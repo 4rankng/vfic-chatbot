@@ -103,6 +103,17 @@ describe("UserList", () => {
     expect(rows).toHaveLength(2);
     expect(surface.textContent).toContain("2 tài khoản");
     expect(getComputedStyle(rows[0]).display).toBe("table-row");
+
+    // The avatar cell is Untitled UI's `Avatar`, fed with the record's
+    // initials: the first and last words of a Vietnamese name.
+    const avatars = Array.from(
+      table.querySelectorAll<HTMLElement>("td.user-directory-cell-avatar"),
+    );
+    expect(avatars.map((cell) => cell.textContent?.trim())).toEqual([
+      "NA",
+      "TB",
+    ]);
+    expect(avatars[0]?.querySelector("img")).toBeNull();
   });
 
   it("replaces the bespoke empty card with the kit empty state", async () => {

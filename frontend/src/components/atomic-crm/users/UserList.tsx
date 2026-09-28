@@ -9,14 +9,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  CalendarDays,
-  Mail,
-  Plus,
-  ShieldOff,
-  UserCog,
-  UserRound,
-} from "lucide-react";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { CalendarDays, Mail, Plus, ShieldOff, UserCog } from "lucide-react";
 import { Link } from "react-router";
 import { UserActions } from "./UserActions";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
@@ -204,11 +198,18 @@ const UserAccountList = () => {
                 {/* Row hover is the kit's `tbody tr:hover` accent tint. */}
                 <tr className="user-directory-row border-b border-[var(--tt-border)] last:border-b-0 even:bg-[var(--tt-surface-muted)]">
                   <td className="user-directory-cell-avatar p-3 align-middle">
-                    <div className="tt-avatar tt-avatar-placeholder user-directory-avatar">
-                      <div>
-                        <UserRound className="size-4" aria-hidden="true" />
-                      </div>
-                    </div>
+                    {/* Untitled UI v8 Avatar: initials, with the library's own
+                        placeholder as the fallback. No `uu-scope` wrapper is
+                        needed for this component -- it uses only
+                        `text-fg-quaternary`, none of the four names the console
+                        and the library both define. It is `md` (40px), four
+                        pixels larger than the daisyUI placeholder it replaced;
+                        the 64px column absorbs it. */}
+                    <Avatar
+                      size="md"
+                      alt={user.full_name || user.email}
+                      initials={initialsOf(user)}
+                    />
                   </td>
                   <td className="user-directory-cell-identity p-3 align-middle">
                     <div className="user-directory-identity">
@@ -248,6 +249,21 @@ const UserAccountList = () => {
       </div>
     </section>
   );
+};
+
+/**
+ * Two-letter initials for the directory avatar. Vietnamese names put the family
+ * name first, so the first and last words carry the identity ("Nguyễn Văn An" ->
+ * NA); a single word yields one letter, and a missing name falls back to the
+ * email so the avatar is never blank.
+ */
+const initialsOf = (user: UserAccount) => {
+  const source = user.full_name.trim() || user.email.trim();
+  const words = source.split(/\s+/).filter(Boolean);
+  const first = words.at(0)?.charAt(0) ?? "";
+  const last = words.length > 1 ? (words.at(-1)?.charAt(0) ?? "") : "";
+
+  return `${first}${last}`.toUpperCase();
 };
 
 const formatDate = (value: string) =>

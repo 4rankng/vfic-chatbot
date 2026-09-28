@@ -276,6 +276,11 @@ npx untitledui@latest add input --yes       # pulls button/tags/tooltip siblings
   (so a kept component's own dependencies are not reported as dead) and prints
   what nothing reaches. Trust it before deleting; `npx untitledui add <component>
   --yes` re-installs anything pruned.
+- **After any `add`, run `npm run prettier:apply`.** The CLI writes its own
+  formatting, so a re-installed component can fail `npm run prettier` even though
+  the file was clean before — which is how `src/utils/is-react-component.ts` kept
+  reappearing in the diff. The pre-commit hook formats staged files, so a
+  re-installed file that nobody stages stays unformatted until then.
 - **Wrap every Untitled UI subtree in `.uu-scope`.** The console and Untitled UI
   both define `bg-primary`, `bg-secondary`, `text-primary` and `border-primary`
   with different meanings; `src/styles/untitledui-theme.css` pins the console's

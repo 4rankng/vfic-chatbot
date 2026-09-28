@@ -19,17 +19,8 @@
    console's `--tt-border`, a muted count strip, a muted `<thead>`, `p-3` cells
    and `even:` zebra rows. This sheet owns only what those utilities cannot
    express — the ≤760px reflow that linearises a table row into a two-band card,
-   and the loading rows. */
-.user-directory-avatar > div {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--tt-surface-muted);
-  color: var(--tt-ink-muted);
-}
-
+   and the loading rows. The avatar is Untitled UI's `Avatar` (initials + its own
+   placeholder), so no rule here sizes it. */
 .user-directory-identity {
   min-width: 0;
 }
