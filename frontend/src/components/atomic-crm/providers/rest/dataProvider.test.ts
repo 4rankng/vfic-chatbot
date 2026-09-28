@@ -254,7 +254,9 @@ describe("backend route contract", () => {
         sort: { field: "id", order: "DESC" },
         filter: {},
       });
-      expect(lastUrl(), `resource ${resource}`).toContain(`/api/v1/${segment}?`);
+      expect(lastUrl(), `resource ${resource}`).toContain(
+        `/api/v1/${segment}?`,
+      );
     }
   });
 });

@@ -122,7 +122,9 @@ describe("conversation row state", () => {
 
     expect(
       rows
-        .sort((first, second) => compareConversationRows(first, second, new Set()))
+        .sort((first, second) =>
+          compareConversationRows(first, second, new Set()),
+        )
         .map((row) => row.id),
     ).toEqual(["latest-message", "recently-touched"]);
   });

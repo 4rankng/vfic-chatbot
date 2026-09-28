@@ -35,9 +35,27 @@ const mobile = 700;
 const narrow = 390;
 
 const trend: PerfTrendBucket[] = [
-  { bucket: "2026-09-27T10:00:00Z", p95_ms: 4_000, p50_ms: 2_800, turns: 5, errors: 0 },
-  { bucket: "2026-09-27T10:05:00Z", p95_ms: 24_000, p50_ms: 18_000, turns: 6, errors: 2 },
-  { bucket: "2026-09-27T10:10:00Z", p95_ms: 12_000, p50_ms: 9_000, turns: 4, errors: 0 },
+  {
+    bucket: "2026-09-27T10:00:00Z",
+    p95_ms: 4_000,
+    p50_ms: 2_800,
+    turns: 5,
+    errors: 0,
+  },
+  {
+    bucket: "2026-09-27T10:05:00Z",
+    p95_ms: 24_000,
+    p50_ms: 18_000,
+    turns: 6,
+    errors: 2,
+  },
+  {
+    bucket: "2026-09-27T10:10:00Z",
+    p95_ms: 12_000,
+    p50_ms: 9_000,
+    turns: 4,
+    errors: 0,
+  },
 ];
 
 afterEach(async () => {
@@ -146,9 +164,7 @@ describe("performance trend chart layers", () => {
       ".performance-target-line",
     )!;
     const bars = Array.from(
-      screen.container.querySelectorAll<HTMLElement>(
-        ".performance-trend-bar",
-      ),
+      screen.container.querySelectorAll<HTMLElement>(".performance-trend-bar"),
     );
     expect(bars.length).toBeGreaterThan(1);
 
@@ -156,9 +172,7 @@ describe("performance trend chart layers", () => {
     const lineRect = targetLine.getBoundingClientRect();
     const hovered = bars.find((candidate) => {
       const rect = candidate.getBoundingClientRect();
-      return (
-        rect.top <= lineRect.top + 1 && rect.bottom >= lineRect.top + 1
-      );
+      return rect.top <= lineRect.top + 1 && rect.bottom >= lineRect.top + 1;
     });
     expect(hovered, "no bar crosses the target line").toBeDefined();
 
@@ -170,9 +184,7 @@ describe("performance trend chart layers", () => {
     expect(hit?.className ?? "").toContain("performance-trend-bar");
 
     await page.elementLocator(hovered!).hover();
-    await expect
-      .poll(() => getComputedStyle(hovered!).opacity)
-      .not.toBe("1");
+    await expect.poll(() => getComputedStyle(hovered!).opacity).not.toBe("1");
   });
 
   it("bounds the trend plot so the target line spans it horizontally", async () => {
@@ -181,9 +193,8 @@ describe("performance trend chart layers", () => {
       dashboard(<PerformanceTrendChart trend={trend} window="24h" />),
     );
 
-    const plot = screen.container.querySelector<HTMLElement>(
-      ".performance-trend",
-    )!;
+    const plot =
+      screen.container.querySelector<HTMLElement>(".performance-trend")!;
     const targetLine = screen.container.querySelector<HTMLElement>(
       ".performance-target-line",
     )!;
@@ -306,9 +317,7 @@ describe("performance metric strip", () => {
       const styles = getComputedStyle(metric);
       expect(styles.borderTopWidth, metric.outerHTML).toBe("0px");
       expect(styles.borderRadius, metric.outerHTML).toBe("0px");
-      expect(styles.backgroundColor, metric.outerHTML).toBe(
-        "rgba(0, 0, 0, 0)",
-      );
+      expect(styles.backgroundColor, metric.outerHTML).toBe("rgba(0, 0, 0, 0)");
     }
     // Adjacent metrics are divided by a single rule, not by their own boxes.
     expect(getComputedStyle(metrics[1]).borderLeftWidth).toBe("1px");
@@ -406,10 +415,9 @@ describe("performance slow-turn review table", () => {
       ["thead tr", headRow],
       ["thead th", headCell],
     ] as const) {
-      expect(
-        getComputedStyle(element).backgroundColor,
-        name,
-      ).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(element).backgroundColor, name).toBe(
+        "rgba(0, 0, 0, 0)",
+      );
     }
     expect(getComputedStyle(headCell).position).toBe("static");
     expect(getComputedStyle(headCell).borderBottomWidth).toBe("1px");
@@ -457,9 +465,9 @@ describe("performance mobile report", () => {
     const strip = screen.container.querySelector<HTMLElement>(
       ".performance-metrics",
     )!;
-    expect(
-      getComputedStyle(strip).gridTemplateColumns.split(" ").length,
-    ).toBe(2);
+    expect(getComputedStyle(strip).gridTemplateColumns.split(" ").length).toBe(
+      2,
+    );
 
     const metrics = Array.from(
       screen.container.querySelectorAll<HTMLElement>(".performance-metric"),
@@ -505,9 +513,7 @@ describe("performance mobile report", () => {
     for (const card of cards) {
       const styles = getComputedStyle(card);
       expect(styles.borderRadius, card.outerHTML).toBe("0px");
-      expect(styles.backgroundColor, card.outerHTML).toBe(
-        "rgba(0, 0, 0, 0)",
-      );
+      expect(styles.backgroundColor, card.outerHTML).toBe("rgba(0, 0, 0, 0)");
     }
     // No card draws its own box; consecutive turns share one divider, carried
     // by the `article + article` rule. A frame restored on every card is what
@@ -526,9 +532,8 @@ describe("performance mobile report", () => {
       dashboard(<PerformanceTrendChart trend={trend} window="24h" />),
     );
 
-    const plot = screen.container.querySelector<HTMLElement>(
-      ".performance-trend",
-    )!;
+    const plot =
+      screen.container.querySelector<HTMLElement>(".performance-trend")!;
     expect(plot.getBoundingClientRect().height).toBe(152);
   });
 });

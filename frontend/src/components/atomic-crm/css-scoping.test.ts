@@ -44,14 +44,19 @@ const selectorsOf = (css: string): string[] => {
 
 describe("feature CSS scoping ratchet (FE-19)", () => {
   it("does not add rules nested under the shared inbox-bg-container", () => {
-    expect(Object.keys(sheets).length, "import.meta.glob matched no stylesheets").toBeGreaterThan(20);
+    expect(
+      Object.keys(sheets).length,
+      "import.meta.glob matched no stylesheets",
+    ).toBeGreaterThan(20);
 
     const byFile = Object.entries(sheets)
       .map(([file, css]) => {
         const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
         const count = selectorsOf(stripped)
           .flatMap((selector) => selector.split(","))
-          .filter((selector) => /\.inbox-bg-container(?!\.)\s+[A-Za-z.[:#]/.test(selector)).length;
+          .filter((selector) =>
+            /\.inbox-bg-container(?!\.)\s+[A-Za-z.[:#]/.test(selector),
+          ).length;
         return [file.replace(/^\.\.\/\.\.\//, "src/"), count] as const;
       })
       .filter(([, count]) => count > 0)
@@ -74,6 +79,9 @@ describe("feature CSS scoping ratchet (FE-19)", () => {
       /\.inbox-bg-container\.[A-Za-z0-9_-]+/.test(css),
     ).length;
 
-    expect(compound, "no sheet uses the compound .inbox-bg-container.<workspace> form").toBeGreaterThan(0);
+    expect(
+      compound,
+      "no sheet uses the compound .inbox-bg-container.<workspace> form",
+    ).toBeGreaterThan(0);
   });
 });

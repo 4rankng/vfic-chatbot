@@ -516,9 +516,7 @@ describe("ProjectKnowledgePanel", () => {
       <ProjectKnowledgePanel project={project} editable />,
     );
 
-    await screen
-      .getByRole("button", { name: "Vị trí tuyển dụng" })
-      .click();
+    await screen.getByRole("button", { name: "Vị trí tuyển dụng" }).click();
     const jobsEditor = screen.getByLabelText(
       "Dữ liệu hiện tại của danh mục Vị trí tuyển dụng",
     );

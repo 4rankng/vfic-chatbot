@@ -16,9 +16,7 @@ describe("vietnameseCrmMessages", () => {
     expect(i18nProvider.translate("crm.common.save_credentials")).toBe(
       "Lưu thông tin",
     );
-    expect(i18nProvider.translate("crm.common.save_project")).toBe(
-      "Lưu dự án",
-    );
+    expect(i18nProvider.translate("crm.common.save_project")).toBe("Lưu dự án");
     expect(i18nProvider.translate("crm.common.save_file")).toBe("Lưu tệp");
   });
 
@@ -47,9 +45,7 @@ describe("vietnameseCrmMessages", () => {
   });
 
   it("keeps the navigation entry the dashboard still renders", () => {
-    expect(i18nProvider.translate("crm.navigation.overview")).toBe(
-      "Tổng quan",
-    );
+    expect(i18nProvider.translate("crm.navigation.overview")).toBe("Tổng quan");
   });
 
   it("no longer carries the blocks no component can reach", () => {

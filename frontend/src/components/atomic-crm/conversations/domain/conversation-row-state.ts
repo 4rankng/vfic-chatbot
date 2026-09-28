@@ -72,7 +72,9 @@ export const compareConversationRows = (
   // updated_at) so the order never contradicts the visible times. ``updated_at``
   // alone drifts when batch maintenance touches a row without a new message.
   const firstAt = new Date(first.last_inbound_at ?? first.updated_at).getTime();
-  const secondAt = new Date(second.last_inbound_at ?? second.updated_at).getTime();
+  const secondAt = new Date(
+    second.last_inbound_at ?? second.updated_at,
+  ).getTime();
   return secondAt - firstAt;
 };
 

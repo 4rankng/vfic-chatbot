@@ -70,7 +70,11 @@ describe("mapLeadsByZaloId", () => {
 
 describe("mapLeadsByContactId", () => {
   it("keys contact-id leads and skips those without one", () => {
-    const keyed = lead({ id: 7, contact_id: "contact-2", name: "Phạm Văn Thành" });
+    const keyed = lead({
+      id: 7,
+      contact_id: "contact-2",
+      name: "Phạm Văn Thành",
+    });
     const unkeyed = lead({ id: 8, contact_id: null, name: "Không có contact" });
 
     const mapped = mapLeadsByContactId([keyed, unkeyed]);

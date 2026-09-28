@@ -348,9 +348,7 @@ describe("project knowledge category editor", () => {
     // push the editor below a long scroll.
     expect(
       getComputedStyle(
-        screen.container.querySelector<HTMLElement>(
-          ".project-category-grid",
-        )!,
+        screen.container.querySelector<HTMLElement>(".project-category-grid")!,
       ).display,
     ).toBe("none");
     const select = screen.container.querySelector<HTMLElement>(
@@ -427,8 +425,9 @@ describe("project knowledge category editor", () => {
     const styles = getComputedStyle(textarea);
     // `field-sizing` is not yet in this TS lib's CSSStyleDeclaration, so the
     // longhand is read through a cast; the value itself is a real computed one.
-    expect((styles as CSSStyleDeclaration & { fieldSizing: string }).fieldSizing)
-      .toBe("fixed");
+    expect(
+      (styles as CSSStyleDeclaration & { fieldSizing: string }).fieldSizing,
+    ).toBe("fixed");
     expect(textarea.getBoundingClientRect().height).toBeLessThanOrEqual(420);
     expect(textarea.getBoundingClientRect().height).toBeGreaterThan(0);
   });

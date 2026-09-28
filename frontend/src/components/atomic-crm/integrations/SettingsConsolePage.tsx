@@ -12,10 +12,7 @@ import {
 import { JevSection } from "./JevSection";
 import { LlmProvidersSection } from "./LlmProvidersSection";
 import { TingtingSection } from "./TingtingSection";
-import {
-  SettingsChrome,
-  SettingsWorkspace,
-} from "./SettingsChrome";
+import { SettingsChrome, SettingsWorkspace } from "./SettingsChrome";
 import { ZaloChannelSection } from "./ZaloChannelSection";
 import {
   resolveInitialSettingsItemId,

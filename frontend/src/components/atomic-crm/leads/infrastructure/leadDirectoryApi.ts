@@ -1,6 +1,9 @@
 import { apiJson } from "@/lib/apiClient";
 import type { Lead } from "../../types";
-import type { CancellationSignal, LeadDirectoryPort } from "../application/ports";
+import type {
+  CancellationSignal,
+  LeadDirectoryPort,
+} from "../application/ports";
 
 type LeadListEnvelope = {
   data: Lead[];

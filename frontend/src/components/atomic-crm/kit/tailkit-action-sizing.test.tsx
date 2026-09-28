@@ -28,7 +28,10 @@ afterEach(async () => {
 const heightOf = (element: Element) => getComputedStyle(element).height;
 
 const actionShell = (children: React.ReactNode) => (
-  <div className="tailkit-workspace-content" style={{ "--fs-body-sm": "13px" } as React.CSSProperties}>
+  <div
+    className="tailkit-workspace-content"
+    style={{ "--fs-body-sm": "13px" } as React.CSSProperties}
+  >
     {children}
   </div>
 );
@@ -64,7 +67,9 @@ describe("Tailkit action sizing system", () => {
     // `height` and `min-height` are pinned together, so a control that grows
     // content (a two-line label) still keeps its 32px floor.
     for (const button of [small, normal, large]) {
-      expect(heightOf(button), button.outerHTML).toBe(getComputedStyle(button).minHeight);
+      expect(heightOf(button), button.outerHTML).toBe(
+        getComputedStyle(button).minHeight,
+      );
     }
   });
 
@@ -84,7 +89,9 @@ describe("Tailkit action sizing system", () => {
       ),
     );
 
-    for (const button of screen.container.querySelectorAll<HTMLElement>("button")) {
+    for (const button of screen.container.querySelectorAll<HTMLElement>(
+      "button",
+    )) {
       const styles = getComputedStyle(button);
       expect(styles.fontSize, button.outerHTML).toBe("13px");
       expect(styles.fontWeight, button.outerHTML).toBe("600");
@@ -170,7 +177,9 @@ describe("Tailkit action sizing system", () => {
     );
 
     const controls = Array.from(
-      screen.container.querySelectorAll<HTMLElement>("button, a, input, select"),
+      screen.container.querySelectorAll<HTMLElement>(
+        "button, a, input, select",
+      ),
     );
     expect(controls).toHaveLength(4);
 
@@ -180,7 +189,10 @@ describe("Tailkit action sizing system", () => {
       // The declared floor must survive a control whose content is smaller than
       // the target — a `min-height` silently downgraded to `height` keeps the
       // computed value but breaks the box the finger has to hit.
-      expect(control.getBoundingClientRect().height, control.outerHTML).toBeGreaterThanOrEqual(44);
+      expect(
+        control.getBoundingClientRect().height,
+        control.outerHTML,
+      ).toBeGreaterThanOrEqual(44);
     }
   });
 });

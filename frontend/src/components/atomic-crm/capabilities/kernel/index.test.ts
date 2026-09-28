@@ -114,9 +114,7 @@ describe("kernel capability routes", () => {
     // does move it.
     kernelTestState.resetPerformance();
     kernelTestState.releasePerformance();
-    const deferredScreen = await render(
-      createElement(AdminPerformanceRoute),
-    );
+    const deferredScreen = await render(createElement(AdminPerformanceRoute));
     await expect
       .element(deferredScreen.getByRole("heading", { name: "Trang hiệu suất" }))
       .toBeVisible();

@@ -153,9 +153,9 @@ describe("pruneConversationRowViewModelCache", () => {
 
     pruneConversationRowViewModelCache(cache, [kept]);
     expect([...cache.keys()]).toEqual(["conv-2"]);
-    expect(
-      resolveConversationRowViewModel(cache, kept, undefined, {}),
-    ).toBe(keptViewModel);
+    expect(resolveConversationRowViewModel(cache, kept, undefined, {})).toBe(
+      keptViewModel,
+    );
 
     pruneConversationRowViewModelCache(cache, []);
     expect(cache.size).toBe(0);

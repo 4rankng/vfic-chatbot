@@ -357,9 +357,12 @@ export const zaloIntegrationGateway = {
 
   /** Re-probe the stored OA credentials without changing them. */
   checkTingtingOa: async (): Promise<TingtingSettings> =>
-    apiJson<TingtingSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/tingting/oa/check`, {
-      method: "POST",
-    }),
+    apiJson<TingtingSettings>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/tingting/oa/check`,
+      {
+        method: "POST",
+      },
+    ),
 } as const;
 
 export const facebookIntegrationGateway = {
