@@ -128,13 +128,29 @@
   fixed with `resolve.dedupe` plus pre-bundling the React Aria entry points) and
   a gap in the reachability checker, which ignored `export … from` re-exports and
   therefore reported live avatar base-components as dead.
+- Part C3 step 2 continued: the users directory renders the library `Avatar`
+  (initials from the record's name), and the persona editor's Knowledge Base
+  field is the library `ComboBox` (type-ahead over a dynamic list) instead of a
+  Radix select. Four primitives are now live in real routes: `Badge`, `Input`,
+  `Select` and `ComboBox`/`Avatar`.
+- **A real regression the adoption exposed, found and fixed**: React Aria's
+  default `validationBehavior="native"` sets `required` on the input, so the
+  browser blocked the knowledge-base create form's submit before react-admin's
+  validation could run — no submit, no Vietnamese error. Both adopted forms now
+  set `validationBehavior="aria"`, the test pins `aria-required` present /
+  `required` absent, and `frontend/AGENTS.md` records the rule. The original
+  assertion accepted either signal, which is why the suite passed while the app
+  was broken.
 - Remaining work:
-  1. C3 step 2 continued — `base/combobox`, `base/dropdown` and `base/avatar` in
-     real routes. Each adoption needs its own `.uu-scope` wrapper and must not
-     nest React Aria inside a Radix subtree.
-  2. Optional — `base/input`'s siblings and the React Aria select's siblings were
-     pruned; re-install with `npx untitledui add <component> --yes` when a form
-     needs one, then re-run `node scripts/check-generated-reachability.mjs`.
+  1. C3 step 2 is complete for the primitives the app actually needs. The
+     `base/dropdown` (UserActions) and `base/combobox` (ProjectPicker) candidates
+     were assessed and deliberately declined: both surfaces already carry
+     feature-richer equivalents (a full Radix action menu; a server-searched
+     combobox with inline create), so a swap would be lateral and would cost the
+     inline-create flow.
+  2. Optional — `base/input`'s and the select's pruned siblings can be restored
+     with `npx untitledui add <component> --yes`, then re-checked with
+     `node scripts/check-generated-reachability.mjs`.
 - Open issues handed over, with evidence rather than blame:
   1. **Two `EmptyState` implementations remain.** `kit/EmptyState` now serves
      `knowledge-base`, `users`, `automation`, `projects` and `knowledge`;
