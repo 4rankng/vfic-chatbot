@@ -9,9 +9,21 @@ const frontendRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const registry = JSON.parse(
-  fs.readFileSync(path.join(frontendRoot, "registry.json"), "utf8"),
-);
+
+/**
+ * Parse a manifest file, failing loudly. This script is a gate: malformed JSON
+ * must stop it, but the operator needs to know *which* file and why rather than
+ * reading a bare SyntaxError stack from inside JSON.parse.
+ */
+const readJson = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`${file} is not valid JSON: ${error.message}`);
+  }
+};
+
+const registry = readJson(path.join(frontendRoot, "registry.json"));
 const manifestFiles = registry.items.flatMap((item) => item.files ?? []);
 const manifestPaths = new Set(manifestFiles.map(({ path: file }) => file));
 const errors = [];
@@ -105,9 +117,7 @@ const checkDependency = (from, specifier) => {
 const moduleScriptPattern = /\.(?:ts|tsx|js|jsx|mjs)$/;
 const cssImportPattern = /@import\s+(?:url\()?["']([^"']+)["']/g;
 const cssFilePattern = /\.css$/;
-const packageJson = JSON.parse(
-  fs.readFileSync(path.join(frontendRoot, "package.json"), "utf8"),
-);
+const packageJson = readJson(path.join(frontendRoot, "package.json"));
 
 const readModuleSpecifiers = (file, absolute) => {
   const source = ts.createSourceFile(
