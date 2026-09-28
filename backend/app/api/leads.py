@@ -75,6 +75,10 @@ async def list_leads(
     contact_id: uuid.UUID | None = Query(
         None, description="Filter to the lead of one contact (Messenger rows have NULL zalo_id)"
     ),
+    contact_ids: str | None = Query(
+        None,
+        description="Comma-separated list of contact ids (IN filter; the Messenger inbox resolves rows this way)",
+    ),
     q: str | None = Query(
         None, description="Case-insensitive search over name/phone/desired_job/zalo_id"
     ),
@@ -86,6 +90,7 @@ async def list_leads(
     db: AsyncSession = Depends(get_db),
 ) -> LeadListResponse:
     zalo_id_list = [s for s in (zalo_ids.split(",") if zalo_ids else []) if s]
+    contact_id_list = [s for s in (contact_ids.split(",") if contact_ids else []) if s]
     rows, total = await LeadService(db).list(
         viewer=user,
         page=page,
@@ -96,6 +101,7 @@ async def list_leads(
         zalo_id=zalo_id,
         zalo_ids=zalo_id_list or None,
         contact_id=str(contact_id) if contact_id else None,
+        contact_ids=contact_id_list or None,
         q=q,
         sort_by=sort,
         order=order,

@@ -52,6 +52,9 @@ export type Contact = {
 export type Lead = {
   id: number;
   zalo_id: string;
+  // Canonical channel identity. Messenger leads have no zalo_id, so this is the
+  // only key the inbox can match them on.
+  contact_id?: string | null;
   name: string;
   phone: string;
   birth_year?: number | null;

@@ -74,6 +74,7 @@ class LeadService:
         zalo_id: str | None = None,
         zalo_ids: list[str] | None = None,
         contact_id: str | None = None,
+        contact_ids: list[str] | None = None,
         q: str | None = None,
         sort_by: str | None = None,
         order: str | None = "desc",
@@ -89,6 +90,12 @@ class LeadService:
             # Messenger rows are contact-keyed with a NULL zalo_id (migration
             # 0047), so the chat-id filters never match them.
             base = base.where(Lead.contact_id == uuid.UUID(contact_id))
+        if contact_ids:
+            # The batch form of the above: the inbox resolves every row it is
+            # about to render in one request instead of one request per row.
+            base = base.where(
+                Lead.contact_id.in_([uuid.UUID(value) for value in contact_ids])
+            )
         if q:
             pat = f"%{q}%"
             ua = func.extensions.unaccent

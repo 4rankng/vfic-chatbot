@@ -15,6 +15,10 @@ class LeadOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     zalo_id: str | None = None
+    # Canonical channel identity (Alembic 0047). Messenger rows are keyed by
+    # this and carry a NULL zalo_id, so a client that only knows zalo_id cannot
+    # find them — which is what left Messenger inbox rows showing a PSID tail.
+    contact_id: uuid.UUID | None = None
     name: str | None = None
     phone: str | None = None
     birth_year: int | None = None

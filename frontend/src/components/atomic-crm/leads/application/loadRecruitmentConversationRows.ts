@@ -17,6 +17,16 @@ export const mapLeadsByZaloId = (leads: Lead[]) => {
   return leadByZalo;
 };
 
+export const mapLeadsByContactId = (leads: Lead[]) => {
+  const leadByContact = new Map<string, Lead>();
+  for (const lead of leads) {
+    if (lead.contact_id && !leadByContact.has(lead.contact_id)) {
+      leadByContact.set(lead.contact_id, lead);
+    }
+  }
+  return leadByContact;
+};
+
 export const loadRecruitmentConversationRows = async (
   conversations: Conversation[],
   port: LeadDirectoryPort,
@@ -29,19 +39,35 @@ export const loadRecruitmentConversationRows = async (
         .filter((value): value is string => Boolean(value)),
     ),
   );
-  // A Messenger conversation carries no zalo_chat_id and therefore no lead to
-  // batch-fetch, but it still has a channel profile to present. Skip the fetch,
-  // never the presentation — otherwise the row renders nameless and with a
-  // placeholder avatar.
-  const leadByZalo =
-    zaloIds.length === 0
-      ? new Map<string, Lead>()
-      : mapLeadsByZaloId(await port.listByZaloIds(zaloIds, signal));
+  // Messenger rows are contact-keyed (Alembic 0047) and carry a NULL
+  // zalo_chat_id, so a zalo-only lookup could never resolve them: every such
+  // row rendered as "Ứng viên · <PSID tail>" even after the lead had a name,
+  // because the row never received a lead to read the name from.
+  const contactIds = Array.from(
+    new Set(
+      conversations
+        .map((conversation) => conversation.contact_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const [zaloLeads, contactLeads] = await Promise.all([
+    zaloIds.length === 0 ? [] : port.listByZaloIds(zaloIds, signal),
+    contactIds.length === 0 ? [] : port.listByContactIds(contactIds, signal),
+  ]);
+  const leadByZalo = mapLeadsByZaloId(zaloLeads);
+  const leadByContact = mapLeadsByContactId(contactLeads);
   const presentations = new Map<string, RecruitmentConversationRow>();
 
   for (const conversation of conversations) {
-    const chatKey = conversation.zalo_chat_id ?? conversation.id;
-    const lead = leadByZalo.get(chatKey);
+    // contact_id is the canonical key, so it wins when both resolve; zalo_id
+    // stays as the fallback for a lead that predates contact keying.
+    const lead =
+      (conversation.contact_id
+        ? leadByContact.get(conversation.contact_id)
+        : undefined) ??
+      (conversation.zalo_chat_id
+        ? leadByZalo.get(conversation.zalo_chat_id)
+        : undefined);
     presentations.set(conversation.id, {
       lead,
       presentation: buildRecruitmentRowPresentation(conversation, lead),

@@ -10,6 +10,10 @@ export interface LeadDirectoryPort {
     zaloIds: string[],
     signal?: CancellationSignal,
   ): Promise<Lead[]>;
+  listByContactIds(
+    contactIds: string[],
+    signal?: CancellationSignal,
+  ): Promise<Lead[]>;
 }
 
 export interface LeadRealtimePort {
