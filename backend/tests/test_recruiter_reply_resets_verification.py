@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.models.conversation import DeliveryStatus, Message, MessageSender
+from app.models.conversation import ConversationMode, DeliveryStatus, Message, MessageSender
 from app.services.conversation.recruiter_receipts import RecruiterReceiptsMixin
 
 
@@ -36,6 +36,8 @@ async def test_record_recruiter_message_resets_the_attempts() -> None:
     store, reset = _store_patch()
     conv = SimpleNamespace(
         id="11111111-2222-4333-8444-555566667777",
+        mode=ConversationMode.HUMAN,
+        needs_human=True,
         last_outbound_at=None,
         taken_over_at=None,
         version=3,
@@ -56,6 +58,11 @@ async def test_record_recruiter_message_resets_the_attempts() -> None:
         await mixin.record_recruiter_message(conv, recruiter, "đã kiểm tra", result)
 
     reset.assert_awaited_once_with(conv.id)
+    # Operator rule 2026-09-28: the consultant's reply demotes HUMAN to
+    # SEMI_AUTO — the bot resumes after the inactivity window without a
+    # manual release.
+    assert conv.mode == ConversationMode.SEMI_AUTO
+    assert conv.needs_human is False
 
 
 @pytest.mark.asyncio
@@ -64,6 +71,8 @@ async def test_prepare_recruiter_message_resets_the_attempts() -> None:
     store, reset = _store_patch()
     conv = SimpleNamespace(
         id="22222222-3333-4744-8555-666677778888",
+        mode=ConversationMode.HUMAN,
+        needs_human=True,
         taken_over_at=None,
         version=1,
         conversation_seq=1,

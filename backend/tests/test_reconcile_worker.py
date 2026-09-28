@@ -337,7 +337,7 @@ async def test_semi_auto_inactive_human_enqueued(mock_session_cls, mock_enqueue)
     """SEMI_AUTO with old taken_over_at → run_start_guard True → enqueue."""
     mock_redis = _mock_redis()
     conv = _make_conv(mode=ConversationMode.SEMI_AUTO)
-    conv.taken_over_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    conv.taken_over_at = datetime.now(timezone.utc) - timedelta(minutes=40)
 
     mock_db_scan = _mock_db_for_scan([conv])
     mock_db_proc = _mock_db_for_process(conv, _make_worker_msg())

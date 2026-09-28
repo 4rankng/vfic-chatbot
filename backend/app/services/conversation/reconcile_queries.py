@@ -158,7 +158,7 @@ class ReconcileQueriesMixin:
         included, so a crashed worker's lock can be force-broken and the turn
         recovered instead of waiting the full ``bot_lock_ttl``.
 
-        SEMI_AUTO 5-min-inactivity is NOT in SQL — it is re-checked in Python
+        SEMI_AUTO 30-min-inactivity is NOT in SQL — it is re-checked in Python
         inside the tick (depends on ``taken_over_at``/``updated_at``).
         """
         now_minus_grace = now - timedelta(seconds=grace_seconds)

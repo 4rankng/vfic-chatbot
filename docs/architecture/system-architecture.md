@@ -319,7 +319,7 @@ sequenceDiagram
 
     rect rgb(245, 235, 235)
     Note over H,DB: ── mode policy guard layer 1/4 ──
-    H->>H: run_start_guard(conv)<br/>HUMAN / CLOSED → "starved_human_mode"<br/>SEMI_AUTO → wait 5min after human inactive<br/>BOT → allow
+    H->>H: run_start_guard(conv)<br/>HUMAN / CLOSED → "starved_human_mode"<br/>SEMI_AUTO → wait 30min after human inactive<br/>BOT → allow
     end
 
     rect rgb(245, 235, 235)
@@ -473,6 +473,13 @@ proactive follow-up. An unassigned
 thread is read-only in the console until a recruiter clicks **Tiếp quản**.
 Returning it to `BOT` is rejected until it has been claimed; an authorized
 release clears the review flag and restores chatbot processing.
+
+**Consultant reply ⇒ SEMI_AUTO (operator rule 2026-09-28).** A consultant's
+human reply on a `HUMAN` thread demotes it to `SEMI_AUTO` in the same write
+(`recruiter_receipts.record_recruiter_message` / `prepare_recruiter_message`,
+with `needs_human` cleared): the thread stays theirs for 30 minutes after the
+last consultant message (`_SEMI_AUTO_INACTIVITY`), then `run_start_guard`
+admits the bot again on the next inbound — no manual release required.
 
 **Key corrections vs naive "webhook → dedup → normalize → worker → send" sketches**
 

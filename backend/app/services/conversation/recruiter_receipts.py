@@ -21,6 +21,7 @@ from app.conversation_messaging.application.ports import DeliveryResultPort
 from app.conversation_messaging.domain.delivery import receipt_advances
 from app.models.conversation import (
     Conversation,
+    ConversationMode,
     DeliveryStatus,
     Message,
     MessageSender,
@@ -61,6 +62,13 @@ class RecruiterReceiptsMixin:
         if result.ok:
             conv.last_outbound_at = utcnow()
         conv.taken_over_at = utcnow()
+        # Operator rule 2026-09-28: a consultant's reply demotes HUMAN to
+        # SEMI_AUTO — the thread stays theirs for _SEMI_AUTO_INACTIVITY
+        # (30 minutes since this message), then the bot answers new inbound
+        # again without a manual release.
+        if conv.mode == ConversationMode.HUMAN:
+            conv.mode = ConversationMode.SEMI_AUTO
+            conv.needs_human = False
         conv.version += 1
         conv.conversation_seq += 1
         await record_audit(
@@ -112,6 +120,13 @@ class RecruiterReceiptsMixin:
             payload=payload,
         )
         conv.taken_over_at = utcnow()
+        # Operator rule 2026-09-28: a consultant's reply demotes HUMAN to
+        # SEMI_AUTO — the thread stays theirs for _SEMI_AUTO_INACTIVITY
+        # (30 minutes since this message), then the bot answers new inbound
+        # again without a manual release.
+        if conv.mode == ConversationMode.HUMAN:
+            conv.mode = ConversationMode.SEMI_AUTO
+            conv.needs_human = False
         conv.version += 1
         conv.conversation_seq += 1
         await record_audit(

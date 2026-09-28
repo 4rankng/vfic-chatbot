@@ -51,7 +51,10 @@ from app.services.conversation.locking import LockingMixin
 from app.services.conversation.reconcile import ReconcileMixin
 from app.services.conversation.send_claim import SendClaimMixin
 
-_SEMI_AUTO_INACTIVITY = timedelta(minutes=5)
+# SEMI_AUTO: the assigned human owns the thread for this long after their last
+# message (``taken_over_at``/``updated_at``); past it, new inbound is answered
+# by the bot again. Operator requirement 2026-09-28: 30 minutes (was 5).
+_SEMI_AUTO_INACTIVITY = timedelta(minutes=30)
 
 # The human-visible note an escalation leaves in the transcript, next to the
 # handoff reply. Kept as a constant so the deploy smoke gate can assert the
@@ -232,7 +235,7 @@ class BotConversationState(
         """True only when the bot may run.
 
         BOT is always eligible. SEMI_AUTO is eligible after the assigned human has
-        been inactive for five minutes. HUMAN/CLOSED starve the bot.
+        been inactive for thirty minutes. HUMAN/CLOSED starve the bot.
         """
         if conv.mode == ConversationMode.BOT:
             return True
