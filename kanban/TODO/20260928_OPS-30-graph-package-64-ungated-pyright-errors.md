@@ -14,7 +14,7 @@ opened: 2026-09-28
 
 **Severity:** low · **Area:** backend · **Labels:** type-safety, static-analysis, graph, tech-debt
 
-**Trạng thái:** TODO — surfaced 2026-09-28 by a full LSP probe of `backend/app/graph` (49 files, 64 diagnostics, 11 files with errors) during the BOT-01 verification pass.
+**Trạng thái:** TODO — surfaced 2026-09-28 by a full LSP probe of `backend/app/graph` (49 files, 64 diagnostics, 11 files with errors). **Partially cleared 2026-09-28:** `app/core/db.py` lazy-attribute declarations (`a84133ad`), `adapters.py:200/301` persona-provider widenings + narrow `PersonaBodyResolver` param (`86c92e14`), `proactive.py` None-inbound crash (`86c92e14`). Remaining: the `DecisionTraceSummaryCode` literal cluster and the Optional-narrowing clusters in `runner.py`/`lanes.py`/`proactive.py`/`clients.py`/`usage.py`/`tools/*`.
 
 ## Problem
 
