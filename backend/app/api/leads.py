@@ -1,7 +1,7 @@
 """Lead CRM API: list/get/update + assign/stage(+lead_events)/follow-ups/events."""
 
 from __future__ import annotations
-
+import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,6 +72,9 @@ async def list_leads(
     ),
     zalo_id: str | None = None,
     zalo_ids: str | None = Query(None, description="Comma-separated list of zalo ids (IN filter)"),
+    contact_id: uuid.UUID | None = Query(
+        None, description="Filter to the lead of one contact (Messenger rows have NULL zalo_id)"
+    ),
     q: str | None = Query(
         None, description="Case-insensitive search over name/phone/desired_job/zalo_id"
     ),
@@ -92,6 +95,7 @@ async def list_leads(
         exclude_needs_reply=exclude_needs_reply,
         zalo_id=zalo_id,
         zalo_ids=zalo_id_list or None,
+        contact_id=str(contact_id) if contact_id else None,
         q=q,
         sort_by=sort,
         order=order,

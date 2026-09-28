@@ -18,45 +18,48 @@ from app.services.viewer_scope import ViewerIdentity, viewer_lead_filter
 
 _FETCH_SQL = text(
     """
-    SELECT id, zalo_id, name, phone, birth_year, age, living_area, address, gender,
+    SELECT id, zalo_id, contact_id, name, phone, birth_year, age, living_area, address, gender,
            region, desired_job, years_experience, expected_salary, avatar_url,
            lead_score, lead_stage, notes, version
     FROM leads WHERE zalo_id = :zalo_id
     """
 )
 
-_UPSQL = text(
+
+def _merge_assignments(source: str) -> str:
+    """Lead merge expressions shared by both write paths.
+
+    ``source`` qualifies the incoming values: ``EXCLUDED.`` inside an
+    ``ON CONFLICT`` clause, ``:`` (a bind name) inside a plain UPDATE. One
+    template so the INSERT-on-conflict merge and the contact-keyed merge
+    cannot drift.
     """
-    INSERT INTO leads (zalo_id, name, phone, birth_year, age, living_area, address, gender,
-        region, desired_job, years_experience, expected_salary, lead_score,
-        notes, version)
-    VALUES (:zalo_id, :name, :phone, :birth_year, :age, :living_area, :address, :gender,
-        :region, :desired_job, :years_experience, :expected_salary, :lead_score,
-        :notes, 1)
-    ON CONFLICT (zalo_id) DO UPDATE SET
-        name = COALESCE(NULLIF(EXCLUDED.name,''), leads.name),
-        phone = COALESCE(NULLIF(EXCLUDED.phone,''), leads.phone),
-        birth_year = COALESCE(EXCLUDED.birth_year, leads.birth_year),
-        age = COALESCE(EXCLUDED.age, leads.age),
-        living_area = COALESCE(NULLIF(EXCLUDED.living_area,''), leads.living_area),
-        address = COALESCE(NULLIF(EXCLUDED.address,''), leads.address),
-        gender = COALESCE(NULLIF(EXCLUDED.gender,''), leads.gender),
-        region = COALESCE(NULLIF(EXCLUDED.region,''), leads.region),
-        desired_job = COALESCE(NULLIF(EXCLUDED.desired_job,''), leads.desired_job),
-        years_experience = COALESCE(NULLIF(EXCLUDED.years_experience,''), leads.years_experience),
-        expected_salary = COALESCE(NULLIF(EXCLUDED.expected_salary,''), leads.expected_salary),
-        lead_score = COALESCE(EXCLUDED.lead_score, leads.lead_score),
+    return f"""
+        name = COALESCE(NULLIF({source}name,''), leads.name),
+        phone = COALESCE(NULLIF({source}phone,''), leads.phone),
+        birth_year = COALESCE({source}birth_year, leads.birth_year),
+        age = COALESCE({source}age, leads.age),
+        living_area = COALESCE(NULLIF({source}living_area,''), leads.living_area),
+        address = COALESCE(NULLIF({source}address,''), leads.address),
+        gender = COALESCE(NULLIF({source}gender,''), leads.gender),
+        region = COALESCE(NULLIF({source}region,''), leads.region),
+        desired_job = COALESCE(NULLIF({source}desired_job,''), leads.desired_job),
+        years_experience = COALESCE(NULLIF({source}years_experience,''), leads.years_experience),
+        expected_salary = COALESCE(NULLIF({source}expected_salary,''), leads.expected_salary),
+        lead_score = COALESCE(CAST({source}lead_score AS lead_score), leads.lead_score),
         notes = CASE
-            WHEN EXCLUDED.notes IS NULL OR EXCLUDED.notes = '' THEN leads.notes
-            WHEN leads.notes IS NULL OR leads.notes = '' THEN EXCLUDED.notes
+            WHEN CAST({source}notes AS text) IS NULL
+                 OR CAST({source}notes AS text) = '' THEN leads.notes
+            WHEN leads.notes IS NULL OR leads.notes = ''
+                 THEN CAST({source}notes AS text)
             ELSE concat_ws(
-                E'\n',
+                E'\\n',
                 leads.notes,
                 (
-                    SELECT string_agg(incoming.note, E'\n' ORDER BY incoming.line_order)
+                    SELECT string_agg(incoming.note, E'\\n' ORDER BY incoming.line_order)
                     FROM (
                         SELECT btrim(split.line) AS note, split.line_order
-                        FROM regexp_split_to_table(EXCLUDED.notes, chr(10))
+                        FROM regexp_split_to_table(CAST({source}notes AS text), chr(10))
                              WITH ORDINALITY AS split(line, line_order)
                     ) AS incoming
                     WHERE incoming.note <> ''
@@ -72,7 +75,7 @@ _UPSQL = text(
                               )
                           ) = lower(
                               regexp_replace(
-                                  regexp_replace(incoming.note, '[[:space:]]+', ' ', 'g'),
+                                  regexp_replace(btrim(incoming.note), '[[:space:]]+', ' ', 'g'),
                                   '[.!?;:,]+$',
                                   '',
                                   'g'
@@ -84,6 +87,18 @@ _UPSQL = text(
         END,
         version = leads.version + 1,
         updated_at = now()
+    """
+
+
+_UPSQL = text(
+    f"""
+    INSERT INTO leads (zalo_id, name, phone, birth_year, age, living_area, address, gender,
+        region, desired_job, years_experience, expected_salary, lead_score,
+        notes, version)
+    VALUES (:zalo_id, :name, :phone, :birth_year, :age, :living_area, :address, :gender,
+        :region, :desired_job, :years_experience, :expected_salary, :lead_score,
+        :notes, 1)
+    ON CONFLICT (zalo_id) DO UPDATE SET{_merge_assignments("EXCLUDED.")}
     RETURNING id
     """
 )
@@ -94,12 +109,46 @@ _UPSQL = text(
 # NEW-stage rows.
 _BY_CONTACT_SQL = text(
     """
-    SELECT id, zalo_id, name, phone, birth_year, age, living_area, address, gender,
+    SELECT id, zalo_id, contact_id, name, phone, birth_year, age, living_area, address, gender,
            region, desired_job, years_experience, expected_salary, avatar_url,
            lead_score, lead_stage, notes, version
     FROM leads WHERE contact_id = CAST(:contact_id AS uuid)
     ORDER BY updated_at DESC, id DESC
     LIMIT 1
+    """
+)
+
+# Contact-keyed merge: the row is located by contact_id, so its NULL zalo_id
+# is preserved and leads_zalo_id_fkey is never exercised. The latest lead for
+# the contact wins, matching _BY_CONTACT_SQL.
+_UPDATE_BY_CONTACT_SQL = text(
+    f"""
+    WITH target AS (
+        SELECT id FROM leads
+        WHERE contact_id = CAST(:contact_id AS uuid)
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 1
+        FOR UPDATE
+    )
+    UPDATE leads SET{_merge_assignments(":")}
+    WHERE id IN (SELECT id FROM target)
+    RETURNING id
+    """
+)
+
+# Fallback for a contact that has no lead row yet. zalo_id is a literal NULL —
+# that is the point of the contact-keyed write, and it keeps the
+# leads_zalo_id_fkey intact. lead_stage falls through to the column default,
+# exactly as _UPSQL already does.
+_INSERT_BY_CONTACT_SQL = text(
+    """
+    INSERT INTO leads (contact_id, zalo_id, name, phone, birth_year, age, living_area,
+        address, gender, region, desired_job, years_experience, expected_salary,
+        lead_score, notes, version)
+    VALUES (CAST(:contact_id AS uuid), NULL, :name, :phone, :birth_year, :age,
+        :living_area, :address, :gender, :region, :desired_job, :years_experience,
+        :expected_salary, CAST(:lead_score AS lead_score), :notes, 1)
+    RETURNING id
     """
 )
 
@@ -117,6 +166,25 @@ class LeadRepository:
         row = await self.db.execute(_UPSQL, lead)
         await self.db.flush()
         return row.scalar()
+
+    async def upsert_by_contact(self, contact_id: str, lead: dict) -> int | None:
+        """Insert or merge a normalised lead by ``contact_id``; return the lead id.
+
+        Messenger rows are contact-keyed, so the zalo_id-keyed upsert would
+        violate ``leads_zalo_id_fkey``. The advisory lock closes the insert race:
+        two jobs for a contact with no lead yet would otherwise both miss the
+        UPDATE and both insert.
+        """
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:contact_id, 0))"),
+            {"contact_id": str(contact_id)},
+        )
+        params = {**lead, "contact_id": str(contact_id)}
+        lead_id = (await self.db.execute(_UPDATE_BY_CONTACT_SQL, params)).scalar()
+        if lead_id is None:
+            lead_id = (await self.db.execute(_INSERT_BY_CONTACT_SQL, params)).scalar()
+        await self.db.flush()
+        return lead_id
 
     async def by_zalo_id(self, zalo_id: str) -> dict | None:
         """Fetch an existing lead by ``zalo_id``; return all columns as a dict, or None."""

@@ -94,6 +94,8 @@ async def _persist_candidate_async(job: dict) -> None:
                 user_text=job.get("user_text", ""),
                 bot_output=job.get("bot_output", ""),
                 expected_conversation_version=job.get("conversation_version"),
+                contact_id=job.get("contact_id"),
+                conversation_id=job.get("conversation_id"),
             )
     except Exception:
         logger.warning(

@@ -46,6 +46,8 @@ async def run_candidate_persistence(
     user_text: str,
     bot_output: str,
     expected_conversation_version: int | None,
+    contact_id: str | None = None,
+    conversation_id: str | None = None,
 ):
     return await persist_candidate(
         ServiceCandidatePersistenceAdapter(db),
@@ -54,6 +56,8 @@ async def run_candidate_persistence(
             user_text=user_text,
             bot_output=bot_output,
             expected_conversation_version=expected_conversation_version,
+            contact_id=contact_id,
+            conversation_id=conversation_id,
         ),
         embed_batch=embed_batch,
         extractor=extractor,

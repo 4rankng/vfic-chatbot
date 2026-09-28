@@ -627,7 +627,7 @@ class TestCandidateExtractionService:
             existing_notes="Không có trình độ\nCó xe máy",
             oa_profile_display_name=None,
         )
-        upsert.assert_awaited_once_with(db, None)
+        upsert.assert_awaited_once_with(db, None, contact_id=None)
 
     @pytest.mark.asyncio
     async def test_persist_supplies_oa_profile_name_to_llm_judgment(self, monkeypatch):
@@ -652,6 +652,8 @@ class TestCandidateExtractionService:
                     status=ConversationStatus.OPEN,
                     version=1,
                     contact=SimpleNamespace(display_name="Bé Gấu"),
+                    zalo_chat_id="zalo_1",
+                    contact_id="contact-1",
                 )
 
         from app.models.conversation import ConversationMode, ConversationStatus
@@ -705,6 +707,8 @@ class TestCandidateExtractionService:
                     status=ConversationStatus.OPEN,
                     version=1,
                     contact=SimpleNamespace(display_name="Bé Gấu"),
+                    zalo_chat_id="zalo_1",
+                    contact_id="contact-1",
                 )
 
         from app.models.conversation import ConversationMode, ConversationStatus
@@ -789,7 +793,7 @@ class TestCandidateExtractionService:
         assert result.lead_patch is not None
         assert result.lead_patch["name"] is None
         assert result.lead_patch["desired_job"] == "CNC"
-        upsert.assert_awaited_once_with(db, result.lead_patch)
+        upsert.assert_awaited_once_with(db, result.lead_patch, contact_id=None)
 
     @pytest.mark.asyncio
     async def test_oa_profile_context_cannot_turn_question_into_canonical_name(
@@ -823,6 +827,8 @@ class TestCandidateExtractionService:
                         "mode": ConversationMode.BOT,
                         "status": ConversationStatus.OPEN,
                         "version": 3,
+                        "zalo_chat_id": "oa:user-1",
+                        "contact_id": "contact-1",
                         "contact": type(
                             "_Contact",
                             (),
@@ -858,7 +864,7 @@ class TestCandidateExtractionService:
 
         assert result.lead_patch is not None
         assert result.lead_patch["name"] is None
-        upsert.assert_awaited_once_with(db, result.lead_patch)
+        upsert.assert_awaited_once_with(db, result.lead_patch, contact_id=None)
 
     @pytest.mark.asyncio
     async def test_explicit_name_correction_replaces_confirmed_name(self, monkeypatch):
@@ -914,7 +920,7 @@ class TestCandidateExtractionService:
         assert result.lead_patch is not None
         assert result.lead_patch["name"] == "Nguyễn Văn Hưng"
         assert result.lead_patch["desired_job"] == "CNC"
-        upsert.assert_awaited_once_with(db, result.lead_patch)
+        upsert.assert_awaited_once_with(db, result.lead_patch, contact_id=None)
 
     @pytest.mark.asyncio
     async def test_persist_skips_llm_when_conversation_is_already_human(self, monkeypatch):
@@ -1018,6 +1024,8 @@ class TestCandidateExtractionService:
             mode="BOT",
             status="OPEN",
             version=1,
+            zalo_chat_id="zalo_1",
+            contact_id="contact-1",
         )
         escalate = AsyncMock(return_value=True)
 
@@ -1100,6 +1108,8 @@ class TestCandidateExtractionService:
             mode="BOT",
             status="OPEN",
             version=1,
+            zalo_chat_id="zalo_1",
+            contact_id="contact-1",
         )
         escalate = AsyncMock(return_value=True)
 
@@ -1375,3 +1385,131 @@ class TestLeadCollectionQuestion:
         lead = {"name": "Dũng", "phone": "0987", "desired_job": "kho"}
         q = self._ask(lead=lead, current_user_text="tôi ở Hải Phòng", recent_messages=[])
         assert "tỉnh" not in q.lower() and "thành" not in q.lower()
+
+
+# ---------------------------------------------------------------------------
+# Messenger turns are contact-keyed (Alembic 0047): the conversation carries no
+# zalo_chat_id, so the lead must be written and read by contact_id. Keying it
+# on the PSID is what raised leads_zalo_id_fkey and lost every Messenger lead.
+# ---------------------------------------------------------------------------
+class TestContactKeyedPersist:
+    @staticmethod
+    def _conversation(**overrides):
+        from app.models.conversation import ConversationMode, ConversationStatus
+
+        fields = {
+            "mode": ConversationMode.BOT,
+            "status": ConversationStatus.OPEN,
+            "version": 3,
+            "zalo_chat_id": None,
+            "contact_id": "contact-1",
+        }
+        return SimpleNamespace(**{**fields, **overrides})
+
+    @pytest.mark.asyncio
+    async def test_messenger_turn_writes_the_lead_by_contact(self, monkeypatch):
+        db = AsyncMock()
+        db.get.return_value = self._conversation()
+        lookups: list[str] = []
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_contact_id(self, contact_id: str):
+                lookups.append(f"contact:{contact_id}")
+                return {"notes": "ở Nam Am, Vĩnh Bảo"}
+
+            async def by_zalo_id(self, _chat_id: str):
+                lookups.append("zalo")
+                return None
+
+        patch_obj = CandidateExtraction(lead_patch={"phone": "0566866899"}, memory_facts=[])
+        upsert = AsyncMock(return_value=None)
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository", FakeLeadRepository
+        )
+        monkeypatch.setattr(CandidateExtractionService, "extract", AsyncMock(return_value=patch_obj))
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+
+        await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            AsyncMock(),
+            "28225543490450146",
+            "số điện thoại của tôi là 0566866899",
+            "Cảm ơn bạn",
+            contact_id="contact-1",
+            conversation_id="c71b264b-82be-4111-9b84-cf2b84dd395e",
+        )
+
+        assert lookups == ["contact:contact-1"]
+        upsert.assert_awaited_once_with(db, patch_obj.lead_patch, contact_id="contact-1")
+
+    @pytest.mark.asyncio
+    async def test_zalo_turn_with_a_contact_keeps_the_zalo_keyed_write(self, monkeypatch):
+        db = AsyncMock()
+        db.get.return_value = self._conversation(zalo_chat_id="oa:user-1", contact=None)
+        lookups: list[str] = []
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_contact_id(self, _contact_id: str):
+                lookups.append("contact")
+                return None
+
+            async def by_zalo_id(self, chat_id: str):
+                lookups.append(f"zalo:{chat_id}")
+                return {"notes": None}
+
+        patch_obj = CandidateExtraction(lead_patch={"phone": "0357210887"}, memory_facts=[])
+        upsert = AsyncMock(return_value=None)
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository", FakeLeadRepository
+        )
+        monkeypatch.setattr(CandidateExtractionService, "extract", AsyncMock(return_value=patch_obj))
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+
+        await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            AsyncMock(),
+            "oa:user-1",
+            "số điện thoại của tôi là 0357210887",
+            "Cảm ơn bạn",
+            contact_id="contact-1",
+            conversation_id="3f6b1c22-0f1a-4f1b-9a2f-0a1b2c3d4e5f",
+        )
+
+        assert lookups == ["zalo:oa:user-1"]
+        upsert.assert_awaited_once_with(db, patch_obj.lead_patch, contact_id=None)
+
+    @pytest.mark.asyncio
+    async def test_messenger_turn_respects_the_closed_conversation_guard(self, monkeypatch):
+        """A Messenger conversation is now resolvable, so the guard can fire."""
+        from app.models.conversation import ConversationStatus
+
+        db = AsyncMock()
+        db.get.return_value = self._conversation(status=ConversationStatus.CLOSED)
+        extractor = AsyncMock()
+        lead_repository = MagicMock()
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository", lead_repository
+        )
+
+        result = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            extractor,
+            "28225543490450146",
+            "số điện thoại của tôi là 0566866899",
+            "Phản hồi cũ",
+            contact_id="contact-1",
+            conversation_id="c71b264b-82be-4111-9b84-cf2b84dd395e",
+        )
+
+        assert result == CandidateExtraction(lead_patch=None, memory_facts=[])
+        extractor.assert_not_awaited()
+        lead_repository.assert_not_called()

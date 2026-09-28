@@ -161,17 +161,22 @@ async def test_adapter_writes_nothing_without_a_resolved_lead(adapter):
     assert _FakeLeadRepository.calls == []
 
 
-# --- profile-name capture: blank-only, zalo-keyed rows only -------------------
+# --- profile-name capture: blank-only, written through the row's own key ------
 
 
 class _FakeNameLeadRepository:
-    """Stands in for LeadRepository during profile-name persistence tests."""
+    """Stands in for LeadRepository during profile-name persistence tests.
+
+    ``writes`` records which key each upsert went through, so a test can assert
+    that a contact-keyed lead is never addressed by the chat id.
+    """
 
     instances: list = []
     results: list = []
 
     def __init__(self, _db) -> None:
         self.upserts: list[dict] = []
+        self.writes: list[str] = []
         _FakeNameLeadRepository.instances.append(self)
 
     async def by_zalo_id(self, _chat_id):
@@ -182,6 +187,12 @@ class _FakeNameLeadRepository:
 
     async def upsert(self, lead: dict):
         self.upserts.append(lead)
+        self.writes.append(f"zalo:{lead.get('zalo_id')}")
+        return _FakeNameLeadRepository.results.pop(0)
+
+    async def upsert_by_contact(self, contact_id, lead: dict):
+        self.upserts.append(lead)
+        self.writes.append(f"contact:{contact_id}")
         return _FakeNameLeadRepository.results.pop(0)
 
 
@@ -219,12 +230,34 @@ async def test_record_profile_name_persists_blank_zalo_keyed_lead(name_db):
 
 
 @pytest.mark.asyncio
-async def test_record_profile_name_refuses_contact_keyed_lead(name_db):
-    """A Messenger lead (NULL zalo_id) must never be upserted by a chat id."""
+async def test_record_profile_name_merges_contact_keyed_lead_by_contact(name_db):
+    """A Messenger lead (NULL zalo_id) is written by contact, never by chat id.
+
+    The page-scoped PSID is a provider recipient, not a
+    ``conversations.zalo_chat_id``, so offering it to ``leads.zalo_id`` violates
+    ``leads_zalo_id_fkey`` and rolls the whole write back.
+    """
     from app.recruitment.infrastructure.service_adapters import ServiceLeadGenderAdapter
 
     adapter = ServiceLeadGenderAdapter(name_db)
-    lead = {"id": 7, "zalo_id": None, "name": ""}
+    lead = {"id": 7, "zalo_id": None, "contact_id": "contact-1", "name": ""}
+
+    assert await adapter.record_profile_name(
+        "28225543490450146", "Duc Huy Nguyen", lead=lead
+    ) is True
+    repo = _FakeNameLeadRepository.instances[0]
+    assert repo.writes == ["contact:contact-1"]
+    assert repo.upserts[0]["name"] == "Duc Huy Nguyen"
+    name_db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_record_profile_name_refuses_unaddressable_lead_row(name_db):
+    """A lead row carrying neither key cannot be written at all."""
+    from app.recruitment.infrastructure.service_adapters import ServiceLeadGenderAdapter
+
+    adapter = ServiceLeadGenderAdapter(name_db)
+    lead = {"id": 7, "zalo_id": None, "contact_id": None, "name": ""}
 
     assert await adapter.record_profile_name("z1", "Duc Huy Nguyen", lead=lead) is False
     assert _FakeNameLeadRepository.instances == []

@@ -92,7 +92,11 @@ class _FakeConv:
         version: int = 1,
         zalo_channel: str = "bot",
         channel_identity=None,
-        contact_id=None) -> None:
+        contact_id=None,
+        id=None) -> None:
+        # The persist job carries the conversation's primary key: the Messenger
+        # lead write is contact-keyed, so the job cannot be resolved by chat id.
+        self.id = id if id is not None else uuid.uuid4()
         self.zalo_chat_id = zalo_chat_id
         self.zalo_channel = zalo_channel
         self.channel_identity = channel_identity
@@ -803,6 +807,8 @@ async def test_clean_reply_owned_is_sent_and_persisted(monkeypatch):
             "user_text": "tôi muốn tìm việc lái xe",
             "bot_output": "Chào bạn!",
             "conversation_version": 1,
+            "contact_id": None,
+            "conversation_id": str(conv.id),
         }
     ]
 

@@ -12,6 +12,8 @@ class PersistCandidateCommand:
     user_text: str
     bot_output: str
     expected_conversation_version: int | None = None
+    contact_id: str | None = None
+    conversation_id: str | None = None
 
 
 class CandidatePersistencePort(Protocol):

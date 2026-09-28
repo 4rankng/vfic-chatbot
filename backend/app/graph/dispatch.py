@@ -355,6 +355,8 @@ async def _record_dispatched_outcome(
             "user_text": state.user_text,
             "bot_output": candidate,
             "conversation_version": state.version_at_start,
+            "contact_id": str(conv.contact_id) if conv.contact_id else None,
+            "conversation_id": str(conv.id),
         }
         if manifest_policy is not None:
             persist_job.update(

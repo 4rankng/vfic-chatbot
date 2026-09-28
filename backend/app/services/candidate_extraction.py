@@ -7,12 +7,13 @@ remains the canonical UI/profile store; `memories` remains recall context.
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.domain.text import normalize_vietnamese_text
-from app.models.conversation import ConversationMode, ConversationStatus
+from app.models.conversation import Conversation, ConversationMode, ConversationStatus
 from app.models.lead import Lead
 from app.prompts.candidate_extraction import CANDIDATE_EXTRACT_SYSTEM_PROMPT
 from app.recruitment.application.candidate_extraction import (
@@ -20,6 +21,7 @@ from app.recruitment.application.candidate_extraction import (
     candidate_turn as _candidate_turn,
 )
 from app.recruitment.domain.candidate_extraction import CandidateExtraction, ContactIntent
+from app.recruitment.domain.provider import lead_key_for_chat, lead_key_for_conversation
 from app.services.lead.events import LeadEventBus
 from app.services.lead.normalizers import extract_self_reported_name, normalize_lead
 from app.services.lead.repository import LeadRepository
@@ -138,10 +140,20 @@ class CandidateExtractionService:
         return result
 
     @staticmethod
-    async def upsert_lead(db: AsyncSession, lead_patch: dict | None) -> int | None:
+    async def upsert_lead(
+        db: AsyncSession,
+        lead_patch: dict | None,
+        *,
+        contact_id: str | None = None,
+    ) -> int | None:
         if not lead_patch:
             return None
-        lead_id = await LeadRepository(db).upsert(lead_patch)
+        repo = LeadRepository(db)
+        lead_id = (
+            await repo.upsert_by_contact(contact_id, lead_patch)
+            if contact_id
+            else await repo.upsert(lead_patch)
+        )
         if lead_id is None:
             return None
         await db.commit()
@@ -160,6 +172,8 @@ class CandidateExtractionService:
         bot_output: str,
         *,
         expected_conversation_version: int | None = None,
+        contact_id: str | None = None,
+        conversation_id: str | None = None,
     ) -> CandidateExtraction:
         if not greeting_gate(user_text):
             logger.debug("candidate extraction skipped by greeting_gate")
@@ -168,7 +182,13 @@ class CandidateExtractionService:
         from app.services.conversation import ConversationService
 
         conversation_service = ConversationService(db)
-        conversation = await conversation_service.get_by_zalo(chat_id)
+        if conversation_id:
+            # A Messenger row has zalo_chat_id IS NULL, so get_by_zalo never
+            # finds it. Loading by primary key is authoritative and lets the
+            # HUMAN/CLOSED/version guard below actually run for those turns.
+            conversation = await db.get(Conversation, uuid.UUID(str(conversation_id)))
+        else:
+            conversation = await conversation_service.get_by_zalo(chat_id)
         if conversation is not None and (
             conversation.mode == ConversationMode.HUMAN
             or conversation.status == ConversationStatus.CLOSED
@@ -180,7 +200,27 @@ class CandidateExtractionService:
             logger.debug("candidate extraction skipped because source turn is no longer current")
             return CandidateExtraction(lead_patch=None, memory_facts=[])
 
-        existing_lead = await LeadRepository(db).by_zalo_id(chat_id)
+        lead_key = (
+            lead_key_for_conversation(conversation)
+            if conversation is not None
+            else lead_key_for_chat(chat_id, contact_id=contact_id)
+        )
+
+        # One key decides both the read and the write, so a turn can never read
+        # one lead and write another. The zalo branch keeps the Zalo/OA rows
+        # (and the leads_zalo_id_fkey they satisfy) exactly as they were; every
+        # other provider is contact-keyed, with no per-provider branch.
+        lead_repo = LeadRepository(db)
+        if lead_key.zalo_id:
+            existing_lead = await lead_repo.by_zalo_id(lead_key.zalo_id)
+        elif lead_key.contact_id:
+            existing_lead = await lead_repo.by_contact_id(lead_key.contact_id)
+        else:
+            logger.warning(
+                "candidate extraction has no lead key for chat %s; skipping lead write",
+                chat_id,
+            )
+            existing_lead = None
         existing_notes = existing_lead.get("notes") if existing_lead else None
         existing_name = str((existing_lead or {}).get("name") or "").strip()
         oa_profile_display_name = None
@@ -226,7 +266,12 @@ class CandidateExtractionService:
                 )
             return result
 
-        await CandidateExtractionService.upsert_lead(db, result.lead_patch)
+        if lead_key.is_writable:
+            await CandidateExtractionService.upsert_lead(
+                db,
+                result.lead_patch,
+                contact_id=None if lead_key.is_zalo_keyed else lead_key.contact_id,
+            )
 
         if result.memory_facts:
             try:

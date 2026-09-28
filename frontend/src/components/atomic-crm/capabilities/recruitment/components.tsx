@@ -46,14 +46,23 @@ export const RecruitmentConversationContext = ({
 }: ConversationContextAdapterProps) => {
   const params = useMemo(
     () => ({
-      filter: { zalo_id: conversation?.zalo_chat_id },
+      // zalo_id first: every Zalo/OA conversation keeps its exact current
+      // request. Messenger rows have no zalo_chat_id, so the contact filter is
+      // the only way to reach their lead.
+      filter: conversation?.zalo_chat_id
+        ? { zalo_id: conversation.zalo_chat_id }
+        : conversation?.contact_id
+          ? { contact_id: conversation.contact_id }
+          : {},
       pagination: { page: 1, perPage: 1 },
     }),
-    [conversation?.zalo_chat_id],
+    [conversation?.zalo_chat_id, conversation?.contact_id],
   );
   const options = useMemo(
-    () => ({ enabled: Boolean(conversation?.zalo_chat_id) }),
-    [conversation?.zalo_chat_id],
+    () => ({
+      enabled: Boolean(conversation?.zalo_chat_id || conversation?.contact_id),
+    }),
+    [conversation?.zalo_chat_id, conversation?.contact_id],
   );
   const { data, refetch } = useGetList("leads", params, options);
   const lead = data?.[0] as Lead | undefined;
