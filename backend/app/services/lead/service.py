@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.conversation import Conversation, ConversationMode, Message, MessageSender
 from app.models.lead import FollowUpTask, FollowupStatus, Lead, LeadEvent, LeadStage
 from app.models.user import User
-from app.services.viewer_scope import viewer_lead_filter, viewer_scope_condition
+from app.services.viewer_scope import (
+    Viewer,
+    ViewerActor,
+    viewer_lead_filter,
+    viewer_scope_condition,
+)
 from app.services.audit_service import record_audit
 from app.shared.domain.errors import BadRequestError, ConflictError
 from app.services.lead import tags as _tag_lib
@@ -49,7 +54,7 @@ class LeadService:
         self.events = LeadEventBus()
         self.chatops = ChatopsService(self)
 
-    async def get_visible(self, lead_id: int, *, viewer: User) -> Lead | None:
+    async def get_visible(self, lead_id: int, *, viewer: Viewer) -> Lead | None:
         """Fetch one lead through the viewer-scope invariant; None when out of scope.
 
         The by-id routes use this instead of an unscoped primary-key read: a
@@ -60,7 +65,7 @@ class LeadService:
     async def list(
         self,
         *,
-        viewer: User,
+        viewer: Viewer,
         page: int = 1,
         per_page: int = 25,
         stage: LeadStage | None = None,
@@ -125,12 +130,12 @@ class LeadService:
                 base.order_by(*order_by).offset((page - 1) * per_page).limit(per_page)
             )
         ).all()
-        return list(rows), int(total or 0)
+        return list(rows), (total or 0)
 
     async def board(
         self,
         *,
-        viewer: User,
+        viewer: Viewer,
         section_pages: dict[str, int],
         per_page: int = 25,
         q: str | None = None,
@@ -160,7 +165,7 @@ class LeadService:
         ]
         total = 0
         for config in configs:
-            page = max(1, int(section_pages.get(config["key"], 1) or 1))
+            page = max(1, section_pages.get(config["key"], 1) or 1)
             rows, section_total = await self.list(
                 viewer=viewer,
                 page=page,
@@ -211,7 +216,7 @@ class LeadService:
         await self.events.lead_updated(lead)
         return lead
 
-    async def assign(self, lead: Lead, recruiter_id: uuid.UUID, *, actor: User) -> Lead:
+    async def assign(self, lead: Lead, recruiter_id: uuid.UUID, *, actor: ViewerActor) -> Lead:
         if not await self._is_assignable_recruiter(recruiter_id):
             raise BadRequestError("Người phụ trách không tồn tại hoặc đã bị vô hiệu hoá")
         if not await self.repo.optimistic_apply(
@@ -242,7 +247,7 @@ class LeadService:
         await self.events.lead_updated(lead, actor_name=actor.full_name)
         return lead
 
-    async def set_stage(self, lead: Lead, stage: LeadStage, *, actor: User) -> Lead:
+    async def set_stage(self, lead: Lead, stage: LeadStage, *, actor: ViewerActor) -> Lead:
         prev = lead.lead_stage
         if not await self.repo.optimistic_apply(
             lead.id, lead.version, lead_stage=stage, version=lead.version + 1
@@ -273,7 +278,7 @@ class LeadService:
         return lead
 
     async def create_followup(
-        self, lead: Lead, due_at: datetime, note: str | None, *, actor: User
+        self, lead: Lead, due_at: datetime, note: str | None, *, actor: ViewerActor
     ) -> FollowUpTask:
         followup = await self.repo.create_followup(lead.id, due_at, note, created_by=actor.id)
         await self.db.commit()
@@ -306,7 +311,7 @@ class LeadService:
         lead: Lead,
         keys: list[str],
         *,
-        actor: User,
+        actor: ViewerActor,
         tags: list[dict] | None = None,
     ) -> list[dict]:
         payloads = self._normalize_manual_tag_payloads(keys, tags or [])
@@ -335,7 +340,7 @@ class LeadService:
     async def build_chatops_assist(self, lead: Lead) -> dict:
         return await self.chatops.build_assist(lead)
 
-    async def apply_chatops_action(self, lead: Lead, action: str, *, actor: User) -> Lead:
+    async def apply_chatops_action(self, lead: Lead, action: str, *, actor: ViewerActor) -> Lead:
         return await self.chatops.apply_action(lead, action, actor=actor)
 
     async def list_events(self, lead_id: int) -> list[LeadEvent]:
@@ -435,7 +440,7 @@ class LeadService:
     def _signals(self, lead: Lead, conversation: Conversation | None) -> list[dict]:
         return _vm_lib.signals(lead, conversation)
 
-    def _unanswered_conversation_exists(self, viewer: User):
+    def _unanswered_conversation_exists(self, viewer: Viewer):
         conditions = [
             # Canonical link via contact_id (Alembic 0047). Both columns are
             # NOT NULL on conversations and populated on backfilled leads, so
@@ -466,7 +471,7 @@ class LeadService:
             .exists()
         )
 
-    def _needs_reply_condition(self, viewer: User):
+    def _needs_reply_condition(self, viewer: Viewer):
         not_skipped = Lead.lead_stage != LeadStage.SKIPPED
         return or_(
             and_(not_skipped, self._unanswered_conversation_exists(viewer)),

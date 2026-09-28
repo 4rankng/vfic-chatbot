@@ -58,48 +58,56 @@ class CatalogRepository:
     async def list_active_projects(self) -> list:
         """name/slug/summary of active projects (catalog tool)."""
         if self.page_project_ids is not None:
-            return (
+            return list(
+                (
+                    await self.db.execute(
+                        text(
+                            "SELECT p.name, p.slug, p.summary FROM projects p "
+                            "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
+                            "AND p.id = ANY(CAST(:pids AS uuid[])) ORDER BY p.name"
+                        ),
+                        {"pids": list(self.page_project_ids)},
+                    )
+                ).all()
+            )
+        return list(
+            (
                 await self.db.execute(
                     text(
                         "SELECT p.name, p.slug, p.summary FROM projects p "
-                        "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
-                        "AND p.id = ANY(CAST(:pids AS uuid[])) ORDER BY p.name"
-                    ),
-                    {"pids": list(self.page_project_ids)},
+                        "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL ORDER BY p.name"
+                    )
                 )
             ).all()
-        return (
-            await self.db.execute(
-                text(
-                    "SELECT p.name, p.slug, p.summary FROM projects p "
-                    "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL ORDER BY p.name"
-                )
-            )
-        ).all()
+        )
 
     async def active_projects_with_card(self) -> list:
         """Active projects for the master-index prompt."""
         if self.page_project_ids is not None:
-            return (
+            return list(
+                (
+                    await self.db.execute(
+                        text(
+                            "SELECT p.name, p.slug, p.summary, p.index_card, p.aliases "
+                            "FROM projects p "
+                            "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
+                            "AND p.id = ANY(CAST(:pids AS uuid[])) ORDER BY p.name"
+                        ),
+                        {"pids": list(self.page_project_ids)},
+                    )
+                ).all()
+            )
+        return list(
+            (
                 await self.db.execute(
                     text(
                         "SELECT p.name, p.slug, p.summary, p.index_card, p.aliases "
                         "FROM projects p "
-                        "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
-                        "AND p.id = ANY(CAST(:pids AS uuid[])) ORDER BY p.name"
-                    ),
-                    {"pids": list(self.page_project_ids)},
+                        "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL ORDER BY p.name"
+                    )
                 )
             ).all()
-        return (
-            await self.db.execute(
-                text(
-                    "SELECT p.name, p.slug, p.summary, p.index_card, p.aliases "
-                    "FROM projects p "
-                    "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL ORDER BY p.name"
-                )
-            )
-        ).all()
+        )
 
     async def active_persona_body(self, provider: str | None = None) -> str | None:
         """Return the effective persona body for ``provider``, or None."""
@@ -181,20 +189,22 @@ class CatalogRepository:
         Filtered to ``is_active`` catalog rows so disabled criteria (migration 0009) are
         hidden from the agent tool and readiness gauge without re-extraction.
         """
-        return (
-            await self.db.execute(
-                text(
-                    "SELECT jfv.value_text, jfv.value_json, jfv.is_highlight, jfv.is_missing, "
-                    "       jfv.needs_clarification, jfv.evidence_text, "
-                    "       wfc.name_vi, wfc.feature_key "
-                    "FROM job_feature_values jfv "
-                    "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
-                    "WHERE jfv.project_id = :pid AND wfc.is_active = true "
-                    "ORDER BY jfv.display_priority ASC, wfc.default_importance_score DESC"
-                ),
-                {"pid": str(project_id)},
-            )
-        ).all()
+        return list(
+            (
+                await self.db.execute(
+                    text(
+                        "SELECT jfv.value_text, jfv.value_json, jfv.is_highlight, jfv.is_missing, "
+                        "       jfv.needs_clarification, jfv.evidence_text, "
+                        "       wfc.name_vi, wfc.feature_key "
+                        "FROM job_feature_values jfv "
+                        "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
+                        "WHERE jfv.project_id = :pid AND wfc.is_active = true "
+                        "ORDER BY jfv.display_priority ASC, wfc.default_importance_score DESC"
+                    ),
+                    {"pid": str(project_id)},
+                )
+            ).all()
+        )
 
     async def income_summary_for_active_projects(self):
         """Verbatim income evidence for active projects (Page-scoped when bound)."""

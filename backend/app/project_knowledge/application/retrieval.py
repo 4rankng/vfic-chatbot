@@ -12,13 +12,13 @@ class ProjectKnowledgeQueryPort(Protocol):
     async def active_projects_with_card(self) -> list[Any]: ...
     async def project_id_by_slug(self, slug: str, *, active_only: bool = False) -> Any: ...
     async def match_faq(
-        self, embedding: str, *, top_k: int = 3, project_ids: list[str] | None = None
+        self, emb: str, *, top_k: int = 3, project_ids: list[str] | None = None
     ) -> list[Any]: ...
     async def match_documents(
         self,
-        embedding: str,
+        emb: str,
         top_k: int,
-        filters_json: str,
+        filter_json: str,
         *,
         project_ids: list[str] | None = None,
         query_text: str = "",

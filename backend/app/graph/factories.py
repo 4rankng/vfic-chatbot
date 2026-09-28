@@ -43,6 +43,21 @@ from app.graph.types import GraphDeps
 logger = logging.getLogger(__name__)
 
 
+def _message_text(content) -> str:
+    """Flatten a LangChain message body to text.
+
+    ``BaseMessage.content`` is ``str | list[str | dict]``: multimodal providers
+    return content blocks. Every client built here is text-only, so a block list
+    is joined into the one string the callers (candidate extraction, the digest
+    pipeline) actually consume.
+    """
+    if isinstance(content, str):
+        return content
+    return "".join(
+        block if isinstance(block, str) else str(block.get("text", "")) for block in content
+    )
+
+
 def build_minimax_extractor():
     """MiniMax extractor client (temp 0) for candidate extraction."""
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -50,9 +65,10 @@ def build_minimax_extractor():
     llm = _chat_for_role("extractor", temperature=0.0)
 
     async def extractor(system: str, user: str) -> str:
-        return (
-            await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])
-        ).content
+        response = await llm.ainvoke(
+            [SystemMessage(content=system), HumanMessage(content=user)]
+        )
+        return _message_text(response.content)
 
     return extractor
 
@@ -79,9 +95,10 @@ def make_minimax_llm_json(
     )
 
     async def _call(system: str, user: str) -> str:
-        return (
-            await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])
-        ).content
+        response = await llm.ainvoke(
+            [SystemMessage(content=system), HumanMessage(content=user)]
+        )
+        return _message_text(response.content)
 
     return _call
 

@@ -13,7 +13,7 @@ async def enqueue_latest_unanswered_worker_message(
     svc,
     conv,
     *,
-    enqueue: Callable[[dict], bool],
+    enqueue: Callable[[dict], bool | None],
     execution_source: str = "queued",
 ) -> bool:
     """Enqueue a bot turn for the latest unanswered worker message, if any."""

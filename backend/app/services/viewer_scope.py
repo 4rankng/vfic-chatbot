@@ -17,14 +17,21 @@ predicates.
 from __future__ import annotations
 
 import uuid
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import ColumnElement, Select, and_, exists, or_, select
+from sqlalchemy.orm import InstrumentedAttribute
 
 from app.models.conversation import Conversation
 from app.models.contact import ContactChannelIdentity
 from app.models.lead import Lead
 from app.models.user import Role, User
+
+#: A column or mapped attribute a scope predicate can be built against. An
+#: ``InstrumentedAttribute`` is not a ``ColumnElement`` to the type checker even
+#: though every ``==`` / ``.is_()`` / ``.where()`` use here accepts both, so the
+#: predicate builders take the union rather than forcing a cast at each call.
+ColumnLike = ColumnElement[Any] | InstrumentedAttribute[Any]
 
 
 class ViewerIdentity(Protocol):
@@ -34,8 +41,24 @@ class ViewerIdentity(Protocol):
     role: Role
 
 
+class ViewerProfile(ViewerIdentity, Protocol):
+    """A viewer whose display name is available for audit/event attribution."""
+
+    full_name: str | None
+
+
+#: What every viewer-scoped read accepts. ``User`` is the ORM row; the protocol
+#: arm lets a transport principal be handed straight to a service with no
+#: conversion. The union is required, not decorative: at class level an ORM
+#: column resolves to ``Mapped[...]``, which is not assignable to the protocol's
+#: plain ``uuid.UUID`` / ``Role``, so ``User`` alone can never satisfy it.
+Viewer = User | ViewerIdentity
+#: What the mutating, audited paths accept: they also attribute the actor's name.
+ViewerActor = User | ViewerProfile
+
+
 def viewer_scope_condition(
-    column: ColumnElement, viewer: User | ViewerIdentity
+    column: ColumnLike, viewer: Viewer
 ) -> ColumnElement[bool] | None:
     """Return the ORM viewer-scope predicate, or ``None`` for admins.
 
@@ -49,7 +72,7 @@ def viewer_scope_condition(
 
 
 def viewer_scope_filter(
-    stmt: Select, column: ColumnElement, viewer: User | ViewerIdentity
+    stmt: Select, column: ColumnLike, viewer: Viewer
 ) -> Select:
     """Apply :func:`viewer_scope_condition` to a ``Select`` statement."""
     condition = viewer_scope_condition(column, viewer)
@@ -131,7 +154,7 @@ def support_leads_sql(alias: str = "") -> str:
     )
 
 
-def viewer_lead_filter(stmt: Select, viewer: User | ViewerIdentity) -> Select:
+def viewer_lead_filter(stmt: Select, viewer: Viewer) -> Select:
     """Viewer scope for a lead read, plus the admin-only support contacts."""
     scoped = viewer_scope_filter(stmt, Lead.assigned_recruiter_id, viewer)
     if viewer.role == Role.admin:
@@ -139,7 +162,7 @@ def viewer_lead_filter(stmt: Select, viewer: User | ViewerIdentity) -> Select:
     return scoped.where(support_leads_condition())
 
 
-def viewer_conversation_filter(stmt: Select, viewer: User | ViewerIdentity) -> Select:
+def viewer_conversation_filter(stmt: Select, viewer: Viewer) -> Select:
     """Viewer scope for a conversation read, plus the admin-only support OA.
 
     Every conversation read goes through this: the assigned-recruiter invariant
@@ -154,7 +177,7 @@ def viewer_conversation_filter(stmt: Select, viewer: User | ViewerIdentity) -> S
 
 
 async def viewer_can_access_conversation(
-    db, conversation_id: uuid.UUID, viewer: User | ViewerIdentity
+    db, conversation_id: uuid.UUID, viewer: Viewer
 ) -> bool:
     """Return whether ``viewer`` may subscribe to one conversation."""
     stmt = viewer_conversation_filter(
@@ -164,7 +187,7 @@ async def viewer_can_access_conversation(
     return (await db.scalar(stmt)) is not None
 
 
-async def viewer_can_access_lead(db, lead_id: int, viewer: User | ViewerIdentity) -> bool:
+async def viewer_can_access_lead(db, lead_id: int, viewer: Viewer) -> bool:
     """Return whether ``viewer`` may subscribe to one lead."""
     stmt = viewer_lead_filter(select(Lead.id).where(Lead.id == lead_id), viewer)
     return (await db.scalar(stmt)) is not None
@@ -182,7 +205,11 @@ def viewer_scope_sql(alias: str = "") -> str:
 
 
 __all__ = [
+    "ColumnLike",
+    "Viewer",
+    "ViewerActor",
     "ViewerIdentity",
+    "ViewerProfile",
     "support_account_condition",
     "support_account_sql",
     "support_leads_condition",

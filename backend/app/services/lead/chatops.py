@@ -17,9 +17,9 @@ from zoneinfo import ZoneInfo
 
 from app.models.conversation import MessageSender
 from app.models.lead import Lead, LeadEvent, LeadScore, LeadStage
-from app.models.user import User
 from app.services.audit_service import record_audit
 from app.services.lead import viewmodels as _vm_lib
+from app.services.viewer_scope import ViewerActor
 from app.shared.domain.errors import ConflictError
 
 if TYPE_CHECKING:
@@ -62,7 +62,7 @@ class ChatopsService:
             ],
         }
 
-    async def apply_action(self, lead: Lead, action: str, *, actor: User) -> Lead:
+    async def apply_action(self, lead: Lead, action: str, *, actor: ViewerActor) -> Lead:
         if action not in _CHATOPS_ACTIONS:
             raise ValueError("unsupported ChatOps action")
 

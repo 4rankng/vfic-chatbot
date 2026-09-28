@@ -7,12 +7,14 @@ follow-ups.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, cast
 
 from sqlalchemy import delete, desc, func, or_, select, text, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadTag
-from app.services.viewer_scope import ViewerIdentity, viewer_lead_filter
+from app.services.viewer_scope import Viewer, viewer_lead_filter
 
 # ── Raw SQL constants ──────────────────────────────────────────────
 
@@ -192,7 +194,7 @@ class LeadRepository:
         result = row.mappings().first()
         return dict(result) if result else None
 
-    async def get_visible(self, lead_id: int, *, viewer: ViewerIdentity) -> Lead | None:
+    async def get_visible(self, lead_id: int, *, viewer: Viewer) -> Lead | None:
         """Fetch one lead the ``viewer`` is allowed to see; None when out of scope.
 
         Mirrors :func:`app.services.viewer_scope.viewer_can_access_lead`: admins
@@ -223,7 +225,7 @@ class LeadRepository:
         if not override:
             stmt = stmt.where(or_(Lead.gender.is_(None), func.btrim(Lead.gender) == ""))
         result = await self.db.execute(stmt.execution_options(synchronize_session=False))
-        return result.rowcount > 0
+        return cast(CursorResult[Any], result).rowcount > 0
 
     async def by_contact_id(self, contact_id: str) -> dict | None:
         """Latest lead for a contact; None when the contact has no lead."""
@@ -248,7 +250,7 @@ class LeadRepository:
             .execution_options(synchronize_session=False)
         )
         await self.db.flush()
-        return res.rowcount > 0
+        return cast(CursorResult[Any], res).rowcount > 0
 
     async def list_events(self, lead_id: int, *, limit: int = 200) -> list[LeadEvent]:
         return list(

@@ -36,10 +36,14 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import cast
 
 from app.core.config import get_settings
 from app.graph.clients import _chat_for_role, build_embedder
+from app.graph.llm import Embedder
+from app.graph.providers import LlmProvider
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +52,9 @@ logger = logging.getLogger(__name__)
 class _CachedClients:
     agent_llm: object
     fast_llm: object | None
-    embedder: object
+    # Typed: ``GraphDeps`` and ``MiniMaxAgent`` both take an ``Embedder``, and an
+    # ``object`` here made every construction site pass an unassignable value.
+    embedder: Embedder
     # Ordered clients for the other configured providers; empty when the
     # operator has only one provider enabled.
     failover_llms: list = field(default_factory=list)
@@ -76,7 +82,9 @@ _client_retirement_tasks: set[asyncio.Task[None]] = set()
 _CLIENT_RETIREMENT_GRACE_SECONDS = 600.0
 
 
-async def _close_client_bundles(bundles: list[_CachedClients | _CachedExtraction]) -> None:
+async def _close_client_bundles(
+    bundles: Sequence[_CachedClients | _CachedExtraction],
+) -> None:
     cancellation: asyncio.CancelledError | None = None
     close_callbacks: list[tuple[str, object, object]] = []
     for bundle in bundles:
@@ -196,7 +204,11 @@ async def build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for
             openrouter_api_key=openrouter_config.api_key,
             minimax_enabled=minimax_config.enabled,
             openrouter_enabled=openrouter_config.enabled,
-            default_provider=minimax_config.default_provider,
+            # ``MinimaxRuntimeConfig.default_provider`` is a plain ``str`` while
+            # the client wants the ``LlmProvider`` literal. The settings layer
+            # guarantees the value via ``_shared._provider_value``, which returns
+            # one of ``_SELECTABLE_PROVIDERS`` or "minimax".
+            default_provider=cast(LlmProvider, minimax_config.default_provider),
             reasoning_mode=minimax_config.reasoning_mode,
             max_tokens=minimax_config.agent_max_tokens,
             openrouter_agent_model=openrouter_config.agent_model,

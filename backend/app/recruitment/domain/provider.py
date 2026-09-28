@@ -7,13 +7,19 @@ from typing import Protocol
 
 
 class ChannelIdentityView(Protocol):
-    provider: str | None
-    external_id: str | None
+    @property
+    def provider(self) -> str | None: ...
+
+    @property
+    def external_id(self) -> str | None: ...
 
 
 class ConversationProviderView(Protocol):
-    channel_identity: ChannelIdentityView | None
-    zalo_channel: str | None
+    @property
+    def channel_identity(self) -> ChannelIdentityView | None: ...
+
+    @property
+    def zalo_channel(self) -> str | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,9 +51,13 @@ class LeadKey:
         return self.zalo_id is not None or self.contact_id is not None
 
 
-def lead_key_for_conversation(conversation: ConversationProviderView) -> LeadKey:
+def lead_key_for_conversation(conversation: object) -> LeadKey:
     """The lead key for a loaded conversation row."""
 
+    # Read through ``getattr`` because callers pass a SQLAlchemy conversation
+    # row: its attributes are declared ``Mapped[...]``, so no ORM instance can
+    # satisfy a Protocol of plain runtime types, and this domain module must
+    # stay free of ORM imports.
     contact_id = getattr(conversation, "contact_id", None)
     zalo_chat_id = getattr(conversation, "zalo_chat_id", None)
     return LeadKey(
@@ -93,7 +103,7 @@ def lead_key_for_row(lead: dict | None) -> LeadKey | None:
 SUPPORTED_CONVERSATION_PROVIDERS = frozenset({"zalo_bot", "zalo_oa", "facebook_messenger"})
 
 
-def provider_from_conversation(conversation: ConversationProviderView) -> str:
+def provider_from_conversation(conversation: object) -> str:
     """Resolve the canonical provider while preserving legacy channel fallback."""
 
     identity = getattr(conversation, "channel_identity", None)
@@ -109,7 +119,7 @@ def provider_from_conversation(conversation: ConversationProviderView) -> str:
     return "zalo_bot"
 
 
-def recipient_from_conversation(conversation: ConversationProviderView) -> str | None:
+def recipient_from_conversation(conversation: object) -> str | None:
     """Resolve the provider recipient while preserving Zalo compatibility aliases."""
 
     if provider_from_conversation(conversation) == "facebook_messenger":

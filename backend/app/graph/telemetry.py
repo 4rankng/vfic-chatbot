@@ -24,14 +24,17 @@ from app.graph.types import BotRunState
 from app.shared.application.outbound import OutboundTelemetry
 
 
-def _stamp_db(timings: dict, key: str, t0: float) -> None:
+def _stamp_db(timings: dict | None, key: str, t0: float) -> None:
     """Accumulate wall-clock of one DB call into timings['db_ms'].
 
     ``key`` is recorded into db_breakdown for per-call granularity when the
     dashboard needs to localize a slow query. db_ms is the aggregate the
-    percentile chart reads.
+    percentile chart reads. A stand-down that never started a turn owns no
+    timings dict, so an absent one records nothing instead of failing.
     """
-    elapsed = int(round((time.monotonic() - t0) * 1000))
+    if timings is None:
+        return
+    elapsed = round((time.monotonic() - t0) * 1000)
     timings["db_ms"] = timings.get("db_ms", 0) + elapsed
     breakdown = timings.setdefault("db_breakdown", {})
     breakdown[key] = breakdown.get(key, 0) + elapsed
@@ -41,7 +44,7 @@ def _stamp_end_to_end(state: BotRunState, timings: dict | None) -> None:
     """Record candidate-visible latency from webhook receipt through completion."""
     if timings is None or state.received_at_epoch <= 0:
         return
-    timings["end_to_end_ms"] = max(0, int(round((time.time() - state.received_at_epoch) * 1000)))
+    timings["end_to_end_ms"] = max(0, round((time.time() - state.received_at_epoch) * 1000))
 
 
 def _stamp_outbound_telemetry(timings: dict | None, send_result) -> None:

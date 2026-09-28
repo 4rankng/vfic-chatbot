@@ -39,7 +39,7 @@ async def _record_silent_terminal(
     stage_timings: dict | None = None,
     trace_sink=None,
     lock_owner=None,
-):
+) -> TurnOutcome:
     """Record a turn that produced no answer — and send nothing more to the customer.
 
     The silent terminal path: when the bot cannot produce

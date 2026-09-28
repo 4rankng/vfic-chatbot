@@ -13,6 +13,7 @@ evolve without dragging the contract along.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -123,9 +124,13 @@ class ConversationStatePort(Protocol):
 class ConversationPort(Protocol):
     """Subset of the conversation service surface the brain depends on."""
 
-    state: ConversationStatePort
+    # Read-only on purpose: the concrete service exposes ``state`` as a mutable
+    # instance attribute, so a plain protocol attribute would be invariant and
+    # the (much wider) ``ConversationState`` could never satisfy this narrow port.
+    @property
+    def state(self) -> ConversationStatePort: ...
 
-    async def get(self, conversation_id: Any) -> Any: ...
+    async def get(self, conv_id: Any) -> Any: ...
 
     async def last_messages(self, conv: Any, *, limit: int) -> list[Any]: ...
 
@@ -139,7 +144,7 @@ class ConversationPort(Protocol):
         reply: str,
         started_at: Any,
         sent: bool,
-        pending_message_id: int | None,
+        pending_message_id: int | None = None,
         external_error: str | None = None,
         zalo_message_id: str | None = None,
         stage_timings: dict | None = None,
@@ -150,7 +155,7 @@ class ConversationPort(Protocol):
         decision_trace: dict | None = None,
         outbox_channel: str | None = None,
         outbox_payload: dict | None = None,
-    ) -> None: ...
+    ) -> Any: ...
 
     async def recheck_ownership(
         self, conv: Any, version_at_start: int, lock_owner: Any = None
@@ -206,9 +211,7 @@ class GraphRetrievalPort(
 ):
     """Graph-owned query surface composed from bounded-context read ports."""
 
-    async def match_memories(
-        self, embedding: str, top_k: int, filters_json: str
-    ) -> list[Any]: ...
+    async def match_memories(self, emb: str, top_k: int, filter_json: str) -> list[Any]: ...
 
     # Recruitment-domain reads the job-feature and income-comparison tools
     # need. The retrieval facade serves both through its recommendation seam;
@@ -216,7 +219,7 @@ class GraphRetrievalPort(
     # context read port owns them (job features and income summaries are
     # recruitment agent surface, not project-knowledge queries).
     async def job_features_for_project(self, project_id: Any) -> list[Any]: ...
-    async def income_summary_for_active_projects(self) -> list[Any]: ...
+    async def income_summary_for_active_projects(self) -> Sequence[Any]: ...
 
     # Deployment-wide TingTing password-reset integration (settings-managed).
     # Not project surface: the origin and key come from the integration settings
