@@ -81,7 +81,7 @@ release-check:
 	rc_be=0; rc_fe=0; rc_data=0; \
 	( cd backend && uvx pyright app/graph && .venv/bin/ruff check . && .venv/bin/python -m pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing ) >"$$tmp/backend.log" 2>&1 & \
 	be_pid=$$!; \
-	( cd frontend && npm audit --omit=dev --audit-level=high && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build ) >"$$tmp/frontend.log" 2>&1 & \
+	( cd frontend && npm audit --omit=dev --audit-level=high && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build && npm run smoke:built ) >"$$tmp/frontend.log" 2>&1 & \
 	fe_pid=$$!; \
 	( cd backend && .venv/bin/python -m pytest "tests/integration/test_migration_roundtrip_walk.py::test_chain_reverses_to_base_and_reapplies" "tests/integration/test_migration_roundtrip_walk.py::test_reverse_chain_renders_offline" -p no:randomly -m integration && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp/golden-raw.json" && .venv/bin/python -c 'import json, sys; from pathlib import Path; raw = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")); passed = raw.get("passed"); case_count = raw.get("case_count"); \
 assert isinstance(passed, int) and not isinstance(passed, bool), "benchmark artifact missing integer passed"; \

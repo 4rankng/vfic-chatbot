@@ -13,6 +13,7 @@
     "build": "tsc && vite build",
     "build:analyze": "ANALYZE=true npm run build",
     "build:e2e": "vite build --mode e2e",
+    "smoke:built": "node ./scripts/smoke-built-bundle.mjs",
     "typecheck": "tsc --noEmit --project tsconfig.app.json",
     "typecheck:node": "tsc --noEmit --project tsconfig.node.json",
     "preview": "vite preview",

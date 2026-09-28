@@ -159,49 +159,79 @@ export default defineConfig({
         // `react-router` or `@tanstack/react-query`, which carry their own
         // rules below. `[\\/]` matches either path separator.
         codeSplitting: {
-          // Recursive capture is ON by default, which makes a group swallow its
-          // matches' dependency closure too. That is wrong here: `ra-core`
-          // peer-depends on `@tanstack/react-query`, `react-router` and
-          // `react-hook-form` and imports all three, so the first group
-          // (alphabetically declared before them) pulled 146 kB of other
-          // vendors into `ra-vendor` and left `tanstack-vendor` and
-          // `router-vendor` with nothing to emit. `false` restores one-module-
-          // to-one-rule assignment, which is what `manualChunks` did.
-          includeDependenciesRecursively: false,
+          // Recursive capture stays ON (the default). Disabling it was the
+          // mistake that shipped a broken bundle: Rolldown documents that
+          // `includeDependenciesRecursively: false` can generate chunks with
+          // invalid execution order unless it is paired with
+          // `preserveEntrySignatures: false | 'allow-extension'` and
+          // `strictExecutionOrder: true`, and the built bundle died at boot with
+          // `TypeError: D is not a function` while the dev server was fine.
+          //
+          // The reason it was disabled still has to be solved, and `priority`
+          // solves it: `ra-core` peer-depends on `@tanstack/react-query`,
+          // `react-router` and `react-hook-form` and imports all three, so with
+          // equal priority the first group captured their modules and
+          // `tanstack-vendor`/`router-vendor` emitted nothing. Groups with a
+          // higher priority are matched first and their modules are removed from
+          // later groups, so the three specific rules below win before
+          // `ra-vendor`'s closure can take them.
+          includeDependenciesRecursively: true,
           groups: [
+            // These three first: `ra-core` imports all of them, so they must be
+            // claimed before `ra-vendor` (priority 0) is considered.
+            {
+              name: "tanstack-vendor",
+              test: /node_modules[\\/]@tanstack[\\/]/,
+              priority: 30,
+            },
+            {
+              name: "router-vendor",
+              test: /node_modules[\\/]react-router/,
+              priority: 30,
+            },
+            {
+              name: "forms-vendor",
+              test: /node_modules[\\/](react-hook-form|react-dropzone)[\\/]/,
+              priority: 30,
+            },
             // React core — stable, must be in its own early-loaded chunk
             {
               name: "react-vendor",
               test: /node_modules[\\/]react(-dom)?[\\/]/,
-            },
-            // react-admin headless framework
-            { name: "ra-vendor", test: /node_modules[\\/]ra-core[\\/]/ },
-            // TanStack Query family
-            {
-              name: "tanstack-vendor",
-              test: /node_modules[\\/]@tanstack[\\/]/,
+              priority: 20,
             },
             // Icon set (large barrel)
             {
               name: "lucide-vendor",
               test: /node_modules[\\/]lucide-react[\\/]/,
+              priority: 10,
             },
-            // Routing (react-router + the react-router-dom compat shim)
-            { name: "router-vendor", test: /node_modules[\\/]react-router/ },
             // Realtime transport
             {
               name: "realtime-vendor",
               test: /node_modules[\\/]socket\.io-client[\\/]/,
-            },
-            // Forms (form state + file drop)
-            {
-              name: "forms-vendor",
-              test: /node_modules[\\/](react-hook-form|react-dropzone)[\\/]/,
+              priority: 10,
             },
             // Virtualized lists (inbox thread + dashboard candidate list)
-            { name: "virtua-vendor", test: /node_modules[\\/]virtua[\\/]/ },
+            {
+              name: "virtua-vendor",
+              test: /node_modules[\\/]virtua[\\/]/,
+              priority: 10,
+            },
             // Schema validation (eager: InstallationBootstrap → runtime manifest)
-            { name: "zod-vendor", test: /node_modules[\\/]zod[\\/]/ },
+            {
+              name: "zod-vendor",
+              test: /node_modules[\\/]zod[\\/]/,
+              priority: 10,
+            },
+            // react-admin headless framework — last, so its dependency closure
+            // (date-fns, lodash, query-string, …) only takes what the rules
+            // above did not claim.
+            {
+              name: "ra-vendor",
+              test: /node_modules[\\/]ra-core[\\/]/,
+              priority: 0,
+            },
           ],
         },
       },
