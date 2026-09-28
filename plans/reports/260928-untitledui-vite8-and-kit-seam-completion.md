@@ -118,17 +118,23 @@
   equivalent shade — `--workspace-canvas` is `#fff6ed` while
   `--color-secondary-50` is `#fffcf8` — so re-pointing them would have moved
   pixels on every workspace screen for no user-visible gain.
+- Part C3 step 2 started and shipped for two primitives: `KnowledgeBaseCreate`'s
+  name field is Untitled UI's `Input` and its mode field is Untitled UI's
+  `Select` (a React Aria list box in a popover), both driven by `useController`
+  inside react-admin's form and wrapped in `uu-scope`. The knowledge-base test
+  fills the React Aria input, opens the select, picks an option and asserts the
+  exact payload the data provider receives. This surfaced a duplicate-React
+  defect in the browser test project (React Aria pre-bundled its own React copy;
+  fixed with `resolve.dedupe` plus pre-bundling the React Aria entry points) and
+  a gap in the reachability checker, which ignored `export … from` re-exports and
+  therefore reported live avatar base-components as dead.
 - Remaining work:
-  1. C3 step 2 — Untitled UI form primitives (`base/select`, `base/combobox`,
-     `base/dropdown`, `base/avatar`) in real routes. `base/input` is installed and
-     kept for exactly this; each adoption needs its own `.uu-scope` wrapper and
-     must not nest React Aria inside a Radix subtree.
-  2. Optional — the kept `base/input` closure still compiles ~20 kB of utilities
-     nothing renders. Re-run the reachability check before deleting it, and
-     re-install with `npx untitledui add input --yes` when the first form lands.
-  3. Optional — `src/utils/is-react-component.ts` has no importer; the CLI
-     re-adds it with `add badges`, so deleting it only pays off once badges is the
-     last generated component. Documented rather than churned.
+  1. C3 step 2 continued — `base/combobox`, `base/dropdown` and `base/avatar` in
+     real routes. Each adoption needs its own `.uu-scope` wrapper and must not
+     nest React Aria inside a Radix subtree.
+  2. Optional — `base/input`'s siblings and the React Aria select's siblings were
+     pruned; re-install with `npx untitledui add <component> --yes` when a form
+     needs one, then re-run `node scripts/check-generated-reachability.mjs`.
 - Open issues handed over, with evidence rather than blame:
   1. **Two `EmptyState` implementations remain.** `kit/EmptyState` now serves
      `knowledge-base`, `users`, `automation`, `projects` and `knowledge`;
