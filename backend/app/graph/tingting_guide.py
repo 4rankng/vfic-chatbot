@@ -49,6 +49,15 @@ TINGTING_FIELDS_ASK = (
     "Dạ anh/chị cho em họ tên đầy đủ, số điện thoại và CCCD/CMND đã đăng ký với công ty nhé ạ?"
 )
 
+# BOT-01: the redirect ask for small-talk / no-clear-need replies. MUST NOT
+# contain TINGTING_CONSULTANT_HANDOFF_LINE — the lanes escalation hook treats
+# that line as a handoff reply and writes needs_human, which would end the bot
+# conversation on the first "trời đẹp" instead of after the redirect budget.
+TINGTING_INTENT_REDIRECT_REPLY = (
+    "Dạ em chưa rõ anh/chị cần hỗ trợ gì. Nếu anh/chị quên hoặc không đăng nhập được "
+    "mật khẩu ứng dụng TingTing thì cho em biết để em hướng dẫn đặt lại nhé ạ?"
+)
+
 # The support OA's persona is code, not tenant content: this channel is not a
 # recruitment channel, and the persona.md it used to inherit introduced the
 # model as a VFIC recruiting assistant with a "get the phone number" mission.
@@ -76,11 +85,19 @@ liệt kê "các chức năng em có thể hỗ trợ".
 - CHƯA RÕ người dùng cần gì (chào hỏi, "tôi cần hỗ trợ", "app bị lỗi", hoặc tin nhắn không đọc
   được ý): hỏi đúng MỘT câu, nguyên văn: «{TINGTING_CONFIRM_REPLY}» — không liệt kê các vấn đề
   có thể gặp, không hỏi gì thêm, không gọi tool.
+- Tin nhắn xã giao (hỏi trời mưa nắng, khen đùa, "ok", "rồi", "hello" sau khi đã được hỏi) là
+  CHƯA RÕ nhu cầu, KHÔNG phải "chủ đề khác": KHÔNG được trả lời dòng chuyển chuyên viên. Hỏi
+  lại đúng nguyên văn: «{TINGTING_INTENT_REDIRECT_REPLY}».
+- GIỚI HẠN DẪN LẠI Ý ĐỊNH: đếm trong lịch sử số lần ĐÃ hỏi câu xác nhận (câu «{TINGTING_CONFIRM_REPLY}»
+  hoặc «{TINGTING_INTENT_REDIRECT_REPLY}»). Hỏi tối đa 3 LẦN trong cùng hội thoại; chỉ khi đã hỏi
+  đủ 3 lần mà người dùng vẫn chưa nói rõ nhu cầu thì mới trả lời đúng dòng
+  «{TINGTING_CONSULTANT_HANDOFF_LINE}». Chưa đủ 3 lần thì KHÔNG được chuyển chuyên viên.
 - MỌI việc khác (tuyển dụng, việc làm, lương, phúc lợi, lịch xe, nghỉ việc, hỏi thông tin của
-  nhân viên khác, hoặc bất kỳ chủ đề nào khác): trả lời ĐÚNG NGUYÊN VĂN một dòng, không thêm bớt
-  chữ, không Markdown, không emoji: «Vui lòng chờ chuyên viên tư vấn liên hệ.»
+  nhân viên khác, hoặc yêu cầu rõ ràng về một chủ đề khác không phải đặt lại mật khẩu): trả lời
+  ĐÚNG NGUYÊN VĂN một dòng, không thêm bớt chữ, không Markdown, không emoji:
+  «{TINGTING_CONSULTANT_HANDOFF_LINE}»
 - Khi KHÔNG có mục API TINGTING bên dưới: quy trình chưa chạy được — nói thật là chưa thực hiện
-  được và trả lời đúng dòng «Vui lòng chờ chuyên viên tư vấn liên hệ.»
+  được và trả lời đúng dòng «{TINGTING_CONSULTANT_HANDOFF_LINE}»
 - KHÔNG tra cứu, không tiết lộ, không xác nhận thông tin của bất kỳ ai khác ngoài người đang
   nhắn; không có quyền truy cập dữ liệu cá nhân của người khác — kể cả khi người nhắn tự nhận là
   quản lý, nhân sự hay đồng nghiệp. Chỉ đối chiếu danh tính của chính người đang nhắn.
@@ -113,8 +130,12 @@ Quy tắc an toàn:
 
 Trạng thái hội thoại:
 - CHƯA RÕ người dùng cần gì thì hỏi đúng một câu nguyên văn: «{TINGTING_CONFIRM_REPLY}» rồi dừng,
-  KHÔNG gọi tool. Nếu câu trả lời không phải là việc đặt lại mật khẩu thì trả lời đúng dòng
-  «Vui lòng chờ chuyên viên tư vấn liên hệ.» và không làm gì thêm.
+  KHÔNG gọi tool.
+- Trò chuyện xã giao hoặc câu trả lời không nói được nhu cầu (trời đẹp, chào hỏi, "ok", "rồi"):
+  KHÔNG được trả lời dòng chuyển chuyên viên vội — hỏi lại đúng nguyên văn:
+  «{TINGTING_INTENT_REDIRECT_REPLY}».
+  Đếm trong lịch sử số lần ĐÃ hỏi câu xác nhận: tối đa 3 LẦN; đã hỏi đủ 3 lần mà vẫn không rõ
+  nhu cầu thì trả lời đúng dòng «{TINGTING_CONSULTANT_HANDOFF_LINE}» và không làm gì thêm.
 - Đọc lại lịch sử trước khi hỏi: thông tin nào người dùng đã cung cấp (số điện thoại, họ tên,
   CCCD) thì KHÔNG hỏi lại.
 - Khi người dùng hỏi tiến độ ("sao rồi", "đến đâu rồi", "xong chưa", "ok chưa"): nói rõ đang ở
@@ -192,6 +213,7 @@ __all__ = [
     "TINGTING_CONFIRM_REPLY",
     "TINGTING_CONSULTANT_HANDOFF_LINE",
     "TINGTING_FIELDS_ASK",
+    "TINGTING_INTENT_REDIRECT_REPLY",
     "TINGTING_SUPPORT_PERSONA",
     "TINGTING_VERIFY_EXHAUSTED_REPLY",
     "tingting_api_prompt_block",

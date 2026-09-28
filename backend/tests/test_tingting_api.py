@@ -19,7 +19,9 @@ from app.graph.tingting_guide import (
     TINGTING_API_BLOCK_HEADER,
     TINGTING_API_GUIDE,
     TINGTING_CONFIRM_REPLY,
+    TINGTING_CONSULTANT_HANDOFF_LINE,
     TINGTING_FIELDS_ASK,
+    TINGTING_INTENT_REDIRECT_REPLY,
     TINGTING_SUPPORT_PERSONA,
     tingting_api_prompt_block,
     tingting_support_system_prompt,
@@ -437,6 +439,31 @@ def test_guide_asks_the_fixed_confirm_question_and_never_lists_problems() -> Non
     assert TINGTING_CONFIRM_REPLY in TINGTING_SUPPORT_PERSONA
     assert "tra cứu thông tin nhân viên" not in TINGTING_API_GUIDE
     assert "tra cứu thông tin nhân viên" not in TINGTING_SUPPORT_PERSONA
+
+
+def test_small_talk_gets_a_redirect_budget_before_any_handoff() -> None:
+    """BOT-01: small talk ("trời đẹp đấy") must be redirected, not escalated.
+
+    Production (2026-09-28, TingTing support OA): a weather reply after the
+    confirm question was answered with the consultant handoff line on the SAME
+    turn. The prompt must now (a) classify small talk as unclear intent, not an
+    out-of-scope topic, (b) cap the redirect at 3 asks before handing off, and
+    (c) keep the immediate handoff only for explicit out-of-scope requests.
+    """
+    for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
+        # small talk is explicitly excluded from the immediate handoff
+        assert "KHÔNG được trả lời dòng chuyển chuyên viên" in prompt
+        assert "tối đa 3 LẦN" in prompt
+        # the redirect ask is quoted verbatim in both sections
+        assert TINGTING_INTENT_REDIRECT_REPLY in prompt
+        # the confirm question stays quoted verbatim (existing contract)
+        assert TINGTING_CONFIRM_REPLY in prompt
+    # the immediate handoff is narrowed to explicit out-of-scope requests
+    assert "yêu cầu rõ ràng về một chủ đề khác" in TINGTING_SUPPORT_PERSONA
+    # the escalation hook (lanes.py) keys on the handoff line inside the reply:
+    # a redirect reply containing it would write needs_human on the first
+    # small-talk turn, so it must never appear in the redirect wording.
+    assert TINGTING_CONSULTANT_HANDOFF_LINE not in TINGTING_INTENT_REDIRECT_REPLY
 
 
 def test_support_persona_forbids_other_employee_data_and_the_recruitment_role() -> None:
