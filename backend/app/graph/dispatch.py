@@ -130,6 +130,13 @@ async def _dispatch_claimed_message(
             error="messenger requires durable outbound dispatch",
         )
     recipient_id = _recipient_for_conversation(conv)
+    if not recipient_id:
+        # A Zalo conversation always carries its chat id; this guard keeps a row
+        # that somehow lost it from being handed to the provider as ``None``.
+        return SendOutcome(
+            ok=False,
+            error="conversation has no provider recipient",
+        )
     if quote_message_id:
         return await zalo.send_message(recipient_id, text, quote_message_id=quote_message_id)
     return await zalo.send_message(recipient_id, text)
@@ -173,7 +180,10 @@ async def _status_heartbeat(zalo, chat_id: str, *, settings) -> None:
             try:
                 await zalo.send_chat_action(chat_id, "typing")
             except Exception:  # noqa: BLE001
-                pass
+                # Status is best-effort: a channel that rejects the indicator
+                # must not break the turn, but the reason still belongs in the
+                # log for the next operator chasing a missing "typing…".
+                logger.debug("typing heartbeat failed", exc_info=True)
             next_typing = elapsed + settings.typing_heartbeat_seconds
         await asyncio.sleep(0.5)
 
@@ -249,7 +259,7 @@ async def _claim_and_dispatch(
         text=candidate,
         quote_message_id=state.reply_to_message_id,
     )
-    timings["send_ms"] = int(round((time.monotonic() - send_t0) * 1000))
+    timings["send_ms"] = round((time.monotonic() - send_t0) * 1000)
     _stamp_outbound_telemetry(timings, send_result)
     return await _record_dispatched_outcome(
         state=state,
@@ -297,7 +307,7 @@ async def _record_dispatched_outcome(
     drift between the two. ``decision_trace`` is snapshotted by the caller at the
     moment the send was claimed.
     """
-    timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
+    timings["total_ms"] = round((time.monotonic() - t0) * 1000)
     _stamp_end_to_end(state, timings)
     db_t0 = time.monotonic()
     # Classify transport failures: ambiguous (timeout/reset after the

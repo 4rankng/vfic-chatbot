@@ -297,6 +297,12 @@ class ConversationService:
         quote_message_id = None
         channel = provider_from_conversation(conv)
         recipient_id = recipient_from_conversation(conv)
+        if not recipient_id:
+            # Mirror of the graph-side send guard: a conversation that lost its
+            # chat id must not persist an outbox row addressed to ``None``.
+            raise DeliveryEligibilityError(
+                "Không thể gửi tin vì cuộc trò chuyện không có người nhận."
+            )
         is_oa = channel == "zalo_oa"
         if is_oa:
             latest_inbound = await self.repo.latest_worker_message(conv)
@@ -357,7 +363,7 @@ class ConversationService:
         conv: Conversation,
         actor: User,
         *,
-        enqueue: Callable[..., object],
+        enqueue: Callable[[dict], bool | None],
     ) -> Conversation:
         """Release a conversation to BOT mode and schedule any pending worker reply."""
         released = await self.state.release(conv, actor)
