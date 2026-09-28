@@ -28,7 +28,7 @@ _RUNTIME_RETRIEVAL_RULES = f"""
 - Nếu tool/KB không trả về liên hệ cần hỏi, nói rõ "chưa có thông tin này trong dữ liệu" thay vì suy đoán.
 - Kết quả Job ACTIVE có cấu trúc là nguồn ưu tiên cho tình trạng tuyển dụng. Nếu graph thông báo danh mục Job có cấu trúc đang trống/chưa cấu hình, phải gọi search_knowledge: chỉ được xác nhận "đang tuyển" khi nội dung KB đang hoạt động, đã xuất bản nói rõ điều đó.
 - Không được suy ra tình trạng tuyển dụng từ danh mục dự án, tên dự án hoặc kiến thức chung. Nếu KB không có bằng chứng tuyển dụng rõ ràng, nói "chưa thể xác minh từ dữ liệu hiện có"; không được biến thiếu dữ liệu thành "chưa tuyển".
-- Câu hỏi về CHÍNH VFIC (công ty ở tỉnh nào, địa chỉ, trụ sở, "VFIC là gì", "chúng tôi là ai", đơn vị nào hỗ trợ ứng viên): trả lời bằng các SỰ THẬT CỐ ĐỊNH sau, KHÔNG cần gọi search_knowledge — Công ty Cổ phần Quốc tế Thương mại và Dịch vụ Việt Pháp (thương hiệu Nhân lực VFIC), MST 0201307104; văn phòng công ty tại Manhattan 07-08, Vinhomes Imperia, phường Hồng Bàng, TP. Hải Phòng; hotline miễn phí 1800 7228. PHÂN BIỆT BẮT BUỘC: Manhattan là VĂN PHÒNG công ty, KHÔNG phải nơi làm việc — các vị trí tuyển dụng (ví dụ LG Display) làm việc tại nhà máy LG Display, KCN Tràng Duệ, An Dương, Hải Phòng. Tuyệt đối KHÔNG trả lời "VFIC ở KCN Tràng Duệ" khi được hỏi địa chỉ công ty. Vẫn phải dùng tool cho tình trạng tuyển dụng, việc làm cụ thể, lương, lịch xe.
+- Câu hỏi về CHÍNH VFIC (công ty ở tỉnh nào, địa chỉ, trụ sở, "VFIC là gì", "chúng tôi là ai", đơn vị nào hỗ trợ ứng viên): trả lời bằng các SỰ THẬT CỐ ĐỊNH sau, KHÔNG cần gọi search_knowledge — Công ty Cổ phần Quốc tế Thương mại và Dịch vụ Việt Pháp (thương hiệu Nhân lực VFIC), MST 0201307104; văn phòng công ty tại Manhattan 07-08, Vinhomes Imperia, phường Hồng Bàng, TP. Hải Phòng; hotline miễn phí 1800 7228. PHÂN BIỆT BẮT BUỘC: Manhattan là VĂN PHÒNG công ty, KHÔNG phải nơi làm việc — ứng viên làm việc tại nhà máy của dự án cụ thể, không phải tại văn phòng. KHÔNG nêu tên một nhà máy/dự án cụ thể nào khi trả lời về công ty; các dự án đang hoạt động liệt kê ở DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG bên dưới. Tuyệt đối KHÔNG trả lời "VFIC ở KCN Tràng Duệ" khi được hỏi địa chỉ công ty. Vẫn phải dùng tool cho tình trạng tuyển dụng, việc làm cụ thể, lương, lịch xe.
 - KHÔNG ĐƯỢC BỊA KÊNH LIÊN HỆ: không nêu hotline, tổng đài, số máy lẻ, email, địa chỉ hoặc tên người liên hệ mà kết quả tool (hoặc mục API TINGTING) không trả về. Không có dữ liệu thì nói rõ "chưa có thông tin đã xác minh" và xin SĐT để liên hệ lại — tuyệt đối không tự nghĩ ra số điện thoại, email hay phòng ban nào. Mẫu "chưa có thông tin đã xác minh"/xin SĐT KHÔNG áp dụng cho việc tài khoản TingTing: khi có mục API TINGTING và người dùng quên/đặt lại/quá hạn mật khẩu hoặc không nhận được OTP, phải chạy quy trình đặt lại mật khẩu (verify_tingting_identity) trước, không được trả lời bằng mẫu đó.
 - NHÂN VIÊN CẦN HỖ TRỢ TÀI KHOẢN/HỆ THỐNG: khi có mục API TINGTING (quên mật khẩu, không nhận được mã OTP, đặt lại mật khẩu), PHẢI chạy đúng quy trình bằng các tool theo thứ tự: verify_tingting_identity (đối chiếu danh tính bằng mã) → send_tingting_otp → confirm_tingting_otp → reset_tingting_password; hỏi từng bước một, không được trả lời rằng việc này ngoài phạm vi rồi hướng dẫn liên hệ nơi khác. Không tự so khớp họ tên/CCCD bằng mắt và không gửi OTP khi tool chưa trả về ĐÃ XÁC MINH. Chỉ hỏi các trường mà tool báo còn thiếu; không hỏi lại thông tin đã có. Không hỏi, không đọc và không truyền session_id/reset_token — hệ thống giữ phiên theo số điện thoại.
 - GỌI TOOL SONG SONG: Khi cần nhiều tool không phụ thuộc nhau (ví dụ recommend_jobs + get_product_features, hoặc search_knowledge + list_active_projects), hãy gọi TẤT CẢ trong cùng một lượt trả lời thay vì gọi từng cái một. Điều này giúp trả lời nhanh hơn rất nhiều. Không gọi trùng cùng một tool với cùng tham số trong một lượt — mỗi tool chỉ gọi một lần cho mỗi bộ tham số.
@@ -52,6 +52,13 @@ _STALE_REFUSAL_RULE_MARKERS = (
     "lịch hẹn riêng",
     "số cá nhân",
 )
+
+# Bump whenever this module's static text (rules, directory instructions) changes
+# in a release: the revision is part of the Redis preamble cache key, so the first
+# turn after deploy re-assembles instead of serving the previous text from the
+# 10-min TTL window. DB-side card/persona writes invalidate independently via the
+# NS_PREAMBLE version bump.
+_PROMPT_TEXT_REVISION = "2"
 
 
 def _strip_stale_refusal_rules(persona: str) -> str:
@@ -105,6 +112,7 @@ async def active_projects_index(retrieval: GraphRetrievalPort) -> str:
         aliases = ", ".join(str(alias) for alias in (getattr(r, "aliases", None) or []) if alias)
         roles = ", ".join(card.get("roles") or card.get("key_roles") or [])
         loc = card.get("location") or ""
+        highlights = ", ".join(str(h) for h in (card.get("highlights") or []) if h)
         seg = f"- {r.slug} ({r.name})"
         if r.summary:
             seg += f": {r.summary}"
@@ -114,6 +122,8 @@ async def active_projects_index(retrieval: GraphRetrievalPort) -> str:
             seg += f"; vị trí: {roles}"
         if loc:
             seg += f"; địa điểm: {loc}"
+        if highlights:
+            seg += f"; nổi bật: {highlights}"
         lines.append(seg)
 
     prompt = (
@@ -127,6 +137,12 @@ async def active_projects_index(retrieval: GraphRetrievalPort) -> str:
         "với câu hỏi mở/tìm thêm chi tiết, gọi search_knowledge(project_slug). "
         "Riêng câu hỏi về tuyến xe, điểm đón hoặc giờ đón phải dùng search_bus_timetable trước, "
         "không dùng get_product_features thay cho lịch xe chi tiết. "
+        "Khi ứng viên chưa rõ có những dự án/công việc nào hoặc đang tìm việc chung chung: giới thiệu "
+        "các dự án đang hoạt động trong DANH MỤC ở trên, mỗi dự án chỉ nêu đúng tên, địa điểm và các "
+        "điểm nổi bật đã ghi trong danh mục; dự án nào không có điểm nổi bật thì chỉ giới thiệu tên và "
+        "địa điểm, rồi xin SĐT để chuyên viên tư vấn liên hệ lại. Tuyệt đối không bịa điểm nổi bật; "
+        "riêng xác nhận 'đang tuyển' phải qua list_active_jobs hoặc bằng chứng KB đã xuất bản, "
+        "không suy từ danh mục. "
         "TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về; dữ liệu chưa có thì nói 'chưa ghi rõ', không bịa."
     )
     return prompt
@@ -140,7 +156,9 @@ async def build_system_prompt(
     Returns ``(prompt, cache_hit)``. ``cache_hit`` is True when the prompt came
     from Redis (sub-ms); False when assembled fresh (DB reads) or on any error
     fallback. Cached in Redis under the ``preamble`` version namespace —
-    persona/project writes bump that namespace so the next turn re-reads.
+    persona/project writes bump that namespace so the next turn re-reads, and
+    this module's own static text invalidates through ``_PROMPT_TEXT_REVISION``
+    in the key suffix.
     """
 
     async def _assemble() -> str:
@@ -156,7 +174,9 @@ async def build_system_prompt(
         )
 
     try:
-        return await cached_system_prompt(_assemble, key_suffix=provider or "default")
+        return await cached_system_prompt(
+            _assemble, key_suffix=f"{provider or 'default'}:r{_PROMPT_TEXT_REVISION}"
+        )
     except Exception:  # noqa: BLE001
         return _strip_stale_refusal_rules(
             AGENT_SYSTEM_PROMPT

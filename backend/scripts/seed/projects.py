@@ -40,7 +40,7 @@ def make_projects() -> list[Project]:
         ),
         Project(
             id=new_uuid(),
-            slug="samsung-bac-ning",
+            slug="samsung-bac-ninh",
             name="Samsung Bắc Ninh",
             is_active=True,
             summary="Khu phức hợp Samsung tại KCN Yên Phong, Bắc Ninh. Tuyển dụng quy mô lớn liên tục.",

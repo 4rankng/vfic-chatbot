@@ -172,6 +172,170 @@ async def test_active_projects_index_excludes_project_persona_overrides():
 
 
 @pytest.mark.asyncio
+async def test_active_projects_index_renders_highlights_from_index_card():
+    """Directory lines carry the card's highlights so the bot can advertise them.
+
+    Highlights come only from ``index_card.highlights`` — the key both the
+    ingestion card schema and ``sync_highlights`` write — never from anywhere else.
+    """
+
+    class _Repo:
+        async def active_projects_with_card(self):
+            return [
+                SimpleNamespace(
+                    slug="samsung-bac-ninh",
+                    name="Samsung Bắc Ninh",
+                    aliases=[],
+                    summary="Tuyển dụng quy mô lớn liên tục",
+                    index_card={
+                        "roles": ["Công nhân SMT"],
+                        "location": "Bắc Ninh",
+                        "highlights": ["Xe đưa đón", "Bao ăn ở", ""],
+                    },
+                )
+            ]
+
+    prompt = await active_projects_index(_Repo())
+
+    assert "samsung-bac-ninh (Samsung Bắc Ninh)" in prompt
+    assert "địa điểm: Bắc Ninh" in prompt
+    assert "nổi bật: Xe đưa đón, Bao ăn ở" in prompt
+
+
+@pytest.mark.asyncio
+async def test_active_projects_index_omits_the_highlights_segment_when_the_card_has_none():
+    """No highlights → no 'nổi bật' segment, so nothing invites invented benefits."""
+
+    class _Repo:
+        async def active_projects_with_card(self):
+            return [
+                SimpleNamespace(
+                    slug="foxconn-nghe-an",
+                    name="Foxconn Nghệ An",
+                    aliases=[],
+                    summary="Sản xuất linh kiện điện tử",
+                    index_card={"location": "Nghệ An"},
+                ),
+                SimpleNamespace(
+                    slug="lg-display",
+                    name="LG Display Hải Phòng",
+                    aliases=[],
+                    summary="Tuyển công nhân sản xuất",
+                    index_card={"location": "Hải Phòng", "highlights": []},
+                ),
+            ]
+
+    prompt = await active_projects_index(_Repo())
+
+    assert "nổi bật:" not in prompt
+    assert "địa điểm: Nghệ An" in prompt
+
+
+@pytest.mark.asyncio
+async def test_active_projects_index_carries_the_vague_seeker_rule():
+    """Vague seekers get the whole directory, grounded to card fields only.
+
+    The rule lives inside the directory block (not the static rules) so it is
+    present exactly when the DANH MỤC it points at exists, and hiring claims
+    stay anchored to ``list_active_jobs`` evidence.
+    """
+
+    class _Repo:
+        async def active_projects_with_card(self):
+            return [
+                SimpleNamespace(
+                    slug="lg-display",
+                    name="LG Display Hải Phòng",
+                    aliases=[],
+                    summary="Tuyển công nhân sản xuất",
+                    index_card={"location": "Hải Phòng"},
+                )
+            ]
+
+    prompt = await active_projects_index(_Repo())
+
+    assert "tìm việc chung chung" in prompt
+    assert "DANH MỤC" in prompt
+    assert "list_active_jobs" in prompt
+    assert "không bịa điểm nổi bật" in prompt
+
+
+def test_runtime_rules_fixed_facts_do_not_advertise_a_single_project():
+    """The always-on fixed facts name no factory; enumeration belongs to DANH MỤC.
+
+    A hardcoded example here is what made the bot advertise exactly one
+    workplace on company-identity turns. The office-vs-plant discriminator and
+    the office facts must survive the strip.
+    """
+    from app.graph.context import _RUNTIME_RETRIEVAL_RULES
+
+    # The exact advertisement regression: the parenthetical example and the
+    # single-factory workplace claim. (A bare "LG Display" mention survives in
+    # the KB-name contact rule — that one cannot be echoed as a workplace.)
+    assert "ví dụ LG Display" not in _RUNTIME_RETRIEVAL_RULES
+    assert "làm việc tại nhà máy LG Display" not in _RUNTIME_RETRIEVAL_RULES
+    assert "Trảng Duệ" not in _RUNTIME_RETRIEVAL_RULES
+    # Office facts + the PHÂN BIỆT BẮT BUỘC discriminator survive.
+    assert "PHÂN BIỆT BẮT BUỘC" in _RUNTIME_RETRIEVAL_RULES
+    assert "Manhattan là VĂN PHÒNG công ty" in _RUNTIME_RETRIEVAL_RULES
+    assert "MST 0201307104" in _RUNTIME_RETRIEVAL_RULES
+    assert "DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG" in _RUNTIME_RETRIEVAL_RULES
+
+
+def test_tingting_support_prompt_excludes_the_recruitment_directory():
+    """The support OA's prompt never carries the directory or the vague-seeker rule.
+
+    The lane never builds ``build_system_prompt`` for that account (see the
+    runner-turn tests), so the directory can only leak if someone embeds it
+    into the support persona itself — this pins that boundary.
+    """
+    from app.graph.tingting_guide import tingting_support_system_prompt
+
+    for prompt in (
+        tingting_support_system_prompt(include_guide=False),
+        tingting_support_system_prompt(include_guide=True),
+    ):
+        assert "DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG" not in prompt
+        assert "tìm việc chung chung" not in prompt
+        assert "list_active_jobs" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_cache_key_carries_the_prompt_text_revision(monkeypatch):
+    """The cache suffix embeds the revision, so a rule-text release re-assembles.
+
+    Without it a deploy changing the static rules would keep serving the old
+    prompt from Redis until the 10-min TTL lapsed. The provider separation in
+    the key must survive.
+    """
+    from app.graph import context
+
+    captured: dict[str, str] = {}
+
+    async def _caching(factory, *, key_suffix="default"):
+        captured["suffix"] = key_suffix
+        return await factory(), False
+
+    monkeypatch.setattr(context, "cached_system_prompt", _caching)
+
+    class _Repo:
+        async def active_persona_body(self, provider=None):  # noqa: ARG002
+            return "persona body"
+
+        async def active_projects_with_card(self):
+            return []
+
+    prompt, cache_hit = await context.build_system_prompt(_Repo(), provider="zalo_oa")
+
+    assert cache_hit is False
+    assert captured["suffix"] == f"zalo_oa:r{context._PROMPT_TEXT_REVISION}"
+    assert "persona body" in prompt
+
+    await context.build_system_prompt(_Repo())
+    assert captured["suffix"] == f"default:r{context._PROMPT_TEXT_REVISION}"
+
+
+@pytest.mark.asyncio
 async def test_persona_service_update_returns_404_for_missing_id():
     """PersonaService.update raises NotFoundError when persona not found."""
     mock_db = AsyncMock()
