@@ -75,58 +75,73 @@ export default defineConfig({
       "/socket.io": { target: backendUrl, ws: true },
     },
   },
-  esbuild: {
-    keepNames: true,
-  },
   build: {
     sourcemap: true,
-    rollupOptions: {
+    // Vite 8 bundles with Rolldown, so `rollupOptions` is renamed and the
+    // minifier is oxc. `manualChunks` is replaced by `codeSplitting.groups`;
+    // the deprecated `manualChunks` object form is not supported at all and the
+    // function form is ignored when `codeSplitting` is present.
+    rolldownOptions: {
       output: {
+        // Replaces the Vite 7 top-level `esbuild.keepNames`. oxc owns
+        // minification now, so the flag has to sit on the Rolldown output where
+        // the minifier runs. Function and class `name` values survive — stack
+        // traces stay readable instead of collapsing to single letters.
+        keepNames: true,
         // Vendor chunk rules below are keyed by package path, so they MUST
         // track the actual imports: a rule for a package nothing imports spends
         // a split on dead weight, and a heavy package on the hot path with no
         // rule silently lands in whichever chunk imports it first.
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return;
-          // React core — stable, must be in its own early-loaded chunk
-          if (id.includes("/react-dom/") || id.includes("/react/")) {
-            return "react-vendor";
-          }
-          // react-admin headless framework
-          if (id.includes("/ra-core/")) {
-            return "ra-vendor";
-          }
-          // TanStack Query family
-          if (id.includes("/@tanstack/")) {
-            return "tanstack-vendor";
-          }
-          // Icon set (large barrel)
-          if (id.includes("/lucide-react/")) {
-            return "lucide-vendor";
-          }
-          // Routing (react-router + the react-router-dom compat shim)
-          if (id.includes("/react-router")) {
-            return "router-vendor";
-          }
-          // Realtime transport
-          if (id.includes("/socket.io-client/")) {
-            return "realtime-vendor";
-          }
-          // Forms (form state + file drop)
-          if (
-            id.includes("/react-hook-form/") ||
-            id.includes("/react-dropzone/")
-          ) {
-            return "forms-vendor";
-          }
-          // Virtualized lists (inbox thread + dashboard candidate list)
-          if (id.includes("/virtua/")) {
-            return "virtua-vendor";
-          }
-          // Schema validation (eager: InstallationBootstrap → runtime manifest)
-          if (id.includes("/zod/")) {
-            return "zod-vendor";
-          }
+        //
+        // Each `test` is anchored on the `/node_modules/<pkg>/` path segment:
+        // `react` must not swallow `react-aria`, `react-hook-form`,
+        // `react-router` or `@tanstack/react-query`, which carry their own
+        // rules below. `[\\/]` matches either path separator.
+        codeSplitting: {
+          // Recursive capture is ON by default, which makes a group swallow its
+          // matches' dependency closure too. That is wrong here: `ra-core`
+          // peer-depends on `@tanstack/react-query`, `react-router` and
+          // `react-hook-form` and imports all three, so the first group
+          // (alphabetically declared before them) pulled 146 kB of other
+          // vendors into `ra-vendor` and left `tanstack-vendor` and
+          // `router-vendor` with nothing to emit. `false` restores one-module-
+          // to-one-rule assignment, which is what `manualChunks` did.
+          includeDependenciesRecursively: false,
+          groups: [
+            // React core — stable, must be in its own early-loaded chunk
+            {
+              name: "react-vendor",
+              test: /node_modules[\\/]react(-dom)?[\\/]/,
+            },
+            // react-admin headless framework
+            { name: "ra-vendor", test: /node_modules[\\/]ra-core[\\/]/ },
+            // TanStack Query family
+            {
+              name: "tanstack-vendor",
+              test: /node_modules[\\/]@tanstack[\\/]/,
+            },
+            // Icon set (large barrel)
+            {
+              name: "lucide-vendor",
+              test: /node_modules[\\/]lucide-react[\\/]/,
+            },
+            // Routing (react-router + the react-router-dom compat shim)
+            { name: "router-vendor", test: /node_modules[\\/]react-router/ },
+            // Realtime transport
+            {
+              name: "realtime-vendor",
+              test: /node_modules[\\/]socket\.io-client[\\/]/,
+            },
+            // Forms (form state + file drop)
+            {
+              name: "forms-vendor",
+              test: /node_modules[\\/](react-hook-form|react-dropzone)[\\/]/,
+            },
+            // Virtualized lists (inbox thread + dashboard candidate list)
+            { name: "virtua-vendor", test: /node_modules[\\/]virtua[\\/]/ },
+            // Schema validation (eager: InstallationBootstrap → runtime manifest)
+            { name: "zod-vendor", test: /node_modules[\\/]zod[\\/]/ },
+          ],
         },
       },
     },
@@ -134,7 +149,7 @@ export default defineConfig({
   resolve: {
     preserveSymlinks: true,
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
 });

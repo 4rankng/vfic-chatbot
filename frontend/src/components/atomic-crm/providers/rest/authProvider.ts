@@ -10,6 +10,7 @@ import {
   refreshOnce,
   setTokens,
 } from "@/lib/apiClient";
+import { clearActiveDecisionTraceQueries } from "../../root/reset-runtime-state";
 
 // JWT auth provider (replaces Supabase Auth).
 //
@@ -64,10 +65,15 @@ const clearIdentity = (): void => {
   storage()?.removeItem(IDENTITY_KEY);
 };
 
+/**
+ * Drops cached decision-trace queries on login/logout so one session cannot
+ * read another's. The import is static, not `await import(...)`: a dynamic
+ * import of a module that is already in the bundle statically cannot split it,
+ * so it only bought an extra promise per login. Safe to hoist because
+ * `reset-runtime-state` has no static path back to `providers/rest/*`, so this
+ * edge cannot close an import cycle.
+ */
 const clearSensitiveQueryState = async (): Promise<void> => {
-  const { clearActiveDecisionTraceQueries } = await import(
-    "../../root/reset-runtime-state"
-  );
   clearActiveDecisionTraceQueries();
 };
 

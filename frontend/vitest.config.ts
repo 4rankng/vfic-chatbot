@@ -58,7 +58,7 @@ export default defineConfig({
         resolve: {
           preserveSymlinks: true,
           alias: {
-            "@": path.resolve(__dirname, "./src"),
+            "@": path.resolve(import.meta.dirname, "./src"),
           },
         },
         test: {
@@ -88,7 +88,11 @@ export default defineConfig({
               },
             },
           },
-          exclude: ["**/node_modules/**", "e2e/**/*.spec.{ts,tsx}", ".claude/**"],
+          exclude: [
+            "**/node_modules/**",
+            "e2e/**/*.spec.{ts,tsx}",
+            ".claude/**",
+          ],
           server: {
             deps: {
               external: [/playwright/],

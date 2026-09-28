@@ -221,8 +221,11 @@ export const SimpleFormIteratorItem = React.forwardRef(
           ref={ref}
           className={cn(
             "flex flex-row items-start justify-between gap-2 pb-2 border-b border-border last:border-b-0",
-            // Align the buttons with the input
-            "[&:has(label)>.simple-form-iterator-item-actions]:pt-10",
+            // Align the buttons with the input. The `:has()` shorthand is
+            // composed with the child combinator rather than inlined as one
+            // arbitrary variant: Tailwind 4.3 canonicalizes `[&:has(x)]` to
+            // `has-[x]`, and both forms compile to `&:has(x) > .child`.
+            "has-[label]:[&>.simple-form-iterator-item-actions]:pt-10",
           )}
         >
           {label != null && label !== false && (

@@ -104,13 +104,16 @@ export default defineConfig({
        Baselines live in e2e/visual.spec.ts-snapshots/. Update intentionally
        with: npx playwright test visual --update-snapshots
        Determinism is handled inside the spec (fonts ready, animations off,
-       fixed clock, masked dynamic regions, service worker unregistered). */
+       fixed clock, masked dynamic regions, service worker unregistered) and by
+       the context options below: `reducedMotion` is a `browser.newContext`
+       option, so it only takes effect under `contextOptions` — a top-level
+       `use.reducedMotion` is silently ignored. */
     {
       name: "visual-desktop",
       testMatch: /visual\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
-        reducedMotion: "reduce",
+        contextOptions: { reducedMotion: "reduce" },
       },
     },
     {
@@ -118,7 +121,7 @@ export default defineConfig({
       testMatch: /visual\.spec\.ts/,
       use: {
         ...devices["Pixel 5"],
-        reducedMotion: "reduce",
+        contextOptions: { reducedMotion: "reduce" },
       },
     },
 
