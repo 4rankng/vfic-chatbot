@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  * Layout: title+subtitle on the left, actions on the right, separated from
  * the page body by a hairline border-bottom. Stacks vertically under `sm`.
  *
- * Consume via `--tt-*` tokens (see conversations/inbox/tokens.css).
+ * Consume via `--tt-*` tokens (declared in `kit/tailkit-system.css`).
  */
 type PageHeadingProps = {
   title: ReactNode;

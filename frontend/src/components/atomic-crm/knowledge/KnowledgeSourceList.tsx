@@ -3,12 +3,12 @@ import { ListBase, useNotify, usePermissions, useRefresh } from "ra-core";
 import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
 import { usePipelineAutoRefresh } from "./usePipelineAutoRefresh";
 import { BookOpen, FileText, RefreshCw, Search, Upload } from "lucide-react";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Confirm } from "@/components/admin/confirm";
 import { ListPagination } from "@/components/admin/list-pagination";
+import { EmptyState } from "../kit";
 import { KnowledgeUpload } from "./KnowledgeUpload";
 import { KnowledgeVersionManager } from "./KnowledgeVersionManager";
 import {

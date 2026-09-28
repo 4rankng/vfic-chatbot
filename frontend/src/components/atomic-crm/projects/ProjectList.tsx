@@ -26,8 +26,8 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "../kit";
 import { cn } from "@/lib/utils";
 import type { Project } from "../types";
 import { useRoleActions } from "../hooks/useRoleActions";

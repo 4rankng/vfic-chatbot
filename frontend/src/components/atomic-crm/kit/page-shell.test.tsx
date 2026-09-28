@@ -47,4 +47,43 @@ describe("EmptyState", () => {
     expect(screen.getByText("Chưa có dữ liệu")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Tạo mới" })).toBeTruthy();
   });
+
+  it("uses the Tailkit empty-state anatomy inside a dashed frame", async () => {
+    const screen = await render(
+      <EmptyState
+        icon={<span>i</span>}
+        title="Chưa có dữ liệu"
+        description="Tạo mục đầu tiên để bắt đầu."
+      />,
+    );
+    const status =
+      screen.container.querySelector<HTMLElement>('[role="status"]');
+
+    expect(status).not.toBeNull();
+    expect(status).toHaveClass("rounded-xl", "border-2", "border-dashed");
+    expect(status).toHaveClass("min-h-64", "gap-5");
+  });
+
+  it("stays at console density and omits the action slot when unused", async () => {
+    const screen = await render(
+      <EmptyState
+        icon={<span>i</span>}
+        title="Chưa có dữ liệu"
+        description="Tạo mục đầu tiên để bắt đầu."
+      />,
+    );
+    const status =
+      screen.container.querySelector<HTMLElement>('[role="status"]');
+    const markup = status?.outerHTML ?? "";
+
+    // Marketing density from the Tailkit catalog must never reach the console.
+    expect(markup).not.toContain("py-20");
+    expect(markup).not.toContain("py-40");
+    expect(markup).not.toContain("text-2xl");
+    // Heading and description keep the console's role tokens.
+    expect(markup).toContain("--text-section-title");
+    expect(markup).toContain("--text-body-sm");
+    // No empty action container is rendered.
+    expect(status?.querySelector("button")).toBeNull();
+  });
 });

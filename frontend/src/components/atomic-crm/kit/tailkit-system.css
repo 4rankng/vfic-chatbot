@@ -1,14 +1,23 @@
 /* Shared Tailkit production layer for authenticated pages.
    Exact anatomy references: a-c-page-headings-03/04, a-c-form-layouts-04/05,
    a-c-tables-14/15, a-c-empty-states-03 and a-c-list-groups-05. */
+/* ---- One owner for the neutral ramp: `--color-secondary-*`.
+   Four of these slots already carried the exact right-hand side as a Tailkit
+   shade, so they now alias it rather than duplicating the mapping — change
+   `src/styles/tailkit-tokens.css` and the kit follows. The rest (canvas, ink,
+   ink-faint, accent*, ring, shadow) have NO Tailkit shade with the same value:
+   `--workspace-canvas` is the warm page tone (#fff6ed) while
+   `--color-secondary-50` is the lightest surface (#fffcf8), so re-pointing them
+   would change rendered pixels on every workspace screen. Names stay stable in
+   both directions, so no consumer and none of the kit's baselines churn. */
 .workspace-frame {
   --tt-canvas: var(--workspace-canvas, var(--background));
-  --tt-surface-muted: var(--workspace-surface-muted, var(--secondary));
-  --tt-surface-lift: var(--workspace-surface, var(--card));
+  --tt-surface-muted: var(--color-secondary-100);
+  --tt-surface-lift: var(--color-secondary-50);
   --tt-ink: var(--workspace-ink, var(--foreground));
-  --tt-ink-muted: var(--workspace-ink-muted, var(--muted-foreground));
+  --tt-ink-muted: var(--color-secondary-500);
   --tt-ink-faint: var(--workspace-faint, var(--muted-foreground));
-  --tt-border: var(--workspace-border, var(--border));
+  --tt-border: var(--color-secondary-200);
   --tt-accent: var(--workspace-action, var(--primary));
   --tt-accent-strong: var(--workspace-action-strong, var(--primary));
   --tt-accent-soft: var(--workspace-teal-soft, var(--accent));
