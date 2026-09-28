@@ -19,7 +19,9 @@ disappears — so a routing target that vanishes is loud, not silent.
 - Code conventions: `docs/development/code-standards.md`
 - Testing: `docs/development/testing.md`
 - Agent harness and hooks: `docs/architecture/agent-development-kit.md`
-- Durable agent rules: `.claude/rules/`
+- Agent harness (`.claude/`): machine-local and untracked (see `.gitignore`),
+  so nothing under it is a source of truth — every durable rule lives in the
+  tracked sources above.
 - Completion record: `standards/agent-completion-checklist.md`
 
 For backend, frontend, security, performance, deployment, or bot work, load the
@@ -102,8 +104,8 @@ When asked to commit, work directly on `main` per the repository workflow.
 
 ## Task routing
 
-- Implementation: `.claude/skills/ak-cook/SKILL.md`
-- Verification: `.claude/skills/ak-debug/SKILL.md`
+- Implementation: `docs/development/code-standards.md`
+- Verification: `standards/review-checklist.md`
 - Dev-environment QA: `standards/agent-completion-checklist.md` (record only)
 - Bot diagnosis: `docs/troubleshooting/chatbot-response-path.html`
 - Deployment: read `docs/ops/deployment-guide.md` in full, then obtain approval.

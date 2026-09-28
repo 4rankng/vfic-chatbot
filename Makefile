@@ -44,14 +44,12 @@ bootstrap:
 # Release must be committed and validated before any image is pushed or production is touched.
 # Every gate runs on this machine — there is no CI in the loop.
 release-check:
-	@dirty="$$(git status --porcelain | grep -v '^ M \.claude/CLAUDE\.md$$')"; \
+	@dirty="$$(git status --porcelain)"; \
 	if [ -n "$$dirty" ]; then \
 		echo "Release blocked: commit or stash all local changes first."; \
 		echo "$$dirty" | sed 's/^/    /'; \
-		echo "Only .claude/CLAUDE.md may differ, and only inside its generated block."; \
 		exit 1; \
 	fi
-	@node scripts/check-agent-rules-committed.mjs
 	@git diff --check
 	@if command -v uv >/dev/null 2>&1; then (cd backend && uv lock --check); else echo "WARNING: uv not found — skipped uv lock --check"; fi
 	@cd backend && test "$$(.venv/bin/python -m alembic heads | wc -l | tr -d ' ')" = 1
@@ -59,7 +57,7 @@ release-check:
 		grep -qF "**HEAD:** \`$$HEAD_REV" ../docs/ops/deployment-guide.md || { \
 			echo "Release blocked: docs/ops/deployment-guide.md's Alembic HEAD no longer matches alembic heads ($$HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
 	@if command -v node >/dev/null 2>&1; then node scripts/check-doc-links.mjs; \
-		else echo "Release blocked: node not found — cannot verify that agent routing (AGENTS.md, .claude/CLAUDE.md, standards/) still resolves."; exit 1; fi
+		else echo "Release blocked: node not found — cannot verify that agent routing (AGENTS.md, standards/) still resolves."; exit 1; fi
 	@cd backend && .venv/bin/ruff check . && .venv/bin/python -m pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
 	@cd frontend && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build
 	@tmp_raw="$$(mktemp -t release-gate-raw.XXXXXX.json)"; \
