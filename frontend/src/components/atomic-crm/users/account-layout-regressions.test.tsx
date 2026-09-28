@@ -87,10 +87,7 @@ const mountAccountForm = (children: ReactNode) => (
                 type is narrower than NotificationContextType, so it is widened
                 here rather than stubbing the full notification store. */}
             <NotificationContext.Provider value={[notify, vi.fn()] as never}>
-              <main
-                className="tailkit-workspace-content"
-                style={accountTokens}
-              >
+              <main className="tailkit-workspace-content" style={accountTokens}>
                 {children}
               </main>
             </NotificationContext.Provider>
@@ -111,9 +108,8 @@ describe("account form content plane", () => {
     await page.viewport(desktop, 720);
     const screen = await renderedForm();
 
-    const form = screen.container.querySelector<HTMLElement>(
-      ".user-account-form",
-    )!;
+    const form =
+      screen.container.querySelector<HTMLElement>(".user-account-form")!;
     const styles = getComputedStyle(form);
 
     // One flat plane: ruled top and bottom edges, no fill of its own. A card
@@ -184,16 +180,15 @@ describe("account form field grid", () => {
     // At 760px the grid drops to `minmax(0, 1fr)` and `.user-account-field-wide`
     // gives up its full-row span, so all five fields share one narrow track.
     for (const field of tracks) {
-      expect(
-        field.getBoundingClientRect().width,
-        field.className,
-      ).toBeCloseTo(rects[0].width, 0);
+      expect(field.getBoundingClientRect().width, field.className).toBeCloseTo(
+        rects[0].width,
+        0,
+      );
     }
     for (let index = 1; index < rects.length; index += 1) {
-      expect(
-        rects[index].top,
-        tracks[index].className,
-      ).toBeGreaterThanOrEqual(rects[index - 1].bottom - 1);
+      expect(rects[index].top, tracks[index].className).toBeGreaterThanOrEqual(
+        rects[index - 1].bottom - 1,
+      );
     }
   });
 
@@ -214,8 +209,10 @@ describe("account form field grid", () => {
       const styles = getComputedStyle(control);
       expect(styles.height, control.outerHTML).toBe("44px");
       expect(styles.minHeight, control.outerHTML).toBe("44px");
-      expect(control.getBoundingClientRect().height, control.outerHTML)
-        .toBeGreaterThanOrEqual(44);
+      expect(
+        control.getBoundingClientRect().height,
+        control.outerHTML,
+      ).toBeGreaterThanOrEqual(44);
     }
   });
 });
@@ -262,8 +259,10 @@ describe("account form actions", () => {
       cancel.getBoundingClientRect().top + 1,
     );
     for (const button of buttons) {
-      expect(button.getBoundingClientRect().width, button.outerHTML)
-        .toBeCloseTo(actions.getBoundingClientRect().width, 0);
+      expect(
+        button.getBoundingClientRect().width,
+        button.outerHTML,
+      ).toBeCloseTo(actions.getBoundingClientRect().width, 0);
       expect(getComputedStyle(button).height, button.outerHTML).toBe("44px");
     }
   });
@@ -282,10 +281,11 @@ describe("account form validation", () => {
     // that an empty submit surfaces the Vietnamese message and never reaches
     // the data provider.
     await expect
-      .poll(() =>
-        Array.from(screen.container.querySelectorAll("p")).filter((node) =>
-          (node.textContent ?? "").includes("Vui lòng nhập thông tin."),
-        ).length,
+      .poll(
+        () =>
+          Array.from(screen.container.querySelectorAll("p")).filter((node) =>
+            (node.textContent ?? "").includes("Vui lòng nhập thông tin."),
+          ).length,
       )
       .toBeGreaterThanOrEqual(4);
     expect(create).not.toHaveBeenCalled();
@@ -331,10 +331,11 @@ describe("account form validation", () => {
     expect(email.checkValidity()).toBe(true);
     await screen.getByRole("button", { name: /Tạo tài khoản/ }).click();
     await expect
-      .poll(() =>
-        screen.container.textContent?.includes(
-          "Email chưa đúng định dạng.",
-        ) ?? false,
+      .poll(
+        () =>
+          screen.container.textContent?.includes(
+            "Email chưa đúng định dạng.",
+          ) ?? false,
       )
       .toBe(true);
     expect(create).not.toHaveBeenCalled();
@@ -355,12 +356,18 @@ describe("account form validation", () => {
     await page.viewport(desktop, 720);
     const screen = await renderedForm();
 
-    await screen.getByRole("textbox", { name: /Email/ }).fill("recruiter@vfic.dev");
-    await screen.getByRole("textbox", { name: /Họ và tên/ }).fill("Nguyễn Minh Anh");
+    await screen
+      .getByRole("textbox", { name: /Email/ })
+      .fill("recruiter@vfic.dev");
+    await screen
+      .getByRole("textbox", { name: /Họ và tên/ })
+      .fill("Nguyễn Minh Anh");
     await screen
       .getByRole("textbox", { name: "Mật khẩu", exact: true })
       .fill("matkhau");
-    await screen.getByRole("textbox", { name: "Xác nhận mật khẩu" }).fill("matkhau");
+    await screen
+      .getByRole("textbox", { name: "Xác nhận mật khẩu" })
+      .fill("matkhau");
 
     await screen.getByRole("button", { name: /Tạo tài khoản/ }).click();
 
@@ -369,9 +376,7 @@ describe("account form validation", () => {
     expect(pending.element().hasAttribute("disabled")).toBe(true);
 
     resolveCreate({ data: { id: 7 } });
-    await expect
-      .poll(() => create.mock.calls.length)
-      .toBe(1);
+    await expect.poll(() => create.mock.calls.length).toBe(1);
     // The provider is called as `create("users", { data })`, so the payload
     // lands in the second argument.
     const [resource, params] = create.mock.calls[0] as unknown as [

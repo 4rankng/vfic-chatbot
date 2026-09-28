@@ -22,11 +22,22 @@ import { UserActions } from "./UserActions";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
 import type { UserAccount } from "../types";
 import "./users.css";
-import { PageHeading, PageShell } from "../kit";
+import { EmptyState, PageHeading, PageShell } from "../kit";
 
 type UserListProps = {
   embedded?: boolean;
 };
+
+/**
+ * Tailkit `a-c-tables-08` column headings at console density: a 13px uppercase
+ * caption on the muted strip. The strip colour sits on the cells (the catalog
+ * paints `thead` cells, not the row group) and the table wrapper already draws
+ * the hairline row separators and the horizontal scroll container.
+ */
+const COLUMN_HEADING =
+  "bg-[var(--tt-surface-muted)] px-3 text-left text-[length:var(--text-caption)] font-semibold uppercase tracking-[0.05em] text-[var(--tt-ink-muted)]";
+
+const numberFormatter = new Intl.NumberFormat("vi-VN");
 
 const AccessDenied = () => {
   const translate = useTranslate();
@@ -121,8 +132,8 @@ const UserAccountList = () => {
 
   if (isPending) {
     return (
-      <div
-        className="tt-card tt-card-border user-directory-card"
+      <section
+        className="user-directory-card overflow-hidden rounded-sm border border-[var(--tt-border)] bg-[var(--tt-surface-lift)]"
         aria-busy="true"
       >
         {Array.from({ length: 4 }).map((_, index) => (
@@ -135,69 +146,106 @@ const UserAccountList = () => {
             <Skeleton className="h-6 w-24 rounded-full" />
           </div>
         ))}
-      </div>
+      </section>
     );
   }
 
   if (!data || data.length === 0) {
     return (
-      <Card role="status" className="user-directory-empty mt-4 p-8 text-center">
-        <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-muted">
-          <UserCog className="size-5 text-muted-foreground" />
-        </div>
-        <p className="text-body font-medium">Chưa có tài khoản nào</p>
-        <p className="mt-1 text-helper text-muted-foreground">
-          Tạo tài khoản để phân quyền cho đội tuyển dụng.
-        </p>
-      </Card>
+      <EmptyState
+        className="mt-4"
+        icon={<UserCog className="size-6" aria-hidden="true" />}
+        title="Chưa có tài khoản nào"
+        description="Tạo tài khoản để phân quyền cho đội tuyển dụng."
+      />
     );
   }
 
   return (
-    <section className="tt-card tt-card-border user-directory-card">
-      <div className="user-directory-columns" aria-hidden="true">
-        <span />
-        <span>Người dùng</span>
-        <span>Vai trò</span>
-        <span>Trạng thái</span>
-        <span>Ngày tạo</span>
-        <span />
+    <section className="user-directory-card overflow-hidden rounded-sm border border-[var(--tt-border)] bg-[var(--tt-surface-lift)]">
+      {/* `a-c-tables-08` header block: the muted count line that opens the
+          table surface. The surface title itself is rendered above by the page
+          heading (standalone route) or the embedded directory toolbar. */}
+      <header className="user-directory-header flex items-center justify-between gap-3 border-b border-[var(--tt-border)] px-3 py-2.5">
+        <p className="text-[length:var(--text-body-sm)] font-medium tabular-nums text-[var(--tt-ink-muted)]">
+          {numberFormatter.format(data.length)} tài khoản
+        </p>
+      </header>
+      <div className="overflow-x-auto">
+        <table
+          className="user-directory-table w-full table-fixed border-collapse"
+          aria-label="Danh sách tài khoản"
+        >
+          <thead className="user-directory-head">
+            <tr>
+              <th scope="col" className={`w-16 ${COLUMN_HEADING}`}>
+                <span className="sr-only">Ảnh đại diện</span>
+              </th>
+              <th scope="col" className={COLUMN_HEADING}>
+                Người dùng
+              </th>
+              <th scope="col" className={`w-40 ${COLUMN_HEADING}`}>
+                Vai trò
+              </th>
+              <th scope="col" className={`w-36 ${COLUMN_HEADING}`}>
+                Trạng thái
+              </th>
+              <th scope="col" className={`w-36 ${COLUMN_HEADING}`}>
+                Ngày tạo
+              </th>
+              <th scope="col" className={`w-20 ${COLUMN_HEADING}`}>
+                <span className="sr-only">Thao tác</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="user-directory-body">
+            {data.map((user) => (
+              <RecordContextProvider key={user.id} value={user}>
+                {/* Row hover is the kit's `tbody tr:hover` accent tint. */}
+                <tr className="user-directory-row border-b border-[var(--tt-border)] last:border-b-0 even:bg-[var(--tt-surface-muted)]">
+                  <td className="user-directory-cell-avatar p-3 align-middle">
+                    <div className="tt-avatar tt-avatar-placeholder user-directory-avatar">
+                      <div>
+                        <UserRound className="size-4" aria-hidden="true" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="user-directory-cell-identity p-3 align-middle">
+                    <div className="user-directory-identity">
+                      <h3>{user.full_name || "Chưa có tên"}</h3>
+                      <p>
+                        <Mail className="size-3.5" aria-hidden="true" />
+                        <span>{user.email}</span>
+                      </p>
+                    </div>
+                  </td>
+                  <td className="user-directory-cell-role p-3 align-middle">
+                    <div className="user-directory-role">
+                      <UserRoleBadge />
+                    </div>
+                  </td>
+                  <td className="user-directory-cell-status p-3 align-middle">
+                    <div className="user-directory-status">
+                      <UserStatusBadge />
+                    </div>
+                  </td>
+                  <td className="user-directory-cell-created p-3 align-middle">
+                    <p className="user-directory-created">
+                      <CalendarDays className="size-3.5" aria-hidden="true" />
+                      <span>{formatDate(user.created_at)}</span>
+                    </p>
+                  </td>
+                  <td className="user-directory-cell-actions p-3 align-middle">
+                    <div className="user-directory-actions">
+                      <UserActions />
+                    </div>
+                  </td>
+                </tr>
+              </RecordContextProvider>
+            ))}
+          </tbody>
+        </table>
       </div>
-      <ul className="tt-list user-directory-list">
-        {data.map((user) => (
-          <RecordContextProvider key={user.id} value={user}>
-            <li className="tt-list-row user-directory-row">
-              <div className="tt-avatar tt-avatar-placeholder user-directory-avatar">
-                <div>
-                  <UserRound className="size-4" aria-hidden="true" />
-                </div>
-              </div>
-              <div className="user-directory-identity">
-                <h3>{user.full_name || "Chưa có tên"}</h3>
-                <p>
-                  <Mail className="size-3.5" aria-hidden="true" />
-                  <span>{user.email}</span>
-                </p>
-              </div>
-              <div className="user-directory-meta">
-                <div className="user-directory-role">
-                  <UserRoleBadge />
-                </div>
-                <div className="user-directory-status">
-                  <UserStatusBadge />
-                </div>
-                <p className="user-directory-created">
-                  <CalendarDays className="size-3.5" aria-hidden="true" />
-                  <span>{formatDate(user.created_at)}</span>
-                </p>
-              </div>
-              <div className="user-directory-actions">
-                <UserActions />
-              </div>
-            </li>
-          </RecordContextProvider>
-        ))}
-      </ul>
     </section>
   );
 };
