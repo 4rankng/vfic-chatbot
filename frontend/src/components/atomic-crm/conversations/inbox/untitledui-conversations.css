@@ -453,74 +453,62 @@
   box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
 }
 
+/* a-c-chat-01 at console density: fill-only bubbles (no border, no shadow),
+   `rounded-2xl` with the near bottom corner squared, `p-3` padding and the
+   `text-sm` body scale. Inbound sits on the muted surface, outbound on the solid
+   brand fill with white text. Colours resolve through the `--tt-*` role bridge
+   declared in `inbox/tokens.css`. */
 .inbox-bg-container .bubble {
-  max-width: min(74%, 680px);
-  padding: 11px 14px;
+  max-width: min(80%, 680px);
+  padding: 12px;
+  border: 0;
   border-radius: 16px;
+  box-shadow: none;
 }
 
 .inbox-bg-container .message-row.user .bubble {
-  border: 1px solid var(--uu-inbox-line);
-  border-bottom-left-radius: 4px;
-  background: #f9fafb;
-  color: var(--uu-inbox-ink);
-  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+  border-bottom-left-radius: 0;
+  background: var(--tt-surface-muted);
+  color: var(--tt-ink);
 }
 
 .inbox-bg-container .message-row.bot .bubble,
 .inbox-bg-container .message-row.agent .bubble {
-  border: 1px solid var(--uu-inbox-brand-line);
-  border-bottom-right-radius: 4px;
-  background: var(--uu-inbox-brand-soft);
-  color: var(--uu-inbox-ink);
-  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+  border-bottom-right-radius: 0;
+  background: var(--tt-accent);
+  color: #ffffff;
 }
 
 .inbox-bg-container .message-text {
-  font-size: 14px;
+  font-size: var(--fs-body);
   line-height: 1.52;
 }
 
 .inbox-bg-container .bubble-meta-inline {
+  gap: 5px;
   margin-left: 8px;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
 .inbox-bg-container .message-row.user .bubble-time-inline {
-  color: var(--uu-inbox-muted);
+  color: var(--tt-ink-muted);
 }
 
+/* The outbound bubble is a solid brand fill, so its meta row is set in white
+   instead of the page's ink scale. */
 .inbox-bg-container
   .message-row:is(.bot, .agent)
   .bubble
   :is(.bubble-time-inline, .delivery-status, .delivery-retry-count) {
-  color: var(--uu-inbox-message-meta);
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .inbox-bg-container
   .message-row:is(.bot, .agent)
   .bubble
-  .delivery-status.pending,
-.inbox-bg-container
-  .message-row:is(.bot, .agent)
-  .bubble
-  .delivery-retry-button {
-  color: var(--uu-inbox-brand-hover);
-}
-
-.inbox-bg-container
-  .message-row:is(.bot, .agent)
-  .bubble
-  :is(.delivery-status.failed, .delivery-error-detail) {
-  color: #b42318;
-}
-
-.inbox-bg-container
-  .message-row:is(.bot, .agent)
-  .bubble
-  .delivery-status.suppressed {
-  color: var(--uu-inbox-message-meta);
+  :is(.delivery-retry-button, .delivery-error-detail) {
+  color: #ffffff;
 }
 
 .inbox-bg-container .system-message span,

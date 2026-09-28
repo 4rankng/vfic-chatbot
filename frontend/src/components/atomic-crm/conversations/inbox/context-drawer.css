@@ -823,16 +823,6 @@
   font-style: italic;
 }
 
-.inbox-bg-container .empty-state {
-  display: grid;
-  place-items: center;
-  min-height: 300px;
-  color: var(--ink-faint);
-  font-size: var(--chat-fs-body);
-  font-weight: var(--chat-fw-medium);
-  text-align: center;
-}
-
 .inbox-bg-container .workspace-empty-state {
   width: min(760px, calc(100% - 64px));
   min-height: 0;

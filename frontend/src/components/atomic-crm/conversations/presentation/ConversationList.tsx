@@ -20,6 +20,7 @@ import { useSearchParams } from "react-router";
 import type { Conversation } from "../../types";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "../InboxIcons";
+import { EmptyState } from "../../kit";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { loadConversationSnippets } from "../application/conversation-runtime";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,7 +52,6 @@ import {
 } from "./conversation-row-view-model";
 import type { ConversationRowPresentation } from "../../capabilities/types";
 import conversationWorkspaceIllustration from "@/assets/empty-states/conversation-workspace-illustration.webp";
-import conversationLoadErrorIllustration from "@/assets/empty-states/conversation-load-error-illustration.png";
 import { AlertTriangle, Inbox, RefreshCw, Reply, SearchX } from "lucide-react";
 import "../inbox.css";
 
@@ -289,7 +289,6 @@ const ListEmptyState = ({ kind, onAction }: ListEmptyStateProps) => {
     },
     error: {
       icon: AlertTriangle,
-      image: conversationLoadErrorIllustration,
       title: translate("conversations.list.error_title"),
       description: translate("conversations.list.error_description"),
       action: translate("crm.common.retry"),
@@ -297,30 +296,29 @@ const ListEmptyState = ({ kind, onAction }: ListEmptyStateProps) => {
   }[kind];
   const Icon = content.icon;
 
+  // The three list edge states — nothing to show, nothing matched, load failed —
+  // render the shared kit `EmptyState` frame; only the copy, the icon and the
+  // optional recovery action differ. The list supplies its own inset through
+  // the `.list-empty-state` class.
   return (
-    <div className={`empty-state list-empty-state is-${kind}`} role="status">
-      {content.image ? (
-        <img className="list-empty-state-image" src={content.image} alt="" />
-      ) : (
-        <span className="list-empty-state-icon" aria-hidden="true">
-          <Icon />
-        </span>
-      )}
-      <div className="list-empty-state-copy">
-        <p>{content.title}</p>
-        <span>{content.description}</span>
-      </div>
-      {content.action && onAction ? (
-        <button
-          type="button"
-          className="list-retry tt-btn tt-btn-sm tt-btn-outline"
-          onClick={onAction}
-        >
-          {kind === "error" ? <RefreshCw aria-hidden="true" /> : null}
-          {content.action}
-        </button>
-      ) : null}
-    </div>
+    <EmptyState
+      className="list-empty-state"
+      icon={<Icon className="size-6" aria-hidden="true" />}
+      title={content.title}
+      description={content.description}
+      action={
+        content.action && onAction ? (
+          <button
+            type="button"
+            className="list-retry tt-btn tt-btn-sm tt-btn-outline"
+            onClick={onAction}
+          >
+            {kind === "error" ? <RefreshCw aria-hidden="true" /> : null}
+            {content.action}
+          </button>
+        ) : null
+      }
+    />
   );
 };
 

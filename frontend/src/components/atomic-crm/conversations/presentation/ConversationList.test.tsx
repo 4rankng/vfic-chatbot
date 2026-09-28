@@ -213,3 +213,53 @@ describe("ConversationList — row memo boundary", () => {
     expect(rendersOf(rowNames[3])).toBe(before.get(rowNames[3]));
   });
 });
+
+describe("ConversationList — empty states", () => {
+  it("renders the shared kit empty state when there is nothing to list", async () => {
+    listState.conversations = [];
+    const screen = await render(
+      <MemoryRouter>
+        <ConversationList />
+      </MemoryRouter>,
+    );
+
+    await expect
+      .element(screen.getByText("Chưa có cuộc trò chuyện"))
+      .toBeVisible();
+    const frame = screen.container.querySelector(".list-empty-state")!;
+    // The status region is the shared kit frame — dashed Tailkit anatomy at
+    // console density — carrying the directory's own inset class; it is not the
+    // bespoke icon/illustration stack the list used to render. Utility classes
+    // are asserted by name because this lane does not emit the Tailwind layer
+    // (see kit/page-shell.test.tsx).
+    expect(frame).toHaveClass(
+      "list-empty-state",
+      "rounded-xl",
+      "border-2",
+      "border-dashed",
+      "min-h-64",
+    );
+    expect(frame.getAttribute("role")).toBe("status");
+    // An inbox with no conversations has nothing to recover, so this variant
+    // renders no action button.
+    expect(frame.querySelector("button")).toBeNull();
+  });
+
+  it("clears the search from the filtered empty state's action", async () => {
+    const screen = await mountList();
+    await screen.getByLabelText("Tìm liên hệ").fill("không khớp ai");
+
+    await expect
+      .element(screen.getByText("Không tìm thấy hội thoại"))
+      .toBeVisible();
+    await screen
+      .getByRole("button", { name: "Xoá tìm kiếm và bộ lọc" })
+      .click();
+
+    // The action slot is wired to the directory's own clear-and-reset handler,
+    // so every row comes back.
+    await vi.waitFor(() => {
+      expect(screen.container.querySelectorAll(".conversation").length).toBe(4);
+    });
+  });
+});

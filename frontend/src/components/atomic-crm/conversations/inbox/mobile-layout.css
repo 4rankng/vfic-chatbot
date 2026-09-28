@@ -199,11 +199,6 @@
     background: var(--surface-solid);
   }
 
-  .inbox-bg-container .list-empty-state {
-    min-height: 300px;
-    padding: 44px 24px 120px;
-  }
-
   .inbox-bg-container .workspace-empty-state {
     width: min(100% - 40px, 360px);
     grid-template-columns: 1fr;

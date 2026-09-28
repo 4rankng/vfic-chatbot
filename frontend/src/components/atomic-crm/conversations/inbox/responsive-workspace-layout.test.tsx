@@ -88,9 +88,7 @@ describe("knowledge workspace title", () => {
     await page.viewport(tablet, 900);
     const tabletScreen = await render(
       <div className="inbox-bg-container">
-        <div className="knowledge-page-shell">
-          {header()}
-        </div>
+        <div className="knowledge-page-shell">{header()}</div>
       </div>,
     );
     const tabletHeader = tabletScreen.container.querySelector<HTMLElement>(
@@ -103,9 +101,7 @@ describe("knowledge workspace title", () => {
     await page.viewport(phone, 900);
     const phoneScreen = await render(
       <div className="inbox-bg-container">
-        <div className="knowledge-page-shell">
-          {header()}
-        </div>
+        <div className="knowledge-page-shell">{header()}</div>
       </div>,
     );
     const title = phoneScreen.container.querySelector<HTMLElement>(
@@ -123,7 +119,9 @@ describe("knowledge unit disclosure", () => {
         <div className="knowledge-unit-list">
           <details className="knowledge-unit-disclosure">
             <summary>
-              <span className="knowledge-unit-summary-copy">Đơn vị tuyển dụng</span>
+              <span className="knowledge-unit-summary-copy">
+                Đơn vị tuyển dụng
+              </span>
               <span className="knowledge-unit-chevron" aria-hidden="true">
                 ▾
               </span>
@@ -158,9 +156,9 @@ describe("knowledge unit disclosure", () => {
     )!;
     expect(getComputedStyle(phoneSummary).minHeight).toBe("72px");
     // The chevron track narrows on a phone to leave the label the room.
-    expect(getComputedStyle(phoneSummary).gridTemplateColumns.split(" ")).toHaveLength(
-      2,
-    );
+    expect(
+      getComputedStyle(phoneSummary).gridTemplateColumns.split(" "),
+    ).toHaveLength(2);
     expect(phoneSummary.getBoundingClientRect().height).toBeGreaterThanOrEqual(
       72,
     );
@@ -239,9 +237,9 @@ describe("knowledge page shell width", () => {
         (child as HTMLElement).className,
       ).toBeLessThanOrEqual(shellRect.right + 1);
     }
-    expect(
-      document.scrollingElement!.scrollWidth,
-    ).toBeLessThanOrEqual(document.scrollingElement!.clientWidth + 1);
+    expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(
+      document.scrollingElement!.clientWidth + 1,
+    );
   });
 });
 
@@ -252,11 +250,7 @@ describe("settings destination navigation", () => {
         <nav>
           <div className="settings-side-nav-list">
             {Array.from({ length: count }, (_, index) => (
-              <a
-                key={index}
-                className="settings-side-nav-link"
-                href="#/"
-              >
+              <a key={index} className="settings-side-nav-link" href="#/">
                 Mục {index + 1}
               </a>
             ))}
@@ -279,9 +273,7 @@ describe("settings destination navigation", () => {
 
     expect(tracks).toHaveLength(3);
     const links = Array.from(
-      screen.container.querySelectorAll<HTMLElement>(
-        ".settings-side-nav-link",
-      ),
+      screen.container.querySelectorAll<HTMLElement>(".settings-side-nav-link"),
     );
     expect(links).toHaveLength(6);
     // Three equal columns over two rows.

@@ -309,50 +309,10 @@
   color: var(--tailkit-muted);
 }
 
-.inbox-bg-container .bubble {
-  max-width: min(78%, 680px);
-  padding: 10px 13px;
-  border: 0;
-  border-radius: 16px;
-  box-shadow: none;
-}
-
-.inbox-bg-container .message-row.user .bubble {
-  border: 0;
-  border-bottom-left-radius: 4px;
-  background: var(--tailkit-surface-muted);
-  color: var(--tailkit-ink);
-}
-
-.inbox-bg-container .message-row.bot .bubble,
-.inbox-bg-container .message-row.agent .bubble {
-  border: 0;
-  border-bottom-right-radius: 4px;
-  background: var(--tailkit-brand);
-  color: #ffffff;
-}
-
-.inbox-bg-container
-  .message-row.bot
-  .bubble
-  :is(.bubble-time-inline, .delivery-status, .delivery-retry-count),
-.inbox-bg-container
-  .message-row.agent
-  .bubble
-  :is(.bubble-time-inline, .delivery-status, .delivery-retry-count) {
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.inbox-bg-container .message-row.bot .delivery-retry-button,
-.inbox-bg-container .message-row.agent .delivery-retry-button,
-.inbox-bg-container .message-row.bot .delivery-error-detail,
-.inbox-bg-container .message-row.agent .delivery-error-detail {
-  color: #ffffff;
-}
-
-.inbox-bg-container .bubble-meta-inline {
-  gap: 5px;
-}
+/* The bubble anatomy (a-c-chat-01) lives in the later
+   `untitledui-conversations.css` layer: that layer declares `.bubble` fill,
+   radius, padding and meta colours after this one, so the older bubble block
+   here was shadowed in full and has been removed rather than left to drift. */
 
 /* Tailkit textarea + primary icon button, retained as a stable grid footer. */
 .inbox-bg-container .composer-wrap {

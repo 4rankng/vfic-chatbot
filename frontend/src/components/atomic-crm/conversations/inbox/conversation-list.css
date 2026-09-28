@@ -76,70 +76,13 @@
   padding: 6px 0 10px;
 }
 
+/* The list's empty / filtered / error states render the shared kit
+   `EmptyState` (dashed `--tt-border` frame, accent-soft icon disc,
+   section-title heading, optional action row). The list only supplies the
+   inset: the directory is a narrow column, so the frame keeps clear of the rail
+   above it and of the panel edges. */
 .inbox-bg-container .list-empty-state {
-  min-height: 0;
-  height: 100%;
-  padding: 40px 28px;
-  align-content: center;
-  justify-items: center;
-  gap: 14px;
-  color: var(--workspace-muted);
-}
-
-.inbox-bg-container .list-empty-state-icon {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--workspace-blue-line);
-  border-radius: 14px;
-  color: var(--workspace-active);
-  background: var(--workspace-blue-wash);
-}
-
-.inbox-bg-container .list-empty-state-icon svg {
-  width: 21px;
-  height: 21px;
-  stroke-width: 1.75;
-}
-
-.inbox-bg-container .list-empty-state-image {
-  width: 64px;
-  height: 64px;
-  display: block;
-  object-fit: contain;
-}
-
-.inbox-bg-container .list-empty-state.is-error .list-empty-state-icon {
-  color: var(--workspace-warning);
-  background: color-mix(in srgb, var(--workspace-warning) 10%, white);
-  border-color: color-mix(
-    in srgb,
-    var(--workspace-warning) 24%,
-    var(--workspace-blue-line)
-  );
-}
-
-.inbox-bg-container .list-empty-state-copy {
-  display: grid;
-  max-width: 230px;
-  gap: 4px;
-  text-align: center;
-}
-
-.inbox-bg-container .list-empty-state-copy p {
-  margin: 0;
-  color: var(--workspace-ink);
-  font-size: var(--chat-fs-body);
-  font-weight: var(--chat-fw-semibold);
-  line-height: var(--chat-lh-title);
-}
-
-.inbox-bg-container .list-empty-state-copy span {
-  color: var(--workspace-muted);
-  font-size: var(--chat-fs-meta);
-  font-weight: var(--chat-fw-regular);
-  line-height: var(--chat-lh-body);
+  margin: 20px 16px;
 }
 
 .inbox-bg-container .conversation {
