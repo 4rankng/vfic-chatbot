@@ -93,6 +93,24 @@ build + push both images → blue/green cutover.
    pushed frontend image. This is separate from the backend blue/green cutover,
    which intentionally does not pull the frontend.
 
+### Dependency audit gate (`npm audit`)
+
+`release-check` runs `npm audit --omit=dev --audit-level=high` in `frontend/`:
+the release fails on a new high or critical advisory in a package that actually
+ships. It needs registry access and fails closed if the audit endpoint is
+unreachable. Dev tooling is deliberately out of scope (assessed 2026-09-27,
+re-check on any lockfile refresh): `js-yaml` (dev-only transitive of `eslint`
+and `shadcn`), `sharp` (not a frontend dependency at all), and `vitest` /
+`@vitest/mocker` / `baseline-browser-mapping` (test tooling, absent from
+`dist/`) carry standing Dependabot alerts with no fixes available, so upgrading
+to chase them buys nothing. These exclusions hold only while the affected
+packages stay out of `dependencies` — the moment one of them ships, the gate is
+authoritative again. The four standing moderates in the production `ra-core`
+chain (`decode-uri-component` → `query-string` → `ra-core` →
+`ra-i18n-polyglot`, no fix available) sit below the gate's threshold. GitHub's
+alert banner counts a different resolution than the committed lockfile; the
+local lockfile audit is what the gate trusts.
+
 ### Blue/green cutover (`scripts/bg_deploy.sh`) — zero downtime at the edge
 1. Pull the new backend image for the inactive web color and backend workers;
    the frontend is not part of a backend blue/green cutover.

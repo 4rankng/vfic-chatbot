@@ -58,6 +58,10 @@ release-check:
 			echo "Release blocked: docs/ops/deployment-guide.md's Alembic HEAD no longer matches alembic heads ($$HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
 	@if command -v node >/dev/null 2>&1; then node scripts/check-doc-links.mjs; \
 		else echo "Release blocked: node not found — cannot verify that agent routing (AGENTS.md, standards/) still resolves."; exit 1; fi
+	# Dependency audit: fails the release on a new high/critical advisory in a
+	# package that actually ships. Dev-only tooling is deliberately out of
+	# scope — exclusions and boundary condition: docs/ops/deployment-guide.md §3.
+	@cd frontend && npm audit --omit=dev --audit-level=high
 	@cd backend && .venv/bin/ruff check . && .venv/bin/python -m pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
 	@cd frontend && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build
 	@tmp_raw="$$(mktemp -t release-gate-raw.XXXXXX.json)"; \
