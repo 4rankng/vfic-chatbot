@@ -1,0 +1,6 @@
+{
+  // Bind pyright to the project virtualenv so bare invocations (CLI, editor,
+  // release gate) resolve app dependencies instead of reporting them missing.
+  "venvPath": ".",
+  "venv": ".venv"
+}

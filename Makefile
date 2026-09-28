@@ -62,6 +62,14 @@ release-check:
 	# package that actually ships. Dev-only tooling is deliberately out of
 	# scope — exclusions and boundary condition: docs/ops/deployment-guide.md §3.
 	@cd frontend && npm audit --omit=dev --audit-level=high
+	# Scoped type gate: app/graph must stay at zero Pyright errors (OPS-30).
+	# backend/pyrightconfig.json binds the project virtualenv.
+	@cd backend && uvx pyright app/graph
+	# Chain reversibility: the roundtrip harness walks head -> base revision ->
+	# head and renders the reverse walk offline, on its own throwaway database
+	# (~2 min; needs the dev Postgres). The 20-minute per-revision sweep stays
+	# in the integration lane.
+	@cd backend && .venv/bin/python -m pytest "tests/integration/test_migration_roundtrip_walk.py::test_chain_reverses_to_base_and_reapplies" "tests/integration/test_migration_roundtrip_walk.py::test_reverse_chain_renders_offline" -p no:randomly -m integration
 	@cd backend && .venv/bin/ruff check . && .venv/bin/python -m pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
 	@cd frontend && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build
 	@tmp_raw="$$(mktemp -t release-gate-raw.XXXXXX.json)"; \
