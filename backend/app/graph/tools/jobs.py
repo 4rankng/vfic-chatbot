@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
@@ -199,7 +200,11 @@ async def _no_match_safe_reply(
             f"{head} Bạn nhắn \"xem vị trí đang tuyển\" để tôi kiểm tra lại nhé.",
             [],
         )
-    alt_jobs = tuple(getattr(fallback, "jobs", ()) or ())[:k]
+    # The port types the lookup result Any, so the attribute read stays Any;
+    # an annotated local keeps the ``or ()`` None-guard from collapsing to an
+    # empty-tuple type the checker treats as uniterable.
+    fallback_jobs: Any = getattr(fallback, "jobs", ()) or ()
+    alt_jobs = tuple(fallback_jobs)[:k]
     if not alt_jobs:
         return (
             f"{head} Bạn nhắn \"xem vị trí đang tuyển\" để tôi kiểm tra lại nhé.",
@@ -256,7 +261,11 @@ async def list_active_jobs(
     status = getattr(lookup, "status", "unavailable")
     total = int(getattr(lookup, "total", 0) or 0)
     if status == "matched":
-        jobs = tuple(getattr(lookup, "jobs", ()) or ())[:k]
+        # Annotated local: the port types the lookup Any, and without it the
+        # ``or ()`` None-guard collapses the read to an uniterable empty-tuple
+        # type for the checker.
+        found_jobs: Any = getattr(lookup, "jobs", ()) or ()
+        jobs = tuple(found_jobs)[:k]
         if not jobs:
             return _active_job_tool_result(
                 "unavailable",
@@ -338,7 +347,9 @@ async def recommend_jobs(
         return "Chưa đủ thông tin hồ sơ để gợi ý việc phù hợp. Anh/chị cho em biết vị trí hoặc khu vực mong muốn nhé."
     if status == "no_match":
         return "Hiện chưa có việc làm đang tuyển phù hợp với hồ sơ này."
-    scored = tuple(getattr(recommendation, "jobs", ()) or ())
+    # Annotated local: same Any-read collapse as ``found_jobs`` above.
+    recommended_jobs: Any = getattr(recommendation, "jobs", ()) or ()
+    scored = tuple(recommended_jobs)
     if not scored:
         return "Hiện chưa thể tra cứu việc làm phù hợp. Bạn vui lòng thử lại sau nhé."
     lines = ["GỢI Ý VIỆC LÀM PHÙ HỢP (dựa trên hồ sơ ứng viên):"]

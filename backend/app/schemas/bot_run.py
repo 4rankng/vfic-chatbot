@@ -49,6 +49,7 @@ DecisionTraceSummaryCode = Literal[
     "employee_support_terms",
     "employee_support_continuation",
     "channel_not_allowed",
+    "allowed",
     "phone_number",
     "profile_terms",
     "fallback",
@@ -81,6 +82,13 @@ DecisionTraceSummaryCode = Literal[
     "llm_throttled",
     "agent_error",
     "outbox_recovery",
+    # Codes the runner records that the Literal had drifted away from (triaged
+    # 2026-09-28): the recipient-unreachable stand-down, the tingting_scope
+    # allow verdict, the alarmable progressive stream/answer mismatch, and the
+    # support-OA clarify route.
+    "recipient_unreachable",
+    "progressive_stream_mismatch",
+    "employee_support_clarify",
 ]
 
 DecisionTraceToolName = Literal[

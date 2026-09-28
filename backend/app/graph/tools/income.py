@@ -10,6 +10,7 @@ evidence shaping, and target ranking only.
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 from app.graph.income_contract import (
     INCOME_STATUS_UNAVAILABLE,
@@ -59,7 +60,11 @@ def _mentions_target_amount(project: dict[str, object], target_monthly_vnd: int 
     if target_monthly_vnd is None:
         return False
     target = f"{target_monthly_vnd / 1_000_000:g}"
-    for evidence in project.get("evidence", []):
+    # Producers always store ``name_vi``/``value_text`` string pairs under
+    # ``evidence``; the dict[str, object] container is the JSON contract, so
+    # narrow the read once instead of guarding every row access.
+    evidence_rows = cast("list[dict[str, str]]", project.get("evidence") or [])
+    for evidence in evidence_rows:
         text = normalize_vietnamese_text(str(evidence.get("value_text") or ""))
         start = 0
         while (index := text.find(target, start)) >= 0:

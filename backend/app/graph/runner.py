@@ -428,22 +428,25 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     # overlaps that work instead of serialising behind it, while the shared
     # AsyncSession keeps a single in-flight coroutine at any moment.
 
-    async def _timed_decide_turn() -> TurnDecisions:
-        decisions_t0 = time.monotonic()
-        try:
-            return await deps.turn_decisions.decide_turn(
-                user_text=state.user_text,
-                recent_messages=recent_messages,
-                profile_name=profile_name,
-            )
-        finally:
-            timings["jev_ms"] = int(round((time.monotonic() - decisions_t0) * 1000))
+    turn_decisions = deps.turn_decisions
+    if turn_decisions is not None:
 
-    jev_task = (
-        asyncio.create_task(_timed_decide_turn())
-        if deps.turn_decisions is not None
-        else None
-    )
+        async def _timed_decide_turn() -> TurnDecisions:
+            decisions_t0 = time.monotonic()
+            try:
+                return await turn_decisions.decide_turn(
+                    user_text=state.user_text,
+                    recent_messages=recent_messages,
+                    profile_name=profile_name,
+                )
+            finally:
+                timings["jev_ms"] = int(round((time.monotonic() - decisions_t0) * 1000))
+
+        jev_task: asyncio.Task[TurnDecisions] | None = asyncio.create_task(
+            _timed_decide_turn()
+        )
+    else:
+        jev_task = None
 
     # Resolve the candidate's lead row once and hand it to every adapter call
     # below (stored gender, inference write, prompt context); the adapters keep
@@ -568,7 +571,11 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             elif hasattr(deps.direct_context, "active_context"):
                 from app.graph.direct_context import ProjectTurnContext
 
-                legacy_direct = await deps.direct_context.active_context()
+                # Legacy readers (pre-resolve adapters, test fakes) surface the
+                # context directly and duck-type rather than live on the port —
+                # the production adapter carries only ``resolve`` — so the read
+                # stays deliberately untyped via getattr.
+                legacy_direct = await getattr(deps.direct_context, "active_context")()
                 if legacy_direct is not None:
                     project_context = ProjectTurnContext(
                         state="FOCUSED",
@@ -675,7 +682,10 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
         outcome_label = lane.outcome_label
         faq_metadata = lane.faq_metadata
 
-        if early is not None:
+        # An early bubble only exists when the progressive stream ran (the
+        # branch above guards on the stream), so the guard carries both: real
+        # narrowing for the stream, not a cast, and no behavior change.
+        if stream is not None and early is not None:
             # The first bubble is already with the candidate. Split the raw
             # stream at the sent offset: the remainder is a true suffix, so no
             # text is ever sent twice.

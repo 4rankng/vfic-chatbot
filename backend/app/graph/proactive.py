@@ -16,7 +16,7 @@ import logging
 import re
 from datetime import timedelta
 from inspect import iscoroutinefunction
-from typing import Any, TypedDict
+from typing import Any, Awaitable, Callable, TypedDict, cast
 
 from app.graph.message_values import delivery_is, sender_is
 from app.graph.ports import SendOutcome
@@ -42,7 +42,7 @@ class ProactiveDecision(TypedDict):
 _OUTCOME = "proactive"
 
 
-def _outcome(kind: str, *, reason: str, reply: str = "") -> dict:
+def _outcome(kind: str, *, reason: str, reply: str = "") -> TurnOutcome:
     return {"outcome": f"{_OUTCOME}:{kind}", "reason": reason, "reply": reply}
 
 
@@ -184,6 +184,12 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     )
 
     svc = deps.conversation
+    # Proactive runs always wire the follow-up guard — the None default on
+    # GraphDeps.followup_allowed exists for reactive-only tests — so bind the
+    # callable once and keep the two guard sites below branch-free.
+    followup_allowed = cast(
+        "Callable[[Any], Awaitable[tuple[bool, str]]]", deps.followup_allowed
+    )
     injected_proactive_state = getattr(deps, "proactive_state", None)
     proactive_state: ProactiveStatePort = (
         injected_proactive_state
@@ -195,7 +201,11 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     cap = PROACTIVE_FOLLOWUP_CAP
     silence_limit = PROACTIVE_SILENCE_LIMIT
     provider = provider_from_conversation(conv)
-    recipient_id = recipient_from_conversation(conv)
+    # Eligibility for a proactive nudge requires an inbound message inside the
+    # 48h window, and an inbound message always persists the sender id on the
+    # conversation, so the port's ``str | None`` never carries None here.
+    # Narrow once at the boundary instead of branching at each typed consumer.
+    recipient_id = cast("str", recipient_from_conversation(conv))
 
     if deps.runtime_policy is not None:
         policy = await deps.runtime_policy.resolve_active_policy()
@@ -217,7 +227,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
     if not conv.last_inbound_at:
         return _outcome("suppressed", reason="no_inbound")
 
-    rule_allowed, rule_reason = await deps.followup_allowed(conv)
+    rule_allowed, rule_reason = await followup_allowed(conv)
     if not rule_allowed:
         return _outcome("suppressed", reason=rule_reason)
 
@@ -283,7 +293,8 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         lead_profile = ""
         recent_messages = await svc.last_messages(conv, limit=16)
         try:
-            lead_profile = await deps.lead.profile_text(recipient_id)
+            if deps.lead is not None:
+                lead_profile = await deps.lead.profile_text(recipient_id)
         except Exception:  # noqa: BLE001
             logger.warning("lead fetch failed for %s, skipping", conv.zalo_chat_id, exc_info=True)
 
@@ -373,7 +384,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
             await proactive_state.commit()
             return _outcome("suppressed", reason="opted_out_during_generation")
-        rule_allowed, rule_reason = await deps.followup_allowed(conv)
+        rule_allowed, rule_reason = await followup_allowed(conv)
         if not rule_allowed:
             await svc.state.release_lock(conv, lock_owner=lock_owner)
             await proactive_state.commit()

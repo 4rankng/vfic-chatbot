@@ -178,6 +178,12 @@ def _identity_note(verdict: Mapping[str, Any]) -> str:
     return "Chưa xác minh được danh tính. Hỏi lại đúng trường còn thiếu rồi gọi lại tool."
 
 
+def _missing_field_label(field: Any) -> str:
+    """Label if known, else the raw field name (the verdict types fields Any)."""
+    label = _FIELD_LABELS.get(field)
+    return field if label is None else label
+
+
 def render_verdict(verdict: Mapping[str, Any]) -> str:
     """The model-facing block: booleans + the fields owed + one instruction.
 
@@ -186,7 +192,9 @@ def render_verdict(verdict: Mapping[str, Any]) -> str:
     is an answer key: disclosing it would let anyone holding a phone number pass
     the check by repeating it back.
     """
-    owed = ", ".join(_FIELD_LABELS.get(field, field) for field in verdict["missing"]) or "không"
+    owed = ", ".join(
+        _missing_field_label(field) for field in verdict["missing"]
+    ) or "không"
     lines = [
         "Kết quả đối chiếu danh tính TingTing (do hệ thống so khớp, không phải tự đoán):",
         f"- tìm thấy tài khoản: {'có' if verdict['found'] else 'không'}",

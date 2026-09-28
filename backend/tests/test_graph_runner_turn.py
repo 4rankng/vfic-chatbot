@@ -1618,7 +1618,7 @@ async def test_model_tier_metric_follows_the_configured_fast_client(monkeypatch)
         # off-domain turn now hands off before the model is ever reached. The
         # fast tier therefore serves the below-floor reading — the one that
         # still falls through to the agent — so that is the route pinned here.
-        return TurnRoute("out_of_scope", "safe_redirect", reason="off_topic", confidence=0.4)
+        return TurnRoute("out_of_scope", "safe_redirect", reason="off_domain_terms", confidence=0.4)
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kw: kw["current_user_text"])

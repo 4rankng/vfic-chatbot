@@ -56,6 +56,21 @@ def _field(obj: object, key: str) -> object | None:
     return getattr(obj, key, None)
 
 
+def _coerce_int(value: object) -> int:
+    """Convert a usage-block scalar exactly like ``int()`` would.
+
+    The usage block is untyped JSON, so the read comes back ``object``; the
+    isinstance ladder narrows the numeric/string shapes the providers and
+    LangChain actually emit. Anything it does not recognize raises TypeError,
+    which the parse paths below already translate into the all-zero TokenUsage.
+    """
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        return int(value)
+    raise TypeError(f"non-numeric usage field: {type(value).__name__}")
+
+
 def _cached_tokens(usage_obj: object) -> int:
     """Cached-prompt tokens across the key shapes the providers/LangChain emit.
 
@@ -71,13 +86,13 @@ def _cached_tokens(usage_obj: object) -> int:
     """
     direct = _field(usage_obj, "prompt_cache_hit_tokens") or _field(usage_obj, "cached_tokens")
     if direct:
-        return int(direct)
+        return _coerce_int(direct)
     details = _field(usage_obj, "prompt_tokens_details")
     if details is not None and (value := _field(details, "cached_tokens")):
-        return int(value)
+        return _coerce_int(value)
     normalized = _field(usage_obj, "input_token_details")
     if normalized is not None and (value := _field(normalized, "cache_read")):
-        return int(value)
+        return _coerce_int(value)
     return 0
 
 
@@ -91,8 +106,10 @@ def parse_usage(usage_obj: object | None) -> TokenUsage:
     if usage_obj is None:
         return TokenUsage()
     try:
-        prompt = int(_field(usage_obj, "prompt_tokens") or _field(usage_obj, "input_tokens") or 0)
-        completion = int(
+        prompt = _coerce_int(
+            _field(usage_obj, "prompt_tokens") or _field(usage_obj, "input_tokens") or 0
+        )
+        completion = _coerce_int(
             _field(usage_obj, "completion_tokens") or _field(usage_obj, "output_tokens") or 0
         )
         return TokenUsage(prompt, completion, _cached_tokens(usage_obj))

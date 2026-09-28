@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.graph.ports import TurnDecisions
+from app.schemas.bot_run import DecisionTraceSummaryCode
 
 TurnIntent = Literal[
     "small_talk",
@@ -58,7 +59,9 @@ class TurnRoute:
     intent: TurnIntent
     strategy: TurnStrategy
     tools: tuple[str, ...] = ()
-    reason: str = ""
+    # Reason codes reuse the decision-trace summary literals (schemas/bot_run.py)
+    # so the trace contract stays intact; "empty" is the unrouted default.
+    reason: DecisionTraceSummaryCode = "empty"
     confidence: float = 0.0
 
 
@@ -138,7 +141,10 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
 
 
 # intent -> (strategy, tools, trace reason) — one place for the whole mapping.
-_INTENT_ROUTES = {
+# Keys are runtime intent names, so the dict stays open (not keyed by TurnIntent).
+_INTENT_ROUTES: dict[
+    str, tuple[TurnStrategy, tuple[str, ...], DecisionTraceSummaryCode]
+] = {
     "recommend": (
         "recommendation",
         ("list_active_jobs", "recommend_jobs", "recommend_projects", "get_product_features"),
@@ -183,7 +189,7 @@ TURN_INTENTS: frozenset[str] = frozenset(
 _SUPPORT_CLARIFY_INTENTS: frozenset[str] = frozenset({"general", "small_talk"})
 
 
-def employee_support_route(*, reason: str, confidence: float) -> TurnRoute:
+def employee_support_route(*, reason: DecisionTraceSummaryCode, confidence: float) -> TurnRoute:
     """The employee-support route with the caller's own trace reason.
 
     Shared by the mid-flow continuation (``route_from_decisions``) and the

@@ -14,8 +14,13 @@ import asyncio
 import logging
 import re
 import time
+from typing import TYPE_CHECKING
 
 from app.graph.llm_observability import _record_llm_429
+
+if TYPE_CHECKING:
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import Runnable
 
 logger = logging.getLogger(__name__)
 
@@ -85,12 +90,12 @@ def _bind_like(llm, schemas, *, bound_primary: bool):
 
 
 async def _llm_call_with_retry(
-    bound,
+    bound: Runnable,
     messages,
     *,
     metrics: dict | None = None,
     fallback_bounds: list | None = None,
-):
+) -> tuple[AIMessage, int]:
     """Call bound.ainvoke with 1 retry on 429 (settings.llm_429_retry_sleep_seconds backoff).
 
     ``fallback_bounds`` (optional) is an ordered list of equivalently-bound
@@ -188,7 +193,7 @@ def _content_text(chunk: object) -> str:
     return ""
 
 
-async def _stream_collect(bound, messages, on_delta):
+async def _stream_collect(bound, messages, on_delta) -> AIMessage:
     """Stream one completion, forwarding text deltas, and return the merged message.
 
     langchain's ``AIMessageChunk`` supports ``+``, so summing the chunks yields a
@@ -268,13 +273,13 @@ class _OverlapSuppressor:
 
 
 async def _llm_call_streaming_with_retry(
-    bound,
+    bound: Runnable,
     messages,
     *,
     on_delta,
     metrics: dict | None = None,
     fallback_bounds: list | None = None,
-):
+) -> tuple[AIMessage, int]:
     """Streaming twin of :func:`_llm_call_with_retry`.
 
     Same capacity policy as :func:`_llm_call_with_retry` — retry once on 429,
@@ -300,7 +305,7 @@ async def _llm_call_streaming_with_retry(
     # recall, so the turn is partial no matter which provider finishes it.
     emitted: list[str] = []
 
-    async def _attempt(client, *, suppress_overlap: bool = False) -> object:
+    async def _attempt(client, *, suppress_overlap: bool = False) -> AIMessage:
         suppressor = _OverlapSuppressor("".join(emitted)) if suppress_overlap else None
 
         if suppressor is None:

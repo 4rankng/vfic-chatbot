@@ -24,7 +24,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import NamedTuple
+from typing import NamedTuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_core.messages import AIMessage
 
 from app.core.config import get_settings
 from app.graph.answer_repair import (
@@ -117,7 +120,9 @@ def _init_turn_metrics(metrics: dict | None) -> None:
 class _RoundResult(NamedTuple):
     """One model round: the response plus the timing splits it produced."""
 
-    message: object
+    # A chat-model round always resolves to an AI message; typed via
+    # TYPE_CHECKING so the module keeps its lazy heavy-import policy.
+    message: AIMessage
     backoff_ms: int
     queue_ms: int
     model_ms: int
@@ -406,10 +411,10 @@ class MiniMaxAgent:
         )
 
         early = await self._prefetch_routes(turn)
-        if early is not _CONTINUE_TURN:
+        if not isinstance(early, _ContinueTurn):
             return early
         early = await self._run_generation_round(turn)
-        if early is not _CONTINUE_TURN:
+        if not isinstance(early, _ContinueTurn):
             return early
         return await self._finalize_answer(turn)
 
