@@ -466,6 +466,24 @@ def test_small_talk_gets_a_redirect_budget_before_any_handoff() -> None:
     assert TINGTING_CONSULTANT_HANDOFF_LINE not in TINGTING_INTENT_REDIRECT_REPLY
 
 
+def test_login_trouble_is_reset_intent_not_a_handoff() -> None:
+    """BOT-01 follow-up: "Ứng dụng đăng nhập kiểu gì" must enter the reset flow.
+
+    Production (2026-09-28 15:36, TingTing support OA): after the confirm
+    question, a login-trouble reply was answered with the consultant handoff
+    line on the same turn. Login trouble IS the reset flow's customer: both
+    prompt sections must route it straight to the three-field ask instead of
+    escalating.
+    """
+    for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
+        assert "RẮC RỐI ĐĂNG NHẬP" in prompt
+        assert "đăng nhập kiểu gì" in prompt
+        assert TINGTING_FIELDS_ASK in prompt
+    # routed INTO the flow, never out to a human
+    assert "KHÔNG chuyển chuyên viên" in TINGTING_SUPPORT_PERSONA
+    assert "không chuyển chuyên viên" in TINGTING_API_GUIDE
+
+
 def test_support_persona_forbids_other_employee_data_and_the_recruitment_role() -> None:
     """The OA persona is the code-defined password-reset assistant, nothing else."""
     assert "KHÔNG tra cứu" in TINGTING_SUPPORT_PERSONA
