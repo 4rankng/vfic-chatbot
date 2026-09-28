@@ -156,16 +156,22 @@
      `knowledge-base`, `users`, `automation`, `projects` and `knowledge`;
      `@/components/ui/empty-state` still serves `admin/data-table.tsx`, which is
      dependency-owned and cannot be moved.
-  2. **The inbox still overrides the kit's `--tt-*` bridge.**
-     `conversations/inbox/tokens.css` declares an overlapping `--tt-*` set on
-     `:root` and on `.workspace-frame`; on inbox routes its values win. Merging
-     the two sets moves pixels on the most screen-covered surface in the app, so
-     it is deferred and documented in `kit/index.ts`.
-  3. **78 installed Untitled UI files cost CSS they do not yet earn.** Tailwind
-     scans files, not import graphs, so unused components' utilities compile. The
-     fix when adoption settles is to prune the unused generated components (the
-     `base/input` install pulled payment/tags/tooltip siblings) — not to hide the
-     CSS.
+  2. **The inbox's second `--tt-*` set is narrower than it looked.** Measured in
+     the built CSS: the kit's `.workspace-frame` block wins for every key both
+     sets define (`:root` and `.workspace-frame` have the same specificity and the
+     inbox's set is inherited rather than matched by workspace elements), so the
+     inbox's `:root` block reaches only `<html>` — in practice, portaled Radix UI
+     (dialogs, menus, popovers) rendered outside `.workspace-frame`. The two sets
+     differ in two shared keys (`--tt-surface-lift`, `--tt-shadow-xs`) and the
+     inbox adds several keys the kit does not define. Consolidating them would
+     move those portals, with no baseline coverage, so it stays deferred and is
+     now documented accurately in `kit/index.ts` and the audit.
+  3. **`[SOURCEMAP_BROKEN]` from `@tailwindcss/vite` is an upstream limitation.**
+     Vite 8 warns that the plugin transforms CSS without emitting a sourcemap, so
+     CSS sourcemaps may be approximate. The plugin exposes no option for it
+     (checked: no `sourcemap` key in its build output), and the alternative —
+     dropping `build.sourcemap` — would lose JS sourcemaps too. JS sourcemaps are
+     unaffected; the warning is informational and does not fail the build.
   4. **One flaky e2e test.** `e2e/knowledge.spec.ts` (Mobile Chrome) timed out
      once waiting for the `Tải lên` button to leave `disabled`; it passed on
      retry and on an isolated re-run. The button is shadcn, untouched by this

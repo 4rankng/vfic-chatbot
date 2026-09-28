@@ -78,11 +78,14 @@ shell replacement — not recommended" for all 13 surfaces.
 1. **`kit/` is the correct seam, and its doc comment was wrong.** `kit/index.ts`
    claimed the primitives "consume the `--tt-*` token bridge declared in
    `conversations/inbox/tokens.css`". They do not: `kit/tailkit-system.css`
-   declares `--tt-*` on `.workspace-frame`, and the inbox *also* declares an
-   overlapping `--tt-*` set (on `:root` at `inbox/tokens.css:2` and on
-   `.workspace-frame` at `:223`), so on inbox routes the inbox's values win for
-   the keys it declares. Both defects are fixed in `kit/index.ts`, and the
-   remaining duplication is recorded as a follow-up below.
+   declares `--tt-*` on `.workspace-frame`, and that block is the one that wins
+   for workspace content — measured in the built CSS, `:root` and
+   `.workspace-frame` have the same specificity and the inbox's set is inherited
+   rather than matched by workspace elements, so the inbox's `:root` block reaches
+   only `<html>` (in practice, portaled Radix UI). The earlier claim that the
+   inbox overrides the kit on inbox routes was wrong and is corrected here and in
+   `kit/index.ts`. The dangling `plans/<timestamp>-tailkit-overhaul/` reference in
+   the same comment was also fixed.
 2. **`kit/index.ts` pointed at `plans/<timestamp>-tailkit-overhaul/`, which does
    not exist.** `check-doc-links.mjs` cannot see code comments, so nothing caught
    it. Fixed.
