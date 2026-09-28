@@ -11,17 +11,27 @@ settings and caches it, so production still has exactly one engine per process.
 """
 
 from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    # Static view of the lazy module attributes served through ``__getattr__``
+    # below. Pyright infers ``__getattr__``'s return as the union of the
+    # helper returns (AsyncEngine | async_sessionmaker), which made every
+    # ``async_session()`` call site read as "AsyncEngine is not callable".
+    # Declarations only — never executed at runtime.
+    engine: AsyncEngine
+    async_session: async_sessionmaker[AsyncSession]
 
 _engine = None
 _session_factory: async_sessionmaker | None = None
 
 
-def get_engine():
+def get_engine() -> AsyncEngine:
     """The process-wide async engine, built on first use (import-safe)."""
     global _engine
     if _engine is None:
