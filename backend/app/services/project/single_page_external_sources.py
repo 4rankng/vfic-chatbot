@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from app.core.cache import bump_cache_version
 from app.core.preamble_cache import NS_PREAMBLE
-from app.core.redis import get_redis
+from app.core.redis import async_value, get_redis
 from app.models.company import Project
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseDirectFile, KnowledgeBaseMode
 from app.models.single_page_external_source_sync_state import SinglePageExternalSourceSyncState
@@ -326,12 +326,14 @@ async def sync_single_page_external_source(
     try:
         return await _sync_locked(db, state, actor)
     finally:
-        await redis.eval(
-            "if redis.call('get', KEYS[1]) == ARGV[1] "
-            "then return redis.call('del', KEYS[1]) else return 0 end",
-            1,
-            lock_key,
-            lock_owner,
+        await async_value(
+        redis.eval(
+                "if redis.call('get', KEYS[1]) == ARGV[1] "
+                "then return redis.call('del', KEYS[1]) else return 0 end",
+                1,
+                lock_key,
+                lock_owner,
+            )
         )
 
 

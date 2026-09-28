@@ -97,11 +97,11 @@ class RedisLlmSemaphore:
         if self._limit <= 0:
             return
         try:
-            from app.core.redis import get_redis_sync
+            from app.core.redis import get_redis_sync, sync_value
 
             r = get_redis_sync()
             if not self._initialized:
-                current = r.llen(self._key)
+                current = sync_value(r.llen(self._key))
                 if current < self._limit:
                     r.rpush(self._key, *[1] * (self._limit - current))
                 # Token keys carry no TTL: the deployment's volatile-lru
@@ -139,10 +139,10 @@ class RedisLlmSemaphore:
         job). ``__aexit__`` therefore dispatches this to a worker thread.
         """
         try:
-            from app.core.redis import get_redis_sync
+            from app.core.redis import get_redis_sync, sync_value
 
             r = get_redis_sync()
-            count = int(r.eval(_RELEASE_TOKEN_LUA, 1, self._key, self._limit) or 0)
+            count = int(sync_value(r.eval(_RELEASE_TOKEN_LUA, 1, self._key, self._limit)) or 0)
             # The script trims excess above the limit atomically, so the
             # count can only sit at or below the limit afterwards; a
             # shortfall reflects tokens legitimately held in flight (or a

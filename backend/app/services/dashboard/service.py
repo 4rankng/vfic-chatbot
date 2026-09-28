@@ -331,12 +331,12 @@ class DashboardService:
     def _rq_ingest_counts(self) -> tuple[int, int, int]:
         """Ingest-queue depth / failed jobs / live workers. Sync: call via ``to_thread``."""
         try:
-            from app.core.redis import get_redis_sync
+            from app.core.redis import get_redis_sync, sync_value
 
             redis = get_redis_sync()
-            queue_depth = int(redis.llen("rq:queue:ingest") or 0)
-            failed_job_count = int(redis.zcard("rq:failed:ingest") or 0)
-            worker_count = int(redis.scard("rq:workers:ingest") or 0)
+            queue_depth = int(sync_value(redis.llen("rq:queue:ingest")) or 0)
+            failed_job_count = int(sync_value(redis.zcard("rq:failed:ingest")) or 0)
+            worker_count = int(sync_value(redis.scard("rq:workers:ingest")) or 0)
             return queue_depth, failed_job_count, worker_count
         except Exception:  # noqa: BLE001 — Redis telemetry must not break dashboard
             return 0, 0, 0

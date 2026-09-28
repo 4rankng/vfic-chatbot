@@ -48,6 +48,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.conversation_messaging.domain.statuses import ConversationMode, MessageSender
+from app.core.redis import sync_value
 from app.core.config import get_settings
 from app.models.conversation import BotRun, Conversation, Message
 from app.models.outbox import OutboundOutbox, OutboxStatus
@@ -74,7 +75,7 @@ def _queue_depths(client: redis_lib.Redis) -> dict[str, int]:
     depths: dict[str, int] = {}
     for queue in CONSUMED_QUEUES:
         try:
-            depths[queue] = int(client.llen(f"rq:queue:{queue}"))
+            depths[queue] = int(sync_value(client.llen(f"rq:queue:{queue}")))
         except redis_lib.RedisError:
             depths[queue] = -1
     return depths

@@ -19,7 +19,7 @@ import logging
 from fastapi import HTTPException, Request, status
 
 from app.core.config import get_settings
-from app.core.redis import get_redis
+from app.core.redis import async_value, get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ async def _enforce_bucket(
     """
     try:
         redis = get_redis()
-        count = await redis.eval(_BUCKET_INCREMENT, 1, key, window)
+        count = await async_value(redis.eval(_BUCKET_INCREMENT, 1, key, window))
         if count > limit:
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, _TOO_MANY_REQUESTS)
     except HTTPException:

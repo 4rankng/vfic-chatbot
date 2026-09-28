@@ -271,7 +271,7 @@ class ZaloSettingsMixin:
         (one would block the other's legitimate refresh).
         """
 
-        from app.core.redis import get_redis
+        from app.core.redis import async_value, get_redis
 
         account_key = account_key or ZALO_OA_DEFAULT_ACCOUNT_KEY
         is_default = account_key == ZALO_OA_DEFAULT_ACCOUNT_KEY
@@ -374,12 +374,14 @@ class ZaloSettingsMixin:
             # Delete the marker only while we still own it (Lua CAS): a holder
             # that outlived its TTL must never delete a successor's lock.
             try:
-                await redis.eval(
-                    "if redis.call('get', KEYS[1]) == ARGV[1] "
-                    "then return redis.call('del', KEYS[1]) else return 0 end",
-                    1,
-                    lock_key,
-                    leader_id,
-                )
+                await async_value(
+        redis.eval(
+                        "if redis.call('get', KEYS[1]) == ARGV[1] "
+                        "then return redis.call('del', KEYS[1]) else return 0 end",
+                        1,
+                        lock_key,
+                        leader_id,
+                    )
+        )
             except Exception:  # noqa: BLE001
                 logger.warning("zalo OA token refresh lock cleanup failed", exc_info=True)

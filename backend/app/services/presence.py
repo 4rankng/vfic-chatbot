@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 
-from app.core.redis import get_redis
+from app.core.redis import async_value, get_redis
 from app.realtime.emitter import emit_event
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ async def join_viewing(
     """Register a user as viewing an entity. Returns current viewers."""
     redis = get_redis()
     key = _viewer_key(entity_type, entity_id)
-    await redis.sadd(key, json.dumps({"user_id": user_id, "name": user_name}))
+    await async_value(redis.sadd(key, json.dumps({"user_id": user_id, "name": user_name})))
     await redis.expire(key, VIEWER_TTL)
     viewers = await _get_viewers(redis, key)
     room = f"{entity_type}:{entity_id}"
@@ -58,11 +58,11 @@ async def leave_viewing(entity_type: str, entity_id, user_id: str) -> dict:
     redis = get_redis()
     key = _viewer_key(entity_type, entity_id)
     # Remove all entries with matching user_id (stored as JSON)
-    members = await redis.smembers(key)
+    members = await async_value(redis.smembers(key))
     for member in members:
         data = json.loads(member)
         if data.get("user_id") == user_id:
-            await redis.srem(key, member)
+            await async_value(redis.srem(key, member))
     viewers = await _get_viewers(redis, key)
     room = f"{entity_type}:{entity_id}"
     await emit_event(
@@ -81,7 +81,7 @@ async def heartbeat_viewing(
     key = _viewer_key(entity_type, entity_id)
     # Re-add with current name (in case it changed)
     member = json.dumps({"user_id": user_id, "name": user_name})
-    await redis.sadd(key, member)
+    await async_value(redis.sadd(key, member))
     await redis.expire(key, VIEWER_TTL)
     return await _get_viewers(redis, key)
 

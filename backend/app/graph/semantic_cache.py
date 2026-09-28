@@ -156,7 +156,7 @@ async def semantic_cache_get(
     Linear scan over the stored query vectors of ``scope``. Returns ``None`` on
     miss, disabled, or any Redis error (best-effort, non-fatal).
     """
-    from app.core.redis import get_redis
+    from app.core.redis import async_value, get_redis
 
     s = _settings()
     if not getattr(s, "semantic_cache_enabled", False):
@@ -165,14 +165,14 @@ async def semantic_cache_get(
     try:
         vkey, rkey, _tkey = await _keys(scope)
         r = await get_redis()
-        all_vecs = await r.hgetall(vkey)
+        all_vecs = await async_value(r.hgetall(vkey))
         if not all_vecs:
             return None
         candidates = await asyncio.to_thread(_scan_candidates, query_vec, all_vecs, thr)
         # Best-first: the first candidate that still has its result text wins, so
         # a stale/missing higher-similarity entry can't mask a valid lower one.
         for qhash, sim in candidates:
-            result = await r.hget(rkey, qhash)
+            result = await async_value(r.hget(rkey, qhash))
             if result:
                 return SemanticCacheHit(result=result, similarity=sim, cached_query=qhash)
         return None

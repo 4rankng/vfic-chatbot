@@ -235,7 +235,7 @@ async def metrics() -> dict:
 
     def _collect() -> dict:
         from rq import Queue, Worker
-        from app.core.redis import get_redis_sync
+        from app.core.redis import get_redis_sync, sync_value
 
         conn = get_redis_sync()
         queues = {}
@@ -261,7 +261,7 @@ async def metrics() -> dict:
             "reconcile_stale_lock_broken",
             "reconcile_unanswered_gauge",
         ):
-            queues[key] = int(conn.get(key) or 0)
+            queues[key] = int(sync_value(conn.get(key)) or 0)
         return queues
 
     return await asyncio.to_thread(_collect)

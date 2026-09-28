@@ -169,13 +169,13 @@ def collect_token_usage(day: str | None = None) -> dict:
     """
     day = day or _today_utc()
     try:
-        from app.core.redis import get_redis_sync
+        from app.core.redis import get_redis_sync, sync_value
 
         r = get_redis_sync()
-        inp = int(r.get(_RKEY_TOKEN_INPUT.format(day=day)) or 0)
-        out = int(r.get(_RKEY_TOKEN_OUTPUT.format(day=day)) or 0)
-        cached = int(r.get(_RKEY_TOKEN_CACHED.format(day=day)) or 0)
-        cost_micro = int(r.get(_RKEY_COST.format(day=day)) or 0)
+        inp = int(sync_value(r.get(_RKEY_TOKEN_INPUT.format(day=day))) or 0)
+        out = int(sync_value(r.get(_RKEY_TOKEN_OUTPUT.format(day=day))) or 0)
+        cached = int(sync_value(r.get(_RKEY_TOKEN_CACHED.format(day=day))) or 0)
+        cost_micro = int(sync_value(r.get(_RKEY_COST.format(day=day))) or 0)
         return {
             "day": day,
             "tokens_input": inp,
