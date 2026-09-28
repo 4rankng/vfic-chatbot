@@ -71,6 +71,8 @@ push:
 		--tag $(IMAGE_NAME):latest \
 		--tag $(IMAGE_NAME):$(GIT_SHA) \
 		--cache-from type=registry,ref=$(IMAGE_NAME):latest \
+		--cache-from type=registry,ref=$(IMAGE_NAME):buildcache \
+		--cache-to type=registry,ref=$(IMAGE_NAME):buildcache,mode=max \
 		--build-arg BUILDKIT_INLINE_CACHE=1 \
 		--push \
 		.
