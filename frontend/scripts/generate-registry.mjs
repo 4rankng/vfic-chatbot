@@ -5,6 +5,9 @@ import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
 
+import { isDependencyOwned } from "./dependency-owned-paths.mjs";
+import { readJson } from "./read-json.mjs";
+
 const registryPath = "registry.json";
 const packageJsonPath = "package.json";
 const basePath = "src";
@@ -80,7 +83,7 @@ const assets = globSync(
   path.join(basePath, "assets", "**", assetPattern),
 ).filter((file) => !excludedAssetFiles.includes(path.basename(file)));
 
-const registryContent = JSON.parse(fs.readFileSync(registryPath, "utf-8"));
+const registryContent = readJson(registryPath);
 
 const files = [
   ...atomicCrmComponents.map((path) => {
@@ -120,7 +123,12 @@ const files = [
       target: `~/${path}`,
     };
   }),
-];
+  // Dependency-owned paths are supplied by the external registry or installed by
+  // the Untitled UI CLI, so publishing them would ship a second copy of a
+  // dependency to every consumer. Same list the path checker uses: before this
+  // filter existed, the two disagreed and the CLI's resize-observer hook was
+  // published while the checker called it dependency-owned.
+].filter((file) => !isDependencyOwned(file.path));
 
 // The published install list has to be derived, never hand-maintained: the
 // upstream manifest shipped packages this fork dropped from package.json, and
@@ -214,9 +222,7 @@ const deriveDependencies = (files) => {
     }
   }
 
-  const { dependencies } = JSON.parse(
-    fs.readFileSync(packageJsonPath, "utf-8"),
-  );
+  const { dependencies } = readJson(packageJsonPath);
 
   return [...importedBy.keys()].sort().map((name) => {
     const range = dependencies?.[name];

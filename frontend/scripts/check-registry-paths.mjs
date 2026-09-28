@@ -5,23 +5,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
+import { DEPENDENCY_OWNED_PATHS as dependencyOwnedPaths } from "./dependency-owned-paths.mjs";
+import { readJson } from "./read-json.mjs";
+
 const frontendRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-
-/**
- * Parse a manifest file, failing loudly. This script is a gate: malformed JSON
- * must stop it, but the operator needs to know *which* file and why rather than
- * reading a bare SyntaxError stack from inside JSON.parse.
- */
-const readJson = (file) => {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (error) {
-    throw new Error(`${file} is not valid JSON: ${error.message}`);
-  }
-};
 
 const registry = readJson(path.join(frontendRoot, "registry.json"));
 const manifestFiles = registry.items.flatMap((item) => item.files ?? []);
@@ -44,21 +34,6 @@ for (const file of manifestPaths) {
   }
 }
 
-const dependencyOwnedPaths = [
-  "src/components/admin/",
-  "src/components/ui/",
-  // Untitled UI v8 components + helpers, written by `npx untitledui add …`
-  // under `components.json`'s `@/components` alias. They are a copy-paste
-  // dependency like `components/ui`, so published application files may import
-  // them without the registry republishing the library's own source.
-  "src/components/base/",
-  "src/components/foundations/",
-  "src/utils/",
-  // Installed by the Untitled UI CLI for its popover/select positioning.
-  "src/hooks/use-resize-observer.ts",
-  "src/hooks/use-mobile.ts",
-  "src/lib/utils.ts",
-];
 const nonTextAssetExtensions = new Set([".png", ".webp"]);
 const candidates = [
   "",
