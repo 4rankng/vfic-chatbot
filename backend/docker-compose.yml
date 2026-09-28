@@ -3,23 +3,23 @@
 #         ghcr.io/4rankng/tinghire-fe (nginx static). Caddy = edge (auto-TLS).
 # All app config comes from .env (compose auto-loads /opt/vfic/.env).
 #
-# Host (OPS-09, measured 2026-09-24): DigitalOcean droplet, 1 vCPU / 2 GB RAM
-# (1967 MB usable) + 4 GB swap, 48 GB disk. These deploy-time figures are the
-# authoritative ones; any doc claiming "4 GB" is stale. Memory limits are sized
-# from measured resident usage — see the sum documented in
-# docs/deployment-guide.md §1.
+# Host (resized 2026-09-28, measured live): DigitalOcean droplet, 2 vCPU /
+# 3915 MB RAM + 4 GB swap, 77 GB disk. The previous 1 vCPU / 2 GB / 48 GB host
+# (OPS-09, measured 2026-09-24) shaped the original fences; the resize re-based
+# the ones that had grown tight — see the per-service notes below.
 #
-# Memory-limit ledger (OPS-09): every service carries a
+# Memory-limit ledger (OPS-09, re-based 2026-09-28): every service carries a
 # deploy.resources.limits.memory ceiling — postgres 448M, redis 320M, web-blue
-# 384M, web-green 384M, worker-chatbot 3×512M, worker-persistence 512M,
+# 512M, web-green 512M, worker-chatbot 4×512M, worker-persistence 512M,
 # worker-ingest 512M, worker-followup 512M, worker-maintenance 384M, scheduler
-# 128M, frontend 64M, adminer 128M, caddy 64M, oa-profile-backfill 512M
-# (profile-gated). Sum of ceilings ≈ 5.3 GB against 1967 MB usable + swap: the
-# limits are per-container KILL FENCES, not reservations. Steady-state RSS is
-# far below each ceiling; the point of a fence is that a runaway container hits
-# ITS cap and gets OOM-killed by Docker alone, instead of growing until the
-# kernel OOM killer picks a victim (historically postgres or caddy — the
-# unbounded-blast-radius outage). Revisit the ledger if the host size changes.
+# 128M, metrics-watch 128M, frontend 64M, adminer 128M, caddy 128M,
+# oa-profile-backfill 512M (profile-gated). Sum of ceilings ≈ 6.2 GB against
+# 3915 MB usable + swap: the limits are per-container KILL FENCES, not
+# reservations. Steady-state RSS is far below each ceiling; the point of a
+# fence is that a runaway container hits ITS cap and gets OOM-killed by Docker
+# alone, instead of growing until the kernel OOM killer picks a victim
+# (historically postgres or caddy — the unbounded-blast-radius outage). Revisit
+# the ledger if the host size changes.
 #
 # App images are `${IMAGE_TAG:?…}`: a required variable, so no compose command
 # can silently resolve `:latest` (OPS-10) — including bare `docker compose run`
@@ -55,7 +55,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 448M  # measured 181 MB resident; shared_buffers alone is 128 MB
+          memory: 448M  # measured 218 MB resident (2026-09-28); shared_buffers alone is 128 MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vfic}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -122,17 +122,22 @@ services:
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
     env_file: .env
     environment:
-      # DB connection budget (see config.py): the steady state is ONE active web
-      # colour + 3 chatbot + persistence/ingest/followup/maintenance workers = 8
-      # DB-touching processes, i.e. 12 + 6×6 = 48 of the max_connections=150
-      # ceiling. A cutover briefly adds the second colour's 12 (60 worst case).
+      # DB connection budget (see config.py): each of the colour's two uvicorn
+      # workers holds its own pool, so the steady state — ONE active web colour
+      # (2 × (8+4)) + 4 chatbot + persistence/ingest/followup/maintenance
+      # workers (6 each) = 12 DB-touching processes — draws at most
+      # 24 + 8×6 = 72 of the max_connections=150 ceiling. A cutover briefly
+      # adds the second colour's 24 (96 worst case).
       DB_POOL_SIZE: "8"
       DB_MAX_OVERFLOW: "4"
     logging: *default-logging
     deploy:
       resources:
         limits:
-          memory: 384M  # measured 118 MB resident (single uvicorn worker)
+          # Two uvicorn workers (Dockerfile CMD) since the 2026-09-28 resize;
+          # the single-worker measurement was 118 MB resident, so expect
+          # roughly double. The fence is a kill fence, not a reservation.
+          memory: 512M
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -163,9 +168,9 @@ services:
     deploy:
       resources:
         limits:
-          # Mirrors web-blue (same image, same single uvicorn worker). Both
+          # Mirrors web-blue (same image, same two uvicorn workers). Both
           # colours only run at the same time during a cutover window.
-          memory: 384M
+          memory: 512M
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -196,16 +201,18 @@ services:
     command: ["python", "-m", "app.workers.run_worker", "webhook_high", "recovery"]
     stop_grace_period: 180s  # let rq finish the ≤60s turn on SIGTERM before SIGKILL
     deploy:
-      replicas: 3  # RQ consumes webhook_high first and recovery second, so a
+      replicas: 4  # RQ consumes webhook_high first and recovery second, so a
                    # recovered-turn backlog can never delay a live candidate turn.
-                   # 3 replicas raise cross-conversation throughput (per-chat locks
-                   # serialize same-chat turns); the 2026-09-22 recovery storm of
-                   # 62 turns held candidates for 30–115s on 2.
+                   # Replicas raise cross-conversation throughput (per-chat locks
+                   # serialize same-chat turns): the 2026-09-22 recovery storm of
+                   # 62 turns held candidates for 30–115s on 2, so 3; the
+                   # 2026-09-28 resize to 2 vCPU / 4 GB made room for a 4th.
+                   # LLM_CONCURRENCY_LIMIT=8 stays the cross-process ceiling.
       resources:
         limits:
-          # 3 instances × measured RSS ~130M ≈ 390M on the 2GB droplet. 512M cap
-          # per container lets Docker OOM-kill a runaway worker without taking
-          # the host down; host headroom verified at deploy time.
+          # 4 instances × measured RSS ~150M ≈ 600M (live sample, 2026-09-28).
+          # 512M cap per container lets Docker OOM-kill a runaway worker without
+          # taking the host down; the 4 GB host carries the fleet comfortably.
           memory: 512M
     healthcheck:
       # Loop liveness, not socket liveness: RQ's work loop refreshes this
@@ -550,9 +557,11 @@ services:
     deploy:
       resources:
         limits:
-          # Caddy's own docs put idle usage at a few tens of MB; it must stay
-          # small so the edge never competes with the data plane for RAM.
-          memory: 64M
+          # Measured 48.7 MiB steady (2026-09-28) — 76% of the old 64M fence,
+          # which the 2 GB host had sized. Re-based to 128M: the edge still
+          # stays small, but a TLS-handshake burst can no longer reach its own
+          # kill fence.
+          memory: 128M
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - vfic_caddy_data:/data

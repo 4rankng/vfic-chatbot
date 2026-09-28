@@ -48,8 +48,9 @@ COPY scripts ./scripts
 RUN pip install --no-deps -e .
 
 # Default: run the web process. Workers/scheduler override the command in
-# compose. Single uvicorn worker — --workers 2 forks two uvicorn processes
-# which doubled cold-boot RSS and produced a multi-second listener gap on the
-# 1.9GiB host where the deploy verification probe could overshoot.
+# compose. Two uvicorn workers — the 1.9GiB host pinned one because a second
+# worker doubled cold-boot RSS and widened the listener gap past the deploy
+# verification probe; the 2026-09-28 resize to 2 vCPU / 4 GB removed both
+# constraints, and the web colour's compose fence is sized for the fork.
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

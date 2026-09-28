@@ -23,14 +23,16 @@ remains a registry convenience tag but is never used by `make deploy`.
 |---|---|---|---|
 | `postgres` | `pgvector/pgvector:pg16` | 1 | Source of truth. `max_connections=150`, healthcheck `pg_isready`, volume `vfic_pgdata`. |
 | `redis` | `redis:7-alpine` | 1 | RQ broker + pub/sub + LLM semaphore/cache. AOF on, 256 MB cap `allkeys-lru`, volume `vfic_redisdata`. |
-| `web-blue` / `web-green` | `ghcr.io/4rankng/tinghire-be:latest` | 1 each (only **active** receives traffic) | FastAPI (uvicorn, 1 worker). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. The **active** color is tracked in `/opt/vfic/ACTIVE_COLOR`; Caddy proxies only it. The inactive color is stopped between deploys (kept for instant rollback). |
-| `worker-chatbot` | `ghcr.io/4rankng/tinghire-be:latest` | **3** | RQ queues `webhook_high` then `recovery` (strict priority: a recovered-turn backlog can never delay a live candidate turn). Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit per container. |
+| `web-blue` / `web-green` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 each (only **active** receives traffic) | FastAPI (uvicorn, 2 workers since the 2026-09-28 host resize). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. The **active** color is tracked in `/opt/vfic/ACTIVE_COLOR`; Caddy proxies only it. The inactive color is stopped between deploys (kept for instant rollback). |
+| `worker-chatbot` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | **4** (raised from 3 by the 2026-09-28 host resize) | RQ queues `webhook_high` then `recovery` (strict priority: a recovered-turn backlog can never delay a live candidate turn). Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit per container. |
 | `worker-persistence` | `ghcr.io/4rankng/tinghire-be:latest` | **1** | RQ queue `persistence_low` only. Best-effort lead/memory enrichment; isolated so it cannot delay candidate replies. 512 MB limit. |
 | `worker-ingest` | `ghcr.io/4rankng/tinghire-be:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
-| `worker-followup` | `ghcr.io/4rankng/tinghire-be:latest` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
-| `scheduler` | `ghcr.io/4rankng/tinghire-be:latest` | 1 | `rqscheduler`. |
+| `worker-followup` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
+| `worker-maintenance` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | RQ queue `maintenance` (reconcile sweep + outbound dispatch ticks, split from followup by PERF-12). |
+| `scheduler` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | `rqscheduler`. |
+| `metrics-watch` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | In-stack ops-endpoint watcher: polls `/health`, `/metrics`, `/health/queue` on both colors and emits single-line JSON alerts to stdout. |
 | `oa-profile-backfill` | active `ghcr.io/4rankng/tinghire-be:<git-sha>` | on demand | Profile-gated maintenance job that fills only missing Zalo OA profile names and avatars. It is not started by ordinary `docker compose up`; deploy starts it after a successful cutover. |
-| `frontend` | `ghcr.io/4rankng/tinghire-fe:latest` | 1 | nginx static SPA. Expose 80. |
+| `frontend` | `ghcr.io/4rankng/tinghire-fe:<git-sha>` | 1 | nginx static SPA. Expose 80. |
 | `adminer` | `adminer:4` | 1 | DB UI, bound to `127.0.0.1:8081` (loopback only — reach via `make adminer` SSH tunnel). |
 | `caddy` | `caddy:2` | 1 | Edge. `80:80`, `443:443`. Caddyfile ro. Volumes `vfic_caddy_data`, `vfic_caddy_config`. |
 
@@ -173,7 +175,7 @@ local lockfile audit is what the gate trusts.
    - `https://bot.tingting.vip/health` returns `{"status":"ok"}`.
    - `https://bot.tingting.vip/` returns the frontend root.
    - `Caddyfile` routes the public edge to the new `web-<color>:8000` upstream.
-   - `docker compose ps` shows 1 `frontend`, 3 `worker-chatbot`, 1 each of
+   - `docker compose ps` shows 1 `frontend`, 4 `worker-chatbot`, 1 each of
      `worker-persistence`, `worker-ingest`, `worker-followup`, `scheduler`, and
      `worker-maintenance` containers running, with health checks healthy when
      present.
@@ -324,7 +326,7 @@ Sourced from `backend/.env.example` (committed template) and
 |---|---|
 | `APP_ENV` | `development` (default) or `production`. Gates boot-time safety checks. |
 | `CORS_ORIGINS` | Comma-separated explicit origins (no `*` — credentials enabled). |
-| `WEB_CONCURRENCY` | No longer read by the web entrypoint: the image pins a single uvicorn worker (Dockerfile CMD; a second worker doubled cold-boot RSS and widened the listener gap on the 1.9 GiB host). |
+| `WEB_CONCURRENCY` | Not read by the web entrypoint: the image pins two uvicorn workers (Dockerfile CMD; raised from one by the 2026-09-28 resize to 2 vCPU / 4 GB — the old 1.9 GiB host pinned one because a second worker doubled cold-boot RSS and widened the listener gap). |
 
 ### Database
 | Name | Purpose |
@@ -564,6 +566,9 @@ rise) and `GET /health` on the edge.
 ```cron
 * * * * * root /opt/vfic/scripts/ops-alerts.sh 2>> /var/log/vfic-alerts.log
 ```
+
+Installed on the droplet as `/etc/cron.d/vfic-ops-alerts` (2026-09-28; the
+script had shipped but the schedule had never been installed).
 
 Ship the script with the config snapshot the deploy pushes to `/opt/vfic/`, and
 read `/var/log/vfic-alerts.log` (or forward it wherever you already read logs).
