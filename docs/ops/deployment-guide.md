@@ -102,7 +102,14 @@ build + push both images → blue/green cutover.
 
 ### Dependency audit gate (`npm audit`)
 
-`release-check` runs `npm audit --omit=dev --audit-level=high` in `frontend/`:
+Since 2026-09-28 the heavy gates run as three **concurrent lanes** — backend
+(pyright/ruff/unit suite), frontend (audit/lint/typecheck/registry/unit/
+coverage/build), data (migration walk + golden retrieval benchmark) — with any
+lane failure failing the release; wall time is the slowest lane, not their sum.
+The post-gate deploy then runs the OneDrive backup and both image pushes
+concurrently and waits for all three before the cutover.
+
+`npm audit --omit=dev --audit-level=high` runs in `frontend/`:
 the release fails on a new high or critical advisory in a package that actually
 ships. It needs registry access and fails closed if the audit endpoint is
 unreachable. Dev tooling is deliberately out of scope (assessed 2026-09-27,

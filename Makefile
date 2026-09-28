@@ -58,46 +58,67 @@ release-check:
 			echo "Release blocked: docs/ops/deployment-guide.md's Alembic HEAD no longer matches alembic heads ($$HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
 	@if command -v node >/dev/null 2>&1; then node scripts/check-doc-links.mjs; \
 		else echo "Release blocked: node not found — cannot verify that agent routing (AGENTS.md, standards/) still resolves."; exit 1; fi
-	# Dependency audit: fails the release on a new high/critical advisory in a
-	# package that actually ships. Dev-only tooling is deliberately out of
-	# scope — exclusions and boundary condition: docs/ops/deployment-guide.md §3.
-	@cd frontend && npm audit --omit=dev --audit-level=high
-	# Scoped type gate: app/graph must stay at zero Pyright errors (OPS-30).
-	# backend/pyrightconfig.json binds the project virtualenv.
-	@cd backend && uvx pyright app/graph
-	# Chain reversibility: the roundtrip harness walks head -> base revision ->
-	# head and renders the reverse walk offline, on its own throwaway database
-	# (~2 min; needs the dev Postgres). The 20-minute per-revision sweep stays
-	# in the integration lane.
-	@cd backend && .venv/bin/python -m pytest "tests/integration/test_migration_roundtrip_walk.py::test_chain_reverses_to_base_and_reapplies" "tests/integration/test_migration_roundtrip_walk.py::test_reverse_chain_renders_offline" -p no:randomly -m integration
-	@cd backend && .venv/bin/ruff check . && .venv/bin/python -m pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
-	@cd frontend && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build
-	@tmp_raw="$$(mktemp -t release-gate-raw.XXXXXX.json)"; \
-		tmp_gold="$$(mktemp -t release-gate-golden.XXXXXX.json)"; \
-		(cd backend && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp_raw"); \
-		(cd backend && .venv/bin/python -c 'import json, sys; from pathlib import Path; raw = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")); passed = raw.get("passed"); case_count = raw.get("case_count"); \
+	# The heavy gates are independent of each other, so they run as three
+	# concurrent lanes (backend | frontend | data) instead of one serial chain.
+	# Every original gate still runs and any lane failure still fails the
+	# release; the lanes only stop waiting on each other. Lane logs are kept
+	# and printed whole so a red lane is diagnosable exactly as before.
+	#
+	# backend lane — scoped type gate (app/graph at zero Pyright errors,
+	# OPS-30; backend/pyrightconfig.json binds the project virtualenv), lint
+	# and the full non-integration suite under coverage.
+	# frontend lane — the dependency audit fails the release on a new
+	# high/critical advisory in a package that actually ships (dev-only
+	# tooling is deliberately out of scope — docs/ops/deployment-guide.md §3),
+	# then lint, typecheck, registry, unit tests, changed-surface coverage
+	# and the production build.
+	# data lane — chain reversibility: the roundtrip harness walks head ->
+	# base revision -> head and renders the reverse walk offline, on its own
+	# throwaway database (~2 min; needs the dev Postgres). The 20-minute
+	# per-revision sweep stays in the integration lane. Then the offline
+	# golden retrieval-correctness benchmark and its gate.
+	@tmp="$$(mktemp -d -t vfic-release.XXXXXX)"; \
+	rc_be=0; rc_fe=0; rc_data=0; \
+	( cd backend && uvx pyright app/graph && .venv/bin/ruff check . && .venv/bin/python -m pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing ) >"$$tmp/backend.log" 2>&1 & \
+	be_pid=$$!; \
+	( cd frontend && npm audit --omit=dev --audit-level=high && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build ) >"$$tmp/frontend.log" 2>&1 & \
+	fe_pid=$$!; \
+	( cd backend && .venv/bin/python -m pytest "tests/integration/test_migration_roundtrip_walk.py::test_chain_reverses_to_base_and_reapplies" "tests/integration/test_migration_roundtrip_walk.py::test_reverse_chain_renders_offline" -p no:randomly -m integration && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp/golden-raw.json" && .venv/bin/python -c 'import json, sys; from pathlib import Path; raw = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")); passed = raw.get("passed"); case_count = raw.get("case_count"); \
 assert isinstance(passed, int) and not isinstance(passed, bool), "benchmark artifact missing integer passed"; \
 assert isinstance(case_count, int) and not isinstance(case_count, bool) and case_count > 0, "benchmark artifact missing positive integer case_count"; \
 assert 0 <= passed <= case_count, "benchmark artifact has invalid passed/case_count values"; \
-Path(sys.argv[2]).write_text(json.dumps({"golden_pass_rate_pct": passed / case_count * 100.0}), encoding="utf-8")' "$$tmp_raw" "$$tmp_gold"); \
-		(cd backend && RELEASE_GATE_LATENCY_SLO_ENABLED=false .venv/bin/python scripts/release_gate_check.py --golden-results "$$tmp_gold"); \
-		rc=$$?; \
-		rm -f "$$tmp_raw" "$$tmp_gold"; \
-		exit "$$rc"
+Path(sys.argv[2]).write_text(json.dumps({"golden_pass_rate_pct": passed / case_count * 100.0}), encoding="utf-8")' "$$tmp/golden-raw.json" "$$tmp/golden.json" && RELEASE_GATE_LATENCY_SLO_ENABLED=false .venv/bin/python scripts/release_gate_check.py --golden-results "$$tmp/golden.json" ) >"$$tmp/data.log" 2>&1 & \
+	data_pid=$$!; \
+	wait $$be_pid; rc_be=$$?; \
+	wait $$fe_pid; rc_fe=$$?; \
+	wait $$data_pid; rc_data=$$?; \
+	echo "===== backend lane (exit $$rc_be) ====="; cat "$$tmp/backend.log"; \
+	echo "===== frontend lane (exit $$rc_fe) ====="; cat "$$tmp/frontend.log"; \
+	echo "===== data lane (exit $$rc_data) ====="; cat "$$tmp/data.log"; \
+	rm -rf "$$tmp"; \
+	test "$$rc_be" -eq 0 -a "$$rc_fe" -eq 0 -a "$$rc_data" -eq 0
 
 # Build & push BOTH GHCR images, then deploy to bot.tingting.vip.
 #
-# Depends on `backup`, not just `release-check`: this target runs `alembic upgrade
-# head` on the production database, so a bad migration is only recoverable from a
-# dump taken BEFORE the run. `deploy-backend` already had this dependency;
-# `deploy` did not, which meant a full deploy -- the one that carries migrations --
-# was the one path with no pre-migration dump.
-deploy: release-check backup
-	@echo "=== Building & pushing frontend ==="
-	cd frontend && make push
-	@echo "=== Building & pushing backend ==="
-	cd backend && make push
-	@echo "=== Deploying to production ==="
+# This target runs `alembic upgrade head` on the production database, so a bad
+# migration is only recoverable from a dump taken BEFORE the run. The backup
+# therefore still hard-gates the cutover — but it no longer serializes in
+# front of the image pushes: backup and both pushes run concurrently, and the
+# recipe waits for all three (failing on any) before touching production.
+deploy: release-check
+	@echo "=== Backup + frontend/backend image pushes run concurrently ==="
+	@tmp="$$(mktemp -d -t vfic-deploy.XXXXXX)"; \
+	rc_backup=0; rc_fe=0; rc_be=0; \
+	( $(MAKE) backup ) >"$$tmp/backup.log" 2>&1 & backup_pid=$$!; \
+	( cd frontend && make push ) >"$$tmp/fe-push.log" 2>&1 & fe_pid=$$!; \
+	( cd backend && make push ) >"$$tmp/be-push.log" 2>&1 & be_pid=$$!; \
+	wait $$backup_pid; rc_backup=$$?; \
+	wait $$fe_pid; rc_fe=$$?; \
+	wait $$be_pid; rc_be=$$?; \
+	for lane in backup fe-push be-push; do echo "--- $$lane:"; cat "$$tmp/$$lane.log"; done; \
+	rm -rf "$$tmp"; \
+	test "$$rc_backup" -eq 0 -a "$$rc_fe" -eq 0 -a "$$rc_be" -eq 0 || exit 1
+	@echo "=== Deploying to production (blue/green cutover) ==="
 	$(MAKE) -C backend deploy
 	@echo "=== Recreating production frontend ==="
 	$(MAKE) -C backend deploy-restart-frontend
@@ -109,9 +130,20 @@ adminer:
 
 # Fast-track: rebuild + push + rolling restart backend only (web + workers + scheduler).
 # Skips frontend build and full-stack bootstrap (compose sync, migrations, etc.).
-deploy-backend: release-check backup
-	@echo "=== Deploying backend only ==="
-	cd backend && make push
+# The backup still gates the restart — the cutover runs `alembic upgrade head`
+# — but runs concurrently with the image push instead of serially before it.
+deploy-backend: release-check
+	@echo "=== Backup + backend image push run concurrently ==="
+	@tmp="$$(mktemp -d -t vfic-deploy.XXXXXX)"; \
+	rc_backup=0; rc_be=0; \
+	( $(MAKE) backup ) >"$$tmp/backup.log" 2>&1 & backup_pid=$$!; \
+	( cd backend && make push ) >"$$tmp/be-push.log" 2>&1 & be_pid=$$!; \
+	wait $$backup_pid; rc_backup=$$?; \
+	wait $$be_pid; rc_be=$$?; \
+	for lane in backup be-push; do echo "--- $$lane:"; cat "$$tmp/$$lane.log"; done; \
+	rm -rf "$$tmp"; \
+	test "$$rc_backup" -eq 0 -a "$$rc_be" -eq 0 || exit 1
+	@echo "=== Deploying backend only (blue/green cutover) ==="
 	$(MAKE) -C backend deploy-restart
 
 # Fast-track: rebuild + push + rolling restart frontend only.
