@@ -38,7 +38,11 @@ def fake_redis():
     lock = threading.Lock()
 
     r = MagicMock()
-    r.op_threads: list[threading.Thread] = []
+    # Annotated as a local bound onto the mock: a MagicMock attribute cannot
+    # carry an annotation. The closures append through `r` and the assertions
+    # read `fake_redis.op_threads` — the same list object either way.
+    op_threads: list[threading.Thread] = []
+    r.op_threads = op_threads
 
     def _rpush(key, *vals):
         with lock:
