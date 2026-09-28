@@ -54,6 +54,42 @@ class TurnPair:
     bot_output: str
 
 
+@dataclass
+class _RunReport:
+    """Mutable counters for one backfill run.
+
+    Holding the counters as real ints keeps every increment a plain ``+=``; the
+    earlier stringly-typed dict forced each one to re-parse its own value.
+    """
+
+    run_id: str
+    dry_run: bool = False
+    lock_acquired: bool = False
+    eligible_at_start: int = 0
+    processed: int = 0
+    turns: int = 0
+    enqueued: int = 0
+    enqueue_failed: int = 0
+    skipped_no_bot: int = 0
+    skipped_blank: int = 0
+    limit_reached: bool = False
+
+    def as_payload(self) -> dict[str, int | bool | str]:
+        """Flat fields of the ``final`` event; ``_emit`` supplies ``run_id`` itself."""
+        return {
+            "dry_run": self.dry_run,
+            "lock_acquired": self.lock_acquired,
+            "eligible_at_start": self.eligible_at_start,
+            "processed": self.processed,
+            "turns": self.turns,
+            "enqueued": self.enqueued,
+            "enqueue_failed": self.enqueue_failed,
+            "skipped_no_bot": self.skipped_no_bot,
+            "skipped_blank": self.skipped_blank,
+            "limit_reached": self.limit_reached,
+        }
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="report the plan, enqueue nothing")
@@ -114,7 +150,9 @@ async def _eligible_page(
 
 async def _eligible_count(session: AsyncSession) -> int:
     statement = select(func.count()).select_from(_eligible_statement().subquery())
-    return int(await session.scalar(statement) or 0)
+    # ``func.count()`` is an integer column, so the scalar needs no cast.
+    total: int = await session.scalar(statement) or 0
+    return total
 
 
 def _turn_pairs(messages: list[tuple[MessageSender, str]]) -> tuple[list[TurnPair], int, int]:
@@ -204,8 +242,7 @@ def _enqueue(pair: TurnPair, conversation: EligibleConversation) -> bool:
     )
 
 
-async def _run(args: argparse.Namespace) -> dict[str, int | bool | str]:
-    run_id = uuid.uuid4().hex
+async def _run(args: argparse.Namespace) -> _RunReport:
     only = list(args.conversation_ids) or None
     async with get_session_factory()() as session:
         if only:
@@ -214,20 +251,12 @@ async def _run(args: argparse.Namespace) -> dict[str, int | bool | str]:
             )
         else:
             eligible_at_start = await _eligible_count(session)
-    report: dict[str, int | bool | str] = {
-        "run_id": run_id,
-        "dry_run": bool(args.dry_run),
-        "lock_acquired": False,
-        "eligible_at_start": eligible_at_start,
-        "processed": 0,
-        "turns": 0,
-        "enqueued": 0,
-        "enqueue_failed": 0,
-        "skipped_no_bot": 0,
-        "skipped_blank": 0,
-        "limit_reached": False,
-    }
-    _emit("start", run_id, dry_run=bool(args.dry_run), eligible=eligible_at_start)
+    report = _RunReport(
+        run_id=uuid.uuid4().hex,
+        dry_run=bool(args.dry_run),
+        eligible_at_start=eligible_at_start,
+    )
+    _emit("start", report.run_id, dry_run=report.dry_run, eligible=eligible_at_start)
 
     if args.dry_run:
         cursor: uuid.UUID | None = None
@@ -244,38 +273,38 @@ async def _run(args: argparse.Namespace) -> dict[str, int | bool | str]:
                     pairs, no_bot, blank = await _conversation_turns(
                         session, conversation.conversation_id
                     )
-                report["processed"] = int(report["processed"]) + 1
-                report["turns"] = int(report["turns"]) + len(pairs)
-                report["skipped_no_bot"] = int(report["skipped_no_bot"]) + no_bot
-                report["skipped_blank"] = int(report["skipped_blank"]) + blank
+                report.processed += 1
+                report.turns += len(pairs)
+                report.skipped_no_bot += no_bot
+                report.skipped_blank += blank
                 for pair in pairs:
                     if shown < 10:
                         shown += 1
                         _emit(
                             "turn",
-                            run_id,
+                            report.run_id,
                             conversation_id=str(conversation.conversation_id),
                             psid=conversation.psid,
                             user_text=pair.user_text[:200],
                             bot_output=pair.bot_output[:200],
                         )
             cursor = page[-1].conversation_id
-        _emit("final", run_id, **{k: v for k, v in report.items() if k != "run_id"})
+        _emit("final", report.run_id, **report.as_payload())
         return report
 
     async with _exclusive_backfill() as acquired:
-        report["lock_acquired"] = acquired
+        report.lock_acquired = acquired
         if not acquired:
-            _emit("locked", run_id)
-            _emit("final", run_id, **{k: v for k, v in report.items() if k != "run_id"})
+            _emit("locked", report.run_id)
+            _emit("final", report.run_id, **report.as_payload())
             return report
 
         cursor = None
         batch_number = 0
-        while args.limit == 0 or int(report["processed"]) < args.limit:
+        while args.limit == 0 or report.processed < args.limit:
             page_size = args.batch_size
             if args.limit:
-                page_size = min(page_size, args.limit - int(report["processed"]))
+                page_size = min(page_size, args.limit - report.processed)
             async with get_session_factory()() as session:
                 page = await _eligible_page(session, after=cursor, batch_size=page_size, only=only)
             if not page:
@@ -286,41 +315,41 @@ async def _run(args: argparse.Namespace) -> dict[str, int | bool | str]:
                     pairs, no_bot, blank = await _conversation_turns(
                         session, conversation.conversation_id
                     )
-                report["processed"] = int(report["processed"]) + 1
-                report["turns"] = int(report["turns"]) + len(pairs)
-                report["skipped_no_bot"] = int(report["skipped_no_bot"]) + no_bot
-                report["skipped_blank"] = int(report["skipped_blank"]) + blank
+                report.processed += 1
+                report.turns += len(pairs)
+                report.skipped_no_bot += no_bot
+                report.skipped_blank += blank
                 # Oldest turn first, so the replay matches the order the
                 # candidate actually spoke in: each non-blank field replaces the
                 # previous one (a corrected number lands) while notes accumulate
                 # line by line without duplicating what is already stored.
                 for pair in pairs:
                     if _enqueue(pair, conversation):
-                        report["enqueued"] = int(report["enqueued"]) + 1
+                        report.enqueued += 1
                     else:
-                        report["enqueue_failed"] = int(report["enqueue_failed"]) + 1
+                        report.enqueue_failed += 1
             cursor = page[-1].conversation_id
             _emit(
                 "batch",
-                run_id,
+                report.run_id,
                 batch=batch_number,
-                processed=report["processed"],
-                turns=report["turns"],
-                enqueued=report["enqueued"],
-                enqueue_failed=report["enqueue_failed"],
+                processed=report.processed,
+                turns=report.turns,
+                enqueued=report.enqueued,
+                enqueue_failed=report.enqueue_failed,
             )
 
-    report["limit_reached"] = bool(args.limit and int(report["processed"]) >= args.limit)
-    _emit("final", run_id, **{k: v for k, v in report.items() if k != "run_id"})
+    report.limit_reached = bool(args.limit and report.processed >= args.limit)
+    _emit("final", report.run_id, **report.as_payload())
     return report
 
 
-def _exit_code(args: argparse.Namespace, report: dict[str, int | bool | str]) -> int:
+def _exit_code(args: argparse.Namespace, report: _RunReport) -> int:
     if args.dry_run:
         return 0
-    if not report["lock_acquired"]:
+    if not report.lock_acquired:
         return 3
-    if int(report["enqueue_failed"]) > 0:
+    if report.enqueue_failed > 0:
         return 2
     return 0
 

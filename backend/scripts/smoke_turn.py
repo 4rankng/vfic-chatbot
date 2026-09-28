@@ -151,8 +151,13 @@ class _StubStreamingAgent:
     is the interleaving production sees.
     """
 
-    async def agent(self, _user_text: str, **kwargs: object) -> str:
-        on_delta = kwargs.get("on_delta")
+    async def agent(
+        self,
+        _user_text: str,
+        *,
+        on_delta: Callable[[str], Awaitable[None]] | None = None,
+        **_kwargs: object,
+    ) -> str:
         for part in SMOKE_STREAM_PARTS:
             if on_delta is not None:
                 await on_delta(part)
@@ -176,8 +181,13 @@ class _StubFailingStreamingAgent:
     def __init__(self, wire_ack: asyncio.Event) -> None:
         self.wire_ack = wire_ack
 
-    async def agent(self, _user_text: str, **kwargs: object) -> str:
-        on_delta = kwargs.get("on_delta")
+    async def agent(
+        self,
+        _user_text: str,
+        *,
+        on_delta: Callable[[str], Awaitable[None]] | None = None,
+        **_kwargs: object,
+    ) -> str:
         if on_delta is not None:
             # One delta carrying the whole answer: a complete, sendable bubble
             # is available to the sender however the two tasks interleave.
@@ -721,7 +731,7 @@ async def _run_probe(probe: "_SmokeProbe", *, inject_failure: bool) -> int:
 
                 shipped_record_bot_outcome = ConversationService.record_bot_outcome
 
-                async def _boom(self, _conv, **_kwargs):  # noqa: ANN001, ARG001
+                async def _boom(self, conv, **_kwargs):  # noqa: ANN001, ARG001
                     raise TypeError("injected record_bot_outcome kwarg drift")
 
                 ConversationService.record_bot_outcome = _boom  # type: ignore[assignment,method-assign]
