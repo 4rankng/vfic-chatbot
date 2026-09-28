@@ -10,6 +10,7 @@ import type { CandidateProfileUpdate } from "../../leads/domain/candidateProfile
 import { useRoleActions } from "../../hooks/useRoleActions";
 import { getLeadStatusColor } from "../../conversations/domain/conversation-display";
 import type { Lead } from "../../types";
+import { leadFilterFor } from "../../leads/domain/leadLookupKey";
 import {
   buildRecruitmentContextIdentity,
   shouldRefreshLeadIdentity,
@@ -44,25 +45,20 @@ export const RecruitmentConversationContext = ({
   conversation,
   children,
 }: ConversationContextAdapterProps) => {
+  const zaloChatId = conversation?.zalo_chat_id ?? null;
+  const contactId = conversation?.contact_id ?? null;
   const params = useMemo(
     () => ({
-      // zalo_id first: every Zalo/OA conversation keeps its exact current
-      // request. Messenger rows have no zalo_chat_id, so the contact filter is
-      // the only way to reach their lead.
-      filter: conversation?.zalo_chat_id
-        ? { zalo_id: conversation.zalo_chat_id }
-        : conversation?.contact_id
-          ? { contact_id: conversation.contact_id }
-          : {},
+      filter: leadFilterFor(zaloChatId, contactId),
       pagination: { page: 1, perPage: 1 },
     }),
-    [conversation?.zalo_chat_id, conversation?.contact_id],
+    [zaloChatId, contactId],
   );
   const options = useMemo(
     () => ({
-      enabled: Boolean(conversation?.zalo_chat_id || conversation?.contact_id),
+      enabled: Boolean(zaloChatId || contactId),
     }),
-    [conversation?.zalo_chat_id, conversation?.contact_id],
+    [zaloChatId, contactId],
   );
   const { data, refetch } = useGetList("leads", params, options);
   const lead = data?.[0] as Lead | undefined;
@@ -94,6 +90,15 @@ export const RecruitmentConversationContext = ({
   };
   const identity = buildRecruitmentContextIdentity(source, lead);
   const colors = getLeadStatusColor(lead);
+  // Save handlers report their own outcome, so a rejected refresh is awaited
+  // and dropped here rather than surfacing as a save failure.
+  const refetchQuietly = async (): Promise<void> => {
+    try {
+      await refetch();
+    } catch {
+      // Swallowed on purpose: the caller reports the save result.
+    }
+  };
   const saveCandidateProfile = async (
     changes: Partial<CandidateProfileUpdate>,
     version: number,
@@ -106,9 +111,9 @@ export const RecruitmentConversationContext = ({
         previousData: lead,
       });
       notify("Đã cập nhật hồ sơ ứng viên", { type: "success" });
-      await refetch().catch(() => undefined);
+      await refetchQuietly();
     } catch (error) {
-      await refetch().catch(() => undefined);
+      await refetchQuietly();
       notify(
         error instanceof Error
           ? error.message

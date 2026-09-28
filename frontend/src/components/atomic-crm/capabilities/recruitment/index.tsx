@@ -18,6 +18,7 @@ import {
 } from "./components";
 
 export { resolveRecruitmentProfile } from "../../leads/domain/recruitmentPresentation";
+export { leadFilterFor } from "../../leads/domain/leadLookupKey";
 
 const loadRecruitmentRows: ConversationRowSlot["load"] = async (
   conversations,
