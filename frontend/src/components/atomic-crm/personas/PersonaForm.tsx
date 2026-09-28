@@ -13,13 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select as UntitledSelect } from "@/components/base/select/select";
+import type { SelectItemType } from "@/components/base/select/select-shared";
 import {
   BotMessageSquare,
   ChevronDown,
@@ -109,6 +104,15 @@ const PersonaForm = ({
       sort: { field: "name", order: "ASC" },
       filter: {},
     });
+  // Same visible copy the Radix select rendered: name, then the access mode.
+  const knowledgeBaseItems: SelectItemType[] = knowledgeBases.map(
+    (knowledgeBase) => ({
+      id: knowledgeBase.id,
+      label: `${knowledgeBase.name} · ${
+        knowledgeBase.mode === "RAG" ? "RAG" : "Ngữ cảnh trực tiếp"
+      }`,
+    }),
+  );
   const nameInputRef = useRef<HTMLInputElement>(null);
   const bodyMd = useMemo(
     () => composePersonaMarkdown(sectionValues, extraMarkdown),
@@ -280,40 +284,40 @@ const PersonaForm = ({
             ) : null}
           </div>
           <div className="persona-edit-name-field">
-            <Label
-              htmlFor="persona-knowledge-base"
-              className="text-label font-semibold"
-            >
-              Knowledge Base{" "}
-              <span aria-hidden="true" className="text-destructive">
-                *
-              </span>
-            </Label>
-            <Select
-              value={knowledgeBaseId}
-              onValueChange={(value) => {
-                setKnowledgeBaseId(value);
+            {/* Untitled UI v8 `ComboBox` (React Aria) instead of the Radix
+                select: the knowledge-base list is dynamic and unbounded, so the
+                field earns the type-ahead a plain select cannot give it. The
+                Radix select is replaced, not nested inside it.
+
+                `validationBehavior="aria"` is required, not cosmetic: React
+                Aria's default `native` behaviour sets the `required` attribute
+                on the input, the browser then blocks the form's submit before
+                this component's own validation runs, and no Vietnamese error
+                message ever renders. This form validates in JavaScript, like
+                every other react-admin form in the console.
+
+                `uu-scope` is required because the control is built on the same
+                input surface as `base/input`, which paints `bg-primary` -- one
+                of the four names the console and the library both define. */}
+            <UntitledSelect.ComboBox
+              className="uu-scope lg:max-w-xl"
+              label="Knowledge Base"
+              placeholder="Chọn Knowledge Base"
+              items={knowledgeBaseItems}
+              selectedKey={knowledgeBaseId || null}
+              onSelectionChange={(key) => {
+                setKnowledgeBaseId(key === null ? "" : String(key));
                 setKnowledgeBaseError(null);
               }}
-              disabled={knowledgeBasesPending || knowledgeBases.length === 0}
+              validationBehavior="aria"
+              isRequired
+              isDisabled={knowledgeBasesPending || knowledgeBases.length === 0}
+              isInvalid={Boolean(knowledgeBaseError)}
             >
-              <SelectTrigger
-                id="persona-knowledge-base"
-                className="h-11 text-control lg:max-w-xl"
-              >
-                <SelectValue placeholder="Chọn Knowledge Base" />
-              </SelectTrigger>
-              <SelectContent>
-                {knowledgeBases.map((knowledgeBase) => (
-                  <SelectItem key={knowledgeBase.id} value={knowledgeBase.id}>
-                    {knowledgeBase.name} ·{" "}
-                    {knowledgeBase.mode === "RAG"
-                      ? "RAG"
-                      : "Ngữ cảnh trực tiếp"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {(item: SelectItemType) => (
+                <UntitledSelect.Item id={item.id} label={item.label} />
+              )}
+            </UntitledSelect.ComboBox>
             {knowledgeBaseError ? (
               <p
                 role="alert"
