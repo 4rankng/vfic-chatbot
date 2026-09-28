@@ -150,14 +150,14 @@ describe("Knowledge Base pages", () => {
     const screen = await render(<KnowledgeBaseCreate />);
 
     const name = screen.getByRole("textbox", { name: "Tên" });
-    // Labelled by RAC, marked required (React Aria emits the native `required`
-    // attribute under its default validation behaviour and `aria-required`
-    // under `validationBehavior="aria"`), and inside the scope that re-binds
-    // the four utility names Untitled UI shares with the console.
-    const requiredSignal =
-      name.element().hasAttribute("required") ||
-      name.element().getAttribute("aria-required") === "true";
-    expect(requiredSignal).toBe(true);
+    // Labelled by RAC and inside the scope that re-binds the four utility names
+    // Untitled UI shares with the console. The required signal must be
+    // `aria-required`, NOT the native `required` attribute: React Aria's default
+    // `native` validation sets `required`, the browser then blocks the form's
+    // submit and react-admin's Vietnamese validation never runs. This assertion
+    // is what catches that, and the react-admin `Form` stub above cannot.
+    expect(name.element().getAttribute("aria-required")).toBe("true");
+    expect(name.element().hasAttribute("required")).toBe(false);
     expect(name.element().closest(".uu-scope")).not.toBeNull();
 
     await name.fill("Kho dùng chung");

@@ -47,6 +47,11 @@ const KnowledgeBaseNameField = () => {
       onBlur={field.onBlur}
       label="Tên"
       placeholder="Ví dụ: VFIC tuyển dụng"
+      // React Aria's default `native` validation sets the `required` attribute,
+      // the browser then blocks the form's submit before react-admin's own
+      // validation runs, and the user sees a browser bubble instead of the
+      // console's Vietnamese error. This form validates in JavaScript.
+      validationBehavior="aria"
       isRequired
       isInvalid={fieldState.invalid}
       hint={fieldState.error ? "Tên kho là bắt buộc." : undefined}
@@ -83,6 +88,8 @@ const KnowledgeBaseModeField = () => {
       selectedKey={typeof field.value === "string" ? field.value : null}
       onSelectionChange={(key) => field.onChange(String(key))}
       onBlur={field.onBlur}
+      // See the name field: JavaScript validation owns this form.
+      validationBehavior="aria"
       isRequired
       isInvalid={fieldState.invalid}
       hint={fieldState.error ? "Chọn chế độ truy cập dữ liệu." : undefined}

@@ -281,6 +281,12 @@ npx untitledui@latest add input --yes       # pulls button/tags/tooltip siblings
   the file was clean before — which is how `src/utils/is-react-component.ts` kept
   reappearing in the diff. The pre-commit hook formats staged files, so a
   re-installed file that nobody stages stays unformatted until then.
+- **React Aria controls inside a react-admin form must set
+  `validationBehavior="aria"`.** Its default `native` behaviour sets the
+  `required` attribute on the input, so the browser blocks the form's submit
+  before react-admin's validation runs and the user gets a browser bubble instead
+  of the console's Vietnamese error — a silent no-op save. Both adopted forms pin
+  it: `aria-required` present, native `required` absent.
 - **Wrap every Untitled UI subtree in `.uu-scope`.** The console and Untitled UI
   both define `bg-primary`, `bg-secondary`, `text-primary` and `border-primary`
   with different meanings; `src/styles/untitledui-theme.css` pins the console's
