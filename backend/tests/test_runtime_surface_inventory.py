@@ -139,7 +139,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # _error_subcode_from_envelope. Its envelope read is a dict `.get`, which
     # the provider_transport heuristic counts — the same treatment the sibling
     # _error_code_from_envelope already gets above.
-    "provider_boundary": 90,
+    # -2: the zalo diagnostics probe (39fde21d, 2026-09-28) no longer holds a
+    # token endpoint of its own — probe_zalo_oa_channel delegates the one
+    # redemption to the provider, dropping its reviewed `get` (x4) and `post`
+    # (x1) sites. Verified against a 39fde21d^ scan: same two rows, nothing
+    # added anywhere. The 2026-09-28 graph typing work is scan-neutral.
+    "provider_boundary": 88,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -209,7 +214,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # recruiter_path.py into recruiter_receipts.py: same scope, same call, same
 # count, so EXPECTED_BROAD_BOUNDARY_COUNTS is unchanged and only the digest
 # (which covers the file key) moves.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "8bc2071f90b7a46dffeb0dc3fd93d9ed13b95dc2b5c425d7f083b296a7cabfa7"
+# 2026-09-28: 39fde21d removed probe_zalo_oa_channel's own token-endpoint
+# redemption (the -2 provider_boundary sites above); digest recomputed from the
+# post-change scan. The 2026-09-28 graph typing work (OPS-30) is scan-neutral,
+# confirmed by comparing the scan against a git archive of HEAD.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "4b7b91efa94b2d16bd9c52c29ca06b88e583badeffbca588b7bec1b5be88d9e6"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
