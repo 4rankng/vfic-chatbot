@@ -13,16 +13,14 @@ import uuid
 
 import pytest
 
-from types import SimpleNamespace
-
-from app.models.user import Role
+from app.models.user import Role, User
 from app.services.lead.repository import LeadRepository
 from app.services.lead.service import LeadService
 from tests.integration._conv_factory import make_conversation
 
 pytestmark = pytest.mark.integration
 
-ADMIN = SimpleNamespace(id=uuid.uuid4(), role=Role.admin, email="admin@test", full_name="Admin")
+ADMIN = User(id=uuid.uuid4(), role=Role.admin, email="admin@test", full_name="Admin")
 
 
 async def _messenger_conversation(db, external_id: str):

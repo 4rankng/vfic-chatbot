@@ -23,7 +23,7 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
     fake_extractor = AsyncMock()
 
     class _FakeEmbedder:
-        batch = fake_embedder
+        batch: AsyncMock = fake_embedder
 
     clients = SimpleNamespace(embedder=_FakeEmbedder(), extractor=fake_extractor)
 
@@ -62,7 +62,9 @@ async def test_persist_candidate_job_uses_one_combined_service_call():
 
 
 @pytest.mark.asyncio
-async def test_repeated_persist_jobs_reuse_one_cached_client_bundle(monkeypatch):
+async def test_repeated_persist_jobs_reuse_one_cached_client_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+):
     """The extractor and embedder are built once per process, not once per job.
 
     Every SENT reply used to construct a fresh langchain client (and its own httpx
@@ -74,24 +76,29 @@ async def test_repeated_persist_jobs_reuse_one_cached_client_bundle(monkeypatch)
     built: list[str] = []
 
     class _FakeEmbedder:
+        batch: AsyncMock
+        _client: SimpleNamespace
+
         def __init__(self) -> None:
             self.batch = AsyncMock()
 
     class _FakeLLM:
+        root_async_client: SimpleNamespace
+
         def __init__(self, role: str) -> None:
             self.root_async_client = SimpleNamespace(
                 close=lambda: built.append(f"closed:{role}")
             )
 
-    def _chat_for_role(role, **_kwargs):
+    def _chat_for_role(role: str, **_kwargs: object) -> _FakeLLM:
         built.append(f"llm:{role}")
         return _FakeLLM(role)
 
-    def _build_minimax_extractor():
+    def _build_minimax_extractor() -> AsyncMock:
         built.append("extractor")
         return AsyncMock()
 
-    def _build_embedder(_settings=None, **_kwargs):
+    def _build_embedder(_settings: object | None = None, **_kwargs: object) -> _FakeEmbedder:
         built.append("embedder")
         embedder = _FakeEmbedder()
         embedder._client = SimpleNamespace(
@@ -99,7 +106,7 @@ async def test_repeated_persist_jobs_reuse_one_cached_client_bundle(monkeypatch)
         )
         return embedder
 
-    async def _cache_version(_name):
+    async def _cache_version(_name: str) -> str:
         return "v1"
 
     monkeypatch.setattr(client_cache, "_chat_for_role", _chat_for_role)
@@ -156,10 +163,10 @@ async def test_stale_stamped_persist_job_never_resolves_an_extractor():
         yield db
 
     class _InactiveInstallation:
-        def __init__(self, _db) -> None:
+        def __init__(self, _db: object) -> None:
             pass
 
-        async def resolve_active(self):
+        async def resolve_active(self) -> None:
             return None
 
     with (
@@ -201,20 +208,20 @@ async def test_oa_profile_worker_waits_for_inline_lookup_before_retrying():
         yield db
 
     class _Integration:
-        def __init__(self, received_db) -> None:
+        def __init__(self, received_db: object) -> None:
             assert received_db is db
 
-        async def resolve_zalo(self, account_key=None):
+        async def resolve_zalo(self, account_key: str | None = None) -> object:
             return type("_Config", (), {"oa_access_token": "test-token"})()
 
-        async def refresh_oa_access_token(self, account_key=None):
+        async def refresh_oa_access_token(self, account_key: str | None = None) -> str:
             return "refreshed-token"
 
     class _ProfileService:
-        def __init__(self, received_db, _sender) -> None:
-            assert received_db is db
+        enrich_oa_user: AsyncMock = enrichment
 
-        enrich_oa_user = enrichment
+        def __init__(self, received_db: object, _sender: object) -> None:
+            assert received_db is db
 
     with (
         patch("app.workers._db.worker_session", fake_worker_session),

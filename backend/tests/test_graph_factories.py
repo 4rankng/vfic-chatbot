@@ -449,7 +449,9 @@ async def test_inline_oa_profile_lookup_has_no_refresh_and_uses_isolated_session
     monkeypatch.setattr("app.services.profile_enrichment.ProfileEnrichmentService", _ProfileService)
 
     deps = await build_deps(object(), session_factory=session_factory)
-    await deps.enrich_oa_profile("oa:user-1", "user-1")
+    enrich = deps.enrich_oa_profile
+    assert enrich is not None
+    await enrich("oa:user-1", "user-1")
 
     profile_sender = enrichment_calls[0][1]
     assert set(profile_sender.kwargs) == {"access_token"}
@@ -742,9 +744,18 @@ async def test_aclose_client_cache_isolates_failures_and_closes_embedder_pool():
         async def aclose(self) -> None:
             closed.append("embedder")
 
+    class _FakeEmbedder:
+        """Satisfies the ``Embedder`` call shape and carries the client the close path walks."""
+
+        def __init__(self) -> None:
+            self._client = SimpleNamespace(aio=_EmbedAio())
+
+        async def __call__(self, _text: str) -> list[float]:
+            return []
+
     failing_client = SimpleNamespace(root_async_client=_RootClient("agent", fails=True))
     fast_client = SimpleNamespace(root_async_client=_RootClient("fast"))
-    embedder = SimpleNamespace(_client=SimpleNamespace(aio=_EmbedAio()))
+    embedder = _FakeEmbedder()
     client_cache._client_cache["test"] = client_cache._CachedClients(
         agent_llm=failing_client,
         fast_llm=fast_client,

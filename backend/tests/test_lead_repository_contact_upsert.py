@@ -10,7 +10,10 @@ tests pin the two statements the contact path is allowed to issue.
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.lead.repository import (
     _INSERT_BY_CONTACT_SQL,
@@ -76,7 +79,7 @@ def _sql_of(call: tuple[str, dict]) -> str:
 async def test_upsert_by_contact_merges_the_existing_row_without_an_insert():
     """The trigger already created the lead, so the write is a merge."""
     db = _RecordingSession(scalars=[130])
-    repo = LeadRepository(db)
+    repo = LeadRepository(cast(AsyncSession, db))
 
     lead_id = await repo.upsert_by_contact("contact-1", LEAD)
 
@@ -93,7 +96,7 @@ async def test_upsert_by_contact_merges_the_existing_row_without_an_insert():
 @pytest.mark.asyncio
 async def test_upsert_by_contact_inserts_with_a_null_zalo_id_when_no_row_exists():
     db = _RecordingSession(scalars=[None, 131])
-    repo = LeadRepository(db)
+    repo = LeadRepository(cast(AsyncSession, db))
 
     lead_id = await repo.upsert_by_contact("contact-1", LEAD)
 
@@ -112,7 +115,7 @@ async def test_upsert_by_contact_inserts_with_a_null_zalo_id_when_no_row_exists(
 async def test_upsert_by_contact_takes_the_contact_lock_before_the_write():
     db = _RecordingSession(scalars=[130])
 
-    await LeadRepository(db).upsert_by_contact("contact-1", LEAD)
+    await LeadRepository(cast(AsyncSession, db)).upsert_by_contact("contact-1", LEAD)
 
     assert "pg_advisory_xact_lock" in _sql_of(db.calls[0])
     assert "UPDATE leads" in _sql_of(db.calls[1])
@@ -122,7 +125,7 @@ async def test_upsert_by_contact_takes_the_contact_lock_before_the_write():
 async def test_the_zalo_keyed_upsert_is_unchanged_by_the_contact_path():
     """Zalo rows still merge on ``ON CONFLICT (zalo_id)`` — the proven path."""
     db = _RecordingSession(scalars=[42])
-    repo = LeadRepository(db)
+    repo = LeadRepository(cast(AsyncSession, db))
 
     assert await repo.upsert(LEAD) == 42
     sql = " ".join(_UPSQL.text.split())

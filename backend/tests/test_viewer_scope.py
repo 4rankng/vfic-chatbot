@@ -8,7 +8,7 @@ checked directly.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+import uuid
 
 from app.models.conversation import Conversation
 from app.models.user import Role
@@ -19,8 +19,21 @@ from app.services.viewer_scope import (
 )
 
 
-def _viewer(role: Role, uid: str = "11111111-1111-1111-1111-111111111111"):
-    return SimpleNamespace(role=role, id=uid)
+class _Viewer:
+    """Typed stand-in for the ``ViewerIdentity`` arm of ``Viewer``.
+
+    An ORM ``User`` cannot satisfy that protocol — at class level ``User.id``
+    resolves to ``Mapped[UUID]``, not ``UUID`` — so the scope helpers take the
+    structural arm, and this is it.
+    """
+
+    def __init__(self, role: Role, uid: str = "11111111-1111-1111-1111-111111111111") -> None:
+        self.id = uuid.UUID(uid)
+        self.role = role
+
+
+def _viewer(role: Role, uid: str = "11111111-1111-1111-1111-111111111111") -> _Viewer:
+    return _Viewer(role, uid)
 
 
 # --- ORM condition -----------------------------------------------------------
