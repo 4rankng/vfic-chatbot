@@ -315,6 +315,10 @@ class ZaloSettingsMixin:
 
         cfg = await self.resolve_zalo(account_key)
         if not cfg.oa_refresh_token:
+            logger.warning(
+                "zalo OA token refresh skipped: no stored refresh token "
+                f"(account_key={account_key}) — re-link the OA in settings"
+            )
             return None
 
         redis = get_redis()
@@ -373,6 +377,17 @@ class ZaloSettingsMixin:
                 logger.warning("zalo OA token refresh transport error", exc_info=True)
                 return None
             if not isinstance(data, dict) or not data.get("access_token"):
+                # Zalo rejected the refresh (e.g. -14014 "Invalid refresh token."
+                # when the stored single-use token was already redeemed or
+                # expired). Surface the provider's own error fields — the body
+                # carries no secrets — so ops can see WHY without re-deriving.
+                logger.warning(
+                    "zalo OA token refresh rejected by provider "
+                    f"(account_key={account_key}, "
+                    f"error={data.get('error') if isinstance(data, dict) else 'non-json'}, "
+                    f"error_name={data.get('error_name') if isinstance(data, dict) else '-'}, "
+                    f"error_description={data.get('error_description') if isinstance(data, dict) else '-'})"
+                )
                 return None
 
             new_access = str(data["access_token"])
