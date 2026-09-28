@@ -71,13 +71,18 @@ build + push both images → blue/green cutover.
 
 ### Full deploy (`make deploy`)
 1. `release-check` — a clean committed worktree, exactly one Alembic head with
-   §4 below matching it, `uv lock --check`, then backend lint + unit tests,
-   frontend lint/typecheck/registry/scoped coverage/build, and the offline
-   golden retrieval-correctness check (the latency SLO is not evaluated —
-   a dev machine has no production telemetry). The gate is **unit-only** (since
-   2026-09-26): the backend integration suite and desktop/mobile Playwright
-   remain manual lanes and are no longer deploy blockers, so a deploy never
-   depends on local dev infrastructure. Every lane runs on the deploying
+   §4 below matching it, `uv lock --check`, then the scoped Pyright gate on
+   `app/graph` (zero errors; `backend/pyrightconfig.json` binds the venv), the
+   production-only `npm audit`, backend lint + unit tests, the two-test
+   migration-reversibility walk (the roundtrip harness walks head → base
+   revision → head and renders offline on its own throwaway database, ~2 min —
+   this is the one gate that needs the dev Postgres up), frontend
+   lint/typecheck/registry/scoped coverage/build, and the offline golden
+   retrieval-correctness check (the latency SLO is not evaluated —
+   a dev machine has no production telemetry). The gate is otherwise
+   **unit-only** (since 2026-09-26): the rest of the backend integration suite
+   and desktop/mobile Playwright remain manual lanes and are not deploy
+   blockers. Every lane runs on the deploying
    machine — there is **no CI** in the release path (see K-13 in
    `docs/project-roadmap.md`). Stops before any image is pushed if a check
    fails.
