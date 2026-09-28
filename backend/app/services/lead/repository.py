@@ -92,6 +92,9 @@ def _merge_assignments(source: str) -> str:
     """
 
 
+# Static SQL: every value is a bound parameter; the only interpolation is the
+# literal "EXCLUDED." column prefix from _merge_assignments, never runtime input.
+# nosemgrep: avoid-sqlalchemy-text
 _UPSQL = text(
     f"""
     INSERT INTO leads (zalo_id, name, phone, birth_year, age, living_area, address, gender,
@@ -123,6 +126,9 @@ _BY_CONTACT_SQL = text(
 # Contact-keyed merge: the row is located by contact_id, so its NULL zalo_id
 # is preserved and leads_zalo_id_fkey is never exercised. The latest lead for
 # the contact wins, matching _BY_CONTACT_SQL.
+# Static SQL: every value is a bound parameter; the only interpolation is the
+# literal ":" bind prefix from _merge_assignments, never runtime input.
+# nosemgrep: avoid-sqlalchemy-text
 _UPDATE_BY_CONTACT_SQL = text(
     f"""
     WITH target AS (
