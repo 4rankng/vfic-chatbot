@@ -64,6 +64,67 @@ export default defineConfig({
     }),
   ],
   base: "./",
+  // Dev-server dependency optimizer. Lazy route modules pull deep CJS entries
+  // (the `lodash/*` per-function files, `react-dropzone`, `cmdk`) that Vite only
+  // discovers when the route first renders. Each discovery re-bundles the
+  // optimizer and invalidates every dep URL the running page already holds —
+  // "504 (Outdated Optimize Dep)" followed by "Failed to fetch dynamically
+  // imported module" and a React error boundary, which is what made the console
+  // unusable in dev after the Vite 8 toolchain change reset the optimizer cache.
+  // Declaring the app's external imports up front lets one optimize pass cover
+  // them, so navigating never triggers a re-bundle. Builds are unaffected.
+  optimizeDeps: {
+    include: [
+      "@radix-ui/react-accordion",
+      "@radix-ui/react-avatar",
+      "@radix-ui/react-checkbox",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-dropdown-menu",
+      "@radix-ui/react-label",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-progress",
+      "@radix-ui/react-radio-group",
+      "@radix-ui/react-select",
+      "@radix-ui/react-separator",
+      "@radix-ui/react-slot",
+      "@radix-ui/react-tabs",
+      "@radix-ui/react-toggle",
+      "@radix-ui/react-toggle-group",
+      "@radix-ui/react-tooltip",
+      "@tanstack/react-query",
+      "@untitledui/icons",
+      "class-variance-authority",
+      "clsx",
+      "cmdk",
+      "dompurify",
+      "inflection",
+      "input-otp",
+      "lodash/get",
+      "lodash/isEqual",
+      "lodash/matches",
+      "lodash/pickBy",
+      "lucide-react",
+      "marked",
+      "query-string",
+      "ra-core",
+      "ra-i18n-polyglot",
+      "react-aria",
+      "react-aria-components",
+      "react-dropzone",
+      "react-error-boundary",
+      "react-hook-form",
+      "react-router",
+      "react-router-dom",
+      "react-stately",
+      "socket.io-client",
+      "sonner",
+      "tailwind-merge",
+      "virtua",
+      "zod",
+      "zustand",
+      "zustand/middleware",
+    ],
+  },
   // Dev server: proxy backend endpoints to uvicorn so the SPA stays same-origin
   // (apiBaseUrl="") in local dev — no VITE_API_BASE or CORS needed. Covers REST
   // (/api), SSE (/realtime) and Socket.IO (WebSocket upgrade). The target tracks
