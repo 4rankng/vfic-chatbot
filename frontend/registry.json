@@ -24,10 +24,10 @@
         "marked@^17.0.1",
         "ra-core@^5.14.7",
         "ra-i18n-polyglot@^5.14.7",
-        "react@^19.1.0",
+        "react@^19.2.4",
         "react-dropzone@^14.4.1",
         "react-error-boundary@^6.1.2",
-        "react-hook-form@^7.78.0",
+        "react-hook-form@^7.88.0",
         "react-router@^7.17.0",
         "react-router-dom@^7.17.0",
         "socket.io-client@^4.8.3",
@@ -433,11 +433,11 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/leads/domain/candidateProfile.ts",
+          "path": "src/components/atomic-crm/leads/domain/leadLookupKey.ts",
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/leads/domain/leadLookupKey.ts",
+          "path": "src/components/atomic-crm/leads/domain/candidateProfile.ts",
           "type": "registry:component"
         },
         {

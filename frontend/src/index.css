@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "./styles/untitledui.css";
 @import "./styles/tailkit-tokens.css";
+@import "./styles/untitledui-theme.css";
 
 /* Load only the Latin and Vietnamese WOFF2 subsets used by the console. The
    package's aggregate CSS also references Latin Extended and legacy WOFF
@@ -162,7 +163,15 @@
 
 @plugin "@tailwindcss/typography";
 
+/* Untitled UI v8 component contract. Its own `globals.css` declares these three
+   alongside the theme tokens; without them the variants silently emit no CSS.
+   `tailwindcss-react-aria-components` supplies the `selected:` / `pressed:` /
+   `open:` state variants for React Aria components (base/select, base/dropdown,
+   base/combobox); nothing compiled from it yet. */
+@plugin "tailwindcss-react-aria-components";
 @custom-variant dark (&:is(.dark *));
+@custom-variant label (& [data-label]);
+@custom-variant focus-input-within (&:has(input:focus));
 
 @theme inline {
   --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;

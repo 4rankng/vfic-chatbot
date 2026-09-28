@@ -20,15 +20,25 @@ stripped to eight recruitment-console resources.
 Real commands are **npm scripts** (`make help` lists the common ones).
 
 ```bash
-npm install                 # install dependencies
+npm install                 # install dependencies (also installs the git pre-commit hook)
 npm run dev                 # Vite dev server -> http://localhost:5173
 npm run typecheck           # tsc --noEmit (tsconfig.app.json)
+npm run typecheck:node      # tsc --noEmit (tsconfig.node.json: the three config files)
 npm run build               # tsc && vite build (production bundle)
 npm run test:unit:app       # vitest unit tests
 npm run lint                # eslint
 npm run prettier            # prettier --check
 make push                   # build + push ghcr.io/4rankng/tinghire-fe image (deploy)
 ```
+
+`tsconfig.node.json` covers `vite.config.ts`, `vitest.config.ts` and
+`playwright.config.ts`. Its `verbatimModuleSyntax` is deliberately `false`
+because `vite-plugin-simple-html@1.1.0` resolves its `@swc/html` dependency to
+that CommonJS package's raw TypeScript source, which the flag reports as an error
+inside this type-only project. A **duplicate key** in that file is not a syntax
+error for `tsc` (last one wins) but *is* fatal for Rolldown's strict JSON loader,
+which fails the whole build and every Vitest browser import with
+"Failed to load tsconfig … duplicate field" — so keep one copy of every key.
 
 Point the app at a backend by setting `VITE_API_BASE` (defaults to the same
 origin); see `src/lib/runtime-config.ts`.
@@ -133,10 +143,17 @@ registry serializes file contents as UTF-8; they are path-checked but are not
 embedded in the registry payload. SVGs are text, so the ones product code
 imports (`facebook-messenger.svg`) are published.
 
-`npm run registry:gen` rebuilds the manifest from globs and must stay
-idempotent; `npm run registry:check` fails the `frontend-quality` CI job when a
-published file is missing, is test-only, or imports something unpublished.
-Regenerate and review the diff before committing — it should only add entries.
+`npm run registry:gen` rebuilds the manifest from globs and is idempotent
+(verified byte-for-byte across consecutive runs); `npm run registry:check` fails
+when a published file is missing, is test-only, or imports something
+unpublished. Regenerate and review the diff before committing — it should only
+add entries. The manifest has no CI job: GitHub Actions was removed in
+`e7010b22`, so the gate runs in `frontend/.husky/pre-commit` (which also runs
+`registry:gen` and prettier) and in the root `make release-check`. That hook is
+installed by `npm install` — if `.git` reports no `pre-commit` hook, run
+`npm run prepare` from `frontend/`, because without it the manifest and the
+formatting drift silently (that is how `registry.json` fell out of sync with its
+own generator once).
 
 ### Feature CSS Scoping
 
@@ -205,13 +222,16 @@ Identifiers are `<letter>-c-<subcategory>-<nn>`; the recruiter console is the
 5. Light theme only. `dark:` variants compile but never match; strip them when
    they add noise rather than styling a mode that does not exist.
 
-### Untitled UI — design direction today, components after Phase 3
+### Untitled UI — installed, and the layer that makes it render
 
-Use freely, no install required:
+Two things are true at once: the design direction is still the primary value for
+*layout* decisions, and its React components are now genuinely installable.
+
+Design direction (no install needed):
 
 - `mcp__untitledui__search_components`, `get_page_templates`,
   `get_component_suggestions`, `get_latest_components` — layout, hierarchy, and
-  interaction patterns. This is its main value right now.
+  interaction patterns.
 - `mcp__untitledui__search_icons` — `@untitledui/icons` is installed (1181
   exports). **Pass `category`**: free-text queries return 0 results, so
   `search_icons(query: "user")` finds nothing while
@@ -220,19 +240,55 @@ Use freely, no install required:
   import. Round-trip is covered by
   `src/components/atomic-crm/ui-design-dependencies.test.tsx`.
 
-**Its React components are NOT yet installable.** Every base component and every
-page template declares `react-aria-components@^1.21.1` + `@untitledui/icons`,
-and Untitled UI v8 sets minimums of Tailwind `^4.2.2`, React `^19.2.4`, and
-**Vite `^8.0.0`**. This app is on Tailwind 4.1.18 / React 19.1.0 / Vite 7.3.6, and
-`@vitejs/plugin-react@4.7.0` peer-excludes Vite 8. Do not paste React Aria markup
-until that migration lands.
+Installing a component (the toolchain migration landed 2026-09-28: Tailwind
+4.3.3, React 19.2.4, Vite 8.3.1, React Aria runtime installed, so the CLI works):
 
-**Never run `npx untitledui upgrade` in this repository.** It rewrites
-`tsconfig.json` and `package.json` and drops `upgrade-report.json` and
-`UPGRADE-INSTRUCTIONS.md` at the project root. Only `npx untitledui add …` is
-safe, and only after Phase 3. Keep any generated component out of
-`src/components/ui/` and `src/components/admin/` — those are `dependencyOwnedPaths`
-owned by the external shadcn registry.
+```bash
+npx untitledui@latest add badges --yes      # writes into src/components/base/**
+npx untitledui@latest add input --yes       # pulls button/tags/tooltip siblings
+```
+
+- **Never run `npx untitledui upgrade` in this repository.** It rewrites
+  `tsconfig.json` and `package.json` and drops `upgrade-report.json` /
+  `UPGRADE-INSTRUCTIONS.md` at the project root. `add` is the only safe verb.
+- Generated files are a **dependency-owned layer**: `src/components/base/`,
+  `src/components/foundations/`, `src/utils/`, listed in
+  `scripts/check-registry-paths.mjs` as `dependencyOwnedPaths` because the CLI's
+  own imports target `@/components/base/...`. Do not hand-edit them; re-run the
+  CLI. Do not move them under `components/ui/` or `components/admin/` — those
+  belong to the external shadcn registry.
+- **Only the components the app can reach are kept.** The `add badges` and
+  `add input` runs installed 78 files; the whole `foundations/payment-icons` set,
+  the tags set and the payment/date/number/file/group/pin input variants were
+  unreachable from any app import and were deleted, because Tailwind scans *files*
+  rather than import graphs and therefore compiled their utilities into the
+  shipped CSS (**−23.9 kB** measured on the index sheet). The kept set is
+  `base/badges/{badges,badge-types}.tsx`, `base/input/{input,label,hint-text}.tsx`,
+  `base/tooltip/tooltip.tsx`, `foundations/dot-icon.tsx` and `utils/cx.ts`.
+  Re-check before adding a component back:
+
+  ```bash
+  node scripts/check-generated-reachability.mjs                                 # report
+  node scripts/check-generated-reachability.mjs --keep=src/components/base/input/input.tsx
+  ```
+
+  It resolves `@/` and `./` static imports, seeds the traversal with the keep-set
+  (so a kept component's own dependencies are not reported as dead) and prints
+  what nothing reaches. Trust it before deleting; `npx untitledui add <component>
+  --yes` re-installs anything pruned.
+- **Wrap every Untitled UI subtree in `.uu-scope`.** The console and Untitled UI
+  both define `bg-primary`, `bg-secondary`, `text-primary` and `border-primary`
+  with different meanings; `src/styles/untitledui-theme.css` pins the console's
+  meaning on `:root` and restores the library's inside `.uu-scope`. Rendering a
+  component without the wrapper gives it the brand coral fill instead of white.
+  `src/components/atomic-crm/untitledui-theme-contract.test.ts` guards the
+  collision set.
+- **Two primitive runtimes, two focus models.** React Aria (Untitled UI) and
+  Radix (`components/ui`) must not be nested inside each other's subtrees. If a
+  surface needs both, one component owns the whole subtree.
+- Untitled UI page templates are **not** adopted: each is a 26–32 file whole-app
+  scaffold carrying its own sidebar, nav, filter bar and pagination. Use them as
+  reference only.
 
 ### The token contract (load-bearing)
 
@@ -254,3 +310,17 @@ scale, the default palette stays intact, `ring-3`/`shadow-xs` compile, and
 - `src/components/atomic-crm/tailkit-contract.test.ts` asserts the scale, the
   single import, and the "never override `--color-secondary`" rule. Extend it
   when a Tailkit component needs a shade that does not exist yet.
+
+**A second token layer sits beside it:** `src/styles/untitledui-theme.css`
+supplies Untitled UI v8's own vocabulary (`--color-utility-*`, the `--color-bg-*`
+/ `--color-text-*` alias families, the `--background-color-*` / `--text-color-*`
+/ `--border-color-*` / `--ring-color-*` / `--outline-color-*` namespaces, and
+`--text-md` / `--text-display-*`). Its one hard constraint: **four utility names
+are defined by both systems** — `bg-primary`, `bg-secondary`, `text-primary`,
+`border-primary` — and Tailwind resolves `bg-primary` from
+`--background-color-primary` the moment that key exists. The file therefore pins
+those four to the console's `var(--primary)` / `var(--secondary)` on `:root` and
+restores Untitled UI's meaning inside `.uu-scope` (see the Untitled UI section
+above). `src/components/atomic-crm/untitledui-theme-contract.test.ts` fails if a
+future token would capture a fifth console name, if the four bindings move, or if
+the layer starts redeclaring the console's type, radius, shadow or font scale.

@@ -35,6 +35,13 @@ for (const file of manifestPaths) {
 const dependencyOwnedPaths = [
   "src/components/admin/",
   "src/components/ui/",
+  // Untitled UI v8 components + helpers, written by `npx untitledui add …`
+  // under `components.json`'s `@/components` alias. They are a copy-paste
+  // dependency like `components/ui`, so published application files may import
+  // them without the registry republishing the library's own source.
+  "src/components/base/",
+  "src/components/foundations/",
+  "src/utils/",
   "src/hooks/use-mobile.ts",
   "src/lib/utils.ts",
 ];

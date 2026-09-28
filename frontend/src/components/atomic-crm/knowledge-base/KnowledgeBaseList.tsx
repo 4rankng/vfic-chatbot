@@ -1,5 +1,6 @@
 import { ListBase, useListContext, useRedirect } from "ra-core";
 import { BookOpen, ChevronRight, Plus } from "lucide-react";
+import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/ui/button";
 import { EmptyState, PageHeading, PageShell } from "../kit";
 import type { KnowledgeBase } from "../types";
@@ -94,9 +95,17 @@ export const KnowledgeBaseListContent = () => {
                         <span className="truncate text-body font-semibold text-foreground">
                           {kb.name}
                         </span>
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-badge font-semibold uppercase tracking-wide text-muted-foreground">
+                        {/* Untitled UI primitive. `uu-scope` is required: it
+                            re-binds the four utility names this console and
+                            Untitled UI both define. See
+                            src/styles/untitledui-theme.css. */}
+                        <Badge
+                          color="gray"
+                          size="sm"
+                          className="uu-scope font-semibold tracking-wide uppercase"
+                        >
                           {modeLabel}
-                        </span>
+                        </Badge>
                       </span>
                       <span className="mt-1 block text-helper text-muted-foreground">
                         {kb.attached_agent_count} Agent · {kb.project_count} dự
