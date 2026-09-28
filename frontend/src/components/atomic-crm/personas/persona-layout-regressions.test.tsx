@@ -48,24 +48,44 @@ const studio = (overview: ReactNode) => (
       <div className="persona-workspace-content">
         <div className="persona-page-shell">
           <div className="persona-studio-layout persona-agent-stack">
-            <section className="persona-agent-picker" aria-label="Danh sách Agent">
+            <section
+              className="persona-agent-picker"
+              aria-label="Danh sách Agent"
+            >
               <div className="persona-panel-header">
                 <div className="persona-panel-heading">
-                  <h2>Agent</h2>
+                  <div className="min-w-0">
+                    <h2>Agent</h2>
+                    <p className="text-[length:var(--text-body-sm)] font-medium whitespace-nowrap tabular-nums text-[var(--tt-ink-muted)]">
+                      3 hồ sơ
+                    </p>
+                  </div>
                 </div>
-                <button type="button" className="persona-create-action tt-btn-touch">
+                <button
+                  type="button"
+                  className="persona-create-action tt-btn-touch"
+                >
                   Tạo Agent
                 </button>
               </div>
               {/* The component renders this `label` as a flex row; the CSS rule
                   under test sets `min-height`, which an inline box ignores. */}
-              <label className="tt-input persona-studio-command" style={{ display: "flex" }}>
-                <input type="search" placeholder="Tìm Agent" aria-label="Tìm Agent" />
+              <label
+                className="tt-input persona-studio-command"
+                style={{ display: "flex" }}
+              >
+                <input
+                  type="search"
+                  placeholder="Tìm Agent"
+                  aria-label="Tìm Agent"
+                />
               </label>
-              <div className="persona-directory-list">
-                <article className="tt-list-row persona-directory-row">
-                  <div className="persona-directory-main">Tuyển dụng</div>
-                </article>
+              <div className="persona-directory-surface rounded-sm border border-[var(--tt-border)] bg-[var(--tt-surface-lift)] p-1.5">
+                <div className="persona-directory-list">
+                  <article className="tt-list-row persona-directory-row">
+                    <div className="persona-directory-main">Tuyển dụng</div>
+                  </article>
+                </div>
               </div>
             </section>
             <div className="persona-studio-body">{overview}</div>
@@ -103,7 +123,9 @@ const overviewPanel = (
 describe("Agent overview content plane", () => {
   it("draws the studio layout as a continuous surface, not a card", async () => {
     await page.viewport(desktop, 900);
-    const screen = await render(<TestMessages>{studio(overviewPanel)}</TestMessages>);
+    const screen = await render(
+      <TestMessages>{studio(overviewPanel)}</TestMessages>,
+    );
 
     const layout = screen.container.querySelector<HTMLElement>(
       ".persona-studio-layout",
@@ -135,21 +157,25 @@ describe("Agent overview content plane", () => {
     // rendered overview must carry a single edit control and no per-prompt
     // edit affordances.
     await page.viewport(desktop, 900);
-    const screen = await render(<TestMessages>{studio(overviewPanel)}</TestMessages>);
+    const screen = await render(
+      <TestMessages>{studio(overviewPanel)}</TestMessages>,
+    );
 
     const body = screen.container.querySelector<HTMLElement>(
       ".persona-studio-body",
     )!;
-    expect(
-      body.querySelectorAll(".persona-overview-edit-action"),
-    ).toHaveLength(1);
+    expect(body.querySelectorAll(".persona-overview-edit-action")).toHaveLength(
+      1,
+    );
     expect(body.textContent).not.toContain("Sửa prompt");
     expect(body.textContent).not.toContain("Đang xem");
   });
 
   it("keeps every overview control at the 44px comfortable height", async () => {
     await page.viewport(desktop, 900);
-    const screen = await render(<TestMessages>{studio(overviewPanel)}</TestMessages>);
+    const screen = await render(
+      <TestMessages>{studio(overviewPanel)}</TestMessages>,
+    );
 
     const command = screen.container.querySelector<HTMLElement>(
       ".persona-studio-command",
@@ -188,7 +214,9 @@ describe("Agent overview embedded in settings", () => {
     // Above 760px the embedded studio drops the rail to a 208–224px track, so
     // the overview is not squeezed into a sliver next to a full-width rail.
     await page.viewport(tablet, 900);
-    const screen = await render(<TestMessages>{embedded(overviewPanel)}</TestMessages>);
+    const screen = await render(
+      <TestMessages>{embedded(overviewPanel)}</TestMessages>,
+    );
 
     const picker = screen.container.querySelector<HTMLElement>(
       ".persona-agent-picker",
@@ -208,7 +236,9 @@ describe("Agent overview embedded in settings", () => {
     // The embedded picker trades the 44px phone targets for 34px controls and
     // a 38px search box: a full-width 44px create button dominated a 224px rail.
     await page.viewport(tablet, 900);
-    const screen = await render(<TestMessages>{embedded(overviewPanel)}</TestMessages>);
+    const screen = await render(
+      <TestMessages>{embedded(overviewPanel)}</TestMessages>,
+    );
 
     const create = screen.container.querySelector<HTMLElement>(
       ".persona-create-action",
@@ -233,7 +263,9 @@ describe("Agent overview embedded in settings", () => {
   it("tightens the embedded overview sections", async () => {
     // `.settings-embedded-resource .persona-studio-section { padding: 14px 16px }`
     await page.viewport(tablet, 900);
-    const screen = await render(<TestMessages>{embedded(overviewPanel)}</TestMessages>);
+    const screen = await render(
+      <TestMessages>{embedded(overviewPanel)}</TestMessages>,
+    );
 
     const section = screen.container.querySelector<HTMLElement>(
       ".persona-studio-section",
@@ -249,7 +281,10 @@ describe("Agent overview embedded in settings", () => {
       <TestMessages>
         <div className="inbox-bg-container settings-workspace">
           <div className="persona-workspace-content">
-            <div className="persona-scope-activity-grid" style={{ display: "grid" }}>
+            <div
+              className="persona-scope-activity-grid"
+              style={{ display: "grid" }}
+            >
               <div className="persona-scope-row">phạm vi</div>
               <div className="persona-scope-activity">hoạt động</div>
             </div>
@@ -329,9 +364,7 @@ describe("Agent editor metrics plane", () => {
     expect(stripStyles.backgroundColor).toBe("rgba(0, 0, 0, 0)");
 
     const cards = Array.from(
-      screen.container.querySelectorAll<HTMLElement>(
-        ".persona-edit-rail-card",
-      ),
+      screen.container.querySelectorAll<HTMLElement>(".persona-edit-rail-card"),
     );
     expect(cards).toHaveLength(2);
     for (const card of cards) {
@@ -494,7 +527,11 @@ describe("Agent editor long-form actions", () => {
                 <span />
               </span>
             </label>
-            <input data-slot="input" type="text" aria-label="Nội dung follow-up" />
+            <input
+              data-slot="input"
+              type="text"
+              aria-label="Nội dung follow-up"
+            />
           </div>,
         )}
       </TestMessages>,

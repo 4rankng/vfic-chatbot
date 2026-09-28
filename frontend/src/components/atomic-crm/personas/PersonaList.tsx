@@ -7,7 +7,6 @@ import {
   useRefresh,
   useTranslate,
 } from "ra-core";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ListPagination } from "@/components/admin/list-pagination";
@@ -19,6 +18,7 @@ import {
   Search,
 } from "lucide-react";
 import type { Persona } from "../types";
+import { EmptyState } from "../kit";
 import { activatePersona } from "./personaService";
 import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
 import { PersonaStudioOverview } from "./presentation/PersonaStudioOverview";
@@ -79,63 +79,6 @@ const PersonaBubble = memo(
   },
 );
 PersonaBubble.displayName = "PersonaBubble";
-
-const PersonaEmptyWorkspace = ({ onCreate }: { onCreate: () => void }) => {
-  const translate = useTranslate();
-  return (
-    <section
-      className="persona-empty-workspace"
-      aria-label="Tạo Agent đầu tiên"
-    >
-      <div className="persona-empty-primary">
-        <div className="persona-empty-copy">
-          <span className="persona-empty-icon" aria-hidden="true">
-            <BotMessageSquare className="size-5" />
-          </span>
-          <p className="persona-panel-eyebrow">Bắt đầu</p>
-          <h2>Tạo giọng Agent đầu tiên</h2>
-          <p>
-            Thiết lập một hồ sơ để chatbot biết cách chào hỏi, hỏi thông tin và
-            chuyển cuộc trò chuyện cho đội tuyển dụng khi cần.
-          </p>
-          <Button
-            type="button"
-            className="h-9 rounded-[8px] text-button"
-            onClick={onCreate}
-          >
-            <Plus className="size-4" />
-            {translate("personas.create_agent")}
-          </Button>
-        </div>
-      </div>
-      <div className="persona-empty-guide" aria-label="Quy trình thiết lập">
-        <div>
-          <span className="persona-empty-step-index">1</span>
-          <div>
-            <strong>Viết giọng tư vấn</strong>
-            <p>Vai trò, phạm vi trả lời, những điều Agent không được bịa.</p>
-          </div>
-        </div>
-        <div>
-          <span className="persona-empty-step-index">2</span>
-          <div>
-            <strong>Thiết lập adapter</strong>
-            <p>
-              Chọn adapter nào dùng Agent này hoặc để adapter kế thừa mặc định.
-            </p>
-          </div>
-        </div>
-        <div>
-          <span className="persona-empty-step-index">3</span>
-          <div>
-            <strong>Bật follow-up</strong>
-            <p>Đặt lịch nhắc lại theo Hot, Warm hoặc Not interested.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
 
 const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
   const { data, isPending, total } = useListContext<Persona>();
@@ -206,8 +149,20 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
     <div className="persona-workspace-content">
       <div className="persona-page-shell">
         {isEmpty ? (
-          <PersonaEmptyWorkspace
-            onCreate={() => redirect("create", "personas")}
+          <EmptyState
+            icon={<BotMessageSquare className="size-6" aria-hidden="true" />}
+            title="Tạo giọng Agent đầu tiên"
+            description="Thiết lập một hồ sơ để chatbot biết cách chào hỏi, hỏi thông tin và chuyển cuộc trò chuyện cho đội tuyển dụng khi cần."
+            action={
+              <Button
+                type="button"
+                className="h-9 rounded-[8px] text-button"
+                onClick={() => redirect("create", "personas")}
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                {translate("personas.create_agent")}
+              </Button>
+            }
           />
         ) : (
           <>
@@ -217,22 +172,25 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                 aria-label="Danh sách Agent"
               >
                 <div className="persona-panel-header">
+                  {/* `a-c-tables-08` header block: the title, then the muted
+                      count line. The 224px embedded rail has no room for the
+                      two side by side, so the count sits beneath the title. */}
                   <div className="persona-panel-heading">
-                    <h2>Agent</h2>
-                    <Badge
-                      variant="outline"
-                      className="border-border bg-background/70"
-                      aria-label={`${numberFormatter.format(totalCount)} hồ sơ`}
-                    >
-                      {numberFormatter.format(totalCount)}
-                    </Badge>
+                    <div className="min-w-0">
+                      <h2>Agent</h2>
+                      {!isPending ? (
+                        <p className="text-[length:var(--text-body-sm)] font-medium whitespace-nowrap tabular-nums text-[var(--tt-ink-muted)]">
+                          {numberFormatter.format(totalCount)} hồ sơ
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                   <Button
                     type="button"
                     className="persona-create-action tt-btn-touch"
                     onClick={() => redirect("create", "personas")}
                   >
-                    <Plus className="size-4" />
+                    <Plus className="size-4" aria-hidden="true" />
                     {translate("personas.create_agent")}
                   </Button>
                 </div>
@@ -262,23 +220,28 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                     ))}
                   </div>
                 ) : (
-                  <div className="tt-list persona-directory-list persona-agent-bubbles">
-                    {filteredPersonas.length > 0 ? (
-                      filteredPersonas.map((p) => (
-                        <PersonaBubble
-                          key={p.id}
-                          persona={p}
-                          isSelected={selectedPersona?.id === p.id}
-                          onSelect={(persona) =>
-                            setSelectedPersonaId(persona.id)
-                          }
-                        />
-                      ))
-                    ) : (
-                      <p className="persona-empty-results">
-                        Không tìm thấy Agent phù hợp.
-                      </p>
-                    )}
+                  /* `a-c-tables-08` treats the list as one framed surface. The
+                     Agent rail is a card list, not a table, so the frame holds
+                     the cards instead of the rows carrying their own boxes. */
+                  <div className="persona-directory-surface overflow-hidden rounded-sm border border-[var(--tt-border)] bg-[var(--tt-surface-lift)] p-1.5">
+                    <div className="tt-list persona-directory-list persona-agent-bubbles">
+                      {filteredPersonas.length > 0 ? (
+                        filteredPersonas.map((p) => (
+                          <PersonaBubble
+                            key={p.id}
+                            persona={p}
+                            isSelected={selectedPersona?.id === p.id}
+                            onSelect={(persona) =>
+                              setSelectedPersonaId(persona.id)
+                            }
+                          />
+                        ))
+                      ) : (
+                        <p className="persona-empty-results text-[length:var(--text-body-sm)] text-[var(--tt-ink-muted)]">
+                          Không tìm thấy Agent phù hợp.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </section>
