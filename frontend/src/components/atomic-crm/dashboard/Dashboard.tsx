@@ -1,4 +1,7 @@
+import { Wrench } from "lucide-react";
+
 import { InboxIcons } from "../conversations/InboxIcons";
+import { EmptyState } from "../kit";
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
 import "./dashboard.css";
 
@@ -28,16 +31,18 @@ export const Dashboard = () => (
       {ATTENTION_DASHBOARD_ENABLED ? (
         <RecruitingCommandCenter />
       ) : (
-        <div className="recruiting-command" role="status">
+        <div className="recruiting-command">
           <header className="recruiting-hero recruiting-hero-minimal">
             <div className="recruiting-hero-copy">
               <span className="recruiting-eyebrow">Theo dõi trực tiếp</span>
               <h1>Tổng quan</h1>
-              <p>
-                Bảng điều khiển đang tạm bảo trì. Vui lòng quay lại sau ít phút.
-              </p>
             </div>
           </header>
+          <EmptyState
+            icon={<Wrench className="size-6" aria-hidden="true" />}
+            title="Bảng điều khiển đang tạm bảo trì"
+            description="Vui lòng quay lại sau ít phút."
+          />
         </div>
       )}
     </section>

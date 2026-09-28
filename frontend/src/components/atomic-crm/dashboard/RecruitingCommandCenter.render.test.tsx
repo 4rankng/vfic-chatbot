@@ -424,4 +424,66 @@ describe("RecruitingCommandCenter candidate rows", () => {
       .element(screen.getByTestId("dashboard-location"))
       .toHaveTextContent("/conversations?id=conversation-21");
   });
+
+  it("renders both worklist queues as empty states when nothing needs action", async () => {
+    mockApiJson.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.startsWith("/api/v1/leads")
+          ? { data: [], total: 0 }
+          : {
+              updated_at: "2026-07-12T10:00:00Z",
+              counters: {
+                needs_reply: 0,
+                overdue: 0,
+                due_today: 0,
+                priority: 0,
+                unread: 0,
+              },
+              immediate: [],
+              today: [],
+            },
+      ),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <TestMessages>
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <RecruitingCommandCenter />
+          </QueryClientProvider>
+        </MemoryRouter>
+      </TestMessages>,
+    );
+
+    await expect
+      .element(
+        screen.getByRole("heading", {
+          name: "Không có hội thoại cần xử lý",
+          level: 3,
+        }),
+      )
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("heading", {
+          name: "Chưa có ứng viên có số điện thoại",
+          level: 3,
+        }),
+      )
+      .toBeVisible();
+    // An empty queue is not a failed queue: the counts stay at zero and the
+    // retry panes stay out of the worklist.
+    await expect
+      .element(screen.getByLabelText("0 hội thoại cần xử lý"))
+      .toBeVisible();
+    await expect.element(screen.getByLabelText("0 ứng viên mới")).toBeVisible();
+    expect(screen.container.textContent).not.toContain(
+      "Không tải được hội thoại.",
+    );
+    expect(screen.container.textContent).not.toContain(
+      "Không tải được ứng viên.",
+    );
+  });
 });

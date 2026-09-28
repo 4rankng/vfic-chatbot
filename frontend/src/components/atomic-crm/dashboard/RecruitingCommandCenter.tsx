@@ -1,4 +1,11 @@
-import { AlertTriangle, MessageCircle, PanelRight, Phone } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  MessageCircle,
+  PanelRight,
+  Phone,
+  UserRoundPlus,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   useDataProvider,
@@ -21,6 +28,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { LeadAvatar } from "../conversations/LeadAvatar";
 import { useRoleActions } from "../hooks/useRoleActions";
+import { EmptyState } from "../kit";
 import type { CandidateProfileUpdate } from "../leads/domain/candidateProfile";
 import type { CrmDataProvider } from "../providers/types";
 import type { Lead } from "../types";
@@ -320,7 +328,14 @@ const AttentionPanel = ({
           {state.showSkeleton || state.showInitialError ? "—" : rows.length}
         </strong>
       </div>
-      {!isEmpty ? (
+      {isEmpty ? (
+        <EmptyState
+          className="m-4"
+          icon={<CheckCircle2 className="size-6" aria-hidden="true" />}
+          title="Không có hội thoại cần xử lý"
+          description="Mọi cuộc trò chuyện hiện đã được xử lý. Bạn có thể chuyển sang xem ứng viên mới."
+        />
+      ) : (
         <div className="dashboard-candidate-list">
           {state.showSkeleton ? (
             <DashboardListSkeleton />
@@ -335,7 +350,7 @@ const AttentionPanel = ({
             ))
           )}
         </div>
-      ) : null}
+      )}
     </article>
   );
 };
@@ -385,7 +400,14 @@ const CandidatePanel = ({
           {state.showSkeleton || state.showInitialError ? "—" : count}
         </strong>
       </div>
-      {!isEmpty ? (
+      {isEmpty ? (
+        <EmptyState
+          className="m-4"
+          icon={<UserRoundPlus className="size-6" aria-hidden="true" />}
+          title="Chưa có ứng viên có số điện thoại"
+          description="Ứng viên sẽ xuất hiện tại đây sau khi cung cấp số liên hệ."
+        />
+      ) : (
         <div className="dashboard-candidate-list">
           {state.showSkeleton ? (
             <DashboardListSkeleton />
@@ -404,7 +426,7 @@ const CandidatePanel = ({
             />
           )}
         </div>
-      ) : null}
+      )}
     </article>
   );
 };
