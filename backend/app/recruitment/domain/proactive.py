@@ -38,7 +38,7 @@ class FollowupRulesPolicy:
 def followup_rule_allows(
     *,
     followup_count: int,
-    last_inbound_at: datetime,
+    last_inbound_at: datetime | None,
     lead_score: str | None,
     lead_stage: str | None,
     rules: FollowupRulesPolicy,
@@ -57,6 +57,10 @@ def followup_rule_allows(
         return False, "rule_sequence_exhausted"
     if followup_count >= followup_cap:
         return False, "cap_reached"
+    if last_inbound_at is None:
+        # Never messaged inbound: the cadence measures silence since the last
+        # user turn, and Zalo requires a prior user interaction for OA sends.
+        return False, "no_inbound"
     due_at = last_inbound_at + timedelta(hours=rule.cadence_hours[followup_count])
     if now < due_at:
         return False, "not_due"

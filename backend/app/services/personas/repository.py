@@ -45,8 +45,13 @@ class PersonaRepository:
         ).first()
 
     async def assignment_for_provider(
-        self, provider: AdapterProvider
+        self, provider: str | None
     ) -> AdapterPersonaAssignment | None:
+        # Callers pass the raw conversation provider, which can be None for a
+        # conversation with no channel identity yet; None has no override row,
+        # so the caller falls back to the global active persona.
+        if provider is None:
+            return None
         return await self.db.get(AdapterPersonaAssignment, provider)
 
     async def assignment_rows(self) -> list[AdapterPersonaAssignment]:
@@ -103,13 +108,13 @@ class PersonaRepository:
             )
         return mapping
 
-    async def effective_persona_for_provider(self, provider: AdapterProvider) -> Persona | None:
+    async def effective_persona_for_provider(self, provider: str | None) -> Persona | None:
         assignment = await self.assignment_for_provider(provider)
         if assignment is not None:
             return await self.get_by_id(assignment.persona_id)
         return await self.active_persona()
 
-    async def active_persona_body(self, provider: AdapterProvider) -> str | None:
+    async def active_persona_body(self, provider: str | None = None) -> str | None:
         persona = await self.effective_persona_for_provider(provider)
         return None if persona is None else persona.body_md
 

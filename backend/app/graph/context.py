@@ -17,6 +17,7 @@ from app.core.preamble_cache import cached_system_prompt
 from app.graph.ports import GraphRetrievalPort
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
 from app.graph.tingting_guide import TINGTING_RESET_REDIRECT_REPLY
+from app.recruitment.application.ports import PersonaBodyResolver
 
 _INDEX_HEADER = "\n\n=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ==="
 _RUNTIME_RETRIEVAL_RULES = f"""
@@ -65,7 +66,7 @@ def _strip_stale_refusal_rules(persona: str) -> str:
 
 
 async def resolve_effective_persona(
-    retrieval: GraphRetrievalPort, *, provider: str | None = None
+    retrieval: PersonaBodyResolver, *, provider: str | None = None
 ) -> str:
     """The one owner of the effective persona body: fetch, then strip.
 
@@ -76,6 +77,10 @@ async def resolve_effective_persona(
     hedge on one lane and answer normally on the other. Any lookup failure
     collapses to the committed ``persona.md``, which is this module's
     best-effort contract.
+
+    Takes :class:`PersonaBodyResolver`, not the full ``GraphRetrievalPort``:
+    the direct-context lane hands in a one-method adapter, and demanding the
+    whole graph read surface for a persona fetch would make that lie.
     """
     try:
         body = await retrieval.active_persona_body(provider=provider)
