@@ -5,8 +5,8 @@ severity: low
 area: backend
 labels: [type-safety, sqlalchemy, static-analysis, lead-service]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-28
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-28
 
 **Severity:** low · **Area:** backend · **Labels:** type-safety, sqlalchemy, static-analysis, lead-service
 
-**Trạng thái:** TODO — confirmed 2026-09-28 by an LSP diagnostics re-run over `backend/app/services/lead/` (9 files, 20 diagnostics, 3 files with errors)
+**Trạng thái:** DEV_COMPLETED — 2026-09-28: four of the five diagnostics were already fixed at HEAD by `0e6c0747`/`8f49f29d`; the two Semgrep audit sites silenced with the verified short-form `# nosemgrep: avoid-sqlalchemy-text` (the long-form id is inert — the registry doubles the rule id). pyright → 0 errors, 227 lead tests green.
 
 ## Problem
 

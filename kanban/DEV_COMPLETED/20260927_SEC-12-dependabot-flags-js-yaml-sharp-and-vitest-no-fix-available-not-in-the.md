@@ -5,8 +5,8 @@ severity: low
 area: security
 labels: [dependencies, security, supply-chain]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-27
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-27
 
 **Severity:** low · **Area:** security · **Labels:** dependencies, security, supply-chain
 
-**Trạng thái:** TODO — assessed 2026-09-27 before the 2026-09-27 production deploy; deliberately not treated as a deploy blocker
+**Trạng thái:** DEV_COMPLETED — 2026-09-28: `npm audit --omit=dev --audit-level=high` wired into `release-check` (verified exit 0 standalone before wiring); none of GitHub's alerted packages appear in the committed lockfile's production tree; exclusions, boundary condition, and the reconciliation recorded in `docs/ops/deployment-guide.md` §3.
 
 ## Problem
 

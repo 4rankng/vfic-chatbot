@@ -5,8 +5,8 @@ severity: high
 area: docs
 labels: [documentation, agent-context, governance]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-27
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-27
 
 **Severity:** high · **Area:** docs · **Labels:** documentation, agent-context, governance
 
-**Trạng thái:** TODO — found 2026-09-27 by the sweep report writer; not fixed by that sweep
+**Trạng thái:** RESOLVED-BY-RESTORE — the owner restored AGENTS.md + standards/ (reconciled, not blind) and shipped `scripts/check-doc-links.mjs` wired into `release-check` in `d92c1584` (2026-09-27 18:56), minutes after this card was opened; `6064082d` (2026-09-28) kept the gate out of machine-local `.claude/`. Gate verified green at HEAD 2026-09-28 (55 paths, 4 make targets, 4 documents all resolve).
 
 ## Problem
 

@@ -5,8 +5,8 @@ severity: low
 area: backend
 labels: [type-safety, static-analysis, graph, tech-debt]
 effort: M
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-28
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-28
 
 **Severity:** low · **Area:** backend · **Labels:** type-safety, static-analysis, graph, tech-debt
 
-**Trạng thái:** TODO — surfaced 2026-09-28 by a full LSP probe of `backend/app/graph` (49 files, 64 diagnostics, 11 files with errors). **Partially cleared 2026-09-28:** `app/core/db.py` lazy-attribute declarations (`a84133ad`), `adapters.py:200/301` persona-provider widenings + narrow `PersonaBodyResolver` param (`86c92e14`), `proactive.py` None-inbound crash (`86c92e14`). Remaining: the `DecisionTraceSummaryCode` literal cluster and the Optional-narrowing clusters in `runner.py`/`lanes.py`/`proactive.py`/`clients.py`/`usage.py`/`tools/*`.
+**Trạng thái:** DEV_COMPLETED — 2026-09-28: `backend/app/graph` is at 0 Pyright errors (was 52 live; the card's 64 was stale — parallel sessions had already cleared lanes/adapters). The `DecisionTraceSummaryCode` Literal in `schemas/bot_run.py` gained the four drifted members after triage (record_decision is an inert compatibility sink); `TurnRoute.reason` is now Literal-typed; zero ignores added. Scoped pyright lane (`uvx pyright app/graph`) and the fast migration-walk subset now gate `release-check`; `backend/pyrightconfig.json` binds the venv for every invocation.
 
 ## Problem
 

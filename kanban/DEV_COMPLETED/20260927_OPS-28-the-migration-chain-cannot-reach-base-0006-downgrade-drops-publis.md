@@ -5,8 +5,8 @@ severity: high
 area: ops
 labels: [migrations, ops, release-gate]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-09-27
 ---
 
@@ -14,7 +14,7 @@ opened: 2026-09-27
 
 **Severity:** high · **Area:** ops · **Labels:** migrations, ops, release-gate
 
-**Trạng thái:** TODO — found 2026-09-27 by the backend gate during the kanban sweep; not fixed by that sweep
+**Trạng thái:** DEV_COMPLETED — the fix landed 2026-09-27 19:22 in `44e8ed05` (owner), ~30 minutes after this card was opened; it chose the keep-PUBLISHED option for 0006 and also fixed a data-corruption bug the card had not identified (the old 0006 downgrade rewrote PUBLISHED rows to APPROVED). Independently re-proven 2026-09-28 on a throwaway database: walk to 0001 and back to head, offline `--sql` renders clean, 3/3 integration tests. Literal `downgrade base` stops only at 0001's by-design forward-only raise — the deepest legal rollback target.
 
 ## Problem
 
