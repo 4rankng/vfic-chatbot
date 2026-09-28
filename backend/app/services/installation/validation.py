@@ -10,6 +10,7 @@ runtime resolution both depend on. Mixed into ``InstallationService``.
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import func
 
@@ -39,6 +40,37 @@ VALIDATOR_VERSION = "1"
 
 class ValidationMixin:
     """Revision creation, revision validation, and evidence-currency checks."""
+
+    if TYPE_CHECKING:
+        # Supplied by InstallationService, the class that mixes these in.
+        # Declarations only: TYPE_CHECKING is False at runtime, so nothing here
+        # is ever assigned and the composed class stays the single source of
+        # truth for the contract.
+        db: AsyncSession
+        repo: InstallationRepository
+        registry: CapabilityRegistry
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from app.capabilities.registry import CapabilityRegistry
+        from app.services.installation.repository import InstallationRepository
+        from app.shared.domain.errors import InstallationError
+
+        @staticmethod
+        def _error(
+            message: str,
+            code: str,
+            lifecycle: str,
+            *,
+            status_code: int = 409,
+            issues: list[dict[str, str | None]] | None = None,
+        ) -> InstallationError: ...
+
+        async def _revision_or_error(
+            self, revision_id: uuid.UUID, lifecycle: str
+        ) -> InstallationManifestRevision: ...
+
+        async def _invalidate_cache_safely(self) -> None: ...
 
     async def create_revision(
         self,

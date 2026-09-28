@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import TYPE_CHECKING
 from datetime import UTC, datetime
 
 from app.capabilities.contracts import IndustryPackDefinition
@@ -36,9 +37,52 @@ logger = logging.getLogger(__name__)
 class LifecycleMixin:
     """Authority-locked transitions plus the runtime authority hot path."""
 
+    if TYPE_CHECKING:
+        # Supplied by InstallationService, the class that mixes these in.
+        # Declarations only: TYPE_CHECKING is False at runtime, so nothing here
+        # is ever assigned and the composed class stays the single source of
+        # truth for the contract.
+        db: AsyncSession
+        repo: InstallationRepository
+        registry: CapabilityRegistry
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from app.capabilities.registry import CapabilityRegistry
+        from app.services.installation.repository import InstallationRepository
+        from app.shared.domain.errors import InstallationError
+
+        @staticmethod
+        def _error(
+            message: str,
+            code: str,
+            lifecycle: str,
+            *,
+            status_code: int = 409,
+            issues: list[dict[str, str | None]] | None = None,
+        ) -> InstallationError: ...
+
+        async def _revision_or_error(
+            self, revision_id: uuid.UUID, lifecycle: str
+        ) -> InstallationManifestRevision: ...
+
+        async def _validation_is_current(
+            self,
+            revision_id: uuid.UUID,
+            validation: InstallationManifestValidation,
+            *,
+            require_kb_snapshot: bool = True,
+        ) -> bool: ...
+
+        async def _find_current_validation(
+            self, revision_id: uuid.UUID
+        ) -> InstallationManifestValidation | None: ...
+
+        from app.services.installation.service import ActiveInstallation
+
     async def activate_revision(
         self, revision_id: uuid.UUID, actor_id: uuid.UUID
-    ) -> "ActiveInstallation":  # noqa: F821 - composed class attribute
+    ) -> "ActiveInstallation":  # composed attribute, declared under TYPE_CHECKING
         await self.repo.acquire_authority_lock()
         state = await self.repo.get_state(for_update=True)
         lifecycle = state.lifecycle if state else InstallationLifecycle.unconfigured.value
@@ -50,7 +94,7 @@ class LifecycleMixin:
 
     async def rollback_revision(
         self, revision_id: uuid.UUID, actor_id: uuid.UUID
-    ) -> "ActiveInstallation":  # noqa: F821 - composed class attribute
+    ) -> "ActiveInstallation":  # composed attribute, declared under TYPE_CHECKING
         await self.repo.acquire_authority_lock()
         state = await self.repo.get_state(for_update=True)
         lifecycle = state.lifecycle if state else InstallationLifecycle.unconfigured.value
@@ -90,7 +134,7 @@ class LifecycleMixin:
             await self.db.refresh(state)
         return state
 
-    async def resume(self, actor_id: uuid.UUID) -> "ActiveInstallation":  # noqa: F821
+    async def resume(self, actor_id: uuid.UUID) -> "ActiveInstallation":  # composed attribute, declared under TYPE_CHECKING
         await self.repo.acquire_authority_lock()
         state = await self.repo.get_state(for_update=True)
         lifecycle = state.lifecycle if state else InstallationLifecycle.unconfigured.value
@@ -118,7 +162,7 @@ class LifecycleMixin:
         await self._invalidate_cache_safely()
         return await self._active_context(state, validation)
 
-    async def resolve_active(self) -> "ActiveInstallation | None":  # noqa: F821
+    async def resolve_active(self) -> "ActiveInstallation | None":  # composed attribute, declared under TYPE_CHECKING
         state = await self.repo.get_state()
         if (
             state is None
@@ -164,7 +208,7 @@ class LifecycleMixin:
             return None
         return await self._active_context(state, validation, active_kb_vector=active_kb_vector)
 
-    async def require_active(self) -> "ActiveInstallation":  # noqa: F821
+    async def require_active(self) -> "ActiveInstallation":  # composed attribute, declared under TYPE_CHECKING
         active = await self.resolve_active()
         if active is None:
             state = await self.repo.get_state()
@@ -226,7 +270,7 @@ class LifecycleMixin:
         actor_id: uuid.UUID,
         *,
         rollback: bool,
-    ) -> "ActiveInstallation":  # noqa: F821
+    ) -> "ActiveInstallation":  # composed attribute, declared under TYPE_CHECKING
         revision = await self._revision_or_error(revision_id, state.lifecycle)
         if not rollback and state.active_revision_id == revision.id:
             raise self._error(
@@ -312,7 +356,7 @@ class LifecycleMixin:
         *,
         active_kb_vector: tuple[tuple[str, str], ...] | None = None,
         write_cache: bool = True,
-    ) -> "ActiveInstallation":  # noqa: F821
+    ) -> "ActiveInstallation":  # composed attribute, declared under TYPE_CHECKING
         revision = await self._revision_or_error(validation.revision_id, state.lifecycle)
         if validation.authentication_policy_checksum is None:
             raise self._error(

@@ -8,6 +8,9 @@ never reach a projection. Mixed into ``InstallationService``.
 
 from __future__ import annotations
 
+import uuid
+from typing import TYPE_CHECKING
+
 from app.installation.domain.projection import (
     project_public_mapping,
     project_public_terminology,
@@ -48,6 +51,47 @@ PUBLIC_BRANDING_KEYS = frozenset(
 
 class ProjectionMixin:
     """Runtime/admin projections and the readiness derivation."""
+
+    if TYPE_CHECKING:
+        # Supplied by InstallationService, the class that mixes these in.
+        # Declarations only: TYPE_CHECKING is False at runtime, so nothing here
+        # is ever assigned and the composed class stays the single source of
+        # truth for the contract.
+        db: AsyncSession
+        repo: InstallationRepository
+        registry: CapabilityRegistry
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from app.capabilities.registry import CapabilityRegistry
+        from app.services.installation.repository import InstallationRepository
+        from app.shared.domain.errors import InstallationError
+
+        @staticmethod
+        def _error(
+            message: str,
+            code: str,
+            lifecycle: str,
+            *,
+            status_code: int = 409,
+            issues: list[dict[str, str | None]] | None = None,
+        ) -> InstallationError: ...
+
+        async def _revision_or_error(
+            self, revision_id: uuid.UUID, lifecycle: str
+        ) -> InstallationManifestRevision: ...
+
+        async def _validation_is_current(
+            self,
+            revision_id: uuid.UUID,
+            validation: InstallationManifestValidation,
+            *,
+            require_kb_snapshot: bool = True,
+        ) -> bool: ...
+
+        async def _find_current_validation(
+            self, revision_id: uuid.UUID
+        ) -> InstallationManifestValidation | None: ...
 
     async def runtime_view(self) -> InstallationRuntimeOut:
         state = await self.repo.get_state()
@@ -107,7 +151,13 @@ class ProjectionMixin:
             locale=revision.locale,
             timezone=revision.timezone,
             currency=revision.currency,
-            terminology=project_public_terminology(revision.terminology),
+            # Rebuilt here so the literal is checked against the field's
+            # dict[str, JsonValue] — dict is invariant in its value type, so a
+            # dict[str, str] straight from the projector is not assignable.
+            terminology={
+                key: item
+                for key, item in project_public_terminology(revision.terminology).items()
+            },
             capability_ids=revision.capability_ids,
             readiness_code=readiness,
             legacy_workspace=False,
