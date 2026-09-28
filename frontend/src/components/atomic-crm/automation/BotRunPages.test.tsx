@@ -77,6 +77,15 @@ describe("Bot run pages", () => {
     );
     expect(section.element().querySelector(".overflow-y-auto")).toBeNull();
     expect(screen.container.querySelector(".tt-alternate-card")).toBeNull();
+
+    // Tailkit a-c-timeline-01 rail: one marker per run, so the log reads
+    // chronologically and by outcome instead of as a bare list.
+    const items = section.element().querySelectorAll('[role="listitem"]');
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      expect(item.firstElementChild?.tagName).toBe("SPAN");
+    }
+
     expect(shell).toHaveClass("h-full", "min-h-0", "overflow-y-auto");
     expect(shell?.contains(pagination.element())).toBe(true);
 

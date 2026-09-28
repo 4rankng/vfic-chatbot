@@ -20,7 +20,7 @@ export const BotRunRow = ({ run }: { run: BotRun }) => {
       type="button"
       onClick={() => redirect("show", "bot_runs", run.id)}
       aria-label={`Xem lần chạy #${run.id}: ${meta.label}, ${relativeTime}${dur ? `, ${dur}` : ""}`}
-      className="group flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5"
+      className="group flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5"
     >
       <div className="min-w-0 flex-1">
         <p className="truncate text-body font-medium text-foreground">
@@ -62,6 +62,51 @@ export const BotRunRow = ({ run }: { run: BotRun }) => {
   );
 };
 
+/**
+ * Tailkit `a-c-timeline-01` vertical rail, at console density: a hairline guide
+ * with one marker per run, capped at both ends so the line does not run into the
+ * section border. The marker carries the run's outcome colour (`meta.indicatorClasses`
+ * sets `currentColor`, the marker paints with `bg-current`), so the audit trail
+ * reads chronologically and by outcome at a glance.
+ */
+const BotRunTimelineRail = ({
+  outcome,
+  isFirst,
+  isLast,
+}: {
+  outcome: BotRun["outcome"];
+  isFirst: boolean;
+  isLast: boolean;
+}) => {
+  const meta = outcomeMeta(outcome);
+
+  return (
+    <span
+      aria-hidden="true"
+      className="ml-4 flex w-4 shrink-0 flex-col items-center sm:ml-5"
+    >
+      <span
+        className={cn(
+          "w-px flex-1",
+          isFirst ? "bg-transparent" : "bg-[var(--tt-border)]",
+        )}
+      />
+      <span
+        className={cn(
+          "my-1.5 size-2.5 shrink-0 rounded-full bg-current",
+          meta.indicatorClasses,
+        )}
+      />
+      <span
+        className={cn(
+          "w-px flex-1",
+          isLast ? "bg-transparent" : "bg-[var(--tt-border)]",
+        )}
+      />
+    </span>
+  );
+};
+
 export const BotRunListContent = () => {
   const { data, isPending } = useListContext<BotRun>();
 
@@ -95,12 +140,17 @@ export const BotRunListContent = () => {
           />
         ) : (
           <div role="list">
-            {data.map((run) => (
+            {data.map((run, index) => (
               <div
                 role="listitem"
                 key={run.id}
-                className="border-b border-[var(--tt-border)] last:border-b-0"
+                className="flex border-b border-[var(--tt-border)] last:border-b-0 hover:bg-muted/50 focus-within:bg-muted"
               >
+                <BotRunTimelineRail
+                  outcome={run.outcome}
+                  isFirst={index === 0}
+                  isLast={index === data.length - 1}
+                />
                 <BotRunRow run={run} />
               </div>
             ))}
