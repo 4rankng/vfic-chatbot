@@ -17,6 +17,7 @@ import uuid
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
 from app.services.lead.repository import LeadRepository
 from app.services.recommendation import (
     ActiveJobLookup,
@@ -189,22 +190,31 @@ class CatalogRepository:
         Filtered to ``is_active`` catalog rows so disabled criteria (migration 0009) are
         hidden from the agent tool and readiness gauge without re-extraction.
         """
-        return list(
-            (
-                await self.db.execute(
-                    text(
-                        "SELECT jfv.value_text, jfv.value_json, jfv.is_highlight, jfv.is_missing, "
-                        "       jfv.needs_clarification, jfv.evidence_text, "
-                        "       wfc.name_vi, wfc.feature_key "
-                        "FROM job_feature_values jfv "
-                        "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
-                        "WHERE jfv.project_id = :pid AND wfc.is_active = true "
-                        "ORDER BY jfv.display_priority ASC, wfc.default_importance_score DESC"
-                    ),
-                    {"pid": str(project_id)},
-                )
-            ).all()
+        statement = (
+            select(
+                JobFeatureValue.value_text,
+                JobFeatureValue.value_json,
+                JobFeatureValue.is_highlight,
+                JobFeatureValue.is_missing,
+                JobFeatureValue.needs_clarification,
+                JobFeatureValue.evidence_text,
+                WorkerFeatureCatalog.name_vi,
+                WorkerFeatureCatalog.feature_key,
+            )
+            .join(
+                WorkerFeatureCatalog,
+                WorkerFeatureCatalog.id == JobFeatureValue.feature_id,
+            )
+            .where(
+                JobFeatureValue.project_id == project_id,
+                WorkerFeatureCatalog.is_active.is_(True),
+            )
+            .order_by(
+                JobFeatureValue.display_priority.asc(),
+                WorkerFeatureCatalog.default_importance_score.desc(),
+            )
         )
+        return list((await self.db.execute(statement)).all())
 
     async def income_summary_for_active_projects(self):
         """Verbatim income evidence for active projects (Page-scoped when bound)."""
