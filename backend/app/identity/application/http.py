@@ -5,12 +5,14 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Protocol
+from app.identity.domain.role import Role
+
 
 class AuthenticatedUser(Protocol):
     id: uuid.UUID
     email: str
     full_name: str | None
-    role: object
+    role: Role
     disabled: bool
     token_version: int
     password_hash: str
