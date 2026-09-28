@@ -72,13 +72,16 @@ class GeminiEmbedder:
         """
         resp = await self._provider_call(chunk)
         dim = self.s.embedding_dim or 768
-        if not resp.embeddings:
-            # API returned no embeddings — pad with zero vectors so the caller
-            # (embed_with_fallback) can retry one-by-one.
+        # The SDK types its response as EmbedContentResponse | None, so a null
+        # body is a real outcome, not a checker artifact. Treat it exactly like
+        # an empty one: pad with zero vectors so the caller
+        # (embed_with_fallback) can retry the texts one-by-one.
+        embeddings = resp.embeddings if resp is not None else None
+        if not embeddings:
             return [[0.0] * dim for _ in chunk]
         return [
             list(item.values) if item.values else [0.0] * dim
-            for item in resp.embeddings
+            for item in embeddings
         ]
 
     async def batch(self, texts: list[str]) -> list[list[float]]:

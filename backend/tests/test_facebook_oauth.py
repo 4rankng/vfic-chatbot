@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import parse_qs, urlencode, urlparse
 from uuid import UUID
@@ -25,6 +26,19 @@ import httpx
 import pytest
 
 import app.services.integrations.facebook_oauth_flow as flow
+from app.identity.application.http import AuthenticatedUser
+
+
+def _admin(**fields: object) -> AuthenticatedUser:
+    """An admin stand-in carrying only the fields a handler under test reads.
+
+    ``AuthenticatedUser`` is a nine-member Protocol and the real model wants a
+    session; these endpoint tests read one to three attributes (id,
+    token_version, role, password_hash), so the double is built from exactly
+    those instead of a full model instance. Declaring the return type here is
+    what lets ``admin=``/``_admin=`` parameters stay honestly typed.
+    """
+    return cast(AuthenticatedUser, SimpleNamespace(**fields))
 
 
 def _oauth_flow_capsule(
@@ -365,7 +379,7 @@ async def test_oauth_start_returns_400_when_app_id_not_configured(monkeypatch):
 
     with pytest.raises(BadRequestError) as exc_info:
         await api.start_facebook_oauth(
-            admin=SimpleNamespace(id=UUID(int=1), token_version=1),
+            admin=_admin(id=UUID(int=1), token_version=1),
             db=MagicMock(),
         )
 
@@ -405,7 +419,7 @@ async def test_reveal_returns_plaintext_secrets_and_forbids_caching(monkeypatch)
     result = await api.reveal_facebook_credentials(
         response=response,
         password="re-entered-password",
-        admin=SimpleNamespace(id="admin-id", password_hash="stored-hash"),
+        admin=_admin(id="admin-id", password_hash="stored-hash"),
         db=MagicMock(),
     )
 
@@ -452,7 +466,7 @@ def _reveal_app(monkeypatch, *, password_hash: str):
     app = FastAPI()
     register_domain_exception_handlers(app)
     app.include_router(api.router, prefix="/api/v1")
-    app.dependency_overrides[require_admin] = lambda: SimpleNamespace(
+    app.dependency_overrides[require_admin] = lambda: _admin(
         id=UUID(int=7), password_hash=password_hash
     )
     app.dependency_overrides[get_request_db] = lambda: db
@@ -506,11 +520,16 @@ async def test_facebook_endpoints_require_admin(monkeypatch):
     The require_admin dependency enforces this; verify the routes are wired
     with it (not a separate RBAC check inside each handler).
     """
+    from fastapi.routing import APIRoute
+
     from app.api.integrations import router
 
-    fb_paths = {
-        r.path for r in router.routes if "facebook" in r.path
-    }
+    # router.routes is typed as BaseRoute, which has neither .path nor
+    # .dependant; narrowing to APIRoute is what makes this wiring assertion
+    # provable rather than a cast.
+    api_routes = [route for route in router.routes if isinstance(route, APIRoute)]
+
+    fb_paths = {r.path for r in api_routes if "facebook" in r.path}
     assert fb_paths == {
         "/admin/integrations/facebook/oauth/start",
         "/admin/integrations/facebook/oauth/callback",
@@ -526,7 +545,7 @@ async def test_facebook_endpoints_require_admin(monkeypatch):
     # The callback is authenticated by its single-use state because Meta's
     # browser redirect cannot carry the application's Authorization header.
     # Every other Facebook endpoint remains Bearer-authenticated admin-only.
-    for route in router.routes:
+    for route in api_routes:
         if "facebook" not in route.path:
             continue
         callables = {getattr(d.call, "__name__", "") for d in route.dependant.dependencies}
@@ -566,7 +585,7 @@ async def test_oauth_state_is_single_use_and_admin_bound(monkeypatch):
     )
 
     admin_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-    admin = SimpleNamespace(
+    admin = _admin(
         id=admin_id, role="admin", disabled=False, token_version=7
     )
     db = MagicMock()
@@ -723,8 +742,8 @@ async def test_oauth_callback_safely_redirects_expected_provider_failures(
     ("admin", "error_code"),
     [
         (None, "invalid_admin"),
-        (SimpleNamespace(role="admin", disabled=True, token_version=3), "invalid_admin"),
-        (SimpleNamespace(role="recruiter", disabled=False, token_version=3), "invalid_admin"),
+        (_admin(role="admin", disabled=True, token_version=3), "invalid_admin"),
+        (_admin(role="recruiter", disabled=False, token_version=3), "invalid_admin"),
     ],
 )
 async def test_oauth_callback_reloads_and_validates_admin(monkeypatch, admin, error_code):
@@ -864,7 +883,7 @@ async def test_oauth_pages_accepts_only_own_current_session(monkeypatch):
         "app.channels.providers.facebook_account.FacebookAccountResolver.list_facebook_accounts",
         AsyncMock(return_value=[]),
     )
-    admin = SimpleNamespace(id=admin_id, token_version=3)
+    admin = _admin(id=admin_id, token_version=3)
 
     result = await api.list_facebook_pages(
         flow_id="owned-flow", admin=admin, db=MagicMock()
@@ -880,10 +899,10 @@ async def test_oauth_pages_accepts_only_own_current_session(monkeypatch):
 @pytest.mark.parametrize(
     "admin",
     [
-        SimpleNamespace(
+        _admin(
             id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), token_version=3
         ),
-        SimpleNamespace(
+        _admin(
             id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), token_version=4
         ),
     ],
@@ -941,7 +960,7 @@ async def test_oauth_pages_missing_or_invalid_flow_returns_410(monkeypatch, caps
     with pytest.raises(flow.GoneError) as exc_info:
         await api.list_facebook_pages(
             flow_id="expired-flow",
-            admin=SimpleNamespace(
+            admin=_admin(
                 id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), token_version=3
             ),
             db=MagicMock(),
@@ -974,7 +993,7 @@ async def test_oauth_complete_wrong_admin_does_not_consume_owner_flow(monkeypatc
             payload=FacebookOAuthCompleteRequest(
                 flow_id="owned-flow", page_id="page-1"
             ),
-            admin=SimpleNamespace(id=other_id, token_version=3),
+            admin=_admin(id=other_id, token_version=3),
             db=MagicMock(),
         )
 
@@ -1004,7 +1023,7 @@ async def test_oauth_complete_changed_session_consumes_and_rejects_flow(monkeypa
             payload=FacebookOAuthCompleteRequest(
                 flow_id="stale-flow", page_id="page-1"
             ),
-            admin=SimpleNamespace(id=admin_id, token_version=4),
+            admin=_admin(id=admin_id, token_version=4),
             db=MagicMock(),
         )
 
@@ -1046,7 +1065,7 @@ async def test_oauth_complete_atomically_consumes_before_side_effects(monkeypatc
         activate,
     )
     request = FacebookOAuthCompleteRequest(flow_id=flow_id, page_id="page-1")
-    admin = SimpleNamespace(id=admin_id, token_version=3)
+    admin = _admin(id=admin_id, token_version=3)
 
     result = await api.complete_facebook_oauth(
         payload=request, admin=admin, db=MagicMock()
@@ -1105,7 +1124,7 @@ async def test_oauth_complete_maps_expected_provider_failures_to_generic_502(
             payload=FacebookOAuthCompleteRequest(
                 flow_id=flow_id, page_id="page-1"
             ),
-            admin=SimpleNamespace(id=admin_id, token_version=3),
+            admin=_admin(id=admin_id, token_version=3),
             db=MagicMock(),
         )
 
@@ -1169,7 +1188,7 @@ async def test_oauth_pages_rejects_malformed_decrypted_capsules(monkeypatch, pay
     with pytest.raises(flow.GoneError) as exc_info:
         await api.list_facebook_pages(
             flow_id="malformed",
-            admin=SimpleNamespace(
+            admin=_admin(
                 id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), token_version=3
             ),
             db=MagicMock(),
@@ -1252,7 +1271,7 @@ async def test_facebook_health_maps_expected_provider_failures_to_unhealthy(
     )
 
     result = await api.test_facebook_connection(
-        _admin=SimpleNamespace(id="admin-id"), db=MagicMock()
+        _admin=_admin(id="admin-id"), db=MagicMock()
     )
 
     assert result.healthy is False
@@ -1320,7 +1339,7 @@ async def test_facebook_health_healthy_when_app_subscribed(monkeypatch):
     await _health_probe_mocks(monkeypatch, subscribed=True)
 
     result = await api.test_facebook_connection(
-        _admin=SimpleNamespace(id="admin-id"), db=MagicMock()
+        _admin=_admin(id="admin-id"), db=MagicMock()
     )
 
     assert result.healthy is True
@@ -1338,7 +1357,7 @@ async def test_facebook_health_unhealthy_when_app_not_subscribed(monkeypatch):
     await _health_probe_mocks(monkeypatch, subscribed=False)
 
     result = await api.test_facebook_connection(
-        _admin=SimpleNamespace(id="admin-id"), db=MagicMock()
+        _admin=_admin(id="admin-id"), db=MagicMock()
     )
 
     assert result.healthy is False
@@ -1369,7 +1388,7 @@ async def test_facebook_health_subscription_lookup_failure_is_unhealthy(
     )
 
     result = await api.test_facebook_connection(
-        _admin=SimpleNamespace(id="admin-id"), db=MagicMock()
+        _admin=_admin(id="admin-id"), db=MagicMock()
     )
 
     assert result.healthy is False
@@ -1430,7 +1449,7 @@ async def test_disconnect_resolves_active_page_server_side(monkeypatch):
         unsubscribe,
     )
 
-    admin = SimpleNamespace(id="admin-id")
+    admin = _admin(id="admin-id")
     result = await api.disconnect_facebook(admin=admin, db=MagicMock())
 
     disconnect.assert_awaited_once_with(
@@ -1489,7 +1508,7 @@ async def test_disconnect_deactivates_locally_when_meta_unsubscribe_fails(monkey
     )
 
     result = await api.disconnect_facebook(
-        admin=SimpleNamespace(id="admin-id"), db=MagicMock()
+        admin=_admin(id="admin-id"), db=MagicMock()
     )
 
     disconnect.assert_awaited_once_with(
@@ -1510,7 +1529,7 @@ async def test_disconnect_returns_404_when_no_active_page(monkeypatch):
 
     with pytest.raises(api.NotFoundError) as exc_info:
         await api.disconnect_facebook(
-            admin=SimpleNamespace(id="admin-id"), db=MagicMock()
+            admin=_admin(id="admin-id"), db=MagicMock()
         )
 
     assert exc_info.value.status_code == 404
@@ -1524,7 +1543,6 @@ async def test_status_response_masks_page_id_and_carries_no_token(monkeypatch):
     from app.channels.accounts import ChannelAccountStatus
 
     import app.api.integrations as api
-    from types import SimpleNamespace
 
     async def _list(self):
         return [
@@ -1544,7 +1562,7 @@ async def test_status_response_masks_page_id_and_carries_no_token(monkeypatch):
     )
 
     db = MagicMock()
-    admin = SimpleNamespace(id="admin", role="admin")
+    admin = _admin(id="admin", role="admin")
     response = await api.get_facebook_status(_admin=admin, db=db)
     # `enabled` is derived from whether an active Page account exists — NOT from
     # a deploy-time env toggle. Mirrors Zalo "configured" semantics.

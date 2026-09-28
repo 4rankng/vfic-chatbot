@@ -287,7 +287,7 @@ def current_year() -> int:
     return datetime.now().year
 
 
-def normalize_lead(raw, chat_id: str) -> dict | None:
+def normalize_lead(raw, chat_id: str | None) -> dict | None:
     """Full port of 'Merge Lead': returns the normalised lead dict, or None if no chat_id."""
     chat_id = _pick(chat_id)
     if not chat_id:

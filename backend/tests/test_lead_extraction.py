@@ -5,9 +5,12 @@ Matches the project convention: plain pytest, no heavy fixtures.
 """
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.candidate_extraction import (
     CandidateExtraction,
@@ -29,6 +32,16 @@ from app.services.lead.normalizers import (
 from app.services.lead.repository import _UPSQL
 from app.services.lead.probing import lead_collection_question
 from app.services.memory_service import greeting_gate
+
+
+def _session() -> AsyncSession:
+    """A session stand-in: these tests never reach a database.
+
+    ``persist``/``persist_explicit_name`` take ``AsyncSession``; typing the
+    double is what keeps those parameters checked instead of passing
+    ``object()`` and erasing the argument type at every call site.
+    """
+    return cast(AsyncSession, object())
 
 
 def test_human_review_evidence_requires_explicit_non_negated_language():
@@ -224,11 +237,13 @@ class TestNormalizeLead:
     def test_notes_extracted(self):
         raw = '{"name": "Lan", "phone": "0987654321", "notes": "xăm kín người, có xe máy"}'
         result = normalize_lead(raw, "zalo_1")
+        assert result is not None
         assert result["notes"] == "xăm kín người, có xe máy"
 
     def test_notes_are_normalized_as_individual_lines(self):
         raw = '{"notes": "- Có xe máy\\n• Ca ngày\\n1. Có xe máy"}'
         result = normalize_lead(raw, "zalo_1")
+        assert result is not None
         assert result["notes"] == "Có xe máy\nCa ngày"
 
     def test_no_chat_id_returns_none(self):
@@ -247,6 +262,7 @@ class TestNormalizeLead:
     def test_expected_salary_passes_through(self):
         raw = '{"expected_salary": "9-11 triệu"}'
         result = normalize_lead(raw, "zalo_1")
+        assert result is not None
         assert result["expected_salary"] == "9-11 triệu"
 
 
@@ -348,7 +364,7 @@ class TestCandidateExtractionService:
         )
 
         saved_name = await CandidateExtractionService.persist_explicit_name(
-            object(),
+            _session(),
             "zalo_1",
             "mình là công nhân",
         )
@@ -371,7 +387,7 @@ class TestCandidateExtractionService:
         )
 
         saved_name = await CandidateExtractionService.persist_explicit_name(
-            object(),
+            _session(),
             "zalo_1",
             "mình tên LiteQA",
         )
@@ -398,7 +414,7 @@ class TestCandidateExtractionService:
         )
 
         saved_name = await CandidateExtractionService.persist_explicit_name(
-            object(),
+            _session(),
             "zalo_1",
             "Dũng",
             prev_bot_message="Bạn tên gì vậy? Mình gọi cho đàng hoàng nhé 😄",
@@ -415,7 +431,7 @@ class TestCandidateExtractionService:
 
         # No prior name request -> a bare reply must not be stored as a name.
         saved_name = await CandidateExtractionService.persist_explicit_name(
-            object(),
+            _session(),
             "zalo_1",
             "Dũng",
             prev_bot_message="Bạn muốn tìm việc ở khu vực nào?",
@@ -462,6 +478,7 @@ class TestCandidateExtractionService:
         )
 
         assert calls == 1
+        assert result.lead_patch is not None
         assert result.lead_patch["name"] == "Mai"
         assert result.lead_patch["desired_job"] == "lao động thời vụ"
         assert result.lead_patch["lead_score"] == "warm"
@@ -576,11 +593,12 @@ class TestCandidateExtractionService:
 
         assert "GHI CHÚ ĐÃ LƯU" in captured_turn
         assert "Không có trình độ" in captured_turn
+        assert result.lead_patch is not None
         assert result.lead_patch["notes"] == "Hỏi về bảo hiểm"
 
     @pytest.mark.asyncio
     async def test_persist_supplies_saved_notes_to_extract(self, monkeypatch):
-        db = object()
+        db = _session()
         llm_extractor = AsyncMock()
         extract = AsyncMock(return_value=CandidateExtraction(lead_patch=None, memory_facts=[]))
         upsert = AsyncMock(return_value=None)
@@ -674,7 +692,7 @@ class TestCandidateExtractionService:
         )
 
         await CandidateExtractionService.persist(
-            object(),
+            _session(),
             AsyncMock(),
             AsyncMock(),
             "oa:user-1",
@@ -682,6 +700,7 @@ class TestCandidateExtractionService:
             "Bạn muốn làm ở đâu?",
         )
 
+        assert extract.await_args is not None
         assert extract.await_args.kwargs["oa_profile_display_name"] == "Bé Gấu"
 
     @pytest.mark.asyncio
@@ -729,7 +748,7 @@ class TestCandidateExtractionService:
         )
 
         await CandidateExtractionService.persist(
-            object(),
+            _session(),
             AsyncMock(),
             AsyncMock(),
             "oa:user-1",
@@ -737,11 +756,12 @@ class TestCandidateExtractionService:
             "Bạn muốn làm ở đâu?",
         )
 
+        assert extract.await_args is not None
         assert extract.await_args.kwargs["oa_profile_display_name"] is None
 
     @pytest.mark.asyncio
     async def test_confirmed_name_survives_later_hallucinated_name(self, monkeypatch):
-        db = object()
+        db = _session()
         extracted = CandidateExtraction(
             lead_patch={
                 "zalo_id": "zalo_1",
@@ -801,7 +821,7 @@ class TestCandidateExtractionService:
     ):
         from app.models.conversation import ConversationMode, ConversationStatus
 
-        db = object()
+        db = _session()
         extracted = CandidateExtraction(
             lead_patch={"zalo_id": "oa:user-1", "name": "CTY ở đâu vậy"},
             memory_facts=[],
@@ -868,7 +888,7 @@ class TestCandidateExtractionService:
 
     @pytest.mark.asyncio
     async def test_explicit_name_correction_replaces_confirmed_name(self, monkeypatch):
-        db = object()
+        db = _session()
         extracted = CandidateExtraction(
             lead_patch={
                 "zalo_id": "zalo_1",
@@ -926,7 +946,7 @@ class TestCandidateExtractionService:
     async def test_persist_skips_llm_when_conversation_is_already_human(self, monkeypatch):
         from app.models.conversation import ConversationMode
 
-        db = object()
+        db = _session()
         extractor = AsyncMock()
         lead_repository = MagicMock()
 
@@ -965,7 +985,7 @@ class TestCandidateExtractionService:
 
     @pytest.mark.asyncio
     async def test_persist_skips_llm_for_closed_conversation(self, monkeypatch):
-        db = object()
+        db = _session()
         extractor = AsyncMock()
 
         class FakeConversationService:
@@ -1005,7 +1025,7 @@ class TestCandidateExtractionService:
         mismatch made every live extraction a silent no-op: the model ran, the
         job reported success, and nothing was written.
         """
-        db = object()
+        db = _session()
         extract = AsyncMock(
             return_value=CandidateExtraction(
                 lead_patch={"phone": "0359151980"},
@@ -1064,7 +1084,7 @@ class TestCandidateExtractionService:
     async def test_persist_escalates_high_confidence_intent_without_lead_or_memory_write(
         self, monkeypatch
     ):
-        db = object()
+        db = _session()
         result = CandidateExtraction(
             lead_patch=None,
             memory_facts=[],
@@ -1149,7 +1169,7 @@ class TestCandidateExtractionService:
     async def test_persist_does_not_escalate_recruitment_question_from_model_label(
         self, monkeypatch
     ):
-        db = object()
+        db = _session()
         model_result = CandidateExtraction(
             lead_patch=None,
             memory_facts=[],

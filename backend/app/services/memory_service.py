@@ -62,7 +62,7 @@ _SKIP = {
 }
 
 
-def greeting_gate(user_text: str) -> bool:
+def greeting_gate(user_text: str | None) -> bool:
     """Return True if the message is substantive enough to run the memory extractor.
 
     Allows single meaningful answers like '5' (age), '25', '30' through — these
