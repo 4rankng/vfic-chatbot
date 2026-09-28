@@ -94,13 +94,78 @@ unchanged; old keys age out via TTL.
 - **Uncommitted delta**: `backend/tests/test_universal_platform_characterization.py`
   (cache-key assertion) is not in a8b3593e — fold it in during integration, or the
   characterization suite fails on the old key assertion via the error-fallback path.
+  (Resolved: integrated in f4540ada with the docs line and card move.)
 - **Docs impact (minor)**: `docs/architecture/system-architecture.md:912` lists the
   preamble-index fields as "(name, slug, aliases, discovery summary, roles, and
   location)" — add "highlights". Not edited (outside my ownership).
+  (Resolved: f4540ada.)
 - The parallel commit also swept in the kanban card file; card state is the lead's to
   manage.
 
+## Extension (lead grant, 2026-09-28 ~22:40): identity-only TingTing prompt gates
+
+The lead's scout map confirmed a real leak and granted two regions: the lanes.py
+prompt branch (plus an identity-only helper) and the proactive.py call site. All
+shipped, uncommitted, on top of HEAD (8b1225a1).
+
+- **`lanes.py` — `_tingting_account_conversation(conv)`** (new helper next to
+  `_tingting_reset_allowed`): provider == zalo_oa AND account_key ==
+  TINGTING_OA_ACCOUNT_KEY, no admin pin. `_tingting_reset_allowed` is untouched —
+  the reset flow stays pin-gated as the lead directed.
+- **`lanes.py` prompt branch**: condition is now
+  `tingting_reset_allowed or tingting_support_account`, so a pin-unset TingTing-OA
+  turn gets the support persona instead of falling through to the recruitment
+  preamble. The project-context append (FOCUSED/EXPLORE blocks, both of which
+  reference the project directory) gained the same `not tingting_support_account`
+  guard — those blocks must not land on the support prompt either.
+- **Plumbing note (one region beyond the literal grant)**: `_agent_turn` does not
+  receive `conv`, so the flag is computed in `_resolve_lane` (which has `conv`) and
+  forwarded to `_agent_turn` via the existing `_optional_policy_kwargs` filter
+  alongside `tingting_reset_allowed`. This adds `tingting_support_account: bool =
+  False` to `_agent_turn`'s signature and one dict entry at the forwarding site —
+  the smallest possible plumbing for the granted fix shape; runner.py untouched.
+- **`proactive.py`**: the context build branches on the same identity check —
+  TingTing-OA conversations get `tingting_support_system_prompt` (guide included
+  when `deps.retrieval.tingting_api_configured` reads true, guarded like the
+  reactive branch); every other conversation keeps `build_system_prompt`.
+  Imports `_tingting_account_conversation` from lanes (same direction runner
+  already imports `_tingting_reset_allowed`; no cycle).
+- **Tests**: `test_support_oa_keeps_the_support_prompt_when_the_reset_link_pin_is_unset`
+  (the leak, now pinned shut: pin False + identity True → support prompt,
+  `build_system_prompt` unreached) and `test_tingting_support_account_identity_is_pin_free`
+  (provider/account matrix, no-identity default) in test_graph_runner_turn.py;
+  `test_support_oa_nudge_never_gets_the_recruitment_preamble` in
+  test_graph_proactive_turn.py (tingting identity → support persona, marker absent;
+  recruitment OA → assembled preamble still used; OA nudge quotes a WORKER inbound
+  message per the existing `zalo_oa_requires_inbound_message_id` guard).
+- **Adjacent gap (lead-ordered fix, shipped)**: `_resolve_lane`'s two curated
+  lane-selection gates (project_clarification / direct-context) keyed on
+  `not tingting_reset_allowed` only, so a pin-unset TingTing-OA conversation with a
+  resolved clarification/direct-context could still take a recruitment-data lane
+  before the prompt branch. Both conditions now also require
+  `not tingting_support_account`; the flag is computed once at the top of
+  `_resolve_lane` and reused by the forwarding dict. Coverage:
+  `test_support_oa_never_takes_the_curated_recruitment_lanes` drives both paths on
+  a pin-unset TingTing identity (lane falls through to agent, flag forwarded,
+  direct-context turn never invoked) with recruitment-OA controls proving each
+  lane still selects for non-support accounts.
+- **Tooling note**: `git status`/`git log` output in this session was repeatedly
+  mangled by the repowise distill wrapper (empty or missing lines, including a
+  false "my edits vanished" reading); raw `command git` shows the tree correctly.
+
+### Extension gate evidence
+
+- `pytest tests/test_graph_runner_turn.py tests/test_architecture_boundaries.py
+  tests/test_runtime_surface_inventory.py tests/test_graph_proactive_turn.py
+  tests/test_persona.py tests/test_persona_resolver_convergence.py
+  tests/test_universal_platform_characterization.py tests/test_tingting_api.py
+  -p no:randomly -q` → `244 passed in 64.22s` (243 before the gap fix; the new
+  lane-selection test is the delta)
+- `uvx pyright app/graph` → `0 errors, 0 warnings, 0 informations`
+- `.venv/bin/ruff check app/graph tests/test_graph_runner_turn.py
+  tests/test_graph_proactive_turn.py` → `All checks passed!`
+
 Docs impact: minor — one field name ("highlights") missing from the preamble-index
-enumeration in docs/architecture/system-architecture.md:912; everything else is
-code-internal behavior already covered by the architecture doc's existing invariant
-that hiring authority stays with list_active_jobs.
+enumeration in docs/architecture/system-architecture.md:912 (resolved in f4540ada);
+everything else is code-internal behavior already covered by the architecture doc's
+existing invariant that hiring authority stays with list_active_jobs.
