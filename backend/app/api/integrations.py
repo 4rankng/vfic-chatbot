@@ -132,12 +132,13 @@ async def test_zalo_oa(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ZaloChannelTestOut:
-    """Full diagnostic of the Zalo OA channel — checks 4 layers:
+    """Full diagnostic of the Zalo OA channel — checks 3 layers:
 
     1. All credentials configured (app_id, secret_key, access_token, refresh_token)
-    2. Access token valid (getoa probe) — if expired, tries auto-refresh
-    3. Secret key valid (refresh probe) — the most common silent failure
-    4. Token refresh works (calls oauth.zaloapp.com/v4/oa/access_token)
+    2. Access token valid (getoa probe)
+    3. Token refresh works (delegated to the provider, which persists whatever
+       it is issued — a refresh token is single-use, so the probe never
+       redeems one just to diagnose it)
 
     Returns granular diagnostics so the admin knows exactly which credential
     is broken, instead of a generic "not connected" with no actionable info.

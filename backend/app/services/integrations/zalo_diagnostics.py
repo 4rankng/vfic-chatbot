@@ -1,20 +1,18 @@
 """Zalo channel diagnostics: Bot + OA probes and the webhook-sync policy.
 
-Extracted from the admin integrations router so the probes (including the
-diagnostic OAuth token POST) are exercisable without HTTP. The raw POST
-reuses the process-scoped integration HTTP client, preserving the exact wire
-shape (form-encoded body, per-request ``secret_key`` header) the endpoint
-used.
+Extracted from the admin integrations router so the probes are exercisable
+without HTTP. Nothing here redeems a credential: the probes read stored values
+and call Zalo's read APIs, and the one token grant they trigger is delegated to
+``IntegrationSettingsService.refresh_oa_access_token`` so the rotated pair is
+always persisted (a refresh token is single-use, so a probe that redeemed one
+and threw it away would strand the OA).
 """
 
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.admin_runtime import (
-    ZALO_BOT_WEBHOOK_URL,
-    get_integration_http_client,
-)
+from app.integrations.admin_runtime import ZALO_BOT_WEBHOOK_URL
 from app.schemas.integrations import ZaloChannelTestOut
 from app.services.integration_settings import (
     IntegrationSettingsService,
@@ -109,12 +107,14 @@ async def probe_zalo_bot_channel(db: AsyncSession) -> ZaloChannelTestOut:
 
 
 async def probe_zalo_oa_channel(db: AsyncSession) -> ZaloChannelTestOut:
-    """Full diagnostic of the Zalo OA channel — checks 4 layers:
+    """Full diagnostic of the Zalo OA channel — checks 3 layers:
 
     1. All credentials configured (app_id, secret_key, access_token, refresh_token)
-    2. Access token valid (getoa probe) — if expired, tries auto-refresh
-    3. Secret key valid (refresh probe) — the most common silent failure
-    4. Token refresh works (calls oauth.zaloapp.com/v4/oa/access_token)
+    2. Access token valid (getoa probe)
+    3. Token refresh works — delegated to the provider, which redeems the
+       single-use grant and persists whatever it is issued. A rejection means
+       the stored refresh token is gone and only a fresh authorization fixes
+       it, so the probe says so rather than re-redeeming to find out.
 
     Returns granular diagnostics so the admin knows exactly which credential
     is broken, instead of a generic "not connected" with no actionable info.
@@ -180,43 +180,20 @@ async def probe_zalo_oa_channel(db: AsyncSession) -> ZaloChannelTestOut:
                         )
                 else:
                     oa_refresh_ok = False
-                    # Layer 3: diagnose WHY refresh failed — test the secret key directly.
-                    # Reuse the process-scoped OA-token diagnostic client (Tech-Lead
-                    # Directive §4) — a different oauth host from the runtime refresh,
-                    # so a distinct name. Per-request secret_key header (admin-entered).
-                    try:
-                        client = await get_integration_http_client(
-                            "zalo_oa_oauth_diag", timeout=10
-                        )
-                        resp = await client.post(
-                            "https://oauth.zaloapp.com/v4/oa/access_token",
-                            data={
-                                "grant_type": "refresh_token",
-                                "refresh_token": cfg.oa_refresh_token,
-                                "app_id": cfg.oa_app_id,
-                            },
-                            headers={"secret_key": cfg.oa_secret_key} if cfg.oa_secret_key else {},
-                        )
-                        data = resp.json()
-                        if isinstance(data, dict) and "access_token" in data:
-                            oa_secret_valid = True
-                            errors.append(
-                                "Secret key valid but refresh returned no token — check app_id"
-                            )
-                        elif isinstance(data, dict) and data.get("error") == -14004:
-                            oa_secret_valid = False
-                            errors.append(
-                                "❌ OA Secret Key is INVALID — refresh cannot work. Update it from the Zalo OA dashboard."
-                            )
-                        else:
-                            oa_secret_valid = False
-                            errors.append(
-                                f"Refresh failed: {data.get('error_name', 'unknown')} "
-                                f"({data.get('error', '?')}) — {data.get('error_description', '')}"
-                            )
-                    except Exception as exc:
-                        oa_secret_valid = None
-                        errors.append(f"Refresh check failed: {exc}")
+                    # The refresh grant is single-use, so it must not be
+                    # redeemed a second time just to diagnose the secret key:
+                    # that discarded a freshly issued pair and left the stored
+                    # token dead (the "silent refresh" behind OPS-31). The
+                    # provider already logs Zalo's own error fields, so report
+                    # the actionable conclusion instead of buying granularity
+                    # with the credential. The secret key can no longer be
+                    # tested on its own — that needs a fresh token anyway.
+                    oa_secret_valid = None
+                    errors.append(
+                        "Refresh Token bị Zalo từ chối (thường là -14014: token đã "
+                        "dùng hoặc hết hạn). Vào OA dashboard Zalo lấy cặp Access "
+                        "Token + Refresh Token mới rồi lưu lại."
+                    )
             else:
                 errors.append(err_text)
 

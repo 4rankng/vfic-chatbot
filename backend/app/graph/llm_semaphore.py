@@ -41,7 +41,9 @@ logger = logging.getLogger(__name__)
 class LLMThrottled(Exception):
     """Raised when LLM 429 retry is exhausted — no LLM call should follow."""
 
-    pass
+    # Attached by the answer lane after the raise so the turn's decision trace
+    # survives the throttle (the semaphore raise site has no trace sink).
+    decision_trace: dict | None = None
 
 
 # Release + excess prune in ONE atomic step: push the returned token, count,

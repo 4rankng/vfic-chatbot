@@ -1,13 +1,17 @@
-"""The TingTing support OA link: probe, register, expose, unlink.
+"""The TingTing support OA link: probe, rotate, register, expose, unlink.
 
 The admin never types an OA id — Zalo's `getoa` is what names the OA, so the
 probe is the link. These tests pin what happens on a good probe, a rejected one,
-and a malformed id, plus the unlink that turns the reset flow off.
+and a malformed id; that the link rotates the single-use refresh token exactly
+once so a dead pair fails here instead of 25 hours later (OPS-31); that nothing
+a provider echoes back can reach `oa_last_error`; and the unlink that turns the
+reset flow off.
 """
 
 from __future__ import annotations
 
 import types
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -27,7 +31,7 @@ class _Session:
 
     def __init__(self, row: object | None = None) -> None:
         self._row = row
-        self.added: list[object] = []
+        self.added: list[Any] = []
         self.commits = 0
 
     async def scalar(self, _stmt):
@@ -56,9 +60,22 @@ class _Settings:
     stored: dict[str, str] = {}
     writes: list[tuple[str, dict]] = []
     pin: str = ""
+    # The link flow rotates at link time, so a healthy link needs a working
+    # grant. None = Zalo rejected it (the dead single-use token of OPS-31).
+    refresh_result: str | None = "rotated-token"
+    refresh_calls = 0
+    refresh_keys: list[str | None] = []
 
     def __init__(self, _db, **_kwargs) -> None:
         pass
+
+    async def refresh_oa_access_token(self, account_key=None):
+        _Settings.refresh_calls += 1
+        _Settings.refresh_keys.append(account_key)
+        token = _Settings.refresh_result
+        if token:
+            self.stored["zalo_oa_access_token"] = token
+        return token
 
     async def oa_account_credentials_view(self, _account_key):
         return {
@@ -95,7 +112,7 @@ class _Settings:
         return {}
 
 
-def _patch(monkeypatch, *, probe):
+def _patch(monkeypatch, *, probe, then=None, refresh="rotated-token"):
     import app.services.tingting_oa as mod
 
     monkeypatch.setattr(mod, "TingtingOaLinkService", TingtingOaLinkService)
@@ -103,11 +120,23 @@ def _patch(monkeypatch, *, probe):
         "app.services.integration_settings.IntegrationSettingsService", _Settings
     )
     monkeypatch.setattr(mod, "record_audit", AsyncMock())
-    sender = types.SimpleNamespace(get_oa_info=AsyncMock(return_value=probe))
+    # Describe only the transition a test cares about: the first call answers
+    # `probe`, every later call repeats the last entry.
+    sequence = [probe] if then is None else [probe, then]
+
+    async def _get_oa_info(*_args, **_kwargs):
+        return sequence.pop(0) if len(sequence) > 1 else sequence[0]
+
+    sender = types.SimpleNamespace(get_oa_info=_get_oa_info)
     monkeypatch.setattr("app.services.zalo_oa_service.ZaloOASender", lambda **_kw: sender)
+    # Every bit of the double's class-level state, or it leaks between tests and
+    # the file's results depend on execution order.
     _Settings.stored = {}
     _Settings.writes = []
     _Settings.pin = ""
+    _Settings.refresh_result = refresh
+    _Settings.refresh_calls = 0
+    _Settings.refresh_keys = []
     return sender
 
 
@@ -149,6 +178,11 @@ async def test_a_good_probe_registers_the_account_and_binds_the_flow(monkeypatch
     assert account.label == "Ting Ting Software Solution"
     assert account.provider_metadata["oa_id"] == "3383849659955472174"
     assert db.commits == 1
+    # The default OA's lifecycle, applied to this account: the link proves the
+    # pair by rotating it, once. A Zalo refresh token is single-use, so a second
+    # call would redeem a second token for nothing.
+    assert _Settings.refresh_calls == 1
+    assert _Settings.refresh_keys == [TINGTING_OA_ACCOUNT_KEY]
 
 
 async def test_a_rejected_probe_stores_nothing_binding_and_reports_why(monkeypatch):
@@ -159,13 +193,16 @@ async def test_a_rejected_probe_stores_nothing_binding_and_reports_why(monkeypat
     db = _Session(None)
 
     view = await TingtingOaLinkService(db, settings=object()).link(  # type: ignore[arg-type]
-        {"zalo_oa_access_token": "access-1"},
+        {"zalo_oa_access_token": "access-1", "zalo_oa_refresh_token": "refresh-1"},
         actor_id=None,
     )
 
     # Stored so the admin can fix one field and retry, but not linked and no pin:
     # the flow stays off until Zalo confirms the credentials.
-    assert _Settings.writes[0][1] == {"zalo_oa_access_token": "access-1"}
+    assert _Settings.writes[0][1] == {
+        "zalo_oa_access_token": "access-1",
+        "zalo_oa_refresh_token": "refresh-1",
+    }
     assert view["oa_linked"] is False
     assert view["oa_id"] == ""
     assert _Settings.pin == ""
@@ -176,11 +213,109 @@ async def test_a_rejected_probe_stores_nothing_binding_and_reports_why(monkeypat
     assert [a.status for a in db.added] == ["INACTIVE"]
 
 
+async def test_a_rejected_rotation_fails_the_link_with_the_dashboard_guidance(
+    monkeypatch,
+):
+    _patch(monkeypatch, probe=_ok(), refresh=None)
+    db = _Session(None)
+
+    view = await TingtingOaLinkService(db, settings=object()).link(  # type: ignore[arg-type]
+        {"zalo_oa_access_token": "access-1", "zalo_oa_refresh_token": "dead-1"},
+        actor_id=None,
+    )
+
+    # The probe passed, but a dead refresh token would strand every send in 25
+    # hours — the 2026-09-28 incident. It must fail HERE, loudly, with the fix.
+    assert view["oa_linked"] is False
+    assert _Settings.pin == ""
+    assert "-14014" in view["oa_last_error"]
+    assert [a.status for a in db.added] == ["INACTIVE"]
+
+
+async def test_an_expired_access_token_is_recovered_by_the_one_rotation(monkeypatch):
+    _patch(
+        monkeypatch,
+        probe=SendResult(ok=False, error="access token access-1 has expired"),
+        then=_ok(),
+    )
+    db = _Session(None)
+
+    view = await TingtingOaLinkService(db, settings=object()).link(  # type: ignore[arg-type]
+        {"zalo_oa_access_token": "access-1", "zalo_oa_refresh_token": "refresh-1"},
+        actor_id=None,
+    )
+
+    assert view["oa_linked"] is True
+    # The re-probe used the rotated token, and the single-use refresh token was
+    # redeemed exactly once: rotating again here would burn a second one.
+    assert _Settings.refresh_calls == 1
+    assert _Settings.stored["zalo_oa_access_token"] == "rotated-token"
+
+
+async def test_a_missing_refresh_token_is_refused_before_probing(monkeypatch):
+    _patch(monkeypatch, probe=_ok())
+
+    with pytest.raises(TingtingOaLinkError, match="Refresh Token"):
+        await TingtingOaLinkService(_Session(None), settings=object()).link(  # type: ignore[arg-type]
+            {"zalo_oa_access_token": "access-1"}, actor_id=None
+        )
+
+    # Refused before spending a redemption or a Zalo round-trip.
+    assert _Settings.refresh_calls == 0
+    assert _Settings.writes == []
+
+
+async def test_a_provider_error_never_echoes_a_credential(monkeypatch):
+    _patch(
+        monkeypatch,
+        probe=SendResult(
+            ok=False,
+            error="access token access-1 rejected; secret secret-1; refresh refresh-1",
+        ),
+    )
+
+    view = await TingtingOaLinkService(_Session(None), settings=object()).link(  # type: ignore[arg-type]
+        {
+            "zalo_oa_access_token": "access-1",
+            "zalo_oa_secret_key": "secret-1",
+            "zalo_oa_refresh_token": "refresh-1",
+        },
+        actor_id=None,
+    )
+
+    # oa_last_error is admin-visible and persisted in provider_metadata.
+    for secret in ("access-1", "secret-1", "refresh-1"):
+        assert secret not in view["oa_last_error"]
+    assert "[redacted]" in view["oa_last_error"]
+
+
+async def test_a_probe_exception_is_redacted_too(monkeypatch):
+    sender = _patch(monkeypatch, probe=_ok())
+
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError("transport failed for secret-1")
+
+    sender.get_oa_info = _boom
+
+    view = await TingtingOaLinkService(_Session(None), settings=object()).link(  # type: ignore[arg-type]
+        {
+            "zalo_oa_access_token": "access-1",
+            "zalo_oa_secret_key": "secret-1",
+            "zalo_oa_refresh_token": "refresh-1",
+        },
+        actor_id=None,
+    )
+
+    assert view["oa_linked"] is False
+    assert "secret-1" not in view["oa_last_error"]
+    assert "[redacted]" in view["oa_last_error"]
+
+
 async def test_a_malformed_oa_id_is_a_failed_probe(monkeypatch):
     _patch(monkeypatch, probe=_ok(oa_id="not-a-number"))
 
     view = await TingtingOaLinkService(_Session(None), settings=object()).link(  # type: ignore[arg-type]
-        {"zalo_oa_access_token": "access-1"},
+        {"zalo_oa_access_token": "access-1", "zalo_oa_refresh_token": "refresh-1"},
         actor_id=None,
     )
 
@@ -224,7 +359,8 @@ async def test_the_registered_id_is_what_routing_matches(monkeypatch):
     _patch(monkeypatch, probe=_ok(oa_id="555"))
     db = _Session(None)
     await TingtingOaLinkService(db, settings=object()).link(  # type: ignore[arg-type]
-        {"zalo_oa_access_token": "access-1"}, actor_id=None
+        {"zalo_oa_access_token": "access-1", "zalo_oa_refresh_token": "refresh-1"},
+        actor_id=None,
     )
     account = db.added[0]
 

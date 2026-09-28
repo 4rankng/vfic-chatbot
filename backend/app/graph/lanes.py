@@ -30,6 +30,7 @@ from app.graph.direct_context import (
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.message_values import sender_is
 from app.graph.ports import TurnDecisions
+from app.shared.domain.vietnamese_gender import infer_gender_from_name
 from app.graph.progressive import _ProgressiveStream
 from app.graph.prompt_context import build_agent_user_text
 from app.graph.tingting_guide import TINGTING_CONSULTANT_HANDOFF_LINE
@@ -378,6 +379,35 @@ async def run_manifest_composed_agent(
     )
 
 
+async def _tingting_addressing(state: BotRunState, deps: GraphDeps) -> str:
+    """Gendered pronoun instruction from the lead's own Zalo display name.
+
+    The support persona stays neutral ("anh/chị") unless a name carries an
+    unambiguous Vietnamese marker (2026-09-28: "Trần Quang Việt" was addressed
+    neutrally because the name lives on the contact record — the employee never
+    typed it in-chat and the blocked sends deferred enrichment). Best-effort:
+    any failure keeps the neutral default. The name itself NEVER enters the
+    prompt — only the pronoun — so the bot cannot greet the employee by their
+    record name (the reset guide's privacy rule).
+    """
+    try:
+        conv = await deps.conversation.get(state.conversation_id)
+        name = str(getattr(getattr(conv, "contact", None), "display_name", "") or "")
+        gender = infer_gender_from_name(name)
+        if not gender:
+            return ""
+        pronoun = "anh" if gender == "male" else "chị"
+        return (
+            "\n\n=== XƯNG HÔ ===\nDựa trên tên Zalo của người nhắn: gọi họ là "
+            f'"{pronoun}" thay vì "anh/chị" trong mọi tin nhắn. KHÔNG gọi tên họ.'
+        )
+    except Exception as exc:  # noqa: BLE001 — addressing is best-effort, never breaks a turn
+        logger.warning(
+            "tingting addressing inference failed error_type=%s", type(exc).__name__
+        )
+        return ""
+
+
 async def _agent_turn(
     state: BotRunState,
     deps: GraphDeps,
@@ -397,7 +427,11 @@ async def _agent_turn(
     on_delta=None,
     on_evidence=None,
 ) -> str:
-    route = route_from_decisions(user_text, decisions or TurnDecisions(degraded=True))
+    # Normalize once: every downstream consumer (vacancy args, evidence query,
+    # forced-tool args) assumes a TurnDecisions; a None fan-out (degraded runs)
+    # previously crashed on ``decisions.recent_vacancy`` instead of degrading.
+    decisions = decisions or TurnDecisions(degraded=True)
+    route = route_from_decisions(user_text, decisions)
     if route.intent == "employee_support" and not tingting_reset_allowed:
         # Employee-account support belongs to the TingTing OA: elsewhere the turn
         # is answered with the operator's exact pointer to that OA instead of
@@ -504,7 +538,7 @@ async def _agent_turn(
                     trace_sink,
                 ),
             )
-        return await run_manifest_composed_agent(
+        composed = await run_manifest_composed_agent(
             user_text,
             deps,
             policy=manifest_policy,
@@ -522,6 +556,26 @@ async def _agent_turn(
             ),
             metrics=timings,
             trace_sink=trace_sink,
+        )
+        if composed is not None:
+            return composed
+        # The manifest policy deactivated mid-turn (the resolve bailed) — a race,
+        # not a normal path. Degrade exactly like the other authority-gates
+        # instead of returning a None reply the runner cannot render.
+        return await deps.agent.direct(
+            user_text,
+            **_with_optional_trace(
+                deps.agent.direct,
+                {
+                    "system": (
+                        "Bạn là tư vấn viên tuyển dụng. Hệ thống đang bảo trì quyền truy cập dữ liệu. "
+                        "Hãy trả lời tự nhiên bằng tiếng Việt rằng tạm chưa tra cứu được thông tin, "
+                        "không khẳng định có việc và không bịa dữ liệu."
+                    ),
+                    "metrics": timings,
+                },
+                trace_sink,
+            ),
         )
 
     # System prompt = active persona + master index of active products (best-effort;
@@ -547,6 +601,9 @@ async def _agent_turn(
                     "tingting api configured-read failed error_type=%s", type(exc).__name__
                 )
         system = tingting_support_system_prompt(include_guide=tingting_configured)
+        addressing = await _tingting_addressing(state, deps)
+        if addressing:
+            system += addressing
         sys_prompt_hit = False
     else:
         system, sys_prompt_hit = await build_system_prompt(
@@ -711,16 +768,17 @@ async def _agent_turn(
             and "candidate_intake" in manifest_policy.capability_ids
         )
     )
-    if allow_lead_context:
+    lead_port = deps.lead
+    if allow_lead_context and lead_port is not None:
         try:
             # The runner's once-per-turn lead row (None for ports without the
             # resolve seam — those keep their own lookup inside context()).
             lead_ctx_kwargs = {"lead": lead_row} if lead_row is not None else {}
-            lead_profile, lead_collection_question = await deps.lead.context(
+            lead_profile, lead_collection_question = await lead_port.context(
                 chat_id, user_text, recent_messages, contact_id=contact_id, **lead_ctx_kwargs
             )
             if lead_collection_question:
-                lead_collection_instruction = deps.lead.instruction(lead_collection_question)
+                lead_collection_instruction = lead_port.instruction(lead_collection_question)
         except Exception:  # noqa: BLE001
             logger.warning(
                 "lead profile fetch failed for %s, skipping injection", chat_id, exc_info=True
@@ -787,7 +845,7 @@ async def _agent_turn(
         agent_kwargs["required_tool"] = "search_knowledge"
         agent_kwargs["required_tool_args"] = {
             "query": evidence_query or user_text,
-            "project_slug": project_context.project_slug,
+            "project_slug": getattr(project_context, "project_slug", None),
         }
     if resolved_tool_registry is not None:
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry

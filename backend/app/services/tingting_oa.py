@@ -15,6 +15,7 @@ encrypted in ``integration_settings``.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -40,6 +41,16 @@ TINGTING_OA_CREDENTIAL_BASES = (
     "zalo_oa_refresh_token",
 )
 
+# Zalo rejects a single-use refresh token that was already redeemed or has
+# expired (-14014). Nothing in this app can revive one — only a fresh
+# authorization from the OA dashboard can. Said plainly to the operator, because
+# a link that stores a dead pair is exactly how the 2026-09-28 sends failed.
+OA_REFRESH_REJECTED_ERROR = (
+    "OA Refresh Token bị Zalo từ chối khi rotation (thường là -14014: token đã "
+    "bị dùng hoặc đã hết hạn). Vào OA dashboard Zalo lấy cặp Access Token + "
+    "Refresh Token MỚI rồi lưu lại."
+)
+
 
 class TingtingOaLinkError(ValueError):
     """The submitted credentials cannot serve as the support OA (→ 422)."""
@@ -49,13 +60,29 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _redact(message: str, secrets: list[str]) -> str:
+def _redact(message: str, secrets: Iterable[str]) -> str:
     """Strip any credential the provider echoed back, and bound the length."""
     for secret in secrets:
         if secret:
             message = message.replace(secret, "[redacted]")
     message = message.strip() or "unknown error"
     return f"{message[:237]}..." if len(message) > 240 else message
+
+
+def _link_secrets(*sources: dict[str, str | None]) -> set[str]:
+    """Every credential a provider error could echo, from every value in play.
+
+    The admin's posted values, the values left in force, and any token a
+    rotation returns all reach ``oa_last_error`` if unredacted — and that field
+    is admin-visible and persisted in ``provider_metadata``.
+    """
+    secrets: set[str] = set()
+    for source in sources:
+        for value in source.values():
+            cleaned = str(value or "").strip()
+            if cleaned:
+                secrets.add(cleaned)
+    return secrets
 
 
 class TingtingOaLinkService:
@@ -125,13 +152,23 @@ class TingtingOaLinkService:
 
     # --- mutation -------------------------------------------------------
     async def link(self, values: dict[str, str | None], *, actor_id: Any = None) -> dict:
-        """Store the four credentials, probe Zalo, and register the account.
+        """Store the four credentials, prove they work, and register the account.
 
         ``values`` is tri-state per field: absent keeps the stored value, ``""``
-        clears it. The probe runs against the *effective* access token (posted,
-        else stored). A failed probe still stores what was typed — the admin
-        fixes the token and saves again — but the account is not registered and
-        the reset flow stays off, so a bad link can never serve employees.
+        clears it. Every step runs against the *effective* credentials (posted,
+        else stored).
+
+        The link is proven, not assumed: Zalo's ``getoa`` discovers the OA id (no
+        OA id is ever typed) and the access token is rotated **once** through the
+        same provider call the default OA uses, so a refresh token that is dead
+        or belongs to another authorization fails here instead of silently
+        breaking every send a day later.
+
+        A failure still stores what was typed — the admin fixes one field and
+        saves again — but the account is not registered and the reset flow stays
+        off, so a bad link can never serve employees. Note the rotation commits
+        the staged credential write as a side effect, which is what makes
+        "stored even when the link fails" true.
         """
         settings_service = self._settings_service()
         # Omitted fields keep the stored value, so the probe runs against the
@@ -153,17 +190,55 @@ class TingtingOaLinkService:
 
         if not effective["zalo_oa_access_token"]:
             raise TingtingOaLinkError("cần OA Access Token của Zalo OA TingTing")
+        # Without a refresh token the pair cannot outlive the 25-hour access
+        # token, so refuse before probing rather than discover it in a day.
+        if not effective["zalo_oa_refresh_token"]:
+            raise TingtingOaLinkError("cần OA Refresh Token của Zalo OA TingTing")
 
-        touched = {
+        touched: dict[str, str | None] = {
             base: value for base, value in effective.items() if values.get(base) is not None
         }
         if touched:
             await settings_service.write_oa_account_credentials(
                 TINGTING_OA_ACCOUNT_KEY, touched, actor_id=actor_id
             )
+            # The credential write only stages, and the rotation below reads the
+            # pair back through a SELECT — flush explicitly so it redeems the
+            # value just saved instead of the previously stored one.
+            await self.db.flush()
+
+        # Posted values, the values in force, and whatever the rotation returns
+        # may all be echoed back; none may survive into oa_last_error.
+        secrets = _link_secrets(values, existing, effective)
 
         # The probe is what discovers the OA id: no OA id is ever typed.
-        probe = await self._probe(effective)
+        probe = await self._probe(effective, secrets)
+
+        # Exactly one rotation per link, always attempted. Zalo refresh tokens
+        # are single-use, so a second call would redeem a second token for
+        # nothing. A rejection is the root cause of a failing link and is
+        # reported as such even when the probe happened to pass: on 2026-09-28 a
+        # pair was stored at 07:48 whose refresh token was already dead, and the
+        # first send failed 25 hours later with -14014. Rotating here is what
+        # turns that silent day-later outage into an error the admin sees now.
+        new_token = await settings_service.refresh_oa_access_token(
+            TINGTING_OA_ACCOUNT_KEY
+        )
+        if not new_token:
+            probe = {
+                "ok": False,
+                "oa_id": "",
+                "name": "",
+                "error": OA_REFRESH_REJECTED_ERROR,
+            }
+        else:
+            secrets.add(new_token.strip())
+            if not probe["ok"]:
+                # The pasted access token was simply expired while the pair is
+                # healthy — re-probe with the freshly rotated one, exactly like
+                # the runtime send path does.
+                effective["zalo_oa_access_token"] = new_token
+                probe = await self._probe(effective, secrets)
 
         await acquire_zalo_oa_account_lock(self.db, shared=False)
         row = await self._account()
@@ -255,12 +330,16 @@ class TingtingOaLinkService:
         return await self.view()
 
     # --- probe ----------------------------------------------------------
-    async def _probe(self, credentials: dict[str, str]) -> dict:
+    async def _probe(
+        self, credentials: dict[str, str], secrets: Iterable[str] = ()
+    ) -> dict:
         """Call Zalo's ``getoa`` with the effective token.
 
         Returns ``{ok, oa_id, name, error}`` — never a credential. Zalo's error
-        text can echo the token back, so it is redacted against every secret in
-        this submission plus the stored ones.
+        text can echo any of the four submitted values back, so ``secrets``
+        carries every credential in play (posted, stored, and rotated) and is
+        applied to both the provider's error text and the exception text, which
+        must never reach ``oa_last_error`` unredacted.
         """
         from app.services.zalo_oa_service import ZaloOASender
 
@@ -276,16 +355,13 @@ class TingtingOaLinkService:
             result = await sender.get_oa_info()
         except Exception as exc:  # noqa: BLE001 - a probe failure is a status, not a crash
             logger.warning("tingting oa probe failed error_type=%s", type(exc).__name__)
-            return {"ok": False, "oa_id": "", "name": "", "error": _redact(str(exc), [])}
+            return {"ok": False, "oa_id": "", "name": "", "error": _redact(str(exc), secrets)}
         if not result.ok:
             return {
                 "ok": False,
                 "oa_id": "",
                 "name": "",
-                "error": _redact(
-                    str(result.error or ""),
-                    [credentials.get("zalo_oa_access_token", "")],
-                ),
+                "error": _redact(str(result.error or ""), secrets),
             }
         data = (result.raw or {}).get("data") if isinstance(result.raw, dict) else {}
         data = data if isinstance(data, dict) else {}

@@ -136,6 +136,16 @@ class ConversationPort(Protocol):
 
     async def record_bot_pending(self, conv: Any) -> Any: ...
 
+    async def escalate_extracted_intent(
+        self,
+        conv: Any,
+        *,
+        reason: str,
+        confidence: float,
+        expected_version: int,
+        preserve_turn_ownership: bool = False,
+    ) -> bool: ...
+
     async def record_bot_outcome(
         self,
         conv: Any,

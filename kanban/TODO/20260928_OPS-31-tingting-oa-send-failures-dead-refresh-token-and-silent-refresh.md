@@ -53,13 +53,62 @@ secrets):
   `error_description` (e.g. `-14014 / Invalid refresh token.`);
 - the lock-timeout and transport branches already logged.
 
+### Link-time rotation — why a dead pair was storable (2026-09-28)
+
+The renewal path itself was always correct: `refresh_oa_access_token` is
+account-scoped, writes **both** rotated tokens, and commits before audit/cache
+work. What the `tingting` account never had was a *proof* that the pasted pair
+worked — `TingtingOaLinkService.link()` only probed the access token with
+`getoa`, so a mismatched or already-redeemed pair was stored, audited
+`verified: true` and activated, then failed at the first refresh ~25 h later.
+That is precisely the 09-27 07:48 → 09-28 15:49 timeline.
+
+`backend/app/services/tingting_oa.py`:
+
+- `link()` now rotates **once** through the same provider call the default OA
+  uses, always scoped to `tingting`. A Zalo refresh token is single-use, so the
+  previous two-rotation shape burned two; the rotated token is reused for the
+  re-probe when the first probe failed.
+- A rejected rotation fails the link loudly with the `-14014` dashboard
+  guidance, so the operator sees it at link time instead of a day later.
+- A link now **requires** a refresh token; an access-token-only paste is refused
+  up front with a clear message. This is the behaviour change that prevents a
+  repeat of this incident.
+- The staged credential write is flushed explicitly before the rotation, which
+  reads it back through a SELECT — previously correct only by virtue of session
+  autoflush.
+- `_probe` redacts every credential in play (posted, stored, rotated) from both
+  the provider's error text **and** the exception text, which previously
+  redacted nothing. `oa_last_error` is admin-visible and persisted in
+  `channel_account.provider_metadata`.
+
+### The silent refresh (the `Test connection` burner)
+
+`probe_zalo_oa_channel` redeemed the **default** OA's single-use refresh token a
+second time purely to diagnose the secret key, then discarded the pair Zalo
+issued and kept only a boolean. This did not cause the TingTing outage — the
+probe is scoped to the default account — but one admin click while the
+recruitment OA's token was expired would have killed that OA the same way.
+
+`backend/app/services/integrations/zalo_diagnostics.py` no longer performs that
+second grant. It delegates the one redemption to the provider (which persists
+whatever it is issued) and reports the actionable conclusion instead;
+`oa_secret_valid` is now `None` ("not determined without redeeming"). Guarded by
+`backend/tests/test_zalo_oa_channel_probe.py`, including a structural check that
+the module holds no token endpoint of its own.
+
 ## Operator action (BLOCKING for this conversation)
 
 1. Admin → integration settings → re-link/refresh the **Ting Ting Software
    Solution** OA (fresh authorization so Zalo issues a new access+refresh pair).
-   Pasting an already-redeemed refresh token will re-create this incident.
+   All four values must come from the same authorization — a mismatched set is
+   what `-14014` means. Pasting an already-redeemed refresh token will re-create
+   this incident, and the new link gate will now reject it immediately with the
+   same guidance instead of storing it.
 2. After re-linking, retry messages 5398/5402/5404 from the console ("Thử lại")
    so the employee gets the reset-flow ask.
+3. Do not use "Kiểm tra kết nối" on the Zalo channel card as a way to renew
+   TingTing: that probe is scoped to the default (recruitment) OA only.
 
 ## Notes
 
