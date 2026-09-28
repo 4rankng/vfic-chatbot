@@ -2,8 +2,17 @@ import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
-import { SettingsFieldStatus, SettingsGroupStatus } from "./SettingsFieldStatus";
+import {
+  ProviderSwitchField,
+  SettingsGroup,
+  SettingsSectionPanel,
+} from "./SettingsGroup";
+import {
+  SettingsFieldStatus,
+  SettingsGroupStatus,
+} from "./SettingsFieldStatus";
+import { PlainField } from "./SecretField";
+import { SettingsChrome } from "./SettingsChrome";
 import "@/index.css";
 import "../conversations/inbox.css";
 import "./settings.css";
@@ -42,26 +51,45 @@ const console = (children: React.ReactNode) => (
         "--settings-border": "#d4dce6",
         "--settings-elevated": "#ffffff",
         "--border-strong": "#0b1b2b",
+        // The typography scale lives in an `@theme` block, which this lane does
+        // not expand, so the fixture supplies the one type token these rules
+        // consume — the value `--text-body-sm` resolves to. A dropped
+        // `font-size` declaration then falls back to the 16px browser default
+        // and goes red, exactly as `tailkit-action-sizing.test.tsx` does for
+        // the action hierarchy.
+        "--fs-body-sm": "13px",
       } as React.CSSProperties
     }
   >
-    <div className="settings-workspace-content">
-      <header className="settings-command-header">
-        <h1>Cài đặt</h1>
-      </header>
-      <button type="button" className="settings-mobile-drawer-trigger">
-        Mục cục
-      </button>
-      <SettingsSectionPanel id="providers">
-        {/* `grid` is a Tailwind utility the console applies; the CRM stylesheet
-            owns the track sizing, which is what this fixture measures. */}
-        <div className="settings-grid-models" style={{ display: "grid" }}>
-          <div className="settings-group-content">a</div>
-          <div className="settings-group-content">b</div>
-          <div className="settings-group-content">c</div>
+    {/* `.settings-app` is the real shell's flex item inside the inbox
+        container; it carries the `width: 100%` that makes the workspace fill
+        the viewport. Without it the fixture is sized by its content, and the
+        form-layout row's container query measures a 24px main column. */}
+    <div className="app settings-app">
+      <div className="settings-workspace-content">
+        {/* The console nests the view header and the active section in
+            `.settings-main`, which is also the container the form-layout row
+            measures the available main column against. */}
+        <div className="settings-main">
+          <header className="settings-command-header">
+            <h1>Cài đặt</h1>
+          </header>
+          <button type="button" className="settings-mobile-drawer-trigger">
+            Mục cục
+          </button>
+          <SettingsSectionPanel id="providers">
+            {/* `grid` is a Tailwind utility the console applies; the CRM
+                stylesheet owns the track sizing, which is what this fixture
+                measures. */}
+            <div className="settings-grid-models" style={{ display: "grid" }}>
+              <div className="settings-group-content">a</div>
+              <div className="settings-group-content">b</div>
+              <div className="settings-group-content">c</div>
+            </div>
+          </SettingsSectionPanel>
+          {children}
         </div>
-      </SettingsSectionPanel>
-      {children}
+      </div>
     </div>
   </div>
 );
@@ -95,9 +123,15 @@ describe("settings workspace density scale", () => {
       ".settings-workspace-content",
     )!;
     const styles = getComputedStyle(scoped);
-    expect(styles.getPropertyValue("--settings-control-height").trim()).toBe("38px");
-    expect(styles.getPropertyValue("--settings-action-height").trim()).toBe("36px");
-    expect(styles.getPropertyValue("--settings-touch-target").trim()).toBe("44px");
+    expect(styles.getPropertyValue("--settings-control-height").trim()).toBe(
+      "38px",
+    );
+    expect(styles.getPropertyValue("--settings-action-height").trim()).toBe(
+      "36px",
+    );
+    expect(styles.getPropertyValue("--settings-touch-target").trim()).toBe(
+      "44px",
+    );
     expect(styles.getPropertyValue("--settings-mobile-row-height").trim()).toBe(
       "48px",
     );
@@ -125,9 +159,16 @@ describe("settings configuration group card", () => {
     await page.viewport(desktop, 720);
 
     const screen = await render(
-      console(group(<button type="button" className="settings-test-button">Kiểm tra</button>)),
+      console(
+        group(
+          <button type="button" className="settings-test-button">
+            Kiểm tra
+          </button>,
+        ),
+      ),
     );
-    const card = screen.container.querySelector<HTMLElement>(".settings-group")!;
+    const card =
+      screen.container.querySelector<HTMLElement>(".settings-group")!;
     const styles = getComputedStyle(card);
 
     // The card contract: 1px frame, 12px radius, elevated surface (not flat).
@@ -145,7 +186,8 @@ describe("settings configuration group card", () => {
     await page.viewport(desktop, 720);
 
     const screen = await render(console(group(<span />)));
-    const card = screen.container.querySelector<HTMLElement>(".settings-group")!;
+    const card =
+      screen.container.querySelector<HTMLElement>(".settings-group")!;
     const resting = getComputedStyle(card).borderTopColor;
 
     await page.elementLocator(card).hover();
@@ -155,24 +197,137 @@ describe("settings configuration group card", () => {
     expect(getComputedStyle(card).borderTopWidth).toBe("1px");
   });
 
-  it("tints the group header band separately from the card body", async () => {
+  // TEST-17 replaced the source-text pin with this measured contract; the
+  // anatomy it measures is now Tailkit a-c-form-layouts-04/05 (`md:flex
+  // md:gap-5`, `md:w-1/3` title column, `md:w-2/3` field panel) rather than a
+  // full-width band above the body, so the divider the old test pinned as
+  // `border-bottom` is asserted here on the axis the anatomy actually uses.
+  it("divides the title rail from the field panel on a wide main column", async () => {
     await page.viewport(desktop, 720);
 
     const screen = await render(console(group(<span />)));
-    const header = screen.container.querySelector<HTMLElement>(
-      ".settings-group-header",
-    )!;
-    const content = screen.container.querySelector<HTMLElement>(
-      ".settings-group-content",
-    )!;
+    const card =
+      screen.container.querySelector<HTMLElement>(".settings-group")!;
+    const header = card.querySelector<HTMLElement>(".settings-group-header")!;
+    const content = card.querySelector<HTMLElement>(".settings-group-content")!;
 
+    const cardBox = card.getBoundingClientRect();
+    const rail = header.getBoundingClientRect();
+    const panel = content.getBoundingClientRect();
+
+    // md:flex md:gap-5 — one row, not a stacked band.
+    expect(getComputedStyle(card).display).toBe("flex");
+    expect(getComputedStyle(card).columnGap).toBe("20px");
+    // md:w-1/3 title+help column, md:w-2/3 field panel reaching the card edge.
+    expect(rail.width / cardBox.width).toBeGreaterThan(0.3);
+    expect(rail.width / cardBox.width).toBeLessThan(0.36);
+    expect(panel.width / cardBox.width).toBeGreaterThan(0.6);
+    expect(panel.left - rail.right).toBeCloseTo(20, 0);
+    // The panel runs to the card's inner right edge, inside the 1px frame.
+    expect(cardBox.right - panel.right).toBeLessThanOrEqual(1);
+
+    // The rail keeps the tinted identity surface, divided vertically now.
     const headerStyles = getComputedStyle(header);
     expect(headerStyles.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
     expect(headerStyles.backgroundColor).not.toBe(
       getComputedStyle(content).backgroundColor,
     );
-    expect(headerStyles.borderBottomWidth).toBe("1px");
-    expect(headerStyles.minHeight).toBe("36px");
+    expect(headerStyles.borderRightWidth).toBe("1px");
+    expect(headerStyles.borderBottomWidth).toBe("0px");
+    // Title and status meta stack in the column instead of spanning the card.
+    expect(headerStyles.flexDirection).toBe("column");
+  });
+
+  it("keeps the header band when the main column cannot afford a rail", async () => {
+    await page.viewport(phone, 844);
+
+    const screen = await render(console(group(<span />)));
+    const card =
+      screen.container.querySelector<HTMLElement>(".settings-group")!;
+    const header = screen.container.querySelector<HTMLElement>(
+      ".settings-group-header",
+    )!;
+
+    // The phone keeps the disclosure anatomy: one stacked column, the header
+    // spanning it, and no vertical rule.
+    expect(getComputedStyle(card).display).toBe("grid");
+    expect(getComputedStyle(header).borderRightWidth).toBe("0px");
+    expect(header.getBoundingClientRect().width).toBeGreaterThan(
+      card.getBoundingClientRect().width * 0.85,
+    );
+  });
+
+  it("measures the rail against the main column, not the viewport", async () => {
+    // At 1000px the settings rail and its gutters leave the main column about
+    // 740px, so the same group that is a row at 1280 stays a band here: a third
+    // of 740px would leave each credential input about a hundred pixels wide.
+    // The real chrome is rendered because the nav column is what makes the
+    // viewport and the main column disagree.
+    await page.viewport(1000, 900);
+
+    const screen = await render(
+      <SettingsChrome
+        activeItemId="settings-zalo-channel"
+        onItemSelect={() => {}}
+      >
+        {group(<span />)}
+      </SettingsChrome>,
+    );
+    const card =
+      screen.container.querySelector<HTMLElement>(".settings-group")!;
+    const header = card.querySelector<HTMLElement>(".settings-group-header")!;
+    const panel = card.querySelector<HTMLElement>(".settings-group-content")!;
+
+    expect(getComputedStyle(card).display).toBe("grid");
+    expect(getComputedStyle(header).borderRightWidth).toBe("0px");
+    expect(panel.getBoundingClientRect().width).toBeCloseTo(
+      card.getBoundingClientRect().width - 2,
+      0,
+    );
+  });
+
+  it("sets field labels in the console's small-label type at medium weight", async () => {
+    await page.viewport(desktop, 720);
+
+    const screen = await render(
+      console(
+        <>
+          <PlainField
+            id="zalo_oa_app_id"
+            label="Zalo App ID"
+            value=""
+            configured={false}
+            onChange={() => {}}
+          />
+          <ProviderSwitchField
+            id="minimax_enable"
+            label="Kích hoạt"
+            checked={false}
+            onCheckedChange={() => {}}
+          />
+        </>,
+      ),
+    );
+    const fieldLabel = screen.container.querySelector<HTMLElement>(
+      'label[for="zalo_oa_app_id"]',
+    )!;
+    const switchLabel = screen.container.querySelector<HTMLElement>(
+      'label[for="minimax_enable"]',
+    )!;
+
+    // Tailkit a-c-form-layouts-04/05: `inline-block font-medium`, sized on the
+    // console's small-label token rather than the shadcn Label default
+    // (`text-label font-semibold`, 14px). The switch row's label sits in block
+    // flow, so the unlayered rule has to beat Tailwind's layered `flex`
+    // utility there — a field-row label is blockified by its flex parent, so
+    // its computed display reads `block`.
+    const fieldStyles = getComputedStyle(fieldLabel);
+    expect(fieldStyles.fontWeight).toBe("500");
+    expect(fieldStyles.fontSize).toBe("13px");
+    const switchStyles = getComputedStyle(switchLabel);
+    expect(switchStyles.display).toBe("inline-block");
+    expect(switchStyles.fontWeight).toBe("500");
+    expect(switchStyles.fontSize).toBe("13px");
   });
 
   it("renders the group status summary the provider cards depend on", async () => {
@@ -246,7 +401,13 @@ describe("settings action sizing", () => {
     await page.viewport(desktop, 720);
 
     const screen = await render(
-      console(group(<button type="button" className="settings-test-button">Kiểm tra</button>)),
+      console(
+        group(
+          <button type="button" className="settings-test-button">
+            Kiểm tra
+          </button>,
+        ),
+      ),
     );
     const button = screen.getByRole("button", { name: "Kiểm tra" }).element();
 
@@ -258,7 +419,13 @@ describe("settings action sizing", () => {
     await page.viewport(phone, 844);
 
     const screen = await render(
-      console(group(<button type="button" className="settings-test-button">Kiểm tra</button>)),
+      console(
+        group(
+          <button type="button" className="settings-test-button">
+            Kiểm tra
+          </button>,
+        ),
+      ),
     );
     const button = screen.getByRole("button", { name: "Kiểm tra" }).element();
 
@@ -335,7 +502,9 @@ describe("settings action sizing", () => {
   it("lays out the field status marker as a fixed 20px square", async () => {
     await page.viewport(desktop, 720);
 
-    const screen = await render(console(<SettingsFieldStatus configured={false} />));
+    const screen = await render(
+      console(<SettingsFieldStatus configured={false} />),
+    );
     const marker = screen.container.querySelector<HTMLElement>(
       ".settings-field-status",
     )!;

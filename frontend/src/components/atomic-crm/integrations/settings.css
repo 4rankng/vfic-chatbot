@@ -93,6 +93,22 @@
   gap: 8px;
 }
 
+/* Tailkit a-c-form-layouts-04/05 labels: `inline-block font-medium`, sized on
+   the console's small-label token. This wins over the shadcn `Label` default
+   (`text-label font-semibold`, 14px) because Tailwind ships its utilities in
+   `@layer utilities` and these rules are unlayered. Read-only provider labels
+   and the label spans Messenger uses for non-input controls are the same role,
+   so they read the same. */
+.settings-workspace-content .settings-field label,
+.settings-workspace-content .settings-field-label,
+.settings-workspace-content .settings-llm-field-label,
+.settings-workspace-content .settings-switch-row label {
+  display: inline-block;
+  color: var(--ink);
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-medium);
+}
+
 .settings-field-status {
   width: 20px;
   height: 20px;
@@ -1041,6 +1057,83 @@
   .settings-oa-fields > .settings-oa-actions,
   .settings-oa-fields > .settings-advanced {
     grid-column: 1 / -1;
+  }
+}
+
+/* Tailkit a-c-form-layouts-04/05 at console density: a titled configuration
+   block is a row — `md:flex md:gap-5`, title and help in the `md:w-1/3` left
+   column, the field panel in the `md:w-2/3` right column — instead of a
+   full-width band above its fields. The card frame stays where it is: the row
+   wears the console's existing `--settings-elevated` / `--settings-border`
+   framing, not Tailkit's white card, and the left column keeps the tinted
+   identity surface as its rail.
+
+   The main column decides, not the viewport: `min-width: 768px` only keeps the
+   mobile disclosure out, and the 796px threshold mirrors the one that already
+   stacks the Zalo cards — below it a rail would leave each credential input
+   about a hundred pixels wide, so the block keeps its stacked band.
+
+   The provider board (`.settings-llm-card`) opts out at every width: those
+   cards compare as peers in equal tracks, and their header carries the rank
+   badge, the reorder arrows and the status chip, which a narrow rail cannot
+   hold. Group rows without a title column (a group with only content, the
+   Messenger empty state, the collapsed recovery disclosure) have no `:has()`
+   match and stay full width. */
+@media (min-width: 768px) {
+  @container settings-main (min-width: 796px) {
+    .settings-workspace-content
+      .settings-group:has(
+        > .settings-group-header,
+        > .settings-messenger-group-heading
+      ):not(.settings-llm-card) {
+      display: flex;
+      align-items: stretch;
+      gap: var(--settings-space-5);
+    }
+
+    /* The title and help column: a full-height rail inside the card. */
+    .settings-workspace-content
+      .settings-group:not(.settings-llm-card)
+      > .settings-group-header,
+    .settings-workspace-content
+      .settings-group:not(.settings-llm-card)
+      > .settings-messenger-group-heading {
+      min-width: 0;
+      flex: 0 0 33.3333%;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: flex-start;
+      gap: var(--settings-space-2);
+      border-right: 1px solid
+        color-mix(in srgb, var(--settings-border) 72%, transparent);
+      border-bottom: 0;
+    }
+
+    .settings-workspace-content
+      .settings-group:not(.settings-llm-card)
+      > .settings-messenger-group-heading {
+      padding: 11px var(--settings-space-4);
+    }
+
+    /* Group and Messenger action rows sit with their title in the rail. */
+    .settings-workspace-content
+      .settings-group:not(.settings-llm-card)
+      > .settings-messenger-group-heading
+      > .settings-messenger-heading-actions {
+      justify-content: flex-start;
+    }
+
+    /* The field panel: the remaining two thirds, still tiled by the field
+       grids the CRM stylesheet already owns. */
+    .settings-workspace-content
+      .settings-group:not(.settings-llm-card)
+      > .settings-group-content,
+    .settings-workspace-content
+      .settings-group:not(.settings-llm-card)
+      > .settings-messenger-group-content {
+      min-width: 0;
+      flex: 1 1 66.6667%;
+    }
   }
 }
 
