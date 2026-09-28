@@ -8,6 +8,8 @@ which owns ``db`` / ``settings`` / ``cipher``.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import json
 import logging
 from typing import Iterable
@@ -39,6 +41,21 @@ PROVIDER_TEST_KEYS = {
 
 class StorageMixin:
     """DB row primitives + cache invalidation shared across provider groups."""
+
+    if TYPE_CHECKING:
+        # Supplied by IntegrationSettingsService, the class that mixes these in.
+        # Declarations only: TYPE_CHECKING is False at runtime, so nothing here is
+        # ever assigned and the composed class stays the single source of truth.
+        db: AsyncSession
+        settings: Settings
+        cipher: IntegrationSettingsCipher
+
+        from collections.abc import Iterable
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from app.core.config import Settings
+        from app.services.integration_settings.cipher import IntegrationSettingsCipher
 
     async def _stored_values(self, keys: Iterable[str]) -> dict[str, str]:
         if not hasattr(self.db, "scalars"):

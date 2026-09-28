@@ -15,7 +15,9 @@ must point at.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, TypedDict
+
+from pydantic import SecretStr
 
 from app.core.config import get_settings
 from app.graph.reasoning_compat import _reasoning_chat_class
@@ -26,6 +28,18 @@ ModelRole = Literal["agent", "extractor", "digest"]
 LlmProvider = Literal["minimax", "openrouter", "custom"]
 
 _REASONING_MODES = ("off", "low", "default")
+_PROVIDER_ORDER: tuple[LlmProvider, ...] = ("minimax", "openrouter", "custom")
+
+
+class _AgentLimits(TypedDict, total=False):
+    """Output cap applied to agent-role calls only; empty for other roles.
+
+    These splat into this module's own builders, so the single key is worth
+    declaring: checked key-by-key it matches their ``max_tokens`` parameter,
+    while an undeclared dict was read as an argument for every parameter.
+    """
+
+    max_tokens: int | None
 
 
 def _resolve_reasoning_mode(explicit: str | None = None) -> str:
@@ -104,7 +118,7 @@ def _minimax_chat(
         kwargs["max_tokens"] = max_tokens
     return chat_class(
         model=model,
-        api_key=resolved_api_key,
+        api_key=SecretStr(resolved_api_key),
         base_url=s.minimax_base_url,
         timeout=s.minimax_request_timeout,
         temperature=temperature,
@@ -170,7 +184,7 @@ def _custom_chat(
         kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
     return chat_class(
         model=model,
-        api_key=api_key,
+        api_key=SecretStr(api_key),
         base_url=base_url,
         timeout=timeout or s.custom_llm_request_timeout,
         temperature=temperature,
@@ -204,7 +218,9 @@ def _openrouter_chat(
     resolved_api_key = api_key or s.openrouter_api_key
     if not resolved_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter chat")
-    kwargs = {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
+    kwargs: dict[str, Any] = (
+        {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
+    )
     mode = _resolve_reasoning_mode(reasoning_mode)
     if mode == "off":
         kwargs["extra_body"] = {"reasoning": {"enabled": False}}
@@ -215,7 +231,7 @@ def _openrouter_chat(
     chat_class = _reasoning_chat_class()
     return chat_class(
         model=model,
-        api_key=resolved_api_key,
+        api_key=SecretStr(resolved_api_key),
         base_url=s.openrouter_base_url,
         timeout=timeout or s.openrouter_request_timeout,
         temperature=temperature,
@@ -254,11 +270,20 @@ def _active_llm_provider(
     custom_on = (
         getattr(s, "custom_llm_enable", False) if custom_enabled is None else custom_enabled
     )
-    enabled = {"minimax": mm_on, "openrouter": or_on, "custom": custom_on}
+    enabled: dict[LlmProvider, bool] = {
+        "minimax": mm_on,
+        "openrouter": or_on,
+        "custom": custom_on,
+    }
     preferred = default_provider or getattr(s, "llm_default_provider", "minimax")
-    if enabled.get(preferred):
-        return preferred
-    for name in ("minimax", "openrouter", "custom"):
+    # Return the literal from the loop rather than the configured string: they
+    # are equal whenever the configured value names a real provider, and a
+    # value that names none still falls through to the enabled-provider scan,
+    # exactly as the previous ``enabled.get`` lookup did.
+    for name in _PROVIDER_ORDER:
+        if name == preferred and enabled[name]:
+            return name
+    for name in _PROVIDER_ORDER:
         if enabled[name]:
             return name
     raise RuntimeError(
@@ -313,7 +338,7 @@ def _chat_for_role(
     # settings-backed default.
     if role == "agent":
         resolved_cap = max_tokens if max_tokens is not None else _agent_max_tokens()
-        agent_limits = {"max_tokens": resolved_cap}
+        agent_limits: _AgentLimits = {"max_tokens": resolved_cap}
         agent_reasoning = reasoning_mode or _resolve_reasoning_mode()
     else:
         agent_limits = {}
@@ -362,10 +387,12 @@ def _chat_for_role(
             raise RuntimeError("MINIMAX_API_KEY is required for MiniMax JSON generation")
         from langchain_openai import ChatOpenAI
 
-        kwargs = {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
+        kwargs: dict[str, Any] = (
+        {"model_kwargs": {"response_format": {"type": "json_object"}}} if json_mode else {}
+    )
         return ChatOpenAI(
             model=s.minimax_digest_model or s.minimax_agent_model,
-            api_key=resolved_minimax_key,
+            api_key=SecretStr(resolved_minimax_key),
             base_url=s.minimax_base_url,
             timeout=s.minimax_digest_timeout,
             temperature=temperature,

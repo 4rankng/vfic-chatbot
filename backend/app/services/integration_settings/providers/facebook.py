@@ -6,6 +6,8 @@ app-level secrets are revealed only through the audited step-up flow (SEC-07).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import logging
 from dataclasses import dataclass
 
@@ -79,6 +81,34 @@ class FacebookOAuthConfig:
 
 class FacebookSettingsMixin:
     """Resolve/admin/persist for the Meta App credentials + per-Page tokens."""
+
+    if TYPE_CHECKING:
+        # Supplied by IntegrationSettingsService, the class that mixes these in.
+        # Declarations only: TYPE_CHECKING is False at runtime, so nothing here is
+        # ever assigned and the composed class stays the single source of truth.
+        db: AsyncSession
+        settings: Settings
+        cipher: IntegrationSettingsCipher
+
+        async def _stored_values(self, keys: Iterable[str]) -> dict[str, str]: ...
+
+        async def _write_setting(
+            self,
+            key: str,
+            value: str,
+            *,
+            actor_id: object | None = None,
+            is_secret: bool,
+        ) -> bool: ...
+
+        async def _stored_value_with_context(self, key: str, context: str) -> str: ...
+
+        from collections.abc import Iterable
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from app.core.config import Settings
+        from app.services.integration_settings.cipher import IntegrationSettingsCipher
 
     def _fb_page_token_key(self, page_id: str) -> str:
         return f"{FB_PAGE_TOKEN_PREFIX}{page_id}"

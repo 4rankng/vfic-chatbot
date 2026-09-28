@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, cast
+
 import asyncio
 import logging
 import uuid
@@ -95,6 +97,34 @@ class ZaloRuntimeConfig:
 
 class ZaloSettingsMixin:
     """Resolve/admin/persist for the two Zalo channels (Bot + OA)."""
+
+    if TYPE_CHECKING:
+        # Supplied by IntegrationSettingsService, the class that mixes these in.
+        # Declarations only: TYPE_CHECKING is False at runtime, so nothing here is
+        # ever assigned and the composed class stays the single source of truth.
+        db: AsyncSession
+        settings: Settings
+        cipher: IntegrationSettingsCipher
+
+        async def _stored_values(self, keys: Iterable[str]) -> dict[str, str]: ...
+
+        async def _write_setting(
+            self,
+            key: str,
+            value: str,
+            *,
+            actor_id: object | None = None,
+            is_secret: bool,
+        ) -> bool: ...
+
+        async def _stored_value_with_context(self, key: str, context: str) -> str: ...
+
+        from collections.abc import Iterable
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from app.core.config import Settings
+        from app.services.integration_settings.cipher import IntegrationSettingsCipher
 
     async def resolve_zalo(self, account_key: str | None = None) -> ZaloRuntimeConfig:
         """Resolve the Zalo Bot + OA runtime config.
@@ -252,7 +282,11 @@ class ZaloSettingsMixin:
         result = await self.db.execute(
             delete(IntegrationSetting).where(IntegrationSetting.key.in_(keys))
         )
-        return int(result.rowcount or 0)
+        # rowcount is a CursorResult member; the execute() result is typed as
+        # the wider Result[Any] the session hands back.
+        from sqlalchemy import CursorResult
+
+        return int(cast(CursorResult[Any], result).rowcount or 0)
 
     async def refresh_oa_access_token(self, account_key: str | None = None) -> str | None:
         """Refresh one OA account's access_token from its stored refresh_token.

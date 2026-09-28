@@ -8,9 +8,26 @@ thin delegate so the settings service exposes one uniform surface per group.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 
 class TingtingSettingsMixin:
     """Resolve/admin/persist for the deployment-wide TingTing integration."""
+
+    if TYPE_CHECKING:
+        # Supplied by IntegrationSettingsService, the class that mixes these in.
+        # Declarations only: TYPE_CHECKING is False at runtime, so nothing here is
+        # ever assigned and the composed class stays the single source of truth.
+        db: AsyncSession
+        settings: Settings
+        cipher: IntegrationSettingsCipher
+
+        from collections.abc import Iterable
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from app.core.config import Settings
+        from app.services.integration_settings.cipher import IntegrationSettingsCipher
 
     def _tingting_service(self):
         # Imported per call: the TingTing service pulls in the project-external-

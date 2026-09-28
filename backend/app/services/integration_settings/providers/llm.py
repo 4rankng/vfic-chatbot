@@ -3,6 +3,8 @@ operator-ranked failover order."""
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import logging
 import os
 from dataclasses import dataclass
@@ -206,6 +208,37 @@ class JevRuntimeConfig:
 
 class LlmSettingsMixin:
     """Resolve/admin/persist for the MiniMax / OpenRouter / custom / Jev groups."""
+
+    if TYPE_CHECKING:
+        # Supplied by IntegrationSettingsService (the composer) and StorageMixin
+        # (its sibling). Declarations only: TYPE_CHECKING is False at runtime, so
+        # nothing here is ever assigned and the composed class stays the single
+        # source of truth.
+        db: AsyncSession
+        settings: Settings
+
+        async def _stored_values(self, keys: Iterable[str]) -> dict[str, str]: ...
+
+        async def _write_setting(
+            self,
+            key: str,
+            value: str,
+            *,
+            actor_id: object | None = None,
+            is_secret: bool,
+        ) -> bool: ...
+
+        async def _bump_provider_namespaces(
+            self, primary: str, changed: list[str]
+        ) -> None: ...
+
+        async def get_provider_test_result(self, provider: str) -> dict | None: ...
+
+        from collections.abc import Iterable
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from app.core.config import Settings
 
     async def resolve_minimax(self) -> MinimaxRuntimeConfig:
         async def _load() -> dict:
