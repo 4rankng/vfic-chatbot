@@ -22,6 +22,7 @@ from app.graph.tingting_guide import (
     TINGTING_CONSULTANT_HANDOFF_LINE,
     TINGTING_FIELDS_ASK,
     TINGTING_INTENT_REDIRECT_REPLY,
+    TINGTING_RESOLVED_CLOSER_REPLY,
     TINGTING_SUPPORT_PERSONA,
     tingting_api_prompt_block,
     tingting_support_system_prompt,
@@ -464,6 +465,38 @@ def test_small_talk_gets_a_redirect_budget_before_any_handoff() -> None:
     # a redirect reply containing it would write needs_human on the first
     # small-talk turn, so it must never appear in the redirect wording.
     assert TINGTING_CONSULTANT_HANDOFF_LINE not in TINGTING_INTENT_REDIRECT_REPLY
+
+
+def test_resolved_conversation_gets_the_closer_not_another_pitch() -> None:
+    """After resolution, closers and gibberish get the warm close, never a re-pitch.
+
+    Production (2026-09-28, TingTing support OA): the employee confirmed the
+    login worked, then sent a casual closer twice — and both times got the
+    unclear-intent redirect pitching the reset flow. Both prompt sections must
+    quote the fixed closer verbatim, forbid re-pitching in the resolved state,
+    and cap the confirm question at one ask after resolution.
+    """
+    for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
+        assert TINGTING_RESOLVED_CLOSER_REPLY in prompt
+        assert "ĐÃ GIẢI QUYẾT XONG" in prompt
+        assert "chỉ được hỏi TỐI ĐA MỘT LẦN" in prompt
+        assert "TỰ nhắc lại rắc rối đăng nhập" in prompt
+    # the escalation hook (lanes.py) keys on the handoff line inside the reply:
+    # a closer containing it would write needs_human on a polite goodbye.
+    assert TINGTING_CONSULTANT_HANDOFF_LINE not in TINGTING_RESOLVED_CLOSER_REPLY
+
+
+def test_login_trouble_after_resolution_re_engages_the_reset_flow() -> None:
+    """Naming login trouble again restarts the reset flow after the closer.
+
+    The resolved-state rule must not swallow a genuine reset request: the
+    re-engagement condition in both sections has to sit alongside the untouched
+    login-trouble entry that runs the flow straight to the three-field ask.
+    """
+    for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
+        assert "TỰ nhắc lại rắc rối đăng nhập" in prompt
+        assert "RẮC RỐI ĐĂNG NHẬP" in prompt
+        assert TINGTING_FIELDS_ASK in prompt
 
 
 def test_login_trouble_is_reset_intent_not_a_handoff() -> None:
