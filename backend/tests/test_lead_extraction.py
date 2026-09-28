@@ -964,20 +964,7 @@ class TestCandidateExtractionService:
         lead_repository.assert_not_called()
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        ("mode", "status", "version"),
-        [
-            ("BOT", "CLOSED", 1),
-            ("BOT", "OPEN", 2),
-        ],
-    )
-    async def test_persist_skips_llm_for_closed_or_stale_source_turn(
-        self,
-        monkeypatch,
-        mode,
-        status,
-        version,
-    ):
+    async def test_persist_skips_llm_for_closed_conversation(self, monkeypatch):
         db = object()
         extractor = AsyncMock()
 
@@ -986,7 +973,7 @@ class TestCandidateExtractionService:
                 pass
 
             async def get_by_zalo(self, _chat_id: str):
-                return SimpleNamespace(mode=mode, status=status, version=version)
+                return SimpleNamespace(mode="BOT", status="CLOSED", version=1)
 
         monkeypatch.setattr(
             "app.services.conversation.ConversationService",
@@ -1005,6 +992,73 @@ class TestCandidateExtractionService:
 
         assert result == CandidateExtraction(lead_patch=None, memory_facts=[])
         extractor.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_persist_runs_when_only_the_turn_outcome_bumped_the_version(
+        self, monkeypatch
+    ):
+        """The shape every live job has: the turn's own outcome bumped the version.
+
+        The persist job is enqueued after ``record_bot_outcome``, which bumps
+        ``Conversation.version`` as it completes the turn the job describes, so
+        the captured turn-start version is already stale. Skipping on that
+        mismatch made every live extraction a silent no-op: the model ran, the
+        job reported success, and nothing was written.
+        """
+        db = object()
+        extract = AsyncMock(
+            return_value=CandidateExtraction(
+                lead_patch={"phone": "0359151980"},
+                memory_facts=[],
+            )
+        )
+        upsert = AsyncMock()
+        conversation = SimpleNamespace(
+            id="conversation-1",
+            mode="BOT",
+            status="OPEN",
+            version=2,
+            zalo_chat_id="zalo_1",
+            contact_id="contact-1",
+        )
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return None
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return conversation
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(CandidateExtractionService, "extract", extract)
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+
+        result = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            AsyncMock(),
+            "zalo_1",
+            "0359151980",
+            "Dạ em ghi nhận số điện thoại ạ",
+            expected_conversation_version=1,
+        )
+
+        assert result.lead_patch == {"phone": "0359151980"}
+        upsert.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_persist_escalates_high_confidence_intent_without_lead_or_memory_write(

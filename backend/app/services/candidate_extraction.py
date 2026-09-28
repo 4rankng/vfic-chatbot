@@ -185,19 +185,34 @@ class CandidateExtractionService:
         if conversation_id:
             # A Messenger row has zalo_chat_id IS NULL, so get_by_zalo never
             # finds it. Loading by primary key is authoritative and lets the
-            # HUMAN/CLOSED/version guard below actually run for those turns.
+            # HUMAN/CLOSED guard below actually run for those turns.
             conversation = await db.get(Conversation, uuid.UUID(str(conversation_id)))
         else:
             conversation = await conversation_service.get_by_zalo(chat_id)
+        # ``expected_conversation_version`` is deliberately NOT compared here.
+        # The persist job is enqueued after record_bot_outcome, which bumps
+        # Conversation.version as part of completing the very turn the job
+        # describes — so the captured turn-start version is already stale at
+        # enqueue time and the comparison rejected every live extraction while
+        # still reporting the job as "Successfully completed". It also has to
+        # stay out: each job's patch holds only what its own turn revealed, so
+        # skipping superseded turns would silently drop a phone number given on
+        # turn 3 because turn 50 arrived later. Ordering is what keeps the
+        # newest patch last (the queue is FIFO on a single worker), and
+        # upsert_lead merges field-wise, never clearing a value. The version is
+        # still passed through to escalate_extracted_intent, which needs it as
+        # an optimistic-concurrency token.
         if conversation is not None and (
             conversation.mode == ConversationMode.HUMAN
             or conversation.status == ConversationStatus.CLOSED
-            or (
-                expected_conversation_version is not None
-                and conversation.version != expected_conversation_version
-            )
         ):
-            logger.debug("candidate extraction skipped because source turn is no longer current")
+            logger.info(
+                "candidate extraction skipped: conversation is %s for chat %s",
+                "human-owned"
+                if conversation.mode == ConversationMode.HUMAN
+                else "closed",
+                chat_id,
+            )
             return CandidateExtraction(lead_patch=None, memory_facts=[])
 
         lead_key = (
