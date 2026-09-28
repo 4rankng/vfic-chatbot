@@ -2589,6 +2589,190 @@ async def test_support_oa_turn_uses_the_tingting_prompt_not_the_recruitment_one(
 
 
 @pytest.mark.asyncio
+async def test_support_oa_keeps_the_support_prompt_when_the_reset_link_pin_is_unset(
+    monkeypatch,
+):
+    """The prompt gate is identity-only: no admin pin → still no recruitment preamble.
+
+    ``tingting_reset_allowed`` (the pin-gated reset-flow flag) is False here, so
+    before the identity branch this turn fell through to ``build_system_prompt``
+    and served the project directory and recruiting rules on the support OA.
+    """
+    from app.graph.runner import _agent_turn
+    from app.graph.tingting_guide import TINGTING_SUPPORT_PERSONA
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "safe reply"
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "RECRUITMENT-PERSONA-MARKER", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(tingting_api_configured=AsyncMock(return_value=False))
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="hello"),
+        deps,
+        "hello",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="general", intent_confidence=0.2),
+        tingting_reset_allowed=False,
+        tingting_support_account=True,
+    )
+
+    system = str(captured["system"])
+    assert system.startswith(TINGTING_SUPPORT_PERSONA)
+    assert "RECRUITMENT-PERSONA-MARKER" not in system
+
+
+def test_tingting_support_account_identity_is_pin_free():
+    """The identity check matches the OA account and nothing else.
+
+    A messenger account that happens to carry the key does not count, the
+    recruitment OA never does, and conversations without an identity row are
+    recruitment-scoped by default.
+    """
+    from app.graph.lanes import _tingting_account_conversation
+
+    def _conv(provider, account_key):
+        return SimpleNamespace(
+            channel_identity=SimpleNamespace(provider=provider, account_key=account_key)
+        )
+
+    assert _tingting_account_conversation(_conv("zalo_oa", "tingting")) is True
+    assert _tingting_account_conversation(_conv("zalo_oa", "default:zalo_oa")) is False
+    assert _tingting_account_conversation(_conv("facebook_messenger", "tingting")) is False
+    assert _tingting_account_conversation(_conv("zalo_bot", "tingting")) is False
+    assert _tingting_account_conversation(SimpleNamespace(channel_identity=None)) is False
+    assert _tingting_account_conversation(object()) is False
+
+
+@pytest.mark.asyncio
+async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch):
+    """Pin-unset TingTing turns skip project_clarification and direct-context.
+
+    Both curated lanes answer from project knowledge, so the identity flag gates
+    them the same way it gates the prompt branch: the support OA falls through to
+    the agent lane, and a recruitment-OA control proves the flag is what rerouted
+    the turn.
+    """
+    from app.graph.lanes import _resolve_lane
+
+    tingting_conv = SimpleNamespace(
+        channel_identity=SimpleNamespace(provider="zalo_oa", account_key="tingting")
+    )
+    recruit_conv = SimpleNamespace(
+        channel_identity=SimpleNamespace(provider="zalo_oa", account_key="default:zalo_oa")
+    )
+    turn_route = SimpleNamespace(intent="general", reason="faq", confidence=0.9)
+    clarification_ctx = SimpleNamespace(
+        clarification="Anh muốn tìm hiểu lương dự án nào ạ?",
+        direct_context=None,
+        state="EXPLORE",
+        knowledge_mode="DIRECT_CONTEXT",
+    )
+
+    class _Trace:
+        def __init__(self) -> None:
+            self.decisions: list[tuple[str, str]] = []
+
+        def record_decision(self, key, value) -> None:
+            self.decisions.append((key, value))
+
+    class _LaneAgent:
+        def __init__(self) -> None:
+            self.kwargs: dict | None = None
+
+        async def __call__(self, state, deps, user_text, **kwargs):  # noqa: ARG002
+            self.kwargs = kwargs
+            return "ok"
+
+    direct_calls: list[object] = []
+
+    async def _stub_direct_turn(context, *args, **kwargs):  # noqa: ARG001, ARG002
+        direct_calls.append(context)
+        return "direct answer"
+
+    monkeypatch.setattr(lanes, "_direct_context_turn", _stub_direct_turn)
+
+    async def _run(conv, project_context):
+        agent = _LaneAgent()
+        trace = _Trace()
+        resolution = await _resolve_lane(
+            state=_state(),
+            deps=_deps(_FakeZalo(), conversation=object()),
+            conv=conv,
+            svc=object(),
+            decisions=TurnDecisions(intent="general", intent_confidence=0.9),
+            turn_route=turn_route,
+            project_context=project_context,
+            recent_messages=[],
+            manifest_policy=None,
+            provider="zalo_oa",
+            recipient_id="oa:u1",
+            timings={},
+            trace_sink=trace,
+            started=None,
+            lock_owner=None,
+            status_task=None,
+            t0=0.0,
+            tingting_reset_allowed=False,
+            agent_turn=agent,
+        )
+        return resolution, agent, trace
+
+    # A stale clarification on the support OA must not read like recruitment.
+    resolution, agent, trace = await _run(tingting_conv, clarification_ctx)
+    assert resolution.lane == "agent"
+    assert agent.kwargs["tingting_support_account"] is True
+    assert ("lane_selected", "project_clarification") not in trace.decisions
+
+    # Control: the same context on the recruitment OA still clarifies.
+    control, _, _ = await _run(recruit_conv, clarification_ctx)
+    assert control.lane == "project_clarification"
+    assert control.candidate == "Anh muốn tìm hiểu lương dự án nào ạ?"
+
+    # A direct-context hit on the support OA must not leak project KB text.
+    direct_ctx = SimpleNamespace(
+        clarification=None,
+        direct_context=SimpleNamespace(knowledge_base_id=7),
+        state="EXPLORE",
+        knowledge_mode="DIRECT_CONTEXT",
+    )
+    resolution, agent, trace = await _run(tingting_conv, direct_ctx)
+    assert resolution.lane == "agent"
+    assert agent.kwargs["tingting_support_account"] is True
+    assert ("lane_selected", "direct_context") not in trace.decisions
+    assert direct_calls == []
+
+    # Control: the recruitment OA still takes the direct-context lane.
+    control, _, _ = await _run(recruit_conv, direct_ctx)
+    assert control.lane == "direct_context"
+    assert control.candidate == "direct answer"
+
+
+@pytest.mark.asyncio
 async def test_support_oa_queues_a_human_when_the_model_sends_the_handoff_line(monkeypatch):
     """The handoff line promises a consultant, so the model reaching it queues one.
 

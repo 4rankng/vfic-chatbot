@@ -178,6 +178,8 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         PROACTIVE_SILENCE_LIMIT,
     )
     from app.graph.context import build_system_prompt
+    from app.graph.lanes import _tingting_account_conversation
+    from app.graph.tingting_guide import tingting_support_system_prompt
     from app.recruitment.domain.provider import (
         provider_from_conversation,
         recipient_from_conversation,
@@ -273,10 +275,25 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
 
     try:
         # 5. Build context
-        system, _ = await build_system_prompt(
-            deps.retrieval,
-            provider=provider,
-        )
+        if _tingting_account_conversation(conv):
+            # The support OA never receives the recruitment preamble (project
+            # directory, advertising rules): identity-scoped, so an unconfigured
+            # reset link cannot leak it here. Same prompt as the reactive turn.
+            configured_reader = getattr(deps.retrieval, "tingting_api_configured", None)
+            tingting_configured = False
+            if configured_reader is not None:
+                try:
+                    tingting_configured = bool(await configured_reader())
+                except Exception as exc:  # noqa: BLE001 — a prompt gate must never break a nudge
+                    logger.warning(
+                        "tingting api configured-read failed error_type=%s", type(exc).__name__
+                    )
+            system = tingting_support_system_prompt(include_guide=tingting_configured)
+        else:
+            system, _ = await build_system_prompt(
+                deps.retrieval,
+                provider=provider,
+            )
         project_context = (
             await deps.direct_context.resolve(conv, "")
             if deps.direct_context is not None and hasattr(deps.direct_context, "resolve")

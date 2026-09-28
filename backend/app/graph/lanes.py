@@ -270,6 +270,23 @@ async def _tingting_reset_allowed(deps: GraphDeps, conv) -> bool:
     return pinned == TINGTING_OA_ACCOUNT_KEY
 
 
+def _tingting_account_conversation(conv) -> bool:
+    """Whether the conversation sits on the TingTing support OA (identity only).
+
+    Deliberately pin-free, unlike :func:`_tingting_reset_allowed`: the OA's
+    prompt scope is a property of the channel identity, so the account keeps the
+    support prompt even while the reset link is unconfigured — a pin-gated
+    prompt branch would fall through to the recruitment preamble (project
+    directory, advertising rules) on exactly that fallback path.
+    """
+    from app.channels.types import TINGTING_OA_ACCOUNT_KEY
+
+    identity = getattr(conv, "channel_identity", None)
+    if identity is None or str(getattr(identity, "provider", "") or "") != "zalo_oa":
+        return False
+    return str(getattr(identity, "account_key", "") or "") == TINGTING_OA_ACCOUNT_KEY
+
+
 def _vacancy_required_args(decisions: TurnDecisions) -> dict:
     """Build forced ``list_active_jobs`` args for a vacancy-listing turn.
 
@@ -424,6 +441,7 @@ async def _agent_turn(
     decisions: TurnDecisions | None = None,
     lead_row: dict | None = None,
     tingting_reset_allowed: bool = False,
+    tingting_support_account: bool = False,
     on_delta=None,
     on_evidence=None,
 ) -> str:
@@ -587,10 +605,13 @@ async def _agent_turn(
     from app.graph.context import build_system_prompt
 
     sys_t0 = time.monotonic()
-    if tingting_reset_allowed:
+    if tingting_reset_allowed or tingting_support_account:
         # The support OA is not a recruitment channel: its prompt is the code
         # persona (+ the reset guide when the key is configured), never the
-        # recruitment persona, the project index, or the recruiting rules.
+        # recruitment persona, the project index, or the recruiting rules. The
+        # identity check owns this branch alongside the pin-gated reset flag so
+        # an unconfigured reset link cannot leak the recruitment preamble
+        # (project directory, advertising rules) onto the support account.
         configured_reader = getattr(deps.retrieval, "tingting_api_configured", None)
         tingting_configured = False
         if configured_reader is not None:
@@ -610,7 +631,11 @@ async def _agent_turn(
             deps.retrieval,
             provider=provider,
         )
-    if project_context is not None and not tingting_reset_allowed:
+    if (
+        project_context is not None
+        and not tingting_reset_allowed
+        and not tingting_support_account
+    ):
         if project_context.state == "FOCUSED":
             system += (
                 "\n\n=== DỰ ÁN ĐANG ĐƯỢC CHỌN ===\n"
@@ -951,6 +976,10 @@ async def _resolve_lane(
     # Messenger leads are keyed by contact (NULL zalo_id), so the contact id is
     # the fallback key for the agent's lead context.
     contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
+    # The support OA never touches recruitment machinery: this identity flag
+    # (pin-free, unlike tingting_reset_allowed) gates the two curated
+    # recruitment lanes below and rides along to the agent's prompt branch.
+    tingting_support_account = _tingting_account_conversation(conv)
     # An off-scope question must reach ``_agent_turn``, where the phone-ask /
     # handoff branch lives. Both curated lanes below would otherwise answer it
     # from project context first and the handoff would never be offered. The
@@ -963,6 +992,7 @@ async def _resolve_lane(
         project_context is not None
         and project_context.clarification
         and not tingting_reset_allowed
+        and not tingting_support_account
         and not off_scope
     ):
         trace_sink.record_decision("context_selected", "project_clarification")
@@ -983,6 +1013,7 @@ async def _resolve_lane(
         and turn_route.reason != "vacancy_listing"
         and turn_route.intent != "employee_support"
         and not tingting_reset_allowed
+        and not tingting_support_account
         and not off_scope
     ):
         trace_sink.record_decision("context_selected", "direct_context")
@@ -1039,7 +1070,11 @@ async def _resolve_lane(
             agent_kwargs["lead_row"] = lead_row
         agent_kwargs.update(
             _optional_policy_kwargs(
-                agent_turn, {"tingting_reset_allowed": tingting_reset_allowed}
+                agent_turn,
+                {
+                    "tingting_reset_allowed": tingting_reset_allowed,
+                    "tingting_support_account": tingting_support_account,
+                },
             )
         )
         if stream is not None:

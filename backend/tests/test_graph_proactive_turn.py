@@ -265,6 +265,81 @@ async def test_agent_decides_not_to_send_suppresses(monkeypatch):
     assert recorded == [{"message": "", "ok": False}]
 
 
+class _CapturingAgent(_FakeAgent):
+    """Records every system prompt the proactive context build handed over."""
+
+    def __init__(self, raw: str) -> None:
+        super().__init__(raw)
+        self.systems: list[str] = []
+
+    async def agent(self, text, *, system, **kwargs):  # noqa: ARG002
+        self.systems.append(system)
+        return self._raw
+
+
+@pytest.mark.asyncio
+async def test_support_oa_nudge_never_gets_the_recruitment_preamble(monkeypatch):
+    """Proactive context is identity-gated like the reactive turn.
+
+    A nudge on the TingTing support OA must carry the support persona, never the
+    recruitment preamble (project directory, advertising rules) — including when
+    the reset link pin is unset, which is why the gate reads the identity alone.
+    """
+    from app.graph.tingting_guide import TINGTING_SUPPORT_PERSONA
+
+    async def _marker_prompt(db, *, provider=None):  # noqa: ARG001
+        return "RECRUITMENT-PERSONA-MARKER", True
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _marker_prompt)
+
+    async def _configured() -> bool:
+        return False
+
+    def _svc_with_quote():
+        # zalo_oa nudges must quote the inbound message they follow.
+        svc = _stub_svc()[0]
+
+        async def _last_messages(conv, *, limit):  # noqa: ARG002
+            return [
+                SimpleNamespace(
+                    zalo_message_id="m-1", sender="WORKER", body="Em cần hỗ trợ gì?"
+                )
+            ]
+
+        svc.last_messages = _last_messages
+        return svc
+
+    # Support OA: identity matches, no pin involved.
+    conv = _FakeConv(
+        channel_identity=SimpleNamespace(provider="zalo_oa", account_key="tingting")
+    )
+    agent = _CapturingAgent('{"send": true, "message": "Nhắc anh/chị nhé?", "reason": "warm"}')
+    deps = _deps(agent, _FakeZalo(), conversation=_svc_with_quote())
+    deps.retrieval = SimpleNamespace(tingting_api_configured=_configured)
+
+    res = await run_proactive_turn(conv, deps)
+
+    assert res["outcome"] == "sent"
+    system = agent.systems[0]
+    assert system.startswith(TINGTING_SUPPORT_PERSONA)
+    assert "RECRUITMENT-PERSONA-MARKER" not in system
+    assert "DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG" not in system
+
+    # A recruitment-channel conversation still gets the assembled preamble.
+    recruit_conv = _FakeConv(
+        channel_identity=SimpleNamespace(provider="zalo_oa", account_key="default:zalo_oa")
+    )
+    recruit_agent = _CapturingAgent(
+        '{"send": true, "message": "Nhắc anh/chị nhé?", "reason": "warm"}'
+    )
+
+    await run_proactive_turn(
+        recruit_conv, _deps(recruit_agent, _FakeZalo(), conversation=_svc_with_quote())
+    )
+
+    assert "RECRUITMENT-PERSONA-MARKER" in recruit_agent.systems[0]
+
+
 @pytest.mark.asyncio
 async def test_clean_decision_is_sent(monkeypatch):
     svc, recorded = _stub_svc()
