@@ -218,7 +218,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # redemption (the -2 provider_boundary sites above); digest recomputed from the
 # post-change scan. The 2026-09-28 graph typing work (OPS-30) is scan-neutral,
 # confirmed by comparing the scan against a git archive of HEAD.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "4b7b91efa94b2d16bd9c52c29ca06b88e583badeffbca588b7bec1b5be88d9e6"
+# 2026-09-29: enqueue_job's canceled-job recovery path re-submits with a direct
+# `q.enqueue(...)` call instead of the `retry_submit = q.enqueue` alias (the
+# alias could NameError when the original failure preceded the assignment).
+# Same scope, same reviewed site, +1 `enqueue` invocation; fixture row and
+# digest recomputed from the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "0efacdc2d3485af65223b8956be47700e96388dde9ce2fc9b96351209b615546"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
@@ -256,12 +261,16 @@ class _CallInventory(ast.NodeVisitor):
         self.scope: list[str] = []
         self.items: list[tuple[str, str, str, str]] = []
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self.scope.append(node.name)
         self.generic_visit(node)
         self.scope.pop()
 
-    visit_AsyncFunctionDef = visit_FunctionDef
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_function(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_function(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         name = _call_name(node)
@@ -277,21 +286,23 @@ class _CallInventory(ast.NodeVisitor):
 class _BroadCallInventory(_CallInventory):
     def visit_Call(self, node: ast.Call) -> None:
         name = _call_name(node)
+        if name is None:
+            self.generic_visit(node)
+            return
         categories: list[str] = []
-        if name:
-            if "outbox" in name and name.startswith(("create", "enqueue", "dispatch")):
-                categories.append("outbox_boundary")
-            elif "enqueue" in name:
-                categories.append("queue_producer")
-            if name.startswith("send_") or (
-                self.provider_transport
-                # `eval` is the Redis Lua CAS the ownership-checked lock releases
-                # use (REL-03); it mutates state, so it belongs in the snapshot
-                # the same way `delete` did.
-                and name
-                in {"get", "getdel", "post", "put", "patch", "delete", "request", "eval"}
-            ):
-                categories.append("provider_boundary")
+        if "outbox" in name and name.startswith(("create", "enqueue", "dispatch")):
+            categories.append("outbox_boundary")
+        elif "enqueue" in name:
+            categories.append("queue_producer")
+        if name.startswith("send_") or (
+            self.provider_transport
+            # `eval` is the Redis Lua CAS the ownership-checked lock releases
+            # use (REL-03); it mutates state, so it belongs in the snapshot
+            # the same way `delete` did.
+            and name
+            in {"get", "getdel", "post", "put", "patch", "delete", "request", "eval"}
+        ):
+            categories.append("provider_boundary")
         for category in categories:
             self.items.append(
                 (category, self.relative_path, ".".join(self.scope) or "<module>", name)

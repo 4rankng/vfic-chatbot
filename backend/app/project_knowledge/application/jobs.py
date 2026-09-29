@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -18,7 +19,7 @@ class ProjectKnowledgeJobKind(StrEnum):
 @dataclass(frozen=True, slots=True)
 class ProjectKnowledgeJobRequest:
     kind: ProjectKnowledgeJobKind
-    aggregate_id: object
+    aggregate_id: uuid.UUID
     requested_job_id: str | None = None
 
 
@@ -36,7 +37,7 @@ class ProjectKnowledgeJobs:
     def __init__(self, port: ProjectKnowledgeJobPort) -> None:
         self._port = port
 
-    def ingest_document(self, document_id: object) -> None:
+    def ingest_document(self, document_id: uuid.UUID) -> None:
         self._port.enqueue(
             ProjectKnowledgeJobRequest(
                 ProjectKnowledgeJobKind.DOCUMENT_INGEST,
@@ -44,7 +45,7 @@ class ProjectKnowledgeJobs:
             )
         )
 
-    def ingest_version(self, version_id: object) -> str:
+    def ingest_version(self, version_id: uuid.UUID) -> str:
         receipt = self._port.enqueue(
             ProjectKnowledgeJobRequest(
                 ProjectKnowledgeJobKind.VERSION_INGEST,
@@ -55,7 +56,7 @@ class ProjectKnowledgeJobs:
             raise RuntimeError("knowledge version enqueue failed")
         return receipt
 
-    def process_category_revision(self, revision_id: object) -> str:
+    def process_category_revision(self, revision_id: uuid.UUID) -> str:
         receipt = self._port.enqueue(
             ProjectKnowledgeJobRequest(
                 ProjectKnowledgeJobKind.CATEGORY_REVISION,
@@ -68,7 +69,7 @@ class ProjectKnowledgeJobs:
 
     def sync_external_source(
         self,
-        state_id: object,
+        state_id: uuid.UUID,
         *,
         job_id: str | None = None,
     ) -> str | None:
@@ -82,7 +83,7 @@ class ProjectKnowledgeJobs:
 
     def sync_single_page_source(
         self,
-        state_id: object,
+        state_id: uuid.UUID,
         *,
         job_id: str | None = None,
     ) -> str | None:
@@ -97,8 +98,8 @@ class ProjectKnowledgeJobs:
 
 @dataclass(frozen=True, slots=True)
 class DirectContextIndexRequest:
-    knowledge_base_id: object
-    project_id: object
+    knowledge_base_id: uuid.UUID
+    project_id: uuid.UUID
     text_blob: str
 
 
@@ -114,8 +115,8 @@ class ProjectKnowledgeDirectContextJobs:
 
     def index_direct_context(
         self,
-        knowledge_base_id: object,
-        project_id: object,
+        knowledge_base_id: uuid.UUID,
+        project_id: uuid.UUID,
         text_blob: str,
     ) -> None:
         self._port.enqueue(

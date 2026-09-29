@@ -656,7 +656,10 @@ class KnowledgeService:
             ).all()
             project_names = {row.id: row.name for row in project_rows}
             for row in rows:
-                row.project_name = project_names.get(row.project_id)
+                # A transient view attribute, not a column: setattr because the
+                # ORM model does not declare it and instance __dict__ is typed
+                # read-only.
+                setattr(row, "project_name", project_names.get(row.project_id))
         return list(rows), int(total or 0)
 
     async def reconcile(self, current_drive_ids: list[str]) -> int:

@@ -63,6 +63,13 @@ from app.project_knowledge.domain.project import (
 logger = logging.getLogger(__name__)
 
 
+def _mode_of(
+    modes: dict[uuid.UUID, KnowledgeBaseMode], key: uuid.UUID | None
+) -> KnowledgeBaseMode | None:
+    """Look up one knowledge-base mode; a Project's nullable FK reads as None."""
+    return modes.get(key) if key is not None else None
+
+
 def _enqueue_direct_context_index(
     knowledge_base_id: uuid.UUID,
     project_id: uuid.UUID,
@@ -155,7 +162,7 @@ class ProjectService:
         out: list[ProjectOut] = []
         for p in rows:
             o = ProjectOut.model_validate(p)
-            o.knowledge_mode = modes.get(p.knowledge_base_id)
+            o.knowledge_mode = _mode_of(modes, p.knowledge_base_id)
             o.knowledge_document_count = doc_counts.get(p.id, 0)
             o.feature_readiness = FeatureReadiness(ready=ready.get(p.id, 0), total=total)
             out.append(o)
@@ -172,8 +179,9 @@ class ProjectService:
         total = await repo.active_catalog_size()
         doc_counts = await self.repo.knowledge_document_counts([proj.id])
         o = ProjectOut.model_validate(proj)
-        o.knowledge_mode = (await self._knowledge_modes([proj.knowledge_base_id])).get(
-            proj.knowledge_base_id
+        o.knowledge_mode = _mode_of(
+            await self._knowledge_modes([proj.knowledge_base_id]),
+            proj.knowledge_base_id,
         )
         o.knowledge_document_count = doc_counts.get(proj.id, 0)
         o.feature_readiness = FeatureReadiness(ready=ready.get(proj.id, 0), total=total)
@@ -240,8 +248,9 @@ class ProjectService:
         if body.aliases is not None:
             proj.aliases = [value.strip() for value in body.aliases if value.strip()]
         if "discovery_card" in body.model_fields_set:
-            mode = (await self._knowledge_modes([proj.knowledge_base_id])).get(
-                proj.knowledge_base_id
+            mode = _mode_of(
+                await self._knowledge_modes([proj.knowledge_base_id]),
+                proj.knowledge_base_id,
             )
             if mode is not KnowledgeBaseMode.DIRECT_CONTEXT:
                 raise ConflictError("RAG discovery cards are derived from active categories")
@@ -409,7 +418,7 @@ class ProjectService:
                 select(KnowledgeBase.id, KnowledgeBase.mode).where(KnowledgeBase.id.in_(ids))
             )
         ).all()
-        return dict(rows)
+        return {row[0]: row[1] for row in rows}
 
     async def _require_project_mode(
         self,
@@ -427,7 +436,7 @@ class ProjectService:
 
     async def _require_activation_ready(self, project: Project) -> None:
         modes = await self._knowledge_modes([project.knowledge_base_id])
-        mode = modes.get(project.knowledge_base_id)
+        mode = _mode_of(modes, project.knowledge_base_id)
         if mode is KnowledgeBaseMode.DIRECT_CONTEXT:
             preflight = ProjectActivationFacts(
                 knowledge_mode=mode.value,

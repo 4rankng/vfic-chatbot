@@ -167,8 +167,8 @@ async def _enrich_messenger_profile_async(job: dict) -> None:
             if cfg is None or not cfg.page_access_token:
                 return
 
-            async def _fetch(target_psid: str):
-                return await get_user_profile(cfg, psid=target_psid)
+            async def _fetch(psid: str):
+                return await get_user_profile(cfg, psid=psid)
 
             await ProfileEnrichmentService(db).enrich_messenger_user(
                 psid,

@@ -265,11 +265,22 @@ class OAProfileLookup(Protocol):
 
 
 class MessengerProfile(Protocol):
-    """The Messenger profile shape this service reads."""
+    """The Messenger profile shape this service reads.
 
-    display_name: str
-    profile_pic: str
-    gender: str
+    Declared as read-only properties: implementations like the OAuth layer's
+    ``MessengerUserProfile`` expose computed attributes (``display_name`` is a
+    property combining first/last names), and a settable protocol member would
+    wrongly reject them.
+    """
+
+    @property
+    def display_name(self) -> str: ...
+
+    @property
+    def profile_pic(self) -> str: ...
+
+    @property
+    def gender(self) -> str: ...
 
 
 class MessengerProfileLookup(Protocol):
@@ -415,6 +426,10 @@ class ProfileEnrichmentService:
         missing_contact_avatar = _is_blank(contact.avatar_url)
         missing_lead_avatar = any(_is_blank(lead.avatar_url) for lead in leads)
         if not (missing_display_name or missing_contact_avatar or missing_lead_avatar):
+            return False
+        if self.sender is None:
+            # No OA lookup capability wired (tests, or deployments without the
+            # Zalo sender): nothing this service can fetch.
             return False
 
         claimed, lookup_owner = await _claim_profile_lookup(

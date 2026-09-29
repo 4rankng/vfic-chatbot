@@ -1,3 +1,12 @@
+# pyright: reportArgumentType=false
+#
+# Typed-double convention: the stubs in this file (_ReadDb, _WriteDb,
+# _MutableDb, _Settings, _OtherSettings, _FakeRedis) deliberately implement
+# only the narrow duck-typed surface the service exercises (get / scalars /
+# add / commit / _write_setting / …). Casting each of the ~120 construction
+# and assignment sites to AsyncSession/Settings would add noise, not safety —
+# the real gate here is the behavioral suite below. Revisit only if a stub's
+# surface drifts from the service contract in a way tests stop catching.
 import json
 import uuid
 
@@ -828,7 +837,6 @@ async def test_resolve_embedding_falls_back_when_stored_provider_is_unknown():
     assert embedding.provider == "openrouter"
 
 
-@pytest.mark.asyncio
 @pytest.mark.asyncio
 async def test_update_openrouter_stores_embedding_provider_and_secret_key(monkeypatch):
     audits: list[dict] = []

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import importlib
 from collections.abc import Callable
 
@@ -36,6 +38,13 @@ from app.composition.project_knowledge_jobs import (
 )
 from app.composition.project_knowledge_jobs import RqProjectKnowledgeJobAdapter
 from app.workers.utils import EnqueueStatusUnknown
+
+# Real UUIDs: the job contracts type aggregate ids as uuid.UUID (stdlib),
+# matching what production callers hand over.
+_KB_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+_PROJECT_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
+_DOC_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
+_AGG_ID = uuid.UUID("00000000-0000-0000-0000-000000000004")
 
 
 def test_pure_ingestion_lifecycle_accepts_the_full_happy_path() -> None:
@@ -200,9 +209,9 @@ def test_project_knowledge_jobs_document_ingest_is_fire_and_forget() -> None:
     port = _RecordingJobPort("ignored-worker-receipt")
     jobs = ProjectKnowledgeJobs(port)
 
-    assert jobs.ingest_document(42) is None
+    assert jobs.ingest_document(_DOC_ID) is None
     assert port.requests == [
-        ProjectKnowledgeJobRequest(ProjectKnowledgeJobKind.DOCUMENT_INGEST, 42)
+        ProjectKnowledgeJobRequest(ProjectKnowledgeJobKind.DOCUMENT_INGEST, _DOC_ID)
     ]
 
 
@@ -210,11 +219,11 @@ def test_project_knowledge_direct_context_jobs_preserve_enqueue_arguments() -> N
     port = _RecordingDirectContextPort()
     jobs = ProjectKnowledgeDirectContextJobs(port)
 
-    assert jobs.index_direct_context("kb-1", "project-1", "raw text") is None
+    assert jobs.index_direct_context(_KB_ID, _PROJECT_ID, "raw text") is None
     assert port.requests == [
         DirectContextIndexRequest(
-            knowledge_base_id="kb-1",
-            project_id="project-1",
+            knowledge_base_id=_KB_ID,
+            project_id=_PROJECT_ID,
             text_blob="raw text",
         )
     ]
@@ -234,8 +243,8 @@ def test_project_knowledge_jobs_required_receipt_operations_return_the_receipt(
     port = _RecordingJobPort("rq-receipt")
     jobs = ProjectKnowledgeJobs(port)
 
-    assert getattr(jobs, method_name)(99) == "rq-receipt"
-    assert port.requests == [ProjectKnowledgeJobRequest(kind, 99)]
+    assert getattr(jobs, method_name)(_AGG_ID) == "rq-receipt"
+    assert port.requests == [ProjectKnowledgeJobRequest(kind, _AGG_ID)]
 
 
 @pytest.mark.parametrize(
@@ -252,7 +261,7 @@ def test_project_knowledge_jobs_required_receipt_operations_reject_no_receipt(
     jobs = ProjectKnowledgeJobs(_RecordingJobPort(None))
 
     with pytest.raises(RuntimeError, match=message):
-        getattr(jobs, method_name)(99)
+        getattr(jobs, method_name)(_AGG_ID)
 
 
 @pytest.mark.parametrize(
@@ -271,9 +280,9 @@ def test_project_knowledge_jobs_source_sync_preserves_optional_receipt_and_job_i
     port = _RecordingJobPort(receipt)
     jobs = ProjectKnowledgeJobs(port)
 
-    assert getattr(jobs, method_name)("state-1", job_id="requested-id") == receipt
+    assert getattr(jobs, method_name)(_AGG_ID, job_id="requested-id") == receipt
     assert port.requests == [
-        ProjectKnowledgeJobRequest(kind, "state-1", requested_job_id="requested-id")
+        ProjectKnowledgeJobRequest(kind, _AGG_ID, requested_job_id="requested-id")
     ]
 
 
@@ -330,7 +339,7 @@ def test_rq_adapter_delegates_to_the_exact_existing_worker_facade(
     requested_job_id = "caller-job-id"
     request = ProjectKnowledgeJobRequest(
         kind,
-        "aggregate-1",
+        _AGG_ID,
         requested_job_id=requested_job_id,
     )
 
@@ -345,7 +354,7 @@ def test_rq_adapter_delegates_to_the_exact_existing_worker_facade(
         }
         else {}
     )
-    assert calls == [(kind, ("aggregate-1",), expected_kwargs)]
+    assert calls == [(kind, (_AGG_ID,), expected_kwargs)]
     expected_receipt = None if kind is ProjectKnowledgeJobKind.DOCUMENT_INGEST else "worker-receipt"
     assert receipt == expected_receipt
 
@@ -367,7 +376,7 @@ def test_rq_adapter_maps_unknown_worker_receipt_to_application_error(
 
     with pytest.raises(EnqueueReceiptUnknown) as exc_info:
         RqProjectKnowledgeJobAdapter().enqueue(
-            ProjectKnowledgeJobRequest(kind, "aggregate-1", "ambiguous-job-id")
+            ProjectKnowledgeJobRequest(kind, _AGG_ID, "ambiguous-job-id")
         )
 
     assert isinstance(exc_info.value.__cause__, EnqueueStatusUnknown)
@@ -386,10 +395,10 @@ def test_direct_context_index_adapter_delegates_to_worker_facade(
 
     WorkerDirectContextIndexAdapter().enqueue(
         DirectContextIndexRequest(
-            knowledge_base_id="kb-1",
-            project_id="project-1",
+            knowledge_base_id=_KB_ID,
+            project_id=_PROJECT_ID,
             text_blob="raw text",
         )
     )
 
-    assert calls == [("kb-1", "project-1", "raw text")]
+    assert calls == [(_KB_ID, _PROJECT_ID, "raw text")]

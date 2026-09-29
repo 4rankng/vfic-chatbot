@@ -8,7 +8,10 @@ that logic so callers are one-liners.
 from __future__ import annotations
 
 import logging
-from typing import Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
+
+if TYPE_CHECKING:
+    from rq import Queue
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +93,11 @@ def enqueue_job(
     caller passing a limit explicitly.
     """
     connection = None
+    # Bound before the try: the recovery handler below re-submits with these,
+    # and an early failure (Redis down, Queue() raising) must NameError-proof
+    # it instead of masking the original error.
+    q: Queue | None = None
+    enqueue_options: dict[str, Any] = {}
     try:
         from rq import Queue
 
@@ -124,8 +132,11 @@ def enqueue_job(
                     existing_job.requeue()
                 elif status == "canceled":
                     existing_job.delete()
-                    retry_submit = q.enqueue
-                    retry_submit(fn, *args, **enqueue_options)
+                    if q is None or not enqueue_options:
+                        # This attempt failed before a submit was even built;
+                        # there is nothing to re-submit with.
+                        raise EnqueueStatusUnknown(job_id) from exc
+                    q.enqueue(fn, *args, **enqueue_options)
             except Exception as receipt_exc:  # noqa: BLE001 - receipt transport may also fail
                 from rq.exceptions import NoSuchJobError
 
