@@ -17,6 +17,7 @@ from typing import Protocol
 
 from app.core.config import get_settings
 
+
 # The embedder is infrastructure, not an operator-facing provider switch: it
 # rides the OpenRouter credential whatever ``OPENROUTER_ENABLE`` says (that flag
 # only chooses which LLM answers a CHAT turn — see client_cache/factories).
@@ -88,10 +89,7 @@ class GeminiEmbedder:
         embeddings = resp.embeddings if resp is not None else None
         if not embeddings:
             return [[0.0] * dim for _ in chunk]
-        return [
-            list(item.values) if item.values else [0.0] * dim
-            for item in embeddings
-        ]
+        return [list(item.values) if item.values else [0.0] * dim for item in embeddings]
 
     async def batch(self, texts: list[str]) -> list[list[float]]:
         """Embed many texts in chunked SDK calls.

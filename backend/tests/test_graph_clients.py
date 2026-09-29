@@ -375,8 +375,11 @@ async def test_gemini_embedder_missing_key_names_gemini():
 
 
 @pytest.mark.asyncio
-async def test_openrouter_embedder_missing_key_names_openrouter():
-    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
+async def test_openrouter_embedder_missing_key_points_at_the_settings_page():
+    # The credential is the admin settings page's, so the error says where to
+    # set it. It used to name OPENROUTER_API_KEY, which sent operators to a .env
+    # they no longer edit; the env var is not a supported source any more.
+    with pytest.raises(RuntimeError, match="Settings page"):
         await OpenRouterEmbedder(_Settings()).batch(["hello"])
 
 

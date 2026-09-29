@@ -1,5 +1,6 @@
 """Provider dependency adapters for HTTP transports."""
 
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.project_knowledge.infrastructure.api_dependencies import (
@@ -9,7 +10,7 @@ from app.services.integration_settings import IntegrationSettingsService
 
 
 async def get_embedder(
-    db: AsyncSession = None,  # type: ignore[assignment]
+    db: AsyncSession = Depends(get_project_knowledge_db),
 ):
     """The OpenRouter embedder, with the credential the SETTINGS PAGE stores.
 
@@ -22,14 +23,13 @@ async def get_embedder(
 
     Reading it from a process env var instead is what this used to do, and it is
     why an operator who set the key in the UI could still see a search-test
-    endpoint fail with "no credential".
+    endpoint fail with "no credential". FastAPI caches the session dependency,
+    so this shares the request's existing session rather than opening a second.
     """
-    if db is None:  # pragma: no cover - FastAPI always injects the session
-        raise RuntimeError("get_embedder requires the knowledge DB session")
     openrouter = await IntegrationSettingsService(db).resolve_openrouter()
     from app.composition.project_knowledge import build_default_embedder
 
     return build_default_embedder(openrouter_api_key=openrouter.api_key)
 
 
-__all__ = ["get_embedder", "get_project_knowledge_db"]
+__all__ = ["get_embedder"]
