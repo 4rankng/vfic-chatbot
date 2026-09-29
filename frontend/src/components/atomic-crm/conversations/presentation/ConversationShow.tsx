@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { MenuItem } from "react-aria-components";
 import { Dropdown } from "@/components/base/dropdown/dropdown";
 import {
   Bot,
@@ -305,13 +306,12 @@ export const ConversationShowContent = ({
                       {MODE_OPTIONS.map((option) => {
                         const isActive = activeMode === option.mode;
                         return (
-                          <Dropdown.Item
+                          <MenuItem
                             key={option.mode}
                             id={option.mode}
-                            label={option.label}
-                            unstyled
+                            textValue={option.label}
                             className={`mode-menu-item ${option.mode} ${isActive ? "active" : ""}`}
-                            onPress={() => {
+                            onAction={() => {
                               if (!isActive) setConversationMode(option.mode);
                             }}
                           >
@@ -335,7 +335,7 @@ export const ConversationShowContent = ({
                             >
                               {isActive ? <Check className="icon" /> : null}
                             </span>
-                          </Dropdown.Item>
+                          </MenuItem>
                         );
                       })}
                     </Dropdown.Menu>
