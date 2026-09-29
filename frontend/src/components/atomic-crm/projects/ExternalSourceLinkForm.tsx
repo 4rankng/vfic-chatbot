@@ -21,21 +21,16 @@ import {
   singlePageSyncErrorMessage,
   type KnowledgeCategoryKey,
 } from "./project-knowledge-service";
+import {
+  PROJECT_KNOWLEDGE_CATEGORIES,
+  PROJECT_KNOWLEDGE_CATEGORY_LABELS,
+} from "./domain/project-knowledge-policy";
 
-const CATEGORY_OPTIONS: { value: KnowledgeCategoryKey; label: string }[] = [
-  { value: "faq", label: "Câu hỏi thường gặp" },
-  { value: "jobs", label: "Vị trí tuyển dụng" },
-  { value: "compensation", label: "Lương & thu nhập" },
-  { value: "requirements", label: "Yêu cầu ứng viên" },
-  { value: "work_schedules", label: "Ca làm việc" },
-  { value: "benefits", label: "Phúc lợi" },
-  { value: "accommodation", label: "Chỗ ở" },
-  { value: "meals", label: "Bữa ăn" },
-  { value: "transportation", label: "Đưa đón & lịch xe" },
-  { value: "insurance", label: "Bảo hiểm" },
-  { value: "application", label: "Ứng tuyển & nhận việc" },
-  { value: "contacts", label: "Liên hệ" },
-];
+// Card: the category labels live in the domain policy so the brief import
+// summary and this picker can never drift apart.
+const CATEGORY_OPTIONS: { value: KnowledgeCategoryKey; label: string }[] = (
+  PROJECT_KNOWLEDGE_CATEGORIES as readonly KnowledgeCategoryKey[]
+).map((value) => ({ value, label: PROJECT_KNOWLEDGE_CATEGORY_LABELS[value] }));
 
 type Props = {
   projectId: string;

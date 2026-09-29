@@ -19,6 +19,26 @@ export type ProjectKnowledgeCategory =
   (typeof PROJECT_KNOWLEDGE_CATEGORIES)[number];
 export type ProjectKnowledgeMode = "RAG" | "DIRECT_CONTEXT";
 
+/** The ONE Vietnamese label per knowledge category. Every surface that names a
+ *  category (the external-source picker, the brief import summary) reads this
+ *  table — a second local list is how the two drift apart. */
+export const PROJECT_KNOWLEDGE_CATEGORY_LABELS: Readonly<
+  Record<ProjectKnowledgeCategory, string>
+> = {
+  faq: "Câu hỏi thường gặp",
+  jobs: "Vị trí tuyển dụng",
+  compensation: "Lương & thu nhập",
+  requirements: "Yêu cầu ứng viên",
+  work_schedules: "Ca làm việc",
+  benefits: "Phúc lợi",
+  accommodation: "Chỗ ở",
+  meals: "Bữa ăn",
+  transportation: "Đưa đón & lịch xe",
+  insurance: "Bảo hiểm",
+  application: "Ứng tuyển & nhận việc",
+  contacts: "Liên hệ",
+};
+
 export type ProjectDiscoveryInput = Readonly<{
   summary: string;
   location: string;

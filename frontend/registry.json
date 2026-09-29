@@ -209,6 +209,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/presentation/ProjectBriefImport.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/presentation/FaqAutoSyncSection.tsx",
           "type": "registry:component"
         },
@@ -229,11 +233,23 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/domain/vietnamese-slug.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/domain/project-knowledge-yaml.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/domain/project-knowledge-policy.ts",
           "type": "registry:component"
         },
         {
           "path": "src/components/atomic-crm/projects/domain/project-knowledge-contracts.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/domain/project-brief-ingest.ts",
           "type": "registry:component"
         },
         {

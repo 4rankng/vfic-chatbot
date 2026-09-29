@@ -1,0 +1,170 @@
+import { describe, expect, it } from "vitest";
+import { parseProjectBrief, type ProjectBrief } from "./project-brief-ingest";
+
+/** A trimmed but structurally faithful slice of the real brief: the overview
+ *  table, the Q&A markers, the `<br>`-joined highlight cell, the LaTeX process
+ *  arrow, and the numbered section headings. */
+const BRIEF = `# CÔNG TY CỔ PHẦN CUNG ỨNG NHÂN LỰC VFIC
+## PHIẾU THU THẬP THÔNG TIN DỰ ÁN TUYỂN DỤNG
+
+## PHẦN I: THÔNG TIN TỔNG QUAN VỀ DỰ ÁN
+
+| Hạng mục thông tin | Mô tả nội dung |
+| :--- | :--- |
+| **Tên dự án tuyển dụng** | 4P ELECTRONIC |
+| **Tên viết tắt / Tên thường gọi** | 4P Electronics / 4P Hải Phòng |
+| **Địa chỉ nơi làm việc** | Tầng 2 Công ty LGE, KCN Tràng Duệ, An Phong, TP. Hải Phòng |
+| **Vị trí tuyển dụng chính** | Công nhân sản xuất điện tử (SMT, PCBA, KHO (MAT, PPS), Chất lượng QA, LQC…) |
+| **Tóm tắt công việc** | Sản xuất, lắp ráp và kiểm tra linh kiện bảng mạch điện tử cho ngành ô tô. |
+| **Các điểm nổi bật thu hút** | - Không yêu cầu bằng cấp; chăm chỉ, chịu khó.<br>- Thưởng thâm niên: 100.000 – 1.000.000 đồng/tháng.<br>- Đóng đầy đủ BHXH, BHYT, BHTN. |
+
+## PHẦN II: CHI TIẾT NỘI DUNG TƯ VẤN ỨNG VIÊN
+
+### 1. Vị trí tuyển dụng & Công việc cụ thể
+* **Câu hỏi thường gặp:**
+  * Bên công ty đang tuyển công việc gì?
+* **Thông tin phản hồi:**
+  * **Vị trí tuyển:** Công nhân sản xuất (SMT, PCBA, KHO, QA, LQC...).
+  * **Mô tả công việc hàng ngày:** Thao tác lắp ráp, vận hành máy và kiểm tra sản xuất linh kiện bảng mạch điện tử cho xe ô tô.
+
+### 3. Tiền lương, phụ cấp & Tăng ca
+* **Câu hỏi thường gặp:**
+  * Lương cơ bản bao nhiêu tiền?
+* **Thông tin phản hồi:**
+  * **Lương cơ bản:** 6.200.000 – 6.300.000 đồng/tháng.
+  * **Hình thức & Chu kỳ chi trả:** Trả lương định kỳ theo tháng.
+
+### 5. Chế độ ăn uống & Chỗ ở
+* **Câu hỏi thường gặp:**
+  * Cơm công ty có mất tiền không?
+* **Thông tin phản hồi:**
+  * **Cơm ca:** Được phục vụ hoàn toàn **MIỄN PHÍ** tại nhà ăn công ty trong ca làm việc.
+  * **Chỗ ở / Ký túc xá:** Công ty **không hỗ trợ** ký túc xá (người lao động tự túc chỗ ở hoặc thuê trọ gần KCN).
+
+### 8. Môi trường làm việc & Bảo hộ lao động
+* **Câu hỏi thường gặp:**
+  * Có phải mặc quần áo phòng sạch không?
+* **Thông tin phản hồi:**
+  * **Đồng phục:** Mặc trang phục chuyên dụng phòng sạch (áo smock).
+  * **Chế độ phúc lợi bổ sung:** Được tham gia hoạt động du lịch, nghỉ mát hàng năm do công ty tổ chức.
+  * **Chế độ bảo hiểm xã hội:** Tham gia đóng đầy đủ theo quy định của Luật Lao động.
+
+### 9. Quy trình phỏng vấn & Hồ sơ nhận việc
+* **Câu hỏi thường gặp:**
+  * Đi phỏng vấn có khó không?
+* **Thông tin phản hồi:**
+  * $$\\text{Đăng ký ứng tuyển} \\longrightarrow \\text{Phỏng vấn} \\longrightarrow \\text{Khám sức khỏe} \\longrightarrow \\text{Nhận việc / Đi làm}$$
+
+### 12. Ghi chú riêng của nhà
+* **Thông tin phản hồi:**
+  * Một ghi chú không thuộc danh mục nào.
+`;
+
+const parsed = (): ProjectBrief => parseProjectBrief(BRIEF);
+
+describe("parseProjectBrief — discovery fields", () => {
+  it("reads the project identity out of the overview table", () => {
+    const brief = parsed();
+    expect(brief.name).toBe("4P ELECTRONIC");
+    expect(brief.slug).toBe("4p-electronic");
+    expect(brief.aliases).toEqual(["4P Electronics", "4P Hải Phòng"]);
+  });
+
+  it("shortens the work address to the city the discovery card shows", () => {
+    expect(parsed().location).toBe("Hải Phòng");
+  });
+
+  it("splits the role cell into the recruiter's own comma list", () => {
+    const roles = parsed().roles;
+    expect(roles[0]).toBe("Công nhân sản xuất điện tử");
+    expect(roles).toContain("SMT");
+    expect(roles).toContain("PCBA");
+    expect(roles).toContain("KHO (MAT, PPS)");
+  });
+
+  it("reads the summary and splits the <br>-joined highlight cell", () => {
+    const brief = parsed();
+    expect(brief.summary).toBe(
+      "Sản xuất, lắp ráp và kiểm tra linh kiện bảng mạch điện tử cho ngành ô tô.",
+    );
+    expect(brief.highlights).toHaveLength(3);
+    expect(brief.highlights[1]).toMatch(/Thưởng thâm niên/);
+  });
+
+  it("ignores the table header and alignment rows", () => {
+    const brief = parsed();
+    expect(brief.name).not.toMatch(/Mô tả nội dung/);
+    expect(brief.summary).not.toMatch(/Hạng mục/);
+  });
+});
+
+describe("parseProjectBrief — knowledge categories", () => {
+  it("maps each numbered heading onto its category", () => {
+    const { categories } = parsed();
+    expect(categories.jobs).toMatch(/Mô tả công việc hàng ngày/);
+    expect(categories.compensation).toMatch(/6\.200\.000/);
+  });
+
+  it("keeps the accent-stripped emphasis out of the knowledge body", () => {
+    expect(parsed().categories.meals).toMatch(
+      /Được phục vụ hoàn toàn MIỄN PHÍ/,
+    );
+  });
+
+  it("routes a straddling section's bullets to the right categories", () => {
+    const { categories } = parsed();
+    // The meal section's housing answers belong to accommodation, not meals.
+    expect(categories.meals).toMatch(/nhà ăn công ty/);
+    expect(categories.meals).not.toMatch(/ký túc xá/);
+    expect(categories.accommodation).toMatch(/không hỗ trợ/);
+    // The work-environment section's statutory schemes belong to insurance.
+    expect(categories.benefits).toMatch(/áo smock/);
+    expect(categories.insurance).toMatch(/Luật Lao động/);
+  });
+
+  it("renders the LaTeX process arrow as readable prose", () => {
+    expect(parsed().categories.application).toMatch(
+      /Đăng ký ứng tuyển → Phỏng vấn → Khám sức khỏe → Nhận việc \/ Đi làm/,
+    );
+  });
+
+  it("names the categories the brief does not cover instead of inventing them", () => {
+    const brief = parsed();
+    expect(brief.missingCategories).toContain("transportation");
+    expect(brief.categories.transportation).toBeUndefined();
+  });
+
+  it("keeps an unrecognised section visible rather than dropping it", () => {
+    const brief = parsed();
+    expect(brief.unmappedSections).toHaveLength(1);
+    expect(brief.unmappedSections[0].title).toMatch(/Ghi chú riêng/);
+    expect(brief.unmappedSections[0].body).toMatch(/không thuộc danh mục nào/);
+  });
+
+  it("pairs a section's questions with its answers", () => {
+    const { faqEntries } = parsed();
+    expect(faqEntries[0]).toEqual({
+      question: "Bên công ty đang tuyển công việc gì?",
+      answer: "Vị trí tuyển: Công nhân sản xuất (SMT, PCBA, KHO, QA, LQC...).",
+    });
+  });
+
+  it("chooses the by-category mode once the brief fills several categories", () => {
+    expect(parsed().knowledgeMode).toBe("RAG");
+  });
+});
+
+describe("parseProjectBrief — degenerate input", () => {
+  it("returns the empty brief for an empty file", () => {
+    const brief = parseProjectBrief("   \n  ");
+    expect(brief.name).toBe("");
+    expect(brief.knowledgeMode).toBe("DIRECT_CONTEXT");
+    expect(brief.missingCategories).toHaveLength(12);
+  });
+
+  it("leaves the name empty — never a fabricated one — when the brief has none", () => {
+    const brief = parseProjectBrief("## Ghi chú\n\nMột dòng.");
+    expect(brief.name).toBe("");
+    expect(brief.slug).toBe("");
+  });
+});
