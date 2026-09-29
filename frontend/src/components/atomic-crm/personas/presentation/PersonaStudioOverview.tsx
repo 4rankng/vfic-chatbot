@@ -1,6 +1,8 @@
 import { useTranslate, type TranslateFunction } from "ra-core";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { ProgressBarBase } from "@/components/base/progress-indicators/progress-indicators";
+
 import {
   CheckCircle2,
   ChevronDown,
@@ -137,19 +139,22 @@ const PersonaProfileHeader = ({
         </p>
         <div className="persona-studio-status-row">
           <Badge
-            variant="outline"
-            className={
-              persona.is_active
-                ? "persona-studio-badge is-good"
-                : "persona-studio-badge"
-            }
+            type="pill-color"
+            size="md"
+            color={persona.is_active ? "success" : "gray"}
+            className="persona-studio-badge"
           >
             {persona.is_active ? <CheckCircle2 className="size-3" /> : null}
             {persona.is_active
               ? translate("personas.status_default")
               : translate("personas.status_fallback")}
           </Badge>
-          <Badge variant="outline" className="persona-studio-badge">
+          <Badge
+            type="pill-color"
+            size="md"
+            color="gray"
+            className="persona-studio-badge"
+          >
             {getScopeLabel(persona, stats, translate)}
           </Badge>
         </div>
@@ -157,12 +162,14 @@ const PersonaProfileHeader = ({
       <div className="persona-studio-profile-actions">
         <span className="persona-studio-updated">Cập nhật {updatedAt}</span>
         <Button
-          variant="outline"
           type="button"
-          className="persona-overview-edit-action tt-btn-touch"
+          color="secondary"
+          size="md"
+          data-slot="button"
+          className="persona-overview-edit-action tt-btn-touch uu-scope"
           onClick={() => onEdit(persona)}
+          iconLeading={Pencil}
         >
-          <Pencil className="size-3.5" />
           Sửa Agent
         </Button>
       </div>
@@ -205,15 +212,17 @@ const PersonaReadinessSection = ({
           <span>Hồ sơ</span>
           <strong>{readinessPercent}%</strong>
         </div>
-        <progress
-          className="tt-progress tt-progress-success persona-readiness-bar"
+        <ProgressBarBase
           value={readinessPercent}
           max={100}
-          aria-label={`Sẵn sàng ${readinessPercent}%`}
+          className="persona-readiness-bar"
         />
+        <span className="sr-only">Sẵn sàng {readinessPercent}%</span>
         <Badge
-          variant="outline"
-          className={`persona-studio-badge ${readinessPercent >= 100 ? "is-good" : ""}`}
+          type="pill-color"
+          size="md"
+          color={readinessPercent >= 100 ? "success" : "warning"}
+          className="persona-studio-badge"
         >
           {readinessPercent >= 100 ? "Đạt" : "Đang thiếu"}
         </Badge>
@@ -293,12 +302,10 @@ const PersonaPromptSection = ({ bodyMd }: { bodyMd: string }) => {
               </span>
               <span className="persona-prompt-summary-state">
                 <Badge
-                  variant="outline"
-                  className={
-                    section.content
-                      ? "persona-studio-badge is-good"
-                      : "persona-studio-badge"
-                  }
+                  type="pill-color"
+                  size="md"
+                  color={section.content ? "success" : "gray"}
+                  className="persona-studio-badge"
                 >
                   {section.content ? "Đã viết" : "Thiếu"}
                 </Badge>
@@ -335,12 +342,10 @@ const PersonaFollowupSection = ({ persona }: { persona: Persona }) => {
               <div>
                 <strong>{FOLLOWUP_LABELS[key]}</strong>
                 <Badge
-                  variant="outline"
-                  className={
-                    rule?.enabled
-                      ? "persona-studio-badge is-good"
-                      : "persona-studio-badge"
-                  }
+                  type="pill-color"
+                  size="md"
+                  color={rule?.enabled ? "success" : "gray"}
+                  className="persona-studio-badge"
                 >
                   {rule?.enabled ? "Bật" : "Tắt"}
                 </Badge>
@@ -393,7 +398,12 @@ const PersonaScopeSection = ({
           <div className="persona-scope-row">
             <span>Kiểu dùng</span>
             <strong>{adapterModeLabel}</strong>
-            <Badge variant="outline" className="persona-studio-badge is-brand">
+            <Badge
+              type="pill-color"
+              size="md"
+              color={persona.is_active ? "brand" : "gray"}
+              className="persona-studio-badge"
+            >
               {persona.is_active ? "Mặc định" : "Tuỳ chọn"}
             </Badge>
           </div>
@@ -518,8 +528,13 @@ export const PersonaStudioOverview = ({
 
       {!persona.is_active ? (
         <footer className="persona-profile-footer">
-          <Button type="button" onClick={() => onActivate(persona)}>
-            <Zap className="size-3.5" />
+          <Button
+            type="button"
+            data-slot="button"
+            className="uu-scope"
+            onClick={() => onActivate(persona)}
+            iconLeading={Zap}
+          >
             Đặt mặc định
           </Button>
         </footer>

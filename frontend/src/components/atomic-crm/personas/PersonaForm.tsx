@@ -6,13 +6,13 @@ import {
   type ReactNode,
 } from "react";
 import { useGetList, useNotify, useTranslate } from "ra-core";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { Checkbox } from "@/components/base/checkbox/checkbox";
+import { InputBase } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
+import { TextAreaBase } from "@/components/base/textarea/textarea";
+import { Toggle } from "@/components/base/toggle/toggle";
 import { Select as UntitledSelect } from "@/components/base/select/select";
 import type { SelectItemType } from "@/components/base/select/select-shared";
 import {
@@ -20,6 +20,7 @@ import {
   ChevronDown,
   Download,
   FileText,
+  LoaderCircle,
   Upload,
 } from "lucide-react";
 import { importPersona } from "./personaService";
@@ -263,16 +264,18 @@ const PersonaForm = ({
                 *
               </span>
             </Label>
-            <Input
+            <InputBase
               id="persona-name"
+              data-slot="input"
               ref={nameInputRef}
               value={name}
               aria-invalid={nameError ? true : undefined}
-              onChange={(e) => {
-                setName(e.target.value);
+              onChange={(event) => {
+                setName(event.target.value);
                 if (nameError) setNameError(null);
               }}
-              className="h-11 text-control lg:max-w-xl"
+              wrapperClassName="uu-scope h-11 lg:max-w-xl"
+              inputClassName="text-control"
             />
             {nameError ? (
               <p
@@ -352,29 +355,32 @@ const PersonaForm = ({
           <div className="persona-edit-import-actions">
             <Button
               type="button"
-              variant="outline"
-              className="tt-btn-touch"
+              color="secondary"
+              size="md"
+              data-slot="button"
+              className="tt-btn-touch uu-scope"
               onClick={downloadTemplate}
+              iconLeading={Download}
             >
-              <Download className="size-4" />
               Tải mẫu
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className="tt-btn-touch"
-              disabled={importing || !knowledgeBaseId}
+              color="secondary"
+              size="md"
+              data-slot="button"
+              className="tt-btn-touch uu-scope"
+              isDisabled={importing || !knowledgeBaseId}
               aria-busy={importing}
               onClick={() => fileInputRef.current?.click()}
+              iconLeading={
+                importing ? (
+                  <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Upload className="size-4" />
+                )
+              }
             >
-              {importing ? (
-                <span
-                  className="tt-loading tt-loading-spinner tt-loading-sm"
-                  aria-hidden="true"
-                />
-              ) : (
-                <Upload className="size-4" />
-              )}
               {importing ? "Đang nhập..." : "Nhập file"}
             </Button>
             <input
@@ -425,7 +431,9 @@ const PersonaForm = ({
                       </div>
                       <span className="persona-edit-prompt-state">
                         <Badge
-                          variant={completed ? "secondary" : "outline"}
+                          type="pill-color"
+                          size="md"
+                          color={completed ? "success" : "gray"}
                           className="shrink-0"
                         >
                           {completed ? "Đã điền" : "Trống"}
@@ -434,7 +442,7 @@ const PersonaForm = ({
                       </span>
                     </summary>
                     <div className="persona-edit-prompt-content">
-                      <Textarea
+                      <TextAreaBase
                         id={`persona-section-${index}`}
                         aria-labelledby={`persona-section-title-${index}`}
                         value={value}
@@ -461,7 +469,9 @@ const PersonaForm = ({
                       <small>{extraMarkdown.trim().replace(/\s+/g, " ")}</small>
                     </div>
                     <span className="persona-edit-prompt-state">
-                      <Badge variant="secondary">Đã điền</Badge>
+                      <Badge type="pill-color" size="md" color="success">
+                        Đã điền
+                      </Badge>
                       <ChevronDown className="size-4" aria-hidden="true" />
                     </span>
                   </summary>
@@ -469,7 +479,7 @@ const PersonaForm = ({
                     <Label htmlFor="persona-extra-markdown" className="sr-only">
                       Nội dung ngoài mẫu
                     </Label>
-                    <Textarea
+                    <TextAreaBase
                       id="persona-extra-markdown"
                       value={extraMarkdown}
                       onChange={(event) => setExtraMarkdown(event.target.value)}
@@ -500,9 +510,9 @@ const PersonaForm = ({
                           <span>Tính từ tin nhắn cuối của ứng viên</span>
                         </div>
                         <label className="persona-followup-switch-target">
-                          <Switch
-                            checked={rule.enabled}
-                            onCheckedChange={(enabled) =>
+                          <Toggle
+                            isSelected={rule.enabled}
+                            onChange={(enabled) =>
                               updateFollowupRule(score, { enabled })
                             }
                             aria-label={`Bật follow-up ${FOLLOWUP_SCORE_LABELS[score]}`}
@@ -517,8 +527,9 @@ const PersonaForm = ({
                         >
                           Mốc giờ
                         </Label>
-                        <Input
+                        <InputBase
                           id={`followup-cadence-${score}`}
+                          data-slot="input"
                           value={rule.cadence_hours.join(" ")}
                           onChange={(event) =>
                             updateFollowupRule(score, {
@@ -528,7 +539,8 @@ const PersonaForm = ({
                             })
                           }
                           placeholder="VD: 10 22 46"
-                          className="h-11 font-mono text-control"
+                          wrapperClassName="uu-scope h-11"
+                          inputClassName="font-mono text-control"
                         />
                       </div>
 
@@ -538,24 +550,22 @@ const PersonaForm = ({
                         </div>
                         <div className="persona-followup-stage-list">
                           {LEAD_STAGES.map((stage) => (
-                            <label
+                            <Checkbox
                               key={stage.value}
-                              className="persona-followup-stage"
-                            >
-                              <Checkbox
-                                checked={rule.eligible_stages.includes(
+                              className="persona-followup-stage uu-scope [&_p]:min-w-0 [&_p]:truncate"
+                              size="sm"
+                              label={stage.label}
+                              isSelected={rule.eligible_stages.includes(
+                                stage.value,
+                              )}
+                              onChange={(checked) =>
+                                toggleFollowupStage(
+                                  score,
                                   stage.value,
-                                )}
-                                onCheckedChange={(checked) =>
-                                  toggleFollowupStage(
-                                    score,
-                                    stage.value,
-                                    checked === true,
-                                  )
-                                }
-                              />
-                              <span>{stage.label}</span>
-                            </label>
+                                  checked,
+                                )
+                              }
+                            />
                           ))}
                         </div>
                       </div>
@@ -573,10 +583,10 @@ const PersonaForm = ({
                 <FileText className="size-4" />
                 Ghi chú nội bộ
               </Label>
-              <Textarea
+              <TextAreaBase
                 id="persona-notes"
                 value={notes}
-                onChange={(e) => setNotes(e.target.value)}
+                onChange={(event) => setNotes(event.target.value)}
                 rows={4}
                 className="persona-edit-notes"
               />
@@ -588,21 +598,17 @@ const PersonaForm = ({
           {extraActions}
           <Button
             type="submit"
-            className="tt-btn-touch sm:min-w-32"
-            disabled={submitting}
+            data-slot="button"
+            className="tt-btn-touch uu-scope sm:min-w-32"
+            isDisabled={submitting}
             aria-busy={submitting}
+            iconLeading={
+              submitting ? (
+                <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+              ) : undefined
+            }
           >
-            {submitting ? (
-              <>
-                <span
-                  className="tt-loading tt-loading-spinner tt-loading-sm"
-                  aria-hidden="true"
-                />
-                {translate("crm.common.saving")}
-              </>
-            ) : (
-              submitLabel
-            )}
+            {submitting ? translate("crm.common.saving") : submitLabel}
           </Button>
         </footer>
       </form>

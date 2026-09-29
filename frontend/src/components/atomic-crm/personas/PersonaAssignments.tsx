@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNotify, useRefresh } from "ra-core";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Globe2, RefreshCcw, Workflow } from "lucide-react";
+import { Globe2, LoaderCircle, RefreshCcw, Workflow } from "lucide-react";
 import {
   ADAPTER_PROVIDERS,
   type AdapterProvider,
@@ -25,12 +25,6 @@ import {
 interface PersonaAssignmentsProps {
   persona: Persona;
 }
-
-const badgeClassName = (variant: "brand" | "good" | "neutral") => {
-  if (variant === "brand") return "persona-studio-badge is-brand";
-  if (variant === "good") return "persona-studio-badge is-good";
-  return "persona-studio-badge";
-};
 
 export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
   const notify = useNotify();
@@ -192,8 +186,10 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
           <div className="persona-assignment-actions">
             {persona.is_active ? (
               <Badge
-                variant="outline"
-                className="gap-1 border-primary/20 bg-primary/5 text-primary"
+                type="pill-color"
+                size="md"
+                color="brand"
+                className="uu-scope gap-1"
               >
                 <Globe2 className="size-3.5" />
                 Agent mặc định
@@ -201,21 +197,21 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
             ) : (
               <Button
                 type="button"
-                variant="outline"
+                color="secondary"
                 size="sm"
-                className="tt-btn-touch"
+                data-slot="button"
+                className="tt-btn-touch uu-scope"
                 onClick={setGlobalDefault}
-                disabled={activating}
+                isDisabled={activating}
                 aria-busy={activating}
+                iconLeading={
+                  activating ? (
+                    <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <Globe2 className="size-4" />
+                  )
+                }
               >
-                {activating ? (
-                  <span
-                    className="tt-loading tt-loading-spinner tt-loading-sm"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <Globe2 className="size-4" />
-                )}
                 Đặt mặc định
               </Button>
             )}
@@ -254,11 +250,13 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                 <p>{loadError}</p>
                 <Button
                   type="button"
-                  variant="outline"
-                  className="tt-btn-touch"
+                  color="secondary"
+                  size="md"
+                  data-slot="button"
+                  className="tt-btn-touch uu-scope"
                   onClick={() => void loadAssignments(true)}
+                  iconLeading={RefreshCcw}
                 >
-                  <RefreshCcw className="size-4" />
                   Tải lại
                 </Button>
               </div>
@@ -279,8 +277,16 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                       <div className="persona-assignment-row-title">
                         <strong>{assignment.label}</strong>
                         <Badge
-                          variant="outline"
-                          className={badgeClassName(state.badgeVariant)}
+                          type="pill-color"
+                          size="md"
+                          color={
+                            state.badgeVariant === "brand"
+                              ? "brand"
+                              : state.badgeVariant === "good"
+                                ? "success"
+                                : "gray"
+                          }
+                          className="persona-studio-badge"
                         >
                           {missingAssignment ? "Thiếu dữ liệu" : state.badge}
                         </Badge>
@@ -306,30 +312,31 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                     <div className="persona-assignment-row-actions">
                       <Button
                         type="button"
-                        variant="outline"
+                        color="secondary"
                         size="sm"
-                        className="tt-btn-touch"
+                        data-slot="button"
+                        className="tt-btn-touch uu-scope"
                         onClick={() =>
                           void refreshProvider(assignment.provider)
                         }
-                        disabled={feedback.pending}
+                        isDisabled={feedback.pending}
                         aria-busy={feedback.pending}
                         aria-label={`Tải lại trạng thái ${assignment.label}`}
+                        iconLeading={
+                          feedback.pending ? (
+                            <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                          ) : (
+                            <RefreshCcw className="size-4" />
+                          )
+                        }
                       >
-                        {feedback.pending ? (
-                          <span
-                            className="tt-loading tt-loading-spinner tt-loading-sm"
-                            aria-hidden="true"
-                          />
-                        ) : (
-                          <RefreshCcw className="size-4" />
-                        )}
                         Tải lại
                       </Button>
                       <Button
                         type="button"
                         size="sm"
-                        className="tt-btn-touch"
+                        data-slot="button"
+                        className="tt-btn-touch uu-scope"
                         onClick={() =>
                           !state.actionDisabled
                             ? void saveAssignment(
@@ -338,16 +345,15 @@ export const PersonaAssignments = ({ persona }: PersonaAssignmentsProps) => {
                               )
                             : undefined
                         }
-                        disabled={feedback.pending || state.actionDisabled}
+                        isDisabled={feedback.pending || state.actionDisabled}
                         aria-busy={feedback.pending}
                         aria-label={`${state.actionLabel} cho ${assignment.label}`}
+                        iconLeading={
+                          feedback.pending ? (
+                            <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                          ) : undefined
+                        }
                       >
-                        {feedback.pending ? (
-                          <span
-                            className="tt-loading tt-loading-spinner tt-loading-sm"
-                            aria-hidden="true"
-                          />
-                        ) : null}
                         {state.actionLabel}
                       </Button>
                     </div>

@@ -7,7 +7,7 @@ import {
 } from "ra-core";
 import { useNavigate } from "react-router";
 import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 import { PersonaForm, type PersonaValues } from "./PersonaForm";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
@@ -44,12 +44,14 @@ export const PersonaCreate = () => {
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
             <header className="persona-editor-header persona-create-header">
               <Button
-                variant="ghost"
+                type="button"
+                color="tertiary"
                 size="sm"
-                className="persona-create-back"
+                data-slot="button"
+                className="persona-create-back uu-scope"
                 onClick={() => navigate("/personas")}
+                iconLeading={ArrowLeft}
               >
-                <ArrowLeft className="size-4" />
                 Quay lại
               </Button>
               <div className="persona-create-heading">

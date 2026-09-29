@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import "@/index.css";
 import "../conversations/inbox.css";
 import "../integrations/settings.css";
-import "../layout/mobile-workspace.css";
 import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
 
 describe("PersonaList mobile layout", () => {
@@ -42,11 +41,6 @@ describe("PersonaList mobile layout", () => {
               </section>
             </div>
           </main>
-          <nav className="workspace-navigation-mobile">
-            <div className="workspace-navigation-items">
-              <span>Điều hướng</span>
-            </div>
-          </nav>
         </div>
       </TestMessages>,
     );
@@ -61,21 +55,18 @@ describe("PersonaList mobile layout", () => {
     expect(window.getComputedStyle(embeddedContent).overflowY).toBe("visible");
     expect(embeddedContent.scrollHeight).toBe(embeddedContent.clientHeight);
 
+    // Below the rail breakpoint the workspace scrolls with the document, so the
+    // end of a long embedded list stays reachable.
     const scrollingElement = document.scrollingElement!;
     expect(scrollingElement.scrollHeight).toBeGreaterThan(
       scrollingElement.clientHeight,
     );
 
     window.scrollTo(0, scrollingElement.scrollHeight);
-    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     const contentEnd = screen.getByTestId("persona-content-end").element();
-    const mobileNavigation = screen.container.querySelector(
-      ".workspace-navigation-mobile",
-    );
-    expect(mobileNavigation).toBeInstanceOf(HTMLElement);
-    expect(contentEnd.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      (mobileNavigation as HTMLElement).getBoundingClientRect().top,
-    );
+    await expect
+      .poll(() => contentEnd.getBoundingClientRect().bottom)
+      .toBeLessThanOrEqual(scrollingElement.clientHeight);
   });
 });

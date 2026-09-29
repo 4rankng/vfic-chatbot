@@ -4,6 +4,7 @@ import {
   type AdapterProvider,
   type Persona,
 } from "../../types";
+import { CONVERSATION_CHANNEL_LABELS } from "../../conversations/domain/channel-labels";
 
 export type RowFeedback = {
   pending: boolean;
@@ -15,12 +16,6 @@ export const EMPTY_ROW_FEEDBACK: RowFeedback = {
   pending: false,
   success: null,
   error: null,
-};
-
-export const ADAPTER_LABELS: Record<AdapterProvider, string> = {
-  zalo_bot: "Zalo Chatbot",
-  zalo_oa: "Zalo OA",
-  facebook_messenger: "Messenger",
 };
 
 export const createInitialAssignmentFeedback = (): Record<
@@ -40,7 +35,9 @@ export const normalizePersonaAssignments = (
     return (
       existing ?? {
         provider,
-        label: ADAPTER_LABELS[provider],
+        // The one channel-label map every surface reads, so a persona
+        // assignment row and its inbox row cannot be labelled differently.
+        label: CONVERSATION_CHANNEL_LABELS[provider],
         persona_id: null,
         effective_persona_id: null,
         is_default: false,

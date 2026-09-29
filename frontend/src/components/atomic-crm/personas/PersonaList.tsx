@@ -7,7 +7,8 @@ import {
   useRefresh,
   useTranslate,
 } from "ra-core";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
+import { InputBase } from "@/components/base/input/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ListPagination } from "@/components/admin/list-pagination";
 import {
@@ -156,10 +157,11 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
             action={
               <Button
                 type="button"
-                className="h-9 rounded-[8px] text-button"
+                data-slot="button"
+                className="uu-scope h-9 rounded-[8px]"
                 onClick={() => redirect("create", "personas")}
+                iconLeading={Plus}
               >
-                <Plus className="size-4" aria-hidden="true" />
                 {translate("personas.create_agent")}
               </Button>
             }
@@ -187,22 +189,24 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                   </div>
                   <Button
                     type="button"
-                    className="persona-create-action tt-btn-touch"
+                    data-slot="button"
+                    className="persona-create-action tt-btn-touch uu-scope"
                     onClick={() => redirect("create", "personas")}
+                    iconLeading={Plus}
                   >
-                    <Plus className="size-4" aria-hidden="true" />
                     {translate("personas.create_agent")}
                   </Button>
                 </div>
 
-                <label className="tt-input persona-studio-command">
-                  <Search className="size-4" />
-                  <input
+                <label className="persona-studio-command">
+                  <Search className="size-4" aria-hidden="true" />
+                  <InputBase
                     type="search"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Tìm Agent"
                     aria-label="Tìm Agent"
+                    wrapperClassName="min-w-0 flex-1 rounded-none bg-transparent! shadow-none! ring-0!"
                   />
                 </label>
 

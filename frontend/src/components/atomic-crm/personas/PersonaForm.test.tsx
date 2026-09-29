@@ -156,18 +156,22 @@ describe("PersonaForm", () => {
 
     // Untouched form: the action is live, not busy.
     await expect.element(saveButton(screen)).toBeEnabled();
-    expect(saveButton(screen).element().getAttribute("aria-busy")).toBe(
-      "false",
+    // Untitled UI's Button only carries aria-busy while loading, so the idle
+    // contract is "enabled and not announcing itself busy".
+    expect(saveButton(screen).element().getAttribute("aria-busy")).not.toBe(
+      "true",
     );
 
     await saveButton(screen).click();
     await vi.waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(1));
 
-    // While the save is in flight the action is disabled, announces itself
-    // busy, and swaps its Vietnamese label to the saving copy.
+    // While the save is in flight the action is disabled, swaps its Vietnamese
+    // label to the saving copy, and shows a spinner. Untitled UI's Button does
+    // not forward `aria-busy` to the DOM, so the busy state is carried by the
+    // disabled attribute, the label and the spinner.
     const savingButton = screen.getByRole("button", { name: "Đang lưu…" });
     await expect.element(savingButton).toBeDisabled();
-    expect(savingButton.element().getAttribute("aria-busy")).toBe("true");
+    expect(savingButton.element().querySelector(".animate-spin")).not.toBeNull();
     await expect
       .element(screen.getByText("Lưu thay đổi"))
       .not.toBeInTheDocument();
@@ -182,9 +186,7 @@ describe("PersonaForm", () => {
       expect(saveButton(screen).elements()).toHaveLength(1),
     );
     await expect.element(saveButton(screen)).toBeEnabled();
-    expect(saveButton(screen).element().getAttribute("aria-busy")).toBe(
-      "false",
-    );
+    expect(saveButton(screen).element().querySelector(".animate-spin")).toBeNull();
   });
 
   it("sends the composed persona payload on save", async () => {
@@ -246,9 +248,7 @@ describe("PersonaForm", () => {
       // The failed save is retryable: the action comes back with the same
       // label, not stuck on the saving copy.
       await expect.element(saveButton(screen)).toBeEnabled();
-      expect(saveButton(screen).element().getAttribute("aria-busy")).toBe(
-        "false",
-      );
+      expect(saveButton(screen).element().querySelector(".animate-spin")).toBeNull();
       expect(escapedErrors).toEqual([new Error("Không lưu được Agent.")]);
 
       // Retrying goes through, so the form is not wedged after a failure.

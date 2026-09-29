@@ -7,8 +7,8 @@ import {
   useRefresh,
   useTranslate,
 } from "ra-core";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/base/buttons/button";
+import { Badge } from "@/components/base/badges/badges";
 import {
   ArrowLeft,
   BotMessageSquare,
@@ -78,12 +78,13 @@ const PersonaEditContent = () => {
             <div className="persona-editor-hero-main">
               <Button
                 type="button"
-                variant="ghost"
+                color="tertiary"
                 size="sm"
-                className="persona-editor-back"
+                data-slot="button"
+                className="persona-editor-back uu-scope"
                 onClick={() => redirect("/personas")}
+                iconLeading={ArrowLeft}
               >
-                <ArrowLeft className="size-4" />
                 Hồ sơ Agent
               </Button>
               <div className="persona-editor-title-row">
@@ -95,8 +96,10 @@ const PersonaEditContent = () => {
                     <h1>Chỉnh sửa Agent</h1>
                     {persona.is_active && (
                       <Badge
-                        variant="outline"
-                        className="persona-studio-badge is-good"
+                        type="pill-color"
+                        size="md"
+                        color="success"
+                        className="persona-studio-badge"
                       >
                         <CheckCircle2 className="size-3.5" />
                         Đang bật
@@ -143,18 +146,22 @@ const PersonaEditContent = () => {
                 {!persona.is_active ? (
                   <Button
                     type="button"
-                    variant="outline"
-                    className="tt-btn-touch"
+                    color="secondary"
+                    size="md"
+                    data-slot="button"
+                    className="tt-btn-touch uu-scope"
                     onClick={onActivate}
+                    iconLeading={Zap}
                   >
-                    <Zap className="size-4" />
                     Kích hoạt
                   </Button>
                 ) : null}
                 <Button
                   type="button"
-                  variant="ghost"
-                  className="tt-btn-touch"
+                  color="tertiary"
+                  size="md"
+                  data-slot="button"
+                  className="tt-btn-touch uu-scope"
                   onClick={() => redirect("/personas")}
                 >
                   {translate("ra.action.cancel")}
