@@ -1,12 +1,12 @@
 import { formatCompactDuration as fmtShortMs } from "../../../reporting/domain/performanceDiagnostics";
-import { conversationChannelLabel } from "../../../conversations/domain/channel-labels";
+import { conversationChannelLabel } from "../../../types";
 import type { PerfMetrics } from "../../usePerformanceStats";
 
 /**
  * "So sánh kênh giao gửi" — per-channel delivery, timed to the moment the
  * provider accepted the request rather than the moment the candidate saw it.
  *
- * The channel name comes from `conversations/domain/channel-labels`, the single
+ * The channel name comes from the shared `types` module, the single
  * map every channel-naming surface reads, so this matrix and the inbox can never
  * label the same provider two different ways.
  */

@@ -4,7 +4,7 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 
-import type { ConversationChannelProvider } from "./domain/conversation-list-filters";
+import type { ConversationChannelProvider } from "../types";
 
 const { mockApiJson } = vi.hoisted(() => ({
   mockApiJson: vi.fn(),
@@ -38,8 +38,8 @@ describe("ChannelAdapterSelector", () => {
   it("renders an exclusive Vietnamese radio selector and switches scope", async () => {
     // Compact conversation toolbar keeps the visual control at the 44px
     // accessible touch-target minimum rather than the previous 48px tile.
-    // Pin a mobile viewport so the @media (max-width: 767px) rules in
-    // tailkit-redesign.css are the ones under test.
+    // Pin a mobile viewport so the inbox sheet's `@media (max-width: 767px)`
+    // rules are the ones under test.
     await page.viewport(414, 896);
     const onProviderChange = vi.fn();
     const screen = await render(

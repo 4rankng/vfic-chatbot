@@ -12,9 +12,9 @@ import {
 } from "@/components/ui/tooltip";
 import {
   type ConversationChannelProvider,
-  getChannelProviderSearchParams,
-} from "./domain/conversation-list-filters";
-import { CONVERSATION_CHANNEL_LABELS } from "./domain/channel-labels";
+  CONVERSATION_CHANNEL_LABELS,
+} from "../types";
+import { getChannelProviderSearchParams } from "./domain/conversation-list-filters";
 
 type ChannelAdapterProvider = ConversationChannelProvider;
 

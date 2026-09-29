@@ -2,9 +2,9 @@ import {
   ADAPTER_PROVIDERS,
   type AdapterPersonaAssignment,
   type AdapterProvider,
+  CONVERSATION_CHANNEL_LABELS,
   type Persona,
 } from "../../types";
-import { CONVERSATION_CHANNEL_LABELS } from "../../conversations/domain/channel-labels";
 
 export type RowFeedback = {
   pending: boolean;

@@ -1,3 +1,8 @@
+import {
+  isConversationChannelProvider,
+  type ConversationChannelProvider,
+} from "../../types";
+
 const ATTENTION_REASON_KEYS = new Set([
   "DELIVERY_REVIEW",
   "HUMAN_ESCALATION",
@@ -10,27 +15,9 @@ const ATTENTION_REASON_KEYS = new Set([
   "STALLED",
 ]);
 
-export const CONVERSATION_CHANNEL_PROVIDERS = [
-  "zalo_bot",
-  "zalo_oa",
-  "facebook_messenger",
-  // The employee-support OA: provider zalo_oa, narrowed to the linked account.
-  // Only admins can read those threads (server-side scope).
-  "tingting_oa",
-] as const;
-
-export type ConversationChannelProvider =
-  (typeof CONVERSATION_CHANNEL_PROVIDERS)[number];
-
 export type SearchParameterReader = {
   get(name: string): string | null;
 };
-
-export const isConversationChannelProvider = (
-  value: string | null,
-): value is ConversationChannelProvider =>
-  value !== null &&
-  CONVERSATION_CHANNEL_PROVIDERS.some((provider) => provider === value);
 
 export const getEffectiveConversationChannelProvider = (
   searchParams: SearchParameterReader,

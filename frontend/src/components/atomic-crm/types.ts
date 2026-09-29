@@ -459,3 +459,50 @@ export const LEAD_SCORES = [
 ] as const;
 
 export type LeadScoreValue = (typeof LEAD_SCORES)[number]["value"];
+
+// Conversation-channel vocabulary — the provider ids the API puts on a
+// conversation row and the one Vietnamese label per channel. Every surface
+// that names a channel — the inbox adapter selector, the notification rows,
+// the performance adapter matrix and the persona assignment rows — reads this
+// map, so a channel is never labelled two different ways. It lives here (the
+// shared module feature `domain` layers may import) because the persona domain
+// needs it and the architecture test keeps feature domains inward-only.
+export const CONVERSATION_CHANNEL_PROVIDERS = [
+  "zalo_bot",
+  "zalo_oa",
+  "facebook_messenger",
+  // The employee-support OA: provider zalo_oa, narrowed to the linked account.
+  // Only admins can read those threads (server-side scope).
+  "tingting_oa",
+] as const;
+
+export type ConversationChannelProvider =
+  (typeof CONVERSATION_CHANNEL_PROVIDERS)[number];
+
+export const isConversationChannelProvider = (
+  value: string | null,
+): value is ConversationChannelProvider =>
+  value !== null &&
+  CONVERSATION_CHANNEL_PROVIDERS.some((provider) => provider === value);
+
+export const CONVERSATION_CHANNEL_LABELS: Record<
+  ConversationChannelProvider,
+  string
+> = {
+  zalo_bot: "Zalo Chatbot",
+  zalo_oa: "Zalo OA",
+  facebook_messenger: "Messenger",
+  // The employee-support OA: provider zalo_oa, narrowed to the linked account.
+  tingting_oa: "Zalo OA TingTing (hỗ trợ nhân viên)",
+};
+
+/**
+ * Label for a raw provider string from the API. Unknown or absent providers
+ * read as a neutral channel rather than as an empty cell.
+ */
+export const conversationChannelLabel = (
+  provider: string | null | undefined,
+): string =>
+  isConversationChannelProvider(provider ?? null)
+    ? CONVERSATION_CHANNEL_LABELS[provider as ConversationChannelProvider]
+    : "Kênh khác";

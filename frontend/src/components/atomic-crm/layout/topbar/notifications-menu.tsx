@@ -8,7 +8,7 @@ import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { Dropdown } from "@/components/base/dropdown/dropdown";
 
-import { conversationChannelLabel } from "../../conversations/domain/channel-labels";
+import { conversationChannelLabel } from "../../types";
 import { formatElapsed } from "../../dashboard/attentionDashboard";
 import { useNeedsAttention, type NeedsAttentionRow } from "./useNeedsAttention";
 
