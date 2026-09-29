@@ -92,12 +92,18 @@ const BRIEF = `# PHIẾU THU THẬP
  * Hand the component a real File through the hidden input, the way a pick does:
  * the input's `files` list plus a bubbling `change`. The component reads it via
  * `File.text()`, so the payload is a genuine File, not a stubbed handler.
+ * `filename`/`type` let a test pick the file shape under test.
  */
-const uploadBrief = (screen: CreateForm, text: string = BRIEF) => {
+const uploadBrief = (
+  screen: CreateForm,
+  text: string = BRIEF,
+  filename: string = "phiếu 4P.md",
+  type: string = "text/markdown",
+) => {
   const input =
     screen.container.querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error("the brief import renders no file input");
-  const file = new File([text], "phiếu 4P.md", { type: "text/markdown" });
+  const file = new File([text], filename, { type });
   // A real `FileList` — `input.files` rejects a plain array.
   const transfer = new DataTransfer();
   transfer.items.add(file);
@@ -168,11 +174,11 @@ describe("ProjectCreate", () => {
   it("asks for a name, a derived slug, aliases and roles — and no knowledge mode", async () => {
     const screen = await render(<ProjectCreate />);
 
-    await expect.element(screen.getByLabelText("Tên dự án *")).toBeVisible();
-    await expect.element(screen.getByLabelText("Mã dự án")).toBeVisible();
-    await expect.element(screen.getByLabelText("Tên gọi khác")).toBeVisible();
+    await expect.element(screen.getByLabelText(/^Tên dự án/)).toBeVisible();
+    await expect.element(screen.getByLabelText(/^Mã dự án/)).toBeVisible();
+    await expect.element(screen.getByLabelText(/^Tên gọi khác/)).toBeVisible();
     await expect
-      .element(screen.getByLabelText("Vị trí tuyển dụng *"))
+      .element(screen.getByLabelText(/^Vị trí tuyển dụng/))
       .toBeVisible();
     // The mode radio is gone: the ingest pipeline decides the shape.
     expect(screen.container.querySelector('input[type="radio"]')).toBeNull();
@@ -181,10 +187,10 @@ describe("ProjectCreate", () => {
   it("derives the slug from the name the recruiter typed", async () => {
     const screen = await render(<ProjectCreate />);
 
-    await screen.getByLabelText("Tên dự án *").fill("LG Display Hải Phòng");
+    await screen.getByLabelText(/^Tên dự án/).fill("LG Display Hải Phòng");
 
     await expect
-      .element(screen.getByLabelText("Mã dự án"))
+      .element(screen.getByLabelText(/^Mã dự án/))
       .toHaveValue("lg-display-hai-phong");
   });
 });
@@ -245,13 +251,13 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
 
   it("fills the fields from the brief and leaves the typed name alone", async () => {
     const screen = await render(<ProjectCreate />);
-    await screen.getByLabelText("Tên dự án *").fill("Tên tôi tự gõ");
+    await screen.getByLabelText(/^Tên dự án/).fill("Tên tôi tự gõ");
     uploadBrief(screen);
 
     await vi.waitFor(() => expect(mocks.create).toHaveBeenCalled());
     expect(mocks.create.mock.calls[0][1].data.name).toBe("Tên tôi tự gõ");
     await expect
-      .element(screen.getByLabelText("Tên gọi khác"))
+      .element(screen.getByLabelText(/^Tên gọi khác/))
       .toHaveValue("4P Electronics, 4P Hải Phòng");
   }, 20000);
 
@@ -313,7 +319,7 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     );
 
     await screen
-      .getByLabelText("Vị trí tuyển dụng *")
+      .getByLabelText(/^Vị trí tuyển dụng/)
       .fill("Kiểm tra chất lượng");
     await expect
       .element(screen.getByText(/Danh sách vị trí đã sửa/))
@@ -351,7 +357,7 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
   it("refuses to activate a project with no role to advertise", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen, "Tên dự án: Dự án trống\n");
-    await screen.getByLabelText("Vị trí tuyển dụng *").fill("   ");
+    await screen.getByLabelText(/^Vị trí tuyển dụng/).fill("   ");
 
     await vi.waitFor(
       () =>
@@ -368,4 +374,39 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
       { type: "warning" },
     );
   }, 20000);
+
+  it("parses a plain-text (.txt) brief instead of demanding markdown", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(
+      screen,
+      "Tên dự án: Dự án văn bản thuần\n",
+      "phieu-thong-tin.txt",
+      "text/plain",
+    );
+
+    // Reaching the draft-create call with the parsed name proves the .txt
+    // pick went through parseProjectBrief — no .md wall in the way.
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    expect(mocks.create.mock.calls[0][1].data.name).toBe("Dự án văn bản thuần");
+  });
+
+  it.each([
+    ["bieu-mau.pdf", "application/pdf"],
+    ["logo.png", "image/png"],
+    [
+      "phieu.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ],
+  ])(
+    "rejects the non-text %s with the text-file message, before any read",
+    async (filename, type) => {
+      const screen = await render(<ProjectCreate />);
+      uploadBrief(screen, "not a brief", filename, type);
+
+      await expect
+        .element(screen.getByRole("alert"))
+        .toHaveTextContent("Chỉ chấp nhận tệp văn bản.");
+      expect(mocks.create).not.toHaveBeenCalled();
+    },
+  );
 });

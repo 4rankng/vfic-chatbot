@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { FileText, Upload } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 import {
   parseProjectBrief,
   type ProjectBrief,
@@ -23,8 +23,16 @@ type Props = {
 
 /** Guard rail, not a parser: a brief is a document a person typed, so anything
  *  wildly past a brief's size is a mis-drop, and reading it would freeze the
- *  tab. `.md`/`.txt` is what the knowledge API accepts for a text upload. */
+ *  tab. Any text shape is accepted; markdown is the recommended format. */
 const MAX_BYTES = 2 * 1024 * 1024;
+
+/** Clearly non-text shapes — binary documents, images, media, archives — by
+ *  extension or by MIME type. A .md/.txt file, one with no extension, or one
+ *  with an unknown extension is text the parser gets to judge. */
+const BINARY_NAME =
+  /\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|png|jpe?g|gif|bmp|tiff?|ico|webp|mp3|mp4|mov|avi|wav|ogg|flac|zip|rar|7z|tar|gz|exe|dmg|apk|bin)$/i;
+const BINARY_TYPE =
+  /^(image|audio|video|font)\/|^application\/(pdf|zip|gzip|x-tar|x-rar-compression|x-7z-compressed|msword|vnd\.ms-|vnd\.openxmlformats-|vnd\.oasis\.)/i;
 
 /**
  * ProjectBriefImport — the recruiter's "I already wrote it down" path.
@@ -49,6 +57,13 @@ export const ProjectBriefImport = ({
   const read = async (file?: File) => {
     if (!file) return;
     setError("");
+    // Text files only, by product ruling: every text shape is parsed —
+    // markdown is just the recommended format — while a clearly binary pick
+    // (pdf, image, office) is rejected before any read.
+    if (BINARY_NAME.test(file.name) || BINARY_TYPE.test(file.type)) {
+      setError("Chỉ chấp nhận tệp văn bản.");
+      return;
+    }
     if (file.size > MAX_BYTES) {
       setError("Tệp quá lớn. Hãy tải lên phiếu thông tin dưới 2 MB.");
       return;
@@ -59,13 +74,13 @@ export const ProjectBriefImport = ({
       const parsed = parseProjectBrief(text);
       if (!parsed.name && !parsed.categories.jobs) {
         setError(
-          "Không đọc được nội dung dự án từ tệp này. Hãy kiểm tra lại tệp .md hoặc .txt.",
+          "Không đọc được nội dung dự án từ tệp này. Hãy kiểm tra lại tệp văn bản.",
         );
         return;
       }
       onImported(parsed, file.name, file);
     } catch {
-      setError("Không đọc được tệp. Hãy thử lại với tệp .md hoặc .txt.");
+      setError("Không đọc được tệp. Hãy thử lại với tệp văn bản.");
     } finally {
       setReading(false);
       // Allow re-picking the same file after an edit.
@@ -85,26 +100,39 @@ export const ProjectBriefImport = ({
         >
           Đã có sẵn phiếu thông tin?
         </h2>
-        <Button type="button" variant="outline" size="sm" asChild>
-          <label>
-            <Upload className="size-4" aria-hidden="true" />
-            {reading && busy ? "Đang nạp…" : "Nhập từ file"}
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".md,.txt,text/markdown,text/plain"
-              className="sr-only"
-              aria-label="Chọn tệp phiếu thông tin dự án"
-              disabled={reading || busy}
-              onChange={(event) => void read(event.target.files?.[0])}
-            />
-          </label>
+        {/*
+          The file affordance is a Untitled UI button plus a visually hidden
+          input, not a `<label>` wrapped in a button: the library's `Button` is
+          a React Aria button with no `asChild`, and the picker is opened by
+          `click()` on the input so the control's role, name and disabled state
+          stay the button's.
+        */}
+        <Button
+          type="button"
+          color="secondary"
+          size="sm"
+          iconLeading={Upload}
+          isLoading={reading && busy}
+          showTextWhileLoading
+          isDisabled={reading || busy}
+          onClick={() => inputRef.current?.click()}
+        >
+          {reading && busy ? "Đang nạp…" : "Nhập từ file"}
         </Button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".md,.txt,.markdown,text/plain,text/markdown"
+          className="sr-only"
+          aria-label="Chọn tệp phiếu thông tin dự án"
+          disabled={reading || busy}
+          onChange={(event) => void read(event.target.files?.[0])}
+        />
       </div>
       <p className="text-helper text-muted-foreground">
-        Tải lên một tệp .md hoặc .txt. Ngay khi chọn tệp, hệ thống tạo dự án
-        nháp và bắt đầu nạp kiến thức — bạn vẫn xem lại và sửa trước khi bấm
-        «Tạo dự án».
+        Tải lên một tệp văn bản (.md là định dạng được khuyến nghị). Ngay khi
+        chọn tệp, hệ thống tạo dự án nháp và bắt đầu nạp kiến thức — bạn vẫn xem
+        lại và sửa trước khi bấm «Tạo dự án».
       </p>
       {error ? (
         <p role="alert" className="text-helper text-destructive">

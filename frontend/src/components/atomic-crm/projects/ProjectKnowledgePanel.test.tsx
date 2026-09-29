@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type * as RaCore from "ra-core";
 import type { ReactElement, ReactNode } from "react";
 import { render } from "vitest-browser-react";
 import { page } from "vitest/browser";
@@ -32,12 +33,12 @@ const mocks = vi.hoisted(() => ({
   deleteSinglePageExternalSource: vi.fn(),
   replaceProjectSinglePage: vi.fn(),
   replaceProjectKnowledgeCategory: vi.fn(),
-  uploadProjectKnowledgeCategory: vi.fn(),
   listExternalSources: vi.fn(),
 }));
 
-vi.mock("ra-core", () => ({
+vi.mock("ra-core", async (importOriginal) => ({
   // The component under test reads its labels from the Vietnamese catalog.
+  ...(await importOriginal<typeof RaCore>()),
   useTranslate: () => testI18nProvider.translate,
   useDataProvider: () => ({ update: vi.fn() }),
   useNotify: () => mocks.notify,
@@ -57,11 +58,12 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
   deleteSinglePageExternalSource: mocks.deleteSinglePageExternalSource,
   replaceProjectSinglePage: mocks.replaceProjectSinglePage,
   replaceProjectKnowledgeCategory: mocks.replaceProjectKnowledgeCategory,
-  uploadProjectKnowledgeCategory: mocks.uploadProjectKnowledgeCategory,
   listExternalSources: mocks.listExternalSources,
 }));
 
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
+// The real recruiter brief the ingestion contract is proven against.
+import amtranBrief from "./domain/fixtures/amtran-vsip-hai-phong.md?raw";
 import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
 const project: Project = {
@@ -126,6 +128,9 @@ describe("ProjectKnowledgePanel", () => {
       data: categories,
       total: categories.length,
     });
+    mocks.getProjectKnowledgeCategorySource.mockRejectedValue(
+      new ApiError(404, "Chưa có dữ liệu"),
+    );
     mocks.listSinglePageExternalSources.mockResolvedValue([]);
     mocks.listExternalSources.mockResolvedValue([]);
     mocks.getProjectKnowledgeCategoryTemplate.mockImplementation(
@@ -531,7 +536,7 @@ describe("ProjectKnowledgePanel", () => {
     );
     expect(screen.container.textContent).not.toContain("Xóa dữ liệu mục");
     await expect
-      .element(screen.getByRole("button", { name: "Tải file YAML" }))
+      .element(screen.getByText("Nhập từ tệp văn bản (.md khuyến nghị)"))
       .toBeVisible();
     await expect
       .element(
@@ -680,18 +685,28 @@ describe("ProjectKnowledgePanel", () => {
     const navigation = screen.container.querySelector(
       ".project-category-navigation",
     );
-    const mobileSelector = screen.getByLabelText("Chọn danh mục kiến thức");
+    // The phone picker is a Untitled UI `Select`; the console class is what
+    // shows and hides it, so this asserts the control it wraps is on screen.
+    const mobileSelector = screen.container.querySelector(
+      ".project-category-mobile-select",
+    );
     const detail = screen.container.querySelector("#project-category-detail");
     expect(workspace).toBeInstanceOf(HTMLElement);
     expect(navigation).toBeInstanceOf(HTMLElement);
     expect(detail).toBeInstanceOf(HTMLElement);
+    expect(mobileSelector).toBeInstanceOf(HTMLElement);
 
     const workspaceStyle = window.getComputedStyle(workspace as HTMLElement);
     const navigationBounds = (
       navigation as HTMLElement
     ).getBoundingClientRect();
     const detailBounds = (detail as HTMLElement).getBoundingClientRect();
-    await expect.element(mobileSelector).toBeVisible();
+    expect(window.getComputedStyle(mobileSelector as HTMLElement).display).toBe(
+      "block",
+    );
+    expect(
+      (mobileSelector as HTMLElement).getBoundingClientRect().height,
+    ).toBeGreaterThan(0);
     expect(workspaceStyle.display).toBe("block");
     expect(detailBounds.top).toBeGreaterThanOrEqual(navigationBounds.bottom);
     expect(detailBounds.left).toBe(navigationBounds.left);
@@ -753,6 +768,144 @@ describe("ProjectKnowledgePanel", () => {
     await expect
       .element(compensationEditor)
       .toHaveValue("CURRENT COMPENSATION");
+  });
+
+  it("ingests a markdown brief through the revision pipeline, jobs first", async () => {
+    mocks.getProjectKnowledgeCategorySource.mockRejectedValue(
+      new ApiError(404, "Chưa có dữ liệu"),
+    );
+    mocks.replaceProjectKnowledgeCategory.mockImplementation(
+      async (_projectId: string, key: string) => ({
+        revision: { id: `rev-${key}` },
+      }),
+    );
+    // The ingest chain must await real activation: every catalog poll reports
+    // each written revision as ACTIVE, so nothing stalls.
+    mocks.getProjectKnowledgeCategories.mockImplementation(async () => {
+      const rows = (
+        [
+          "jobs",
+          "compensation",
+          "requirements",
+          "work_schedules",
+          "benefits",
+          "accommodation",
+          "meals",
+          "transportation",
+          "insurance",
+          "application",
+          "contacts",
+          "faq",
+        ] as const
+      ).map((key) => ({
+        key,
+        label_vi: key,
+        active_revision_id: `rev-${key}`,
+        latest_revision_id: `rev-${key}`,
+        status: "ACTIVE",
+      }));
+      return { data: rows, total: rows.length };
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("the panel renders no brief input");
+    const file = new File([amtranBrief], "phieu-amtran.md", {
+      type: "text/markdown",
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(() =>
+      expect(mocks.replaceProjectKnowledgeCategory).toHaveBeenCalled(),
+    );
+
+    // The chain awaits each activation (2 s poll cadence), so the batch takes
+    // a few seconds before the done report appears.
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByText(/Đã nạp xong 2 phần kiến thức/))
+          .toBeVisible(),
+      { timeout: 20000 },
+    );
+
+    const keys = mocks.replaceProjectKnowledgeCategory.mock.calls.map(
+      (call) => call[1],
+    );
+    // jobs leads the batch — every other write may reference its rows.
+    expect(keys[0]).toBe("jobs");
+    // Only what the brief genuinely carries is written; the rest is named.
+    expect(keys).toEqual(["jobs", "faq"]);
+    const jobsYaml = mocks.replaceProjectKnowledgeCategory.mock.calls[0][3];
+    expect(jobsYaml).toContain("Nhân viên lắp ráp linh kiện điện tử");
+    expect(jobsYaml).not.toContain("vacancies");
+
+    await expect.element(screen.getByText(/Cần nhập tay: /)).toBeVisible();
+    expect(confirm).toHaveBeenCalledWith(
+      "Phiếu sẽ thay thế dữ liệu của các mục có trong tệp sau khi kiểm tra. Tiếp tục?",
+    );
+    confirm.mockRestore();
+  });
+
+  it("parses a plain-text (.txt) brief instead of demanding markdown", async () => {
+    // Declining the overwrite confirm keeps this a parser test: reaching the
+    // dialog proves the .txt pick passed the text-file guard and went through
+    // parseProjectBrief + planBriefKnowledge.
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("the panel renders no brief input");
+    const file = new File([amtranBrief], "phieu-amtran.txt", {
+      type: "text/plain",
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalled());
+    expect(screen.container.textContent).not.toContain("Chỉ chấp nhận tệp");
+    expect(mocks.replaceProjectKnowledgeCategory).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it("rejects a non-text file with the text-file message, before any read", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("the panel renders no brief input");
+    const file = new File(["binary payload"], "phieu-brief.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await expect
+      .element(screen.getByText("Chỉ chấp nhận tệp văn bản."))
+      .toBeVisible();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(mocks.replaceProjectKnowledgeCategory).not.toHaveBeenCalled();
+    confirm.mockRestore();
   });
 
   it("brings the selected category detail into focus on a small screen", async () => {
