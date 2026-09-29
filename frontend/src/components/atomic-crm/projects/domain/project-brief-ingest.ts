@@ -162,6 +162,112 @@ const toRoleList = (value: string): string[] =>
     })
     .filter(Boolean);
 
+// ── raw-brief normalization: HTML tables and template samples ──────────────
+
+/** The markers the intake template labels its own demonstration material with
+ *  ("Nội dung mẫu tham khảo:", a "Ví dụ mẫu: …" column). Matching the marker
+ *  text — never a file name — is what keeps the template's sample projects
+ *  (LG Display, Rorze…) out of the knowledge a real project ships with. */
+const EXAMPLE_MARKERS: readonly string[] = ["mau tham khao", "vi du mau"];
+
+const carriesExampleMarker = (value: string): boolean => {
+  const folded = fold(value);
+  return EXAMPLE_MARKERS.some((marker) => folded.includes(marker));
+};
+
+const decodeEntities = (value: string): string =>
+  value
+    .replace(/&#(\d{1,7});/g, (_match, code: string) =>
+      String.fromCodePoint(Number(code)),
+    )
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+
+/** One cell's text: tags become line breaks and bullets, entities decode, so a
+ *  `.docx`-converted HTML table reads like markdown the recruiter typed. */
+const unwrapHtmlCell = (html: string): string =>
+  decodeEntities(
+    html
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<li[^>]*>/gi, "\n- ")
+      .replace(/<\/(?:p|div|li|tr|ul|ol|h[1-6])>/gi, "\n")
+      // Bounded so a malformed tag cannot sweep the whole table into one match.
+      .replace(/<[^>]{1,300}>/g, ""),
+  )
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+
+/** `<table>` markup → the pipe rows the table readers already understand. The
+ *  lazy bounded patterns keep the pass linear in the brief's size. */
+const unwrapHtmlTables = (text: string): string =>
+  text.replace(/<table[\s\S]*?<\/table\s*>/gi, (tableHtml) => {
+    const cellsOf = (row: string): string[] =>
+      (row.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi) ?? []).map(unwrapHtmlCell);
+    const rows = tableHtml.match(/<tr[\s\S]*?<\/tr\s*>/gi) ?? [];
+    // A header cell naming an example column ("Ví dụ mẫu: …") starts the
+    // demonstration columns: everything from there on is the form's sample,
+    // so those cells are dropped wholesale before they can become data.
+    let exampleFrom = -1;
+    const [headerRow] = rows;
+    if (headerRow) {
+      cellsOf(headerRow).forEach((cell, index) => {
+        if (exampleFrom === -1 && carriesExampleMarker(cell)) {
+          exampleFrom = index;
+        }
+      });
+    }
+    const rendered = rows.map((row) => {
+      const cells = cellsOf(row).filter(
+        (_cell, index) => exampleFrom === -1 || index < exampleFrom,
+      );
+      if (cells.length === 0) return "";
+      // Intra-cell line breaks ride as `<br>`, which the cell readers unfold.
+      return `| ${cells
+        .map((cell) => cell.replace(/\n+/g, "<br>"))
+        .join(" | ")} |`;
+    });
+    return `\n${rendered.filter(Boolean).join("\n")}\n`;
+  });
+
+/** Removes the template's sample blockquotes (`> **Nội dung mẫu tham khảo:**`
+ *  followed by `> - *LG Display:* …` lines): a `>`-quote run whose first
+ *  content line names an example marker is demonstration material. */
+const dropExampleBlocks = (text: string): string => {
+  const kept: string[] = [];
+  let inExample = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (!/^\s*>/.test(line)) {
+      inExample = false;
+      kept.push(line);
+      continue;
+    }
+    const content = toPlainText(line.replace(/^\s*>\s?/, ""));
+    if (!inExample && carriesExampleMarker(content)) inExample = true;
+    if (!inExample) kept.push(line);
+  }
+  return kept.join("\n");
+};
+
+/** The intake form's empty overview cells arrive filled with the template's
+ *  own instruction ("Tên gọi phổ biến người lao động hay hỏi") — a description
+ *  of WHAT to enter, not data. Reading one as a value would put an instruction
+ *  into the knowledge, so it is treated as no-data (the field stays empty and
+ *  is reported as needing a person) instead. */
+const PLACEHOLDER_VALUE_PATTERNS: readonly RegExp[] = [
+  /ten goi pho bien.*hay hoi/,
+  /gioi thieu ngan gon.*cong viec/,
+];
+
+const isPlaceholderValue = (value: string): boolean => {
+  const folded = fold(toPlainText(value));
+  return PLACEHOLDER_VALUE_PATTERNS.some((pattern) => pattern.test(folded));
+};
+
 // ── section classification ─────────────────────────────────────────────────
 
 /** Heading title → the category it owns. Matched on folded text so marks do
@@ -171,16 +277,28 @@ const CATEGORY_BY_HEADING: readonly (readonly [
   RegExp,
   ProjectKnowledgeCategory,
 ])[] = [
-  [/vi tri (tuyen|tuyen dung)|cong viec cu the|dinh nghe/, "jobs"],
+  [
+    /vi tri (tuyen( dung)?|cong viec)|cong viec cu the|mo ta cong viec|dinh nghe/,
+    "jobs",
+  ],
   [/yeu cau|doi voi ung vien|ho so giay to/, "requirements"],
-  [/tien luong|phu cap|tang ca|thu nhap/, "compensation"],
-  [/ca lam viec|lich kip|lam viec may gio/, "work_schedules"],
+  // No bare "tăng ca": a schedule section titled "…& Quy định tăng ca" is
+  // still the schedule section; the old sheet's salary sections all say
+  // "lương"/"phụ cấp" anyway.
+  [/tien luong|phu cap|thu nhap/, "compensation"],
+  [
+    /ca lam viec|ca kip|lich kip|thoi gian lam viec|lam viec may gio/,
+    "work_schedules",
+  ],
   [/an uong|cho o|ky tuc|thue tro/, "meals"],
   [/xe dua don|tuyen xe dua/, "transportation"],
   [/bao hiem|kham suc khoe/, "insurance"],
   [/moi truong lam viec|bao ho lao dong|phuc loi/, "benefits"],
-  [/quy trinh phong van|ho so nhan viec|ung tuyen/, "application"],
-  [/dau moi lien he|diem lien he|thu muc/, "contacts"],
+  [
+    /quy trinh (phong van|nhan viec|tuyen dung)|ho so nhan viec|ung tuyen|thu tuc nghi viec/,
+    "application",
+  ],
+  [/lien he|dau moi ho tro|thu muc/, "contacts"],
 ] as const;
 
 /** Two sections genuinely straddle two categories. Routing only the matching
@@ -193,8 +311,17 @@ const BULLET_OVERRIDES: readonly (readonly [
 ])[] = [
   // "Chế độ ăn uống & Chỗ ở": housing answers are not meal answers.
   ["meals", /ky tuc|ktx|cho o|thue tro|tu tuc/, "accommodation"],
+  // …and neither is a shuttle answer ("ăn uống, ký túc xá & xe đưa đón").
+  ["meals", /xe dua don|xang xe|di lai/, "transportation"],
   // "Môi trường làm việc & Bảo hộ lao động": the statutory schemes are insurance.
   ["benefits", /bao hiem xa hoi|bhxh|bhyt|bhtn|bao hiem tai nan/, "insurance"],
+  // …while a "Bảo hiểm & Môi trường làm việc" section's environment and
+  // welfare bullets are benefits, not insurance answers.
+  [
+    "insurance",
+    /moi truong|trang phuc|dong phuc|smock|phuc loi|cong doan|du lich/,
+    "benefits",
+  ],
 ] as const;
 
 // ── markdown walking ───────────────────────────────────────────────────────
@@ -202,19 +329,26 @@ const BULLET_OVERRIDES: readonly (readonly [
 const HEADING = /^#{1,6}\s+(.*)$/;
 const BULLET = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/;
 
-/** A heading plus every line under it, in document order. */
-type BriefSection = { title: string; lines: string[] };
+/** A heading plus every line under it, in document order. `depth` is the
+ *  heading's `#` count; a deeper section inherits its nearest shallower
+ *  ancestor's category (a `####` sub-heading inside "Ca làm việc" is that
+ *  section's content, not a new topic). */
+type BriefSection = { title: string; lines: string[]; depth: number };
 
 const splitSections = (text: string): BriefSection[] => {
   // Content before the first heading is a section too: a brief that is one
   // bare table carries no heading at all, and dropping the preamble would
   // silently lose every discovery field.
-  const sections: BriefSection[] = [{ title: "", lines: [] }];
+  const sections: BriefSection[] = [{ title: "", lines: [], depth: 0 }];
   let current = sections[0];
   for (const line of text.split(/\r?\n/)) {
     const heading = HEADING.exec(line);
     if (heading) {
-      current = { title: toPlainText(heading[1]), lines: [] };
+      current = {
+        title: toPlainText(heading[1]),
+        lines: [],
+        depth: /#{1,6}/.exec(heading[0])?.[0].length ?? 1,
+      };
       sections.push(current);
       continue;
     }
@@ -237,9 +371,9 @@ type BriefField =
 
 const OVERVIEW_LABELS: readonly (readonly [RegExp, BriefField])[] = [
   [/^ten du an/, "name"],
-  [/^ten (viet tat|thuong goi|goi khac)/, "aliases"],
+  [/^ten (viet tat|thuong goi|goi khac|doanh nghiep tiep nhan)/, "aliases"],
   [/^(dia chi noi lam viec|dia diem noi lam viec|dia diem)/, "address"],
-  [/^vi tri tuyen dung/, "roles"],
+  [/^vi tri (tuyen dung|tuyen dung chinh)/, "roles"],
   [/^tom tat/, "summary"],
   [/diem noi bat/, "highlights"],
   [/^ma (du an|project)/, "slug"],
@@ -265,10 +399,14 @@ const modeFromText = (value: string): ProjectKnowledgeMode | undefined => {
 /** `**Tên dự án**`, `Tên dự án *`, `Tên dự án:` — decorations stripped, what
  *  remains must be exactly a known label: the folded line matches a pattern
  *  and nothing is left over. The leftover rule is what keeps prose like
- *  "Tên dự án phải dễ nhớ" from posing as a label. */
+ *  "Tên dự án phải dễ nhớ" from posing as a label — unless the line itself is
+ *  colon-terminated, which is how the sheets write a descriptive label whose
+ *  value follows on the next lines ("Các điểm nổi bật thu hút người lao
+ *  động:"). */
 const bareLabelField = (line: string): BriefField | null => {
   const plain = toPlainText(line).trim();
   if (!plain || plain.length > 60) return null;
+  const isLabelLine = /[:：]\s*$/.test(plain);
   const stripped = plain
     .replace(/^\s*[-*+]\s+/, "")
     .replace(/[:：*\s]+$/, "")
@@ -277,7 +415,10 @@ const bareLabelField = (line: string): BriefField | null => {
   const folded = fold(stripped);
   if (!folded) return null;
   for (const [pattern, field] of OVERVIEW_LABELS) {
-    if (pattern.test(folded) && folded.replace(pattern, "").trim() === "") {
+    if (
+      pattern.test(folded) &&
+      (isLabelLine || folded.replace(pattern, "").trim() === "")
+    ) {
       return field;
     }
   }
@@ -303,28 +444,31 @@ const inlineLabeledField = (
 };
 
 /** Write one labeled value into the accumulator; table-found values are
- *  merged in later and win, so `??=` never fights the canonical reader. */
+ *  merged in later and win, so `??=` never fights the canonical reader.
+ *  Scalar fields keep the first line; list fields read the whole block. A
+ *  template instruction is rejected before either. */
 const applyLabeledValue = (
   into: Partial<Overview>,
   field: BriefField,
   rawValue: string,
 ): void => {
-  const value = toPlainText(rawValue.split("\n")[0]).trim();
+  if (isPlaceholderValue(rawValue)) return;
+  const value = toPlainText(rawValue).trim();
   if (!value) return;
   if (field === "name") {
-    into.name ??= value;
+    into.name ??= value.split("\n")[0].trim();
     return;
   }
   if (field === "slug") {
-    into.slug ??= value;
+    into.slug ??= value.split("\n")[0].trim();
     return;
   }
   if (field === "summary") {
-    into.summary ??= value;
+    into.summary ??= value.split("\n")[0].trim();
     return;
   }
   if (field === "address") {
-    into.address ??= value;
+    into.address ??= value.split("\n")[0].trim();
     return;
   }
   if (field === "aliases") into.aliases ??= toAliasList(value);
@@ -333,20 +477,30 @@ const applyLabeledValue = (
   if (field === "mode") into.mode ??= modeFromText(value);
 };
 
-/** The value a bare label owns: the next content line within a short look
- *  ahead, unless it is itself a label or a table row. */
-const labelValueLine = (
+/** How far past a bare label the value block may run: one value line, or a
+ *  short run of bullets ("Điểm nổi bật:" followed by its bullets). */
+const MAX_LABEL_VALUE_LINES = 8;
+
+/** The value a bare label owns: every content line until the next label, a
+ *  table row or a rule — not just the first one, or a bulleted value would
+ *  lose everything after its first bullet. */
+const labelValueBlock = (
   lines: readonly string[],
   start: number,
-): { value: string; index: number } | null => {
-  for (let i = start; i < Math.min(start + 3, lines.length); i += 1) {
+): { value: string[]; index: number } | null => {
+  const collected: string[] = [];
+  let lastIndex = start - 1;
+  const end = Math.min(start + MAX_LABEL_VALUE_LINES, lines.length);
+  for (let i = start; i < end; i += 1) {
     const line = lines[i];
     if (!line.trim()) continue;
-    if (/^\s*\|/.test(line)) return null;
-    if (inlineLabeledField(line) || bareLabelField(line)) return null;
-    return { value: line.trim(), index: i };
+    if (/^\s*\|/.test(line) || /^[-*_]{3,}\s*$/.test(line.trim())) break;
+    if (inlineLabeledField(line) || bareLabelField(line)) break;
+    collected.push(line.trim());
+    lastIndex = i;
   }
-  return null;
+  if (collected.length === 0) return null;
+  return { value: collected, index: lastIndex };
 };
 
 /** Read the plain `label` → `value` shape briefs write when they are not a
@@ -363,14 +517,25 @@ const readLabeledFields = (
       if (!line.trim() || /^\s*\|/.test(line)) continue;
       const inline = inlineLabeledField(line);
       if (inline) {
+        // An inline label whose value is just a colon ("Vị trí tuyển dụng
+        // chính:") introduces a bullet list — the bullets are the value, so
+        // the label takes the block path instead of the stub.
+        if (/[:：]\s*$/.test(inline.value)) {
+          const value = labelValueBlock(lines, i + 1);
+          if (value) {
+            applyLabeledValue(found, inline.field, value.value.join("\n"));
+            i = value.index;
+          }
+          continue;
+        }
         applyLabeledValue(found, inline.field, inline.value);
         continue;
       }
       const bare = bareLabelField(line);
       if (!bare) continue;
-      const value = labelValueLine(lines, i + 1);
+      const value = labelValueBlock(lines, i + 1);
       if (!value) continue;
-      applyLabeledValue(found, bare, value.value);
+      applyLabeledValue(found, bare, value.value.join("\n"));
       i = value.index;
     }
   }
@@ -386,6 +551,63 @@ type Overview = {
   highlights: string[];
   slug: string;
   mode: ProjectKnowledgeMode | undefined;
+};
+
+/** The structured header the newer briefs open with (`---` fenced YAML). It is
+ *  machine-authored truth about the SAME facts the prose body states, so where
+ *  it speaks it wins over prose interpretation — the roles list, the address,
+ *  the project name. Mapped keys only: a field the header does not carry is
+ *  still read from the body. */
+const FRONTMATTER_KEYS: readonly (readonly [RegExp, BriefField])[] = [
+  [/^project_?name$/, "name"],
+  [/^workplace_?location$/, "address"],
+  [/^target_?positions$/, "roles"],
+];
+
+const parseFrontmatter = (text: string): Partial<Overview> => {
+  const fence = /^---\r?\n([\s\S]{0,40000}?)\r?\n---(?:\s*$|\r?\n)/.exec(text);
+  if (!fence) return {};
+  const found: Partial<Overview> = {};
+  let listKey: BriefField | null = null;
+  for (const raw of fence[1].split(/\r?\n/)) {
+    const item = /^\s*-\s+"?([^"]+)"?\s*$/.exec(raw);
+    if (item && listKey) {
+      const current = found[listKey];
+      const list = Array.isArray(current)
+        ? [...current, item[1].trim()]
+        : [item[1].trim()];
+      found[listKey] = list as never;
+      continue;
+    }
+    listKey = null;
+    const pair = /^([A-Za-z][A-Za-z0-9_]*):\s*(.*)$/.exec(raw);
+    if (!pair) continue;
+    const field = FRONTMATTER_KEYS.find(([pattern]) =>
+      pattern.test(pair[1].toLowerCase()),
+    )?.[1];
+    if (!field) continue;
+    const value = pair[2]
+      .trim()
+      .replace(/^"(.*)"$/, "$1")
+      .trim();
+    if (!value || value === "[]") {
+      listKey = field;
+      continue;
+    }
+    const inlineList = /^\[(.+)\]$/.exec(value);
+    if (inlineList) {
+      found[field] = toRoleList(inlineList[1].replace(/"/g, "")) as never;
+      continue;
+    }
+    if (field === "roles") {
+      found.roles = toRoleList(value) as never;
+      continue;
+    }
+    if (field === "address" || field === "name") {
+      found[field] = value as never;
+    }
+  }
+  return found;
 };
 
 /** Read the `| **Nhãn** | giá trị |` rows of the overview table. A label this
@@ -416,6 +638,9 @@ const readOverview = (sections: readonly BriefSection[]): Overview => {
       // A `| :--- |` alignment row and the header row are not data.
       if (/^[:\- ]+$/.test(value) || fold(label).includes("mo ta noi dung"))
         continue;
+      // The form's own instruction in a value cell is a request for data, not
+      // the data itself.
+      if (isPlaceholderValue(value)) continue;
       for (const [pattern, field] of OVERVIEW_LABELS) {
         if (pattern.test(fold(label))) {
           if (field === "name") overview.name = value;
@@ -434,8 +659,24 @@ const readOverview = (sections: readonly BriefSection[]): Overview => {
   return overview;
 };
 
-const QUESTION_MARKER = /cau hoi thuong gap|^\s*questions?\b/i;
-const ANSWER_MARKER = /thong tin phan hoi|^\s*answers?\b/i;
+/** The real sheets write the markers several ways: "Câu hỏi thường gặp",
+ *  "Câu hỏi người lao động thường hỏi", "Thông tin phản hồi", "Thông tin tư
+ *  vấn / Giải đáp", "Thông tin tư vấn dự án …" — and the newer briefs pair
+ *  every Q&A inline as `- **Hỏi:** …` / `- **Trả lời:** …`. The short
+ *  variants are anchored at the line start so "phản hồi:" (which ends in
+ *  "hoi:") can never read as a question marker. Matched on folded bullet
+ *  content so the variant decides nothing. */
+const QUESTION_MARKER =
+  /cau hoi.*thuong (gap|hoi)|^\*{0,2}\s*hoi\s*:|^\s*questions?\b/i;
+const ANSWER_MARKER =
+  /thong tin (phan hoi|tu van)|^\*{0,2}\s*(giai dap|tra loi)\s*[:：]|^\s*answers?\b/i;
+
+/** The text a marker line carries after its colon ("Hỏi: Bên công ty…" →
+ *  "Bên công ty…"); empty for the bare variant ("Câu hỏi thường gặp:"). */
+const markerPayload = (content: string): string => {
+  const colon = content.search(/[:：]/);
+  return colon >= 0 ? content.slice(colon + 1).trim() : "";
+};
 
 /** One Q&A section split into its question list, its answer list and the
  *  plain body that goes into the category. */
@@ -456,10 +697,20 @@ const readSectionBody = (section: BriefSection) => {
     const foldedContent = fold(content);
     if (QUESTION_MARKER.test(foldedContent)) {
       bucket = "question";
+      // A bold marker's closing `**` sits after the colon; strip it so the
+      // bare-marker variant contributes no phantom payload.
+      const payload = toPlainText(markerPayload(content))
+        .replace(/^[*_\s]+|[*_\s]+$/g, "")
+        .trim();
+      if (payload) questions.push(payload);
       continue;
     }
     if (ANSWER_MARKER.test(foldedContent)) {
       bucket = "answer";
+      const payload = toPlainText(markerPayload(content))
+        .replace(/^[*_\s]+|[*_\s]+$/g, "")
+        .trim();
+      if (payload) answers.push(payload);
       continue;
     }
     const value = toPlainText(content);
@@ -491,11 +742,56 @@ const overrideFor = (
 
 // ── entry point ────────────────────────────────────────────────────────────
 
+/** The sheet's own scaffolding: company masthead, form title, PHẦN containers,
+ *  the overview section, the chatbot Q&A bank. What sits directly under them
+ *  is overview or per-question sections the readers already consumed, so
+ *  reporting the container as unrecognised would be noise, not signal. */
+const STRUCTURAL_HEADING =
+  /^(cong ty|phieu thu thap|phan [0-9ivxl]+|phu luc|tai lieu|thong tin tong quan|ngan hang cau hoi)\b/;
+
+/** The chatbot Q&A bank writes every entry as its own question heading. */
+const QUESTION_TITLE = /(?:^❓)|\?\s*$/;
+
+const cleanQuestionTitle = (title: string): string =>
+  title
+    .replace(/^❓\s*/, "")
+    .replace(/^\*\*\s*câu hỏi\s*\*\*\s*[:：]?\s*/i, "")
+    .replace(/^câu hỏi\s*[:：]\s*/i, "")
+    .trim();
+
+/** A question-titled section's answer: the body lines with the `*Chủ đề:*`
+ *  theme tag dropped and the answer marker ("Trả lời:", "Câu trả lời chuẩn:")
+ *  stripped, so the entry carries exactly the question and the answer the
+ *  sheet wrote. */
+const readQuestionAnswer = (
+  section: BriefSection,
+): { question: string; answer: string } | null => {
+  const question = cleanQuestionTitle(section.title);
+  if (!question) return null;
+  const lines: string[] = [];
+  for (const raw of section.lines) {
+    const plain = toPlainText(BULLET.exec(raw)?.[1] ?? raw.trim());
+    if (!plain) continue;
+    if (/^\*{0,2}\s*chủ đề\s*\*{0,2}\s*[:：]/i.test(plain)) continue;
+    const stripped = plain.replace(
+      /^\s*\*{0,2}\s*(câu trả lời( chuẩn)?|trả lời)\s*\*{0,2}\s*[:：]\s*/i,
+      "",
+    );
+    if (stripped) lines.push(stripped);
+  }
+  // No answer in the file, no answer proposed — the question alone is not
+  // something the assistant may quote an answer to.
+  if (lines.length === 0) return null;
+  return { question, answer: lines.join("\n") };
+};
+
 export const parseProjectBrief = (text: string): ProjectBrief => {
   const rawText = text ?? "";
   if (!rawText.trim()) return EMPTY_PROJECT_BRIEF;
 
-  const sections = splitSections(rawText);
+  // Template samples and `.docx`-converted HTML tables are normalized away
+  // before sectioning; `rawText` itself stays verbatim.
+  const sections = splitSections(dropExampleBlocks(unwrapHtmlTables(rawText)));
   const overview = readOverview(sections);
 
   const bodies = new Map<ProjectKnowledgeCategory, string[]>();
@@ -509,10 +805,39 @@ export const parseProjectBrief = (text: string): ProjectBrief => {
     bodies.set(category, bucket);
   };
 
-  for (const section of sections) {
+  // Each section's category: its own heading match first; otherwise — when it
+  // is a sub-heading like `#### 1. Ca Ngày` inside a mapped section — the
+  // nearest strictly shallower ancestor's category. Question-titled sections
+  // stay unclaimed so the Q&A branch below owns them.
+  const primaryOf = new Array<ProjectKnowledgeCategory | null>(
+    sections.length,
+  ).fill(null);
+  const inherited = new Array<boolean>(sections.length).fill(false);
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index];
     const heading = section.title.replace(/^\s*\d+[.)]\s*/, "").trim();
-    const primary =
+    const own =
       categoryForHeading(section.title) ?? categoryForHeading(heading);
+    primaryOf[index] = own;
+    if (own || QUESTION_TITLE.test(section.title.trim())) continue;
+    for (let j = index - 1; j >= 0; j -= 1) {
+      if (sections[j].depth < section.depth) {
+        if (primaryOf[j]) {
+          primaryOf[index] = primaryOf[j];
+          inherited[index] = true;
+          break;
+        }
+      }
+    }
+  }
+
+  for (
+    let sectionIndex = 0;
+    sectionIndex < sections.length;
+    sectionIndex += 1
+  ) {
+    const section = sections[sectionIndex];
+    const primary = primaryOf[sectionIndex];
     const { questions, answers } = readSectionBody(section);
 
     // The Q&A transcript is the `faq` category's body whether or not the
@@ -543,9 +868,32 @@ export const parseProjectBrief = (text: string): ProjectBrief => {
     }
 
     if (!primary) {
+      // A question-titled section is the Q&A bank's own entry format: the
+      // heading is the question, the body the answer.
+      if (section.title && QUESTION_TITLE.test(section.title.trim())) {
+        const entry = readQuestionAnswer(section);
+        if (entry) {
+          const transcript = [
+            `## ${entry.question}`,
+            `**${entry.question}**`,
+            entry.answer,
+          ].join("\n\n");
+          faqEntries.push(entry);
+          faqTranscript.push(transcript);
+          push("faq", transcript);
+        }
+        continue;
+      }
       // Not recognised — unless this is the untitled preamble, which is the
-      // overview table itself and is already read above.
-      if (section.title) {
+      // overview table itself and is already read above, or a structural
+      // container (masthead, form title, PHẦN…) whose content the labeled
+      // readers already consumed.
+      if (
+        section.title &&
+        !STRUCTURAL_HEADING.test(
+          fold(section.title).replace(/^\s*\d+[.)]\s*/, ""),
+        )
+      ) {
         // A container heading ("PHẦN I: …") holds only structure — its table
         // rows are read above and its children are their own sections — so
         // reporting it as unrecognised content would be noise, not signal.
@@ -568,6 +916,16 @@ export const parseProjectBrief = (text: string): ProjectBrief => {
       const target = overrideFor(primary, value);
       push(target, value);
     };
+
+    // A sub-heading that inherited its parent's category carries its own title
+    // as content ("Lương cơ bản: 6.300.000 VNĐ / tháng" IS the salary fact).
+    if (inherited[sectionIndex]) {
+      const titleLine = section.title
+        .replace(/^\s*\d+[.)]\s*/, "")
+        .replace(/[:：]\s*$/, "")
+        .trim();
+      if (titleLine) place(titleLine);
+    }
 
     // A heading with no Q&A structure is plain prose — keep all of it.
     if (answers.length === 0 && questions.length === 0) {
@@ -605,6 +963,15 @@ export const parseProjectBrief = (text: string): ProjectBrief => {
   preferOverview("highlights");
   preferOverview("slug");
   preferOverview("mode");
+
+  // The brief's own structured header outranks every prose reading of the
+  // same facts (see parseFrontmatter).
+  const frontmatter = parseFrontmatter(rawText);
+  for (const field of ["name", "address", "roles"] as const) {
+    if (overviewFieldHasValue(frontmatter[field])) {
+      merged[field] = frontmatter[field] as never;
+    }
+  }
 
   const categories: Partial<Record<ProjectKnowledgeCategory, string>> = {};
   for (const [category, lines] of bodies) {
