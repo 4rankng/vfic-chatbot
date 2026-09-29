@@ -37,15 +37,21 @@ def run_category_revision_job(revision_id: str) -> None:
                 _claim_token=processing_token,
             )
         )
-    except Exception:
+    except Exception as exc:
         _mark_category_revision_failed_sync(revision_id, processing_token)
+        # The stable failure code is what the UI reads, but on its own it hid
+        # the cause: a missing settings-page credential surfaced as an
+        # unexplained "category_worker_failed". Log the reason, keep the code.
         logger.error(
-            "category revision worker failed revision_id=%s failure_code=category_worker_failed",
+            "category revision worker failed revision_id=%s "
+            "failure_code=category_worker_failed cause=%s: %s",
             revision_id,
+            type(exc).__name__,
+            exc,
         )
         from app.services.knowledge.category_service import CategoryActivationError
 
-        raise CategoryActivationError("category_worker_failed") from None
+        raise CategoryActivationError("category_worker_failed") from exc
 
 
 async def _run_category_revision_async(

@@ -2,9 +2,9 @@
 
 The live FAQ surface is chunk-based: ``KnowledgeChunk`` rows with
 ``category='faq'`` (see ``services/project/faq.py`` for the writer). This
-module holds the two read arms — embedding similarity with a higher floor,
-and trigram similarity over normalized search text — that the FAQ pre-pass
-and the FAQ bypass consume.
+module holds the embedding-similarity read arm (higher floor) that the FAQ
+pre-pass consumes. The former trigram arm served only the removed FAQ
+bypass.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class FaqRepository:
-    """Read-only FAQ chunk queries (embedding + trigram arms)."""
+    """Read-only FAQ chunk queries (embedding arm)."""
 
     # FAQ pre-pass floor. Sheet-sourced FAQ chunks embed their full rendered
     # record (label + id + question + answer + terms + tags), so a verbatim
@@ -84,62 +84,3 @@ class FaqRepository:
         )
         return list(rows)
 
-    async def match_faq_lexical(
-        self,
-        query: str,
-        *,
-        top_k: int = 5,
-        project_ids: list[str] | None = None,
-        filter_json: str = "{}",
-        threshold: float = 0.30,
-    ) -> list:
-        """FAQ-scoped trigram retrieval — the lexical/exact arm of the FAQ bypass.
-
-        Uses ``similarity()`` over ``normalize_search_text(search_text)`` so it is
-        diacritic- and case-insensitive. Both the stored text and the query are
-        normalized in SQL (via ``public.normalize_search_text``) so the two sides
-        match exactly. NOTE: wrapping the column in ``normalize_search_text`` means
-        this is a sequential scan over the (small, FAQ-scoped) chunk set, NOT the
-        ``knowledge_chunks_search_text_trgm_idx`` GIN index (which indexes bare
-        ``search_text``); acceptable at FAQ cardinality, revisit only if the FAQ
-        corpus grows large. Returns ``questions``/``required_terms``/
-        ``forbidden_terms`` so the bypass can run its exact-match and rule tiers
-        without a second fetch.
-        """
-        project_clause = ""
-        params: dict[str, object] = {
-            "q": query,
-            "k": top_k,
-            "filter": filter_json,
-            "thr": threshold,
-        }
-        if project_ids:
-            project_clause = "AND d.project_id = ANY(CAST(:pids AS uuid[]))"
-            params["pids"] = project_ids
-        rows = (
-            await self.db.execute(
-                text(
-                    "SELECT c.id, c.questions, c.source_quote, c.summary, c.content, "
-                    "       c.metadata, c.required_terms, c.forbidden_terms, "
-                    "       similarity(public.normalize_search_text(COALESCE(c.search_text, '')), "
-                    "                  public.normalize_search_text(:q)) AS similarity "
-                    "FROM knowledge_chunks c "
-                    "JOIN knowledge_documents d ON d.id = c.document_id "
-                    "JOIN projects p ON p.id = d.project_id "
-                    "LEFT JOIN kb_text_files ktf ON ktf.id = c.file_id "
-                    "WHERE " + DocumentRepository._chunk_visibility(project_clause) + " "
-                    "  AND c.category = 'faq' "
-                    "  AND similarity(public.normalize_search_text(COALESCE(c.search_text, '')), "
-                    "                 public.normalize_search_text(:q)) >= :thr "
-                    "ORDER BY similarity DESC "
-                    "LIMIT :k"
-                ),
-                params,
-            )
-        ).all()
-        logger.debug(
-            "match_faq_lexical: %d rows (threshold=%.2f, category=faq)",
-            len(rows),
-            threshold,
-        )
-        return list(rows)

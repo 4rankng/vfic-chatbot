@@ -148,16 +148,14 @@ async def test_repository_visibility_uses_active_category_and_pre_cutover_legacy
     for document_id, revision_id, version_id, content in chunk_specs:
         await integration_session.execute(
             text(
-                "INSERT INTO knowledge_chunks ("
-                "document_id, category_revision_id, kb_version_id, chunk_index, chunk_type, "
-                "section_path, content, content_plain, token_count, embedding, metadata, "
-                "project_id, search_text"
-                ") VALUES ("
-                "CAST(:document_id AS uuid), CAST(:revision_id AS uuid), CAST(:version_id AS uuid), "
-                "0, 'category_record', CAST(:section_path AS text[]), :content, :content, 3, "
-                "CAST(:vector AS vector), CAST('{}' AS jsonb), CAST(:project_id AS uuid), "
-                "public.normalize_search_text(:content)"
-                ")"
+                "INSERT INTO knowledge_chunks (document_id, category_revision_id, "
+                "kb_version_id, chunk_index, chunk_type, section_path, content, "
+                "content_plain, token_count, embedding, metadata, project_id, "
+                "search_text) VALUES (CAST(:document_id AS uuid), "
+                "CAST(:revision_id AS uuid), CAST(:version_id AS uuid), 0, "
+                "'category_record', CAST(:section_path AS text[]), :content, "
+                ":content, 3, CAST(:vector AS vector), CAST('{}' AS jsonb), "
+                "CAST(:project_id AS uuid), public.normalize_search_text(:content))"
             ),
             {
                 "document_id": str(document_id),
@@ -174,13 +172,12 @@ async def test_repository_visibility_uses_active_category_and_pre_cutover_legacy
     repository = RetrievalRepository(integration_session)
 
     async def visible_contents() -> set[str]:
-        rows = await repository._documents._match_document_lexical_rows(
+        rows = await repository._documents._match_document_vector_rows(
             emb=vector,
             top_k=10,
             filter_json="{}",
             project_clause="AND d.project_id = ANY(CAST(:pids AS uuid[]))",
             project_ids=[str(project.id)],
-            terms=["shared", "evidence"],
         )
         return {row.content for row in rows}
 

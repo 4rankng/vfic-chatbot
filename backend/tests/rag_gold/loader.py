@@ -215,9 +215,8 @@ def build_vector_rows(
     """
     query_emb = embeddings.get(case.id)
     if query_emb is None:
-        # No canned embedding — return empty so the lexical arm drives the test.
-        # This happens before `seed_rag_gold_embeddings.py` has been run; the
-        # gate still exercises fusion + dedup against the lexical arm alone.
+        # No canned embedding — nothing to rank. This happens before
+        # `seed_rag_gold_embeddings.py` has been run; re-seed to gate properly.
         return []
     scored: list[tuple[float, GoldChunk]] = []
     for chunk in chunks:
@@ -231,68 +230,6 @@ def build_vector_rows(
             scored.append((sim, chunk))
     scored.sort(key=lambda pair: pair[0], reverse=True)
     return [_chunk_to_row(sim, chunk) for sim, chunk in scored[:top_k]]
-
-
-def build_lexical_rows(
-    case: GoldCase,
-    chunks: tuple[GoldChunk, ...],
-    *,
-    top_k: int = 25,
-) -> list[SimpleNamespace]:
-    """Build the lexical-arm candidate rows for one case.
-
-    Approximates the trigram-ILIKE lexical arm with a simple term-overlap
-    score (count of query terms present in chunk content). This is enough to
-    exercise RRF fusion; the production lexical arm uses Postgres trigrams.
-    """
-    query_terms = _tokenize(case.query)
-    if not query_terms:
-        return []
-    scored: list[tuple[int, GoldChunk]] = []
-    for chunk in chunks:
-        if case.project_slug and chunk.project_slug != case.project_slug:
-            continue
-        chunk_terms = set(_tokenize(chunk.content))
-        # Count distinct query terms present in the chunk.
-        overlap = len(query_terms & chunk_terms)
-        if overlap > 0:
-            scored.append((overlap, chunk))
-    # Higher overlap first; stable order preserves chunk list order on ties.
-    scored.sort(key=lambda pair: pair[0], reverse=True)
-    return [_chunk_to_row(float(overlap) / max(len(query_terms), 1), chunk)
-            for overlap, chunk in scored[:top_k]]
-
-
-_VI_STOPWORDS = frozenset({
-    "à", "á", "ả", "ã", "ạ", "â", "ầ", "ẩ", "ẫ", "ậ",
-    "và", "hoặc", "của", "với", "trong", "ngoài", "được", "có", "không",
-    "là", "một", "những", "các", "đã", "sẽ", "đang", "bao_nhiêu", "gì",
-    "thế_nào", "sao", "đâu", "khi_nào", "mấy", "được_không", "đúng",
-    "vậy", "thì", "mà", "để", "cho", "về", "tại", "ở", "vào", "ra",
-    "đến", "từ", "bị", "bởi", "theo", "như", "cũng", "vẫn", "đều",
-    "này", "kia", "đó", "này", "ấy", "nhiều", "ít", "hơn",
-})
-
-
-def _tokenize(text: str) -> set[str]:
-    """Split Vietnamese text into normalized lowercase term tokens.
-
-    Approximation only — production uses Postgres trigram ILIKE. Underscore-
-    joins short function words (``bao nhiêu`` → ``bao_nhiêu``) so multi-word
-    concepts match as a unit; this is the same trick the trigram arm benefits
-    from implicitly. Tokens below 2 characters are dropped.
-    """
-    raw = (text or "").lower()
-    # Replace punctuation with whitespace, but keep Vietnamese diacritics.
-    cleaned_chars = []
-    for ch in raw:
-        if ch.isalnum() or ch.isspace() or ch in "_–-":
-            cleaned_chars.append(" " if ch in "–-" else ch)
-        else:
-            cleaned_chars.append(" ")
-    cleaned = "".join(cleaned_chars)
-    tokens = {tok for tok in cleaned.split() if len(tok) >= 2}
-    return tokens - _VI_STOPWORDS
 
 
 def _chunk_to_row(similarity: float, chunk: GoldChunk) -> SimpleNamespace:

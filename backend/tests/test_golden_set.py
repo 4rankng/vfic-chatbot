@@ -14,8 +14,7 @@ The template fast lane these cases once pinned was removed: every message
 reaches the LLM so the reply can use the current project context and
 conversation history. The message-level corpus doubles as the expectation
 table for the opt-in live replay (``JEV_EVAL=1``) — the shadow-mode seed for
-gating automation on measured agreement. The FAQ-bypass gates remain
-pure-unit (no DB/Redis).
+gating automation on measured agreement.
 """
 
 from __future__ import annotations
@@ -23,8 +22,6 @@ from __future__ import annotations
 import os
 
 import pytest
-
-from app.services.retrieval import faq_bypass as fb
 
 # ---------------------------------------------------------------------------
 # Pleasantry golden cases
@@ -88,83 +85,6 @@ JEV_EVAL_EXPECTATIONS = (
     + [(phrase, False) for phrase in PLEASANTRY_HELP_AGENT_OK]
     + [(phrase, False) for phrase in PERSONALIZED_MUST_REACH_AGENT]
 )
-
-
-# ---------------------------------------------------------------------------
-# FAQ-bypass golden cases (pure decide() inputs — no DB/Redis)
-# ---------------------------------------------------------------------------
-
-
-def _scored(
-    faq_id: str,
-    score: float,
-    *,
-    answer: str = "A",
-    **kw,
-) -> fb.Scored:
-    return fb.Scored(
-        faq_id=faq_id,
-        answer=answer,
-        vec_sim=kw.get("vec_sim", score),
-        tri_sim=kw.get("tri_sim", score),
-        score=score,
-        required_terms=kw.get("required_terms", []),
-        forbidden_terms=kw.get("forbidden_terms", []),
-    )
-
-
-def test_golden_faq_exact_accepts() -> None:
-    """A normalized exact-variant match accepts at the exact tier."""
-    from types import SimpleNamespace
-
-    from app.shared.domain.text import normalize_vietnamese_text as norm
-
-    query = "Lương bao nhiêu?"
-    rows = [
-        SimpleNamespace(
-            id="1",
-            questions=[query],
-            required_terms=[],
-            forbidden_terms=[],
-        )
-    ]
-    exact_map = fb.build_exact_map(rows)
-    decision = fb.decide(query, exact_map, [_scored("1", 0.9)])
-    assert decision.decision == fb.DECISION_ACCEPT
-    assert decision.tier == fb.TIER_EXACT
-    assert norm(query) in exact_map
-
-
-FAQ_ABSTAIN_CASES = [
-    # (label, query, scored_list, reason_prefix)
-    ("below_floor", "mot cau hoi", [_scored("1", 0.50)], "below_floor"),
-    ("margin_fail", "mot cau hoi", [_scored("1", 0.90), _scored("2", 0.85)], "margin_fail"),
-    (
-        "forbidden_term_present",
-        "hỏi về lương và phạt",
-        [_scored("1", 0.90, forbidden_terms=["phạt"]), _scored("2", 0.50)],
-        "rule_blocked:forbidden_present",
-    ),
-    (
-        "required_term_missing",
-        "hỏi về xe chỉ",
-        [_scored("1", 0.90, required_terms=["xe", "đưa đón"]), _scored("2", 0.50)],
-        "rule_blocked:required_missing",
-    ),
-    ("no_candidates", "bất kỳ", [], "no_candidates"),
-]
-
-
-@pytest.mark.parametrize(("label", "query", "scored", "reason_prefix"), FAQ_ABSTAIN_CASES)
-def test_golden_faq_abstains(label, query, scored, reason_prefix):
-    """Each abstention reason must fire on its canonical input shape."""
-    decision = fb.decide(query, {}, scored)
-    assert decision.decision == fb.DECISION_ABSTAIN, (
-        f"{label}: expected ABSTAIN, got {decision.decision} ({decision.reason})"
-    )
-    assert decision.reason.startswith(reason_prefix), (
-        f"{label}: expected reason prefix {reason_prefix!r}, got {decision.reason!r}"
-    )
 
 
 # ---------------------------------------------------------------------------

@@ -19,9 +19,11 @@ identity — the fused list passes through unchanged.
 from __future__ import annotations
 
 import logging
-from typing import Protocol
+from typing import Protocol, Sequence, TypeVar
 
 logger = logging.getLogger(__name__)
+
+RowT = TypeVar("RowT")
 
 
 def _similarity(row: object) -> float:
@@ -43,10 +45,12 @@ def _similarity(row: object) -> float:
 class Reranker(Protocol):
     """A post-fusion rerank tail over the top-K fused candidates."""
 
-    def rerank(self, rows: list[object], *, query_text: str = "") -> list[object]: ...
+    def rerank(
+        self, rows: Sequence[RowT], *, query_text: str = ""
+    ) -> Sequence[RowT]: ...
 
 
-def _stable_sort_by_score(rows: list[object]) -> list[object]:
+def _stable_sort_by_score(rows: Sequence[RowT]) -> list[RowT]:
     """Re-sort by blended similarity, preserving first-seen order on ties."""
     # ``sorted`` is stable, so equal scores keep the fused order.
     return sorted(rows, key=_similarity, reverse=True)
@@ -59,7 +63,9 @@ class ScoreBlendReranker:
     candidates with higher blended similarity. Cheap (O(K log K)) and safe.
     """
 
-    def rerank(self, rows: list[object], *, query_text: str = "") -> list[object]:
+    def rerank(
+        self, rows: Sequence[RowT], *, query_text: str = ""
+    ) -> Sequence[RowT]:
         if not rows:
             return rows
         return _stable_sort_by_score(rows)
@@ -79,7 +85,9 @@ def get_reranker() -> Reranker | None:
     return ScoreBlendReranker()
 
 
-def rerank_if_enabled(rows: list[object], *, query_text: str = "") -> list[object]:
+def rerank_if_enabled(
+    rows: Sequence[RowT], *, query_text: str = ""
+) -> Sequence[RowT]:
     """Apply the configured reranker, or return ``rows`` unchanged when disabled.
 
     The single entry point ``match_documents`` calls. Failures are non-fatal: a

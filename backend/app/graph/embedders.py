@@ -17,7 +17,16 @@ from typing import Protocol
 
 from app.core.config import get_settings
 
-
+# The embedder is infrastructure, not an operator-facing provider switch: it
+# rides the OpenRouter credential whatever ``OPENROUTER_ENABLE`` says (that flag
+# only chooses which LLM answers a CHAT turn — see client_cache/factories).
+#
+# The credential itself belongs to the ADMIN SETTINGS PAGE — the
+# ``openrouter_api_key`` row in ``integration_settings``, read through
+# ``IntegrationSettingsService.resolve_openrouter``. It is deliberately NOT read
+# from the process environment: an operator enabling OpenRouter in the UI must
+# not also have to edit a .env for retrieval to start working. A caller that
+# passes ``api_key`` already holds that settings-page value.
 class BatchEmbedder(Protocol):
     """The slice of an embedding client the cached extraction bundle exposes.
 
@@ -115,7 +124,10 @@ class OpenRouterEmbedder:
         api_key: str | None = None,
     ) -> None:
         self.s = settings or get_settings()
-        self.api_key = api_key or self.s.openrouter_api_key
+        # No env lookup here on purpose: the key arrives from the settings page
+        # (``api_key``) or from the configured default that backs it. The
+        # embedder is never switched off by ``openrouter_enable``.
+        self.api_key = (api_key or self.s.openrouter_api_key or "").strip()
 
     async def embed(self, text: str) -> list[float]:
         return (await self.batch([text]))[0]
@@ -127,7 +139,11 @@ class OpenRouterEmbedder:
         if not texts:
             return []
         if not self.api_key:
-            raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter embeddings")
+            raise RuntimeError(
+                "OpenRouter embeddings need a credential. Set the OpenRouter API "
+                "key on the admin Settings page (Cài đặt → tích hợp); "
+                "OPENROUTER_ENABLE does not gate the embedder."
+            )
 
         url = f"{self.s.openrouter_base_url.rstrip('/')}/embeddings"
         headers = {

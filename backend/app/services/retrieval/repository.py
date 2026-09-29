@@ -43,7 +43,6 @@ class RetrievalRepository:
 
     SIMILARITY_FLOOR = DocumentRepository.SIMILARITY_FLOOR
     FAQ_SIMILARITY_FLOOR = FaqRepository.FAQ_SIMILARITY_FLOOR
-    _LEXICAL_STOPWORDS = DocumentRepository._LEXICAL_STOPWORDS
 
     _ann_enabled = staticmethod(DocumentRepository._ann_enabled)
     _chunk_visibility = staticmethod(DocumentRepository._chunk_visibility)
@@ -117,23 +116,6 @@ class RetrievalRepository:
             filter_json=filter_json,
             project_ids=project_ids,
             floor=floor,
-        )
-
-    async def match_faq_lexical(
-        self,
-        query: str,
-        *,
-        top_k: int = 5,
-        project_ids: list[str] | None = None,
-        filter_json: str = "{}",
-        threshold: float = 0.30,
-    ) -> list:
-        return await self._faq.match_faq_lexical(
-            query,
-            top_k=top_k,
-            project_ids=project_ids,
-            filter_json=filter_json,
-            threshold=threshold,
         )
 
     async def project_id_by_slug(self, slug: str, *, active_only: bool = False):

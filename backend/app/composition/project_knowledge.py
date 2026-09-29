@@ -32,10 +32,17 @@ class GraphKnowledgeProviderFactory:
         )
 
 
-def build_default_embedder() -> Any:
+def build_default_embedder(*, openrouter_api_key: str) -> Any:
+    """The OpenRouter embedder.
+
+    ``openrouter_api_key`` is REQUIRED and is expected to be the value the
+    admin settings page stores (``IntegrationSettingsService.resolve_openrouter``).
+    It used to be optional, which silently fell back to a process env var and
+    let a key set in the UI go unused here.
+    """
     from app.graph.clients import build_embedder
 
-    return build_embedder()
+    return build_embedder(openrouter_api_key=openrouter_api_key)
 
 
 def build_knowledge_provider_factory() -> KnowledgeProviderFactory:
