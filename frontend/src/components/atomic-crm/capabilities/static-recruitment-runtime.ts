@@ -38,9 +38,13 @@ const NAVIGATION_IDS = [
   "kernel.navigation.overview",
   "kernel.navigation.messages",
   "kernel.navigation.projects",
+  "kernel.navigation.knowledge_sources",
+  "kernel.navigation.knowledge_bases",
+  "kernel.navigation.personas",
+  "kernel.navigation.users",
   "kernel.navigation.settings",
+  "kernel.navigation.bot_runs",
   "kernel.navigation.performance",
-  "kernel.navigation.account",
 ] as const;
 
 const SLOT_IDS = [

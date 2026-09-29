@@ -1,22 +1,23 @@
 import type { ReactNode } from "react";
 
-import { cn } from "@/lib/utils";
+import { cx } from "@/utils/cx";
 
 /**
- * Page heading with optional subtitle and right-aligned actions.
+ * Page heading with an optional eyebrow, subtitle and right-aligned actions.
  *
- * Adapted from Tailkit `a-c-page-headings-03` (With Actions). Purely
- * presentational — callers own title/subtitle text and action buttons.
+ * Untitled UI's application page-header anatomy: a title block on the left and
+ * an action cluster on the right, separated from the body by a hairline. The
+ * type comes from the console's role tokens (`--fs-*`), so it steps down on
+ * mobile with the rest of the app instead of carrying its own sizes.
  *
- * Layout: title+subtitle on the left, actions on the right, separated from
- * the page body by a hairline border-bottom. Stacks vertically under `sm`.
- *
- * Consume via `--tt-*` tokens (declared in `kit/tailkit-system.css`).
+ * Purely presentational — callers own title/subtitle text and action buttons.
  */
 type PageHeadingProps = {
   title: ReactNode;
   subtitle?: ReactNode;
   eyebrow?: ReactNode;
+  /** Slot above the title, e.g. a breadcrumb trail. */
+  breadcrumbs?: ReactNode;
   actions?: ReactNode;
   /** Wrap the row in a border-bottom hairline (default: true). */
   bordered?: boolean;
@@ -29,48 +30,40 @@ export function PageHeading({
   title,
   subtitle,
   eyebrow,
+  breadcrumbs,
   actions,
   bordered = true,
   className,
   bodyClassName,
   children,
 }: PageHeadingProps) {
-  const hasActions = Boolean(actions);
   return (
-    <div className={cn("tt-page-heading", className)}>
+    <div className={cx("w-full", className)}>
+      {breadcrumbs ? <div className="pb-3">{breadcrumbs}</div> : null}
       <div
-        className={cn(
-          "tt-page-heading-row flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between",
-          bordered &&
-            "border-b border-[var(--tt-border)] sm:mb-6 sm:border-b-[1.5px]",
+        className={cx(
+          "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between",
+          bordered && "border-b border-secondary pb-4 sm:mb-5",
         )}
       >
-        <div className="tt-page-heading-copy min-w-0">
+        <div className="min-w-0">
           {eyebrow ? (
-            <p className="tt-page-heading-eyebrow text-[length:var(--text-caption)] font-semibold uppercase tracking-[0.08em] text-[var(--tt-ink-muted)]">
+            <p className="text-caption font-semibold text-quaternary uppercase">
               {eyebrow}
             </p>
           ) : null}
-          <h1 className="tt-page-heading-title text-[length:var(--text-page-title)] font-bold leading-tight text-[var(--tt-ink)]">
-            {title}
-          </h1>
+          <h1 className="text-page-title font-bold text-primary">{title}</h1>
           {subtitle ? (
-            <p className="tt-page-heading-subtitle mt-1 text-[length:var(--text-body)] text-[var(--tt-ink-muted)]">
-              {subtitle}
-            </p>
+            <p className="mt-1 text-body text-tertiary">{subtitle}</p>
           ) : null}
         </div>
-        {hasActions ? (
-          <div className="tt-page-heading-actions flex flex-wrap items-center justify-start gap-2 [&_button]:min-h-11 [&_a]:min-h-11 sm:justify-end md:[&_button]:min-h-8 md:[&_a]:min-h-8">
+        {actions ? (
+          <div className="flex flex-wrap items-center justify-start gap-2 [&_a]:min-h-11 [&_button]:min-h-11 sm:justify-end md:[&_a]:min-h-9 md:[&_button]:min-h-9">
             {actions}
           </div>
         ) : null}
       </div>
-      {children ? (
-        <div className={cn("tt-page-heading-body", bodyClassName)}>
-          {children}
-        </div>
-      ) : null}
+      {children ? <div className={bodyClassName}>{children}</div> : null}
     </div>
   );
 }

@@ -79,16 +79,94 @@ afterEach(async () => {
 });
 
 describe("kernel capability routes", () => {
-  it("keeps Performance out of the primary mobile dock while leaving it rail-eligible", () => {
-    const performance = contributions["kernel.navigation.performance"];
+  it("publishes every workspace destination in its sidebar section", () => {
+    const destinations = Object.values(contributions)
+      .filter((contribution) => contribution.kind === "navigation")
+      .map((contribution) => {
+        if (contribution.kind !== "navigation") {
+          throw new Error("Expected navigation contribution");
+        }
+        return contribution.destination;
+      });
 
-    expect(performance.kind).toBe("navigation");
-    if (performance.kind !== "navigation") {
-      throw new Error("Expected performance navigation contribution");
-    }
+    expect(
+      destinations.map(({ id, to, section, roles }) => ({
+        id,
+        to,
+        section,
+        roles,
+      })),
+    ).toEqual([
+      { id: "overview", to: "/", section: "operations", roles: undefined },
+      {
+        id: "messages",
+        to: "/conversations",
+        section: "operations",
+        roles: undefined,
+      },
+      {
+        id: "projects",
+        to: "/projects",
+        section: "operations",
+        roles: undefined,
+      },
+      {
+        id: "knowledge_sources",
+        to: "/knowledge_sources",
+        section: "knowledge",
+        roles: ["admin"],
+      },
+      {
+        id: "knowledge_bases",
+        to: "/knowledge_bases",
+        section: "knowledge",
+        roles: ["admin"],
+      },
+      {
+        id: "personas",
+        to: "/personas",
+        section: "team",
+        roles: ["admin"],
+      },
+      { id: "users", to: "/users", section: "team", roles: ["admin"] },
+      {
+        id: "settings",
+        to: "/settings",
+        section: "system",
+        roles: ["admin"],
+      },
+      {
+        id: "bot_runs",
+        to: "/bot_runs",
+        section: "system",
+        roles: ["admin"],
+      },
+      {
+        id: "performance",
+        to: "/hieu-suat",
+        section: "system",
+        roles: ["admin"],
+      },
+    ]);
+  });
 
-    expect(performance.destination.mobile).toBe(false);
-    expect(performance.destination.rail).toBe(true);
+  it("keeps a recruiter's sidebar to the unguarded operations destinations", () => {
+    const recruiterDestinations = Object.values(contributions)
+      .filter((contribution) => contribution.kind === "navigation")
+      .map((contribution) => contribution.destination)
+      .filter(
+        (destination) =>
+          !destination.roles || destination.roles.includes("recruiter"),
+      );
+
+    expect(recruiterDestinations.map(({ id }) => id)).toEqual([
+      "overview",
+      "messages",
+      "projects",
+    ]);
+    // The profile destination moved into the account menu, so no navigation
+    // contribution may claim it any more.
+    expect(contributions["kernel.navigation.account"]).toBeUndefined();
   });
 
   it("keeps the performance page module out of the eager kernel import graph", async () => {

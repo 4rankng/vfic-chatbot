@@ -48,8 +48,6 @@ describe("PageHeading", () => {
 
   it("omits the actions region when no actions are passed", async () => {
     const screen = await render(<PageHeading title="Hồ sơ" />);
-    expect(
-      screen.container.querySelector(".tt-page-heading-actions"),
-    ).toBeNull();
+    expect(screen.container.querySelectorAll("button")).toHaveLength(0);
   });
 });

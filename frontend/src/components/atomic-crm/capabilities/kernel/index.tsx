@@ -1,11 +1,15 @@
 import { Navigate } from "react-router";
 import {
+  BookOpen,
+  Bot,
   Briefcase,
   Gauge,
   Home,
+  Library,
   MessageCircle,
+  ScrollText,
   Settings,
-  UserRound,
+  Users,
 } from "lucide-react";
 
 import users from "../../users";
@@ -37,8 +41,7 @@ const navigation: readonly CompiledDestination[] = [
     label: "Tổng quan",
     to: "/",
     Icon: Home,
-    rail: true,
-    mobile: true,
+    section: "operations",
     isActive: (path) => path === "/",
   },
   {
@@ -46,8 +49,7 @@ const navigation: readonly CompiledDestination[] = [
     label: "Tin nhắn",
     to: "/conversations",
     Icon: MessageCircle,
-    rail: true,
-    mobile: true,
+    section: "operations",
     isActive: pathStartsWith("/conversations"),
   },
   {
@@ -55,9 +57,44 @@ const navigation: readonly CompiledDestination[] = [
     label: "Dự án",
     to: "/projects",
     Icon: Briefcase,
-    rail: true,
-    mobile: true,
+    section: "operations",
     isActive: pathStartsWith("/projects"),
+  },
+  {
+    id: "knowledge_sources",
+    label: "Nguồn kiến thức",
+    to: "/knowledge_sources",
+    Icon: BookOpen,
+    roles: ["admin"],
+    section: "knowledge",
+    isActive: pathStartsWith("/knowledge_sources"),
+  },
+  {
+    id: "knowledge_bases",
+    label: "Cơ sở kiến thức",
+    to: "/knowledge_bases",
+    Icon: Library,
+    roles: ["admin"],
+    section: "knowledge",
+    isActive: pathStartsWith("/knowledge_bases"),
+  },
+  {
+    id: "personas",
+    label: "Agent",
+    to: "/personas",
+    Icon: Bot,
+    roles: ["admin"],
+    section: "team",
+    isActive: pathStartsWith("/personas"),
+  },
+  {
+    id: "users",
+    label: "Người dùng",
+    to: "/users",
+    Icon: Users,
+    roles: ["admin"],
+    section: "team",
+    isActive: pathStartsWith("/users"),
   },
   {
     id: "settings",
@@ -65,14 +102,19 @@ const navigation: readonly CompiledDestination[] = [
     to: "/settings",
     Icon: Settings,
     roles: ["admin"],
-    rail: true,
-    mobile: true,
+    section: "system",
     isActive: (path) =>
       pathStartsWith("/settings")(path) ||
-      pathStartsWith("/zalo_integrations")(path) ||
-      pathStartsWith("/knowledge_sources")(path) ||
-      pathStartsWith("/knowledge_bases")(path) ||
-      pathStartsWith("/personas")(path),
+      pathStartsWith("/zalo_integrations")(path),
+  },
+  {
+    id: "bot_runs",
+    label: "Nhật ký bot",
+    to: "/bot_runs",
+    Icon: ScrollText,
+    roles: ["admin"],
+    section: "system",
+    isActive: pathStartsWith("/bot_runs"),
   },
   {
     id: "performance",
@@ -80,19 +122,8 @@ const navigation: readonly CompiledDestination[] = [
     to: "/hieu-suat",
     Icon: Gauge,
     roles: ["admin"],
-    rail: true,
-    mobile: false,
+    section: "system",
     isActive: pathStartsWith("/hieu-suat"),
-  },
-  {
-    id: "account",
-    label: "Tài khoản",
-    to: "/profile",
-    Icon: UserRound,
-    rail: false,
-    mobile: true,
-    isActive: (path) =>
-      pathStartsWith("/profile")(path) || pathStartsWith("/users")(path),
   },
 ];
 

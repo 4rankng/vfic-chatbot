@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
-import { cn } from "@/lib/utils";
+import { EmptyState as UntitledEmptyState } from "@/components/application/empty-state/empty-state";
+import { cx } from "@/utils/cx";
 
 type PageShellProps = {
   children: ReactNode;
@@ -14,6 +15,11 @@ const PAGE_WIDTHS = {
   wide: "max-w-[1440px]",
 } as const;
 
+/**
+ * Standard page column for a resource screen: one centred width, one vertical
+ * rhythm. The scrolling region belongs to the app shell
+ * (`.workspace-frame-content`), so this only lays out content.
+ */
 export function PageShell({
   children,
   className,
@@ -21,8 +27,8 @@ export function PageShell({
 }: PageShellProps) {
   return (
     <div
-      className={cn(
-        "tt-page-shell mx-auto h-full min-h-0 w-full overflow-y-auto overscroll-contain px-4 py-5 pb-24 md:px-6 md:py-7 md:pb-8 lg:px-8",
+      className={cx(
+        "mx-auto flex w-full flex-col gap-5 px-4 py-5 md:px-6 md:py-6 lg:px-8",
         PAGE_WIDTHS[size],
         className,
       )}
@@ -41,16 +47,14 @@ type EmptyStateProps = {
 };
 
 /**
- * Tailkit `a-c-empty-states-01` / `a-c-empty-states-03` anatomy at console
- * density: a dashed `--tt-border` frame, a muted icon, a section-title heading,
- * a body-sm description and an optional action slot.
+ * The console's single empty state, rendered on Untitled UI's empty-state
+ * anatomy. Every surface that can be empty routes through here — knowledge
+ * base, automation, knowledge, personas, projects and conversations — so the
+ * icon frame, type scale and action placement move together.
  *
- * Density is a deliberate deviation from the catalog. Tailkit ships marketing
- * spacing (`px-6 py-20 md:py-40`) and a `text-2xl` heading; this console runs
- * 16px section titles and `min-h-64` empties, so the anatomy is kept and the
- * scale is not. Every empty state in the app comes through here —
- * `knowledge-base`, `automation`, `knowledge`, `personas`, `projects` and
- * `conversations` — so one change moves six surfaces.
+ * The icon stays a caller-supplied element (callers pass a sized lucide icon)
+ * inside a console-token circle, so this does not force a shipped component
+ * signature change on six screens.
  */
 export function EmptyState({
   icon,
@@ -60,27 +64,32 @@ export function EmptyState({
   className,
 }: EmptyStateProps) {
   return (
-    <div
-      role="status"
-      className={cn(
-        "flex min-h-64 flex-col items-center justify-center gap-5 rounded-xl border-2 border-dashed border-[var(--tt-border)] px-6 py-10 text-center",
+    <UntitledEmptyState
+      size="md"
+      className={cx(
+        "min-h-56 gap-4 rounded-xl border border-secondary bg-primary px-6 py-10",
         className,
       )}
     >
-      <span className="flex size-12 items-center justify-center rounded-full bg-[var(--tt-accent-soft)] text-[var(--tt-accent-strong)]">
+      <span
+        aria-hidden="true"
+        className="flex size-12 items-center justify-center rounded-full bg-secondary text-fg-quaternary [&>svg]:size-5"
+      >
         {icon}
       </span>
-      <div className="mx-auto w-full max-w-sm">
-        <h3 className="text-[length:var(--text-section-title)] font-semibold text-[var(--tt-ink)]">
+      <UntitledEmptyState.Content className="gap-1">
+        <UntitledEmptyState.Title className="text-section-title font-semibold text-primary [&]:!text-[length:var(--fs-section-title)]">
           {title}
-        </h3>
-        <p className="mt-1 text-[length:var(--text-body-sm)] leading-5 text-[var(--tt-ink-muted)]">
+        </UntitledEmptyState.Title>
+        <UntitledEmptyState.Description className="max-w-sm text-body-sm text-tertiary">
           {description}
-        </p>
-      </div>
+        </UntitledEmptyState.Description>
+      </UntitledEmptyState.Content>
       {action ? (
-        <div className="flex items-center justify-center gap-3">{action}</div>
+        <UntitledEmptyState.Footer className="mt-1 flex items-center justify-center gap-3">
+          {action}
+        </UntitledEmptyState.Footer>
       ) : null}
-    </div>
+    </UntitledEmptyState>
   );
 }

@@ -43,10 +43,52 @@ describe("kernel navigation contract", () => {
     expect(navigation("performance").isActive("/hieu-suat/recent")).toBe(true);
     expect(navigation("performance").isActive("/")).toBe(false);
 
-    expect(navigation("account").isActive("/profile")).toBe(true);
-    expect(navigation("account").isActive("/users")).toBe(true);
-    expect(navigation("account").isActive("/users/7")).toBe(true);
-    expect(navigation("account").isActive("/settings")).toBe(false);
+    expect(navigation("users").isActive("/users")).toBe(true);
+    expect(navigation("users").isActive("/users/7")).toBe(true);
+    expect(navigation("users").isActive("/profile")).toBe(false);
+    expect(navigation("users").isActive("/settings")).toBe(false);
+
+    expect(navigation("knowledge_sources").isActive("/knowledge_sources")).toBe(
+      true,
+    );
+    expect(
+      navigation("knowledge_sources").isActive("/knowledge_sources/doc-1"),
+    ).toBe(true);
+    expect(
+      navigation("knowledge_sources").isActive("/knowledge_bases"),
+    ).toBe(false);
+    expect(navigation("knowledge_sources").isActive("/settings")).toBe(false);
+
+    expect(navigation("knowledge_bases").isActive("/knowledge_bases")).toBe(
+      true,
+    );
+    expect(navigation("knowledge_bases").isActive("/knowledge_sources")).toBe(
+      false,
+    );
+
+    expect(navigation("personas").isActive("/personas")).toBe(true);
+    expect(navigation("personas").isActive("/personas/new")).toBe(true);
+    expect(navigation("personas").isActive("/settings")).toBe(false);
+
+    expect(navigation("bot_runs").isActive("/bot_runs")).toBe(true);
+    expect(navigation("bot_runs").isActive("/bot_runs/42")).toBe(true);
+    expect(navigation("bot_runs").isActive("/settings")).toBe(false);
+
+    // The profile screen lives in the account menu, not in the sidebar.
+    expect(contributions["kernel.navigation.account"]).toBeUndefined();
+  });
+
+  it("groups every destination under the sidebar section that owns it", () => {
+    expect(navigation("overview").section).toBe("operations");
+    expect(navigation("messages").section).toBe("operations");
+    expect(navigation("projects").section).toBe("operations");
+    expect(navigation("knowledge_sources").section).toBe("knowledge");
+    expect(navigation("knowledge_bases").section).toBe("knowledge");
+    expect(navigation("personas").section).toBe("team");
+    expect(navigation("users").section).toBe("team");
+    expect(navigation("settings").section).toBe("system");
+    expect(navigation("bot_runs").section).toBe("system");
+    expect(navigation("performance").section).toBe("system");
   });
 
   it("keeps admin settings active across every routed settings surface", () => {
@@ -57,9 +99,12 @@ describe("kernel navigation contract", () => {
     expect(settings.isActive("/settings/profile")).toBe(true);
     expect(settings.isActive("/zalo_integrations")).toBe(true);
     expect(settings.isActive("/zalo_integrations/legacy")).toBe(true);
-    expect(settings.isActive("/knowledge_sources")).toBe(true);
-    expect(settings.isActive("/knowledge_bases/abc")).toBe(true);
-    expect(settings.isActive("/personas")).toBe(true);
+    // Knowledge, personas and projects are their own sidebar destinations now,
+    // so the settings item must not claim their routes.
+    expect(settings.isActive("/knowledge_sources")).toBe(false);
+    expect(settings.isActive("/knowledge_bases/abc")).toBe(false);
+    expect(settings.isActive("/personas")).toBe(false);
+    expect(settings.isActive("/users/7")).toBe(false);
     expect(settings.isActive("/projects")).toBe(false);
   });
 

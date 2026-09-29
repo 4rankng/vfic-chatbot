@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { EmptyState, PageShell } from "./page-shell";
 
 describe("PageShell", () => {
-  it("renders the shared page canvas at the requested width", async () => {
+  it("renders children inside the requested column width", async () => {
     const screen = await render(
       <PageShell size="narrow">
         <p>Nội dung</p>
@@ -12,31 +12,26 @@ describe("PageShell", () => {
     );
 
     expect(screen.getByText("Nội dung")).toBeTruthy();
-    expect(
-      screen.container.querySelector(".tt-page-shell.max-w-3xl"),
-    ).not.toBeNull();
+    expect(screen.container.querySelector(".max-w-3xl")).not.toBeNull();
   });
 
-  it("owns vertical scrolling when content exceeds the workspace", async () => {
+  it("leaves scrolling to the app shell", async () => {
     const screen = await render(
-      <div style={{ height: 160 }}>
-        <PageShell>
-          <div style={{ height: 480 }}>Nội dung dài</div>
-        </PageShell>
-      </div>,
+      <PageShell>
+        <div style={{ height: 480 }}>Nội dung dài</div>
+      </PageShell>,
     );
-    const shell = screen.container.querySelector<HTMLElement>(".tt-page-shell");
+    const shell = screen.container.firstElementChild as HTMLElement;
 
-    expect(shell).not.toBeNull();
-    expect(shell).toHaveClass("h-full", "min-h-0", "overflow-y-auto");
+    expect(shell.style.overflowY).not.toBe("auto");
   });
 });
 
 describe("EmptyState", () => {
-  it("renders the status copy and optional action", async () => {
+  it("renders the status copy, the icon and the optional action", async () => {
     const screen = await render(
       <EmptyState
-        icon={<span>i</span>}
+        icon={<span data-testid="empty-icon">i</span>}
         title="Chưa có dữ liệu"
         description="Tạo mục đầu tiên để bắt đầu."
         action={<button type="button">Tạo mới</button>}
@@ -45,10 +40,12 @@ describe("EmptyState", () => {
 
     expect(screen.getByRole("status")).toBeTruthy();
     expect(screen.getByText("Chưa có dữ liệu")).toBeTruthy();
+    expect(screen.getByText("Tạo mục đầu tiên để bắt đầu.")).toBeTruthy();
+    expect(screen.getByTestId("empty-icon")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Tạo mới" })).toBeTruthy();
   });
 
-  it("uses the Tailkit empty-state anatomy inside a dashed frame", async () => {
+  it("renders no action region when the caller passes none", async () => {
     const screen = await render(
       <EmptyState
         icon={<span>i</span>}
@@ -56,34 +53,7 @@ describe("EmptyState", () => {
         description="Tạo mục đầu tiên để bắt đầu."
       />,
     );
-    const status =
-      screen.container.querySelector<HTMLElement>('[role="status"]');
 
-    expect(status).not.toBeNull();
-    expect(status).toHaveClass("rounded-xl", "border-2", "border-dashed");
-    expect(status).toHaveClass("min-h-64", "gap-5");
-  });
-
-  it("stays at console density and omits the action slot when unused", async () => {
-    const screen = await render(
-      <EmptyState
-        icon={<span>i</span>}
-        title="Chưa có dữ liệu"
-        description="Tạo mục đầu tiên để bắt đầu."
-      />,
-    );
-    const status =
-      screen.container.querySelector<HTMLElement>('[role="status"]');
-    const markup = status?.outerHTML ?? "";
-
-    // Marketing density from the Tailkit catalog must never reach the console.
-    expect(markup).not.toContain("py-20");
-    expect(markup).not.toContain("py-40");
-    expect(markup).not.toContain("text-2xl");
-    // Heading and description keep the console's role tokens.
-    expect(markup).toContain("--text-section-title");
-    expect(markup).toContain("--text-body-sm");
-    // No empty action container is rendered.
-    expect(status?.querySelector("button")).toBeNull();
+    expect(screen.container.querySelectorAll("button")).toHaveLength(0);
   });
 });

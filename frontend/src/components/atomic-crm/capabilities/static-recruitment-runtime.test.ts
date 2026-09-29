@@ -43,49 +43,62 @@ describe("static recruitment runtime", () => {
       },
     ]);
     expect(
-      runtime.navigation.map(({ id, to, roles, rail, mobile }) => ({
+      runtime.navigation.map(({ id, to, roles, section }) => ({
         id,
         to,
         roles,
-        rail,
-        mobile,
+        section,
       })),
     ).toEqual([
-      { id: "overview", to: "/", roles: undefined, rail: true, mobile: true },
+      { id: "overview", to: "/", roles: undefined, section: "operations" },
       {
         id: "messages",
         to: "/conversations",
         roles: undefined,
-        rail: true,
-        mobile: true,
+        section: "operations",
       },
       {
         id: "projects",
         to: "/projects",
         roles: undefined,
-        rail: true,
-        mobile: true,
+        section: "operations",
       },
+      {
+        id: "knowledge_sources",
+        to: "/knowledge_sources",
+        roles: ["admin"],
+        section: "knowledge",
+      },
+      {
+        id: "knowledge_bases",
+        to: "/knowledge_bases",
+        roles: ["admin"],
+        section: "knowledge",
+      },
+      {
+        id: "personas",
+        to: "/personas",
+        roles: ["admin"],
+        section: "team",
+      },
+      { id: "users", to: "/users", roles: ["admin"], section: "team" },
       {
         id: "settings",
         to: "/settings",
         roles: ["admin"],
-        rail: true,
-        mobile: true,
+        section: "system",
+      },
+      {
+        id: "bot_runs",
+        to: "/bot_runs",
+        roles: ["admin"],
+        section: "system",
       },
       {
         id: "performance",
         to: "/hieu-suat",
         roles: ["admin"],
-        rail: true,
-        mobile: false,
-      },
-      {
-        id: "account",
-        to: "/profile",
-        roles: undefined,
-        rail: false,
-        mobile: true,
+        section: "system",
       },
     ]);
     const navigationById = new Map(
@@ -97,13 +110,29 @@ describe("static recruitment runtime", () => {
       true,
     );
     expect(navigationById.get("projects")?.isActive("/projects/1")).toBe(true);
+    expect(
+      navigationById.get("knowledge_sources")?.isActive("/knowledge_sources"),
+    ).toBe(true);
+    expect(
+      navigationById.get("knowledge_sources")?.isActive("/knowledge_bases"),
+    ).toBe(false);
+    expect(
+      navigationById.get("knowledge_bases")?.isActive("/knowledge_bases/abc"),
+    ).toBe(true);
+    expect(navigationById.get("personas")?.isActive("/personas")).toBe(true);
+    expect(navigationById.get("users")?.isActive("/users/7")).toBe(true);
+    expect(navigationById.get("users")?.isActive("/settings")).toBe(false);
+    expect(navigationById.get("settings")?.isActive("/settings")).toBe(true);
+    expect(
+      navigationById.get("settings")?.isActive("/zalo_integrations"),
+    ).toBe(true);
     expect(navigationById.get("settings")?.isActive("/knowledge_sources")).toBe(
-      true,
+      false,
     );
+    expect(navigationById.get("bot_runs")?.isActive("/bot_runs/1")).toBe(true);
     expect(
       navigationById.get("performance")?.isActive("/hieu-suat/weekly"),
     ).toBe(true);
-    expect(navigationById.get("account")?.isActive("/users/1")).toBe(true);
     expect(runtime.dashboard).toBeTypeOf("function");
     expect(runtime.conversationSlots).toMatchObject({
       row: expect.any(Object),

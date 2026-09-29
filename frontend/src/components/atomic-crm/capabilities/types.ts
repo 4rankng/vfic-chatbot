@@ -83,14 +83,20 @@ export type CompiledRoute = Readonly<{
   Component: ComponentType;
 }>;
 
+/**
+ * Sidebar section a destination belongs to. The sidebar groups destinations by
+ * this id and the layout owns the section headings, so the compiled contract
+ * carries identity rather than presentation.
+ */
+export type DestinationSection = "operations" | "knowledge" | "team" | "system";
+
 export type CompiledDestination = Readonly<{
   id: string;
   label: string;
   to: string;
   Icon: LucideIcon;
   roles?: readonly ("admin" | "recruiter")[];
-  rail: boolean;
-  mobile: boolean;
+  section: DestinationSection;
   isActive: (normalizedPath: string) => boolean;
 }>;
 

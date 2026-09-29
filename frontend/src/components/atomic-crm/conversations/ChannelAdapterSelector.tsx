@@ -14,6 +14,7 @@ import {
   type ConversationChannelProvider,
   getChannelProviderSearchParams,
 } from "./domain/conversation-list-filters";
+import { CONVERSATION_CHANNEL_LABELS } from "./domain/channel-labels";
 
 type ChannelAdapterProvider = ConversationChannelProvider;
 
@@ -24,16 +25,24 @@ type AdapterDefinition = {
 };
 
 const ADAPTERS: readonly AdapterDefinition[] = [
-  { provider: "zalo_bot", label: "Zalo Chatbot", icon: zaloChatbotIcon },
-  { provider: "zalo_oa", label: "Zalo OA", icon: zaloOaIcon },
+  {
+    provider: "zalo_bot",
+    label: CONVERSATION_CHANNEL_LABELS.zalo_bot,
+    icon: zaloChatbotIcon,
+  },
+  {
+    provider: "zalo_oa",
+    label: CONVERSATION_CHANNEL_LABELS.zalo_oa,
+    icon: zaloOaIcon,
+  },
   {
     provider: "facebook_messenger",
-    label: "Messenger",
+    label: CONVERSATION_CHANNEL_LABELS.facebook_messenger,
     icon: messengerIcon,
   },
   {
     provider: "tingting_oa",
-    label: "Zalo OA TingTing (hỗ trợ nhân viên)",
+    label: CONVERSATION_CHANNEL_LABELS.tingting_oa,
     icon: tingtingOaIcon,
   },
 ];

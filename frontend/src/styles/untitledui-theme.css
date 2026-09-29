@@ -465,6 +465,86 @@
   --outline-color-brand_alt: var(--color-border-brand_alt);
   --outline-color-brand-solid: var(--color-bg-brand-solid);
   --outline-color-brand-solid_hover: var(--color-bg-brand-solid_hover);
+
+  /* ── CONSOLE ALIASES — one palette, one vocabulary ────────────────────────
+   *
+   * Every Untitled UI component is styled through the alias families declared
+   * above (`--color-bg-*`, `--color-text-*`, `--color-border-*`, `--color-fg-*`
+   * and their `--background-color-*` / `--text-color-*` property namespaces).
+   * Left at the library's defaults they paint cool neutral greys beside the
+   * console's warm cream surfaces, which reads as two systems on one screen.
+   * The aliases below re-point those neutral families at the console's own
+   * tokens, so a PRO component inherits the tenant-branded palette instead of
+   * importing a second one. The brand ramp needs no mapping: `--color-uu-brand-*`
+   * in untitledui.css already IS the console coral (`-700: #b73522`).
+   *
+   * Every value is a var() reference or a color-mix of console tokens, so the
+   * per-workspace overrides of --card / --background / --foreground / --border
+   * on `.workspace-frame` flow straight through to generated components.
+   * Declared last inside @theme so these win over the library defaults above.
+   */
+  --color-bg-primary: var(--card);
+  --color-bg-primary_alt: var(--card);
+  --color-bg-primary_hover: var(--muted);
+  --color-bg-secondary: var(--secondary);
+  --color-bg-secondary_alt: var(--secondary);
+  --color-bg-secondary_hover: color-mix(
+    in oklab,
+    var(--secondary) 82%,
+    var(--foreground)
+  );
+  --color-bg-tertiary: var(--background);
+  --color-bg-quaternary: color-mix(in oklab, var(--muted) 65%, var(--border));
+  --color-bg-active: var(--accent);
+  --color-bg-overlay: var(--popover);
+
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: color-mix(
+    in oklab,
+    var(--foreground) 80%,
+    var(--card)
+  );
+  --color-text-secondary_hover: var(--foreground);
+  --color-text-tertiary: color-mix(
+    in oklab,
+    var(--foreground) 64%,
+    var(--card)
+  );
+  --color-text-tertiary_hover: var(--color-text-secondary);
+  --color-text-quaternary: color-mix(
+    in oklab,
+    var(--foreground) 50%,
+    var(--card)
+  );
+  --color-text-placeholder: color-mix(
+    in oklab,
+    var(--foreground) 46%,
+    var(--card)
+  );
+
+  --color-border-primary: var(--border);
+  --color-border-secondary: color-mix(
+    in oklab,
+    var(--border) 72%,
+    var(--card)
+  );
+  --color-border-tertiary: color-mix(
+    in oklab,
+    var(--border) 46%,
+    var(--card)
+  );
+  --color-border-brand: var(--primary);
+  --color-border-brand_alt: var(--primary);
+
+  --color-fg-primary: var(--color-text-primary);
+  --color-fg-secondary: var(--color-text-secondary);
+  --color-fg-tertiary: var(--color-text-tertiary);
+  --color-fg-quaternary: var(--color-text-quaternary);
+
+  /* The console's single action colour, not the library's brand-600. */
+  --color-bg-brand-solid: var(--primary);
+  --color-bg-brand-solid_hover: var(--color-brand-800);
+  --color-focus-ring: var(--ring);
 }
 
 /*
