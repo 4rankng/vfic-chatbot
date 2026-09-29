@@ -135,7 +135,7 @@
   --color-base-200: #fff6ed;
   --color-base-300: #f5ede5;
   --color-base-content: #172033;
-  --color-primary: #5b7a9e;
+  --color-primary: #557498;
   --color-primary-content: #ffffff;
   --color-secondary: #172033;
   --color-secondary-content: #fffaf5;
@@ -143,13 +143,13 @@
   --color-accent-content: #3d5b82;
   --color-neutral: #24304a;
   --color-neutral-content: #fffaf5;
-  --color-info: #5c86b8;
+  --color-info: #466fa0;
   --color-info-content: #ffffff;
   --color-success: #4e8a6e;
   --color-success-content: #ffffff;
-  --color-warning: #a8813f;
+  --color-warning: #8c6621;
   --color-warning-content: #ffffff;
-  --color-error: #b4636e;
+  --color-error: #ad5d68;
   --color-error-content: #ffffff;
   --radius-selector: 0.65rem;
   --radius-field: 0.55rem;
@@ -418,7 +418,7 @@
   --card-foreground: #172033;
   --popover: #fffcf8;
   --popover-foreground: #172033;
-  --primary: #5b7a9e;
+  --primary: #557498;
   --primary-foreground: #ffffff;
   --secondary: #f5ede5;
   --secondary-foreground: #172033;
@@ -426,23 +426,23 @@
   --muted-foreground: #6d625c;
   --accent: #e7eef6;
   --accent-foreground: #3d5b82;
-  --destructive: #b4636e;
+  --destructive: #ad5d68;
   --destructive-foreground: #ffffff;
-  --info: #5c86b8; /* azure status */
+  --info: #466fa0; /* azure status */
   --info-foreground: #ffffff;
   --info-soft: #e8f0f8;
-  --warning: #a8813f; /* amber */
+  --warning: #8c6621; /* amber */
   --warning-foreground: #ffffff;
   --warning-soft: #f7eedd;
   --border: #e3e8ee;
-  --input: #cbd5e1;
-  --ring: #7c9bbb;
-  --ember: #a8813f;
+  --input: #8a9298;
+  --ring: #7796b6;
+  --ember: #8c6621;
   /* Global semantic accents. Promoted here (not just in inbox/tokens.css) so
      pages that don't import the inbox barrel — e.g. ZaloIntegrationPage's
      webhook-health badges — resolve --success/--warning without coupling to
      inbox CSS. Track the slate/amber/rose identity. */
-  --success: var(--color-green);
+  --success: #0b7e56;
   --success-soft: #dff7ec; /* emerald-soft */
   --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
@@ -464,10 +464,10 @@
   --grid-color: transparent;
   --shimmer-highlight: rgba(23, 32, 51, 0.06);
 
-  --chart-1: #5b7a9e;
-  --chart-2: #5c86b8;
+  --chart-1: #557498;
+  --chart-2: #466fa0;
   --chart-3: #4e8a6e;
-  --chart-4: #a8813f;
+  --chart-4: #8c6621;
   --chart-5: #6d7b95;
 
   --sidebar: #172033;
@@ -510,6 +510,9 @@
   --accent: #22303f;
   --accent-foreground: #c3d6ea;
   --destructive: #d0868f;
+  --destructive-foreground: #172033;
+  --success: oklch(0.72 0.09 155);
+  --success-soft: oklch(0.28 0.03 155);
   --info: #8fb4dc;
   --info-foreground: #172033;
   --info-soft: #1c2c40;
@@ -792,6 +795,33 @@ input:-webkit-autofill:focus {
   }
 }
 
+/* Toasts speak the console palette instead of sonner's defaults. The toaster
+   itself lives in the vendored admin kit, so this stays a token-level override
+   rather than a fork of the component. */
+[data-sonner-toaster] {
+  --normal-bg: var(--card);
+  --normal-text: var(--foreground);
+  --normal-border: var(--border);
+  --success-bg: var(--card);
+  --success-text: var(--success);
+  --success-border: var(--success);
+  --error-bg: var(--card);
+  --error-text: var(--destructive);
+  --error-border: var(--destructive);
+  --warning-bg: var(--card);
+  --warning-text: var(--warning);
+  --warning-border: var(--warning);
+  --info-bg: var(--card);
+  --info-text: var(--info);
+  --info-border: var(--info);
+  --border-radius: var(--radius);
+}
+
+[data-sonner-toast] {
+  font-size: var(--fs-body-sm);
+  box-shadow: 0 8px 24px rgb(23 32 51 / 0.12);
+}
+
 /* Respect prefers-reduced-motion globally: neuter animations/transitions for
    users who request reduced motion (a11y). Covers Radix + tw-animate-css
    animations that aren't gated on their own. */
@@ -846,7 +876,7 @@ input[type="time"] {
   --card-foreground: #172033;
   --popover: #fffcf8;
   --popover-foreground: #172033;
-  --primary: #5b7a9e;
+  --primary: #557498;
   --primary-foreground: #ffffff;
   --secondary: #f5ede5;
   --secondary-foreground: #172033;
@@ -854,21 +884,21 @@ input[type="time"] {
   --muted-foreground: #6d625c;
   --accent: #e7eef6;
   --accent-foreground: #3d5b82;
-  --destructive: #b4636e;
+  --destructive: #ad5d68;
   --destructive-foreground: #ffffff;
   --border: #e6d8ce;
   --input: #e6d8ce;
-  --ring: #7c9bbb;
+  --ring: #7796b6;
   /* kb-only accents (no standard-token equivalent) — names retained for
      backward compatibility; values now track the TingHire identity. */
-  --kb-teal: #4f7199;
+  --kb-teal: #4c6e96;
   --kb-teal-soft: #e7eef6;
-  --kb-rust: #a9705c;
+  --kb-rust: #935c48;
   --kb-rust-soft: #f6e7e1;
-  --kb-ochre: #a8813f;
+  --kb-ochre: #8c6621;
   --kb-ochre-soft: #f7eedd;
   --kb-ink-700: #2d3953;
-  --kb-ink-300: #8b7d74;
+  --kb-ink-300: #80726a;
   --kb-line-strong: #d8c7bc;
   --kb-font-display: "Fraunces", Georgia, "Times New Roman", serif;
   color: var(--foreground);
@@ -898,7 +928,7 @@ input[type="time"] {
   --accent: #22303f;
   --accent-foreground: #c3d6ea;
   --destructive: oklch(0.68 0.11 12); /* lifted, muted rose */
-  --destructive-foreground: oklch(0.98 0.005 245);
+  --destructive-foreground: oklch(0.17 0.012 245);
   --border: oklch(0.32 0.012 245);
   --input: oklch(0.32 0.012 245);
   --ring: #a9c2dc;

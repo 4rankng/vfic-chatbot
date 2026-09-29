@@ -514,12 +514,12 @@
   --color-text-tertiary_hover: var(--color-text-secondary);
   --color-text-quaternary: color-mix(
     in oklab,
-    var(--foreground) 50%,
+    var(--foreground) 58%,
     var(--card)
   );
   --color-text-placeholder: color-mix(
     in oklab,
-    var(--foreground) 46%,
+    var(--foreground) 58%,
     var(--card)
   );
 
@@ -545,6 +545,19 @@
   /* The console's single action colour, not the library's brand-600. */
   --color-bg-brand-solid: var(--primary);
   --color-bg-brand-solid_hover: var(--color-brand-800);
+  /* Status and on-brand inks come from the console, not the library ramp:
+     the library's own yellow-600/green-600/red-600 and brand-200/300 can't
+     reach 4.5:1 on their paired fills. */
+  --color-text-error-primary: var(--destructive);
+  --color-text-warning-primary: var(--warning);
+  --color-text-success-primary: var(--success);
+  --color-fg-error-primary: var(--destructive);
+  --color-fg-warning-primary: var(--warning);
+  --color-fg-success-primary: var(--success);
+  --color-text-secondary_on-brand: var(--color-alpha-white);
+  --color-text-tertiary_on-brand: var(--color-alpha-white);
+  --color-text-quaternary_on-brand: var(--color-alpha-white);
+
   --color-focus-ring: var(--ring);
 }
 

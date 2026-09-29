@@ -15,10 +15,8 @@ import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { useRoleActions } from "../../hooks/useRoleActions";
 
 export type AccountMenuProps = {
-  /** Trigger shape: a labelled topbar button or the sidebar account card. */
+  /** Trigger shape: a labelled topbar button or the drawer account card. */
   variant?: "topbar" | "sidebar";
-  /** Extra classes for the sidebar card trigger. */
-  className?: string;
 };
 
 /**
@@ -27,10 +25,7 @@ export type AccountMenuProps = {
  * items are real anchors built with the router's `useHref`, so the hash router
  * keeps middle-click and "open in new tab" working.
  */
-export const AccountMenu = ({
-  variant = "topbar",
-  className,
-}: AccountMenuProps) => {
+export const AccountMenu = ({ variant = "topbar" }: AccountMenuProps) => {
   const authProvider = useAuthProvider();
   const { data: identity } = useGetIdentity();
   const logout = useLogout();
@@ -56,26 +51,29 @@ export const AccountMenu = ({
 
   const trigger =
     variant === "sidebar" ? (
-      <button
-        type="button"
-        className={`flex w-full items-center gap-3 rounded-lg p-2 text-left outline-focus-ring transition hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2 ${className ?? ""}`}
+      <Button
+        color="tertiary"
+        size="sm"
         aria-label="Mở menu tài khoản"
+        className="w-full justify-start"
       >
-        <Avatar
-          size="sm"
-          src={avatarSrc}
-          alt={displayName}
-          initials={displayName.slice(0, 1).toUpperCase()}
-        />
-        <span className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-semibold text-primary">
-            {displayName}
+        <span className="flex min-w-0 items-center gap-3">
+          <Avatar
+            size="sm"
+            src={avatarSrc}
+            alt={displayName}
+            initials={displayName.slice(0, 1).toUpperCase()}
+          />
+          <span className="flex min-w-0 flex-col items-start">
+            <span className="truncate text-sm font-semibold text-primary">
+              {displayName}
+            </span>
+            {email ? (
+              <span className="truncate text-xs text-tertiary">{email}</span>
+            ) : null}
           </span>
-          {email ? (
-            <span className="truncate text-xs text-tertiary">{email}</span>
-          ) : null}
         </span>
-      </button>
+      </Button>
     ) : (
       <Button
         color="tertiary"
