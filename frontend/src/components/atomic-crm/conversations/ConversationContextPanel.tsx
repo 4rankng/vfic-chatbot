@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { useTranslate } from "ra-core";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { CloseButton } from "@/components/base/buttons/close-button";
+import { ProgressBar } from "@/components/base/progress-indicators/progress-indicators";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -327,14 +330,12 @@ const CandidateContextBody = ({
         </div>
         {showClose ? (
           <div className="context-header-actions">
-            <button
-              type="button"
-              className="context-close"
-              onClick={onClose}
-              aria-label="Đóng thông tin ứng viên"
-            >
-              ×
-            </button>
+            <CloseButton
+              size="sm"
+              className="uu-scope context-close"
+              label="Đóng thông tin ứng viên"
+              onPress={onClose}
+            />
           </div>
         ) : null}
       </header>
@@ -345,14 +346,23 @@ const CandidateContextBody = ({
             <span className="context-overview-kicker">
               Thông tin đã thu thập
             </span>
-            <span className="candidate-progress-score tt-badge tt-badge-soft">
+            <Badge
+              type="pill-color"
+              color="brand"
+              size="sm"
+              className="uu-scope candidate-progress-score tt-badge tt-badge-soft"
+            >
               {completedInfoCount}/{candidateInfoItems.length}
-            </span>
+            </Badge>
           </div>
-          <div className="candidate-progress-meter" aria-hidden="true">
-            <span
-              className="candidate-progress-fill"
-              style={{ width: `${completionPercent}%` }}
+          {/* Decorative: the paragraph below states the same completion in
+              words, so the meter stays out of the accessible tree instead of
+              announcing an unnamed progressbar twice. */}
+          <div aria-hidden="true">
+            <ProgressBar
+              value={completionPercent}
+              className="candidate-progress-meter"
+              progressClassName="candidate-progress-fill"
             />
           </div>
           <p>
@@ -368,9 +378,14 @@ const CandidateContextBody = ({
             lead.version != null &&
             onSave &&
             !editSession ? (
-              <button
+              <Button
                 type="button"
-                onClick={() => {
+                size="xs"
+                color="tertiary"
+                className="uu-scope"
+                aria-label="Chỉnh sửa hồ sơ ứng viên"
+                iconLeading={<Pencil className="size-3.5" aria-hidden="true" />}
+                onPress={() => {
                   if (lead.version == null) return;
                   const initial = candidateProfileDraft(lead);
                   setEditSession({
@@ -379,12 +394,9 @@ const CandidateContextBody = ({
                     version: lead.version,
                   });
                 }}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2"
-                aria-label="Chỉnh sửa hồ sơ ứng viên"
               >
-                <Pencil className="size-3.5" aria-hidden="true" />
                 Sửa
-              </button>
+              </Button>
             ) : null}
           </div>
           {editSession ? (
@@ -456,22 +468,32 @@ const CandidateContextBody = ({
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  disabled={isSaving}
-                  onClick={cancelEditing}
+                  size="sm"
+                  color="secondary"
+                  className="uu-scope"
+                  isDisabled={isSaving}
+                  iconLeading={<X className="size-4" aria-hidden="true" />}
+                  onPress={cancelEditing}
                 >
-                  <X className="size-4" aria-hidden="true" />
                   {translate("ra.action.cancel")}
                 </Button>
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving ? (
-                    <LoaderCircle
-                      className="size-4 animate-spin motion-reduce:animate-none"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <Save className="size-4" aria-hidden="true" />
-                  )}
+                <Button
+                  type="submit"
+                  size="sm"
+                  color="primary"
+                  className="uu-scope"
+                  isDisabled={isSaving}
+                  iconLeading={
+                    isSaving ? (
+                      <LoaderCircle
+                        className="size-4 animate-spin motion-reduce:animate-none"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Save className="size-4" aria-hidden="true" />
+                    )
+                  }
+                >
                   {isSaving
                     ? translate("crm.common.saving")
                     : translate("crm.common.save_changes")}

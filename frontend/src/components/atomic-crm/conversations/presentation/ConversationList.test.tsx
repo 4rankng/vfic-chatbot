@@ -15,6 +15,7 @@
 // row body executes.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type * as RaCoreModule from "ra-core";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
 import { MemoryRouter } from "react-router";
@@ -36,7 +37,11 @@ vi.mock("../LeadAvatar", () => ({
   },
 }));
 
-vi.mock("ra-core", () => ({
+vi.mock("ra-core", async (importOriginal) => ({
+  // Spread the real module first: the kit barrel this component imports now
+  // reaches `useInput`, and a hand-written mock that omits it breaks the whole
+  // suite at import time rather than at an assertion.
+  ...(await importOriginal<typeof RaCoreModule>()),
   // The component under test reads its labels from the Vietnamese catalog.
   useTranslate: () => testI18nProvider.translate,
   InfiniteListBase: ({ children }: { children?: ReactNode }) => <>{children}</>,
@@ -227,18 +232,11 @@ describe("ConversationList — empty states", () => {
       .element(screen.getByText("Chưa có cuộc trò chuyện"))
       .toBeVisible();
     const frame = screen.container.querySelector(".list-empty-state")!;
-    // The status region is the shared kit frame — dashed Tailkit anatomy at
-    // console density — carrying the directory's own inset class; it is not the
-    // bespoke icon/illustration stack the list used to render. Utility classes
-    // are asserted by name because this lane does not emit the Tailwind layer
-    // (see kit/page-shell.test.tsx).
-    expect(frame).toHaveClass(
-      "list-empty-state",
-      "rounded-xl",
-      "border-2",
-      "border-dashed",
-      "min-h-64",
-    );
+    // The empty state is the shared kit frame, not the bespoke icon stack the
+    // list used to render: one status region carrying the directory's inset
+    // class and no action button. The frame's own utility classes belong to
+    // `kit/page-shell.test.tsx`; this lane does not emit the Tailwind layer, so
+    // re-pinning them here would assert source text rather than behaviour.
     expect(frame.getAttribute("role")).toBe("status");
     // An inbox with no conversations has nothing to recover, so this variant
     // renders no action button.

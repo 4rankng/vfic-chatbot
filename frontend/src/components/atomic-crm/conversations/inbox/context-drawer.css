@@ -205,7 +205,9 @@
   height: 100%;
   border-radius: inherit;
   background: var(--brand);
-  transition: width 0.26s var(--ease);
+  /* Untitled UI's ProgressBar moves the fill with a transform rather than a
+     width, so the transition follows the same property. */
+  transition: transform 0.26s var(--ease);
 }
 
 .inbox-bg-container .context-subject {

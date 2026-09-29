@@ -21,6 +21,7 @@ import type { Conversation } from "../../types";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "../InboxIcons";
 import { EmptyState } from "../../kit";
+import { Badge } from "@/components/base/badges/badges";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { loadConversationSnippets } from "../application/conversation-runtime";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -221,8 +222,11 @@ const ConversationListItem = memo(
             )}
             <span className="conv-meta-row">
               {attentionLabel ? (
-                <span
-                  className={`conv-state-label ${
+                <Badge
+                  type="pill-color"
+                  color={conversation.needs_human ? "warning" : "gray"}
+                  size="sm"
+                  className={`uu-scope conv-state-label ${
                     conversation.needs_human ? "is-human-escalation" : ""
                   }`}
                 >
@@ -233,15 +237,17 @@ const ConversationListItem = memo(
                     />
                   ) : null}
                   {attentionLabel}
-                </span>
+                </Badge>
               ) : null}
               {priorityChip ? (
-                <span
-                  className={`mini-chip priority-${priorityChip.tone}`}
-                  title={priorityChip.label}
+                <Badge
+                  type="pill-color"
+                  color={priorityChip.tone === "hot" ? "error" : "warning"}
+                  size="sm"
+                  className={`uu-scope mini-chip priority-${priorityChip.tone}`}
                 >
                   {priorityChip.label}
-                </span>
+                </Badge>
               ) : null}
             </span>
           </span>

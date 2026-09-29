@@ -471,12 +471,13 @@
     max-width: calc(100vw - 1rem);
     padding: 6px;
   }
-  .conversation-actions-menu [data-slot="dropdown-menu-item"] {
+  .conversation-actions-menu .conversation-actions-item {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     min-height: 48px;
-    gap: 12px;
-    padding: 10px 12px;
   }
-  .conversation-actions-menu [data-slot="dropdown-menu-item"] > svg {
+  .conversation-actions-menu .conversation-actions-item svg {
     width: 20px;
     height: 20px;
   }

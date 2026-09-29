@@ -12,6 +12,8 @@ import { memo, useMemo, type CSSProperties } from "react";
 import { useTranslate } from "ra-core";
 import { Sparkles } from "lucide-react";
 
+import { Button } from "@/components/base/buttons/button";
+
 import type { Message } from "../../types";
 import { splitMessageTextBlocks } from "../domain/conversation-message-text";
 import type { ConversationMessageKind } from "../domain/conversation-thread-rows";
@@ -174,16 +176,18 @@ export const ChatMessageRow = memo(
               <span className="delivery-retry-count">{retryLabel}</span>
             ) : null}
             {canRetry ? (
-              <button
+              <Button
                 type="button"
-                className="delivery-retry-button"
-                disabled={isRetrying}
-                onClick={() => onRetry?.(m.id)}
+                size="sm"
+                color="tertiary"
+                className="uu-scope delivery-retry-button"
+                isDisabled={isRetrying}
+                onPress={() => onRetry?.(m.id)}
               >
                 {isRetrying
                   ? translate("crm.common.retrying")
                   : translate("crm.common.retry")}
-              </button>
+              </Button>
             ) : null}
             <span className="bubble-time-inline">
               {formatTime(m.created_at)}

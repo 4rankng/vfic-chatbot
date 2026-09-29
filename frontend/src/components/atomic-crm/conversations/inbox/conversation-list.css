@@ -226,6 +226,11 @@
   font-size: var(--chat-fs-chip);
   font-weight: var(--chat-fw-semibold);
   line-height: 1.25;
+  /* The plain label is metadata text, not a chip: only the escalation variant
+     below takes the Untitled UI Badge pill. */
+  padding: 0;
+  border: 0;
+  background: none;
 }
 .inbox-bg-container .conv-state-label.is-human-escalation {
   display: inline-flex;

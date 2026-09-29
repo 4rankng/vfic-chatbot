@@ -17,13 +17,10 @@ import {
   type ConversationMode,
   useConversationActions,
 } from "./use-conversation-actions";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
 import {
   Bot,
   Check,
@@ -189,15 +186,18 @@ export const ConversationShowContent = ({
             aria-label="Nội dung trò chuyện"
           >
             <header className="chat-header">
-              <button
-                className="icon-btn mobile-toggle list-toggle"
-                onClick={onOpenList}
-                aria-label="Mở danh sách hội thoại"
-              >
-                <svg className="icon">
-                  <use href="#i-menu" />
-                </svg>
-              </button>
+              <ButtonUtility
+                size="sm"
+                color="tertiary"
+                tooltip="Mở danh sách hội thoại"
+                className="icon-btn mobile-toggle list-toggle uu-scope"
+                icon={
+                  <svg className="icon" aria-hidden="true">
+                    <use href="#i-menu" />
+                  </svg>
+                }
+                onPress={() => onOpenList?.()}
+              />
               <div className="header-person">
                 {showWorkspacePanel && context.renderPanel ? (
                   <button
@@ -276,123 +276,141 @@ export const ConversationShowContent = ({
                 </div>
               </div>
               <div className="header-actions">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={`mode-menu-trigger mode-menu-trigger--primary tt-btn tt-btn-sm ${activeMode}`}
-                      aria-label="Đổi chế độ trả lời"
-                      title="Đổi chế độ trả lời"
-                      disabled={activeMode === "closed" || needsClaim}
-                    >
-                      <span className="mode-menu-trigger-icon">
-                        <ActiveModeIcon className="icon" aria-hidden="true" />
-                      </span>
-                      <span className="mode-menu-trigger-label">
-                        {activeModeOption?.label ?? "Chế độ trả lời"}
-                      </span>
-                      <ChevronDown
-                        className="mode-menu-trigger-chevron"
-                        aria-hidden="true"
-                      />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    sideOffset={10}
-                    className="mode-menu-content"
+                <Dropdown.Root>
+                  <Button
+                    size="sm"
+                    color="secondary"
+                    noTextPadding
+                    className={`uu-scope mode-menu-trigger mode-menu-trigger--primary tt-btn tt-btn-sm ${activeMode}`}
+                    aria-label="Đổi chế độ trả lời"
+                    isDisabled={activeMode === "closed" || needsClaim}
                   >
-                    {MODE_OPTIONS.map((option) => {
-                      const isActive = activeMode === option.mode;
-                      return (
-                        <DropdownMenuItem
-                          key={option.mode}
-                          onSelect={() => {
-                            if (!isActive) setConversationMode(option.mode);
-                          }}
-                          className={`mode-menu-item ${option.mode} ${isActive ? "active" : ""}`}
-                          aria-current={isActive ? "true" : undefined}
-                        >
-                          <span className="mode-menu-icon">
-                            <option.Icon className="icon" aria-hidden="true" />
-                          </span>
-                          <span className="mode-menu-copy">
-                            <span className="mode-menu-title">
-                              {option.label}
-                            </span>
-                            <span className="mode-menu-description">
-                              {option.description}
-                            </span>
-                          </span>
-                          <span className="mode-menu-check" aria-hidden="true">
-                            {isActive ? <Check className="icon" /> : null}
-                          </span>
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {(permissions === "admin" && record) ||
-                (!isWideDesktop && context.renderPanel) ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        ref={conversationActionsTriggerRef}
-                        type="button"
-                        className="icon-btn ghost"
-                        aria-label="Thao tác hội thoại"
-                        title="Thao tác hội thoại"
-                      >
-                        <MoreHorizontal className="icon" aria-hidden="true" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      sideOffset={10}
-                      className="conversation-actions-menu"
-                    >
-                      {permissions === "admin" && record ? (
-                        <DropdownMenuItem
-                          onSelect={() => setIsDecisionTraceOpen(true)}
-                        >
-                          <History className="size-4" aria-hidden="true" />
-                          Agent Thinking
-                        </DropdownMenuItem>
-                      ) : null}
-                      {!isWideDesktop && context.renderPanel ? (
-                        <DropdownMenuItem onSelect={() => openContextPanel()}>
-                          <PanelRight className="size-4" aria-hidden="true" />
-                          {context.panelLabel}
-                        </DropdownMenuItem>
-                      ) : null}
-                      {permissions === "admin" && record ? (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={(event) => {
-                              event.preventDefault();
-                              setDeleteOpen(true);
+                    <span className="mode-menu-trigger-icon">
+                      <ActiveModeIcon className="icon" aria-hidden="true" />
+                    </span>
+                    <span className="mode-menu-trigger-label">
+                      {activeModeOption?.label ?? "Chế độ trả lời"}
+                    </span>
+                    <ChevronDown
+                      className="mode-menu-trigger-chevron"
+                      aria-hidden="true"
+                    />
+                  </Button>
+                  <Dropdown.Popover
+                    placement="bottom end"
+                    offset={10}
+                    className="uu-scope mode-menu-content"
+                  >
+                    <Dropdown.Menu>
+                      {MODE_OPTIONS.map((option) => {
+                        const isActive = activeMode === option.mode;
+                        return (
+                          <Dropdown.Item
+                            key={option.mode}
+                            id={option.mode}
+                            label={option.label}
+                            unstyled
+                            className={`mode-menu-item ${option.mode} ${isActive ? "active" : ""}`}
+                            onPress={() => {
+                              if (!isActive) setConversationMode(option.mode);
                             }}
                           >
-                            <Trash2 className="size-4" aria-hidden="true" />
-                            Xoá hội thoại
-                          </DropdownMenuItem>
-                        </>
-                      ) : null}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                            <span className="mode-menu-icon">
+                              <option.Icon
+                                className="icon"
+                                aria-hidden="true"
+                              />
+                            </span>
+                            <span className="mode-menu-copy">
+                              <span className="mode-menu-title">
+                                {option.label}
+                              </span>
+                              <span className="mode-menu-description">
+                                {option.description}
+                              </span>
+                            </span>
+                            <span
+                              className="mode-menu-check"
+                              aria-hidden="true"
+                            >
+                              {isActive ? <Check className="icon" /> : null}
+                            </span>
+                          </Dropdown.Item>
+                        );
+                      })}
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown.Root>
+                {(permissions === "admin" && record) ||
+                (!isWideDesktop && context.renderPanel) ? (
+                  <Dropdown.Root>
+                    <ButtonUtility
+                      ref={conversationActionsTriggerRef}
+                      size="sm"
+                      color="tertiary"
+                      className="uu-scope icon-btn ghost"
+                      aria-label="Thao tác hội thoại"
+                      icon={
+                        <MoreHorizontal className="icon" aria-hidden="true" />
+                      }
+                    />
+                    <Dropdown.Popover
+                      placement="bottom end"
+                      offset={10}
+                      className="uu-scope conversation-actions-menu"
+                    >
+                      <Dropdown.Menu>
+                        {permissions === "admin" && record ? (
+                          <Dropdown.Item
+                            id="decision-trace"
+                            className="conversation-actions-item"
+                            icon={History}
+                            label="Agent Thinking"
+                            onPress={() => setIsDecisionTraceOpen(true)}
+                          />
+                        ) : null}
+                        {!isWideDesktop && context.renderPanel ? (
+                          <Dropdown.Item
+                            id="candidate-panel"
+                            className="conversation-actions-item"
+                            icon={PanelRight}
+                            label={context.panelLabel}
+                            onPress={() => openContextPanel()}
+                          />
+                        ) : null}
+                        {permissions === "admin" && record ? (
+                          <>
+                            <Dropdown.Separator />
+                            <Dropdown.Item
+                              id="delete-conversation"
+                              className="conversation-actions-item conversation-actions-item-danger"
+                              icon={Trash2}
+                              label="Xoá hội thoại"
+                              onPress={() => setDeleteOpen(true)}
+                            />
+                          </>
+                        ) : null}
+                      </Dropdown.Menu>
+                    </Dropdown.Popover>
+                  </Dropdown.Root>
                 ) : null}
                 {CapabilityActions ? (
                   <CapabilityActions conversation={record} />
                 ) : null}
                 {activeMode === "closed" && (
                   <span
-                    className="chat-mode-chip"
+                    className="chat-mode-chip-tooltip"
                     title="Hội thoại đã đóng; không có thao tác tiếp nhận"
                   >
-                    <Bot className="icon" />
-                    <span>Hội thoại đã đóng</span>
+                    <Badge
+                      type="pill-color"
+                      color="brand"
+                      size="sm"
+                      className="uu-scope chat-mode-chip"
+                    >
+                      <Bot className="icon" aria-hidden="true" />
+                      <span>Hội thoại đã đóng</span>
+                    </Badge>
                   </span>
                 )}
               </div>
@@ -427,7 +445,7 @@ export const ConversationShowContent = ({
                 open: isWideDesktop || isContextOpen,
                 persistent: isWideDesktop,
                 onClose: closeContextPanel,
-                onCloseAutoFocus: (event) => {
+                onCloseAutoFocus: (event: Event) => {
                   event.preventDefault();
                   focusContextTrigger();
                 },

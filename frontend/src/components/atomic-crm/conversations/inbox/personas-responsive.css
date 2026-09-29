@@ -161,7 +161,7 @@
     grid-row: 2;
   }
 
-  .persona-page-shell .persona-readiness-bar-card > [data-slot="badge"] {
+  .persona-page-shell .persona-readiness-bar-card > .persona-studio-badge {
     grid-column: 2;
     grid-row: 1;
   }
@@ -655,11 +655,6 @@
     grid-column: 1 / -1;
   }
 
-  .profile-actions [data-slot="button"],
-  .profile-session-content [data-slot="button"] {
-    width: 100%;
-  }
-
   .profile-field-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 14px;
@@ -699,12 +694,6 @@
   .settings-embedded-resource .persona-panel-header h2 {
     margin: 0;
     font-size: var(--fs-subsection);
-  }
-
-  .settings-embedded-resource .persona-panel-header [data-slot="badge"] {
-    min-height: 20px;
-    padding-inline: 7px;
-    font-size: var(--fs-caption);
   }
 
   .settings-embedded-resource .persona-agent-picker .persona-create-action {

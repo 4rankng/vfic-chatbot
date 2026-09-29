@@ -28,6 +28,7 @@ import {
 } from "./conversation-message-state";
 import { ChatMessageRow } from "./ChatMessageRow";
 import { LoadingState } from "../../misc/LoadingState";
+import { Button } from "@/components/base/buttons/button";
 import { Bot } from "lucide-react";
 
 // ChatThread is the reusable message thread + composer. It owns the realtime
@@ -487,13 +488,15 @@ export const ChatThread = ({
               role="status"
             >
               <span>Không tải được tin nhắn cũ hơn.</span>
-              <button
+              <Button
                 type="button"
+                size="sm"
+                color="link-color"
                 className="tt-btn tt-btn-sm tt-btn-outline"
-                onClick={() => retryHistory(messages[0].id)}
+                onPress={() => retryHistory(messages[0].id)}
               >
                 {translate("crm.common.retry")}
-              </button>
+              </Button>
             </div>
           ) : null}
           {messages.length === 0 && initialError ? (
@@ -504,13 +507,15 @@ export const ChatThread = ({
               <span>
                 Không thể tải tin nhắn. Nội dung chưa được xác nhận là trống.
               </span>
-              <button
+              <Button
                 className="tt-btn tt-btn-sm tt-btn-outline"
                 type="button"
-                onClick={retryInitial}
+                size="sm"
+                color="link-color"
+                onPress={retryInitial}
               >
                 {translate("crm.common.retry")}
-              </button>
+              </Button>
             </div>
           ) : messages.length === 0 && isLoading ? (
             <LoadingState className="min-h-full" label="Đang tải tin nhắn…" />
@@ -532,21 +537,26 @@ export const ChatThread = ({
             the bottom; escalates to the stronger "Tin nhắn mới" label only when
             an author/type-aware unseen arrival occurred while away. */}
         {isAwayFromBottom ? (
-          <button
-            type="button"
-            className={`new-message-jump tt-btn tt-btn-sm${hasUnseenLatest ? " has-unseen tt-btn-primary" : ""}`}
+          <Button
+            size="sm"
+            color={hasUnseenLatest ? "primary" : "secondary"}
+            className={`uu-scope new-message-jump tt-btn tt-btn-sm${
+              hasUnseenLatest ? " has-unseen tt-btn-primary" : ""
+            }`}
             aria-label={
               hasUnseenLatest
                 ? "Cuộn đến tin nhắn mới"
                 : "Cuộn đến tin nhắn mới nhất"
             }
-            onClick={handleJumpToNewest}
+            onPress={handleJumpToNewest}
+            iconTrailing={
+              <svg className="icon new-message-jump-icon" aria-hidden="true">
+                <use href="#i-chevron" />
+              </svg>
+            }
           >
             {hasUnseenLatest ? <span>Tin nhắn mới</span> : null}
-            <svg className="icon new-message-jump-icon" aria-hidden="true">
-              <use href="#i-chevron" />
-            </svg>
-          </button>
+          </Button>
         ) : null}
       </div>
 
@@ -561,13 +571,15 @@ export const ChatThread = ({
                 ? "Hội thoại cần nhân viên xác minh trước khi trả lời."
                 : "Đang dùng ChatBot cho cuộc trò chuyện này."}
             </span>
-            <button
+            <Button
               type="button"
-              className="inline-takeover-btn tt-btn tt-btn-sm tt-btn-outline"
-              onClick={handleTakeover}
+              size="sm"
+              color="primary"
+              className="uu-scope inline-takeover-btn tt-btn tt-btn-sm tt-btn-outline"
+              onPress={handleTakeover}
             >
               Tiếp quản
-            </button>
+            </Button>
           </div>
         )}
         {showComposerForm && (
@@ -590,16 +602,19 @@ export const ChatThread = ({
                 }
               }}
             />
-            <button
+            <Button
               type="submit"
-              className="composer-action send tt-btn tt-btn-primary tt-btn-circle text-primary-foreground"
+              size="sm"
+              color="primary"
+              className="uu-scope composer-action send tt-btn tt-btn-primary tt-btn-circle text-primary-foreground"
               aria-label="Gửi tin nhắn"
-              disabled={!canHumanReply || isSending || !reply.trim()}
-            >
-              <svg className="icon" aria-hidden="true">
-                <use href="#i-send" />
-              </svg>
-            </button>
+              isDisabled={!canHumanReply || isSending || !reply.trim()}
+              iconLeading={
+                <svg className="icon" aria-hidden="true">
+                  <use href="#i-send" />
+                </svg>
+              }
+            />
           </form>
         )}
         {isClosedMode && (

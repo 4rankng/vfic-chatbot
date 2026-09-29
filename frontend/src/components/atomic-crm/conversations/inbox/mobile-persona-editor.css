@@ -516,19 +516,6 @@
   line-height: 1.2;
 }
 
-.persona-followup-stage [data-slot="checkbox"] {
-  width: 15px;
-  height: 15px;
-  border-radius: 4px;
-}
-
-.persona-followup-stage span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .persona-edit-notes {
   min-height: 92px;
   resize: vertical;
@@ -1138,12 +1125,6 @@
 
 .persona-followup-stage {
   min-height: 44px;
-}
-
-.tailkit-workspace-content .persona-followup-stage [data-slot="checkbox"] {
-  width: 18px;
-  height: 18px !important;
-  min-height: 18px !important;
 }
 
 .persona-edit-savebar {

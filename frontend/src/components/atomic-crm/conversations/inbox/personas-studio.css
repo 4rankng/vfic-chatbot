@@ -230,33 +230,9 @@
   margin-top: 10px;
 }
 
-.persona-studio-badge {
-  min-height: 22px;
-  gap: 5px;
-  border-radius: 999px;
-  padding: 0 8px;
-  background: var(--surface-solid);
-  color: var(--ink-muted);
-  font-size: var(--fs-caption);
-  font-weight: 800;
-  line-height: 1;
-}
-
-.persona-studio-badge.is-good {
-  border-color: color-mix(in srgb, var(--success) 24%, var(--border));
-  background: color-mix(
-    in srgb,
-    var(--success-light) 72%,
-    var(--surface-solid)
-  );
-  color: var(--success);
-}
-
-.persona-studio-badge.is-brand {
-  border-color: color-mix(in srgb, var(--primary) 26%, var(--border));
-  background: color-mix(in srgb, var(--primary) 10%, var(--surface-solid));
-  color: var(--primary);
-}
+/* `persona-studio-badge` survives as a layout hook only: the badge look is now
+   owned by the Untitled UI `Badge` primitive it renders on, so the hand-rolled
+   pill and its `is-good`/`is-brand` tints were removed with the markup. */
 
 .persona-studio-profile-actions {
   min-width: 0;
