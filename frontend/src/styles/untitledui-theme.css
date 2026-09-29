@@ -19,7 +19,7 @@
  *    already uses `bg-primary`, `bg-secondary`, `text-primary` and
  *    `border-primary` with its own shadcn meaning (`@theme inline` in
  *    src/index.css). Leaving Untitled's values in place would silently restyle
- *    those existing call sites — a coral progress bar would turn white, brand
+ *    those existing call sites — an action-coloured progress bar would turn white, brand
  *    text would turn grey. The unlayered `:root` block at the bottom re-binds
  *    exactly those four keys back to `var(--primary)` / `var(--secondary)`.
  *    Unlayered `:root` beats Tailwind's `@layer theme` output, and it keeps
@@ -29,7 +29,7 @@
  * 2. WRAP UNTITLED UI SUBTREES IN `.uu-scope`. Inside that class the four keys
  *    resolve to Untitled UI's semantics again, which is what its components
  *    expect. Outside it they keep the console's. Rendering an Untitled input
- *    without the wrapper gives it the brand coral fill instead of white —
+ *    without the wrapper gives it the action-coloured fill instead of white —
  *    visibly wrong, so wrap the subtree rather than overriding the component.
  *
  * 3. WHAT IS DELIBERATELY NOT DECLARED, AND WHY.
@@ -476,7 +476,8 @@
    * The aliases below re-point those neutral families at the console's own
    * tokens, so a PRO component inherits the tenant-branded palette instead of
    * importing a second one. The brand ramp needs no mapping: `--color-uu-brand-*`
-   * in untitledui.css already IS the console coral (`-700: #b73522`).
+   * in untitledui.css is already the console slate family (`-500: #6288b0`,
+   * `-700: #41608a`), so only the neutral families need re-pointing.
    *
    * Every value is a var() reference or a color-mix of console tokens, so the
    * per-workspace overrides of --card / --background / --foreground / --border

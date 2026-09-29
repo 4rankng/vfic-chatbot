@@ -122,16 +122,16 @@ const BrandMark = ({ className }: { className?: string }) => (
   <Link
     to="/"
     className={cx(
-      "flex size-10 items-center justify-center rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2",
+      "flex size-10 items-center justify-center rounded-xl outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2",
       className,
     )}
     aria-label="TingHire — về trang tổng quan"
   >
     <img
-      src="/brand/tinghire-icon-transparent.png"
+      src="/brand/tinghire-icon-rail.png"
       alt=""
       aria-hidden="true"
-      className="size-7"
+      className="h-9 w-auto"
     />
   </Link>
 );

@@ -122,7 +122,7 @@
   logs: false;
 }
 
-/* TingHire's recruiter-console theme. The product-owned coral connection
+/* TingHire's recruiter-console theme. The product-owned slate connection
    accent is paired with deep ink navigation and a warm cream workspace.
    Tenant branding never participates in this layer. Semantic success,
    warning, and error hues stay distinct from the brand. */
@@ -135,21 +135,21 @@
   --color-base-200: #fff6ed;
   --color-base-300: #f5ede5;
   --color-base-content: #172033;
-  --color-primary: #b73522;
+  --color-primary: #5b7a9e;
   --color-primary-content: #ffffff;
   --color-secondary: #172033;
   --color-secondary-content: #fffaf5;
-  --color-accent: #ffe1d6;
-  --color-accent-content: #922d20;
+  --color-accent: #e7eef6;
+  --color-accent-content: #3d5b82;
   --color-neutral: #24304a;
   --color-neutral-content: #fffaf5;
-  --color-info: #2463a7;
+  --color-info: #5c86b8;
   --color-info-content: #ffffff;
-  --color-success: #18845c;
+  --color-success: #4e8a6e;
   --color-success-content: #ffffff;
-  --color-warning: #a9630b;
+  --color-warning: #a8813f;
   --color-warning-content: #ffffff;
-  --color-error: #c53b4a;
+  --color-error: #b4636e;
   --color-error-content: #ffffff;
   --radius-selector: 0.65rem;
   --radius-field: 0.55rem;
@@ -223,7 +223,7 @@
   --color-feature-gap-border: var(--feature-gap-border);
 
   /* TingHire semantic accents. The legacy "teal" aliases remain because older
-     feature CSS consumes them, but their role is now the accessible coral
+     feature CSS consumes them, but their role is now the accessible action colour
      action color rather than a hue-specific promise. */
   --color-steel: #6d625c;
   --color-steel-soft: #f5ede5;
@@ -379,7 +379,7 @@
   --tracking-normal: 0;
   --tracking-wide: 0.06em;
 
-  /* Shared authenticated-console roles — TingHire coral, ink, and cream. */
+  /* Shared authenticated-console roles — TingHire slate, ink, and cream. */
   --workspace-shell: #172033;
   --workspace-shell-active: #24304a;
   --workspace-shell-rail-active: #fff6ed;
@@ -418,30 +418,30 @@
   --card-foreground: #172033;
   --popover: #fffcf8;
   --popover-foreground: #172033;
-  --primary: #b73522;
+  --primary: #5b7a9e;
   --primary-foreground: #ffffff;
   --secondary: #f5ede5;
   --secondary-foreground: #172033;
   --muted: #f5ede5;
   --muted-foreground: #6d625c;
-  --accent: #ffe1d6;
-  --accent-foreground: #922d20;
-  --destructive: #c53b4a;
+  --accent: #e7eef6;
+  --accent-foreground: #3d5b82;
+  --destructive: #b4636e;
   --destructive-foreground: #ffffff;
-  --info: #1f6feb; /* azure status */
+  --info: #5c86b8; /* azure status */
   --info-foreground: #ffffff;
-  --info-soft: #e8f0fe;
-  --warning: #c2750a; /* amber */
+  --info-soft: #e8f0f8;
+  --warning: #a8813f; /* amber */
   --warning-foreground: #ffffff;
-  --warning-soft: #fbf0dd;
+  --warning-soft: #f7eedd;
   --border: #e3e8ee;
   --input: #cbd5e1;
-  --ring: #f15a3a;
-  --ember: #c2750a;
+  --ring: #7c9bbb;
+  --ember: #a8813f;
   /* Global semantic accents. Promoted here (not just in inbox/tokens.css) so
      pages that don't import the inbox barrel — e.g. ZaloIntegrationPage's
      webhook-health badges — resolve --success/--warning without coupling to
-     inbox CSS. Track the coral/amber/crimson identity. */
+     inbox CSS. Track the slate/amber/rose identity. */
   --success: var(--color-green);
   --success-soft: #dff7ec; /* emerald-soft */
   --feature-ready: var(--color-green);
@@ -464,11 +464,11 @@
   --grid-color: transparent;
   --shimmer-highlight: rgba(23, 32, 51, 0.06);
 
-  --chart-1: #b73522;
-  --chart-2: #2463a7;
-  --chart-3: #18845c;
-  --chart-4: #a9630b;
-  --chart-5: #6d625c;
+  --chart-1: #5b7a9e;
+  --chart-2: #5c86b8;
+  --chart-3: #4e8a6e;
+  --chart-4: #a8813f;
+  --chart-5: #6d7b95;
 
   --sidebar: #172033;
   --sidebar-foreground: #fffaf5;
@@ -501,24 +501,24 @@
   --card-foreground: #fff7f0;
   --popover: #192235;
   --popover-foreground: #fff7f0;
-  --primary: #ff8a6f;
+  --primary: #a9c2dc;
   --primary-foreground: #172033;
   --secondary: #24304a;
   --secondary-foreground: #fff7f0;
   --muted: #202a3e;
   --muted-foreground: #b7aaa1;
-  --accent: #41251f;
-  --accent-foreground: #ffb29e;
-  --destructive: #e45b68;
-  --info: #67a5e5;
+  --accent: #22303f;
+  --accent-foreground: #c3d6ea;
+  --destructive: #d0868f;
+  --info: #8fb4dc;
   --info-foreground: #172033;
-  --info-soft: #1d3652;
-  --warning: #e1a64d;
+  --info-soft: #1c2c40;
+  --warning: #d0ac72;
   --warning-foreground: #172033;
-  --warning-soft: #45331d;
+  --warning-soft: #3d3423;
   --border: #364158;
   --input: #364158;
-  --ring: #ff8a6f;
+  --ring: #a9c2dc;
   --feature-ready: var(--color-green);
   --feature-ready-soft: color-mix(
     in oklab,
@@ -710,7 +710,7 @@ input:-webkit-autofill:focus {
 /* The ink chrome — topbar and navigation rail are one connected region that
    wraps the workspace canvas. Untitled UI components inside it resolve their
    whole vocabulary through the names below, so the chrome stays navy with ivory
-   text and a coral active marker instead of turning into a white sidebar. */
+   text and an action-coloured active marker instead of turning into a white sidebar. */
 .workspace-chrome {
   --color-bg-primary: var(--workspace-shell);
   --color-bg-primary_hover: var(--workspace-shell-hover);
@@ -832,7 +832,7 @@ input[type="time"] {
    re-declares the app's semantic tokens inside .kb-scope so every shadcn
    primitive + Tailwind utility (bg-background, bg-primary,
    text-muted-foreground, border-border, ...) re-skins to the console's
-   cream canvas / coral / crimson / amber identity WITHOUT touching global
+   cream canvas / slate / rose / amber identity WITHOUT touching global
    :root or .dark. Light values track the TingHire product palette;
    the dark variant (.dark .kb-scope below) inverts lightness so dark-mode
    users get a deep cool surface instead of a bright flash. Editorial
@@ -846,27 +846,27 @@ input[type="time"] {
   --card-foreground: #172033;
   --popover: #fffcf8;
   --popover-foreground: #172033;
-  --primary: #b73522;
+  --primary: #5b7a9e;
   --primary-foreground: #ffffff;
   --secondary: #f5ede5;
   --secondary-foreground: #172033;
   --muted: #f5ede5;
   --muted-foreground: #6d625c;
-  --accent: #ffe1d6;
-  --accent-foreground: #922d20;
-  --destructive: #c53b4a;
+  --accent: #e7eef6;
+  --accent-foreground: #3d5b82;
+  --destructive: #b4636e;
   --destructive-foreground: #ffffff;
   --border: #e6d8ce;
   --input: #e6d8ce;
-  --ring: #f15a3a;
+  --ring: #7c9bbb;
   /* kb-only accents (no standard-token equivalent) — names retained for
      backward compatibility; values now track the TingHire identity. */
-  --kb-teal: #b73522;
-  --kb-teal-soft: #ffe1d6;
-  --kb-rust: #c53b4a;
-  --kb-rust-soft: #fbe4e8;
-  --kb-ochre: #c2750a;
-  --kb-ochre-soft: #fbf0dd;
+  --kb-teal: #4f7199;
+  --kb-teal-soft: #e7eef6;
+  --kb-rust: #a9705c;
+  --kb-rust-soft: #f6e7e1;
+  --kb-ochre: #a8813f;
+  --kb-ochre-soft: #f7eedd;
   --kb-ink-700: #2d3953;
   --kb-ink-300: #8b7d74;
   --kb-line-strong: #d8c7bc;
@@ -889,25 +889,25 @@ input[type="time"] {
   --card-foreground: oklch(0.94 0.008 245);
   --popover: oklch(0.205 0.012 245);
   --popover-foreground: oklch(0.94 0.008 245);
-  --primary: #ff8a6f;
+  --primary: #a9c2dc;
   --primary-foreground: #172033;
   --secondary: oklch(0.245 0.012 245); /* muted surface */
   --secondary-foreground: oklch(0.94 0.008 245);
   --muted: oklch(0.225 0.012 245);
   --muted-foreground: oklch(0.71 0.012 245);
-  --accent: #41251f;
-  --accent-foreground: #ffb29e;
-  --destructive: oklch(0.64 0.19 18); /* lifted crimson */
+  --accent: #22303f;
+  --accent-foreground: #c3d6ea;
+  --destructive: oklch(0.68 0.11 12); /* lifted, muted rose */
   --destructive-foreground: oklch(0.98 0.005 245);
   --border: oklch(0.32 0.012 245);
   --input: oklch(0.32 0.012 245);
-  --ring: #ff8a6f;
-  --kb-teal: #ff8a6f;
-  --kb-teal-soft: #41251f;
-  --kb-rust: oklch(0.66 0.19 18);
-  --kb-rust-soft: oklch(0.28 0.05 18);
-  --kb-ochre: oklch(0.7 0.11 75);
-  --kb-ochre-soft: oklch(0.28 0.035 75);
+  --ring: #a9c2dc;
+  --kb-teal: #a9c2dc;
+  --kb-teal-soft: #22303f;
+  --kb-rust: oklch(0.68 0.09 40);
+  --kb-rust-soft: oklch(0.28 0.03 40);
+  --kb-ochre: oklch(0.72 0.08 80);
+  --kb-ochre-soft: oklch(0.28 0.03 80);
   --kb-ink-700: oklch(0.78 0.012 245);
   --kb-ink-300: oklch(0.6 0.012 245);
   --kb-line-strong: oklch(0.4 0.012 245);
@@ -917,8 +917,8 @@ input[type="time"] {
   background-image:
     linear-gradient(rgba(23, 32, 51, 0.022) 1px, transparent 1px),
     linear-gradient(90deg, rgba(23, 32, 51, 0.022) 1px, transparent 1px),
-    linear-gradient(rgba(241, 90, 58, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(241, 90, 58, 0.018) 1px, transparent 1px);
+    linear-gradient(rgba(91, 122, 158, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(91, 122, 158, 0.03) 1px, transparent 1px);
   background-position:
     0 0,
     0 0,
@@ -1078,7 +1078,7 @@ body {
 
 /* =========================================================================
    Untitled UI shell elevation. The ink sidebar uses a warm active surface and
-   the logo's coral connection accent; the topbar keeps a restrained hairline.
+   the logo connection mark; the topbar keeps a restrained hairline.
    ========================================================================= */
 .workspace-topbar {
   box-shadow: 0 1px 0 0 color-mix(in srgb, #000 16%, transparent);

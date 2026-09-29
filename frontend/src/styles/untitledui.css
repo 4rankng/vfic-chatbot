@@ -2,7 +2,7 @@
  * Untitled UI visual layer (additive) — TingHire recruiter console.
  *
  * Cherry-picked from UntitledUI v8 tokens, ADAPTED to this console's identity:
- *   - brand remapped from Untitled UI violet → TingHire coral #f15a3a
+ *   - brand remapped from Untitled UI violet → the TingHire slate accent (#5b7a9e)
  *   - display / shadow / radius / brand tokens NAMESPACED (--*-uu-*) so they
  *     never clobber the existing shadcn / daisyUI(tt-) / --workspace-* / --fs-*
  *     design system already living in index.css
@@ -12,18 +12,18 @@
  */
 
 @theme {
-  /* ---- Brand: TingHire coral scale (#f15a3a identity accent) ---- */
-  --color-uu-brand-50: #fff1ec;
-  --color-uu-brand-100: #ffe1d6;
-  --color-uu-brand-200: #ffc4b1;
-  --color-uu-brand-300: #ff9b7d;
-  --color-uu-brand-400: #fa7252;
-  --color-uu-brand-500: #f15a3a;
-  --color-uu-brand-600: #d9482b;
-  --color-uu-brand-700: #b73522;
-  --color-uu-brand-800: #922d20;
-  --color-uu-brand-900: #77291f;
-  --color-uu-brand-950: #41120c;
+  /* ---- Brand: TingHire slate scale (professional, low-saturation) ---- */
+  --color-uu-brand-50: #f1f5fa;
+  --color-uu-brand-100: #e3ebf4;
+  --color-uu-brand-200: #c7d8e9;
+  --color-uu-brand-300: #a3beda;
+  --color-uu-brand-400: #7c9fc6;
+  --color-uu-brand-500: #6288b0;
+  --color-uu-brand-600: #4f7199;
+  --color-uu-brand-700: #41608a;
+  --color-uu-brand-800: #385275;
+  --color-uu-brand-900: #2f4462;
+  --color-uu-brand-950: #1b2a40;
 
   /* ---- Display type ramp (UntitledUI scale, tight tracking; hero headings) ---- */
   --text-uu-display-xs: 1.5rem;
@@ -129,7 +129,7 @@
   );
 }
 
-/* Soft coral radial spotlight, composited over a surface. */
+/* Soft slate radial spotlight, composited over a surface. */
 @utility uu-spotlight {
   background-image: radial-gradient(
     120% 120% at 50% -10%,
