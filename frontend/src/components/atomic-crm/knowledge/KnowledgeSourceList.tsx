@@ -3,9 +3,9 @@ import { ListBase, useNotify, usePermissions, useRefresh } from "ra-core";
 import { useMasterDetailSelection } from "../hooks/useMasterDetailSelection";
 import { usePipelineAutoRefresh } from "./usePipelineAutoRefresh";
 import { BookOpen, FileText, RefreshCw, Search, Upload } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { InputBase } from "@/components/base/input/input";
+import { Button } from "@/components/base/buttons/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { Confirm } from "@/components/admin/confirm";
 import { ListPagination } from "@/components/admin/list-pagination";
 import { EmptyState } from "../kit";
@@ -69,17 +69,21 @@ export const KnowledgeRelearnAction = () => {
     <>
       <Button
         type="button"
-        variant="outline"
-        disabled={reindexPending}
+        color="secondary"
+        size="md"
+        data-slot="button"
+        isDisabled={reindexPending}
         onClick={() => setConfirmOpen(true)}
-        className="knowledge-relearn-action tt-btn-touch h-11 w-full rounded-[9px] sm:w-fit"
+        iconLeading={
+          <RelearnIcon
+            className={cn(
+              "size-4",
+              reindexPending && "animate-spin motion-reduce:animate-none",
+            )}
+          />
+        }
+        className="knowledge-relearn-action tt-btn-touch uu-scope h-11 w-full rounded-[9px] sm:w-fit"
       >
-        <RelearnIcon
-          className={cn(
-            "size-4",
-            reindexPending && "animate-spin motion-reduce:animate-none",
-          )}
-        />
         {reindexPending ? "Đang xếp hàng…" : "Học lại"}
       </Button>
       <Confirm
@@ -176,10 +180,11 @@ const KnowledgeSourceListContent = () => {
                   </div>
                   <Button
                     type="button"
+                    data-slot="button"
                     onClick={() => setUploadOpen(true)}
-                    className="knowledge-primary-action tt-btn-touch h-11 w-full rounded-[9px] sm:w-fit"
+                    iconLeading={Upload}
+                    className="knowledge-primary-action tt-btn-touch uu-scope h-11 w-full rounded-[9px] sm:w-fit"
                   >
-                    <Upload className="size-4" />
                     Thêm tệp
                   </Button>
                 </>
@@ -216,15 +221,17 @@ const KnowledgeSourceListContent = () => {
         />
 
         <div className="knowledge-filter-bar">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm tài liệu..."
-              className="h-11 rounded-[9px] border-border bg-card pl-9 text-control"
-            />
-          </div>
+          <InputBase
+            type="search"
+            icon={Search}
+            iconClassName="text-muted-foreground"
+            aria-label="Tìm tài liệu"
+            placeholder="Tìm tài liệu..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            wrapperClassName="uu-scope h-11 rounded-[9px]"
+            inputClassName="text-control"
+          />
           <div className="knowledge-filter-actions">
             <ProjectPicker
               value={projectFilter === ALL_PROJECTS ? "" : projectFilter}
@@ -233,9 +240,11 @@ const KnowledgeSourceListContent = () => {
             {projectFilter !== ALL_PROJECTS && (
               <Button
                 type="button"
-                variant="outline"
+                color="secondary"
+                size="md"
+                data-slot="button"
                 onClick={() => selectProject(ALL_PROJECTS)}
-                className="tt-btn-touch h-11 rounded-[9px]"
+                className="tt-btn-touch uu-scope h-11 rounded-[9px]"
               >
                 Tất cả
               </Button>

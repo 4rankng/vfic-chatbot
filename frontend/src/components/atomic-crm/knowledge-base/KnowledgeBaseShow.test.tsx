@@ -38,7 +38,7 @@ vi.mock("@/lib/apiClient", () => ({
   },
 }));
 vi.mock("react-router", () => ({
-  Link: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  useHref: (to: string) => to,
 }));
 vi.mock("../kit", () => ({
   PageHeading: ({ title }: { title: string }) => <h1>{title}</h1>,

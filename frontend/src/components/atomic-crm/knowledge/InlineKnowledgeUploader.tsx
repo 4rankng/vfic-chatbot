@@ -10,7 +10,7 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 import { cn } from "@/lib/utils";
 import {
   saveKnowledgeTemplate,
@@ -128,11 +128,10 @@ export const InlineKnowledgeUploader = () => {
           <div
             {...getRootProps({
               className: cn(
-                "tt-card tt-card-dash group grid min-h-36 cursor-pointer place-items-center rounded-[12px] border border-dashed border-[var(--kb-line-strong)] bg-background/70 px-5 py-6 text-center transition-colors outline-none",
-                "hover:border-[var(--kb-teal)] hover:bg-[var(--kb-teal-soft)]/55 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-                isDragActive &&
-                  "border-[var(--kb-teal)] bg-[var(--kb-teal-soft)]",
-                isDragReject && "border-destructive bg-destructive/10",
+                "uu-scope group grid min-h-36 cursor-pointer place-items-center rounded-xl border border-dashed border-primary bg-primary px-5 py-6 text-center transition-colors outline-none",
+                "hover:border-brand hover:bg-primary_hover focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+                isDragActive && "border-brand bg-brand-primary_alt",
+                isDragReject && "border-error_subtle bg-error-primary",
                 busy && "pointer-events-none opacity-70",
               ),
               role: "button",
@@ -149,15 +148,15 @@ export const InlineKnowledgeUploader = () => {
           >
             <input {...getInputProps()} />
             <div className="flex max-w-[28rem] flex-col items-center">
-              <span className="flex size-12 items-center justify-center rounded-[10px] bg-card text-[var(--kb-teal)] shadow-[inset_0_0_0_1px_var(--border)]">
+              <span className="flex size-12 items-center justify-center rounded-lg bg-secondary text-fg-brand-secondary ring-1 ring-secondary_alt">
                 <UploadCloud className="size-5" />
               </span>
-              <p className="mt-3 text-body font-semibold text-foreground">
+              <p className="mt-3 text-body-sm font-semibold text-primary">
                 {isDragActive
                   ? "Thả tệp vào đây"
                   : "Kéo thả hoặc bấm để chọn tệp"}
               </p>
-              <p className="mt-1 text-helper leading-5 text-muted-foreground sm:hidden">
+              <p className="mt-1 text-sm leading-5 text-tertiary sm:hidden">
                 Tệp Markdown, TXT hoặc Word DOCX.
               </p>
             </div>
@@ -191,15 +190,15 @@ export const InlineKnowledgeUploader = () => {
               </div>
               <Button
                 type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8 shrink-0 rounded-[9px] text-[var(--kb-teal)] hover:bg-card/70 hover:text-foreground"
+                color="tertiary"
+                size="sm"
+                data-slot="button"
+                className="uu-scope size-8 shrink-0 rounded-[9px] text-[var(--kb-teal)] hover:bg-card/70 hover:text-foreground"
                 onClick={() => setFile(null)}
-                disabled={busy}
+                isDisabled={busy}
+                iconLeading={X}
                 aria-label="Xóa tệp đã chọn"
-              >
-                <X className="size-4" />
-              </Button>
+              />
             </div>
           ) : (
             <p className="text-helper leading-5 text-muted-foreground">
@@ -209,33 +208,41 @@ export const InlineKnowledgeUploader = () => {
 
           <Button
             type="button"
-            variant="outline"
+            color="secondary"
+            size="md"
+            data-slot="button"
             onClick={() => downloadTemplate("knowledge")}
-            className="h-10 w-full rounded-[9px] px-4 sm:w-auto"
+            iconLeading={Download}
+            className="uu-scope h-10 w-full rounded-[9px] px-4 sm:w-auto"
           >
-            <Download className="size-4" />
             Tải mẫu KB
           </Button>
           <Button
             type="button"
-            variant="outline"
+            color="secondary"
+            size="md"
+            data-slot="button"
             onClick={() => downloadTemplate("faq")}
-            className="h-10 w-full rounded-[9px] px-4 sm:w-auto"
+            iconLeading={Download}
+            className="uu-scope h-10 w-full rounded-[9px] px-4 sm:w-auto"
           >
-            <Download className="size-4" />
             Tải mẫu FAQ
           </Button>
           <Button
             type="button"
+            size="md"
+            data-slot="button"
             onClick={submit}
-            disabled={!file || !projectChoice || busy}
-            className="h-10 w-full rounded-[9px] px-4 sm:w-auto"
+            isDisabled={!file || !projectChoice || busy}
+            iconLeading={
+              busy ? (
+                <RefreshCw className="size-4 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Upload className="size-4" />
+              )
+            }
+            className="uu-scope h-10 w-full rounded-[9px] px-4 sm:w-auto"
           >
-            {busy ? (
-              <RefreshCw className="size-4 animate-spin" />
-            ) : (
-              <Upload className="size-4" />
-            )}
             {busy
               ? translate("crm.common.uploading")
               : translate("crm.common.upload")}

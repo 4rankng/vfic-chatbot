@@ -18,9 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
+import { TextArea } from "@/components/base/textarea/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import {
   saveKnowledgeTemplate,
   createAndIngestKnowledgeBaseVersion,
@@ -175,20 +175,24 @@ export const KnowledgeUpload = ({
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
-                variant="outline"
+                color="secondary"
                 size="sm"
+                data-slot="button"
                 onClick={() => downloadTemplate("knowledge")}
+                iconLeading={Download}
+                className="uu-scope"
               >
-                <Download className="size-4" />
                 Tải mẫu KB
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                color="secondary"
                 size="sm"
+                data-slot="button"
                 onClick={() => downloadTemplate("faq")}
+                iconLeading={Download}
+                className="uu-scope"
               >
-                <Download className="size-4" />
                 Tải mẫu FAQ
               </Button>
             </div>
@@ -238,10 +242,10 @@ export const KnowledgeUpload = ({
               <div
                 {...getRootProps({
                   className: cn(
-                    "tt-card tt-card-dash group flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 px-6 py-8 text-center transition-colors outline-none",
-                    "hover:border-primary/50 hover:bg-primary/5 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-                    isDragActive && "border-primary bg-primary/10",
-                    isDragReject && "border-destructive bg-destructive/10",
+                    "uu-scope group flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-primary bg-primary px-6 py-8 text-center transition-colors outline-none",
+                    "hover:border-brand hover:bg-primary_hover focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+                    isDragActive && "border-brand bg-brand-primary_alt",
+                    isDragReject && "border-error_subtle bg-error-primary",
                     busy && "pointer-events-none opacity-70",
                   ),
                   role: "button",
@@ -257,16 +261,16 @@ export const KnowledgeUpload = ({
                 }}
               >
                 <input {...getInputProps()} />
-                <span className="mb-4 flex size-14 items-center justify-center rounded-full bg-background text-primary ring-1 ring-border">
+                <span className="mb-4 flex size-14 items-center justify-center rounded-full bg-secondary text-fg-brand-secondary ring-1 ring-secondary_alt">
                   <UploadCloud className="size-6" />
                 </span>
-                <p className="text-section-title font-semibold">
+                <p className="text-section-title font-semibold text-primary">
                   {isDragActive ? "Thả tệp vào đây" : "Kéo thả tệp vào đây"}
                 </p>
-                <p className="mt-1 max-w-sm text-body text-muted-foreground">
+                <p className="mt-1 max-w-sm text-body-sm text-tertiary">
                   hoặc bấm để chọn tệp Markdown, TXT hoặc Word DOCX.
                 </p>
-                <p className="mt-4 text-helper font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="mt-4 text-xs font-medium tracking-wide text-quaternary uppercase">
                   Một tệp mỗi lần tải
                 </p>
               </div>
@@ -288,32 +292,29 @@ export const KnowledgeUpload = ({
                   </div>
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0"
+                    color="tertiary"
+                    size="sm"
+                    data-slot="button"
+                    className="uu-scope size-8 shrink-0"
                     onClick={() => setFile(null)}
-                    disabled={busy}
+                    isDisabled={busy}
+                    iconLeading={X}
                     aria-label="Xóa tệp đã chọn"
-                  >
-                    <X className="size-4" />
-                  </Button>
+                  />
                 </div>
               )}
             </TabsContent>
 
             <TabsContent value="paste" className="mt-0">
-              <div className="flex flex-col gap-2">
-                <label className="text-helper font-medium uppercase tracking-wide text-muted-foreground">
-                  Nội dung kiến thức
-                </label>
-                <Textarea
-                  value={pasteText}
-                  onChange={(e) => setPasteText(e.target.value)}
-                  rows={10}
-                  placeholder="Dán nội dung mà chatbot cần tham khảo vào đây..."
-                  className="max-h-[40vh] min-h-52 resize-y overflow-y-auto text-control"
-                />
-              </div>
+              <TextArea
+                label="Nội dung kiến thức"
+                className="uu-scope"
+                value={pasteText}
+                onChange={setPasteText}
+                rows={10}
+                placeholder="Dán nội dung mà chatbot cần tham khảo vào đây..."
+                textAreaClassName="max-h-[40vh] min-h-52 resize-y overflow-y-auto text-control"
+              />
             </TabsContent>
           </Tabs>
 
@@ -373,14 +374,29 @@ export const KnowledgeUpload = ({
         </div>
         <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
           <Button
-            variant="outline"
+            type="button"
+            color="secondary"
+            size="md"
+            data-slot="button"
+            className="uu-scope"
+            isDisabled={busy}
             onClick={() => handleOpenChange(false)}
-            disabled={busy}
           >
             {translate("ra.action.cancel")}
           </Button>
-          <Button onClick={submit} disabled={!canSubmit}>
-            {busy ? <RefreshCw className="size-4 animate-spin" /> : null}
+          <Button
+            type="button"
+            size="md"
+            data-slot="button"
+            className="uu-scope"
+            onClick={submit}
+            isDisabled={!canSubmit}
+            iconLeading={
+              busy ? (
+                <RefreshCw className="size-4 animate-spin motion-reduce:animate-none" />
+              ) : undefined
+            }
+          >
             {busy
               ? translate("crm.common.uploading")
               : translate("crm.common.upload")}

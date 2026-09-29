@@ -9,8 +9,9 @@ import {
 } from "ra-core";
 import { ArrowLeft, FileText, LoaderCircle } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/base/buttons/button";
+import { InputBase } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
 import { TopToolbar } from "../layout/TopToolbar";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { KnowledgeSource } from "../types";
@@ -76,11 +77,13 @@ const KnowledgeSourceEditContent = () => {
       <TopToolbar className="knowledge-source-subpage-toolbar justify-start">
         <Button
           type="button"
-          variant="ghost"
-          className="tt-btn-touch h-11 rounded-[9px]"
+          color="tertiary"
+          size="md"
+          data-slot="button"
+          className="tt-btn-touch uu-scope h-11 rounded-[9px]"
           onClick={() => redirect("list", "knowledge_sources")}
+          iconLeading={ArrowLeft}
         >
-          <ArrowLeft className="size-4" />
           Tất cả nguồn
         </Button>
       </TopToolbar>
@@ -107,16 +110,16 @@ const KnowledgeSourceEditContent = () => {
         </div>
 
         <div className="knowledge-source-edit-fields">
-          <label htmlFor="knowledge-source-name">Tên tài liệu</label>
-          <Input
+          <Label htmlFor="knowledge-source-name">Tên tài liệu</Label>
+          <InputBase
             id="knowledge-source-name"
+            data-slot="input"
             value={fileName}
             onChange={(event) => setFileName(event.target.value)}
-            className="h-11"
-            required
+            wrapperClassName="uu-scope h-11"
           />
 
-          <label htmlFor="knowledge-source-project">Dự án</label>
+          <Label htmlFor="knowledge-source-project">Dự án</Label>
           <ProjectPicker
             id="knowledge-source-project"
             value={projectId}
@@ -127,21 +130,26 @@ const KnowledgeSourceEditContent = () => {
         <footer className="knowledge-source-edit-actions">
           <Button
             type="button"
-            variant="outline"
-            className="tt-btn-touch h-11 rounded-[9px]"
-            disabled={submitting}
+            color="secondary"
+            size="md"
+            data-slot="button"
+            className="tt-btn-touch uu-scope h-11 rounded-[9px]"
+            isDisabled={submitting}
             onClick={() => redirect("show", "knowledge_sources", source.id)}
           >
             {translate("ra.action.cancel")}
           </Button>
           <Button
             type="submit"
-            className="tt-btn-touch h-11 rounded-[9px]"
-            disabled={!canSubmit}
+            data-slot="button"
+            className="tt-btn-touch uu-scope h-11 rounded-[9px]"
+            isDisabled={!canSubmit}
+            iconLeading={
+              submitting ? (
+                <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+              ) : undefined
+            }
           >
-            {submitting && (
-              <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-            )}
             {submitting
               ? translate("crm.common.saving")
               : translate("crm.common.save_changes")}

@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
-import { useRedirect, useRefresh } from "ra-core";
+import type { Key } from "react-aria-components";
+import { useDeleteWithUndoController, useRedirect, useRefresh } from "ra-core";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -7,16 +8,12 @@ import {
   MoreHorizontal,
   Pencil,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
-import { DeleteButton } from "@/components/admin";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
+import { ProgressBarBase } from "@/components/base/progress-indicators/progress-indicators";
 import { cn, getRelativeTimeString } from "@/lib/utils";
 import type { KnowledgeSource, Project } from "../types";
 import { stageLabel } from "./stageTone";
@@ -106,27 +103,31 @@ export const KnowledgeSourceRow = ({
   );
 };
 
+const STAMP_COLORS = {
+  ready: "success",
+  error: "error",
+  pending: "warning",
+  processing: "brand",
+} as const;
+
 const Stamp = ({
   tone,
   icon,
   children,
 }: {
-  tone: "ready" | "error" | "pending" | "processing";
+  tone: keyof typeof STAMP_COLORS;
   icon?: ReactNode;
   children: ReactNode;
 }) => (
-  <span
-    className={cn(
-      "kb-status",
-      tone === "ready" && "text-[var(--kb-teal)]",
-      tone === "error" && "text-[var(--kb-rust)]",
-      tone === "pending" && "text-[var(--kb-ochre)]",
-      tone === "processing" && "text-[var(--kb-teal)]",
-    )}
+  <Badge
+    type="pill-color"
+    size="sm"
+    color={STAMP_COLORS[tone]}
+    className="gap-1 uppercase tracking-wide"
   >
     {icon}
     {children}
-  </span>
+  </Badge>
 );
 
 export const SourceStamp = ({ source }: { source: KnowledgeSource }) => {
@@ -190,76 +191,78 @@ export const PipelineMiniProgress = ({
         </span>
         <span className="text-muted-foreground">{percent}%</span>
       </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--kb-line-strong)]/40">
-        <div
-          className={cn(
-            "h-full rounded-full transition-all",
-            isFailed(source) ? "bg-[var(--kb-rust)]" : "bg-[var(--kb-teal)]",
-          )}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+      <ProgressBarBase
+        value={percent}
+        className="mt-1.5 h-1.5 rounded-full bg-[var(--kb-line-strong)]/40!"
+        progressClassName={cn(
+          "rounded-full",
+          isFailed(source) ? "bg-[var(--kb-rust)]!" : "bg-[var(--kb-teal)]!",
+        )}
+      />
     </div>
   );
 };
+
+const CHIP_COLORS = {
+  neutral: "gray",
+  success: "success",
+  warning: "warning",
+  danger: "error",
+  processing: "brand",
+} as const;
 
 export const Chip = ({
   children,
   tone = "neutral",
 }: {
   children: ReactNode;
-  tone?: "neutral" | "success" | "warning" | "danger" | "processing";
+  tone?: keyof typeof CHIP_COLORS;
 }) => (
-  <span
-    className={cn(
-      "kb-mono rounded-full px-2 py-1 text-caption font-semibold leading-none",
-      tone === "neutral" && "bg-secondary text-[var(--kb-ink-700)]",
-      tone === "success" && "bg-[var(--kb-teal-soft)] text-[var(--kb-teal)]",
-      tone === "warning" && "bg-[var(--kb-ochre-soft)] text-[var(--kb-ochre)]",
-      tone === "danger" && "bg-[var(--kb-rust-soft)] text-[var(--kb-rust)]",
-      tone === "processing" && "bg-[var(--kb-teal-soft)] text-[var(--kb-teal)]",
-    )}
-  >
+  <Badge type="pill-color" size="sm" color={CHIP_COLORS[tone]}>
     {children}
-  </span>
+  </Badge>
 );
 
 const SourceRowActions = ({ source }: { source: KnowledgeSource }) => {
   const redirect = useRedirect();
   const refresh = useRefresh();
+  const { isPending, handleDelete } = useDeleteWithUndoController({
+    record: source,
+    resource: "knowledge_sources",
+    redirect: false,
+    successMessage: "Đã xóa tài liệu.",
+    mutationOptions: { onSuccess: () => refresh() },
+  });
+
+  const handleAction = (key: Key) => {
+    if (key === "edit") redirect("edit", "knowledge_sources", source.id);
+    if (key === "delete") handleDelete(undefined as never);
+  };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-11 rounded-lg text-muted-foreground opacity-70 transition-opacity hover:opacity-100"
-          aria-label={`Mở thao tác cho ${source.file_name}`}
-        >
-          <MoreHorizontal className="size-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
-        <DropdownMenuItem
-          onSelect={() => redirect("edit", "knowledge_sources", source.id)}
-        >
-          <Pencil className="size-4" />
-          Sửa
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DeleteButton
-          record={source}
-          resource="knowledge_sources"
-          label="Xóa"
-          size="sm"
-          variant="ghost"
-          redirect={false}
-          successMessage="Đã xóa tài liệu."
-          mutationOptions={{ onSuccess: () => refresh() }}
-          className="h-11 w-full justify-start px-2 text-button text-destructive hover:bg-destructive/10"
-        />
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Dropdown.Root>
+      <Button
+        color="tertiary"
+        size="sm"
+        data-slot="button"
+        className="uu-scope size-11 rounded-lg text-muted-foreground opacity-70 transition-opacity hover:opacity-100"
+        iconLeading={MoreHorizontal}
+        aria-label={`Mở thao tác cho ${source.file_name}`}
+      />
+      <Dropdown.Popover placement="bottom end" className="uu-scope w-40">
+        <Dropdown.Menu onAction={handleAction}>
+          <Dropdown.Item id="edit" icon={Pencil} label="Sửa" />
+          <Dropdown.Separator />
+          <Dropdown.Item
+            id="delete"
+            icon={Trash2}
+            isDisabled={isPending}
+            aria-label="Xóa"
+          >
+            <span className="text-error-primary">Xóa</span>
+          </Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
   );
 };

@@ -1,23 +1,23 @@
 import { useState } from "react";
-import { useNotify, useRedirect, useRefresh } from "ra-core";
+import type { Key } from "react-aria-components";
 import {
-  ArrowLeft,
+  useDeleteWithUndoController,
+  useNotify,
+  useRedirect,
+  useRefresh,
+} from "ra-core";
+import {
   Archive,
+  ArrowLeft,
   Download,
   LoaderCircle,
   MoreHorizontal,
   Pencil,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
-import { DeleteButton } from "@/components/admin";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/base/buttons/button";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
 import {
   archiveKnowledge,
   downloadKnowledgeRawFile,
@@ -63,6 +63,25 @@ export const KnowledgeDetailPanel = ({
     "reindex" | "download" | "archive" | null
   >(null);
   const processing = isProcessing(source);
+  const { isPending: deletePending, handleDelete } =
+    useDeleteWithUndoController({
+      record: source,
+      resource: "knowledge_sources",
+      redirect: false,
+      successMessage: "Đã xóa tài liệu.",
+      mutationOptions: { onSuccess: () => refresh() },
+    });
+
+  const handleDetailAction = (key: Key) => {
+    if (key === "archive") {
+      void run(
+        "archive",
+        () => archiveKnowledge(String(source.id)),
+        "Đã lưu trữ. Agent sẽ không dùng nguồn này nữa.",
+      );
+    }
+    if (key === "delete") handleDelete(undefined as never);
+  };
 
   const run = async (
     action: Exclude<typeof pendingAction, null>,
@@ -86,14 +105,17 @@ export const KnowledgeDetailPanel = ({
   return (
     <section className="knowledge-detail-panel flex flex-col bg-transparent text-foreground">
       {onBack && (
-        <button
+        <Button
           type="button"
+          color="tertiary"
+          size="sm"
+          data-slot="button"
           onClick={onBack}
-          className="kb-mono flex min-h-11 items-center gap-2 self-start rounded-[9px] px-3 text-button text-muted-foreground hover:bg-secondary hover:text-foreground lg:hidden"
+          iconLeading={ArrowLeft}
+          className="kb-mono min-h-11 self-start rounded-[9px] px-3 lg:hidden"
         >
-          <ArrowLeft className="size-4" />
           Quay lại danh sách
-        </button>
+        </Button>
       )}
 
       {/* Compact identity — one block, no duplicated stats */}
@@ -119,16 +141,20 @@ export const KnowledgeDetailPanel = ({
       {/* Single, context-dependent action row */}
       <div className="knowledge-detail-actions flex flex-wrap gap-2">
         <Button
+          type="button"
+          data-slot="button"
+          isDisabled={pendingAction !== null}
           onClick={() => redirect("edit", "knowledge_sources", source.id)}
-          disabled={pendingAction !== null}
-          className="tt-btn-touch rounded-[9px]"
+          iconLeading={Pencil}
+          className="tt-btn-touch uu-scope rounded-[9px]"
         >
-          <Pencil className="size-4" />
           Sửa
         </Button>
         <Button
-          variant="outline"
-          disabled={pendingAction !== null}
+          type="button"
+          color="secondary"
+          data-slot="button"
+          isDisabled={pendingAction !== null}
           onClick={() =>
             run(
               "reindex",
@@ -136,18 +162,22 @@ export const KnowledgeDetailPanel = ({
               "Đã đưa vào hàng huấn luyện lại.",
             )
           }
-          className="tt-btn-touch rounded-[9px]"
+          iconLeading={
+            pendingAction === "reindex" ? (
+              <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )
+          }
+          className="tt-btn-touch uu-scope rounded-[9px]"
         >
-          {pendingAction === "reindex" ? (
-            <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <RefreshCw className="size-4" />
-          )}
           {pendingAction === "reindex" ? "Đang xếp hàng…" : "Huấn luyện lại"}
         </Button>
         <Button
-          variant="outline"
-          disabled={pendingAction !== null}
+          type="button"
+          color="secondary"
+          data-slot="button"
+          isDisabled={pendingAction !== null}
           onClick={() =>
             run(
               "download",
@@ -160,55 +190,46 @@ export const KnowledgeDetailPanel = ({
               false,
             )
           }
-          className="tt-btn-touch rounded-[9px]"
+          iconLeading={
+            pendingAction === "download" ? (
+              <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+            ) : (
+              <Download className="size-4" />
+            )
+          }
+          className="tt-btn-touch uu-scope rounded-[9px]"
         >
-          {pendingAction === "download" ? (
-            <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <Download className="size-4" />
-          )}
           {pendingAction === "download" ? "Đang tải…" : "Tải tệp gốc"}
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              disabled={pendingAction !== null}
-              className="tt-btn-touch rounded-[9px]"
-              aria-label={`Mở thao tác cho ${source.file_name}`}
-            >
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem
-              disabled={pendingAction !== null}
-              onSelect={() =>
-                run(
-                  "archive",
-                  () => archiveKnowledge(String(source.id)),
-                  "Đã lưu trữ. Agent sẽ không dùng nguồn này nữa.",
-                )
-              }
-            >
-              <Archive className="size-4" />
-              Lưu trữ
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DeleteButton
-              record={source}
-              resource="knowledge_sources"
-              label="Xóa"
-              size="sm"
-              variant="ghost"
-              redirect={false}
-              successMessage="Đã xóa tài liệu."
-              mutationOptions={{ onSuccess: () => refresh() }}
-              className="h-11 w-full justify-start px-2 text-button text-destructive hover:bg-destructive/10"
-            />
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Dropdown.Root>
+          <Button
+            color="secondary"
+            size="md"
+            data-slot="button"
+            isDisabled={pendingAction !== null}
+            iconLeading={MoreHorizontal}
+            aria-label={`Mở thao tác cho ${source.file_name}`}
+            className="tt-btn-touch uu-scope rounded-[9px]"
+          />
+          <Dropdown.Popover placement="bottom end" className="uu-scope w-44">
+            <Dropdown.Menu onAction={handleDetailAction}>
+              <Dropdown.Item
+                id="archive"
+                icon={Archive}
+                label="Lưu trữ"
+                isDisabled={pendingAction !== null}
+              />
+              <Dropdown.Separator />
+              <Dropdown.Item
+                id="delete"
+                icon={Trash2}
+                isDisabled={deletePending}
+              >
+                <span className="text-error-primary">Xóa</span>
+              </Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown.Root>
       </div>
 
       {processing && <PipelineMiniProgress source={source} />}
@@ -239,10 +260,7 @@ export const KnowledgeDetailPanel = ({
         </h4>
         {source.digest_summary ? (
           <div className="mt-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3">
-            <p
-              className="text-body italic leading-6 text-[var(--kb-ink-700)]"
-              style={{ fontFamily: "var(--kb-font-display)" }}
-            >
+            <p className="text-body italic leading-6 text-[var(--kb-ink-700)] [font-family:var(--kb-font-display)]">
               {localizeKnowledgeText(source.digest_summary)}
             </p>
           </div>
@@ -321,10 +339,7 @@ const PipelineDigestHint = ({ source }: { source: KnowledgeSource }) => {
 
   return (
     <div className="mt-2 border-l-2 border-[var(--kb-line-strong)] py-1 pl-3">
-      <p
-        className="text-body italic leading-6 text-[var(--kb-ink-300)]"
-        style={{ fontFamily: "var(--kb-font-display)" }}
-      >
+      <p className="text-body italic leading-6 text-[var(--kb-ink-300)] [font-family:var(--kb-font-display)]">
         Chưa có tóm tắt. Nội dung sẽ xuất hiện sau khi xử lý.
       </p>
     </div>

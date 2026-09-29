@@ -12,10 +12,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock("ra-core", () => ({
   useRedirect: () => mocks.redirect,
   useRefresh: () => mocks.refresh,
-}));
-
-vi.mock("@/components/admin", () => ({
-  DeleteButton: () => <button type="button">Xóa</button>,
+  // The row actions own the delete verb directly now that the menu is React
+  // Aria (the Radix `DeleteButton` cannot be rendered inside it).
+  useDeleteWithUndoController: () => ({
+    isPending: false,
+    handleDelete: vi.fn(),
+  }),
 }));
 
 import { KnowledgeSourceRow } from "./KnowledgeSourceRow";
@@ -55,7 +57,7 @@ describe("KnowledgeSourceRow", () => {
     await expect
       .element(screen.getByText("LG Display", { exact: false }))
       .toBeVisible();
-    await expect.element(screen.getByText("Sẵn sàng")).toHaveClass("kb-status");
+    await expect.element(screen.getByText("Sẵn sàng")).toBeVisible();
     expect(screen.container.textContent).not.toContain("Đang xem");
     expect(
       screen.container.querySelector(".knowledge-source-row-footer"),

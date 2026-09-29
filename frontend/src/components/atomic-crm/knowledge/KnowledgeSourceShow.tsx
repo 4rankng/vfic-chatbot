@@ -1,7 +1,7 @@
 import { ShowBase, useGetOne, useRecordContext, useRedirect } from "ra-core";
 import { ArrowLeft } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 import type { KnowledgeSource, Project } from "../types";
 import { TopToolbar } from "../layout/TopToolbar";
 import { KnowledgeDetailPanel } from "./KnowledgeDetailPanel";
@@ -27,11 +27,13 @@ const KnowledgeSourceShowContent = () => {
       <TopToolbar className="knowledge-source-subpage-toolbar justify-start">
         <Button
           type="button"
-          variant="ghost"
-          className="tt-btn-touch h-11 rounded-[9px]"
+          color="tertiary"
+          size="md"
+          data-slot="button"
+          className="tt-btn-touch uu-scope h-11 rounded-[9px]"
           onClick={() => redirect("list", "knowledge_sources")}
+          iconLeading={ArrowLeft}
         >
-          <ArrowLeft className="size-4" />
           Tất cả nguồn
         </Button>
       </TopToolbar>

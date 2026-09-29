@@ -8,8 +8,8 @@ import {
   RefreshCw,
   Tags,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getKnowledgeUnits, type KnowledgeUnit } from "./knowledge-service";
 import { Markdown } from "../misc/Markdown";
@@ -101,7 +101,7 @@ export const StoredKnowledgePanel = ({
             Mở từng đơn vị để kiểm tra nội dung.
           </p>
         </div>
-        <Badge className="kb-mono rounded-full bg-[var(--kb-teal-soft)] text-caption text-[var(--kb-teal)] hover:bg-[var(--kb-teal-soft)]">
+        <Badge type="pill-color" size="md" color="brand" className="kb-mono">
           {source.digest_meta?.unit_count ?? units.length} đơn vị
         </Badge>
       </div>
@@ -137,8 +137,10 @@ export const StoredKnowledgePanel = ({
           {remainingCount > 0 ? (
             <Button
               type="button"
-              variant="ghost"
-              className="knowledge-unit-more tt-btn-touch"
+              color="tertiary"
+              size="md"
+              data-slot="button"
+              className="knowledge-unit-more tt-btn-touch uu-scope"
               onClick={() =>
                 setVisibleCount((count) =>
                   Math.min(units.length, count + INITIAL_VISIBLE_UNITS),
@@ -150,8 +152,10 @@ export const StoredKnowledgePanel = ({
           ) : units.length > INITIAL_VISIBLE_UNITS ? (
             <Button
               type="button"
-              variant="ghost"
-              className="knowledge-unit-more tt-btn-touch"
+              color="tertiary"
+              size="md"
+              data-slot="button"
+              className="knowledge-unit-more tt-btn-touch uu-scope"
               onClick={() => setVisibleCount(INITIAL_VISIBLE_UNITS)}
             >
               Thu gọn danh sách
@@ -319,12 +323,15 @@ const KnowledgeUnitDisclosure = ({ unit }: { unit: KnowledgeUnit }) => {
             </h5>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {entityEntries.slice(0, 8).map(([key, value]) => (
-                <span
+                <Badge
                   key={key}
-                  className="kb-mono rounded-full bg-secondary px-2 py-1 text-caption text-[var(--kb-ink-700)]"
+                  type="pill-color"
+                  size="md"
+                  color="gray"
+                  className="kb-mono"
                 >
                   {labelFromMap(key, ENTITY_LABELS)}: {String(value)}
-                </span>
+                </Badge>
               ))}
             </div>
           </section>

@@ -7,10 +7,10 @@ import {
   useTranslate,
 } from "ra-core";
 import { type ReactNode, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, LoaderCircle } from "lucide-react";
-import { Link } from "react-router";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/base/buttons/button";
+import { TextArea } from "@/components/base/textarea/textarea";
+import { ArrowLeft } from "lucide-react";
+import { useHref } from "react-router";
 import type {
   KnowledgeBase,
   KnowledgeBaseProject,
@@ -35,7 +35,7 @@ type Capacity = {
 };
 
 const Fact = ({ label, value }: { label: string; value: ReactNode }) => (
-  <div className="min-w-0 border-b border-[var(--tt-border)] px-4 py-3 sm:odd:border-r">
+  <div className="min-w-0 border-b border-[var(--workspace-border)] px-4 py-3 sm:odd:border-r">
     <dt className="text-caption uppercase tracking-wide text-muted-foreground">
       {label}
     </dt>
@@ -59,7 +59,7 @@ const KnowledgeSection = ({
   className?: string;
 }) => (
   <section
-    className={`min-w-0 border-t border-[var(--tt-border)] ${className ?? ""}`}
+    className={`min-w-0 border-t border-[var(--workspace-border)] ${className ?? ""}`}
     aria-labelledby={id}
   >
     <header className="flex min-h-14 items-center justify-between gap-3 px-4 py-3">
@@ -75,7 +75,7 @@ const KnowledgeSection = ({
         </span>
       ) : null}
     </header>
-    <div className="border-t border-[var(--tt-border)] px-4 py-3">
+    <div className="border-t border-[var(--workspace-border)] px-4 py-3">
       {children}
     </div>
   </section>
@@ -86,6 +86,8 @@ export const KnowledgeBaseShowContent = () => {
   const notify = useNotify();
   const refresh = useRefresh();
   const translate = useTranslate();
+  const listHref = useHref("/knowledge_bases");
+  const createProjectHref = useHref("/projects/create");
   const { data: personas = [] } = useGetList<Persona>("personas", {
     pagination: { page: 1, perPage: 100 },
     sort: { field: "name", order: "ASC" },
@@ -244,16 +246,19 @@ export const KnowledgeBaseShowContent = () => {
             : "Một tệp được gửi nguyên vẹn theo lượt."
         }
         actions={
-          <Button asChild variant="outline" size="sm">
-            <Link to="/knowledge_bases">
-              <ArrowLeft className="size-4" aria-hidden="true" />
-              Kho kiến thức
-            </Link>
+          <Button
+            href={listHref}
+            color="secondary"
+            size="sm"
+            className="uu-scope"
+            iconLeading={ArrowLeft}
+          >
+            Kho kiến thức
           </Button>
         }
       />
 
-      <dl className="mt-4 grid border-y border-[var(--tt-border)] sm:grid-cols-3">
+      <dl className="mt-4 grid border-y border-[var(--workspace-border)] sm:grid-cols-3">
         <Fact label="Chế độ" value={modeLabel} />
         <Fact label="Agent" value={attached.length} />
         <Fact
@@ -270,8 +275,9 @@ export const KnowledgeBaseShowContent = () => {
           <span>Chưa tải được dữ liệu kho.</span>
           <Button
             type="button"
-            variant="outline"
+            color="secondary"
             size="sm"
+            className="uu-scope"
             onClick={() => setReloadKey((value) => value + 1)}
           >
             {translate("crm.common.retry")}
@@ -286,7 +292,7 @@ export const KnowledgeBaseShowContent = () => {
           count={attached.length}
         >
           {attached.length ? (
-            <ul className="divide-y divide-[var(--tt-border)]">
+            <ul className="divide-y divide-[var(--workspace-border)]">
               {attached.map((persona) => (
                 <li key={persona.id} className="py-2.5 first:pt-0 last:pb-0">
                   {persona.name}
@@ -313,7 +319,7 @@ export const KnowledgeBaseShowContent = () => {
                 Dữ liệu chưa sẵn sàng.
               </p>
             ) : projects.length ? (
-              <ul className="divide-y divide-[var(--tt-border)]">
+              <ul className="divide-y divide-[var(--workspace-border)]">
                 {projects.map((project) => (
                   <li key={project.id} className="py-3 first:pt-0 last:pb-0">
                     <p className="font-medium text-foreground">
@@ -328,7 +334,7 @@ export const KnowledgeBaseShowContent = () => {
                         <summary className="flex min-h-11 cursor-pointer items-center text-helper font-medium text-foreground">
                           {project.factories.length} nhà máy
                         </summary>
-                        <ul className="space-y-2 border-l border-[var(--tt-border)] pl-3 text-helper text-muted-foreground">
+                        <ul className="space-y-2 border-l border-[var(--workspace-border)] pl-3 text-helper text-muted-foreground">
                           {project.factories.map((factory) => (
                             <li key={factory.name}>
                               <span className="font-medium text-foreground">
@@ -375,26 +381,24 @@ export const KnowledgeBaseShowContent = () => {
                     : "Tệp vượt giới hạn ngữ cảnh của model."}
                 </p>
               ) : null}
-              <Textarea
+              <TextArea
+                className="uu-scope"
                 value={text}
-                onChange={(event) => setText(event.target.value)}
+                onChange={setText}
                 rows={14}
                 aria-label="Nội dung tệp ngữ cảnh"
                 placeholder="Nhập nội dung .txt hoặc .md"
-                disabled={knowledgeLoading || loadFailed || savingFile}
+                isDisabled={knowledgeLoading || loadFailed || savingFile}
               />
               <Button
+                className="uu-scope"
                 onClick={saveDirectFile}
-                disabled={
+                isDisabled={
                   knowledgeLoading || loadFailed || savingFile || !text.trim()
                 }
+                isLoading={savingFile}
+                showTextWhileLoading
               >
-                {savingFile ? (
-                  <LoaderCircle
-                    className="size-4 animate-spin motion-reduce:animate-none"
-                    aria-hidden="true"
-                  />
-                ) : null}
                 {savingFile
                   ? translate("crm.common.saving")
                   : translate("crm.common.save_file")}
@@ -418,7 +422,7 @@ export const KnowledgeBaseShowContent = () => {
                 Dữ liệu chưa sẵn sàng.
               </p>
             ) : attachableProjects.length ? (
-              <ul className="divide-y divide-[var(--tt-border)]">
+              <ul className="divide-y divide-[var(--workspace-border)]">
                 {attachableProjects.map((project) => {
                   const isAttaching = attachingProjectId === String(project.id);
                   return (
@@ -429,16 +433,13 @@ export const KnowledgeBaseShowContent = () => {
                       <span className="min-w-0 truncate">{project.name}</span>
                       <Button
                         size="sm"
-                        variant="outline"
-                        disabled={attachingProjectId !== null}
+                        color="secondary"
+                        className="uu-scope"
+                        isDisabled={attachingProjectId !== null}
+                        isLoading={isAttaching}
+                        showTextWhileLoading
                         onClick={() => void attachProject(project)}
                       >
-                        {isAttaching ? (
-                          <LoaderCircle
-                            className="size-4 animate-spin motion-reduce:animate-none"
-                            aria-hidden="true"
-                          />
-                        ) : null}
                         {isAttaching ? "Đang gắn…" : "Gắn"}
                       </Button>
                     </li>
@@ -450,8 +451,13 @@ export const KnowledgeBaseShowContent = () => {
                 <p className="text-body text-muted-foreground">
                   Không còn dự án chưa gắn.
                 </p>
-                <Button asChild variant="outline" size="sm">
-                  <Link to="/projects/create">Tạo dự án</Link>
+                <Button
+                  href={createProjectHref}
+                  color="secondary"
+                  size="sm"
+                  className="uu-scope"
+                >
+                  Tạo dự án
                 </Button>
               </div>
             )}
