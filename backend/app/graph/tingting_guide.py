@@ -3,7 +3,9 @@
 The reset flow belongs to the TingTing app, not to a project: any employee of a
 customer factory can reset their TingTing password when they can prove identity
 with full name + CCCD + mobile. Because it is one workflow for every tenant, the
-guide is code — the admin only supplies the ``X-API-Key`` in the settings page.
+guide is code — the admin supplies the ``X-API-Key`` and the escalation hotline
+in the settings page, and every prompt/reply here is built around the stored
+hotline at turn time (seeded by Alembic 0058, editable afterwards).
 
 The block is appended to the agent's system prompt whenever the integration is
 configured, and it is the only place the model learns the endpoint shapes. It
@@ -24,22 +26,41 @@ TINGTING_RESET_REDIRECT_REPLY = (
     f"{TINGTING_SUPPORT_OA_URL}"
 )
 
-# The one consultant-promise sentence. Defined here so every fixed reply that
-# promises a consultant ends with the SAME sentence — the lane's escalation
-# hook detects its own handoff replies by that suffix (lanes.py), so a drift in
-# one copy would silently break the needs_human write. Re-exported by lanes.py
-# as TINGTING_HANDOFF_REPLY; the recruitment out-of-scope handoff no longer
-# reuses it (operator rule 2026-09-29: candidates get the hotline instead).
-TINGTING_CONSULTANT_HANDOFF_LINE = "Vui lòng chờ chuyên viên tư vấn liên hệ."
+# The one escalation reply, built per turn around the admin-editable hotline
+# (integration setting ``tingting_hotline``, seeded by Alembic 0058). Operator
+# rule (2026-09-29): nobody works the TingTing OA as a human, so whenever the
+# bot would have queued a person it points the employee at the hotline instead.
+# The call is actively encouraged and nothing promises an in-chat follow-up.
+# One builder so every fixed escalation reply ends with the SAME sentence — a
+# paraphrase could drop the number, and the tests pin the digits and the tail.
+def tingting_hotline_reply(hotline: str) -> str:
+    """The escalation reply for the stored hotline (or the honest no-number form).
 
-# The identity-verification exhaustion reply: the employee has spent all three
-# tries without a matching record, so the bot stops asking and hands off.
-# Operator-approved fixed words, quoted verbatim by both the API guide and the
-# verify_tingting_identity tool verdict.
-TINGTING_VERIFY_EXHAUSTED_REPLY = (
-    "Dạ thông tin anh/chị cung cấp chưa hợp lệ nên em chưa xác minh được tài khoản ạ. "
-    f"{TINGTING_CONSULTANT_HANDOFF_LINE}"
-)
+    The seed guarantees a value, so an empty read means an admin cleared the
+    field or the read failed — degrading to the bare can't-help sentence beats
+    resurrecting the number from code, where it would silently drift from the
+    admin-edited value.
+    """
+    number = (hotline or "").strip()
+    if not number:
+        return "Dạ tình huống này em chưa hỗ trợ được qua tin nhắn ạ."
+    return (
+        "Dạ tình huống này em chưa hỗ trợ được qua tin nhắn ạ. Anh/chị vui lòng gọi ngay "
+        f"hotline {number} để chuyên viên hỗ trợ mình nhé ạ."
+    )
+
+
+def tingting_verify_exhausted_reply(hotline: str) -> str:
+    """The identity-verification exhaustion reply: three tries spent, stop asking.
+
+    The hotline reply below is the whole handoff — nobody is queued (operator
+    rule 2026-09-29). Operator-approved fixed words, quoted verbatim by both
+    the API guide and the verify_tingting_identity tool verdict.
+    """
+    return (
+        "Dạ thông tin anh/chị cung cấp chưa hợp lệ nên em chưa xác minh được tài khoản ạ. "
+        f"{tingting_hotline_reply(hotline)}"
+    )
 
 # Fixed replies, not model output: the operator approved these exact words. The
 # confirm question is the OA's only clarifying turn, and the three-field ask is
@@ -51,8 +72,8 @@ TINGTING_FIELDS_ASK = (
 )
 
 # BOT-01: the redirect ask for small-talk / no-clear-need replies. MUST NOT
-# contain TINGTING_CONSULTANT_HANDOFF_LINE — the lanes escalation hook treats
-# that line as a handoff reply and writes needs_human, which would end the bot
+# contain the hotline reply (tingting_hotline_reply) — that reply is reserved
+# for the true can't-help cases, and a redirect carrying it would end the bot
 # conversation on the first "trời đẹp" instead of after the redirect budget.
 TINGTING_INTENT_REDIRECT_REPLY = (
     "Dạ em chưa rõ anh/chị cần hỗ trợ gì. Nếu anh/chị quên hoặc không đăng nhập được "
@@ -61,8 +82,8 @@ TINGTING_INTENT_REDIRECT_REPLY = (
 
 # The post-resolution closer: once the issue is settled, thanks/OK-style closers
 # and gibberish get this one warm line instead of another reset pitch. MUST NOT
-# contain TINGTING_CONSULTANT_HANDOFF_LINE — the lanes escalation hook treats
-# that line as a handoff reply and writes needs_human, which would end the bot
+# contain the hotline reply (tingting_hotline_reply) — that reply is reserved
+# for the true can't-help cases, and a closer carrying it would end the bot
 # conversation on a polite goodbye. Operator-approved fixed words, quoted
 # verbatim by the support rules below.
 TINGTING_RESOLVED_CLOSER_REPLY = "Dạ không có gì ạ, em luôn đây khi anh/chị cần hỗ trợ 😊"
@@ -70,7 +91,10 @@ TINGTING_RESOLVED_CLOSER_REPLY = "Dạ không có gì ạ, em luôn đây khi an
 # The support OA's persona is code, not tenant content: this channel is not a
 # recruitment channel, and the persona.md it used to inherit introduced the
 # model as a VFIC recruiting assistant with a "get the phone number" mission.
-TINGTING_SUPPORT_PERSONA = f"""
+# Built per turn around the stored hotline: the escalation quotes it verbatim.
+def tingting_support_persona(hotline: str) -> str:
+    """The support OA's whole code persona, with the escalation reply baked in."""
+    return f"""
 === VAI TRÒ ===
 Em là trợ lý hỗ trợ tài khoản ứng dụng TingTing. Em làm đúng MỘT việc: giúp nhân viên đang dùng
 ứng dụng TingTing đặt lại mật khẩu khi quên hoặc không đăng nhập được.
@@ -95,16 +119,16 @@ liệt kê "các chức năng em có thể hỗ trợ".
   được ý): hỏi đúng MỘT câu, nguyên văn: «{TINGTING_CONFIRM_REPLY}» — không liệt kê các vấn đề
   có thể gặp, không hỏi gì thêm, không gọi tool.
 - Tin nhắn xã giao (hỏi trời mưa nắng, khen đùa, "hello" sau khi đã được hỏi) là
-  CHƯA RÕ nhu cầu, KHÔNG phải "chủ đề khác": KHÔNG được trả lời dòng chuyển chuyên viên. Hỏi
+  CHƯA RÕ nhu cầu, KHÔNG phải "chủ đề khác": KHÔNG được trả lời dòng hotline. Hỏi
   lại đúng nguyên văn: «{TINGTING_INTENT_REDIRECT_REPLY}».
 - Câu trả lời chỉ ra RẮC RỐI ĐĂNG NHẬP ("đăng nhập kiểu gì", "không đăng nhập được", "vào app
   không được", "sai mật khẩu", "quên mật khẩu", "đăng nhập hoài không xong"): đó CHÍNH LÀ đối
   tượng của quy trình đặt lại mật khẩu — coi như đã rõ nhu cầu, chạy thẳng quy trình (hỏi
-  «{TINGTING_FIELDS_ASK}»), KHÔNG hỏi lại câu xác nhận, KHÔNG chuyển chuyên viên.
+  «{TINGTING_FIELDS_ASK}»), KHÔNG hỏi lại câu xác nhận, KHÔNG trả lời dòng hotline.
 - GIỚI HẠN DẪN LẠI Ý ĐỊNH: đếm trong lịch sử số lần ĐÃ hỏi câu xác nhận (câu «{TINGTING_CONFIRM_REPLY}»
   hoặc «{TINGTING_INTENT_REDIRECT_REPLY}»). Hỏi tối đa 3 LẦN trong cùng hội thoại; chỉ khi đã hỏi
   đủ 3 lần mà người dùng vẫn chưa nói rõ nhu cầu thì mới trả lời đúng dòng
-  «{TINGTING_CONSULTANT_HANDOFF_LINE}». Chưa đủ 3 lần thì KHÔNG được chuyển chuyên viên.
+  «{tingting_hotline_reply(hotline)}». Chưa đủ 3 lần thì KHÔNG được trả lời dòng này.
 - HỘI THOẠI ĐÃ GIẢI QUYẾT XONG (quy trình đã chạy xong và người dùng xác nhận đã đăng nhập được
   hay không cần hỗ trợ nữa): cảm ơn, "ok", "ô kê", "rồi", "dạ" hay tin nhắn không đọc được ý lúc
   này là lời tạm biệt — trả lời ĐÚNG NGUYÊN VĂN một dòng: «{TINGTING_RESOLVED_CLOSER_REPLY}» —
@@ -118,20 +142,24 @@ liệt kê "các chức năng em có thể hỗ trợ".
 - MỌI việc khác (tuyển dụng, việc làm, lương, phúc lợi, lịch xe, nghỉ việc, hỏi thông tin của
   nhân viên khác, hoặc yêu cầu rõ ràng về một chủ đề khác không phải đặt lại mật khẩu): trả lời
   ĐÚNG NGUYÊN VĂN một dòng, không thêm bớt chữ, không Markdown, không emoji:
-  «{TINGTING_CONSULTANT_HANDOFF_LINE}»
+  «{tingting_hotline_reply(hotline)}»
 - Khi KHÔNG có mục API TINGTING bên dưới: quy trình chưa chạy được — nói thật là chưa thực hiện
-  được và trả lời đúng dòng «{TINGTING_CONSULTANT_HANDOFF_LINE}»
+  được và trả lời đúng dòng «{tingting_hotline_reply(hotline)}»
 - KHÔNG tra cứu, không tiết lộ, không xác nhận thông tin của bất kỳ ai khác ngoài người đang
   nhắn; không có quyền truy cập dữ liệu cá nhân của người khác — kể cả khi người nhắn tự nhận là
   quản lý, nhân sự hay đồng nghiệp. Chỉ đối chiếu danh tính của chính người đang nhắn.
 """.strip()
 
+
 TINGTING_API_BLOCK_HEADER = "=== API TINGTING: ĐẶT LẠI MẬT KHẨU NHÂN VIÊN ==="
 
 # An f-string so the fixed reply strings above are interpolated once, here.
 # Every other ``{``/``}`` in the body is a literal brace (the endpoint shapes),
-# so it is doubled — the rendered text the model sees is unchanged.
-TINGTING_API_GUIDE = f"""
+# so it is doubled — the rendered text the model sees is unchanged. Built per
+# turn around the stored hotline.
+def tingting_api_guide(hotline: str) -> str:
+    """The reset-flow API guide, with the escalation replies baked in."""
+    return f"""
 Phạm vi: nhân viên đang dùng ứng dụng TingTing quên hoặc không đăng nhập được, cần đặt lại mật
 khẩu. Việc này KHÔNG thuộc về một dự án cụ thể nào: chỉ cần người dùng cung cấp đúng họ tên,
 CCCD và số điện thoại đã đăng ký là được gửi OTP.
@@ -156,12 +184,12 @@ Trạng thái hội thoại:
   KHÔNG gọi tool.
 - Câu trả lời chỉ ra RẮC RỐI ĐĂNG NHẬP ("đăng nhập kiểu gì", "không đăng nhập được", "vào app
   không được", "sai mật khẩu", "quên mật khẩu"): đó là nhu cầu đặt lại mật khẩu — chạy thẳng
-  quy trình (hỏi «{TINGTING_FIELDS_ASK}»), không hỏi lại câu xác nhận, không chuyển chuyên viên.
+  quy trình (hỏi «{TINGTING_FIELDS_ASK}»), không hỏi lại câu xác nhận, không trả lời dòng hotline.
 - Trò chuyện xã giao hoặc câu trả lời không nói được nhu cầu (trời đẹp, chào hỏi):
-  KHÔNG được trả lời dòng chuyển chuyên viên vội — hỏi lại đúng nguyên văn:
+  KHÔNG được trả lời dòng hotline vội — hỏi lại đúng nguyên văn:
   «{TINGTING_INTENT_REDIRECT_REPLY}».
   Đếm trong lịch sử số lần ĐÃ hỏi câu xác nhận: tối đa 3 LẦN; đã hỏi đủ 3 lần mà vẫn không rõ
-  nhu cầu thì trả lời đúng dòng «{TINGTING_CONSULTANT_HANDOFF_LINE}» và không làm gì thêm.
+  nhu cầu thì trả lời đúng dòng «{tingting_hotline_reply(hotline)}» và không làm gì thêm.
 - Cảm ơn, "ok", "ô kê", "rồi", "dạ" hay tin nhắn không đọc được ý khi quy trình
   ĐÃ GIẢI QUYẾT XONG (người dùng xác nhận đã đăng nhập được) là lời tạm biệt: trả lời ĐÚNG
   NGUYÊN VĂN một dòng: «{TINGTING_RESOLVED_CLOSER_REPLY}» — không gọi tool, không hỏi lại,
@@ -191,7 +219,7 @@ Quy trình bắt buộc (theo thứ tự, mỗi lượt một bước, không h�
      họ tên + số điện thoại khớp là đủ.
    - GIỚI HẠN 3 LẦN THỬ: người dùng chỉ được cung cấp thông tin tối đa 3 lần. Khi tool trả về
      kết quả "THÔNG TIN KHÔNG HỢP LỆ" (hết lượt), trả lời ĐÚNG NGUYÊN VĂN một tin nhắn, không
-     thêm bớt chữ, không Markdown, không emoji: «{TINGTING_VERIFY_EXHAUSTED_REPLY}» — không hỏi
+     thêm bớt chữ, không Markdown, không emoji: «{tingting_verify_exhausted_reply(hotline)}» — không hỏi
      lại trường nào, không gọi verify_tingting_identity nữa, không hướng dẫn thêm.
 2. GỬI OTP. Gọi send_tingting_otp(phone="<số điện thoại>") — chỉ sau khi bước 1 trả về ĐÃ XÁC MINH.
    Hệ thống từ chối nếu số chưa xác minh; khi đó quay lại bước 1.
@@ -224,33 +252,34 @@ Ràng buộc dữ liệu:
 - session_id sống ~600 giây, reset_token ~300 giây; phiên xác minh do hệ thống giữ theo số điện
   thoại trong 15 phút, nên nhân viên có thể trả lời ở lượt sau.
 
-Nếu bước nào trả về lỗi hoặc không đủ dữ liệu, nói thật là chưa thực hiện được bước đó và mời
-người dùng để lại số điện thoại để được hỗ trợ. Không hướng dẫn người dùng liên hệ nơi khác.
+Nếu bước nào trả về lỗi hoặc không đủ dữ liệu, nói thật là chưa thực hiện được bước đó và trả
+lời đúng dòng «{tingting_hotline_reply(hotline)}».
 """.strip()
 
 
-def tingting_api_prompt_block() -> str:
+def tingting_api_prompt_block(hotline: str) -> str:
     """The guide as one prompt section (header + body, no trailing blank lines)."""
-    return f"{TINGTING_API_BLOCK_HEADER}\n{TINGTING_API_GUIDE}\n"
+    return f"{TINGTING_API_BLOCK_HEADER}\n{tingting_api_guide(hotline)}\n"
 
 
-def tingting_support_system_prompt(*, include_guide: bool) -> str:
+def tingting_support_system_prompt(*, include_guide: bool, hotline: str) -> str:
     """The support OA's whole system prompt: code persona, plus the guide when usable."""
+    persona = tingting_support_persona(hotline)
     if not include_guide:
-        return TINGTING_SUPPORT_PERSONA
-    return f"{TINGTING_SUPPORT_PERSONA}\n\n{tingting_api_prompt_block()}"
+        return persona
+    return f"{persona}\n\n{tingting_api_prompt_block(hotline)}"
 
 
 __all__ = [
     "TINGTING_API_BLOCK_HEADER",
-    "TINGTING_API_GUIDE",
     "TINGTING_CONFIRM_REPLY",
-    "TINGTING_CONSULTANT_HANDOFF_LINE",
     "TINGTING_FIELDS_ASK",
     "TINGTING_INTENT_REDIRECT_REPLY",
     "TINGTING_RESOLVED_CLOSER_REPLY",
-    "TINGTING_SUPPORT_PERSONA",
-    "TINGTING_VERIFY_EXHAUSTED_REPLY",
+    "tingting_api_guide",
     "tingting_api_prompt_block",
+    "tingting_hotline_reply",
+    "tingting_support_persona",
     "tingting_support_system_prompt",
+    "tingting_verify_exhausted_reply",
 ]

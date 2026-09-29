@@ -64,6 +64,23 @@ def has_explicit_human_review_evidence(user_text: str, intent: ContactIntent) ->
     )
 
 
+def _tingting_oa_conversation(conversation) -> bool:
+    """Whether the conversation sits on the TingTing support OA.
+
+    Operator rule 2026-09-29: nobody works that OA as a human, so the post-send
+    human-review escalation must never park one of its threads in a queue
+    nobody watches. Identity-only check, mirroring the graph-layer
+    ``lanes._tingting_account_conversation`` (services never import the graph
+    package, so the two-line identity read is duplicated, not shared).
+    """
+    from app.channels.types import PROVIDER_ZALO_OA, TINGTING_OA_ACCOUNT_KEY
+
+    identity = getattr(conversation, "channel_identity", None)
+    if identity is None or str(getattr(identity, "provider", "") or "") != PROVIDER_ZALO_OA:
+        return False
+    return str(getattr(identity, "account_key", "") or "") == TINGTING_OA_ACCOUNT_KEY
+
+
 def candidate_turn(
     user_text: str,
     bot_output: str,
@@ -273,12 +290,23 @@ class CandidateExtractionService:
                     intent_confidence=0.0,
                 )
             if conversation is not None and expected_conversation_version is not None:
-                await conversation_service.escalate_extracted_intent(
-                    conversation,
-                    reason=result.contact_intent,
-                    confidence=result.intent_confidence,
-                    expected_version=expected_conversation_version,
-                )
+                # Operator rule 2026-09-29: nobody works the TingTing OA as a
+                # human, so the bot's replies there already point the employee
+                # at the hotline and this escalation must never park the thread
+                # in a queue no one watches.
+                if _tingting_oa_conversation(conversation):
+                    logger.info(
+                        "candidate extraction escalation skipped: the TingTing "
+                        "OA never escalates for chat %s",
+                        chat_id,
+                    )
+                else:
+                    await conversation_service.escalate_extracted_intent(
+                        conversation,
+                        reason=result.contact_intent,
+                        confidence=result.intent_confidence,
+                        expected_version=expected_conversation_version,
+                    )
             return result
 
         if lead_key.is_writable:

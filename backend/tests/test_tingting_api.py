@@ -17,14 +17,14 @@ import pytest
 
 from app.graph.tingting_guide import (
     TINGTING_API_BLOCK_HEADER,
-    TINGTING_API_GUIDE,
     TINGTING_CONFIRM_REPLY,
-    TINGTING_CONSULTANT_HANDOFF_LINE,
     TINGTING_FIELDS_ASK,
     TINGTING_INTENT_REDIRECT_REPLY,
     TINGTING_RESOLVED_CLOSER_REPLY,
-    TINGTING_SUPPORT_PERSONA,
+    tingting_api_guide,
     tingting_api_prompt_block,
+    tingting_hotline_reply,
+    tingting_support_persona,
     tingting_support_system_prompt,
 )
 from app.graph.tools.tingting_api import (
@@ -43,6 +43,14 @@ from app.services.tingting_api import (
     TingtingApiService,
     resolve_base_url,
 )
+
+# The persona, the guide, and the escalation replies are built around the
+# stored hotline setting; tests build them with the owner-approved number (the
+# value Alembic 0058 seeds) under the names the assertions already use.
+_TINGTING_HOTLINE = "+84 914 827 988"
+TINGTING_SUPPORT_PERSONA = tingting_support_persona(_TINGTING_HOTLINE)
+TINGTING_API_GUIDE = tingting_api_guide(_TINGTING_HOTLINE)
+TINGTING_HOTLINE_REPLY = tingting_hotline_reply(_TINGTING_HOTLINE)
 
 _KEY = "ttk_live_test_key"
 
@@ -413,7 +421,7 @@ def test_guide_requires_identity_verification_before_the_otp() -> None:
 
 def test_guide_forbids_inventing_contact_channels() -> None:
     assert "không tự nghĩ ra hotline" in TINGTING_API_GUIDE
-    assert TINGTING_API_BLOCK_HEADER in tingting_api_prompt_block()
+    assert TINGTING_API_BLOCK_HEADER in tingting_api_prompt_block(_TINGTING_HOTLINE)
 
 
 def test_guide_asks_for_all_three_fields_before_the_lookup() -> None:
@@ -446,25 +454,31 @@ def test_small_talk_gets_a_redirect_budget_before_any_handoff() -> None:
     """BOT-01: small talk ("trời đẹp đấy") must be redirected, not escalated.
 
     Production (2026-09-28, TingTing support OA): a weather reply after the
-    confirm question was answered with the consultant handoff line on the SAME
-    turn. The prompt must now (a) classify small talk as unclear intent, not an
-    out-of-scope topic, (b) cap the redirect at 3 asks before handing off, and
-    (c) keep the immediate handoff only for explicit out-of-scope requests.
+    confirm question was answered with the then-consultant handoff line on the
+    SAME turn. The prompt must (a) classify small talk as unclear intent, not an
+    out-of-scope topic, (b) cap the redirect at 3 asks before the hotline reply,
+    and (c) keep the immediate hotline reply only for explicit out-of-scope
+    requests. The hotline reply itself is the escalation (operator rule
+    2026-09-29 — no consultant promise exists anymore), so the wording guards
+    the same boundaries against it.
     """
     for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
-        # small talk is explicitly excluded from the immediate handoff
-        assert "KHÔNG được trả lời dòng chuyển chuyên viên" in prompt
+        # small talk is explicitly excluded from the immediate escalation
+        assert "KHÔNG được trả lời dòng hotline" in prompt
         assert "tối đa 3 LẦN" in prompt
         # the redirect ask is quoted verbatim in both sections
         assert TINGTING_INTENT_REDIRECT_REPLY in prompt
         # the confirm question stays quoted verbatim (existing contract)
         assert TINGTING_CONFIRM_REPLY in prompt
-    # the immediate handoff is narrowed to explicit out-of-scope requests
-    assert "yêu cầu rõ ràng về một chủ đề khác" in TINGTING_SUPPORT_PERSONA
-    # the escalation hook (lanes.py) keys on the handoff line inside the reply:
-    # a redirect reply containing it would write needs_human on the first
+        # operator rule 2026-09-29: the consultant promise is gone for good —
+        # the hotline reply is the only escalation and never implies a human
+        # waiting in this chat.
+        assert "chuyên viên tư vấn liên hệ" not in prompt
+    assert TINGTING_HOTLINE_REPLY in TINGTING_SUPPORT_PERSONA
+    # the escalation reply is reserved for the can't-help cases: a redirect
+    # reply carrying it verbatim would end the bot conversation on the first
     # small-talk turn, so it must never appear in the redirect wording.
-    assert TINGTING_CONSULTANT_HANDOFF_LINE not in TINGTING_INTENT_REDIRECT_REPLY
+    assert TINGTING_HOTLINE_REPLY not in TINGTING_INTENT_REDIRECT_REPLY
 
 
 def test_resolved_conversation_gets_the_closer_not_another_pitch() -> None:
@@ -482,9 +496,9 @@ def test_resolved_conversation_gets_the_closer_not_another_pitch() -> None:
         assert "ĐÃ GIẢI QUYẾT XONG" in prompt
         assert "KHÔNG hỏi lại lần thứ hai" in prompt
         assert "TỰ nhắc lại rắc rối đăng nhập" in prompt
-    # the escalation hook (lanes.py) keys on the handoff line inside the reply:
-    # a closer containing it would write needs_human on a polite goodbye.
-    assert TINGTING_CONSULTANT_HANDOFF_LINE not in TINGTING_RESOLVED_CLOSER_REPLY
+    # the escalation reply is reserved for the can't-help cases: a closer
+    # carrying it verbatim would read as an escalation on a polite goodbye.
+    assert TINGTING_HOTLINE_REPLY not in TINGTING_RESOLVED_CLOSER_REPLY
 
 
 def test_login_trouble_after_resolution_re_engages_the_reset_flow() -> None:
@@ -513,9 +527,9 @@ def test_login_trouble_is_reset_intent_not_a_handoff() -> None:
         assert "RẮC RỐI ĐĂNG NHẬP" in prompt
         assert "đăng nhập kiểu gì" in prompt
         assert TINGTING_FIELDS_ASK in prompt
-    # routed INTO the flow, never out to a human
-    assert "KHÔNG chuyển chuyên viên" in TINGTING_SUPPORT_PERSONA
-    assert "không chuyển chuyên viên" in TINGTING_API_GUIDE
+    # routed INTO the flow, never out to the escalation reply
+    assert "KHÔNG trả lời dòng hotline" in TINGTING_SUPPORT_PERSONA
+    assert "không trả lời dòng hotline" in TINGTING_API_GUIDE
 
 
 def test_support_persona_forbids_other_employee_data_and_the_recruitment_role() -> None:
@@ -523,11 +537,11 @@ def test_support_persona_forbids_other_employee_data_and_the_recruitment_role() 
     assert "KHÔNG tra cứu" in TINGTING_SUPPORT_PERSONA
     assert "KHÔNG phải trợ lý tuyển dụng VFIC" in TINGTING_SUPPORT_PERSONA
 
-    with_guide = tingting_support_system_prompt(include_guide=True)
+    with_guide = tingting_support_system_prompt(include_guide=True, hotline=_TINGTING_HOTLINE)
     assert TINGTING_SUPPORT_PERSONA in with_guide
     assert TINGTING_API_BLOCK_HEADER in with_guide
 
-    without_guide = tingting_support_system_prompt(include_guide=False)
+    without_guide = tingting_support_system_prompt(include_guide=False, hotline=_TINGTING_HOTLINE)
     assert TINGTING_SUPPORT_PERSONA in without_guide
     assert TINGTING_API_BLOCK_HEADER not in without_guide
 
@@ -936,3 +950,42 @@ async def test_the_reset_oa_pin_round_trips_and_clears() -> None:
 
     kept = await service.replace_reset_oa_id(None, actor_id=None)
     assert kept["reset_oa_id"] == ""  # None keeps the stored value
+
+
+@pytest.mark.asyncio
+async def test_the_hotline_round_trips_and_reads_the_plaintext_seed() -> None:
+    """The hotline setting round-trips, and the plaintext seed reads back verbatim.
+
+    Alembic 0058 stores the owner-approved number WITHOUT the ``v1:`` prefix;
+    the cipher fails soft on unprefixed rows, so the seeded value and a later
+    admin-encrypted edit both read through the same getter — and a cleared row
+    reads empty, which the reply builder degrades on (no code fallback).
+    """
+    from app.services.tingting_api import TINGTING_HOTLINE_SETTING
+
+    db = _MultiRowSession()
+    service = TingtingApiService(db)
+    assert await service.hotline() == ""
+
+    # The seeded row (plaintext, is_secret=False) reads back verbatim.
+    db.rows[TINGTING_HOTLINE_SETTING] = SimpleNamespace(
+        key=TINGTING_HOTLINE_SETTING,
+        encrypted_value="+84 914 827 988",
+        is_secret=False,
+        updated_by=None,
+    )
+    assert await service.hotline() == "+84 914 827 988"
+    assert (await service.admin_view())["hotline"] == "+84 914 827 988"
+
+    # An admin edit encrypts, still reads back, and clearing empties it.
+    edited = await service.replace_hotline("0914 827 988", actor_id=None)
+    assert edited["hotline"] == "0914 827 988"
+    assert db.rows[TINGTING_HOTLINE_SETTING].encrypted_value.startswith("v1:")
+    assert await service.hotline() == "0914 827 988"
+
+    cleared = await service.replace_hotline("", actor_id=None)
+    assert cleared["hotline"] == ""
+    assert await service.hotline() == ""
+
+    kept = await service.replace_hotline(None, actor_id=None)
+    assert kept["hotline"] == ""  # None keeps the stored value

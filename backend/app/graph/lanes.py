@@ -31,7 +31,6 @@ from app.graph.ports import TurnDecisions
 from app.shared.domain.vietnamese_gender import infer_gender_from_name
 from app.graph.progressive import _ProgressiveStream
 from app.graph.prompt_context import build_agent_user_text
-from app.graph.tingting_guide import TINGTING_CONSULTANT_HANDOFF_LINE
 from app.graph.router import (
     TurnRoute,
     _SUPPORT_CLARIFY_INTENTS,
@@ -44,6 +43,7 @@ from app.graph.runtime_policy import TINGTING_TOOL_NAMES
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.tingting_guide import (
     TINGTING_RESET_REDIRECT_REPLY,
+    tingting_hotline_reply,
     tingting_support_system_prompt,
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
@@ -61,21 +61,19 @@ _INCOME_COMPARE_HINT = (
     "thưởng, kỳ lương), không gộp các cơ sở tính thành một con số duy nhất."
 )
 
-# The support OA itself serves the reset flow only; every other message hands the
-# employee to a human instead of answering (operator requirement).
-# The consultant promise is one operator-approved sentence, defined in
-# tingting_guide.py so every fixed reply that ends with it is detected by the
-# escalation hook below (the exhaustion reply is longer than the line alone).
-TINGTING_HANDOFF_REPLY = TINGTING_CONSULTANT_HANDOFF_LINE
-TINGTING_HANDOFF_REASON = "tingting_support_handoff"
+# The support OA itself serves the reset flow only. Operator rule (2026-09-29):
+# no human works this OA, so nothing here queues one — every would-be
+# escalation returns the fixed hotline reply instead (tingting_guide.py). The
+# reply is the whole handoff; there is no queue write to keep honest.
 
 # Off the support OA, a question outside the bot's scope does not get a
 # generated "let me steer you back to jobs" answer. Operator rule (2026-09-29):
 # the candidate is pointed at the VFIC hotline and nothing else — no
 # phone-number interlude, no human queue write; the hotline IS the handoff.
 # The reply is code, not model output. It deliberately does NOT end with
-# TINGTING_CONSULTANT_HANDOFF_LINE: the support-OA escalation hook detects
-# that suffix, and this channel must never look like an escalation to it.
+# the support reply (tingting_hotline_reply): the support OA has its own
+# number and its own copy, and this channel must never look like an
+# escalation to it.
 OUT_OF_SCOPE_HANDOFF_REPLY = (
     "Dạ phần này em chưa hỗ trợ được ngay ạ. Anh/chị vui lòng gọi hotline "
     "18007228 để chuyên viên tư vấn hỗ trợ mình nhé ạ."
@@ -126,38 +124,6 @@ def _with_optional_trace(callable_obj, kwargs: dict, trace_sink) -> dict:
     return {**kwargs, "trace_sink": trace_sink}
 
 
-async def _consultant_handoff(state: BotRunState, deps: GraphDeps, *, reason: str) -> None:
-    """Flag the conversation for a human consultant.
-
-    Both fixed handoff lines promise that a consultant will take over, so the
-    reply is meaningless without this transition — nobody would know to make
-    contact. The reason distinguishes the two paths in the audit trail. It is
-    best-effort: a failure must never swallow the reply the candidate is
-    waiting for.
-
-    ``preserve_turn_ownership`` keeps the escalation from invalidating THIS
-    turn's send claim: the claim re-checks ``version`` and the live
-    ``bot_lock_owner`` server-side at commit time, so a version bump or an early
-    lock release here would suppress the very reply the candidate is waiting for.
-    """
-    try:
-        conv = await deps.conversation.get(state.conversation_id)
-        if conv is None:
-            return
-        # ``conv`` is loaded fresh here, so its version is the current one: the
-        # transition is guarded against a concurrent write, not against the
-        # version the turn started with (that one moved when the inbound landed).
-        await deps.conversation.escalate_extracted_intent(
-            conv,
-            reason=reason,
-            confidence=1.0,
-            expected_version=conv.version,
-            preserve_turn_ownership=True,
-        )
-    except Exception:  # noqa: BLE001 — the handoff is bookkeeping, never the answer
-        logger.warning("consultant handoff failed reason=%s", reason, exc_info=True)
-
-
 async def _tingting_reset_allowed(deps: GraphDeps, conv) -> bool:
     """Whether this conversation's channel may run the TingTing reset flow.
 
@@ -205,6 +171,24 @@ def _tingting_account_conversation(conv) -> bool:
     if identity is None or str(getattr(identity, "provider", "") or "") != "zalo_oa":
         return False
     return str(getattr(identity, "account_key", "") or "") == TINGTING_OA_ACCOUNT_KEY
+
+
+async def _tingting_hotline(deps: GraphDeps) -> str:
+    """The admin-editable escalation hotline, read at turn time (``""`` = unset).
+
+    Best-effort like every other settings read: a failure must never break the
+    turn, and the reply builders degrade to the honest no-number form rather
+    than resurrecting a number from code. Read only on support-OA turns; the
+    empty read is flagged by the repository reader.
+    """
+    reader = getattr(deps.retrieval, "tingting_hotline", None)
+    if reader is None:
+        return ""
+    try:
+        return str(await reader() or "").strip()
+    except Exception as exc:  # noqa: BLE001 — a settings read must never break a turn
+        logger.warning("tingting hotline read failed error_type=%s", type(exc).__name__)
+        return ""
 
 
 def _vacancy_required_args(decisions: TurnDecisions) -> dict:
@@ -397,9 +381,8 @@ async def _agent_turn(
             )
         else:
             if trace_sink is not None:
-                trace_sink.record_decision("tingting_scope", "support_only_handoff")
-            await _consultant_handoff(state, deps, reason=TINGTING_HANDOFF_REASON)
-            return TINGTING_HANDOFF_REPLY
+                trace_sink.record_decision("tingting_scope", "support_only_hotline")
+            return tingting_hotline_reply(await _tingting_hotline(deps))
     if not tingting_reset_allowed:
         # This channel is not the support OA, so the OA branch above never
         # claimed the turn. A confident off-scope question gets no generated
@@ -532,7 +515,10 @@ async def _agent_turn(
                 logger.warning(
                     "tingting api configured-read failed error_type=%s", type(exc).__name__
                 )
-        system = tingting_support_system_prompt(include_guide=tingting_configured)
+        system = tingting_support_system_prompt(
+            include_guide=tingting_configured,
+            hotline=await _tingting_hotline(deps),
+        )
         addressing = await _tingting_addressing(state, deps)
         if addressing:
             system += addressing
@@ -796,13 +782,6 @@ async def _agent_turn(
         contextual_user_text,
         **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
     )
-    if tingting_reset_allowed and reply.strip().endswith(TINGTING_HANDOFF_REPLY):
-        # The line promises a consultant. The model can reach it verbatim (an
-        # unclear reading of a non-reset request) or as the tail of the
-        # verification-exhaustion reply the tool dictates — both promise a
-        # consultant, so the queue write follows the suffix rather than only
-        # the routing branches that also return it.
-        await _consultant_handoff(state, deps, reason=TINGTING_HANDOFF_REASON)
     return reply
 
 

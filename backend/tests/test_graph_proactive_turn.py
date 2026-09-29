@@ -285,7 +285,9 @@ async def test_support_oa_nudge_never_gets_the_recruitment_preamble(monkeypatch)
     recruitment preamble (project directory, advertising rules) — including when
     the reset link pin is unset, which is why the gate reads the identity alone.
     """
-    from app.graph.tingting_guide import TINGTING_SUPPORT_PERSONA
+    from app.graph.tingting_guide import tingting_support_persona
+
+    TINGTING_SUPPORT_PERSONA = tingting_support_persona("+84 914 827 988")
 
     async def _marker_prompt(db, *, provider=None):  # noqa: ARG001
         return "RECRUITMENT-PERSONA-MARKER", True
@@ -294,6 +296,9 @@ async def test_support_oa_nudge_never_gets_the_recruitment_preamble(monkeypatch)
 
     async def _configured() -> bool:
         return False
+
+    async def _hotline() -> str:
+        return "+84 914 827 988"
 
     def _svc_with_quote():
         # zalo_oa nudges must quote the inbound message they follow.
@@ -315,7 +320,7 @@ async def test_support_oa_nudge_never_gets_the_recruitment_preamble(monkeypatch)
     )
     agent = _CapturingAgent('{"send": true, "message": "Nhắc anh/chị nhé?", "reason": "warm"}')
     deps = _deps(agent, _FakeZalo(), conversation=_svc_with_quote())
-    deps.retrieval = SimpleNamespace(tingting_api_configured=_configured)
+    deps.retrieval = SimpleNamespace(tingting_api_configured=_configured, tingting_hotline=_hotline)
 
     res = await run_proactive_turn(conv, deps)
 

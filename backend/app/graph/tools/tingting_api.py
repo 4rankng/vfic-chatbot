@@ -53,7 +53,7 @@ _INVALID_REQUEST = (
 )
 _NOT_CONFIGURED = (
     "Hệ thống TingTing chưa được cấu hình khóa API. Hãy nói thật là chưa thực hiện được "
-    "và mời người dùng để lại số điện thoại để được hỗ trợ."
+    "bước này."
 )
 _RATE_LIMITED = (
     "Hệ thống TingTing đang giới hạn tần suất. Hãy đề nghị người dùng chờ một lát rồi thử lại."
@@ -79,7 +79,7 @@ _NO_RESET_TOKEN = (
 )
 _UNREADABLE = (
     "Không đọc được phản hồi của hệ thống TingTing. Hãy nói thật là chưa thực hiện được bước "
-    "này và mời người dùng để lại số điện thoại để được hỗ trợ."
+    "này."
 )
 _CODE_FORMAT = (
     "Mã xác minh phải là đúng 6 chữ số. Hãy hỏi lại mã mà nhân viên nhận được trong Zalo."
@@ -139,8 +139,7 @@ def tingting_state_text(outcome: Any) -> str:
     if outcome.state == "error":
         return (
             f"Hệ thống TingTing báo lỗi (HTTP {outcome.status_code}; {outcome.detail}). "
-            "Hãy nói thật là chưa thực hiện được và mời người dùng để lại số điện thoại để "
-            "được hỗ trợ."
+            "Hãy nói thật là chưa thực hiện được bước này."
         )
     if outcome.state == "invalid_request":
         return _INVALID_REQUEST.format(detail=outcome.detail or "sai định dạng")

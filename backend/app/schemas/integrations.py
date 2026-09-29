@@ -315,6 +315,10 @@ class TingtingIntegrationSettingsOut(BaseModel):
     # link below. Kept in the response for diagnostics; the settings page shows
     # the OA name/id instead of this key.
     reset_oa_id: str = ""
+    # The escalation hotline the support OA quotes when it cannot help in-chat
+    # (operator rule 2026-09-29). Admin-editable; seeded with the approved
+    # number, so the settings page shows the live value.
+    hotline: str = ""
     # The Zalo OA that serves the reset flow. Credentials are status-only; the
     # OA id and name come from Zalo's `getoa` at link time, never from typing.
     oa_app_id: str = ""
@@ -335,6 +339,10 @@ class TingtingIntegrationSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    # The escalation hotline the support OA quotes when it cannot help in-chat.
+    # Stored as sent (after strip); length-capped only, matching the other
+    # settings fields — the operator copies the owner-approved number.
+    hotline: str | None = Field(default=None, max_length=32)
     # The support OA's four Zalo credentials. Posting any of them (with the API
     # key, or alone) stores what was sent and probes Zalo with the effective
     # access token: on success the OA id/name are discovered and the account is

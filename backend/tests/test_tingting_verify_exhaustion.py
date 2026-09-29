@@ -2,9 +2,9 @@
 
 Covers the two behavior changes on ``verify_tingting_identity``:
 
-- a wrong answer spends one of three tries; the third hands off to a consultant
-  (dictated reply + ``needs_human`` flag) and only a verified match clears the
-  counter;
+- a wrong answer spends one of three tries; the third stops the flow with the
+  dictated reply whose tail points at the hotline — nothing is queued
+  (operator rule 2026-09-29), and only a verified match clears the counter;
 - the verdict derives the address form (anh/chị) from the name the EMPLOYEE
   typed, never from the lookup record (the record is the answer key).
 """
@@ -15,11 +15,18 @@ import pytest
 
 from app.graph.tools.tingting_identity import verify_tingting_identity
 from app.graph.tingting_guide import (
-    TINGTING_API_GUIDE,
-    TINGTING_CONSULTANT_HANDOFF_LINE,
-    TINGTING_VERIFY_EXHAUSTED_REPLY,
+    tingting_api_guide,
+    tingting_hotline_reply,
+    tingting_verify_exhausted_reply,
 )
 from app.shared.domain.vietnamese_gender import infer_gender_from_name
+
+# The persona/guide/replies are built around the stored hotline setting; the
+# stub serves the owner-approved number (the value Alembic 0058 seeds).
+TINGTING_HOTLINE = "+84 914 827 988"
+TINGTING_API_GUIDE = tingting_api_guide(TINGTING_HOTLINE)
+TINGTING_HOTLINE_REPLY = tingting_hotline_reply(TINGTING_HOTLINE)
+TINGTING_VERIFY_EXHAUSTED_REPLY = tingting_verify_exhausted_reply(TINGTING_HOTLINE)
 
 _SCOPE = "0f9b1c3e-1111-4222-8333-444455556666"
 _FOUND_RECORD = (
@@ -30,13 +37,12 @@ _NOT_FOUND_RECORD = '{"data":{"found":false}}'
 
 
 class _CountingRetrieval:
-    """Port stub that counts failures and records the exhaustion flag."""
+    """Port stub that counts failures toward the exhaustion cap."""
 
     def __init__(self, text: str) -> None:
         self.text = text
         self.failures = 0
         self.cleared = 0
-        self.exhausted_scopes: list[str] = []
 
     async def call_tingting_api(self, *, method, path, params):  # noqa: ANN001
         from app.services.external_api_core import ExternalApiOutcome
@@ -56,8 +62,8 @@ class _CountingRetrieval:
     async def clear_tingting_verify_attempts(self, scope: str) -> None:  # noqa: ARG002
         self.cleared += 1
 
-    async def mark_tingting_verification_exhausted(self, scope: str) -> None:
-        self.exhausted_scopes.append(scope)
+    async def tingting_hotline(self) -> str:  # noqa: ARG002
+        return TINGTING_HOTLINE
 
 
 @pytest.mark.asyncio
@@ -79,13 +85,17 @@ async def test_three_wrong_submissions_exhaust_and_flag_the_conversation() -> No
     assert TINGTING_VERIFY_EXHAUSTED_REPLY in exhausted
     assert exhausted.rstrip().endswith("không hướng dẫn gì thêm.")
     assert retrieval.failures == 3
-    assert retrieval.exhausted_scopes == [_SCOPE]
 
 
 @pytest.mark.asyncio
-async def test_the_exhaustion_reply_ends_with_the_consultant_handoff_line() -> None:
-    """The lane's escalation hook fires on this suffix — the words must not drift."""
-    assert TINGTING_VERIFY_EXHAUSTED_REPLY.endswith(TINGTING_CONSULTANT_HANDOFF_LINE)
+async def test_the_exhaustion_reply_points_at_the_tingting_hotline() -> None:
+    """The hotline tail IS the handoff (operator rule 2026-09-29) — no queue write.
+
+    The words must not drift: the number and the shared tail are what the
+    employee acts on.
+    """
+    assert TINGTING_VERIFY_EXHAUSTED_REPLY.endswith(TINGTING_HOTLINE_REPLY)
+    assert "914827988" in TINGTING_VERIFY_EXHAUSTED_REPLY.replace(" ", "")
     # The guide quotes the same fixed words, so the model's reply and the
     # tool's verdict can never disagree about what exhaustion sounds like.
     assert TINGTING_VERIFY_EXHAUSTED_REPLY in TINGTING_API_GUIDE
@@ -103,7 +113,6 @@ async def test_a_progression_ask_does_not_spend_a_try() -> None:
     )
     assert "CHƯA XÁC MINH" in result
     assert retrieval.failures == 0
-    assert retrieval.exhausted_scopes == []
 
 
 @pytest.mark.asyncio
@@ -118,7 +127,6 @@ async def test_a_verified_match_clears_the_counter() -> None:
     )
     assert "ĐÃ XÁC MINH" in result
     assert retrieval.cleared == 1
-    assert retrieval.exhausted_scopes == []
 
 
 @pytest.mark.asyncio

@@ -157,9 +157,10 @@ _DECISION_CODE_SUMMARIES: dict[str, frozenset[str]] = {
     # The TingTing reset flow is bound to the TingTing Zalo OA: the recruitment
     # Bot channel and Messenger must not offer it (operator requirement). On the
     # OA an unreadable message is clarified by the bot; only a confident
-    # non-support intent goes to a human.
+    # non-support intent gets the fixed hotline reply — nothing is queued
+    # (operator rule 2026-09-29).
     "tingting_scope": frozenset(
-        {"allowed", "channel_not_allowed", "support_clarify", "support_only_handoff"}
+        {"allowed", "channel_not_allowed", "support_clarify", "support_only_hotline"}
     ),
 }
 

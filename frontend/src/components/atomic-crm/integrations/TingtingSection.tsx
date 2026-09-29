@@ -66,6 +66,10 @@ export const TingtingSection = () => {
   // Stored credentials never enter form state: a blank field means "keep stored".
   const [apiKey, setApiKey] = useState("");
   const [oaForm, setOaForm] = useState<TingtingOaForm>(EMPTY_OA_FORM);
+  // The hotline field pre-fills with the stored value (it is not a secret), so
+  // its draft holds the EDIT only; saving keeps the stored number when the
+  // field is untouched or cleared — the backend never loses the seed by accident.
+  const [hotlineDraft, setHotlineDraft] = useState("");
 
   const {
     data: settings,
@@ -93,6 +97,7 @@ export const TingtingSection = () => {
       // Back to "keep stored": the response is the section's new truth.
       setApiKey("");
       setOaForm(EMPTY_OA_FORM);
+      setHotlineDraft("");
       queryClient.setQueryData(tingtingSettingsKey, data);
       if (data.oa_linked) {
         notify(`Đã liên kết Zalo OA: ${data.oa_name || data.oa_id}.`, {
@@ -132,6 +137,10 @@ export const TingtingSection = () => {
     setOaForm((current) => ({ ...current, [key]: value }));
 
   const trimmedApiKey = apiKey.trim();
+  const storedHotline = settings?.hotline ?? "";
+  const trimmedHotline = hotlineDraft.trim();
+  const hotlineChanged =
+    Boolean(trimmedHotline) && trimmedHotline !== storedHotline;
   const oaPost: TingtingSettingsUpdate = {};
   const trimmedOa = {
     zalo_oa_app_id: oaForm.app_id.trim(),
@@ -152,7 +161,8 @@ export const TingtingSection = () => {
       settings?.oa_refresh_token?.configured ||
       settings?.oa_secret_key?.configured,
   );
-  const dirty = Boolean(trimmedApiKey) || Object.keys(oaPost).length > 0;
+  const dirty =
+    Boolean(trimmedApiKey) || hotlineChanged || Object.keys(oaPost).length > 0;
 
   // The badge counts the five visible credentials, so "3/5" names which are
   // still missing instead of restating the backend's overall readiness flag.
@@ -167,6 +177,7 @@ export const TingtingSection = () => {
   const submit = () => {
     saveSettings.mutate({
       ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
+      ...(hotlineChanged ? { hotline: trimmedHotline } : {}),
       ...oaPost,
     });
   };
@@ -207,6 +218,17 @@ export const TingtingSection = () => {
           onChange={setApiKey}
           notify={notify}
           hint="Quy trình gửi OTP đã tích hợp sẵn. Để trống để giữ API key đã lưu."
+        />
+
+        <PlainField
+          id="tingting_hotline"
+          label="Hotline hỗ trợ"
+          value={hotlineDraft || storedHotline}
+          onChange={setHotlineDraft}
+          configured={Boolean(storedHotline)}
+          statusState={statusState}
+          showMissingStatus={false}
+          hint="Số bot đưa khi không hỗ trợ được qua tin nhắn. Đã đặt sẵn — sửa khi cần đổi số."
         />
 
         <div className="settings-tingting-subhead">

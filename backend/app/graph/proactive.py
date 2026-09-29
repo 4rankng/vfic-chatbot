@@ -288,7 +288,18 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
                     logger.warning(
                         "tingting api configured-read failed error_type=%s", type(exc).__name__
                     )
-            system = tingting_support_system_prompt(include_guide=tingting_configured)
+            hotline_reader = getattr(deps.retrieval, "tingting_hotline", None)
+            tingting_hotline = ""
+            if hotline_reader is not None:
+                try:
+                    tingting_hotline = str(await hotline_reader() or "").strip()
+                except Exception as exc:  # noqa: BLE001 — a prompt read must never break a nudge
+                    logger.warning(
+                        "tingting hotline read failed error_type=%s", type(exc).__name__
+                    )
+            system = tingting_support_system_prompt(
+                include_guide=tingting_configured, hotline=tingting_hotline
+            )
         else:
             system, _ = await build_system_prompt(
                 deps.retrieval,

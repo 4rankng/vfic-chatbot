@@ -107,6 +107,11 @@ export type TingtingSettings = {
    * OA name/id instead of this key.
    */
   reset_oa_id: string;
+  /**
+   * The escalation hotline the bot quotes when it cannot help in-chat.
+   * Admin-editable; seeded backend-side, so the field always shows a value.
+   */
+  hotline: string;
   /** The Zalo OA that serves the resets. Credentials are status-only. */
   oa_app_id: string;
   oa_secret_key: SecretStatus;
@@ -131,6 +136,7 @@ export type TingtingSettings = {
 export type TingtingSettingsUpdate = {
   api_key?: string;
   reset_oa_id?: string;
+  hotline?: string;
   zalo_oa_app_id?: string;
   zalo_oa_secret_key?: string;
   zalo_oa_access_token?: string;

@@ -1166,6 +1166,79 @@ class TestCandidateExtractionService:
         memory_save.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_persist_never_escalates_a_tingting_oa_conversation(self, monkeypatch):
+        """Operator rule 2026-09-29: the TingTing OA has no human queue.
+
+        Even explicit human-review evidence must not park a support-OA thread
+        in a queue nobody watches — the bot's replies there point the employee
+        at the hotline instead.
+        """
+        db = _session()
+        result = CandidateExtraction(
+            lead_patch=None,
+            memory_facts=[],
+            contact_intent="bot_testing",
+            intent_confidence=0.99,
+        )
+        extract = AsyncMock(return_value=result)
+        upsert = AsyncMock()
+        conversation = SimpleNamespace(
+            id="conversation-1",
+            mode="BOT",
+            status="OPEN",
+            version=1,
+            zalo_chat_id="zalo_1",
+            contact_id="contact-1",
+            channel_identity=SimpleNamespace(provider="zalo_oa", account_key="tingting"),
+        )
+        escalate = AsyncMock(return_value=True)
+
+        class FakeLeadRepository:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def by_zalo_id(self, _chat_id: str):
+                return None
+
+        class FakeConversationService:
+            def __init__(self, _db) -> None:
+                pass
+
+            async def get_by_zalo(self, _chat_id: str):
+                return conversation
+
+            async def escalate_extracted_intent(self, *args, **kwargs) -> bool:
+                return await escalate(*args, **kwargs)
+
+        monkeypatch.setattr(
+            "app.services.candidate_extraction.LeadRepository",
+            FakeLeadRepository,
+        )
+        monkeypatch.setattr(CandidateExtractionService, "extract", extract)
+        monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
+        monkeypatch.setattr(
+            "app.services.conversation.ConversationService",
+            FakeConversationService,
+        )
+        memory_save = AsyncMock()
+        monkeypatch.setattr("app.services.candidate_extraction.MemoryService.save", memory_save)
+
+        persisted = await CandidateExtractionService.persist(
+            db,
+            AsyncMock(),
+            AsyncMock(),
+            "zalo_1",
+            "Tôi đang kiểm tra bot",
+            "Bot đã trả lời tin nhắn đầu tiên.",
+            expected_conversation_version=1,
+        )
+
+        assert persisted is result
+        escalate.assert_not_awaited()
+        upsert.assert_not_awaited()
+        memory_save.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_persist_does_not_escalate_recruitment_question_from_model_label(
         self, monkeypatch
     ):

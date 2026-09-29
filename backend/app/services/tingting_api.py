@@ -59,6 +59,11 @@ TINGTING_API_KEY_SETTING = "tingting_api_key"
 # (``""`` = any connected OA), which is how the operator keeps it on the
 # TingTing OA and off the recruitment Bot.
 TINGTING_RESET_OA_ID_SETTING = "tingting_reset_oa_id"
+# The escalation hotline the support OA quotes whenever the bot cannot help
+# in-chat (operator rule 2026-09-29: nobody works that OA). Admin-editable;
+# seeded with the owner-approved number by Alembic 0058 and re-read every turn,
+# so an edit takes effect on the next message without a deploy.
+TINGTING_HOTLINE_SETTING = "tingting_hotline"
 TINGTING_API_CLIENT_NAME = "tingting_api"
 TINGTING_API_AUTH_HEADER = "X-API-Key"
 # The TingTing app's origin only — the ``/api/v1`` prefix belongs to the path
@@ -278,6 +283,18 @@ class TingtingApiService:
             return ""
         return self._decrypt(str(getattr(row, "encrypted_value", "") or "")).strip()
 
+    async def hotline(self) -> str:
+        """The escalation hotline quoted by the support OA (``""`` = unset).
+
+        The Alembic seed stores the value as plaintext in the settings column,
+        which the cipher fails soft on (only ``v1:``-prefixed rows decrypt), so
+        the seeded number and an admin-encrypted edit both read back here.
+        """
+        row = await self.db.get(IntegrationSetting, TINGTING_HOTLINE_SETTING)
+        if row is None:
+            return ""
+        return self._decrypt(str(getattr(row, "encrypted_value", "") or "")).strip()
+
     async def admin_view(self) -> dict:
         """Status-only projection — the key itself never appears."""
         api_key = self._decrypt(await self._stored_ciphertext())
@@ -287,7 +304,39 @@ class TingtingApiService:
             "base_url": resolve_base_url(self.settings),
             "auth_header": TINGTING_API_AUTH_HEADER,
             "reset_oa_id": await self.reset_oa_id(),
+            "hotline": await self.hotline(),
         }
+
+    async def replace_hotline(self, value: Any, *, actor_id: Any = None) -> dict:
+        """Persist the escalation hotline; ``""`` clears it (the bot degrades to
+        the no-number reply). ``None`` keeps the stored value."""
+        if value is None:
+            return await self.admin_view()
+        number = str(value).strip()
+        row = await self.db.get(IntegrationSetting, TINGTING_HOTLINE_SETTING)
+        encrypted = self._cipher.encrypt(number) if number else ""
+        if row is None:
+            self.db.add(
+                IntegrationSetting(
+                    key=TINGTING_HOTLINE_SETTING,
+                    encrypted_value=encrypted,
+                    is_secret=False,
+                    updated_by=actor_id,
+                )
+            )
+        else:
+            row.encrypted_value = encrypted
+            row.updated_by = actor_id
+        await record_audit(
+            self.db,
+            action="update_tingting_integration_settings",
+            actor_id=actor_id,
+            target_type="integration_settings",
+            target_id="tingting",
+            payload={"hotline_configured": bool(number)},
+        )
+        await self.db.commit()
+        return await self.admin_view()
 
     async def replace_reset_oa_id(self, value: Any, *, actor_id: Any = None) -> dict:
         """Persist the reset-flow OA pin; ``""`` allows any connected OA."""
@@ -450,6 +499,7 @@ __all__ = [
     "TINGTING_API_CLIENT_NAME",
     "TINGTING_API_KEY_SETTING",
     "TINGTING_API_LABEL",
+    "TINGTING_HOTLINE_SETTING",
     "TINGTING_RESET_OA_ID_SETTING",
     "TINGTING_READ_ONLY_PATHS",
     "TINGTING_FLOW_KEY_PREFIX",

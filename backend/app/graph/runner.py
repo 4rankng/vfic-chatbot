@@ -67,7 +67,6 @@ from app.graph.dispatch import (
 from app.graph.lanes import (
     _agent_turn,
     _compare_income_required_args,
-    _consultant_handoff,
     _direct_context_turn,
     _optional_policy_kwargs,
     _resolve_lane,
@@ -78,8 +77,7 @@ from app.graph.lanes import (
     DIRECT_HISTORY_TOKEN_BUDGET,
     run_manifest_composed_agent,
     OUT_OF_SCOPE_HANDOFF_REPLY,
-    TINGTING_HANDOFF_REASON,
-    TINGTING_HANDOFF_REPLY,
+    tingting_hotline_reply,
 )
 from app.graph.ports import TurnDecisions
 from app.graph.progressive import (
@@ -131,9 +129,8 @@ __all__ = [
     "PROGRESSIVE_SUBSTANCE_MIN_CHARS",
     "OUT_OF_SCOPE_HANDOFF_REPLY",
     "RECENT_HISTORY_LIMIT",
-    "TINGTING_HANDOFF_REASON",
-    "TINGTING_HANDOFF_REPLY",
     "TINGTING_RESET_REDIRECT_REPLY",
+    "tingting_hotline_reply",
     "TurnDecisions",
     "TurnOutcome",
     "_EarlyBubble",
@@ -147,7 +144,6 @@ __all__ = [
     "_claim_and_dispatch",
     "_compare_income_required_args",
     "_complete_progressive_prefix",
-    "_consultant_handoff",
     "_contact_display_name",
     "_contact_evidence_text",
     "_delivery_status_for_send_error",

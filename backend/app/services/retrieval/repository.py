@@ -20,7 +20,6 @@ calls did.
 from __future__ import annotations
 
 import logging
-import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -196,30 +195,6 @@ class RetrievalRepository:
         """Clear the counter once identity verification has succeeded."""
         await TingtingVerifyAttemptsStore().reset(scope)
 
-    async def mark_tingting_verification_exhausted(self, scope: str) -> None:
-        """Raise ``needs_human`` so a consultant sees the exhausted conversation.
-
-        A plain flag write — no version bump, no conversation_seq: the turn's
-        own outcome is what commits next, and the lane's consultant-handoff
-        transition (fired when the reply carries the handoff line) is the
-        full lifecycle step. Idempotent by shape: the WHERE clause includes
-        the flag so a replayed call touches nothing.
-        """
-        try:
-            conversation_id = uuid.UUID(str(scope))
-        except (TypeError, ValueError):
-            return
-        from sqlalchemy import update
-
-        from app.models.conversation import Conversation
-
-        await self.db.execute(
-            update(Conversation)
-            .where(Conversation.id == conversation_id, Conversation.needs_human.is_(False))
-            .values(needs_human=True)
-        )
-        await self.db.commit()
-
     async def tingting_reset_oa_id(self) -> str:
         """The OA account key the reset flow is pinned to (``""`` = any OA)."""
         try:
@@ -227,6 +202,24 @@ class RetrievalRepository:
         except Exception as exc:  # noqa: BLE001 — a config read must not 500 a turn
             logger.warning("tingting reset scope read failed error_type=%s", type(exc).__name__)
             return ""
+
+    async def tingting_hotline(self) -> str:
+        """The admin-editable escalation hotline (``""`` = unset/cleared).
+
+        Read fresh every support-OA turn so an admin edit takes effect on the
+        next message. The empty read is flagged here — the one turn-time site —
+        because the Alembic seed guarantees a value: an empty row means an
+        admin cleared the field or the seed never ran, and the reply building
+        degrades to the honest no-number form instead of a code fallback.
+        """
+        try:
+            hotline = await TingtingApiService(self.db).hotline()
+        except Exception as exc:  # noqa: BLE001 — a config read must not 500 a turn
+            logger.warning("tingting hotline read failed error_type=%s", type(exc).__name__)
+            return ""
+        if not hotline:
+            logger.warning("tingting hotline setting is empty; escalation reply omits the number")
+        return hotline
 
     async def income_summary_for_active_projects(self):
         return await self._catalog.income_summary_for_active_projects()

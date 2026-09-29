@@ -28,12 +28,12 @@ gated on the same delivery machinery a candidate receives:
     reading must never be blanked: the row stays SENT with its own text and its
     outbox command is terminalized (REL-13), never overwritten with the
     "nothing was sent" empty reply the failure paths used to record.
-  * ``support-oa-handoff`` -- a thread on the TingTing support OA (which serves
-    the reset flow only). The turn hands the employee to a human; the handoff
-    line itself must still be DELIVERED. Both halves are asserted, because the
-    escalation note appears in the console even when the reply is suppressed
-    (2026-09-27: the escalation invalidated its own turn's send claim and the
-    employee waited for a message the console showed as "Đã chặn").
+  * ``support-oa-hotline`` -- a thread on the TingTing support OA (which serves
+    the reset flow only). A confident non-support question gets the fixed
+    hotline reply, DELIVERED, and nothing is queued behind it: the thread stays
+    BOT, no needs_human, no escalation note (operator rule 2026-09-29 — no
+    human works this OA). The reply must still be delivered because the fixed
+    escalation copy is the employee's only route to help.
 
 Why the stubs are safe: the smoke dependencies wire the REAL
 ``ConversationService(db)`` and ``RetrievalRepository(db)``. The former delegates
@@ -820,32 +820,34 @@ async def _check_delivered_bubble(db, *, conv_id, state) -> None:
     )
 
 
-async def _check_support_oa_handoff(db, *, conv_id, state) -> None:
-    """The handoff reply reached the employee AND the thread is with a human.
+async def _check_support_oa_hotline(db, *, conv_id, state) -> None:
+    """The hotline reply reached the employee AND the thread stays with the bot.
 
-    Both halves matter and they are not the same assertion: the escalation note
-    appears in the console even when the reply is suppressed (the production bug
-    this probe exists for), so a probe that only checked ``mode == HUMAN`` would
-    have passed while the employee waited for a message that never came.
+    Delivery still matters (the fixed escalation copy is the employee's only
+    route to help), and the no-queue half is now the point: nobody works the
+    TingTing OA as a human, so a thread parked in HUMAN mode would wait for an
+    agent who will never arrive.
     """
-    from app.graph.lanes import TINGTING_HANDOFF_REPLY
-    from app.services.conversation.bot_path import ESCALATION_SYSTEM_NOTE
+    from app.graph.tingting_guide import tingting_hotline_reply
+    from app.services.tingting_api import TingtingApiService
 
+    # The expected reply is built from the STORED setting, not a code constant:
+    # the hotline is admin-editable, so the probe asserts exactly what the turn
+    # would quote.
+    hotline = await TingtingApiService(db).hotline()
     await _assert_persisted_delivery_invariant(
         db,
         conv_id=conv_id,
         message_id=state.pending_message_id,
-        expected_reply=TINGTING_HANDOFF_REPLY,
+        expected_reply=tingting_hotline_reply(hotline),
     )
     conv = await db.get(Conversation, conv_id)
     if conv is None:
-        raise AssertionError("support-OA handoff probe lost its conversation")
-    if conv.mode != ConversationMode.HUMAN:
-        raise AssertionError(f"support OA handoff left the conversation in {conv.mode!s}")
-    if not conv.needs_human:
-        raise AssertionError("support OA handoff did not flag the conversation for a human")
-    if conv.bot_lock_owner is not None:
-        raise AssertionError("support OA handoff left the per-chat bot lock held")
+        raise AssertionError("support-OA hotline probe lost its conversation")
+    if conv.mode != ConversationMode.BOT:
+        raise AssertionError(f"support OA hotline left the conversation in {conv.mode!s}")
+    if conv.needs_human:
+        raise AssertionError("support OA hotline queued a human on a non-support question")
     notes = (
         await db.scalars(
             select(Message.body).where(
@@ -854,10 +856,8 @@ async def _check_support_oa_handoff(db, *, conv_id, state) -> None:
             )
         )
     ).all()
-    if list(notes) != [ESCALATION_SYSTEM_NOTE]:
-        raise AssertionError(
-            f"expected the single escalation note {ESCALATION_SYSTEM_NOTE!r}, found {notes!r}"
-        )
+    if list(notes):
+        raise AssertionError(f"support OA hotline wrote an escalation note: {notes!r}")
 
 
 async def _check_support_oa_clarify(db, *, conv_id, state) -> None:
@@ -935,15 +935,14 @@ _PROGRESSIVE_FAILURE_PROBE = _SmokeProbe(
 )
 
 # The support OA answers the reset flow only; a confident non-support question
-# must tell the employee to wait for a consultant AND keep that reply
-# (2026-09-27: the escalation used to invalidate its own turn's send claim, so
-# the reply was recorded SUPPRESSED — "Đã chặn" in the console — and the employee
-# got silence).
+# gets the fixed hotline reply and the thread stays with the bot — nobody is
+# queued (operator rule 2026-09-29). Delivery is still asserted: the fixed
+# escalation copy is the employee's only route to help.
 _SUPPORT_OA_HANDOFF_PROBE = _SmokeProbe(
-    label="support-oa-handoff",
+    label="support-oa-hotline",
     build_deps=lambda db: _build_support_oa_deps(db, intent="faq_detail"),
     expected_outcome="sent",
-    check=_check_support_oa_handoff,
+    check=_check_support_oa_hotline,
     seed=lambda db: _seed_support_oa_conversation(db),
 )
 
@@ -979,7 +978,7 @@ async def _run_progressive_failure_smoke(*, inject_failure: bool) -> int:
     return await _run_probe(_PROGRESSIVE_FAILURE_PROBE, inject_failure=inject_failure)
 
 
-async def _run_support_oa_handoff_smoke(*, inject_failure: bool) -> int:
+async def _run_support_oa_hotline_smoke(*, inject_failure: bool) -> int:
     return await _run_probe(_SUPPORT_OA_HANDOFF_PROBE, inject_failure=inject_failure)
 
 

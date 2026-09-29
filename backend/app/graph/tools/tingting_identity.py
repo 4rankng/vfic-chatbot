@@ -38,7 +38,7 @@ from typing import Any
 
 from app.graph.ports import GraphRetrievalPort
 from app.graph.tools.tingting_api import LOOKUP_PATH, tingting_state_text
-from app.graph.tingting_guide import TINGTING_VERIFY_EXHAUSTED_REPLY
+from app.graph.tingting_guide import tingting_verify_exhausted_reply
 from app.services.tingting_api import TINGTING_VERIFY_MAX_ATTEMPTS
 from app.shared.domain.vietnamese_gender import infer_gender_from_name
 
@@ -48,7 +48,7 @@ _MISSING_PHONE = (
 )
 _UNREADABLE_RESPONSE = (
     "Không đọc được phản hồi tra cứu của hệ thống TingTing. Hãy nói thật là chưa thực hiện "
-    "được bước này và mời người dùng để lại số điện thoại để được hỗ trợ."
+    "được bước này."
 )
 
 _FIELD_LABELS = {"full_name": "họ tên đầy đủ", "cccd": "số CCCD/CMND đã đăng ký"}
@@ -245,20 +245,38 @@ def _counts_as_failed_try(verdict: Mapping[str, Any], *, full_name: str, cccd: s
     return bool(cccd.strip()) and bool(verdict["cccd_required"]) and not verdict["cccd_match"]
 
 
-def _render_exhausted() -> str:
+async def _stored_hotline(retrieval: GraphRetrievalPort) -> str:
+    """The admin-editable escalation hotline, best-effort (``""`` = unset).
+
+    Same contract as the lane's read: a failure or an empty row degrades to
+    the no-number reply builder — never a code fallback.
+    """
+    reader = getattr(retrieval, "tingting_hotline", None)
+    if reader is None:
+        return ""
+    try:
+        return str(await reader() or "").strip()
+    except Exception as exc:  # noqa: BLE001 — a settings read must never break a reply
+        logger.warning("tingting hotline read failed error_type=%s", type(exc).__name__)
+        return ""
+
+
+def _render_exhausted(hotline: str) -> str:
     """The tool block for an employee who has spent every try.
 
     Dictates the fixed exhaustion reply verbatim; the reply ends with the
-    consultant-handoff sentence, which is what fires the lane's escalation
-    hook — the model paraphrasing here cannot lose the handoff.
+    hotline sentence built from the stored setting (tingting_guide.py), so the
+    model paraphrasing here cannot lose the number. Nothing is queued behind
+    it — the hotline IS the handoff (operator rule 2026-09-29).
     """
+    exhausted_reply = tingting_verify_exhausted_reply(hotline)
     return "\n".join(
         [
             "Kết quả đối chiếu danh tính: THÔNG TIN KHÔNG HỢP LỆ.",
             f"Người dùng đã cung cấp sai thông tin {TINGTING_VERIFY_MAX_ATTEMPTS} lần — "
             "quy trình xác minh dừng tại đây.",
             "Trả lời ĐÚNG NGUYÊN VĂN một tin nhắn sau, không thêm bớt chữ, không Markdown, "
-            f"không emoji: «{TINGTING_VERIFY_EXHAUSTED_REPLY}»",
+            f"không emoji: «{exhausted_reply}»",
             "KHÔNG gọi verify_tingting_identity nữa, KHÔNG hỏi lại bất kỳ trường nào, "
             "không hướng dẫn gì thêm.",
         ]
@@ -309,17 +327,7 @@ async def verify_tingting_identity(
     if conversation_scope and _counts_as_failed_try(verdict, full_name=full_name, cccd=cccd):
         attempts = await retrieval.record_tingting_verify_failure(conversation_scope)
         if attempts >= TINGTING_VERIFY_MAX_ATTEMPTS:
-            # Best-effort consultant flag: the reply is the deliverable, the
-            # queue write is bookkeeping (the lane hook escalates again when
-            # the dictated reply lands).
-            try:
-                await retrieval.mark_tingting_verification_exhausted(conversation_scope)
-            except Exception:  # noqa: BLE001 — the flag must never break the reply
-                logger.warning(
-                    "tingting verification exhaustion flag failed scope_set=%s",
-                    bool(conversation_scope),
-                )
-            return _render_exhausted()
+            return _render_exhausted(await _stored_hotline(retrieval))
     return render_verdict(verdict)
 
 

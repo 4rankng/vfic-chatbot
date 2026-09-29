@@ -62,7 +62,7 @@ class TingtingSettingsMixin:
     async def update_tingting(
         self, values: dict[str, str | None], *, actor_id
     ) -> dict:
-        """Persist the API key, the reset-OA pin, and/or the support-OA credentials.
+        """Persist the API key, the escalation hotline, and/or the support-OA credentials.
 
         ``reset_oa_id`` is no longer an admin field — it follows the verified
         link (see :mod:`app.services.tingting_oa`) — but the key stays accepted
@@ -73,6 +73,8 @@ class TingtingSettingsMixin:
             await service.replace_key(values.get("api_key"), actor_id=actor_id)
         if "reset_oa_id" in values:
             await service.replace_reset_oa_id(values.get("reset_oa_id"), actor_id=actor_id)
+        if "hotline" in values:
+            await service.replace_hotline(values.get("hotline"), actor_id=actor_id)
         oa_values = {
             base: values[base]
             for base in (

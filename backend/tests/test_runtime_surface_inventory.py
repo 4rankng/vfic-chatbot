@@ -144,7 +144,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # redemption to the provider, dropping its reviewed `get` (x4) and `post`
     # (x1) sites. Verified against a 39fde21d^ scan: same two rows, nothing
     # added anywhere. The 2026-09-28 graph typing work is scan-neutral.
-    "provider_boundary": 88,
+    # +2: the escalation hotline became the admin-editable `tingting_hotline`
+    # setting (operator rule 2026-09-29): TingtingApiService.hotline reads the
+    # stored row and replace_hotline reads-then-writes it — the same two
+    # configuration `get` reads their reset_oa_id siblings already have, no
+    # new egress site.
+    "provider_boundary": 90,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -223,7 +228,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # alias could NameError when the original failure preceded the assignment).
 # Same scope, same reviewed site, +1 `enqueue` invocation; fixture row and
 # digest recomputed from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "0efacdc2d3485af65223b8956be47700e96388dde9ce2fc9b96351209b615546"
+# 2026-09-29 (later): the escalation hotline became the admin-editable
+# `tingting_hotline` setting — TingtingApiService.hotline and replace_hotline
+# add two reviewed configuration `get` rows (+2 provider_boundary, annotated
+# at the count above); digest recomputed from the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "d2b9f1a864f6ca7013351fb2e1ae8ded2d0b3a106dfe7c3e4adf0176ba14c3a9"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

@@ -42,6 +42,12 @@ from app.graph.llm_semaphore import LLMThrottled
 from app.graph.ports import TurnDecisions
 from app.graph.runner import run_turn
 from app.graph.types import BotRunState, GraphDeps
+from app.graph.tingting_guide import tingting_hotline_reply
+
+# The owner-approved escalation hotline (the value Alembic 0058 seeds). The
+# builders take the number explicitly, so tests pass it instead of any
+# module-level copy existing in production code.
+TINGTING_HOTLINE_REPLY = tingting_hotline_reply("+84 914 827 988")
 
 # These tests observe scheduling directly, not wall-clock budgets; the timeout
 # only guards against an event-loop hang.
@@ -2024,7 +2030,8 @@ async def test_support_oa_turn_injects_the_guide_and_only_the_reset_tools(monkey
     deps.agent = _FakeAgent()
     deps.lead = _Lead()
     deps.retrieval = SimpleNamespace(
-        tingting_api_configured=AsyncMock(return_value=True)
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988")
     )
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
@@ -2082,7 +2089,8 @@ async def test_agent_turn_omits_the_tingting_guide_when_unconfigured(monkeypatch
     deps.agent = _FakeAgent()
     deps.lead = _Lead()
     deps.retrieval = SimpleNamespace(
-        tingting_api_configured=AsyncMock(return_value=False)
+        tingting_api_configured=AsyncMock(return_value=False),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988")
     )
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
@@ -2132,7 +2140,8 @@ async def test_off_channel_support_turn_gets_the_pointer_to_the_support_oa(monke
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
     deps.retrieval = SimpleNamespace(
-        tingting_api_configured=AsyncMock(return_value=True)
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988")
     )
 
     monkeypatch.setattr(
@@ -2160,9 +2169,13 @@ async def test_off_channel_support_turn_gets_the_pointer_to_the_support_oa(monke
 
 
 @pytest.mark.asyncio
-async def test_a_recruitment_question_on_the_support_oa_hands_off_to_a_human(monkeypatch):
-    """A confident non-support question on the support OA waits for a consultant."""
-    from app.graph.runner import TINGTING_HANDOFF_REPLY, _agent_turn
+async def test_a_recruitment_question_on_the_support_oa_points_at_the_hotline():
+    """A confident non-support question on the support OA gets the hotline reply.
+
+    Operator rule (2026-09-29): nobody works the TingTing OA as a human, so the
+    hotline reply IS the handoff — no model call, no human queue write.
+    """
+    from app.graph.runner import _agent_turn
 
     captured: dict[str, object] = {}
     escalations: list[dict] = []
@@ -2192,6 +2205,7 @@ async def test_a_recruitment_question_on_the_support_oa_hands_off_to_a_human(mon
 
     deps = _deps(_FakeZalo(), conversation=_Conversations())
     deps.agent = _FakeAgent()
+    deps.retrieval = SimpleNamespace(tingting_hotline=AsyncMock(return_value="+84 914 827 988"))
 
     reply = await _agent_turn(
         BotRunState(conversation_id=CONV_ID, version_at_start=7, user_text="dự án nào lương cao"),
@@ -2205,30 +2219,25 @@ async def test_a_recruitment_question_on_the_support_oa_hands_off_to_a_human(mon
         tingting_reset_allowed=True,
     )
 
-    assert reply == TINGTING_HANDOFF_REPLY
+    assert reply == TINGTING_HOTLINE_REPLY
+    assert "914827988" in reply.replace(" ", "")
     assert captured == {}  # the model never answers on this channel
-    assert len(escalations) == 1
-    assert escalations[0]["reason"] == "tingting_support_handoff"
-    assert escalations[0]["expected_version"] == 7
-    # The handoff runs inside the turn that must still deliver this reply: the
-    # escalation may not bump the version or release the lock it is about to
-    # claim (see tests/integration/test_support_handoff_reply_send.py).
-    assert escalations[0]["preserve_turn_ownership"] is True
+    assert escalations == []  # nothing is queued — the hotline is the handoff
 
 
 def test_the_recruitment_handoff_reply_sends_the_candidate_to_the_hotline():
     """Operator rule (2026-09-29): the recruitment escalation points candidates
-    at the hotline instead of promising a waiting consultant. The TingTing
-    support OA keeps the bare consultant line, so the two replies must never
-    drift back together — the support-OA escalation hook matches replies by
-    that suffix, and a recruitment reply sharing it would escalate employees'
-    threads by wording alone.
+    at the VFIC hotline 18007228. The TingTing support OA has its own number
+    (+84 914 827 988, same day's OA ruling — no human works that OA), so the
+    two replies must never drift together: neither channel may inherit the
+    other's escalation copy.
     """
-    from app.graph.lanes import OUT_OF_SCOPE_HANDOFF_REPLY, TINGTING_HANDOFF_REPLY
+    from app.graph.lanes import OUT_OF_SCOPE_HANDOFF_REPLY
 
     assert "18007228" in OUT_OF_SCOPE_HANDOFF_REPLY
-    assert OUT_OF_SCOPE_HANDOFF_REPLY != TINGTING_HANDOFF_REPLY
-    assert not OUT_OF_SCOPE_HANDOFF_REPLY.endswith(TINGTING_HANDOFF_REPLY)
+    assert "914827988" in TINGTING_HOTLINE_REPLY.replace(" ", "")
+    assert OUT_OF_SCOPE_HANDOFF_REPLY != TINGTING_HOTLINE_REPLY
+    assert not OUT_OF_SCOPE_HANDOFF_REPLY.endswith(TINGTING_HOTLINE_REPLY)
 
 
 @pytest.mark.asyncio
@@ -2385,7 +2394,10 @@ async def test_an_unclear_message_on_the_support_oa_makes_the_bot_ask_first(
     deps = _deps(_FakeZalo(), conversation=_Conversations())
     deps.agent = _FakeAgent()
     deps.lead = _Lead()
-    deps.retrieval = SimpleNamespace(tingting_api_configured=AsyncMock(return_value=True))
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(
@@ -2429,7 +2441,12 @@ async def test_support_oa_turn_uses_the_tingting_prompt_not_the_recruitment_one(
     on this channel, and the non-OA branch must still reach it unchanged.
     """
     from app.graph.runner import _agent_turn
-    from app.graph.tingting_guide import TINGTING_API_BLOCK_HEADER, TINGTING_SUPPORT_PERSONA
+    from app.graph.tingting_guide import (
+        TINGTING_API_BLOCK_HEADER,
+        tingting_support_persona,
+    )
+
+    TINGTING_SUPPORT_PERSONA = tingting_support_persona("+84 914 827 988")
 
     captured: dict[str, object] = {}
     prompt_calls: list[str] = []
@@ -2453,7 +2470,10 @@ async def test_support_oa_turn_uses_the_tingting_prompt_not_the_recruitment_one(
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
     deps.lead = _Lead()
-    deps.retrieval = SimpleNamespace(tingting_api_configured=AsyncMock(return_value=True))
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(
@@ -2499,7 +2519,9 @@ async def test_support_oa_keeps_the_support_prompt_when_the_reset_link_pin_is_un
     and served the project directory and recruiting rules on the support OA.
     """
     from app.graph.runner import _agent_turn
-    from app.graph.tingting_guide import TINGTING_SUPPORT_PERSONA
+    from app.graph.tingting_guide import tingting_support_persona
+
+    TINGTING_SUPPORT_PERSONA = tingting_support_persona("+84 914 827 988")
 
     captured: dict[str, object] = {}
 
@@ -2521,7 +2543,10 @@ async def test_support_oa_keeps_the_support_prompt_when_the_reset_link_pin_is_un
     deps = _deps(_FakeZalo(), conversation=object())
     deps.agent = _FakeAgent()
     deps.lead = _Lead()
-    deps.retrieval = SimpleNamespace(tingting_api_configured=AsyncMock(return_value=False))
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=False),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(
@@ -2673,20 +2698,21 @@ async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_support_oa_queues_a_human_when_the_model_sends_the_handoff_line(monkeypatch):
-    """The handoff line promises a consultant, so the model reaching it queues one.
+async def test_support_oa_hotline_reply_queues_nothing(monkeypatch):
+    """The dictated hotline reply passes through with no queue write.
 
-    The routing branch that returns the line also queues a human, but the model
-    can emit the same line itself (an unclear reading of a non-reset request);
-    the queue write follows the exact reply so the promise is never empty.
+    The model can emit the fixed reply verbatim (an unclear reading of a
+    non-reset request, or the exhaustion tail the tool dictates). Operator rule
+    (2026-09-29): no reply wording triggers a queue write anymore — the hotline
+    reply itself is the handoff, so it must flow through untouched.
     """
-    from app.graph.runner import TINGTING_HANDOFF_REPLY, _agent_turn
+    from app.graph.runner import _agent_turn
 
     escalations: list[dict] = []
 
     class _FakeAgent:
         async def agent(self, user_text, **kwargs):  # noqa: ARG002
-            return TINGTING_HANDOFF_REPLY
+            return TINGTING_HOTLINE_REPLY
 
     class _Conversations:
         async def get(self, _conversation_id):
@@ -2709,7 +2735,10 @@ async def test_support_oa_queues_a_human_when_the_model_sends_the_handoff_line(m
     deps = _deps(_FakeZalo(), conversation=_Conversations())
     deps.agent = _FakeAgent()
     deps.lead = _Lead()
-    deps.retrieval = SimpleNamespace(tingting_api_configured=AsyncMock(return_value=True))
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
     monkeypatch.setattr(
@@ -2728,9 +2757,8 @@ async def test_support_oa_queues_a_human_when_the_model_sends_the_handoff_line(m
         tingting_reset_allowed=True,
     )
 
-    assert reply == TINGTING_HANDOFF_REPLY
-    assert len(escalations) == 1
-    assert escalations[0]["reason"] == "tingting_support_handoff"
+    assert reply == TINGTING_HOTLINE_REPLY
+    assert escalations == []  # the hotline IS the handoff — nobody is queued
 
 
 @pytest.mark.asyncio
@@ -2763,7 +2791,8 @@ async def test_focused_support_turn_drops_the_project_knowledge_tool(monkeypatch
     deps.agent = _FakeAgent()
     deps.lead = _Lead()
     deps.retrieval = SimpleNamespace(
-        tingting_api_configured=AsyncMock(return_value=True)
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988")
     )
 
     monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
@@ -4021,17 +4050,18 @@ async def test_progressive_stream_mismatch_is_recorded_as_alarmable(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_the_verification_exhaustion_reply_escalates_like_the_handoff_line(monkeypatch):
-    """A reply ENDING with the consultant sentence is a handoff, not a coincidence.
+async def test_the_verification_exhaustion_reply_delivers_without_escalating(monkeypatch):
+    """The verify tool dictates the exhaustion reply; its hotline tail is the handoff.
 
-    The verify tool dictates the exhaustion reply, whose tail is the exact
-    consultant-promise sentence; the lane hook must fire on that suffix so the
-    conversation reaches a consultant even though the reply is longer than the
-    bare line.
+    The lane passes the dictated reply through untouched and nothing is queued
+    (operator rule 2026-09-29): the hotline IS the handoff, so the employee
+    really receives the number instead of a queue entry nobody will work.
     """
     from app.graph import lanes
-    from app.graph.runner import TINGTING_HANDOFF_REPLY, _agent_turn
-    from app.graph.tingting_guide import TINGTING_VERIFY_EXHAUSTED_REPLY
+    from app.graph.runner import _agent_turn
+    from app.graph.tingting_guide import tingting_verify_exhausted_reply
+
+    TINGTING_VERIFY_EXHAUSTED_REPLY = tingting_verify_exhausted_reply("+84 914 827 988")
 
     captured: dict[str, object] = {}
     escalations: list[dict] = []
@@ -4074,7 +4104,5 @@ async def test_the_verification_exhaustion_reply_escalates_like_the_handoff_line
     )
 
     assert reply == TINGTING_VERIFY_EXHAUSTED_REPLY
-    assert reply.endswith(TINGTING_HANDOFF_REPLY)
-    assert len(escalations) == 1
-    assert escalations[0]["reason"] == "tingting_support_handoff"
-    assert escalations[0]["preserve_turn_ownership"] is True
+    assert "914827988" in reply.replace(" ", "")
+    assert escalations == []  # the hotline IS the handoff — nobody is queued
