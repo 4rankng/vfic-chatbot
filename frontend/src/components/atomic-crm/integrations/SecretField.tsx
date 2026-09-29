@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { Copy, Eye, EyeOff } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { InputBase } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
 
 import {
   SettingsFieldStatus,
@@ -21,6 +21,13 @@ import {
  * what is typed locally or fetches the stored plaintext on demand, and — when
  * the page supplies a toast channel — a copy action. `PlainField` owns the
  * non-secret half of the same shell, including its optional copy action.
+ *
+ * The control, the label and the two icon actions are Untitled UI PRO
+ * primitives (`InputBase` / `Label` / `ButtonUtility`). `InputBase` rather than
+ * the composed `Input` is deliberate: the field shell already owns the label,
+ * the hint and the status marker, and the surrounding console CSS places the
+ * input, the reveal and the copy action as sibling grid tracks — the composed
+ * wrapper would add a level that breaks both.
  */
 
 type FieldShellProps = {
@@ -72,17 +79,15 @@ const CopyButton = ({
   notify: CredentialFieldNotify;
   className: string;
 }) => (
-  <Button
-    type="button"
-    variant="ghost"
-    size="icon"
+  <ButtonUtility
+    tooltip={`Sao chép ${label}`}
+    size="xs"
+    color="tertiary"
     className={className}
-    aria-label={`Sao chép ${label}`}
-    disabled={!value}
+    isDisabled={!value}
     onClick={() => void copyCredentialFieldValue(label, value, notify)}
-  >
-    <Copy />
-  </Button>
+    icon={<Copy />}
+  />
 );
 
 export type SecretFieldProps = {
@@ -155,29 +160,36 @@ export const SecretField = ({
       hint={hint}
     >
       <div className="settings-sensitive-input">
-        <Input
+        {/*
+          `uu-scope` re-binds the four utility names this console and Untitled UI
+          both define (`bg-primary`, `bg-secondary`, `text-primary`,
+          `border-primary`), so the input paints its own white surface instead of
+          the brand coral. `[&>button]:hidden` suppresses the primitive's own
+          password eye: the reveal action here is the console's, because it can
+          fetch the stored plaintext from the server — a local toggle cannot.
+        */}
+        <InputBase
           id={id}
+          size="sm"
           type={isShowing ? "text" : "password"}
           autoComplete="off"
           spellCheck={false}
           readOnly={revealed !== null}
           value={revealed ?? value}
           placeholder={preview ? `Hiện tại: ${preview}` : placeholder}
-          className="settings-input"
+          wrapperClassName="settings-input uu-scope [&>button]:hidden"
           onChange={(event) => onChange(event.target.value)}
         />
         {hasRevealAction ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
+          <ButtonUtility
+            tooltip={isShowing ? `Ẩn ${label}` : `Hiện ${label}`}
+            size="xs"
+            color="tertiary"
             className="settings-input-action"
-            disabled={isRevealing}
-            aria-label={isShowing ? `Ẩn ${label}` : `Hiện ${label}`}
+            isDisabled={isRevealing}
             onClick={() => void toggleReveal()}
-          >
-            {isShowing ? <EyeOff /> : <Eye />}
-          </Button>
+            icon={isShowing ? <EyeOff /> : <Eye />}
+          />
         ) : null}
         {notify ? (
           <CopyButton
@@ -227,14 +239,15 @@ export const PlainField = ({
     // sensitive-input wrapper — owns the action's layout class.
     className={notify ? "settings-field-has-action" : ""}
   >
-    <Input
+    <InputBase
       id={id}
+      size="sm"
       type="text"
       autoComplete="off"
       spellCheck={false}
       value={value}
+      wrapperClassName="settings-input uu-scope"
       onChange={(event) => onChange(event.target.value)}
-      className="settings-input"
     />
     {notify ? (
       <CopyButton

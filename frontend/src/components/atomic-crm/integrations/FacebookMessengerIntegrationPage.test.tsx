@@ -373,18 +373,12 @@ describe("FacebookMessengerIntegrationPage", () => {
       .element(screen.getByText("Tuyển dụng thực tập sinh"))
       .toBeVisible();
 
-    const activeBadges = screen.container.querySelectorAll(
-      ".settings-facebook-page-status.is-active",
-    );
-    expect(activeBadges).toHaveLength(2);
-    activeBadges.forEach((badge) => {
-      expect(badge.textContent).toBe("Đang hoạt động");
-    });
+    // One status badge per connected Page, both reading "Đang hoạt động".
+    const pageStatuses = screen.getByText("Đang hoạt động").all();
+    expect(pageStatuses).toHaveLength(2);
 
-    const checkboxes = screen.container.querySelectorAll(
-      ".settings-facebook-project-list [role=checkbox]",
-    );
-    // 2 cards × 3 project options
+    // One checkbox per Page × Project option: 2 cards × 3 Project options.
+    const checkboxes = screen.getByRole("checkbox").all();
     expect(checkboxes).toHaveLength(6);
   });
 
@@ -407,11 +401,10 @@ describe("FacebookMessengerIntegrationPage", () => {
     expect(saveButtons).toHaveLength(2);
     expect((saveButtons[0] as HTMLButtonElement).disabled).toBe(true);
 
-    // Toggle "VFIC Express" ON for card 1 (server had ["1","2"]).
-    await screen
-      .getByRole("checkbox", { name: "VFIC Express" })
-      .first()
-      .click();
+    // Toggle "VFIC Express" ON for card 1 (server had ["1","2"]). The option is
+    // a Untitled UI checkbox: the control is visually hidden and the wrapping
+    // label is the click target, so the test clicks the option name.
+    await screen.getByText("VFIC Express").first().click();
 
     expect((saveButtons[0] as HTMLButtonElement).disabled).toBe(false);
     await expect
@@ -478,8 +471,10 @@ describe("FacebookMessengerIntegrationPage", () => {
     await expect.element(pageRadio).toBeVisible();
     await pageRadio.click();
 
+    // Same as the card editor: the option name is the click target.
     await screen
-      .getByRole("checkbox", { name: "LG Display — Tuyển dụng chính thức" })
+      .getByText("LG Display — Tuyển dụng chính thức")
+      .first()
       .click();
 
     await screen.getByRole("button", { name: "Kích hoạt Trang" }).click();

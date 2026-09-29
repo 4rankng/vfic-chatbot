@@ -5,8 +5,16 @@ import {
   LoaderCircle,
 } from "lucide-react";
 
+import { Badge } from "@/components/base/badges/badges";
+
 export type SettingsStatusState = "ready" | "loading" | "error";
 
+/**
+ * The per-field marker beside a credential label. It stays a bare 20px icon
+ * rather than a Untitled UI badge on purpose: it reports one field's state, and
+ * the console's layout contract measures it as a 20px square so it cannot read
+ * as a pill badge in the middle of a form row.
+ */
 export const SettingsFieldStatus = ({
   configured,
   state = "ready",
@@ -45,6 +53,11 @@ export const SettingsFieldStatus = ({
   );
 };
 
+/**
+ * The per-group "how much of this is configured" chip: a Untitled UI pill whose
+ * colour carries the state, over the same `x/y` counter and screen-reader
+ * sentence the console already reported.
+ */
 export const SettingsGroupStatus = ({
   configured,
   total,
@@ -81,23 +94,31 @@ export const SettingsGroupStatus = ({
         : disabled
           ? "Tắt"
           : `${configured}/${total}`;
+  const color =
+    state === "loading"
+      ? "gray"
+      : state === "error"
+        ? "error"
+        : disabled
+          ? "gray"
+          : ready
+            ? "success"
+            : "warning";
 
   return (
-    <span
-      className={`settings-group-status ${
-        state !== "ready"
-          ? `is-${state}`
-          : disabled
-            ? "is-off"
-            : ready
-              ? "is-ready"
-              : "is-incomplete"
-      }`}
-      title={label}
-    >
-      {disabled && state === "ready" ? null : <Icon aria-hidden="true" />}
-      <span aria-hidden="true">{shortLabel}</span>
-      <span className="sr-only">{label}</span>
+    <span title={label}>
+      <Badge
+        type="pill-color"
+        size="sm"
+        color={color}
+        className="settings-group-status uu-scope gap-1"
+      >
+        {disabled && state === "ready" ? null : (
+          <Icon aria-hidden="true" className="size-4 shrink-0" />
+        )}
+        <span aria-hidden="true">{shortLabel}</span>
+        <span className="sr-only">{label}</span>
+      </Badge>
     </span>
   );
 };

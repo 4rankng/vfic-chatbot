@@ -1,12 +1,7 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { InputBase } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
+import { Select } from "@/components/base/select/select";
+import type { SelectItemType } from "@/components/base/select/select-shared";
 
 import type { SettingsStatusState } from "./SettingsFieldStatus";
 import type {
@@ -20,6 +15,10 @@ import type { CredentialFieldNotify } from "./credentialClipboard";
 /**
  * One renderer for every descriptor field kind, shared by the provider chain
  * cards and the standalone Jev card.
+ *
+ * The text control is `InputBase` rather than the composed `Input`: this field
+ * owns its own label and has no hint slot, and the console styles the control
+ * itself (`settings-input`) as one element.
  */
 export const ProviderField = ({
   field,
@@ -50,23 +49,33 @@ export const ProviderField = ({
     );
   }
   if (field.kind === "select") {
+    const items: SelectItemType[] = field.options.map((model) => ({
+      id: model,
+      label: model,
+    }));
+    const selected = form[field.formKey];
+
     return (
       <div className="settings-field">
         <Label htmlFor={field.formKey}>{field.label}</Label>
+        {/* An empty placeholder keeps a model-less provider blank, exactly as
+            the select it replaces rendered an unset value. */}
         <Select
-          value={form[field.formKey]}
-          onValueChange={(value) => onValueChange(field.formKey, value)}
+          id={field.formKey}
+          size="sm"
+          className="uu-scope"
+          aria-label={field.label}
+          placeholder=""
+          items={items}
+          selectedKey={selected === "" ? null : selected}
+          onSelectionChange={(key) => {
+            if (key !== null) onValueChange(field.formKey, String(key));
+          }}
+          validationBehavior="aria"
         >
-          <SelectTrigger id={field.formKey} className="settings-input">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {field.options.map((model) => (
-              <SelectItem key={model} value={model}>
-                {model}
-              </SelectItem>
-            ))}
-          </SelectContent>
+          {(item: SelectItemType) => (
+            <Select.Item id={item.id} label={item.label} />
+          )}
         </Select>
       </div>
     );
@@ -75,13 +84,16 @@ export const ProviderField = ({
     return (
       <div className="settings-field">
         <Label htmlFor={field.formKey}>{field.label}</Label>
-        <Input
+        <InputBase
           id={field.formKey}
-          className="settings-input"
+          size="sm"
           autoComplete="off"
           value={form[field.formKey]}
           placeholder={field.placeholder(bundle)}
-          onChange={(event) => onValueChange(field.formKey, event.target.value)}
+          wrapperClassName="settings-input uu-scope"
+          onChange={(event) =>
+            onValueChange(field.formKey, event.target.value)
+          }
         />
       </div>
     );

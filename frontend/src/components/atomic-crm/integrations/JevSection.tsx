@@ -1,6 +1,6 @@
 import { useNotify, useTranslate } from "ra-core";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 
 import type { SettingsStatusState } from "./SettingsFieldStatus";
 import { SettingsGroupStatus } from "./SettingsFieldStatus";
@@ -97,12 +97,12 @@ export const JevSection = ({
             </span>
             <Button
               type="button"
-              variant="outline"
+              color="secondary"
               className="tt-btn-touch"
               onClick={() => {
                 void panels.testProviderPanel("jev");
               }}
-              disabled={panels.providerTesting.jev || !ready}
+              isDisabled={panels.providerTesting.jev || !ready}
               aria-busy={panels.providerTesting.jev}
             >
               {panels.providerTesting.jev
@@ -120,11 +120,12 @@ export const JevSection = ({
       >
         <Button
           type="button"
+          color="primary"
           className="settings-primary-action tt-btn-touch"
           onClick={() => {
             void panels.saveProviderPanels("standalone");
           }}
-          disabled={
+          isDisabled={
             !panels.dirty.standalone || panels.providerSaving.standalone
           }
         >

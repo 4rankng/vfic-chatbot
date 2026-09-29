@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/base/input/label";
+import { Toggle } from "@/components/base/toggle/toggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 /**
@@ -98,11 +98,19 @@ export const ProviderSwitchField = ({
     <div className="min-w-0">
       <Label htmlFor={id}>{label}</Label>
     </div>
-    <Switch
+    {/*
+      `uu-scope` re-binds the four utility names this console and Untitled UI
+      both define, so the track paints its own surface instead of the brand
+      coral. The toggle owns no `validationBehavior`: React Aria's switch props
+      omit it, and a toggle always has a value, so there is no empty control for
+      a native validation bubble to fire on.
+    */}
+    <Toggle
       id={id}
-      checked={checked}
-      disabled={disabled}
-      onCheckedChange={onCheckedChange}
+      className="uu-scope"
+      isSelected={checked}
+      isDisabled={disabled}
+      onChange={onCheckedChange}
     />
   </div>
 );

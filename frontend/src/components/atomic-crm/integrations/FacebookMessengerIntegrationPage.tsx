@@ -15,8 +15,9 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useGetList, useNotify, useTranslate } from "ra-core";
 import { ApiError } from "@/lib/apiClient";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { AlertFloating } from "@/components/application/alerts/alerts";
+import { Button } from "@/components/base/buttons/button";
+import { InputBase } from "@/components/base/input/input";
 import type { Project } from "../types";
 import "../conversations/inbox.css";
 import "./settings.css";
@@ -318,12 +319,22 @@ export const FacebookMessengerIntegrationPage = () => {
         Facebook Messenger
       </h2>
 
+      {/*
+        Two different failures share this slot: the OAuth callback's message and
+        the activation error. Both report one sentence and ask nothing, so the
+        alert carries the sentence as its title and renders no action.
+        `[&_p]:whitespace-normal` un-clips the alert's one-line banner
+        `md:truncate`, so a long backend message wraps instead of ending in an
+        ellipsis.
+      */}
       {error ? (
-        <div
-          className="settings-test-result settings-test-result-error tt-alert tt-alert-error tt-alert-soft"
-          role="alert"
-        >
-          {error}
+        <div role="alert" className="uu-scope [&_p]:whitespace-normal">
+          <AlertFloating
+            color="error"
+            title={error}
+            description=""
+            confirmLabel=""
+          />
         </div>
       ) : null}
 
@@ -405,8 +416,9 @@ export const FacebookMessengerIntegrationPage = () => {
           <div className="settings-oa-actions settings-messenger-actions">
             <Button
               type="submit"
+              color="primary"
               className="settings-test-button settings-messenger-solid-action tt-btn-touch"
-              disabled={saveCredentials.isPending}
+              isDisabled={saveCredentials.isPending}
               aria-busy={saveCredentials.isPending}
             >
               {saveCredentials.isPending
@@ -432,29 +444,34 @@ export const FacebookMessengerIntegrationPage = () => {
               </p>
             </div>
             <div className="settings-messenger-heading-actions">
-              <button
+              <Button
                 type="button"
+                color="secondary"
                 className="settings-test-button tt-btn-touch"
                 onClick={() => testConnection.mutate()}
-                disabled={testConnection.isPending}
+                isDisabled={testConnection.isPending}
                 aria-busy={testConnection.isPending}
               >
                 {testConnection.isPending ? "Đang kiểm tra…" : "Kiểm tra kênh"}
-              </button>
-              <button
-                type="button"
-                className="settings-test-button settings-messenger-solid-action tt-btn-touch"
-                onClick={() => startOAuth.mutate()}
-                disabled={startOAuth.isPending || !appIdConfigured}
-                aria-busy={startOAuth.isPending}
+              </Button>
+              <span
                 title={
                   appIdConfigured
                     ? undefined
                     : "Cấu hình App ID trước khi kết nối"
                 }
               >
-                {startOAuth.isPending ? "Đang chuẩn bị…" : "Thêm Trang"}
-              </button>
+                <Button
+                  type="button"
+                  color="primary"
+                  className="settings-test-button settings-messenger-solid-action tt-btn-touch"
+                  onClick={() => startOAuth.mutate()}
+                  isDisabled={startOAuth.isPending || !appIdConfigured}
+                  aria-busy={startOAuth.isPending}
+                >
+                  {startOAuth.isPending ? "Đang chuẩn bị…" : "Thêm Trang"}
+                </Button>
+              </span>
             </div>
           </div>
           <div className="settings-group-content settings-messenger-group-content">
@@ -468,16 +485,17 @@ export const FacebookMessengerIntegrationPage = () => {
               ))}
             </ul>
             {testConnection.data ? (
-              <div
-                className={`settings-test-result settings-messenger-result tt-alert tt-alert-soft ${
-                  testConnection.data.healthy
-                    ? "settings-test-result-ok tt-alert-success"
-                    : "settings-test-result-error tt-alert-error"
-                }`}
-              >
-                {testConnection.data.healthy
-                  ? "Kết nối Messenger hoạt động bình thường; webhook đang nhận sự kiện từ các Trang."
-                  : (testConnection.data.error ?? "Kết nối không khả dụng.")}
+              <div role="status" className="uu-scope [&_p]:whitespace-normal">
+                <AlertFloating
+                  color={testConnection.data.healthy ? "success" : "error"}
+                  title={
+                    testConnection.data.healthy
+                      ? "Kết nối Messenger hoạt động bình thường; webhook đang nhận sự kiện từ các Trang."
+                      : (testConnection.data.error ?? "Kết nối không khả dụng.")
+                  }
+                  description=""
+                  confirmLabel=""
+                />
               </div>
             ) : null}
           </div>
@@ -493,20 +511,22 @@ export const FacebookMessengerIntegrationPage = () => {
                   : "Nhập App ID trước khi kết nối."}
               </p>
             </div>
-            <button
-              type="button"
-              className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn-touch"
-              onClick={() => startOAuth.mutate()}
-              disabled={startOAuth.isPending || !appIdConfigured}
-              aria-busy={startOAuth.isPending}
+            <span
               title={
-                appIdConfigured
-                  ? undefined
-                  : "Cấu hình App ID trước khi kết nối"
+                appIdConfigured ? undefined : "Cấu hình App ID trước khi kết nối"
               }
             >
-              {startOAuth.isPending ? "Đang chuẩn bị…" : "Kết nối Facebook"}
-            </button>
+              <Button
+                type="button"
+                color="primary"
+                className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn-touch"
+                onClick={() => startOAuth.mutate()}
+                isDisabled={startOAuth.isPending || !appIdConfigured}
+                aria-busy={startOAuth.isPending}
+              >
+                {startOAuth.isPending ? "Đang chuẩn bị…" : "Kết nối Facebook"}
+              </Button>
+            </span>
           </div>
         </div>
       )}
@@ -562,8 +582,9 @@ export const FacebookMessengerIntegrationPage = () => {
                 </span>
               )}
             </div>
-            <button
+            <Button
               type="button"
+              color="primary"
               className="settings-test-button settings-messenger-primary-action settings-messenger-solid-action tt-btn-touch"
               onClick={() => {
                 if (!selectedPageId) return;
@@ -575,33 +596,28 @@ export const FacebookMessengerIntegrationPage = () => {
                     : {}),
                 });
               }}
-              disabled={!selectedPageId || completeOAuth.isPending}
+              isDisabled={!selectedPageId || completeOAuth.isPending}
               aria-busy={completeOAuth.isPending}
             >
               {completeOAuth.isPending ? "Đang kích hoạt…" : "Kích hoạt Trang"}
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
 
       {needsPageListRecovery ? (
-        <div
-          className="settings-test-result settings-test-result-error tt-alert tt-alert-error tt-alert-soft"
-          role="alert"
-        >
-          <p>
-            {isPageListError
-              ? "Không thể tải danh sách Trang. Mã phiên có thể không hợp lệ hoặc đã hết hạn."
-              : "Không tìm thấy Trang Facebook nào trong phiên kết nối này."}
-          </p>
-          <p>Vui lòng kết nối lại hoặc nhập một mã phiên khác.</p>
-          <button
-            type="button"
-            className="settings-test-button tt-btn-touch"
-            onClick={resetPageSelection}
-          >
-            Quay lại kết nối
-          </button>
+        <div role="alert" className="uu-scope [&_p]:whitespace-normal">
+          <AlertFloating
+            color="error"
+            title={
+              isPageListError
+                ? "Không thể tải danh sách Trang. Mã phiên có thể không hợp lệ hoặc đã hết hạn."
+                : "Không tìm thấy Trang Facebook nào trong phiên kết nối này."
+            }
+            description="Vui lòng kết nối lại hoặc nhập một mã phiên khác."
+            confirmLabel="Quay lại kết nối"
+            onConfirm={resetPageSelection}
+          />
         </div>
       ) : null}
 
@@ -609,11 +625,11 @@ export const FacebookMessengerIntegrationPage = () => {
           Available even with Pages connected — a lost flow id must remain
           recoverable in the multi-Page add-Page flow. */}
       {!pendingFlowId ? (
-        <details className="settings-group settings-messenger-recovery tt-collapse tt-collapse-arrow">
-          <summary className="settings-messenger-recovery-summary tt-collapse-title">
+        <details className="settings-group settings-messenger-recovery">
+          <summary className="settings-messenger-recovery-summary">
             Nhập mã phiên OAuth
           </summary>
-          <div className="settings-messenger-recovery-content tt-collapse-content">
+          <div className="settings-messenger-recovery-content">
             <form
               className="settings-field settings-messenger-recovery-form"
               onSubmit={loadManualFlow}
@@ -624,26 +640,28 @@ export const FacebookMessengerIntegrationPage = () => {
               >
                 Mã phiên OAuth
               </label>
-              <Input
-                className="settings-input"
+              <InputBase
+                size="sm"
                 id="facebook-oauth-flow-id"
                 name="facebook-oauth-flow-id"
                 type="text"
                 autoComplete="off"
                 spellCheck={false}
                 value={flowIdDraft}
+                wrapperClassName="settings-input uu-scope h-(--settings-control-height)"
                 onChange={(event) => setFlowIdDraft(event.target.value)}
               />
               <span className="settings-field-hint">
                 Dùng để tải các Trang đã ủy quyền.
               </span>
-              <button
+              <Button
                 type="submit"
+                color="primary"
                 className="settings-test-button settings-messenger-solid-action tt-btn-touch"
-                disabled={!flowIdDraft.trim()}
+                isDisabled={!flowIdDraft.trim()}
               >
                 Tải danh sách Trang
-              </button>
+              </Button>
             </form>
           </div>
         </details>

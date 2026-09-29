@@ -33,37 +33,13 @@
   text-align: right;
 }
 
-.settings-group-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--ink-muted);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.settings-group-status svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
-}
-
-.settings-group-status.is-ready {
-  color: var(--success);
-}
-
-.settings-group-status.is-incomplete {
-  color: var(--warning, #a16207);
-}
-
-.settings-group-status.is-loading,
+/* The group's configuration counter is a Untitled UI badge now, so its colour
+   and type come from the badge's own `color` variant; only the field-level
+   marker keeps console state colours. */
 .settings-field-status.is-loading {
   color: var(--ink-muted);
 }
 
-.settings-group-status.is-error,
 .settings-field-status.is-error {
   color: var(--destructive);
 }
@@ -175,25 +151,10 @@
   padding: 10px 0;
 }
 
-.settings-switch-row [role="switch"] {
-  position: relative;
-}
-
-.settings-switch-row [role="switch"]::after {
-  position: absolute;
-  inset: -10px -2px;
-  content: "";
-}
-
 .settings-embedded-resource [data-slot="button"],
 .settings-embedded-resource .persona-studio-command {
   min-height: var(--settings-action-height) !important;
   height: var(--settings-action-height) !important;
-}
-
-.settings-messenger-recovery-form .tt-input {
-  min-height: var(--settings-control-height);
-  height: var(--settings-control-height);
 }
 
 .settings-advanced {
@@ -598,24 +559,6 @@
   .settings-webhook-health {
     grid-column: 1 / -1;
   }
-
-  .settings-webhook-message {
-    margin: 0;
-    border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-    color: var(--ink-muted);
-    padding: 12px 0;
-    font-size: var(--fs-body);
-    font-weight: 500;
-    line-height: 20px;
-  }
-
-  .settings-webhook-message.is-success {
-    color: var(--settings-accent-strong);
-  }
-
-  .settings-webhook-message.is-warning {
-    color: var(--warning, #a16207);
-  }
 }
 
 @media (min-width: 480px) and (max-width: 767px) {
@@ -796,11 +739,6 @@
   opacity: 1;
 }
 
-.settings-messenger-result {
-  grid-column: 1 / -1;
-  margin-top: 0;
-}
-
 .settings-messenger-recovery {
   display: block;
 }
@@ -863,23 +801,6 @@
 .settings-field-hint {
   color: var(--ink-muted, #64748b);
   font-size: var(--fs-body-sm);
-}
-
-.settings-test-result {
-  margin-top: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  font-size: var(--fs-body);
-}
-
-.settings-test-result-ok {
-  background: oklch(0.95 0.05 150);
-  color: oklch(0.4 0.12 150);
-}
-
-.settings-test-result-error {
-  background: oklch(0.95 0.05 25);
-  color: oklch(0.4 0.12 25);
 }
 
 @media (max-width: 767px) {
@@ -1234,22 +1155,6 @@
   line-height: var(--crm-lh-title);
 }
 
-.settings-facebook-page-status {
-  color: var(--ink-muted);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.settings-facebook-page-status.is-active {
-  color: var(--success);
-}
-
-.settings-facebook-page-status.is-pending {
-  color: var(--warning, #a16207);
-}
-
 .settings-facebook-page-projects {
   display: grid;
   gap: 6px;
@@ -1532,37 +1437,6 @@
 
 .settings-llm-radio input[type="radio"]:disabled + span {
   opacity: 0.5;
-}
-
-/* Status chip in the card header band: soft fill + strong text per state. */
-.settings-llm-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--settings-border);
-  background: var(--workspace-surface-muted);
-  color: var(--ink-muted);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.settings-llm-chip.is-success {
-  border-color: color-mix(in srgb, var(--success) 32%, transparent);
-  background: color-mix(in srgb, var(--success) 12%, var(--settings-elevated));
-  color: var(--success);
-}
-
-.settings-llm-chip.is-danger {
-  border-color: color-mix(in srgb, var(--destructive) 32%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--destructive) 10%,
-    var(--settings-elevated)
-  );
-  color: var(--destructive);
 }
 
 /* Read-only model line: same rhythm as an input row, without the affordance. */

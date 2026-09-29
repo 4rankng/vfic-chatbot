@@ -2,7 +2,9 @@ import { Fragment } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useNotify, useTranslate } from "ra-core";
 
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 
 import type { LlmProvider } from "./api";
 import type { SettingsStatusState } from "./SettingsFieldStatus";
@@ -57,12 +59,16 @@ export const LlmProvidersSection = ({
     const index = servingChain.indexOf(provider);
     return index === -1 ? null : index + 1;
   };
-  const chipOf = (provider: LlmProvider): { label: string; cls: string } => {
-    if (!chainEnabled[provider]) return { label: "Tắt", cls: "is-muted" };
+  // The chip is a Untitled UI pill, so the provider's probe state travels as a
+  // badge colour instead of a bespoke class.
+  const chipOf = (
+    provider: LlmProvider,
+  ): { label: string; color: "gray" | "success" | "error" } => {
+    if (!chainEnabled[provider]) return { label: "Tắt", color: "gray" };
     const test = providerLastTests[CHAIN_PANEL_ID_BY_PROVIDER[provider]];
-    if (test?.ok) return { label: "Sẵn sàng", cls: "is-success" };
-    if (test && !test.ok) return { label: "Lỗi kiểm tra", cls: "is-danger" };
-    return { label: "Chưa kiểm tra", cls: "is-muted" };
+    if (test?.ok) return { label: "Sẵn sàng", color: "success" };
+    if (test && !test.ok) return { label: "Lỗi kiểm tra", color: "error" };
+    return { label: "Chưa kiểm tra", color: "gray" };
   };
   const testLineOf = (
     provider: LlmProvider,
@@ -101,27 +107,34 @@ export const LlmProvidersSection = ({
       <>
         {movable ? (
           <span className="settings-llm-moves">
-            <button
-              type="button"
+            <ButtonUtility
+              tooltip={`Tăng ưu tiên cho ${PROVIDER_LABELS[provider]}`}
+              size="xs"
+              color="tertiary"
               className="settings-llm-move"
-              disabled={index <= 1}
+              isDisabled={index <= 1}
               onClick={() => moveProvider(provider, -1)}
-              aria-label={`Tăng ưu tiên cho ${PROVIDER_LABELS[provider]}`}
-            >
-              <ChevronUp className="size-4" />
-            </button>
-            <button
-              type="button"
+              icon={ChevronUp}
+            />
+            <ButtonUtility
+              tooltip={`Giảm ưu tiên cho ${PROVIDER_LABELS[provider]}`}
+              size="xs"
+              color="tertiary"
               className="settings-llm-move"
-              disabled={index === chain.length - 1}
+              isDisabled={index === chain.length - 1}
               onClick={() => moveProvider(provider, 1)}
-              aria-label={`Giảm ưu tiên cho ${PROVIDER_LABELS[provider]}`}
-            >
-              <ChevronDown className="size-4" />
-            </button>
+              icon={ChevronDown}
+            />
           </span>
         ) : null}
-        <span className={`settings-llm-chip ${chip.cls}`}>{chip.label}</span>
+        <Badge
+          type="pill-color"
+          size="sm"
+          color={chip.color}
+          className="uu-scope"
+        >
+          {chip.label}
+        </Badge>
       </>
     );
   };
@@ -163,12 +176,12 @@ export const LlmProvidersSection = ({
         </span>
         <Button
           type="button"
-          variant="outline"
+          color="secondary"
           className="tt-btn-touch"
           onClick={() => {
             void panels.testProviderPanel(panelId);
           }}
-          disabled={anyChainTesting || !ready}
+          isDisabled={anyChainTesting || !ready}
           aria-busy={providerTesting[panelId]}
         >
           {providerTesting[panelId]
@@ -257,20 +270,21 @@ export const LlmProvidersSection = ({
       >
         <Button
           type="button"
-          variant="ghost"
+          color="tertiary"
           className="tt-btn-touch"
           onClick={() => panels.discardProviderPanels("chain")}
-          disabled={!panels.dirty.chain || providerSaving.chain}
+          isDisabled={!panels.dirty.chain || providerSaving.chain}
         >
           Huỷ
         </Button>
         <Button
           type="button"
+          color="primary"
           className="settings-primary-action tt-btn-touch"
           onClick={() => {
             void panels.saveProviderPanels("chain");
           }}
-          disabled={!panels.dirty.chain || providerSaving.chain}
+          isDisabled={!panels.dirty.chain || providerSaving.chain}
         >
           {providerSaving.chain
             ? translate("crm.common.saving")

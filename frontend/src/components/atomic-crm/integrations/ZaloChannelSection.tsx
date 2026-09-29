@@ -1,7 +1,8 @@
 import { MessageCircle, PlugZap, Wifi } from "lucide-react";
 import { useNotify, useTranslate } from "ra-core";
 
-import { Button } from "@/components/ui/button";
+import { AlertFloating } from "@/components/application/alerts/alerts";
+import { Button } from "@/components/base/buttons/button";
 
 import type { ZaloOaSignatureHealth, ZaloSettings } from "./api";
 import type { SettingsStatusState } from "./SettingsFieldStatus";
@@ -106,12 +107,13 @@ export const ZaloChannelSection = ({
           <div className="settings-oa-actions">
             <Button
               type="button"
+              color="primary"
+              iconLeading={<Wifi className="size-4" />}
               className="settings-test-button settings-primary-action tt-btn-touch"
               onClick={() => onTestChannel("bot")}
-              disabled={channelTesting.bot || !settings}
+              isDisabled={channelTesting.bot || !settings}
               aria-busy={channelTesting.bot}
             >
-              <Wifi className="size-4" />
               {channelTesting.bot
                 ? translate("crm.common.testing")
                 : translate("crm.common.save_and_test")}
@@ -179,27 +181,41 @@ export const ZaloChannelSection = ({
             <div className="settings-oa-actions">
               <Button
                 type="button"
+                color="primary"
+                iconLeading={<Wifi className="size-4" />}
                 className="settings-test-button settings-primary-action tt-btn-touch"
                 onClick={() => onTestChannel("oa")}
-                disabled={channelTesting.oa || !settings}
+                isDisabled={channelTesting.oa || !settings}
                 aria-busy={channelTesting.oa}
               >
-                <Wifi className="size-4" />
                 {channelTesting.oa
                   ? translate("crm.common.testing")
                   : translate("crm.common.save_and_test")}
               </Button>
             </div>
-            <details className="settings-advanced settings-webhook-health tt-collapse tt-collapse-arrow">
-              <summary className="settings-advanced-summary tt-collapse-title">
-                Webhook
-              </summary>
-              <p
-                className={`settings-webhook-message is-${webhookHealth.type}`}
-                role="status"
-              >
-                {webhookHealth.message}
-              </p>
+            <details className="settings-advanced settings-webhook-health">
+              <summary className="settings-advanced-summary">Webhook</summary>
+              {/*
+                The health line is an operator-facing alert, so it uses the
+                Untitled UI alert anatomy. `title` carries the sentence and
+                `description`/`confirmLabel` stay empty: this alert reports, it
+                asks nothing, and the alert renders no action for them.
+                `[&_p]:whitespace-normal` un-clips the alert's one-line banner
+                `md:truncate`, so a long status sentence wraps instead of
+                ending in an ellipsis.
+              */}
+              <div role="status" className="uu-scope [&_p]:whitespace-normal">
+                <AlertFloating
+                  color={
+                    webhookHealth.type === "info"
+                      ? "default"
+                      : webhookHealth.type
+                  }
+                  title={webhookHealth.message}
+                  description=""
+                  confirmLabel=""
+                />
+              </div>
             </details>
           </div>
         </SettingsGroup>

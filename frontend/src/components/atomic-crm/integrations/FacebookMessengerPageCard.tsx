@@ -12,8 +12,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNotify, useTranslate } from "ra-core";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { Checkbox } from "@/components/base/checkbox/checkbox";
 import type { Project } from "../types";
 import { facebookIntegrationGateway, type FacebookAccountStatus } from "./api";
 
@@ -30,7 +31,7 @@ const PAGE_STATUS_LABELS: Readonly<
 type FacebookProjectCheckboxListProps = {
   projects: Project[];
   selected: string[];
-  onToggle: (id: string, checked: boolean | "indeterminate") => void;
+  onToggle: (id: string, checked: boolean) => void;
 };
 
 const FacebookProjectCheckboxList = ({
@@ -41,13 +42,20 @@ const FacebookProjectCheckboxList = ({
   <ul className="settings-facebook-project-list">
     {projects.map((project) => (
       <li key={project.id}>
-        <label>
-          <Checkbox
-            checked={selected.includes(project.id)}
-            onCheckedChange={(checked) => onToggle(project.id, checked)}
-          />
-          <span>{project.name}</span>
-        </label>
+        {/*
+          `validationBehavior="aria"` keeps native validation from pre-empting
+          the console's own validation in a react-admin form, and `uu-scope`
+          re-binds the four utility names both systems define. The checkbox
+          renders its own label, so the option name travels as `label` instead
+          of a sibling `<span>`.
+        */}
+        <Checkbox
+          className="uu-scope"
+          label={project.name}
+          isSelected={selected.includes(project.id)}
+          onChange={(isSelected) => onToggle(project.id, isSelected)}
+          validationBehavior="aria"
+        />
       </li>
     ))}
   </ul>
@@ -87,7 +95,7 @@ const FacebookPageProjectsEditor = ({
     [draft, assignedProjectIds],
   );
 
-  const toggle = (id: string, checked: boolean | "indeterminate") => {
+  const toggle = (id: string, checked: boolean) => {
     setDraft((current) =>
       checked
         ? [...current, id]
@@ -101,11 +109,11 @@ const FacebookPageProjectsEditor = ({
         <span className="settings-field-label">Dự án được gán</span>
         <Button
           type="button"
-          variant="ghost"
+          color="tertiary"
           size="sm"
           className="settings-facebook-project-save"
           onClick={() => onCommit(draft)}
-          disabled={saving || !dirty}
+          isDisabled={saving || !dirty}
           aria-busy={saving}
         >
           {saving
@@ -191,13 +199,14 @@ const FacebookPageCard = ({ account, projects }: FacebookPageCardProps) => {
               (…{account.page_id_suffix})
             </span>
           </div>
-          <span
-            className={`settings-facebook-page-status ${
-              account.status === "ACTIVE" ? "is-active" : "is-pending"
-            }`}
+          <Badge
+            type="pill-color"
+            size="sm"
+            color={account.status === "ACTIVE" ? "success" : "warning"}
+            className="uu-scope"
           >
             {PAGE_STATUS_LABELS[account.status]}
-          </span>
+          </Badge>
         </div>
         <FacebookPageProjectsEditor
           assignedProjectIds={assignedProjectIds}
@@ -206,15 +215,16 @@ const FacebookPageCard = ({ account, projects }: FacebookPageCardProps) => {
           onCommit={(ids) => saveAssignments.mutate(ids)}
         />
         <div className="settings-facebook-page-actions">
-          <button
+          <Button
             type="button"
+            color="secondary"
             className="settings-test-button settings-danger-action tt-btn-touch"
             onClick={() => disconnect.mutate()}
-            disabled={disconnect.isPending}
+            isDisabled={disconnect.isPending}
             aria-busy={disconnect.isPending}
           >
             {disconnect.isPending ? "Đang ngắt…" : "Ngắt kết nối"}
-          </button>
+          </Button>
         </div>
       </div>
     </li>

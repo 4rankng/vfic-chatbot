@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNotify, useTranslate } from "ra-core";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 
 import type { SettingsStatusState } from "./SettingsFieldStatus";
 import { SettingsGroupStatus } from "./SettingsFieldStatus";
@@ -291,10 +291,10 @@ export const TingtingSection = () => {
           {oaConfigured ? (
             <Button
               type="button"
-              variant="outline"
+              color="secondary"
               className="settings-test-button tt-btn-touch"
               onClick={() => checkOa.mutate()}
-              disabled={checkOa.isPending}
+              isDisabled={checkOa.isPending}
               aria-busy={checkOa.isPending}
             >
               {checkOa.isPending ? "Đang kiểm tra…" : "Kiểm tra lại OA"}
@@ -306,9 +306,10 @@ export const TingtingSection = () => {
       <div className={`settings-llm-footer${dirty ? " is-dirty" : ""}`}>
         <Button
           type="button"
+          color="primary"
           className="settings-primary-action tt-btn-touch"
           onClick={submit}
-          disabled={!dirty || saveSettings.isPending}
+          isDisabled={!dirty || saveSettings.isPending}
         >
           {saveSettings.isPending
             ? translate("crm.common.saving")
