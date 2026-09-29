@@ -50,7 +50,8 @@ const PersonaEditContent = () => {
         },
       });
       notify("Đã lưu.", { type: "success" });
-      refresh();
+      // Lưu closes the editor: back to the Hồ sơ Agent page, like create does.
+      redirect("/personas");
     } catch (e) {
       notify((e as Error).message, { type: "error" });
     }
