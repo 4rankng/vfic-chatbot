@@ -10,16 +10,19 @@ import {
   useRedirect,
   useTranslate,
 } from "ra-core";
-import { TextInput } from "@/components/admin/text-input";
-import { SelectInput } from "@/components/admin/select-input";
-import { BooleanInput } from "@/components/admin/boolean-input";
-import { Button } from "@/components/ui/button";
+import { useHref } from "react-router";
+import { Button } from "@/components/base/buttons/button";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { UserAccount } from "../types";
 import { UserRoleBadge, UserStatusBadge } from "./UserBadges";
-import { ArrowLeft, Check, LoaderCircle, UserCog } from "lucide-react";
-import { Link } from "react-router";
-import { PageHeading, PageShell } from "../kit";
+import { ArrowLeft, UserCog } from "lucide-react";
+import {
+  FormSelect,
+  FormTextInput,
+  FormToggle,
+  PageHeading,
+  PageShell,
+} from "../kit";
 import "./users.css";
 
 const ROLE_CHOICES = [
@@ -90,45 +93,45 @@ const UserEditContent = () => {
       <Form record={user} onSubmit={onSubmit}>
         <div className="user-account-form-body">
           <div className="user-account-field-grid">
-            <TextInput
+            <FormTextInput
               source="email"
               label="Email"
               type="email"
+              autoComplete="email"
               isRequired
               validate={[REQUIRED_FIELD, VALID_EMAIL]}
               className="user-account-field user-account-field-wide"
             />
-            <TextInput
+            <FormTextInput
               source="full_name"
               label="Họ tên"
+              autoComplete="name"
               isRequired
               validate={REQUIRED_FIELD}
+              className="user-account-field"
             />
-            <SelectInput
+            <FormSelect
               source="role"
               label="Vai trò"
               choices={ROLE_CHOICES}
+              placeholder="Chọn vai trò"
               isRequired
               validate={REQUIRED_FIELD}
+              className="user-account-field"
             />
             <div className="user-account-toggle-row user-account-field-wide">
-              <BooleanInput source="disabled" label="Vô hiệu hóa tài khoản" />
+              <FormToggle source="disabled" label="Vô hiệu hóa tài khoản" />
             </div>
           </div>
           <footer className="user-account-form-actions">
             <Button
               type="submit"
-              disabled={submitting}
-              className="user-account-submit tt-btn-touch"
+              size="md"
+              className="user-account-submit min-h-11 max-[760px]:w-full"
+              isDisabled={submitting}
+              isLoading={submitting}
+              showTextWhileLoading
             >
-              {submitting ? (
-                <LoaderCircle
-                  className="size-4 animate-spin"
-                  aria-hidden="true"
-                />
-              ) : (
-                <Check className="size-4" aria-hidden="true" />
-              )}
               {submitting
                 ? translate("crm.common.saving")
                 : translate("crm.common.save_changes")}
@@ -140,27 +143,28 @@ const UserEditContent = () => {
   );
 };
 
-export const UserEdit = () => (
-  <EditBase>
-    <PageShell size="narrow">
-      <PageHeading
-        eyebrow="Quản trị truy cập"
-        title="Chỉnh sửa tài khoản"
-        subtitle="Cập nhật thông tin, quyền và trạng thái."
-        actions={
-          <Button
-            asChild
-            variant="outline"
-            className="user-account-back tt-btn-touch"
-          >
-            <Link to="/users">
-              <ArrowLeft className="size-4" aria-hidden="true" />
+export const UserEdit = () => {
+  const href = useHref("/users");
+  return (
+    <EditBase>
+      <PageShell size="narrow">
+        <PageHeading
+          eyebrow="Quản trị truy cập"
+          title="Chỉnh sửa tài khoản"
+          subtitle="Cập nhật thông tin, quyền và trạng thái."
+          actions={
+            <Button
+              href={href}
+              color="secondary"
+              size="sm"
+              iconLeading={ArrowLeft}
+            >
               Tài khoản
-            </Link>
-          </Button>
-        }
-      />
-      <UserEditContent />
-    </PageShell>
-  </EditBase>
-);
+            </Button>
+          }
+        />
+        <UserEditContent />
+      </PageShell>
+    </EditBase>
+  );
+};

@@ -5,25 +5,17 @@ import {
   useRecordContext,
   useRefresh,
 } from "ra-core";
-import { Button } from "@/components/ui/button";
-import { Confirm } from "@/components/admin/confirm";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { useHref } from "react-router";
+import { useState } from "react";
+import type { Key } from "react-aria-components";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  Modal,
+  ModalOverlay,
+} from "@/components/application/modals/modal";
 import {
   KeyRound,
   MoreHorizontal,
@@ -32,11 +24,19 @@ import {
   PowerOff,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { UserAccount } from "../types";
 
+/**
+ * Row actions for one account: edit, enable/disable, password reset and a hard
+ * delete.
+ *
+ * The menu and both dialogs are Untitled UI (React Aria) rather than Radix,
+ * because this cell is rendered inside the account directory's React Aria table
+ * and the two primitive runtimes must not nest. Copy, data verbs and visible
+ * names are unchanged: `enableUser` / `disableUser` / `resetUserPassword` /
+ * `delete("users")`, with the same Vietnamese confirmations.
+ */
 export const UserActions = () => {
   const record = useRecordContext<UserAccount>();
   const createPath = useCreatePath();
@@ -48,13 +48,14 @@ export const UserActions = () => {
   const [resetPending, setResetPending] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  if (!record) return null;
-
   const editPath = createPath({
     resource: "users",
     type: "edit",
-    id: record.id,
+    id: record?.id ?? "",
   });
+  const editHref = useHref(editPath);
+  if (!record) return null;
+
   const actionLabel = `Mở thao tác cho ${record.full_name || record.email}`;
 
   const toggleDisabled = async () => {
@@ -115,159 +116,154 @@ export const UserActions = () => {
     }
   };
 
+  const handleAction = (key: Key) => {
+    if (key === "toggle") void toggleDisabled();
+    if (key === "reset") setResetOpen(true);
+    if (key === "delete") setDeleteOpen(true);
+  };
+
   return (
     <>
-      <div
-        className="inline-flex"
-        onClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-11 w-11 rounded-full"
-              aria-label={actionLabel}
-              title={actionLabel}
-            >
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-64"
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <DropdownMenuItem asChild>
-              <Link
-                to={editPath}
-                className="flex items-center gap-2"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <Pencil className="size-4" />
-                Sửa
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={(event) => {
-                event.stopPropagation();
-                void toggleDisabled();
-              }}
-            >
-              {record.disabled ? (
-                <Power className="size-4" />
-              ) : (
-                <PowerOff className="size-4" />
-              )}
-              {record.disabled ? "Kích hoạt" : "Vô hiệu hóa"}
-            </DropdownMenuItem>
+      <Dropdown.Root>
+        <span title={actionLabel}>
+          <Button
+            color="tertiary"
+            size="sm"
+            className="size-11"
+            iconLeading={MoreHorizontal}
+            aria-label={actionLabel}
+          />
+        </span>
+        <Dropdown.Popover className="w-64">
+          <Dropdown.Menu onAction={handleAction}>
+            <Dropdown.Item id="edit" href={editHref} icon={Pencil} label="Sửa" />
+            <Dropdown.Item
+              id="toggle"
+              icon={record.disabled ? Power : PowerOff}
+              label={record.disabled ? "Kích hoạt" : "Vô hiệu hóa"}
+            />
             {!record.disabled ? (
-              <DropdownMenuItem
-                onSelect={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setResetOpen(true);
-                }}
-              >
-                <KeyRound className="size-4" />
-                Đổi mật khẩu
-              </DropdownMenuItem>
+              <Dropdown.Item
+                id="reset"
+                icon={KeyRound}
+                label="Đổi mật khẩu"
+              />
             ) : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={(event) => {
+            <Dropdown.Separator />
+            <Dropdown.Item id="delete" icon={Trash2}>
+              <span className="text-error-primary">Xóa vĩnh viễn</span>
+            </Dropdown.Item>
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown.Root>
+
+      <ModalOverlay
+        isOpen={resetOpen}
+        onOpenChange={(open) => {
+          if (resetPending) return;
+          if (open) setResetOpen(true);
+          else closeResetDialog();
+        }}
+        isDismissable={!resetPending}
+        isKeyboardDismissDisabled={resetPending}
+        className="uu-scope"
+      >
+        <Modal className="w-full outline-hidden sm:max-w-md">
+          <Dialog
+            aria-label="Đổi mật khẩu"
+            className="flex flex-col gap-4 p-5 outline-hidden"
+          >
+            <div className="flex flex-col gap-1">
+              <h2 className="flex items-center gap-2 text-section-title font-semibold text-primary">
+                <KeyRound className="size-5" aria-hidden="true" />
+                Đổi mật khẩu
+              </h2>
+              <p className="text-body-sm text-tertiary">
+                {`Đặt mật khẩu mới cho ${record.email}. Người dùng sẽ cần đăng nhập lại bằng mật khẩu mới.`}
+              </p>
+            </div>
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(event) => {
                 event.preventDefault();
-                event.stopPropagation();
-                setDeleteOpen(true);
+                void resetPassword();
               }}
             >
-              <Trash2 className="size-4" />
-              Xóa vĩnh viễn
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <Dialog
-        open={resetOpen}
-        onOpenChange={(open) => {
-          if (!resetPending) {
-            if (open) setResetOpen(true);
-            else closeResetDialog();
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <KeyRound className="size-5" />
-              Đổi mật khẩu
-            </DialogTitle>
-            <DialogDescription>
-              Đặt mật khẩu mới cho {record.email}. Người dùng sẽ cần đăng nhập
-              lại bằng mật khẩu mới.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void resetPassword();
-            }}
-            className="flex flex-col gap-4"
-          >
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="reset-password-new">Mật khẩu mới</Label>
               <Input
-                id="reset-password-new"
+                className="uu-scope"
+                label="Mật khẩu mới"
                 type="password"
                 autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                minLength={8}
-                required
                 autoFocus
+                value={password}
+                onChange={setPassword}
               />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="reset-password-confirm">Xác nhận mật khẩu</Label>
               <Input
-                id="reset-password-confirm"
+                className="uu-scope"
+                label="Xác nhận mật khẩu"
                 type="password"
                 autoComplete="new-password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                minLength={8}
-                required
+                onChange={setConfirmPassword}
               />
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  color="secondary"
+                  size="md"
+                  isDisabled={resetPending}
+                  onClick={closeResetDialog}
+                >
+                  Hủy
+                </Button>
+                <Button type="submit" size="md" isLoading={resetPending}>
+                  {resetPending ? "Đang đặt lại…" : "Đặt mật khẩu"}
+                </Button>
+              </div>
+            </form>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+
+      <ModalOverlay
+        isOpen={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        className="uu-scope"
+      >
+        <Modal className="w-full outline-hidden sm:max-w-md">
+          <Dialog
+            aria-label="Xóa vĩnh viễn tài khoản?"
+            className="flex flex-col gap-4 p-5 outline-hidden"
+          >
+            <div className="flex flex-col gap-1">
+              <h2 className="text-section-title font-semibold text-primary">
+                Xóa vĩnh viễn tài khoản?
+              </h2>
+              <p className="text-body-sm text-tertiary">
+                {`Tài khoản ${record.email} sẽ bị xóa khỏi hệ thống. Hành động này không thể hoàn tác.`}
+              </p>
             </div>
-            <DialogFooter>
+            <div className="flex justify-end gap-2">
               <Button
                 type="button"
-                variant="outline"
-                disabled={resetPending}
-                onClick={closeResetDialog}
+                color="secondary"
+                size="md"
+                onClick={() => setDeleteOpen(false)}
               >
                 Hủy
               </Button>
-              <Button type="submit" disabled={resetPending}>
-                {resetPending ? "Đang đặt lại…" : "Đặt mật khẩu"}
+              <Button
+                type="button"
+                color="primary-destructive"
+                size="md"
+                onClick={() => void hardDelete()}
+              >
+                Xóa vĩnh viễn
               </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      <Confirm
-        isOpen={deleteOpen}
-        title="Xóa vĩnh viễn tài khoản?"
-        content={`Tài khoản ${record.email} sẽ bị xóa khỏi hệ thống. Hành động này không thể hoàn tác.`}
-        confirm="Xóa vĩnh viễn"
-        confirmColor="warning"
-        onClose={() => setDeleteOpen(false)}
-        onConfirm={hardDelete}
-      />
+            </div>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
     </>
   );
 };

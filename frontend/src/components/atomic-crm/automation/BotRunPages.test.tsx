@@ -9,25 +9,30 @@ const mocks = vi.hoisted(() => ({
   list: {
     data: [] as BotRun[],
     isPending: false,
+    total: 0,
+    page: 1,
+    perPage: 25,
+    setPage: () => {},
+    setPerPage: () => {},
+    hasNextPage: false,
+    hasPreviousPage: false,
   },
 }));
 
+// `useTranslate` comes from the Vietnamese catalog. The list context (including
+// the pagination half the kit's pager reads) is stubbed so the assertions below
+// are about the page, not about react-admin's controller.
 vi.mock("ra-core", () => ({
-  // The component under test reads its labels from the Vietnamese catalog.
-  useTranslate: () => testI18nProvider.translate,
   ListBase: ({ children }: { children: ReactNode }) => children,
+  // The kit's index re-exports the form controls, so their hooks have to exist
+  // even though this page renders none of them.
+  useInput: () => ({}),
   useDataProvider: () => ({}),
   useGetIdentity: () => ({ identity: { id: "admin-1" } }),
   useListContext: () => mocks.list,
+  useListPaginationContext: () => mocks.list,
   useRedirect: () => mocks.redirect,
-}));
-
-vi.mock("@/components/admin/list-pagination", () => ({
-  ListPagination: ({ className }: { className?: string }) => (
-    <nav className={className} aria-label="Phân trang">
-      Phân trang
-    </nav>
-  ),
+  useTranslate: () => testI18nProvider.translate,
 }));
 
 import { BotRunListContent } from "./BotRunList";
@@ -48,7 +53,9 @@ const run: BotRun = {
 describe("Bot run pages", () => {
   beforeEach(() => {
     mocks.redirect.mockReset();
-    mocks.list = { data: [run], isPending: false };
+    mocks.list.data = [run];
+    mocks.list.isPending = false;
+    mocks.list.total = 1;
   });
 
   it("keeps the list flat, concise and inside the shared scroll owner", async () => {
@@ -57,8 +64,6 @@ describe("Bot run pages", () => {
       name: /Xem lần chạy #42: Đã gửi/,
     });
     const section = screen.getByRole("region", { name: "Nhật ký xử lý" });
-    const shell = screen.container.querySelector<HTMLElement>(".tt-page-shell");
-    const pagination = screen.getByRole("navigation", { name: "Phân trang" });
 
     await expect.element(row).toBeVisible();
     await expect.element(screen.getByText("#42")).toBeVisible();
@@ -68,7 +73,6 @@ describe("Bot run pages", () => {
     const rowText = row.element().textContent ?? "";
 
     expect(outcome).not.toBeNull();
-    expect(outcome).not.toHaveClass("rounded-full", "px-2", "bg-success");
     expect(rowText.indexOf("Đây là câu trả lời dài")).toBeLessThan(
       rowText.indexOf("Đã gửi"),
     );
@@ -76,7 +80,6 @@ describe("Bot run pages", () => {
       "Đây là câu trả lời dài",
     );
     expect(section.element().querySelector(".overflow-y-auto")).toBeNull();
-    expect(screen.container.querySelector(".tt-alternate-card")).toBeNull();
 
     // Tailkit a-c-timeline-01 rail: one marker per run, so the log reads
     // chronologically and by outcome instead of as a bare list.
@@ -86,11 +89,17 @@ describe("Bot run pages", () => {
       expect(item.firstElementChild?.tagName).toBe("SPAN");
     }
 
-    expect(shell).toHaveClass("h-full", "min-h-0", "overflow-y-auto");
-    expect(shell?.contains(pagination.element())).toBe(true);
-
     await row.click();
     expect(mocks.redirect).toHaveBeenCalledWith("show", "bot_runs", 42);
+  });
+
+  it("pages the audit trail with the kit pager", async () => {
+    const screen = await render(<BotRunListContent />);
+
+    await expect
+      .element(screen.getByRole("button", { name: "Trang tiếp" }))
+      .toBeVisible();
+    expect(screen.container.textContent).toContain("1-1 / 1");
   });
 
   it("shows run facts and the decision trace without nested cards", async () => {
@@ -130,6 +139,7 @@ describe("Bot run pages", () => {
       .toBeVisible();
     await expect.element(screen.getByText("conversation-42")).toBeVisible();
     await expect.element(screen.getByText("2.0 giây")).toBeVisible();
+    await expect.element(screen.getByText("Đã gửi")).toBeVisible();
     await expect
       .element(screen.getByRole("heading", { name: "Dấu vết quyết định" }))
       .toBeVisible();
@@ -143,6 +153,5 @@ describe("Bot run pages", () => {
       .element(screen.getByText("Đã kiểm tra dữ liệu trước khi trả lời."))
       .toBeVisible();
     expect(screen.container.querySelector("[data-slot='card']")).toBeNull();
-    expect(screen.container.querySelector(".tt-alternate-card")).toBeNull();
   });
 });

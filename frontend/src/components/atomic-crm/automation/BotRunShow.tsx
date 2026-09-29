@@ -1,12 +1,11 @@
 import { type ReactNode } from "react";
 import { useDataProvider, useGetIdentity, useTranslate } from "ra-core";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router";
+import { useHref, useParams } from "react-router";
 import { ArrowLeft, Bot } from "lucide-react";
-import { Link } from "react-router";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
 import { PageHeading, PageShell } from "../kit";
-import { cn } from "@/lib/utils";
 import type { BotRunTraceDetail } from "../types";
 import { durationLabel, formatDateTime, outcomeMeta } from "./botRunMeta";
 import { DecisionTraceRenderer } from "./DecisionTracePanel";
@@ -14,7 +13,7 @@ import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { DECISION_TRACE_QUERY_KEY } from "./decisionTraceQueries";
 
 const Fact = ({ label, value }: { label: string; value?: ReactNode }) => (
-  <div className="min-w-0 border-b border-[var(--tt-border)] px-4 py-3 sm:odd:border-r">
+  <div className="min-w-0 border-b border-[var(--workspace-border)] px-4 py-3 sm:odd:border-r">
     <dt className="text-caption uppercase tracking-wide text-muted-foreground">
       {label}
     </dt>
@@ -27,20 +26,23 @@ export const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
   const dur = durationLabel(run);
 
   return (
-    <section className="mt-4 border-y border-[var(--tt-border)] bg-[var(--tt-surface-lift)]">
-      <header className="flex items-center justify-between gap-3 border-b border-[var(--tt-border)] px-4 py-3">
+    <section className="mt-4 border-y border-[var(--workspace-border)] bg-[var(--workspace-surface)]">
+      <header className="flex items-center justify-between gap-3 border-b border-[var(--workspace-border)] px-4 py-3">
         <h2 className="flex min-w-0 items-center gap-2 text-section-title font-semibold">
           <Bot className="size-4 text-muted-foreground" />
           Lần chạy bot #{run.id}
         </h2>
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-helper font-semibold uppercase tracking-wide",
-            meta.classes,
-          )}
+        {/* Untitled UI chip. `uu-scope` re-binds the four utility names this
+            console and Untitled UI both define; see
+            src/styles/untitledui-theme.css. */}
+        <Badge
+          className="uu-scope shrink-0 font-semibold tracking-wide uppercase"
+          type="pill-color"
+          size="sm"
+          color={meta.badgeColor}
         >
           {meta.label}
-        </span>
+        </Badge>
       </header>
 
       <dl className="grid sm:grid-cols-2">
@@ -82,6 +84,7 @@ const BotRunShowPage = () => {
   const { identity } = useGetIdentity();
   const identityId = identity?.id ? String(identity.id) : "";
   const translate = useTranslate();
+  const listHref = useHref("/bot_runs");
   const detailQuery = useQuery({
     queryKey: [...DECISION_TRACE_QUERY_KEY, identityId, "run", runId],
     queryFn: () => dataProvider.getBotRunTrace(runId),
@@ -98,11 +101,13 @@ const BotRunShowPage = () => {
         title="Chi tiết lần chạy bot"
         subtitle="Kiểm tra dữ liệu chẩn đoán của lượt xử lý."
         actions={
-          <Button asChild variant="outline" size="sm">
-            <Link to="/bot_runs">
-              <ArrowLeft className="size-4" aria-hidden="true" />
-              Lần chạy bot
-            </Link>
+          <Button
+            href={listHref}
+            color="secondary"
+            size="sm"
+            iconLeading={ArrowLeft}
+          >
+            Lần chạy bot
           </Button>
         }
       />
@@ -113,12 +118,12 @@ const BotRunShowPage = () => {
       ) : detailQuery.isError || !detailQuery.data ? (
         <div
           role="alert"
-          className="mt-4 flex flex-wrap items-center justify-between gap-3 border-y border-[var(--tt-border)] px-4 py-3 text-body"
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 border-y border-[var(--workspace-border)] px-4 py-3 text-body"
         >
           <span>Chưa tải được lần chạy bot.</span>
           <Button
             type="button"
-            variant="outline"
+            color="secondary"
             size="sm"
             onClick={() => detailQuery.refetch()}
           >

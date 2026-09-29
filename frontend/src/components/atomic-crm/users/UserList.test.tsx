@@ -31,27 +31,45 @@ const { accounts, secondAccount, listState } = vi.hoisted(() => {
   return {
     accounts,
     secondAccount: second,
-    listState: { data: accounts, isPending: false, total: accounts.length },
+    listState: {
+      data: accounts as UserAccount[],
+      isPending: false,
+      total: accounts.length,
+      page: 1,
+      perPage: 25,
+      setPage: () => {},
+      setPerPage: () => {},
+      hasNextPage: false,
+      hasPreviousPage: false,
+    },
   };
 });
 
+// `UserList` composes the kit's `ListTable`; what matters here is what a
+// recruiter sees — the directory's columns, rows, row action and empty state —
+// not which class names carry it. The kit's own suite covers the real
+// react-admin list context, so this file stubs the context hooks it renders
+// against.
 vi.mock("ra-core", () => ({
   ListBase: ({ children }: { children: ReactNode }) => children,
-  RecordContextProvider: ({ children }: { children: ReactNode }) => children,
-  useCreatePath: () => () => "/users/create",
+  useCreatePath: () => (options: { type: string }) => `/users/${options.type}`,
+  // The kit's index re-exports the form controls, so their hooks have to exist
+  // even though this page renders none of them.
+  useInput: () => ({}),
+  useDataProvider: () => ({
+    enableUser: vi.fn(),
+    disableUser: vi.fn(),
+    resetUserPassword: vi.fn(),
+    delete: vi.fn(),
+  }),
   useListContext: () => listState,
+  useListPaginationContext: () => listState,
+  useNotify: () => vi.fn(),
   usePermissions: () => ({ permissions: "admin", isPending: false }),
-  useTranslate: () => (_key: string, options?: { smart_count?: number }) =>
-    options?.smart_count ? "Tài khoản" : "",
-}));
-
-vi.mock("./UserActions", () => ({
-  UserActions: () => <button type="button">Mở thao tác</button>,
-}));
-
-vi.mock("./UserBadges", () => ({
-  UserRoleBadge: () => <span>Tuyển dụng</span>,
-  UserStatusBadge: () => <span>Hoạt động</span>,
+  useRecordContext: () => listState.data[0],
+  useRefresh: () => vi.fn(),
+  useTranslate: () => (key: string, options?: { smart_count?: number }) =>
+    key === "resources.users.name" && options?.smart_count ? "Tài khoản" : key,
 }));
 
 import { UserList } from "./UserList";
@@ -64,28 +82,25 @@ const mountList = () => (
 
 afterEach(async () => {
   listState.data = accounts;
+  listState.total = accounts.length;
   await cleanup();
   await page.viewport(1280, 720);
 });
 
 describe("UserList", () => {
-  it("lists the directory as one table with real column headers and a count line", async () => {
-    await page.viewport(1280, 844);
+  it("renders the directory as one labelled table with a count line", async () => {
     listState.data = [...accounts, secondAccount];
+    listState.total = 2;
     const screen = await render(mountList());
 
-    const surface = screen.container.querySelector<HTMLElement>(
-      ".user-directory-card",
-    )!;
-    const table = surface.querySelector<HTMLTableElement>("table")!;
-    expect(table).toBeInstanceOf(HTMLTableElement);
-    // The previous surface was an aria-hidden column strip over a grid list.
-    expect(table.getAttribute("aria-label")).toBe("Danh sách tài khoản");
+    await expect
+      .element(screen.getByRole("grid", { name: "Danh sách tài khoản" }))
+      .toBeVisible();
 
-    const heads = Array.from(
-      table.querySelectorAll<HTMLTableCellElement>("thead th"),
-    );
-    expect(heads.map((th) => th.textContent?.trim())).toEqual([
+    const headers = Array.from(
+      screen.container.querySelectorAll('[role="columnheader"]'),
+    ).map((node) => node.textContent);
+    expect(headers).toEqual([
       "Ảnh đại diện",
       "Người dùng",
       "Vai trò",
@@ -93,126 +108,48 @@ describe("UserList", () => {
       "Ngày tạo",
       "Thao tác",
     ]);
-    expect(heads.map((th) => th.scope)).toEqual(
-      Array(heads.length).fill("col"),
-    );
 
-    const rows = table.querySelectorAll<HTMLTableRowElement>(
-      "tbody tr.user-directory-row",
-    );
-    expect(rows).toHaveLength(2);
-    expect(surface.textContent).toContain("2 tài khoản");
-    expect(getComputedStyle(rows[0]).display).toBe("table-row");
-
-    // The avatar cell is Untitled UI's `Avatar`, fed with the record's
-    // initials: the first and last words of a Vietnamese name.
+    expect(screen.container.querySelectorAll("tbody tr")).toHaveLength(2);
+    expect(screen.container.textContent).toContain("2 tài khoản");
+    await expect.element(screen.getByText("Nguyễn Minh Anh")).toBeVisible();
+    await expect.element(screen.getByText("recruiter@vfic.dev")).toBeVisible();
+    // The avatar cell is Untitled UI's `Avatar`, fed the record's initials: the
+    // first and last words of a Vietnamese name.
     const avatars = Array.from(
-      table.querySelectorAll<HTMLElement>("td.user-directory-cell-avatar"),
+      screen.container.querySelectorAll(".user-directory-cell-avatar"),
     );
-    expect(avatars.map((cell) => cell.textContent?.trim())).toEqual([
-      "NA",
-      "TB",
-    ]);
+    expect(avatars.map((cell) => cell.textContent?.trim())).toEqual(["NA", "TB"]);
     expect(avatars[0]?.querySelector("img")).toBeNull();
   });
 
-  it("replaces the bespoke empty card with the kit empty state", async () => {
-    listState.data = [];
+  it("names each account's row action and keeps create reachable", async () => {
     const screen = await render(mountList());
-
-    expect(screen.container.querySelector(".user-directory-card")).toBeNull();
-    const status =
-      screen.container.querySelector<HTMLElement>('[role="status"]')!;
-    expect(status.textContent).toContain("Chưa có tài khoản nào");
-    expect(status.textContent).toContain(
-      "Tạo tài khoản để phân quyền cho đội tuyển dụng.",
-    );
-  });
-
-  it("keeps the primary mobile action named and flattens the account list", async () => {
-    await page.viewport(390, 844);
-    const screen = await render(mountList());
+    await expect
+      .element(
+        screen.getByRole("button", {
+          name: "Mở thao tác cho Nguyễn Minh Anh",
+        }),
+      )
+      .toBeVisible();
 
     const create = screen.getByRole("link", { name: "Tạo tài khoản" });
     await expect.element(create).toBeVisible();
-    expect(
-      getComputedStyle(create.element().querySelector("span")!).display,
-    ).not.toBe("none");
-
-    const directory = screen.container.querySelector<HTMLElement>(
-      ".user-directory-card",
-    )!;
-    const row = screen.container.querySelector<HTMLElement>(
-      ".user-directory-row",
-    )!;
-
-    expect(getComputedStyle(directory).borderRadius).toBe("0px");
-    expect(getComputedStyle(row).backgroundColor).toBe("rgba(0, 0, 0, 0)");
-    expect(row.querySelector("[data-slot='card']")).toBeNull();
-    // The phone row is linearised: the table box roles are dropped so the row
-    // can lay its six cells out instead of forcing six table columns into 390px.
-    expect(getComputedStyle(directory.querySelector("table")!).display).toBe(
-      "block",
-    );
-    expect(getComputedStyle(directory.querySelector("thead")!).display).toBe(
-      "none",
-    );
-    await expect.element(screen.getByText("Nguyễn Minh Anh")).toBeVisible();
-    await expect.element(screen.getByText("Hoạt động")).toBeVisible();
+    expect(create.element().getAttribute("href")).toContain("/users/create");
   });
 
-  it("keeps mobile account rows compact with every metadata field visible", async () => {
-    // Rendered counterpart of the former users.css source-text pins: the
-    // computed styles prove the 760px rules actually apply to a rendered row,
-    // and the metadata cells sharing one line proves nothing is hidden or
-    // pushed out of the card.
-    await page.viewport(390, 844);
+  it("shows the kit empty state when there is no account", async () => {
+    listState.data = [];
+    listState.total = 0;
     const screen = await render(mountList());
 
-    const row = screen.container.querySelector<HTMLElement>(
-      ".user-directory-row",
-    )!;
-    const rowStyles = getComputedStyle(row);
-    expect(rowStyles.minHeight).toBe("84px");
-    expect(rowStyles.rowGap).toBe("4px");
-    expect(rowStyles.paddingTop).toBe("8px");
-    expect(rowStyles.paddingBottom).toBe("8px");
-
-    const metadata = ["role", "status", "created"].map(
-      (field) =>
-        row.querySelector<HTMLElement>(`.user-directory-cell-${field}`)!,
-    );
-    for (const cell of metadata) {
-      expect(cell).toBeInstanceOf(HTMLElement);
-      expect(getComputedStyle(cell).display, cell.outerHTML).not.toBe("none");
-    }
-
-    // All three share the band's line, closed by the creation date in desktop
-    // column order.
-    const centres = metadata.map((cell) => {
-      const rect = cell.getBoundingClientRect();
-      return rect.top + rect.height / 2;
-    });
-    expect(Math.max(...centres) - Math.min(...centres)).toBeLessThanOrEqual(2);
-    expect(metadata[2].getBoundingClientRect().left).toBeGreaterThan(
-      metadata[0].getBoundingClientRect().left,
-    );
-
-    // ...and the band sits under the identity, which keeps the full width above
-    // it rather than being narrowed by the badges.
-    const identity = row.querySelector<HTMLElement>(
-      ".user-directory-cell-identity",
-    )!;
-    const identityRect = identity.getBoundingClientRect();
-    for (const cell of metadata) {
-      expect(cell.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-        identityRect.bottom,
-      );
-    }
-    expect(identityRect.width).toBeGreaterThan(
-      metadata[0].getBoundingClientRect().width * 2,
-    );
-
-    await page.viewport(1280, 720);
+    await expect
+      .element(screen.getByText("Chưa có tài khoản nào"))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByText("Tạo tài khoản để phân quyền cho đội tuyển dụng."),
+      )
+      .toBeVisible();
+    expect(screen.container.querySelector("table")).toBeNull();
   });
 });

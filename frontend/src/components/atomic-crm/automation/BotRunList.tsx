@@ -1,9 +1,7 @@
 import { ListBase, useListContext, useRedirect } from "ra-core";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ListPagination } from "@/components/admin/list-pagination";
 import { ChevronRight, Inbox } from "lucide-react";
 import { cn, getRelativeTimeString } from "@/lib/utils";
-import { EmptyState, PageHeading, PageShell } from "../kit";
+import { EmptyState, ListPagination, PageHeading, PageShell } from "../kit";
 import type { BotRun } from "../types";
 import { durationLabel, outcomeMeta } from "./botRunMeta";
 
@@ -88,7 +86,7 @@ const BotRunTimelineRail = ({
       <span
         className={cn(
           "w-px flex-1",
-          isFirst ? "bg-transparent" : "bg-[var(--tt-border)]",
+          isFirst ? "bg-transparent" : "bg-[var(--workspace-border)]",
         )}
       />
       <span
@@ -100,12 +98,29 @@ const BotRunTimelineRail = ({
       <span
         className={cn(
           "w-px flex-1",
-          isLast ? "bg-transparent" : "bg-[var(--tt-border)]",
+          isLast ? "bg-transparent" : "bg-[var(--workspace-border)]",
         )}
       />
     </span>
   );
 };
+
+const SkeletonRows = () => (
+  <div className="flex flex-col" role="status" aria-label="Đang tải">
+    {Array.from({ length: 8 }).map((_, index) => (
+      <div
+        key={index}
+        className="flex min-h-16 items-center gap-3 border-b border-[var(--workspace-border)] px-4 py-3 sm:px-5"
+      >
+        <span className="flex-1 space-y-2">
+          <span className="block h-4 w-3/4 animate-pulse rounded bg-[var(--workspace-surface-muted)]" />
+          <span className="block h-3 w-2/5 animate-pulse rounded bg-[var(--workspace-surface-muted)]" />
+        </span>
+        <span className="size-4 shrink-0 animate-pulse rounded bg-[var(--workspace-surface-muted)]" />
+      </div>
+    ))}
+  </div>
+);
 
 export const BotRunListContent = () => {
   const { data, isPending } = useListContext<BotRun>();
@@ -114,24 +129,11 @@ export const BotRunListContent = () => {
     <PageShell>
       <PageHeading title="Lần chạy bot" />
       <section
-        className="mt-4 border-y border-[var(--tt-border)] bg-[var(--tt-surface-lift)]"
+        className="mt-4 border-y border-[var(--workspace-border)] bg-[var(--workspace-surface)]"
         aria-label="Nhật ký xử lý"
       >
         {isPending ? (
-          <div className="flex flex-col" role="status" aria-label="Đang tải">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={i}
-                className="flex min-h-16 items-center gap-3 border-b px-4 py-3 sm:px-5"
-              >
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-3 w-2/5" />
-                </div>
-                <Skeleton className="size-4" />
-              </div>
-            ))}
-          </div>
+          <SkeletonRows />
         ) : !data || data.length === 0 ? (
           <EmptyState
             icon={<Inbox className="size-6" aria-hidden="true" />}
@@ -144,7 +146,7 @@ export const BotRunListContent = () => {
               <div
                 role="listitem"
                 key={run.id}
-                className="flex border-b border-[var(--tt-border)] last:border-b-0 hover:bg-muted/50 focus-within:bg-muted"
+                className="flex border-b border-[var(--workspace-border)] last:border-b-0 hover:bg-muted/50 focus-within:bg-muted"
               >
                 <BotRunTimelineRail
                   outcome={run.outcome}
@@ -159,7 +161,7 @@ export const BotRunListContent = () => {
       </section>
       <ListPagination
         rowsPerPageOptions={[10, 25, 50, 100]}
-        className="mt-3 justify-center"
+        className="justify-center"
       />
     </PageShell>
   );

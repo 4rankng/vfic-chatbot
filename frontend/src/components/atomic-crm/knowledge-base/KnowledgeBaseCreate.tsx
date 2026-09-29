@@ -5,107 +5,42 @@ import {
   useNotify,
   useRedirect,
 } from "ra-core";
+import { useHref } from "react-router";
 import { useState } from "react";
-import { useController } from "react-hook-form";
-import { Input as UntitledInput } from "@/components/base/input/input";
-import { Select as UntitledSelect } from "@/components/base/select/select";
-import type { SelectItemType } from "@/components/base/select/select-shared";
-import { Button } from "@/components/ui/button";
-import { TextInput } from "@/components/admin/text-input";
-import { ArrowLeft, BookOpen, Check, LoaderCircle } from "lucide-react";
-import { Link } from "react-router";
-import { PageHeading, PageShell } from "../kit";
+import { required } from "ra-core";
+import { Button } from "@/components/base/buttons/button";
+import { ArrowLeft, BookOpen } from "lucide-react";
+import {
+  FormSelect,
+  FormTextArea,
+  FormTextInput,
+  PageHeading,
+  PageShell,
+} from "../kit";
 
-/**
- * The name field renders an Untitled UI v8 (React Aria) input instead of the
- * react-admin one, to prove the library's components participate in a
- * react-admin form.
- *
- * `useController` is react-admin's own form engine (its `Form` is a
- * react-hook-form `FormProvider`), so this field is registered, validated and
- * submitted exactly like `TextInput` would be — no parallel form state.
- *
- * `uu-scope` is required, not decorative: outside it the four utility names the
- * console and Untitled UI both define (`bg-primary`, `bg-secondary`,
- * `text-primary`, `border-primary`) keep the console's meaning, and the field
- * would render with the brand coral fill instead of a white surface. See
- * `src/styles/untitledui-theme.css`.
- */
-const KnowledgeBaseNameField = () => {
-  const { field, fieldState } = useController({
-    name: "name",
-    rules: { required: true },
-  });
-
-  return (
-    <UntitledInput
-      className="uu-scope"
-      name={field.name}
-      ref={field.ref}
-      value={typeof field.value === "string" ? field.value : ""}
-      onChange={(value: string) => field.onChange(value)}
-      onBlur={field.onBlur}
-      label="Tên"
-      placeholder="Ví dụ: VFIC tuyển dụng"
-      // React Aria's default `native` validation sets the `required` attribute,
-      // the browser then blocks the form's submit before react-admin's own
-      // validation runs, and the user sees a browser bubble instead of the
-      // console's Vietnamese error. This form validates in JavaScript.
-      validationBehavior="aria"
-      isRequired
-      isInvalid={fieldState.invalid}
-      hint={fieldState.error ? "Tên kho là bắt buộc." : undefined}
-    />
-  );
-};
-
-/** The two access modes, as Untitled UI select items. Copy is unchanged. */
-const KNOWLEDGE_BASE_MODES: SelectItemType[] = [
-  { id: "RAG", label: "RAG — nhiều dự án" },
-  { id: "DIRECT_CONTEXT", label: "Trực tiếp — một tệp" },
+/** The two access modes, as choices for the kit's select. Copy is unchanged. */
+const KNOWLEDGE_BASE_MODES = [
+  { id: "RAG", name: "RAG — nhiều dự án" },
+  { id: "DIRECT_CONTEXT", name: "Trực tiếp — một tệp" },
 ];
 
+const REQUIRED_FIELD = required("Vui lòng nhập thông tin.");
+
 /**
- * The mode field renders Untitled UI v8's `Select` (React Aria list box in a
- * popover) instead of the react-admin select, wired through `useController` so
- * it registers and submits like any other field. `uu-scope` is required for the
- * same reason as the name field.
+ * Create form for a knowledge base.
+ *
+ * The fields are the kit's react-admin bound controls on Untitled UI v8 inputs,
+ * so this page carries no form markup of its own: `useInput` registers each
+ * field with react-admin's form engine, and the controls pin
+ * `validationBehavior="aria"` so the browser never pre-empts the console's
+ * Vietnamese validation with a native bubble.
  */
-const KnowledgeBaseModeField = () => {
-  const { field, fieldState } = useController({
-    name: "mode",
-    rules: { required: true },
-  });
-
-  return (
-    <UntitledSelect
-      className="uu-scope"
-      name={field.name}
-      ref={field.ref}
-      label="Chế độ"
-      placeholder="Chọn chế độ"
-      items={KNOWLEDGE_BASE_MODES}
-      selectedKey={typeof field.value === "string" ? field.value : null}
-      onSelectionChange={(key) => field.onChange(String(key))}
-      onBlur={field.onBlur}
-      // See the name field: JavaScript validation owns this form.
-      validationBehavior="aria"
-      isRequired
-      isInvalid={fieldState.invalid}
-      hint={fieldState.error ? "Chọn chế độ truy cập dữ liệu." : undefined}
-    >
-      {(item: SelectItemType) => (
-        <UntitledSelect.Item id={item.id} label={item.label} />
-      )}
-    </UntitledSelect>
-  );
-};
-
 export const KnowledgeBaseCreate = () => {
   const dataProvider = useDataProvider();
   const notify = useNotify();
   const redirect = useRedirect();
   const [saving, setSaving] = useState(false);
+  const listHref = useHref("/knowledge_bases");
   const submit = async (data: Record<string, unknown>) => {
     setSaving(true);
     try {
@@ -127,11 +62,13 @@ export const KnowledgeBaseCreate = () => {
           title="Tạo kho kiến thức"
           subtitle="Chọn chế độ truy cập dữ liệu."
           actions={
-            <Button asChild variant="outline" size="sm">
-              <Link to="/knowledge_bases">
-                <ArrowLeft className="size-4" aria-hidden="true" />
-                Kho kiến thức
-              </Link>
+            <Button
+              href={listHref}
+              color="secondary"
+              size="sm"
+              iconLeading={ArrowLeft}
+            >
+              Kho kiến thức
             </Button>
           }
         />
@@ -139,19 +76,19 @@ export const KnowledgeBaseCreate = () => {
           className="mt-4"
           aria-labelledby="knowledge-base-create-form-title"
         >
-          <header className="flex items-start gap-3 border-y border-[var(--tt-border)] px-4 py-3">
+          <header className="flex items-start gap-3 border-y border-secondary px-4 py-3">
             <BookOpen
-              className="mt-0.5 size-5 shrink-0 text-muted-foreground"
+              className="mt-0.5 size-5 shrink-0 text-tertiary"
               aria-hidden="true"
             />
             <div className="min-w-0">
               <h2
                 id="knowledge-base-create-form-title"
-                className="text-section-title font-semibold text-foreground"
+                className="text-section-title font-semibold text-primary"
               >
                 Thông tin kho
               </h2>
-              <p className="mt-1 text-helper text-muted-foreground">
+              <p className="mt-1 text-[length:var(--fs-helper)] text-tertiary">
                 RAG cho nhiều dự án; trực tiếp cho một tệp.
               </p>
             </div>
@@ -159,33 +96,50 @@ export const KnowledgeBaseCreate = () => {
 
           <Form onSubmit={submit}>
             <div className="space-y-4 px-4 py-4">
-              <KnowledgeBaseNameField />
-              <TextInput source="slug" label="Slug" isRequired />
-              <KnowledgeBaseModeField />
-              <TextInput source="description" label="Mô tả" multiline />
-              <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--tt-border)] pt-4">
+              <FormTextInput
+                source="name"
+                label="Tên"
+                placeholder="Ví dụ: VFIC tuyển dụng"
+                isRequired
+                validate={REQUIRED_FIELD}
+              />
+              <FormTextInput
+                source="slug"
+                label="Slug"
+                isRequired
+                validate={REQUIRED_FIELD}
+              />
+              <FormSelect
+                source="mode"
+                label="Chế độ"
+                choices={KNOWLEDGE_BASE_MODES}
+                placeholder="Chọn chế độ"
+                isRequired
+                validate={REQUIRED_FIELD}
+              />
+              <FormTextArea
+                source="description"
+                label="Mô tả"
+                rows={4}
+              />
+              <div className="flex flex-wrap justify-end gap-2 border-t border-secondary pt-4">
                 <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-11 sm:min-h-10"
-                  disabled={saving}
+                  color="secondary"
+                  size="md"
+                  className="min-h-11"
                   onClick={() => redirect("list", "knowledge_bases")}
+                  isDisabled={saving}
                 >
                   Hủy
                 </Button>
                 <Button
                   type="submit"
-                  disabled={saving}
-                  className="min-h-11 sm:min-h-10"
+                  size="md"
+                  className="min-h-11"
+                  isDisabled={saving}
+                  isLoading={saving}
+                  showTextWhileLoading
                 >
-                  {saving ? (
-                    <LoaderCircle
-                      className="size-4 animate-spin motion-reduce:animate-none"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <Check className="size-4" aria-hidden="true" />
-                  )}
                   {saving ? "Đang tạo…" : "Tạo kho kiến thức"}
                 </Button>
               </div>

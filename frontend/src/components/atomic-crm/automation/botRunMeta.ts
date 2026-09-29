@@ -4,30 +4,37 @@ import type { BotRun } from "../types";
 // sent      → delivered to Zalo
 // suppressed → a recruiter took over mid-run (version mismatch) — NOT sent
 // error     → the run failed
+export type OutcomeBadgeColor = "success" | "warning" | "error";
+
 export const OUTCOME_META: Record<
   BotRun["outcome"],
-  { label: string; classes: string; indicatorClasses: string }
+  {
+    label: string;
+    /** Untitled UI `Badge` colour for the outcome chip (`BotRunShow`). */
+    badgeColor: OutcomeBadgeColor;
+    indicatorClasses: string;
+  }
 > = {
   sent: {
     label: "Đã gửi",
-    classes: "bg-success text-white",
+    badgeColor: "success",
     indicatorClasses: "text-success",
   },
   suppressed: {
     label: "Đã chặn",
-    classes: "bg-warning text-warning-foreground",
+    badgeColor: "warning",
     indicatorClasses: "text-warning-foreground",
   },
   error: {
     label: "Lỗi",
-    classes: "bg-destructive text-white",
+    badgeColor: "error",
     indicatorClasses: "text-destructive",
   },
 };
 
 export const outcomeMeta = (
   outcome: string,
-): { label: string; classes: string; indicatorClasses: string } =>
+): { label: string; badgeColor: OutcomeBadgeColor; indicatorClasses: string } =>
   OUTCOME_META[outcome as BotRun["outcome"]] ?? OUTCOME_META.error;
 
 /** Run wall-clock duration (ended_at − started_at), or null if not finished. */

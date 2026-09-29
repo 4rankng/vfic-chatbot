@@ -1,7 +1,7 @@
 import { ListBase, useListContext, useRedirect } from "ra-core";
 import { BookOpen, ChevronRight, Plus } from "lucide-react";
 import { Badge } from "@/components/base/badges/badges";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 import { EmptyState, PageHeading, PageShell } from "../kit";
 import type { KnowledgeBase } from "../types";
 
@@ -18,28 +18,28 @@ export const KnowledgeBaseListContent = () => {
         actions={
           <Button
             size="sm"
+            iconLeading={Plus}
             onClick={() => redirect("create", "knowledge_bases")}
           >
-            <Plus className="size-4" aria-hidden="true" />
             Tạo kho
           </Button>
         }
       />
 
       <section
-        className="mt-4 border-y border-[var(--tt-border)] bg-[var(--tt-surface-lift)]"
+        className="mt-4 border-y border-[var(--workspace-border)] bg-[var(--workspace-surface)]"
         aria-labelledby="knowledge-base-list-title"
       >
-        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--tt-border)] px-4 py-3">
+        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--workspace-border)] px-4 py-3">
           <h2
             id="knowledge-base-list-title"
-            className="text-section-title font-semibold text-foreground"
+            className="text-section-title font-semibold text-[var(--workspace-ink)]"
           >
             Kho hiện có
           </h2>
           {!isPending && data.length > 0 ? (
             <span
-              className="text-helper tabular-nums text-muted-foreground"
+              className="text-helper tabular-nums text-[var(--workspace-ink-muted)]"
               aria-label={`${data.length} kho`}
             >
               {data.length}
@@ -49,7 +49,7 @@ export const KnowledgeBaseListContent = () => {
 
         {isPending ? (
           <p
-            className="px-4 py-6 text-body-sm text-muted-foreground"
+            className="px-4 py-6 text-body-sm text-[var(--workspace-ink-muted)]"
             role="status"
           >
             Đang tải kho kiến thức…
@@ -62,9 +62,9 @@ export const KnowledgeBaseListContent = () => {
             action={
               <Button
                 size="sm"
+                iconLeading={Plus}
                 onClick={() => redirect("create", "knowledge_bases")}
               >
-                <Plus className="size-4" aria-hidden="true" />
                 Tạo kho đầu tiên
               </Button>
             }
@@ -78,21 +78,21 @@ export const KnowledgeBaseListContent = () => {
                 <div
                   key={kb.id}
                   role="listitem"
-                  className="border-b border-[var(--tt-border)] last:border-b-0"
+                  className="border-b border-[var(--workspace-border)] last:border-b-0"
                 >
                   <button
                     type="button"
-                    className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--workspace-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--workspace-focus)]"
                     aria-label={`Mở kho ${kb.name}: ${modeLabel}, ${kb.attached_agent_count} Agent, ${kb.project_count} dự án`}
                     onClick={() => redirect("show", "knowledge_bases", kb.id)}
                   >
                     <BookOpen
-                      className="size-5 shrink-0 text-muted-foreground"
+                      className="size-5 shrink-0 text-[var(--workspace-ink-muted)]"
                       aria-hidden="true"
                     />
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="truncate text-body font-semibold text-foreground">
+                        <span className="truncate text-body font-semibold text-[var(--workspace-ink)]">
                           {kb.name}
                         </span>
                         {/* Untitled UI primitive. `uu-scope` is required: it
@@ -107,13 +107,13 @@ export const KnowledgeBaseListContent = () => {
                           {modeLabel}
                         </Badge>
                       </span>
-                      <span className="mt-1 block text-helper text-muted-foreground">
+                      <span className="mt-1 block text-helper text-[var(--workspace-ink-muted)]">
                         {kb.attached_agent_count} Agent · {kb.project_count} dự
                         án
                       </span>
                     </span>
                     <ChevronRight
-                      className="size-4 shrink-0 text-muted-foreground"
+                      className="size-4 shrink-0 text-[var(--workspace-ink-muted)]"
                       aria-hidden="true"
                     />
                   </button>

@@ -8,12 +8,10 @@ import {
   useNotify,
   useRedirect,
 } from "ra-core";
-import { TextInput } from "@/components/admin/text-input";
-import { SelectInput } from "@/components/admin/select-input";
-import { Button } from "@/components/ui/button";
-import { Check, LoaderCircle, UserPlus } from "lucide-react";
-import { Link } from "react-router";
-import { PageHeading, PageShell } from "../kit";
+import { useHref } from "react-router";
+import { Button } from "@/components/base/buttons/button";
+import { UserPlus } from "lucide-react";
+import { FormSelect, FormTextInput, PageHeading, PageShell } from "../kit";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import "./users.css";
 
@@ -30,6 +28,7 @@ export const UserCreate = () => {
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const listHref = useHref("/users");
 
   const onSubmit = async (data: Record<string, unknown>) => {
     if (data.password !== data.confirm_password) {
@@ -75,42 +74,47 @@ export const UserCreate = () => {
           <Form onSubmit={onSubmit}>
             <div className="user-account-form-body">
               <div className="user-account-field-grid">
-                <TextInput
+                <FormTextInput
                   source="email"
                   label="Email"
                   type="email"
+                  autoComplete="email"
                   isRequired
                   validate={[REQUIRED_FIELD, VALID_EMAIL]}
                   className="user-account-field user-account-field-wide"
                 />
-                <TextInput
+                <FormTextInput
                   source="full_name"
                   label="Họ và tên"
+                  autoComplete="name"
                   isRequired
                   validate={REQUIRED_FIELD}
                   className="user-account-field"
                 />
-                <SelectInput
+                <FormSelect
                   source="role"
                   label="Vai trò"
                   choices={ROLE_CHOICES}
+                  placeholder="Chọn vai trò"
                   defaultValue="recruiter"
                   isRequired
                   validate={REQUIRED_FIELD}
                   className="user-account-field"
                 />
-                <TextInput
+                <FormTextInput
                   source="password"
                   label="Mật khẩu"
                   type="password"
+                  autoComplete="new-password"
                   isRequired
                   validate={REQUIRED_FIELD}
                   className="user-account-field"
                 />
-                <TextInput
+                <FormTextInput
                   source="confirm_password"
                   label="Xác nhận mật khẩu"
                   type="password"
+                  autoComplete="new-password"
                   isRequired
                   validate={REQUIRED_FIELD}
                   className="user-account-field"
@@ -118,26 +122,21 @@ export const UserCreate = () => {
               </div>
               <footer className="user-account-form-actions">
                 <Button
-                  asChild
-                  type="button"
-                  variant="outline"
-                  className="user-account-secondary-action tt-btn-touch"
+                  href={listHref}
+                  color="secondary"
+                  size="md"
+                  className="user-account-secondary-action min-h-11 max-[760px]:w-full"
                 >
-                  <Link to="/users">Hủy</Link>
+                  Hủy
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="user-account-submit tt-btn-touch"
+                  size="md"
+                  className="user-account-submit min-h-11 max-[760px]:w-full"
+                  isDisabled={isSubmitting}
+                  isLoading={isSubmitting}
+                  showTextWhileLoading
                 >
-                  {isSubmitting ? (
-                    <LoaderCircle
-                      className="size-4 animate-spin"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <Check className="size-4" aria-hidden="true" />
-                  )}
                   {isSubmitting ? "Đang tạo" : "Tạo tài khoản"}
                 </Button>
               </footer>
