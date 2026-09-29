@@ -63,17 +63,6 @@ export const runSinglePageExternalSourceNow =
 export const deleteSinglePageExternalSource =
   operations.deleteSinglePageExternalSource;
 
-export const uploadProjectKnowledgeCategory = async (
-  projectId: string,
-  key: ProjectKnowledgeCategory,
-  file: File,
-) =>
-  operations.uploadCategory(projectId, key, {
-    name: file.name,
-    type: file.type,
-    bytes: await file.arrayBuffer(),
-  });
-
 export const getProjectBusTimetable = (
   projectId: string,
   { page = 1, perPage = 6 }: { page?: number; perPage?: number } = {},

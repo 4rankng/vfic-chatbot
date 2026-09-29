@@ -9,7 +9,6 @@ import type {
   CancellationSignal,
   ProjectDiscoveryCardPatch,
   ProjectKnowledgePort,
-  UploadFile,
 } from "./project-knowledge-port";
 
 export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
@@ -25,11 +24,6 @@ export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
       filename: string,
       content: string,
     ) => port.replaceCategory(projectId, key, filename, content),
-    uploadCategory: (
-      projectId: string,
-      key: ProjectKnowledgeCategory,
-      file: UploadFile,
-    ) => port.uploadCategory(projectId, key, file),
     getSinglePage: (projectId: string) => port.getSinglePage(projectId),
     replaceSinglePage: (projectId: string, filename: string, text: string) =>
       port.replaceSinglePage(projectId, filename, text),

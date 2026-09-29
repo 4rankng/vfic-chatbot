@@ -25,11 +25,6 @@ export type CancellationSignal = Readonly<{
   aborted: boolean;
   onAbort: (listener: () => void) => () => void;
 }>;
-export type UploadFile = Readonly<{
-  name: string;
-  type: string;
-  bytes: ArrayBuffer;
-}>;
 
 /**
  * The recruiter-authored half of a project record: the discovery card the
@@ -62,11 +57,6 @@ export type ProjectKnowledgePort = Readonly<{
     key: ProjectKnowledgeCategory,
     filename: string,
     content: string,
-  ) => Promise<{ revision: KnowledgeCategoryRevision; job_id: string }>;
-  uploadCategory: (
-    projectId: string,
-    key: ProjectKnowledgeCategory,
-    file: UploadFile,
   ) => Promise<{ revision: KnowledgeCategoryRevision; job_id: string }>;
   getSinglePage: (projectId: string) => Promise<SinglePageKnowledge>;
   replaceSinglePage: (

@@ -1,5 +1,5 @@
 import type { Ref } from "react";
-import { Save, Pencil, Download, Upload } from "lucide-react";
+import { Save, Pencil, Download } from "lucide-react";
 import { useTranslate } from "ra-core";
 
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +54,6 @@ export const CategoryEditor = ({
     setContent,
     startEditing,
     template,
-    upload,
   } = draft;
 
   return (
@@ -153,34 +152,6 @@ export const CategoryEditor = ({
             <Download className="size-4" /> Tải mẫu
           </Button>
           {canManageSources && !isEditing && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="tt-btn-touch"
-              asChild
-              disabled={saving || loading}
-            >
-              <label>
-                {saving ? (
-                  <span
-                    className="tt-loading tt-loading-spinner tt-loading-sm"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <Upload className="size-4" />
-                )}
-                Tải file YAML
-                <input
-                  type="file"
-                  accept=".yaml,.yml,application/yaml,text/yaml"
-                  className="sr-only"
-                  disabled={saving || loading}
-                  onChange={(event) => void upload(event.target.files?.[0])}
-                />
-              </label>
-            </Button>
-          )}
-          {canManageSources && !isEditing && (
             <ExternalSourceLinkForm
               projectId={projectId}
               defaultCategory={selectedKey}
@@ -198,7 +169,7 @@ export const CategoryEditor = ({
           rows={20}
           className="project-category-textarea border-primary font-mono ring-3 ring-primary/10"
           aria-label={`Dữ liệu hiện tại của danh mục ${label}`}
-          placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
+          placeholder="Danh mục này chưa có dữ liệu. Hãy tải mẫu hoặc sửa nội dung trực tiếp."
         />
       ) : hasCurrentSource ? (
         <div className="border-y border-border py-2">
@@ -208,7 +179,7 @@ export const CategoryEditor = ({
             rows={14}
             className="project-category-textarea font-mono"
             aria-label={`Dữ liệu hiện tại của danh mục ${label}`}
-            placeholder="Danh mục này chưa có dữ liệu. Hãy tải file YAML để thay thế."
+            placeholder="Danh mục này chưa có dữ liệu. Hãy tải mẫu hoặc sửa nội dung trực tiếp."
           />
         </div>
       ) : null}

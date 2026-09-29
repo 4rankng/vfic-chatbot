@@ -6,7 +6,6 @@ import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-polic
 import {
   getProjectKnowledgeCategories,
   replaceProjectKnowledgeCategory,
-  uploadProjectKnowledgeCategory,
 } from "../project-knowledge-service";
 
 /**
@@ -28,7 +27,6 @@ export type ProjectKnowledgeCatalog = Readonly<{
     filename: string,
     content: string,
   ) => Promise<void>;
-  uploadCategory: (key: ProjectKnowledgeCategory, file: File) => Promise<void>;
 }>;
 
 /**
@@ -179,19 +177,8 @@ export const useProjectKnowledgeCatalog = (
     [notify, projectId, trackRevision],
   );
 
-  const uploadCategory = useCallback(
-    async (key: ProjectKnowledgeCategory, file: File) => {
-      const result = await uploadProjectKnowledgeCategory(projectId, key, file);
-      trackRevision(key, result.revision.id);
-      notify("Đã tải file. Hệ thống đang kiểm tra và chuẩn bị cho Agent.", {
-        type: "info",
-      });
-    },
-    [notify, projectId, trackRevision],
-  );
-
   return useMemo(
-    () => ({ categories, processingKey, replaceCategory, uploadCategory }),
-    [categories, processingKey, replaceCategory, uploadCategory],
+    () => ({ categories, processingKey, replaceCategory }),
+    [categories, processingKey, replaceCategory],
   );
 };

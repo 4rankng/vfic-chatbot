@@ -74,21 +74,6 @@ describe("HTTP project-knowledge adapter", () => {
     expect(listeners.size).toBe(0);
   });
 
-  it("uploads category files as multipart without leaking File into application", async () => {
-    mocks.apiJson.mockResolvedValue({});
-
-    await httpProjectKnowledgeAdapter.uploadCategory("project-1", "faq", {
-      name: "faq.md",
-      type: "text/markdown",
-      bytes: new TextEncoder().encode("Nội dung").buffer,
-    });
-
-    expect(mocks.apiJson).toHaveBeenCalledWith(
-      "/api/v1/knowledge/projects/project-1/categories/faq/upload",
-      expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
-    );
-  });
-
   it("replaces manually edited category content through the JSON endpoint", async () => {
     mocks.apiJson.mockResolvedValue({});
 

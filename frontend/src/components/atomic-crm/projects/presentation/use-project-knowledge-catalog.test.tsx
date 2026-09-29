@@ -12,7 +12,6 @@ import { cleanup, renderHook } from "vitest-browser-react";
 const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   getCategories: vi.fn(),
-  uploadCategory: vi.fn(),
   replaceCategory: vi.fn(),
 }));
 
@@ -22,7 +21,6 @@ vi.mock("ra-core", () => ({
 
 vi.mock("../project-knowledge-service", () => ({
   getProjectKnowledgeCategories: mocks.getCategories,
-  uploadProjectKnowledgeCategory: mocks.uploadCategory,
   replaceProjectKnowledgeCategory: mocks.replaceCategory,
 }));
 
@@ -50,9 +48,6 @@ const catalogResponse = (rows: KnowledgeCategoryStatus[]) => ({
   total: rows.length,
 });
 
-const reviewFile = () =>
-  new File(["content"], "faq.pdf", { type: "application/pdf" });
-
 describe("useProjectKnowledgeCatalog", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -78,7 +73,7 @@ describe("useProjectKnowledgeCatalog", () => {
           },
         ]),
       );
-    mocks.uploadCategory.mockResolvedValue({ revision: { id: "rev-x" } });
+    mocks.replaceCategory.mockResolvedValue({ revision: { id: "rev-x" } });
 
     const hook = await renderHook(
       (projectId?: string) =>
@@ -91,7 +86,11 @@ describe("useProjectKnowledgeCatalog", () => {
     expect(mocks.getCategories).toHaveBeenCalledTimes(1);
 
     await hook.act(async () => {
-      await hook.result.current.uploadCategory("faq", reviewFile());
+      await hook.result.current.replaceCategory(
+        "faq",
+        "faq.yaml",
+        "faq:\n  - id: cau-hoi",
+      );
     });
     expect(hook.result.current.processingKey).toBe("faq");
 
@@ -131,7 +130,7 @@ describe("useProjectKnowledgeCatalog", () => {
           },
         ]),
       );
-    mocks.uploadCategory.mockResolvedValue({ revision: { id: "rev-f" } });
+    mocks.replaceCategory.mockResolvedValue({ revision: { id: "rev-f" } });
 
     const hook = await renderHook(
       (projectId?: string) =>
@@ -143,7 +142,11 @@ describe("useProjectKnowledgeCatalog", () => {
     });
 
     await hook.act(async () => {
-      await hook.result.current.uploadCategory("faq", reviewFile());
+      await hook.result.current.replaceCategory(
+        "faq",
+        "faq.yaml",
+        "faq:\n  - id: cau-hoi",
+      );
     });
     await hook.act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
@@ -159,7 +162,7 @@ describe("useProjectKnowledgeCatalog", () => {
 
   it("a second tracked revision cancels the first chain, so unmount stops all polling", async () => {
     mocks.getCategories.mockResolvedValue(catalogResponse([categoryRow()]));
-    mocks.uploadCategory
+    mocks.replaceCategory
       .mockResolvedValueOnce({ revision: { id: "rev-a" } })
       .mockResolvedValueOnce({ revision: { id: "rev-b" } });
 
@@ -174,7 +177,11 @@ describe("useProjectKnowledgeCatalog", () => {
     expect(mocks.getCategories).toHaveBeenCalledTimes(1);
 
     await hook.act(async () => {
-      await hook.result.current.uploadCategory("faq", reviewFile());
+      await hook.result.current.replaceCategory(
+        "faq",
+        "faq.yaml",
+        "faq:\n  - id: cau-hoi",
+      );
     });
     await hook.act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
@@ -184,7 +191,11 @@ describe("useProjectKnowledgeCatalog", () => {
     // A quick replace while the first review is still polling: the new chain
     // must cancel the old one instead of orphaning it.
     await hook.act(async () => {
-      await hook.result.current.uploadCategory("faq", reviewFile());
+      await hook.result.current.replaceCategory(
+        "faq",
+        "faq.yaml",
+        "faq:\n  - id: cau-hoi",
+      );
     });
 
     const notifyCallsAtUnmount = mocks.notify.mock.calls.length;
@@ -200,7 +211,7 @@ describe("useProjectKnowledgeCatalog", () => {
 
   it("stops polling when the project changes and resets the processing indicator", async () => {
     mocks.getCategories.mockResolvedValue(catalogResponse([categoryRow()]));
-    mocks.uploadCategory.mockResolvedValue({ revision: { id: "rev-p" } });
+    mocks.replaceCategory.mockResolvedValue({ revision: { id: "rev-p" } });
 
     const hook = await renderHook(
       (projectId?: string) =>
@@ -211,7 +222,11 @@ describe("useProjectKnowledgeCatalog", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     await hook.act(async () => {
-      await hook.result.current.uploadCategory("faq", reviewFile());
+      await hook.result.current.replaceCategory(
+        "faq",
+        "faq.yaml",
+        "faq:\n  - id: cau-hoi",
+      );
     });
     expect(hook.result.current.processingKey).toBe("faq");
 
@@ -231,7 +246,7 @@ describe("useProjectKnowledgeCatalog", () => {
       .spyOn(document, "visibilityState", "get")
       .mockReturnValue("visible");
     mocks.getCategories.mockResolvedValue(catalogResponse([categoryRow()]));
-    mocks.uploadCategory.mockResolvedValue({ revision: { id: "rev-h" } });
+    mocks.replaceCategory.mockResolvedValue({ revision: { id: "rev-h" } });
 
     const hook = await renderHook(
       (projectId?: string) =>
@@ -244,7 +259,11 @@ describe("useProjectKnowledgeCatalog", () => {
     expect(mocks.getCategories).toHaveBeenCalledTimes(1);
 
     await hook.act(async () => {
-      await hook.result.current.uploadCategory("faq", reviewFile());
+      await hook.result.current.replaceCategory(
+        "faq",
+        "faq.yaml",
+        "faq:\n  - id: cau-hoi",
+      );
     });
 
     visibility.mockReturnValue("hidden");

@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin, require_recruiter
@@ -289,47 +289,6 @@ async def replace_project_category(
         filename=body.filename,
         source_yaml=body.content,
         actor=editor,
-    )
-    return CategoryReplaceOut(
-        revision=CategoryRevisionOut.model_validate(revision),
-        job_id=job_id,
-    )
-
-
-@router.post(
-    "/{project_id}/categories/{category_key}/upload",
-    response_model=CategoryReplaceOut,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def upload_project_category(
-    project_id: uuid.UUID,
-    category_key: KnowledgeCategoryKey,
-    file: UploadFile = File(...),
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> CategoryReplaceOut:
-    filename = file.filename or f"{category_key.value}.yaml"
-    if not filename.lower().endswith((".yaml", ".yml")):
-        from app.shared.domain.errors import ConflictError
-
-        raise ConflictError("RAG category uploads accept only .yaml or .yml files")
-    raw = await file.read(500_001)
-    if len(raw) > 500_000:
-        from app.shared.domain.errors import ConflictError
-
-        raise ConflictError("Category YAML exceeds the 500 KB limit")
-    try:
-        content = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        from app.shared.domain.errors import ConflictError
-
-        raise ConflictError("Category YAML must use UTF-8 encoding") from exc
-    revision, job_id = await KnowledgeCategoryService(db).stage_replacement(
-        project_id=project_id,
-        category_key=category_key,
-        filename=filename,
-        source_yaml=content,
-        actor=admin,
     )
     return CategoryReplaceOut(
         revision=CategoryRevisionOut.model_validate(revision),

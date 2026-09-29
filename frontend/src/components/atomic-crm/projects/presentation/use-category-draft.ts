@@ -26,7 +26,6 @@ export type CategoryDraft = Readonly<{
   /** Leaves edit mode and restores the revision currently in use. */
   cancelEditing: () => void;
   save: () => Promise<void>;
-  upload: (file?: File) => Promise<void>;
   downloadTemplate: () => void;
 }>;
 
@@ -51,7 +50,7 @@ export const useCategoryDraft = (
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const { replaceCategory, uploadCategory } = catalog;
+  const { replaceCategory } = catalog;
 
   useEffect(() => {
     let active = true;
@@ -137,32 +136,6 @@ export const useCategoryDraft = (
     }
   }, [content, filename, hasCurrentSource, key, notify, replaceCategory]);
 
-  const upload = useCallback(
-    async (file?: File) => {
-      if (!file) return;
-      const fileContent = await file.text();
-      if (
-        !window.confirm(
-          "File này sẽ thay thế toàn bộ dữ liệu của mục đang chọn. Tiếp tục?",
-        )
-      ) {
-        return;
-      }
-      setFilename(file.name);
-      setContent(fileContent);
-      setSaving(true);
-      try {
-        await uploadCategory(key, file);
-        setSavedContent(fileContent);
-      } catch (error) {
-        notify((error as Error).message, { type: "error" });
-      } finally {
-        setSaving(false);
-      }
-    },
-    [key, notify, uploadCategory],
-  );
-
   const downloadTemplate = useCallback(() => {
     const url = URL.createObjectURL(
       new Blob([template], { type: "application/yaml" }),
@@ -188,7 +161,6 @@ export const useCategoryDraft = (
     startEditing,
     cancelEditing,
     save,
-    upload,
     downloadTemplate,
   };
 };
