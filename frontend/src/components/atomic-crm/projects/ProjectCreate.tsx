@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CreateBase,
   Form,
@@ -6,63 +6,26 @@ import {
   useNotify,
   useRedirect,
 } from "ra-core";
-import { useFormContext } from "react-hook-form";
-import { TextInput } from "@/components/admin/text-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import {
   buildProjectCreation,
-  type ProjectKnowledgeMode,
+  parseCommaList,
+  PROJECT_KNOWLEDGE_CATEGORY_LABELS,
 } from "./domain/project-knowledge-policy";
 import type { ProjectBrief } from "./domain/project-brief-ingest";
-import { planBriefKnowledge } from "./domain/project-knowledge-yaml";
-import { ProjectBriefImport } from "./presentation/ProjectBriefImport";
 import {
-  replaceProjectKnowledgeCategory,
-  replaceProjectSinglePage,
-} from "./project-knowledge-service";
+  buildJobsYaml,
+  planBriefKnowledge,
+} from "./domain/project-knowledge-yaml";
+import { slugifyVietnamese } from "./domain/vietnamese-slug";
+import { ProjectBriefImport } from "./presentation/ProjectBriefImport";
+import { useProjectIngest } from "./presentation/use-project-ingest";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 
-type KnowledgeModeOptionProps = {
-  value: ProjectKnowledgeMode;
-  selected: boolean;
-  title: string;
-  description: string;
-  onSelect: (value: ProjectKnowledgeMode) => void;
-};
-
-const KnowledgeModeOption = ({
-  value,
-  selected,
-  title,
-  description,
-  onSelect,
-}: KnowledgeModeOptionProps) => (
-  <label
-    className={cn(
-      "project-mode-option flex cursor-pointer items-start gap-2 rounded-lg border p-3",
-      selected && "border-brand bg-brand-subtle",
-    )}
-    data-selected={selected ? "true" : undefined}
-  >
-    <input
-      type="radio"
-      name="project-knowledge-mode"
-      className="sr-only"
-      checked={selected}
-      onChange={() => onSelect(value)}
-    />
-    <span className="grid gap-0.5">
-      <span className="font-medium text-foreground">{title}</span>
-      <span className="text-helper text-muted-foreground">{description}</span>
-    </span>
-  </label>
-);
-
-type ProjectInputFieldProps = {
+type FieldProps = {
   id: string;
   label: string;
   value: string;
@@ -71,14 +34,14 @@ type ProjectInputFieldProps = {
   onChange: (value: string) => void;
 };
 
-const ProjectInputField = ({
+const Field = ({
   id,
   label,
   value,
   placeholder,
-  required = false,
+  required,
   onChange,
-}: ProjectInputFieldProps) => (
+}: FieldProps) => (
   <div className="grid gap-1.5">
     <label htmlFor={id} className="font-medium">
       {label}
@@ -93,333 +56,242 @@ const ProjectInputField = ({
   </div>
 );
 
-/** Everything the submit path needs, kept out of the presentational body. */
-type ProjectFormState = {
-  mode: "" | ProjectKnowledgeMode;
-  setMode: (value: ProjectKnowledgeMode) => void;
-  aliases: string;
-  setAliases: (value: string) => void;
-  summary: string;
-  setSummary: (value: string) => void;
-  location: string;
-  setLocation: (value: string) => void;
-  roles: string;
-  setRoles: (value: string) => void;
-  highlights: string;
-  setHighlights: (value: string) => void;
-  brief: ProjectBrief | null;
-  briefFilename: string;
-  onBrief: (brief: ProjectBrief, filename: string) => void;
-  submitting: boolean;
-};
+/** The brief's own words, shown so a mis-parsed section is visible rather than
+ *  silently dropped. These never become form fields: the create schema refuses
+ *  a discovery card on a RAG project ("RAG discovery cards are derived from
+ *  active categories"), so the summary and location reach the assistant through
+ *  the category YAML the pipeline writes, not through this form. */
+const CarriedSummary = ({ brief }: { brief: ProjectBrief }) => (
+  <dl className="project-brief-carried grid gap-1 text-helper text-muted-foreground">
+    {brief.summary ? (
+      <div>
+        <dt className="inline font-medium text-foreground">Tóm tắt: </dt>
+        <dd className="inline">{brief.summary}</dd>
+      </div>
+    ) : null}
+    {brief.location ? (
+      <div>
+        <dt className="inline font-medium text-foreground">Địa điểm: </dt>
+        <dd className="inline">{brief.location}</dd>
+      </div>
+    ) : null}
+    {brief.highlights.length > 0 ? (
+      <div>
+        <dt className="inline font-medium text-foreground">Điểm nổi bật: </dt>
+        <dd className="inline">{brief.highlights.join(", ")}</dd>
+      </div>
+    ) : null}
+  </dl>
+);
 
-/**
- * The form BODY, rendered as `<Form>`'s child.
- *
- * It lives below the provider on purpose: the brief import writes the project
- * name and slug through `useFormContext().setValue`, and that context exists
- * only beneath react-admin's `<Form>`. Reading it from any component above it
- * silently yields `null` — which the component test pins.
- *
- * The values it edits are owned by `ProjectCreateForm` above; this component
- * presents them and hands the parsed brief back up to be remembered.
- */
-const ProjectCreateFieldset = ({
-  mode,
-  setMode,
-  aliases,
-  setAliases,
-  summary,
-  setSummary,
-  location,
-  setLocation,
-  roles,
-  setRoles,
-  highlights,
-  setHighlights,
-  brief,
-  briefFilename,
-  onBrief,
-  submitting,
-}: ProjectFormState) => {
-  const { setValue } = useFormContext();
-
-  const applyBrief = (parsed: ProjectBrief, filename: string) => {
-    onBrief(parsed, filename);
-    if (parsed.name) {
-      setValue("name", parsed.name);
-      if (parsed.slug) setValue("slug", parsed.slug);
-    }
-    if (parsed.aliases.length > 0) setAliases(parsed.aliases.join(", "));
-    if (parsed.summary) setSummary(parsed.summary);
-    if (parsed.location) setLocation(parsed.location);
-    if (parsed.roles.length > 0) setRoles(parsed.roles.join(", "));
-    if (parsed.highlights.length > 0)
-      setHighlights(parsed.highlights.join(", "));
-    // The brief proposes the mode; the recruiter can still switch it, and an
-    // empty field is never overwritten by a blank.
-    if (parsed.knowledgeMode) setMode(parsed.knowledgeMode);
-  };
-
-  return (
-    <div className="flex flex-col gap-4">
-      <ProjectBriefImport
-        brief={brief}
-        filename={briefFilename}
-        onImported={applyBrief}
-      />
-      <hr className="border-border" />
-      <TextInput source="name" label="Tên dự án" isRequired />
-      <TextInput
-        source="slug"
-        label="Mã dự án"
-        helperText="Không dấu hoặc khoảng trắng."
-        placeholder="lg-display-hai-phong"
-        isRequired
-      />
-      <fieldset
-        className="project-mode-fieldset grid gap-3"
-        aria-required="true"
-      >
-        <legend className="font-medium">
-          Cách quản lý kiến thức
-          <span aria-hidden="true"> *</span>
-        </legend>
-        <div className="project-mode-grid">
-          <KnowledgeModeOption
-            value="DIRECT_CONTEXT"
-            selected={mode === "DIRECT_CONTEXT"}
-            title="Một nội dung"
-            description="Nhanh gọn; cập nhật toàn bộ cùng lúc."
-            onSelect={setMode}
-          />
-          <KnowledgeModeOption
-            value="RAG"
-            selected={mode === "RAG"}
-            title="Theo danh mục"
-            description="12 phần riêng; dễ cập nhật từng nội dung."
-            onSelect={setMode}
-          />
-        </div>
-        <p className="text-helper text-muted-foreground">
-          Không đổi được sau khi có dữ liệu.
-        </p>
-      </fieldset>
-      <ProjectInputField
-        id="project-aliases"
-        label="Tên gọi khác"
-        value={aliases}
-        placeholder="LG, LGD (không bắt buộc)"
-        onChange={setAliases}
-      />
-      {mode === "DIRECT_CONTEXT" && (
-        <section
-          className="project-discovery-section grid gap-3"
-          aria-labelledby="project-discovery-title"
-        >
-          <h2
-            id="project-discovery-title"
-            className="font-medium text-foreground"
-          >
-            Giúp ứng viên tìm đúng dự án
-          </h2>
-          <ProjectInputField
-            id="project-summary"
-            label="Tóm tắt"
-            value={summary}
-            placeholder="Dự án tuyển dụng nào?"
-            required
-            onChange={setSummary}
-          />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ProjectInputField
-              id="project-location"
-              label="Địa điểm"
-              value={location}
-              placeholder="Hải Phòng"
-              required
-              onChange={setLocation}
-            />
-            <ProjectInputField
-              id="project-roles"
-              label="Vị trí tuyển dụng"
-              value={roles}
-              placeholder="Sản xuất, kiểm tra"
-              onChange={setRoles}
-            />
-          </div>
-          <ProjectInputField
-            id="project-highlights"
-            label="Điểm nổi bật"
-            value={highlights}
-            placeholder="Không yêu cầu kinh nghiệm"
-            onChange={setHighlights}
-          />
-        </section>
-      )}
-      <p className="text-helper text-muted-foreground">
-        Dự án chỉ hiển thị sau khi có kiến thức.
-      </p>
-      <Button type="submit" disabled={submitting}>
-        Tạo dự án
-      </Button>
-    </div>
-  );
-};
-
-type SeedOutcome = Readonly<{
-  failed: number;
-  seeded: number;
-  needsHuman: number;
-}>;
-
-/** Owns the field values and the submit path; renders `<Form>` around the body. */
+/** Owns the field values and the two-phase submit; renders `<Form>` around the
+ *  body so react-admin's form context is available beneath the provider. */
 const ProjectCreateForm = () => {
   const notify = useNotify();
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
-  const [submitting, setSubmitting] = useState(false);
-  const [mode, setMode] = useState<"" | ProjectKnowledgeMode>("");
+  const { state, ingest, cancel } = useProjectIngest();
+
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
   const [aliases, setAliases] = useState("");
-  const [summary, setSummary] = useState("");
-  const [location, setLocation] = useState("");
   const [roles, setRoles] = useState("");
-  const [highlights, setHighlights] = useState("");
   const [brief, setBrief] = useState<ProjectBrief | null>(null);
   const [briefFilename, setBriefFilename] = useState("");
+  /** The draft the pipeline is writing into. It exists from the moment a file
+   *  is picked, because ingest needs a project to write to. */
+  const [draftId, setDraftId] = useState<string | null>(null);
+  /** Exactly the role list the `jobs` category was last written from, so the
+   *  save step knows whether an edit still has to be pushed downstream. */
+  const [ingestedRoles, setIngestedRoles] = useState("");
+  const [creatingDraft, setCreatingDraft] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // The slug is derived, never typed: a hand-typed one contradicts the name it
+  // is supposed to identify, and the brief's own slug loses to the name the
+  // recruiter actually typed above it.
+  useEffect(() => {
+    if (name.trim()) setSlug(slugifyVietnamese(name));
+  }, [name]);
+
+  useEffect(() => cancel, [cancel]);
 
   /**
-   * Seed what the brief genuinely carries.
+   * Picking a file IS the start of the pipeline.
    *
-   * The RAG categories are TYPED YAML, not prose: the API rejects a `.md` body
-   * outright, and a category like `jobs` wants fields (vacancies, employment
-   * type) the brief never states. So only the FAQ is seeded — its question and
-   * answer are verbatim from the file — and the rest is reported so the
-   * recruiter knows what still needs a human instead of opening an empty
-   * category later.
-   *
-   * A failure never loses the project: it already exists, so the write is
-   * reported and the recruiter lands on the edit page to finish the rest.
+   * The draft is created first and stays inactive, because the knowledge API is
+   * keyed by project and there is nothing to ingest into until it exists. The
+   * recruiter still reviews everything and still presses `Tạo dự án`; what
+   * moved is only WHEN the work starts, not WHO decides it counts.
    */
-  const seedKnowledge = async (
-    projectId: string,
-    parsed: ProjectBrief,
-    knowledgeMode: ProjectKnowledgeMode,
-    filename: string,
-  ): Promise<SeedOutcome> => {
-    if (knowledgeMode !== "RAG") {
-      try {
-        await replaceProjectSinglePage(projectId, filename, parsed.rawText);
-        return { failed: 0, seeded: 1, needsHuman: 0 };
-      } catch {
-        return { failed: 1, seeded: 0, needsHuman: 0 };
-      }
-    }
-    const plan = planBriefKnowledge(parsed.faqEntries);
-    let failed = 0;
-    for (const write of plan.writes) {
-      try {
-        await replaceProjectKnowledgeCategory(
-          projectId,
-          write.key,
-          write.filename,
-          write.content,
-        );
-      } catch {
-        failed += 1;
-      }
-    }
-    return {
-      failed,
-      seeded: plan.writes.length,
-      needsHuman: plan.needsHuman.length,
-    };
-  };
+  const onImported = async (parsed: ProjectBrief, filename: string) => {
+    setBrief(parsed);
+    setBriefFilename(filename);
+    if (parsed.aliases.length > 0) setAliases(parsed.aliases.join(", "));
+    if (parsed.roles.length > 0) setRoles(parsed.roles.join(", "));
+    // The typed name wins: the pipeline fills what the recruiter left empty,
+    // never overwrites a decision already made.
+    if (!name.trim() && parsed.name) setName(parsed.name);
 
-  const onSubmit = async (data: Record<string, unknown>) => {
-    setSubmitting(true);
+    setCreatingDraft(true);
     try {
-      const creation = buildProjectCreation({
-        aliases,
-        mode,
-        discovery: { summary, location, roles, highlights },
-      });
-      if (!creation.ok && creation.reason === "mode_required") {
-        notify("Chọn một cách lưu kiến thức để tiếp tục.", { type: "warning" });
-        setSubmitting(false);
-        return;
-      }
-      if (!creation.ok) {
-        notify(
-          "Vui lòng nhập tóm tắt và địa điểm để Agent có thể gợi ý dự án.",
-          {
-            type: "warning",
-          },
-        );
-        setSubmitting(false);
-        return;
-      }
       const created = await dataProvider.create("projects", {
         data: {
-          ...data,
-          ...creation.data,
+          name: (name.trim() || parsed.name || "Dự án mới").trim(),
+          slug: slugifyVietnamese(name.trim() || parsed.name || "du-an-moi"),
+          ...buildProjectCreation({ aliases: parsed.aliases.join(", ") }),
         },
       });
-      const projectId = String(created.data.id);
-      if (brief) {
-        const { failed, seeded, needsHuman } = await seedKnowledge(
-          projectId,
-          brief,
-          creation.data.knowledge_mode,
-          briefFilename,
-        );
-        if (failed > 0) {
-          notify(
-            `Đã tạo dự án nhưng ${failed} phần kiến thức chưa lưu được. Mở trang kiến thức để thử lại.`,
-            { type: "warning" },
-          );
-        } else if (needsHuman > 0) {
-          notify(
-            `Đã tạo dự án và nạp ${seeded} mục kiến thức từ tệp. ${needsHuman} mục còn lại cần nhập tay vì tệp không có dữ liệu dạng trường.`,
-            { type: "success" },
-          );
-        } else {
-          notify("Đã tạo dự án kèm kiến thức từ tệp.", { type: "success" });
-        }
-      } else {
-        notify("Đã tạo dự án.", { type: "success" });
+      const id = String(created.data.id);
+      setDraftId(id);
+      setIngestedRoles(parsed.roles.join(", "));
+      await ingest(id, planBriefKnowledge(parsed).writes);
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
+    } finally {
+      setCreatingDraft(false);
+    }
+  };
+
+  const rolesDirty = roles.trim() !== ingestedRoles.trim();
+
+  /**
+   * `Tạo dự án` activates the draft. It never half-activates: if activation is
+   * refused, the exact backend reason is shown and the project stays inactive
+   * and invisible to candidates, rather than going live on a guess.
+   */
+  const onSubmit = async () => {
+    if (!draftId) return;
+    const roleList = parseCommaList(roles);
+    if (roleList.length === 0) {
+      notify("Cần ít nhất một vị trí tuyển dụng để dự án có thể hoạt động.", {
+        type: "warning",
+      });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // An edited role list is a real change to the knowledge, so it is written
+      // before the project is allowed to go live — otherwise the live project
+      // would answer with roles the recruiter just removed.
+      if (rolesDirty) {
+        await ingest(draftId, [
+          {
+            key: "jobs",
+            filename: "jobs.yaml",
+            content: buildJobsYaml(roleList),
+          },
+        ]);
+        setIngestedRoles(roles.trim());
       }
-      redirect("edit", "projects", projectId);
-    } catch (e) {
-      notify((e as Error).message, { type: "error" });
+      await dataProvider.update("projects", {
+        id: draftId,
+        data: {
+          name: name.trim(),
+          aliases: parseCommaList(aliases),
+          is_active: true,
+        },
+        previousData: { id: draftId },
+      });
+      notify("Đã tạo dự án. Kiến thức đã sẵn sàng cho Agent.", {
+        type: "success",
+      });
+      redirect("show", "projects", draftId);
+    } catch (error) {
+      notify((error as Error).message, { type: "error" });
     } finally {
       setSubmitting(false);
     }
   };
 
+  const ingesting = state.phase === "running";
+  const canSave =
+    draftId !== null && !ingesting && !creatingDraft && !submitting;
+  const ingestBlocked = state.phase === "failed";
+
   return (
     <Form onSubmit={onSubmit}>
-      <ProjectCreateFieldset
-        mode={mode}
-        setMode={setMode}
-        aliases={aliases}
-        setAliases={setAliases}
-        summary={summary}
-        setSummary={setSummary}
-        location={location}
-        setLocation={setLocation}
-        roles={roles}
-        setRoles={setRoles}
-        highlights={highlights}
-        setHighlights={setHighlights}
-        brief={brief}
-        briefFilename={briefFilename}
-        onBrief={(parsed, filename) => {
-          setBrief(parsed);
-          setBriefFilename(filename);
-        }}
-        submitting={submitting}
-      />
+      <div className="flex flex-col gap-4">
+        <Field
+          id="project-name"
+          label="Tên dự án"
+          value={name}
+          placeholder="LG Display Hải Phòng"
+          required
+          onChange={setName}
+        />
+        <Field
+          id="project-slug"
+          label="Mã dự án"
+          value={slug}
+          placeholder="lg-display-hai-phong"
+          onChange={setSlug}
+        />
+        <Field
+          id="project-aliases"
+          label="Tên gọi khác"
+          value={aliases}
+          placeholder="LG, LGD (không bắt buộc)"
+          onChange={setAliases}
+        />
+        <Field
+          id="project-roles"
+          label="Vị trí tuyển dụng"
+          value={roles}
+          placeholder="Công nhân sản xuất, Kiểm tra"
+          required
+          onChange={setRoles}
+        />
+        <p className="text-helper text-muted-foreground">
+          Mỗi vị trí là một dòng trong danh mục «Vị trí tuyển dụng». Dự án cần
+          ít nhất một vị trí thì Agent mới tư vấn được. Số lượng tuyển không
+          giới hạn nên không cần khai báo.
+        </p>
+
+        <hr className="border-border" />
+
+        <ProjectBriefImport
+          brief={brief}
+          filename={briefFilename}
+          busy={creatingDraft || ingesting}
+          onImported={(parsed, filename) => void onImported(parsed, filename)}
+        />
+
+        {brief ? <CarriedSummary brief={brief} /> : null}
+
+        {state.phase === "running" ? (
+          <p role="status" className="text-helper text-foreground">
+            Đang nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (
+            {state.activated.length + 1}/{state.total})…
+          </p>
+        ) : null}
+        {state.phase === "done" ? (
+          <p role="status" className="text-helper text-foreground">
+            Đã nạp xong {state.activated.length} phần kiến thức. Bạn có thể kiểm
+            tra rồi tạo dự án.
+          </p>
+        ) : null}
+        {ingestBlocked ? (
+          <p role="alert" className="text-helper text-destructive">
+            Nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}» không thành
+            công
+            {state.message ? `: ${state.message}` : "."} Dự án vẫn là bản nháp
+            và chưa hiển thị với ứng viên. Sửa nội dung rồi tải lại tệp.
+          </p>
+        ) : null}
+        {rolesDirty && draftId ? (
+          <p className="text-helper text-muted-foreground">
+            Danh sách vị trí đã sửa — sẽ được nạp lại khi bạn bấm «Tạo dự án».
+          </p>
+        ) : null}
+
+        <p className="text-helper text-muted-foreground">
+          Dự án chỉ hiển thị với ứng viên sau khi bạn bấm «Tạo dự án».
+        </p>
+        <Button type="submit" disabled={!canSave}>
+          {submitting ? "Đang tạo…" : "Tạo dự án"}
+        </Button>
+      </div>
     </Form>
   );
 };

@@ -2,26 +2,26 @@ import type { ReactNode } from "react";
 import { render, type RenderResult } from "vitest-browser-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// The `await import("react-hook-form")` calls inside the vi.mock factories are
-// the one case a static import cannot serve: a mock factory runs through the
-// module registry, so the real module has to be fetched at factory time.
+// The `await import("react-hook-form")` inside the vi.mock factory is the one
+// case a static import cannot serve: a mock factory runs through the module
+// registry, so the real module has to be fetched at factory time.
 const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
   create: vi.fn(),
+  update: vi.fn(),
   notify: vi.fn(),
   replaceCategory: vi.fn(),
-  replaceSinglePage: vi.fn(),
-  createFaq: vi.fn(),
+  /** Swapped per test to decide what the pipeline reports back. */
+  catalog: vi.fn(),
 }));
 
 /** Vitest's browser render result, named by the library rather than inferred
  *  from the call — the helper must not couple to `render`'s implementation. */
-type BriefForm = RenderResult;
+type CreateForm = RenderResult;
 
 vi.mock("ra-core", async () => {
-  // react-admin's `Form` is a react-hook-form `FormProvider`, and the brief
-  // import writes into it with `setValue`. A plain <form> stub would throw here
-  // — and would hide the very wiring this feature depends on.
+  // react-admin's `Form` is a react-hook-form `FormProvider`. A plain <form>
+  // stub would throw here and hide the wiring the form depends on.
   const { FormProvider, useForm } = await import("react-hook-form");
 
   return {
@@ -31,36 +31,31 @@ vi.mock("ra-core", async () => {
       onSubmit,
     }: {
       children: ReactNode;
-      onSubmit: (data: Record<string, unknown>) => void;
+      onSubmit: () => void;
     }) => {
       const form = useForm();
       return (
         <FormProvider {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>{children}</form>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSubmit();
+            }}
+          >
+            {children}
+          </form>
         </FormProvider>
       );
     },
-    useDataProvider: () => ({ create: mocks.create }),
+    useDataProvider: () => ({ create: mocks.create, update: mocks.update }),
     useNotify: () => mocks.notify,
     useRedirect: () => mocks.redirect,
   };
 });
 
-vi.mock("@/components/admin/text-input", async () => {
-  const { useFormContext } = await import("react-hook-form");
-
-  return {
-    TextInput: ({ source, label }: { source: string; label: string }) => {
-      const { register } = useFormContext();
-      return <input aria-label={label} {...register(source)} />;
-    },
-  };
-});
-
 vi.mock("./project-knowledge-service", () => ({
-  createProjectFaq: mocks.createFaq,
   replaceProjectKnowledgeCategory: mocks.replaceCategory,
-  replaceProjectSinglePage: mocks.replaceSinglePage,
+  getProjectKnowledgeCategories: mocks.catalog,
 }));
 
 vi.mock("./ProjectWorkspaceShell", () => ({
@@ -98,7 +93,7 @@ const BRIEF = `# PHIẾU THU THẬP
  * the input's `files` list plus a bubbling `change`. The component reads it via
  * `File.text()`, so the payload is a genuine File, not a stubbed handler.
  */
-const uploadBrief = (screen: BriefForm, text: string = BRIEF) => {
+const uploadBrief = (screen: CreateForm, text: string = BRIEF) => {
   const input =
     screen.container.querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error("the brief import renders no file input");
@@ -110,18 +105,48 @@ const uploadBrief = (screen: BriefForm, text: string = BRIEF) => {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 };
 
+/** A catalog row that has accepted the revision it is asked about. */
+const catalogWith = (
+  revisionId: string,
+  status: "ACTIVE" | "FAILED" = "ACTIVE",
+) => ({
+  data: [
+    {
+      key: "jobs",
+      label_vi: "Vị trí tuyển dụng",
+      active_revision_id: status === "ACTIVE" ? revisionId : null,
+      latest_revision_id: revisionId,
+      status,
+      error_message:
+        status === "FAILED" ? "Nội dung không truy xuất được." : null,
+    },
+    {
+      key: "faq",
+      label_vi: "Câu hỏi thường gặp",
+      active_revision_id: null,
+      latest_revision_id: null,
+      status: null,
+      error_message: null,
+    },
+  ],
+  total: 2,
+});
+
 describe("ProjectCreate", () => {
   beforeEach(() => {
     mocks.redirect.mockReset();
     mocks.create.mockReset();
+    mocks.update.mockReset();
     mocks.notify.mockReset();
     mocks.replaceCategory.mockReset();
-    mocks.replaceSinglePage.mockReset();
-    mocks.createFaq.mockReset();
+    mocks.catalog.mockReset();
     mocks.create.mockResolvedValue({ data: { id: "7" } });
-    mocks.replaceCategory.mockResolvedValue({});
-    mocks.replaceSinglePage.mockResolvedValue({});
-    mocks.createFaq.mockResolvedValue({});
+    mocks.update.mockResolvedValue({ data: { id: "7" } });
+    mocks.replaceCategory.mockImplementation(async (_id, key) => ({
+      revision: { id: `rev-${key}` },
+    }));
+    // Every write is accepted on the first poll, so the chain completes.
+    mocks.catalog.mockImplementation(async () => catalogWith("rev-jobs"));
   });
 
   it("keeps the create form bounded and returns to the project list when closed", async () => {
@@ -140,251 +165,207 @@ describe("ProjectCreate", () => {
     expect(mocks.redirect).toHaveBeenCalledWith("/projects");
   });
 
-  it("presents a clear knowledge choice and labels conditional fields", async () => {
+  it("asks for a name, a derived slug, aliases and roles — and no knowledge mode", async () => {
     const screen = await render(<ProjectCreate />);
-    const directMode = screen.getByRole("radio", {
-      name: /Một nội dung/,
-    });
 
-    await expect.element(directMode).not.toBeChecked();
-    await directMode.click();
-    await expect.element(directMode).toBeChecked();
-    expect(
-      directMode.element().closest("[data-selected='true']"),
-    ).not.toBeNull();
-
+    await expect.element(screen.getByLabelText("Tên dự án *")).toBeVisible();
+    await expect.element(screen.getByLabelText("Mã dự án")).toBeVisible();
+    await expect.element(screen.getByLabelText("Tên gọi khác")).toBeVisible();
     await expect
-      .element(
-        screen.getByRole("heading", { name: "Giúp ứng viên tìm đúng dự án" }),
-      )
+      .element(screen.getByLabelText("Vị trí tuyển dụng *"))
       .toBeVisible();
-    await expect.element(screen.getByLabelText("Tóm tắt *")).toBeVisible();
-    await expect.element(screen.getByLabelText("Địa điểm *")).toBeVisible();
-    await expect
-      .element(screen.getByLabelText("Vị trí tuyển dụng"))
-      .toBeVisible();
-  });
-});
-
-describe("ProjectCreate — nhập phiếu thông tin từ tệp", () => {
-  beforeEach(() => {
-    mocks.redirect.mockReset();
-    mocks.create.mockReset();
-    mocks.notify.mockReset();
-    mocks.replaceCategory.mockReset();
-    mocks.replaceSinglePage.mockReset();
-    mocks.createFaq.mockReset();
-    mocks.create.mockResolvedValue({ data: { id: "7" } });
-    mocks.replaceCategory.mockResolvedValue({});
-    mocks.replaceSinglePage.mockResolvedValue({});
-    mocks.createFaq.mockResolvedValue({});
+    // The mode radio is gone: the ingest pipeline decides the shape.
+    expect(screen.container.querySelector('input[type="radio"]')).toBeNull();
   });
 
-  it("offers a file picker on the create form", async () => {
+  it("derives the slug from the name the recruiter typed", async () => {
     const screen = await render(<ProjectCreate />);
-    await expect
-      .element(
-        screen.getByRole("heading", { name: "Đã có sẵn phiếu thông tin?" }),
-      )
-      .toBeVisible();
-    await expect
-      .element(screen.getByLabelText("Chọn tệp phiếu thông tin dự án"))
-      .toBeVisible();
-  });
 
-  it("fills the identity fields and picks the knowledge mode from the brief", async () => {
-    const screen = await render(<ProjectCreate />);
-    uploadBrief(screen);
+    await screen.getByLabelText("Tên dự án *").fill("LG Display Hải Phòng");
 
-    // The identity fields are react-admin's own inputs, written through the
-    // form context — this is the assertion that would fail if the import only
-    // filled local state.
-    await expect
-      .element(screen.getByLabelText("Tên dự án"))
-      .toHaveValue("4P ELECTRONIC");
-    await expect
-      .element(screen.getByLabelText("Mã dự án"))
-      .toHaveValue("4p-electronic");
-    // Three sections in the brief is enough to choose the by-category mode.
-    await expect
-      .element(screen.getByRole("radio", { name: /Theo danh mục/ }))
-      .toBeChecked();
-    // `Tên gọi khác` renders in both modes, so it is asserted here.
-    await expect
-      .element(screen.getByLabelText("Tên gọi khác"))
-      .toHaveValue("4P Electronics, 4P Hải Phòng");
-  });
-
-  // The shape recruiters hand over without a table: label line, value line.
-  it("fills the same fields from a plain label-line brief", async () => {
-    const screen = await render(<ProjectCreate />);
-    uploadBrief(
-      screen,
-      [
-        "Tên dự án *",
-        "LG Display Hải Phòng",
-        "",
-        "Mã dự án *",
-        "lg-display-hai-phong",
-        "",
-        "Tên gọi khác",
-        "LG, LGD",
-        "",
-        "Cách quản lý kiến thức",
-        "Một nội dung",
-        "",
-        "## Giúp ứng viên tìm đúng dự án",
-        "",
-        "Tóm tắt *",
-        "Sản xuất màn hình cho các dòng xe điện.",
-        "",
-        "Địa điểm *",
-        "Hải Phòng",
-        "",
-        "Vị trí tuyển dụng",
-        "Sản xuất, kiểm tra",
-        "",
-        "Điểm nổi bật",
-        "Không yêu cầu kinh nghiệm",
-        "",
-      ].join("\n"),
-    );
-
-    await expect
-      .element(screen.getByLabelText("Tên dự án"))
-      .toHaveValue("LG Display Hải Phòng");
     await expect
       .element(screen.getByLabelText("Mã dự án"))
       .toHaveValue("lg-display-hai-phong");
+  });
+});
+
+describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
+  beforeEach(() => {
+    mocks.redirect.mockReset();
+    mocks.create.mockReset();
+    mocks.update.mockReset();
+    mocks.notify.mockReset();
+    mocks.replaceCategory.mockReset();
+    mocks.catalog.mockReset();
+    mocks.create.mockResolvedValue({ data: { id: "7" } });
+    mocks.update.mockResolvedValue({ data: { id: "7" } });
+    mocks.replaceCategory.mockImplementation(async (_id, key) => ({
+      revision: { id: `rev-${key}` },
+    }));
+    mocks.catalog.mockImplementation(async () => catalogWith("rev-jobs"));
+  });
+
+  it("creates the inactive draft on upload and never sends a discovery card", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    const payload = mocks.create.mock.calls[0][1].data;
+    expect(payload).toMatchObject({
+      name: "4P ELECTRONIC",
+      slug: "4p-electronic",
+      knowledge_mode: "RAG",
+      is_active: false,
+    });
+    expect(payload).not.toHaveProperty("discovery_card");
+  });
+
+  it("writes jobs before faq and never states a vacancy count", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+
+    await vi.waitFor(() =>
+      expect(mocks.replaceCategory.mock.calls.length).toBeGreaterThan(0),
+    );
+    await vi.waitFor(
+      () =>
+        expect(mocks.replaceCategory.mock.calls.map((call) => call[1])).toEqual(
+          ["jobs", "faq"],
+        ),
+      { timeout: 10000 },
+    );
+
+    const jobsCall = mocks.replaceCategory.mock.calls[0];
+    expect(jobsCall[0]).toBe("7");
+    expect(jobsCall[2]).toBe("jobs.yaml");
+    expect(jobsCall[3]).toContain("category: jobs");
+    // The recruiter does not manage headcount, so no count is ever written.
+    expect(jobsCall[3]).not.toContain("vacancies");
+  }, 20000);
+
+  it("fills the fields from the brief and leaves the typed name alone", async () => {
+    const screen = await render(<ProjectCreate />);
+    await screen.getByLabelText("Tên dự án *").fill("Tên tôi tự gõ");
+    uploadBrief(screen);
+
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.create.mock.calls[0][1].data.name).toBe("Tên tôi tự gõ");
     await expect
       .element(screen.getByLabelText("Tên gọi khác"))
-      .toHaveValue("LG, LGD");
-    // The brief's own mode line picked "Một nội dung", so the discovery
-    // fields are visible without a switch.
-    await expect
-      .element(screen.getByRole("radio", { name: /Một nội dung/ }))
-      .toBeChecked();
-    await expect
-      .element(screen.getByLabelText("Tóm tắt *"))
-      .toHaveValue("Sản xuất màn hình cho các dòng xe điện.");
-    await expect
-      .element(screen.getByLabelText("Địa điểm *"))
-      .toHaveValue("Hải Phòng");
-    await expect
-      .element(screen.getByLabelText("Vị trí tuyển dụng"))
-      .toHaveValue("Sản xuất, kiểm tra");
-    await expect
-      .element(screen.getByLabelText("Điểm nổi bật"))
-      .toHaveValue("Không yêu cầu kinh nghiệm");
-  });
+      .toHaveValue("4P Electronics, 4P Hải Phòng");
+  }, 20000);
 
-  it("fills the discovery card fields when the recruiter keeps one-page mode", async () => {
+  it("keeps Tạo dự án disabled until the pipeline has really finished", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen);
 
-    // The discovery card only exists in "Một nội dung" — the product's own
-    // rule, unchanged by this feature. Switching to it reveals the fields the
-    // brief already filled, so the recruiter still types nothing.
-    await screen.getByRole("radio", { name: /Một nội dung/ }).click();
+    // Mid-pipeline the button must not be offered: activating here would
+    // publish a project whose knowledge is still in review.
     await expect
-      .element(screen.getByLabelText("Tóm tắt *"))
-      .toHaveValue("Lắp ráp linh kiện bảng mạch.");
-    await expect
-      .element(screen.getByLabelText("Địa điểm *"))
-      .toHaveValue("Hải Phòng");
-    await expect
-      .element(screen.getByLabelText("Vị trí tuyển dụng"))
-      .toHaveValue("Công nhân, SMT, PCBA");
-    await expect
-      .element(screen.getByLabelText("Điểm nổi bật"))
-      .toHaveValue("Không yêu cầu bằng cấp., Đóng BHXH đầy đủ.");
-  });
+      .element(screen.getByRole("button", { name: /Tạo dự án/ }))
+      .toBeDisabled();
 
-  it("reports what it read and what the brief did not cover", async () => {
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByText(/Đã nạp xong 2 phần kiến thức/))
+          .toBeVisible(),
+      { timeout: 10000 },
+    );
+    await expect
+      .element(screen.getByRole("button", { name: /Tạo dự án/ }))
+      .toBeEnabled();
+  }, 20000);
+
+  it("activates the draft only when the admin presses Tạo dự án", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen);
 
-    // Reading the file is async, so the summary is not there on the tick the
-    // change event fires — assert against the text once it lands.
-    await expect
-      .element(screen.getByTestId("project-brief-summary"))
-      .toHaveTextContent(/phiếu 4P\.md/);
-    // jobs + compensation + faq came from the brief; the rest did not.
-    await expect
-      .element(screen.getByTestId("project-brief-summary"))
-      .toHaveTextContent(/3\/12 phần kiến thức/);
-    await expect
-      .element(screen.getByTestId("project-brief-summary"))
-      .toHaveTextContent(/Đưa đón & lịch xe/);
-  });
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByText(/Đã nạp xong 2 phần kiến thức/))
+          .toBeVisible(),
+      { timeout: 10000 },
+    );
+    expect(mocks.update).not.toHaveBeenCalled();
 
-  it("seeds the FAQ category as typed YAML and names what still needs a human", async () => {
+    await screen.getByRole("button", { name: /Tạo dự án/ }).click();
+
+    await vi.waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
+    expect(mocks.update.mock.calls[0][0]).toBe("projects");
+    expect(mocks.update.mock.calls[0][1]).toMatchObject({
+      id: "7",
+      data: { name: "4P ELECTRONIC", is_active: true },
+    });
+  }, 20000);
+
+  it("re-writes the jobs category when the admin edits the role list", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen);
 
-    await screen.getByRole("button", { name: "Tạo dự án" }).click();
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByText(/Đã nạp xong 2 phần kiến thức/))
+          .toBeVisible(),
+      { timeout: 10000 },
+    );
 
+    await screen
+      .getByLabelText("Vị trí tuyển dụng *")
+      .fill("Kiểm tra chất lượng");
     await expect
-      .poll(() => mocks.replaceCategory.mock.calls.length)
-      .toBeGreaterThan(0);
-    // The RAG categories are typed YAML, not prose: the API rejects a `.md`
-    // body outright. Only the FAQ is derivable from the file.
-    const [projectId, key, filename, content] =
-      mocks.replaceCategory.mock.calls[0];
-    expect(projectId).toBe("7");
-    expect(key).toBe("faq");
-    expect(filename).toBe("faq.yaml");
-    expect(content).toContain("category: faq");
-    expect(content).toContain("Công ty tuyển việc gì?");
-    // Nothing is invented for a category whose typed fields the brief lacks.
-    expect(mocks.replaceCategory.mock.calls.length).toBe(1);
-    expect(mocks.createFaq).not.toHaveBeenCalled();
-    // …and the recruiter is told, not left to find an empty category later.
-    await expect.poll(() => mocks.notify.mock.calls.length).toBeGreaterThan(0);
-    const messages = mocks.notify.mock.calls.map((call) => call[0]);
-    expect(
-      messages.some(
-        (message: string) =>
-          typeof message === "string" && message.includes("cần nhập tay"),
-      ),
-    ).toBe(true);
-    expect(mocks.redirect).toHaveBeenCalledWith("edit", "projects", "7");
-  });
+      .element(screen.getByText(/Danh sách vị trí đã sửa/))
+      .toBeVisible();
 
-  it("saves the whole brief as one page when the recruiter picks one-page mode", async () => {
-    const screen = await render(<ProjectCreate />);
-    uploadBrief(screen);
-    await screen.getByRole("radio", { name: /Một nội dung/ }).click();
+    mocks.replaceCategory.mockClear();
+    await screen.getByRole("button", { name: /Tạo dự án/ }).click();
 
-    await screen.getByRole("button", { name: "Tạo dự án" }).click();
+    await vi.waitFor(() =>
+      expect(mocks.replaceCategory).toHaveBeenCalledTimes(1),
+    );
+    const [, key, , content] = mocks.replaceCategory.mock.calls[0];
+    expect(key).toBe("jobs");
+    expect(content).toContain('title: "Kiểm tra chất lượng"');
+  }, 25000);
 
-    await expect
-      .poll(() => mocks.replaceSinglePage.mock.calls.length)
-      .toBeGreaterThan(0);
-    const [projectId, filename, text] = mocks.replaceSinglePage.mock.calls[0];
-    expect(projectId).toBe("7");
-    expect(filename).toBe("phiếu 4P.md");
-    expect(text).toContain("4P ELECTRONIC");
-    // One page is the whole document, so no category is written.
-    expect(mocks.replaceCategory).not.toHaveBeenCalled();
-  });
-
-  it("still creates the project when a knowledge write fails, and says so", async () => {
-    mocks.replaceCategory.mockRejectedValue(new Error("boom"));
+  it("keeps the draft inactive and shows the reason when a write fails", async () => {
+    mocks.catalog.mockImplementation(async () =>
+      catalogWith("rev-jobs", "FAILED"),
+    );
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen);
 
-    await screen.getByRole("button", { name: "Tạo dự án" }).click();
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByRole("alert"))
+          .toHaveTextContent(/Nạp «Vị trí tuyển dụng» không thành công/),
+      { timeout: 10000 },
+    );
+    // The draft is never published on a failed write.
+    expect(mocks.update).not.toHaveBeenCalled();
+  }, 20000);
 
-    await expect.poll(() => mocks.notify.mock.calls.length).toBeGreaterThan(0);
-    const messages = mocks.notify.mock.calls.map((call) => call[0]);
-    expect(
-      messages.some(
-        (message: string) =>
-          typeof message === "string" && message.includes("chưa lưu được"),
-      ),
-    ).toBe(true);
-    // The project is not lost to a knowledge failure.
-    expect(mocks.redirect).toHaveBeenCalledWith("edit", "projects", "7");
-  });
+  it("refuses to activate a project with no role to advertise", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen, "Tên dự án: Dự án trống\n");
+    await screen.getByLabelText("Vị trí tuyển dụng *").fill("   ");
+
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByRole("button", { name: /Tạo dự án/ }))
+          .toBeEnabled(),
+      { timeout: 10000 },
+    );
+    await screen.getByRole("button", { name: /Tạo dự án/ }).click();
+
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.notify).toHaveBeenCalledWith(
+      expect.stringContaining("ít nhất một vị trí tuyển dụng"),
+      { type: "warning" },
+    );
+  }, 20000);
 });

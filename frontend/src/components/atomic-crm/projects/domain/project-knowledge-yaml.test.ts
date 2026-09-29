@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { buildFaqYaml, planBriefKnowledge } from "./project-knowledge-yaml";
+import {
+  buildFaqYaml,
+  buildJobsYaml,
+  planBriefKnowledge,
+} from "./project-knowledge-yaml";
+import { EMPTY_PROJECT_BRIEF, type ProjectBrief } from "./project-brief-ingest";
 
 const ENTRY = {
   question: "Bên công ty đang tuyển công việc gì?",
   answer: "Vị trí tuyển: Công nhân sản xuất.",
 };
+
+const briefWith = (overrides: Partial<ProjectBrief> = {}): ProjectBrief => ({
+  ...EMPTY_PROJECT_BRIEF,
+  ...overrides,
+});
 
 describe("buildFaqYaml", () => {
   it("emits the shape the category template declares", () => {
@@ -54,23 +64,70 @@ describe("buildFaqYaml", () => {
   });
 });
 
+describe("buildJobsYaml", () => {
+  it("emits the shape the jobs category template declares", () => {
+    const yaml = buildJobsYaml(["Công nhân sản xuất"]);
+    expect(yaml).toContain('schema_version: "1.0"');
+    expect(yaml).toContain("category: jobs");
+    expect(yaml).toContain("jobs:");
+    expect(yaml).toContain("  - id: cong-nhan-san-xuat");
+    expect(yaml).toContain('title: "Công nhân sản xuất"');
+  });
+
+  it("never states a vacancy count — the recruiter does not manage headcount", () => {
+    // The schema makes `vacancies` optional for exactly this reason: an unknown
+    // count must stay unknown rather than become a confident wrong number in an
+    // answer a candidate will read.
+    const yaml = buildJobsYaml(["Công nhân sản xuất", "Kỹ thuật viên"]);
+    expect(yaml).not.toContain("vacancies");
+    expect(yaml).not.toContain("employment_type");
+  });
+
+  it("carries the project location only when the brief stated one", () => {
+    expect(buildJobsYaml(["Kho"], "Hải Phòng")).toContain(
+      'location: "Hải Phòng"',
+    );
+    expect(buildJobsYaml(["Kho"])).not.toContain("location");
+  });
+
+  it("slugs the id and keeps it unique when two roles collapse together", () => {
+    const yaml = buildJobsYaml(["Nhân viên kho", "Nhan vien kho"]);
+    expect(yaml).toContain("id: nhan-vien-kho\n");
+    expect(yaml).toContain("id: nhan-vien-kho-2\n");
+  });
+
+  it("writes an empty list when the brief names no role", () => {
+    expect(buildJobsYaml([])).toContain("jobs: []");
+  });
+});
+
 describe("planBriefKnowledge", () => {
-  it("plans only the FAQ — the one category the brief states in full", () => {
-    const plan = planBriefKnowledge([ENTRY]);
-    expect(plan.writes).toHaveLength(1);
-    expect(plan.writes[0].key).toBe("faq");
-    expect(plan.writes[0].filename).toBe("faq.yaml");
+  it("plans jobs before faq so every later write can resolve its job ids", () => {
+    const plan = planBriefKnowledge(
+      briefWith({ roles: ["Công nhân sản xuất"], faqEntries: [ENTRY] }),
+    );
+    expect(plan.writes.map((write) => write.key)).toEqual(["jobs", "faq"]);
+    expect(plan.writes[0].filename).toBe("jobs.yaml");
+    expect(plan.writes[1].filename).toBe("faq.yaml");
   });
 
-  it("plans nothing to write when the brief pairs no question with an answer", () => {
-    expect(planBriefKnowledge([]).writes).toHaveLength(0);
+  it("plans nothing to write when the brief states neither a role nor a Q&A", () => {
+    expect(planBriefKnowledge(briefWith()).writes).toHaveLength(0);
   });
 
-  it("names the eleven categories that still need a human", () => {
-    const { needsHuman } = planBriefKnowledge([ENTRY]);
-    expect(needsHuman).toHaveLength(11);
+  it("skips jobs when the brief names no role, so no empty category is written", () => {
+    const plan = planBriefKnowledge(briefWith({ faqEntries: [ENTRY] }));
+    expect(plan.writes.map((write) => write.key)).toEqual(["faq"]);
+    expect(plan.needsHuman).toContain("jobs");
+  });
+
+  it("names the ten categories that still need a human", () => {
+    const { needsHuman } = planBriefKnowledge(
+      briefWith({ roles: ["Công nhân sản xuất"], faqEntries: [ENTRY] }),
+    );
+    expect(needsHuman).toHaveLength(10);
     expect(needsHuman).not.toContain("faq");
-    expect(needsHuman).toContain("jobs");
+    expect(needsHuman).not.toContain("jobs");
     expect(needsHuman).toContain("contacts");
   });
 });

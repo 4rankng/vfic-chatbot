@@ -9,29 +9,41 @@ import {
 import { PROJECT_KNOWLEDGE_CATEGORY_LABELS } from "../domain/project-knowledge-policy";
 
 type Props = {
-  /** Fired with the parsed brief; the form owner applies it to the fields. */
-  onImported: (brief: ProjectBrief, filename: string) => void;
+  /** Fired with the parsed brief AND the file itself. The parent fills the
+   *  form from `brief` and hands `file` to the ingest pipeline — the parse
+   *  proposes, the pipeline writes, and the recruiter still reviews. */
+  onImported: (brief: ProjectBrief, filename: string, file: File) => void;
   /** What the last import actually produced, so the recruiter reviews rather
    *  than trusts. `null` until a file has been read. */
   brief: ProjectBrief | null;
   filename: string;
+  /** True while the parent is creating the draft and running the pipeline. */
+  busy?: boolean;
 };
 
 /** Guard rail, not a parser: a brief is a document a person typed, so anything
  *  wildly past a brief's size is a mis-drop, and reading it would freeze the
- *  tab. `.md`/`.txt` is what the console already accepts elsewhere. */
+ *  tab. `.md`/`.txt` is what the knowledge API accepts for a text upload. */
 const MAX_BYTES = 2 * 1024 * 1024;
 
 /**
  * ProjectBriefImport — the recruiter's "I already wrote it down" path.
  *
- * Uploads ONE project brief, reads it in the browser, and hands the parsed
- * result up. Nothing is saved here: the form still shows every value and the
- * recruiter still presses `Tạo dự án`. The import only removes the retyping.
+ * Uploads ONE project brief, reads it in the browser, and hands both the parsed
+ * result and the file up. Picking the file is what STARTS the pipeline: the
+ * parent creates the draft project and writes its knowledge categories, so the
+ * recruiter never waits on a save to learn whether the file was usable. The
+ * `Tạo dự án` button is still theirs, and it is still the thing that makes the
+ * project visible.
  */
-export const ProjectBriefImport = ({ onImported, brief, filename }: Props) => {
+export const ProjectBriefImport = ({
+  onImported,
+  brief,
+  filename,
+  busy = false,
+}: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
   const [error, setError] = useState("");
 
   const read = async (file?: File) => {
@@ -41,7 +53,7 @@ export const ProjectBriefImport = ({ onImported, brief, filename }: Props) => {
       setError("Tệp quá lớn. Hãy tải lên phiếu thông tin dưới 2 MB.");
       return;
     }
-    setBusy(true);
+    setReading(true);
     try {
       const text = await file.text();
       const parsed = parseProjectBrief(text);
@@ -51,11 +63,11 @@ export const ProjectBriefImport = ({ onImported, brief, filename }: Props) => {
         );
         return;
       }
-      onImported(parsed, file.name);
+      onImported(parsed, file.name, file);
     } catch {
       setError("Không đọc được tệp. Hãy thử lại với tệp .md hoặc .txt.");
     } finally {
-      setBusy(false);
+      setReading(false);
       // Allow re-picking the same file after an edit.
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -76,23 +88,23 @@ export const ProjectBriefImport = ({ onImported, brief, filename }: Props) => {
         <Button type="button" variant="outline" size="sm" asChild>
           <label>
             <Upload className="size-4" aria-hidden="true" />
-            {busy ? "Đang đọc…" : "Nhập từ file"}
+            {reading && busy ? "Đang nạp…" : "Nhập từ file"}
             <input
               ref={inputRef}
               type="file"
               accept=".md,.txt,text/markdown,text/plain"
               className="sr-only"
               aria-label="Chọn tệp phiếu thông tin dự án"
-              disabled={busy}
+              disabled={reading || busy}
               onChange={(event) => void read(event.target.files?.[0])}
             />
           </label>
         </Button>
       </div>
       <p className="text-helper text-muted-foreground">
-        Tải lên tệp .md hoặc .txt của phiếu thu thập thông tin. Hệ thống điền
-        sẵn tên, mã, tên gọi khác, tóm tắt, địa điểm, vị trí, điểm nổi bật và
-        các phần kiến thức — bạn vẫn xem lại trước khi lưu.
+        Tải lên một tệp .md hoặc .txt. Ngay khi chọn tệp, hệ thống tạo dự án
+        nháp và bắt đầu nạp kiến thức — bạn vẫn xem lại và sửa trước khi bấm
+        «Tạo dự án».
       </p>
       {error ? (
         <p role="alert" className="text-helper text-destructive">

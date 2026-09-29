@@ -1,21 +1,32 @@
-import type { ProjectKnowledgeCategory } from "./project-knowledge-policy";
-import type { ProjectBriefFaqEntry } from "./project-brief-ingest";
+import {
+  PROJECT_KNOWLEDGE_CATEGORIES,
+  type ProjectKnowledgeCategory,
+} from "./project-knowledge-policy";
+import type {
+  ProjectBrief,
+  ProjectBriefFaqEntry,
+} from "./project-brief-ingest";
 
 /**
  * project-knowledge-yaml — the one place a parsed brief becomes the YAML the
  * knowledge API accepts.
  *
  * The RAG categories are NOT free text: `PUT /categories/{key}` rejects
- * anything but `.yaml`/`.yml`, and each category has its own typed schema (the
- * `jobs` template wants vacancies and employment_type; `contacts` wants a
- * phone). A brief states none of those, so this module deliberately builds
- * YAML for the ONE category whose fields the brief actually carries —
- * `faq`, whose `question` and `answer` are verbatim from the file.
+ * anything but `.yaml`/`.yml`, and each category has its own typed schema. A
+ * brief carries two categories in a form the schema actually accepts:
  *
- * The other eleven stay empty on purpose. Inventing a vacancy count or an
- * employment type would put invented facts into the knowledge the assistant
- * answers real candidates with; leaving them empty keeps the recruiter in
- * control of every field the brief did not state.
+ * - `jobs` — every row is a role the recruiter's own overview listed, and the
+ *   row carries ONLY the fields the brief stated (title, plus the project
+ *   location when the brief gives one). `vacancies` is deliberately never
+ *   written: the recruiter does not manage headcount, and a number invented
+ *   here would be quoted back to a candidate as fact.
+ * - `faq` — question and answer verbatim from the file.
+ *
+ * Every other category stays empty on purpose. A typed field the brief never
+ * stated (an employment type, a phone number, a benefit) has no honest value,
+ * and inventing one puts a fabrication into the knowledge the assistant answers
+ * real candidates with. The plan names them in `needsHuman` instead, so the
+ * recruiter sees what still needs a person rather than meeting a silent gap.
  */
 
 /** A YAML double-quoted scalar: escape the backslash, the quote and the
@@ -79,6 +90,40 @@ export const buildFaqYaml = (
   return `${lines.join("\n")}\n`;
 };
 
+/** The `jobs` category document: one row per role the brief's overview listed.
+ *
+ *  `vacancies` is intentionally absent. The recruiter does not manage headcount
+ *  for these roles, and the schema makes the field optional precisely so an
+ *  unknown count stays unknown instead of becoming a confident wrong number in
+ *  an answer a candidate will read. */
+export const buildJobsYaml = (
+  roles: readonly string[],
+  location = "",
+): string => {
+  const lines = ['schema_version: "1.0"', "category: jobs"];
+  const cleaned = roles.map((role) => role.trim()).filter(Boolean);
+  if (cleaned.length === 0) {
+    lines.push("jobs: []");
+    return `${lines.join("\n")}\n`;
+  }
+  lines.push("jobs:");
+  const used = new Map<string, number>();
+  cleaned.forEach((role, index) => {
+    // Two roles can fold to the same slug ("Nhân viên kho" / "Nhan vien kho");
+    // the suffix keeps ids unique rather than letting the API reject the batch.
+    const base = toEntryId(role, index);
+    const seen = used.get(base) ?? 0;
+    used.set(base, seen + 1);
+    const id = seen === 0 ? base : `${base}-${seen + 1}`;
+    lines.push(`  - id: ${id}`, `    title: ${yamlString(role)}`);
+    // The project address genuinely covers every role in it, so carrying it
+    // across is transcription rather than invention.
+    if (location) lines.push(`    location: ${yamlString(location)}`);
+    lines.push("    aliases: []", "    keywords: []");
+  });
+  return `${lines.join("\n")}\n`;
+};
+
 /** What a brief can seed without inventing anything, and what it cannot. */
 export type BriefKnowledgePlan = Readonly<{
   /** Categories to write, in the order they should be written. */
@@ -87,42 +132,47 @@ export type BriefKnowledgePlan = Readonly<{
     filename: string;
     content: string;
   }>[];
-  /** Categories the brief covers in prose but whose typed fields a human must
-   *  still supply — named so the recruiter is told, not left guessing. */
+  /** Categories the brief does not carry in a form their schema accepts —
+   *  named so the recruiter is told, not left guessing. */
   needsHuman: readonly ProjectKnowledgeCategory[];
 }>;
 
-export const planBriefKnowledge = (
-  entries: readonly ProjectBriefFaqEntry[],
-): BriefKnowledgePlan => {
-  // Only the FAQ: its question and answer are the one pair a prose brief
-  // states in full. A `.md` body for any other category is rejected outright.
-  const writes =
-    entries.length > 0
-      ? [
-          {
-            key: "faq" as const,
-            filename: "faq.yaml",
-            content: buildFaqYaml(entries),
-          },
-        ]
-      : [];
+export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
+  const writes: {
+    key: ProjectKnowledgeCategory;
+    filename: string;
+    content: string;
+  }[] = [];
+
+  // `jobs` goes FIRST and always. Every other category's rows may reference
+  // `job_ids`, and the API rejects a write whose references do not resolve
+  // against the jobs that are active at that moment — so activating jobs first
+  // is what makes the rest of the batch writable. It is also the category
+  // activation itself requires, so a brief with no role at all has nothing to
+  // activate and the form asks the recruiter for one title instead.
+  if (brief.roles.length > 0) {
+    writes.push({
+      key: "jobs",
+      filename: "jobs.yaml",
+      content: buildJobsYaml(brief.roles, brief.location),
+    });
+  }
+
+  if (brief.faqEntries.length > 0) {
+    writes.push({
+      key: "faq",
+      filename: "faq.yaml",
+      content: buildFaqYaml(brief.faqEntries),
+    });
+  }
+
+  const written = new Set(writes.map((write) => write.key));
   return {
     writes,
-    // The eleven categories the brief does NOT fill: each wants typed fields
-    // (vacancies, employment type, a phone) that a prose brief never states.
-    needsHuman: [
-      "jobs",
-      "compensation",
-      "requirements",
-      "work_schedules",
-      "benefits",
-      "accommodation",
-      "meals",
-      "transportation",
-      "insurance",
-      "application",
-      "contacts",
-    ],
+    // Every category this batch did NOT write. Computed from the full list
+    // rather than a fixed remainder so a category that is skipped because the
+    // brief had nothing to say about it — `jobs` above all — is still named as
+    // needing a person instead of vanishing from the report.
+    needsHuman: PROJECT_KNOWLEDGE_CATEGORIES.filter((key) => !written.has(key)),
   };
 };

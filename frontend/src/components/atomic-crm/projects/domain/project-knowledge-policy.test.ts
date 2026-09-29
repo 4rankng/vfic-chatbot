@@ -41,71 +41,23 @@ describe("project knowledge policy", () => {
     expect(parseCommaList(" LG, LGD, LG ")).toEqual(["LG", "LGD", "LG"]);
   });
 
-  it("requires a mode and direct-context discovery fields", () => {
-    const input = {
-      aliases: "",
-      discovery: { summary: "", location: "", roles: "", highlights: "" },
-    };
-    expect(buildProjectCreation({ ...input, mode: "" })).toEqual({
-      ok: false,
-      reason: "mode_required",
-    });
-    expect(buildProjectCreation({ ...input, mode: "DIRECT_CONTEXT" })).toEqual({
-      ok: false,
-      reason: "discovery_required",
+  it("always creates a RAG draft — the mode is the ingest pipeline, not a choice", () => {
+    expect(buildProjectCreation({ aliases: "" })).toEqual({
+      knowledge_mode: "RAG",
+      aliases: [],
+      is_active: false,
     });
   });
 
-  it("builds the canonical inactive direct-context creation payload", () => {
-    expect(
-      buildProjectCreation({
-        aliases: "LG, LGD",
-        mode: "DIRECT_CONTEXT",
-        discovery: {
-          summary: " Nhà máy ",
-          location: " Hải Phòng ",
-          roles: "Công nhân, Kỹ thuật",
-          highlights: "Xe đưa đón, Ký túc xá",
-        },
-      }),
-    ).toEqual({
-      ok: true,
-      data: {
-        aliases: ["LG", "LGD"],
-        discovery_card: {
-          summary: "Nhà máy",
-          location: "Hải Phòng",
-          roles: ["Công nhân", "Kỹ thuật"],
-          eligibility: [],
-          highlights: ["Xe đưa đón", "Ký túc xá"],
-        },
-        is_active: false,
-        knowledge_mode: "DIRECT_CONTEXT",
-      },
-    });
-  });
-
-  it("keeps RAG creation inactive without a discovery card", () => {
-    expect(
-      buildProjectCreation({
-        aliases: "",
-        mode: "RAG",
-        discovery: {
-          summary: "",
-          location: "",
-          roles: "",
-          highlights: "",
-        },
-      }),
-    ).toEqual({
-      ok: true,
-      data: {
-        aliases: [],
-        discovery_card: undefined,
-        is_active: false,
-        knowledge_mode: "RAG",
-      },
-    });
+  it("never sends a discovery card — the API derives a RAG one from the categories", () => {
+    // `ProjectCreate` raises "RAG discovery cards are derived from active
+    // categories" for any non-null card, so sending one fails the whole
+    // create. The brief's summary/location reach the assistant through the
+    // category YAML instead.
+    const payload = buildProjectCreation({ aliases: "LG, LGD" });
+    expect(payload).not.toHaveProperty("discovery_card");
+    expect(payload.aliases).toEqual(["LG", "LGD"]);
+    expect(payload.is_active).toBe(false);
   });
 
   it("derives readiness from the authoritative mode-specific signal", () => {

@@ -46,26 +46,11 @@ export type ProjectDiscoveryInput = Readonly<{
   highlights: string;
 }>;
 
-export type ProjectCreationResult =
-  | Readonly<{
-      ok: true;
-      data: Readonly<{
-        knowledge_mode: ProjectKnowledgeMode;
-        aliases: string[];
-        discovery_card?: Readonly<{
-          summary: string;
-          location: string;
-          roles: string[];
-          eligibility: never[];
-          highlights: string[];
-        }>;
-        is_active: false;
-      }>;
-    }>
-  | Readonly<{
-      ok: false;
-      reason: "mode_required" | "discovery_required";
-    }>;
+export type ProjectCreationPayload = Readonly<{
+  knowledge_mode: ProjectKnowledgeMode;
+  aliases: string[];
+  is_active: false;
+}>;
 
 export const parseCommaList = (value: string): string[] =>
   value
@@ -73,43 +58,33 @@ export const parseCommaList = (value: string): string[] =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+/**
+ * The payload `Tạo dự án` creates the DRAFT with.
+ *
+ * Three deliberate constants, each one a backend rule rather than a preference:
+ *
+ * - `knowledge_mode` is always RAG. The mode used to be a recruiter choice, but
+ *   this form is driven by the category ingest pipeline, and that pipeline only
+ *   exists on the RAG path — a single-page project has no categories to write.
+ * - `is_active` is always false. The create schema refuses an active project
+ *   outright ("A new Project can be activated after its knowledge is ready"),
+ *   so activation is the final button, never a side effect of uploading.
+ * - `discovery_card` is NEVER sent. The create schema rejects one on a RAG
+ *   project outright — "RAG discovery cards are derived from active categories"
+ *   — so the summary, location, roles and highlights the brief carries reach
+ *   the assistant through the category YAML that is ingested, not through a
+ *   field on the project row. Collecting them as editable inputs here would
+ *   promise the recruiter an edit that the API discards.
+ */
 export const buildProjectCreation = ({
   aliases,
-  discovery,
-  mode,
 }: Readonly<{
   aliases: string;
-  discovery: ProjectDiscoveryInput;
-  mode: ProjectKnowledgeMode | "";
-}>): ProjectCreationResult => {
-  if (!mode) return { ok: false, reason: "mode_required" };
-
-  if (
-    mode === "DIRECT_CONTEXT" &&
-    (!discovery.summary.trim() || !discovery.location.trim())
-  ) {
-    return { ok: false, reason: "discovery_required" };
-  }
-
-  return {
-    ok: true,
-    data: {
-      knowledge_mode: mode,
-      aliases: parseCommaList(aliases),
-      discovery_card:
-        mode === "DIRECT_CONTEXT"
-          ? {
-              summary: discovery.summary.trim(),
-              location: discovery.location.trim(),
-              roles: parseCommaList(discovery.roles),
-              eligibility: [],
-              highlights: parseCommaList(discovery.highlights),
-            }
-          : undefined,
-      is_active: false,
-    },
-  };
-};
+}>): ProjectCreationPayload => ({
+  knowledge_mode: "RAG",
+  aliases: parseCommaList(aliases),
+  is_active: false,
+});
 
 export const projectReadinessLabel = (
   project: Pick<
