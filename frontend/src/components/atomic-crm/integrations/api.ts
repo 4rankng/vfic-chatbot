@@ -64,6 +64,8 @@ export type OpenRouterSettings = {
   openrouter_enable: boolean;
   llm_default_provider: LlmProvider;
   llm_failover_order: LlmProvider[];
+  embedding_provider: "openrouter" | "gemini";
+  embedding_gemini_api_key: SecretStatus;
   last_test: ProviderTestStatus | null;
 };
 
@@ -270,6 +272,8 @@ export const zaloIntegrationGateway = {
       openrouter_extractor_model: string;
       openrouter_digest_model: string;
       llm_default_provider: LlmProvider;
+      embedding_provider: "openrouter" | "gemini";
+      embedding_gemini_api_key: string;
     }>,
   ): Promise<OpenRouterSettings> =>
     apiJson<OpenRouterSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/openrouter`, {

@@ -260,13 +260,11 @@ class ProjectFaqService:
     ) -> None:
         from app.services.integration_settings import IntegrationSettingsService
 
-        openrouter_config = await IntegrationSettingsService(self.db).resolve_openrouter()
+        embedding_config = await IntegrationSettingsService(self.db).resolve_embedding()
         # Variants are folded into the embedded text so the vector arm of the FAQ
         # bypass matches paraphrases, not just the canonical phrasing.
         text = "\n".join([question, *(variants or []), answer])
-        vector = await self._provider_factory().embedder(
-            openrouter_api_key=openrouter_config.api_key
-        )(text)
+        vector = await self._provider_factory().embedder(embedding=embedding_config)(text)
         await self.repo.set_chunk_embedding(chunk_id, vec_literal(vector))
 
     @staticmethod

@@ -173,14 +173,13 @@ class ProjectFeatureService:
             integration_settings = IntegrationSettingsService(self.db)
             minimax_config = await integration_settings.resolve_minimax()
             openrouter_config = await integration_settings.resolve_openrouter()
+            embedding_config = await integration_settings.resolve_embedding()
             # Reuses the exact ingest extraction path so manual + automatic extraction stay identical.
             # Web sync path: cap at the request timeout (60s), not the digest ceiling (180s) —
             # this blocking call runs in the web process (web_concurrency=2).
             await KnowledgePipeline(
                 self.db,
-                self._provider_factory().embedder(
-                    openrouter_api_key=openrouter_config.api_key
-                ),
+                self._provider_factory().embedder(embedding=embedding_config),
                 self._provider_factory().json_extractor(
                     minimax_api_key=minimax_config.api_key,
                     openrouter_api_key=openrouter_config.api_key,

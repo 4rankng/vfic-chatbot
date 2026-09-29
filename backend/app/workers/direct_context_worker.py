@@ -75,11 +75,15 @@ async def _run_index_async(
 
     async with worker_session() as db:
         integration_settings = IntegrationSettingsService(db)
-        openrouter_config = await integration_settings.resolve_openrouter()
+        embedding_config = await integration_settings.resolve_embedding()
         embed = (
             _embed
             if _embed is not None
-            else build_embedder(openrouter_api_key=openrouter_config.api_key)
+            else build_embedder(
+                provider=embedding_config.provider,
+                openrouter_api_key=embedding_config.openrouter_api_key,
+                gemini_api_key=embedding_config.gemini_api_key,
+            )
         )
         if _llm is not None:
             llm_json = _llm
@@ -87,6 +91,7 @@ async def _run_index_async(
             from app.graph.factories import make_minimax_llm_json
 
             minimax_config = await integration_settings.resolve_minimax()
+            openrouter_config = await integration_settings.resolve_openrouter()
             llm_json = make_minimax_llm_json(
                 minimax_api_key=minimax_config.api_key,
                 openrouter_api_key=openrouter_config.api_key,

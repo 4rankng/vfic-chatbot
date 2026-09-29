@@ -40,8 +40,11 @@ class BatchEmbedder(Protocol):
 
 
 class GeminiEmbedder:
-    def __init__(self, settings=None) -> None:
+    def __init__(self, settings=None, *, api_key: str | None = None) -> None:
         self.s = settings or get_settings()
+        # The settings page is the credential source; the env key only seeds
+        # the default (mirrors OpenRouterEmbedder).
+        self.api_key = (api_key or self.s.gemini_api_key or "").strip()
         self._client = None
 
     # Gemini's per-request token budget is shared across all inputs; large
@@ -59,9 +62,15 @@ class GeminiEmbedder:
     def _ensure_client(self):
         """The Gemini client, constructed once per instance on first use."""
         if self._client is None:
+            if not self.api_key:
+                raise RuntimeError(
+                    "Gemini embeddings need a credential. Set the Gemini API "
+                    "key on the admin Settings page (Cài đặt → tích hợp) and "
+                    "choose Gemini as the embedding provider."
+                )
             from google import genai
 
-            self._client = genai.Client(api_key=self.s.gemini_api_key)
+            self._client = genai.Client(api_key=self.api_key)
         return self._client
 
     async def _provider_call(self, chunk: list[str]):
@@ -186,12 +195,19 @@ def build_embedder(
     settings=None,
     *,
     openrouter_api_key: str | None = None,
+    provider: str | None = None,
+    gemini_api_key: str | None = None,
 ):
-    """Build the configured embedding client."""
+    """Build the configured embedding client.
+
+    ``provider``/``gemini_api_key`` come from the Settings page resolution
+    (``IntegrationSettingsService.resolve_embedding``); when omitted the env
+    default applies.
+    """
     s = settings or get_settings()
-    provider = (s.embedding_provider or "openrouter").strip().lower()
-    if provider == "openrouter":
+    chosen = (provider or s.embedding_provider or "openrouter").strip().lower()
+    if chosen == "openrouter":
         return OpenRouterEmbedder(s, api_key=openrouter_api_key)
-    if provider == "gemini":
-        return GeminiEmbedder(s)
+    if chosen == "gemini":
+        return GeminiEmbedder(s, api_key=gemini_api_key)
     raise RuntimeError("EMBEDDING_PROVIDER must be 'openrouter' or 'gemini'")

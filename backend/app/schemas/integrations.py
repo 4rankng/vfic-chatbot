@@ -179,6 +179,8 @@ class OpenRouterIntegrationSettingsOut(BaseModel):
     openrouter_enable: bool
     llm_default_provider: Literal["minimax", "openrouter", "custom"]
     llm_failover_order: list[Literal["minimax", "openrouter", "custom"]]
+    embedding_provider: Literal["openrouter", "gemini"]
+    embedding_gemini_api_key: SecretStatus
     last_test: ProviderTestStatus | None = None
 
 
@@ -191,6 +193,8 @@ class OpenRouterIntegrationSettingsUpdate(BaseModel):
     openrouter_extractor_model: str | None = Field(default=None, min_length=1, max_length=256)
     openrouter_digest_model: str | None = Field(default=None, min_length=1, max_length=256)
     llm_default_provider: Literal["minimax", "openrouter", "custom"] | None = None
+    embedding_provider: Literal["openrouter", "gemini"] | None = None
+    embedding_gemini_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
 
 
 class OpenRouterIntegrationTestOut(BaseModel):

@@ -192,6 +192,7 @@ async def build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for
         # process lifetime.
         minimax_config = await integration_settings.resolve_minimax()
         openrouter_config = await integration_settings.resolve_openrouter()
+        embedding_config = await integration_settings.resolve_embedding()
         custom_config = await integration_settings.resolve_custom_llm()
         failover_order = await integration_settings.resolve_llm_failover_order()
         # Imported here (not at module top) because these builders live in the
@@ -217,7 +218,12 @@ async def build_cached_clients(db) -> _CachedClients:  # noqa: RUF029 (async for
             openrouter_agent_model=openrouter_config.agent_model,
             openrouter_digest_model=openrouter_config.digest_model,
         )
-        embedder = build_embedder(s, openrouter_api_key=openrouter_config.api_key)
+        embedder = build_embedder(
+            s,
+            provider=embedding_config.provider,
+            openrouter_api_key=embedding_config.openrouter_api_key,
+            gemini_api_key=embedding_config.gemini_api_key,
+        )
         fast_llm = _build_fast_llm(
             minimax_config=minimax_config,
             openrouter_config=openrouter_config,
@@ -276,13 +282,19 @@ async def build_cached_extraction(db) -> _CachedExtraction:  # noqa: RUF029 (asy
         cached = _extraction_cache.get(cache_key)
         if cached is not None:
             return cached
-        openrouter_config = await IntegrationSettingsService(db, settings=s).resolve_openrouter()
+        integration_settings = IntegrationSettingsService(db, settings=s)
+        embedding_config = await integration_settings.resolve_embedding()
         # The extractor callable closes over the langchain client it builds, so
         # both are cached together and closed together.
         bundle = _CachedExtraction(
             extractor_llm=_chat_for_role("extractor", temperature=0.0),
             extractor=build_minimax_extractor(),
-            embedder=build_embedder(s, openrouter_api_key=openrouter_config.api_key),
+            embedder=build_embedder(
+                s,
+                provider=embedding_config.provider,
+                openrouter_api_key=embedding_config.openrouter_api_key,
+                gemini_api_key=embedding_config.gemini_api_key,
+            ),
         )
         displaced = list(_extraction_cache.values())
         _extraction_cache.clear()  # only one active version at a time

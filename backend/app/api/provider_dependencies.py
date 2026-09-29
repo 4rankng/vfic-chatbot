@@ -26,10 +26,10 @@ async def get_embedder(
     endpoint fail with "no credential". FastAPI caches the session dependency,
     so this shares the request's existing session rather than opening a second.
     """
-    openrouter = await IntegrationSettingsService(db).resolve_openrouter()
+    embedding = await IntegrationSettingsService(db).resolve_embedding()
     from app.composition.project_knowledge import build_default_embedder
 
-    return build_default_embedder(openrouter_api_key=openrouter.api_key)
+    return build_default_embedder(embedding=embedding)
 
 
 __all__ = ["get_embedder"]

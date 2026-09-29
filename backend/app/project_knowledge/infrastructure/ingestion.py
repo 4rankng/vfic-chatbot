@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Awaitable, Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,15 +38,15 @@ class SqlAlchemyKnowledgeIngestionAdapter:
         self,
         document_id: object,
         *,
-        embedder: object | None = None,
-        json_extractor: object | None = None,
+        embedder: Callable[[str], Awaitable[list[float]]] | None = None,
+        json_extractor: Callable[[str, str], Awaitable[str]] | None = None,
     ) -> None:
         integration = IntegrationSettingsService(self._db)
-        openrouter = await integration.resolve_openrouter()
+        embedding_config = await integration.resolve_embedding()
         resolved_embedder = (
             embedder
             if embedder is not None
-            else self._providers.embedder(openrouter_api_key=openrouter.api_key)
+            else self._providers.embedder(embedding=embedding_config)
         )
         document = await self._db.get(KnowledgeDocument, document_id)
         if document is None:
@@ -57,15 +58,19 @@ class SqlAlchemyKnowledgeIngestionAdapter:
         is_canonical = (document.metadata_ or {}).get(
             "schema_version"
         ) in CANONICAL_SCHEMA_VERSIONS
+        resolved_json_extractor: Callable[[str, str], Awaitable[str]]
         if json_extractor is not None:
             resolved_json_extractor = json_extractor
         elif is_canonical:
 
-            async def resolved_json_extractor(_system: str, _user: str) -> str:
+            async def _canonical_noop(_system: str, _user: str) -> str:
                 raise RuntimeError("canonical ingest should not call MiniMax")
+
+            resolved_json_extractor = _canonical_noop
 
         else:
             minimax = await integration.resolve_minimax()
+            openrouter = await integration.resolve_openrouter()
             resolved_json_extractor = self._providers.json_extractor(
                 minimax_api_key=minimax.api_key,
                 openrouter_api_key=openrouter.api_key,
@@ -96,15 +101,15 @@ class SqlAlchemyKnowledgeIngestionAdapter:
         self,
         version_id: object,
         *,
-        embedder: object | None = None,
-        json_extractor: object | None = None,
+        embedder: Callable[[str], Awaitable[list[float]]] | None = None,
+        json_extractor: Callable[[str, str], Awaitable[str]] | None = None,
     ) -> None:
         integration = IntegrationSettingsService(self._db)
-        openrouter = await integration.resolve_openrouter()
+        embedding_config = await integration.resolve_embedding()
         resolved_embedder = (
             embedder
             if embedder is not None
-            else self._providers.embedder(openrouter_api_key=openrouter.api_key)
+            else self._providers.embedder(embedding=embedding_config)
         )
         version = await self._db.get(KBVersion, version_id)
         if version is None:
@@ -114,6 +119,7 @@ class SqlAlchemyKnowledgeIngestionAdapter:
             resolved_json_extractor = json_extractor
         else:
             minimax = await integration.resolve_minimax()
+            openrouter = await integration.resolve_openrouter()
             resolved_json_extractor = self._providers.json_extractor(
                 minimax_api_key=minimax.api_key,
                 openrouter_api_key=openrouter.api_key,

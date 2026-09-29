@@ -69,9 +69,9 @@ async def _run_category_revision_async(
         embedder = _embedder
         if embedder is None:
             integration = IntegrationSettingsService(db)
-            openrouter = await integration.resolve_openrouter()
+            embedding = await integration.resolve_embedding()
             embedder = build_knowledge_provider_factory().embedder(
-                openrouter_api_key=openrouter.api_key
+                embedding=embedding
             )
         await KnowledgeCategoryService(db).activate_revision(
             uuid.UUID(revision_id),

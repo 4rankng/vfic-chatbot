@@ -7,16 +7,21 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.project_knowledge.application.providers import KnowledgeProviderFactory
+from app.project_knowledge.domain.embedding import EmbeddingRuntimeConfig
 from app.project_knowledge.infrastructure.ingestion import SqlAlchemyKnowledgeIngestionAdapter
 
 
 class GraphKnowledgeProviderFactory:
     """Adapt the current graph-owned provider builders at the composition boundary."""
 
-    def embedder(self, *, openrouter_api_key: str) -> Any:
+    def embedder(self, *, embedding: EmbeddingRuntimeConfig) -> Any:
         from app.graph.clients import build_embedder
 
-        return build_embedder(openrouter_api_key=openrouter_api_key)
+        return build_embedder(
+            provider=embedding.provider,
+            openrouter_api_key=embedding.openrouter_api_key,
+            gemini_api_key=embedding.gemini_api_key,
+        )
 
     def json_extractor(
         self,
@@ -32,17 +37,21 @@ class GraphKnowledgeProviderFactory:
         )
 
 
-def build_default_embedder(*, openrouter_api_key: str) -> Any:
-    """The OpenRouter embedder.
+def build_default_embedder(*, embedding: EmbeddingRuntimeConfig) -> Any:
+    """The embedder for the provider the Settings page selects.
 
-    ``openrouter_api_key`` is REQUIRED and is expected to be the value the
-    admin settings page stores (``IntegrationSettingsService.resolve_openrouter``).
-    It used to be optional, which silently fell back to a process env var and
-    let a key set in the UI go unused here.
+    ``embedding`` is REQUIRED and is expected to come from
+    ``IntegrationSettingsService.resolve_embedding``. It used to be an
+    optional OpenRouter key with a process-env fallback, which both let a key
+    set in the UI go unused and hardwired the provider.
     """
     from app.graph.clients import build_embedder
 
-    return build_embedder(openrouter_api_key=openrouter_api_key)
+    return build_embedder(
+        provider=embedding.provider,
+        openrouter_api_key=embedding.openrouter_api_key,
+        gemini_api_key=embedding.gemini_api_key,
+    )
 
 
 def build_knowledge_provider_factory() -> KnowledgeProviderFactory:

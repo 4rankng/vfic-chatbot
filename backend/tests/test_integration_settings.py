@@ -26,6 +26,8 @@ from app.services.integration_settings import (
     ZALO_OA_SECRET_KEY,
 )
 from app.services.integration_settings.providers.llm import (
+    EMBEDDING_GEMINI_API_KEY,
+    EMBEDDING_PROVIDER,
     LLM_AGENT_MAX_TOKENS,
     LLM_PROGRESSIVE_SEND,
     LLM_REASONING_MODE,
@@ -35,6 +37,8 @@ from app.services.integration_settings.providers.llm import (
 class _Settings:
     integration_settings_encryption_key = "test-integration-key"
     jwt_secret = "test-jwt-secret"
+    embedding_provider = "openrouter"
+    gemini_api_key = ""
     zalo_bot_token = ""
     zalo_bot_webhook_secret = ""
     zalo_oa_app_id = ""
@@ -778,6 +782,96 @@ async def test_openrouter_admin_view_uses_stored_routing_and_model():
     assert view["openrouter_enable"] is True
     assert view["llm_default_provider"] == "openrouter"
     assert view["openrouter_agent_model"] == "deepseek/deepseek-v4-flash"
+
+
+@pytest.mark.asyncio
+async def test_resolve_embedding_defaults_to_openrouter_without_stored_values():
+    service = IntegrationSettingsService(
+        _ReadDb([]),
+        settings=_Settings(),
+    )
+
+    embedding = await service.resolve_embedding()
+
+    assert embedding.provider == "openrouter"
+    assert embedding.openrouter_api_key == ""
+    assert embedding.gemini_api_key == ""
+
+
+@pytest.mark.asyncio
+async def test_resolve_embedding_prefers_stored_provider_and_gemini_key():
+    service = IntegrationSettingsService(
+        _ReadDb(
+            [
+                _Row("embedding_provider", "gemini"),
+                _Row("embedding_gemini_api_key", "gemini-stored-key"),
+            ]
+        ),
+        settings=_Settings(),
+    )
+
+    embedding = await service.resolve_embedding()
+
+    assert embedding.provider == "gemini"
+    assert embedding.gemini_api_key == "gemini-stored-key"
+
+
+@pytest.mark.asyncio
+async def test_resolve_embedding_falls_back_when_stored_provider_is_unknown():
+    service = IntegrationSettingsService(
+        _ReadDb([_Row("embedding_provider", "ollama")]),
+        settings=_Settings(),
+    )
+
+    embedding = await service.resolve_embedding()
+
+    assert embedding.provider == "openrouter"
+
+
+@pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_update_openrouter_stores_embedding_provider_and_secret_key(monkeypatch):
+    audits: list[dict] = []
+
+    async def fake_record_audit(db, **kwargs):
+        audits.append(kwargs)
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.providers.llm.record_audit",
+        fake_record_audit,
+    )
+
+    db = _WriteDb()
+    service = IntegrationSettingsService(db, settings=_Settings())
+    actor_id = uuid.uuid4()
+
+    changed = await service.update_openrouter(
+        {
+            "embedding_provider": "gemini",
+            "embedding_gemini_api_key": "gemini-new-key",
+        },
+        actor_id=actor_id,
+    )
+
+    assert changed == ["embedding_provider", "embedding_gemini_api_key"]
+    assert db.committed
+    stored_provider = db.rows[EMBEDDING_PROVIDER]
+    assert stored_provider.encrypted_value == "gemini"
+    stored_key = db.rows[EMBEDDING_GEMINI_API_KEY]
+    assert stored_key.encrypted_value.startswith("v1:")
+    assert "gemini-new-key" not in stored_key.encrypted_value
+    assert service.cipher.decrypt(stored_key.encrypted_value) == "gemini-new-key"
+    assert audits == [
+        {
+            "action": "update_openrouter_integration_settings",
+            "actor_id": actor_id,
+            "target_type": "integration_settings",
+            "target_id": "openrouter",
+            "payload": {
+                "changed_keys": ["embedding_provider", "embedding_gemini_api_key"]
+            },
+        }
+    ]
 
 
 # ─── Custom OpenAI-compatible failover provider ─────────────────────────────

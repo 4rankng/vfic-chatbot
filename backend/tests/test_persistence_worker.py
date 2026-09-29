@@ -117,7 +117,15 @@ async def test_repeated_persist_jobs_reuse_one_cached_client_bundle(
         lambda _db, **_kwargs: SimpleNamespace(
             resolve_openrouter=AsyncMock(
                 return_value=SimpleNamespace(api_key="sk-or-test")
-            )
+            ),
+            resolve_embedding=AsyncMock(
+                return_value=SimpleNamespace(
+                    provider="openrouter",
+                    openrouter_api_key="sk-or-test",
+                    gemini_api_key="",
+                    openrouter_embedding_model="",
+                )
+            ),
         ),
     )
     monkeypatch.setattr(

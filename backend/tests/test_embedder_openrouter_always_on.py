@@ -73,11 +73,16 @@ async def test_missing_credential_names_the_settings_page(monkeypatch) -> None:
 
 
 def test_build_default_embedder_requires_the_settings_page_key() -> None:
-    # The key is keyword-only and required: the old signature made it optional,
-    # which is exactly how the env fallback crept in.
+    # The embedding config is keyword-only and required: the old signature made
+    # the OpenRouter key optional, which is exactly how the env fallback crept in.
     from app.composition.project_knowledge import build_default_embedder
+    from app.project_knowledge.domain.embedding import EmbeddingRuntimeConfig
 
-    embedder = build_default_embedder(openrouter_api_key="sk-or-settings")
+    embedder = build_default_embedder(
+        embedding=EmbeddingRuntimeConfig(
+            provider="openrouter", openrouter_api_key="sk-or-settings"
+        )
+    )
     assert isinstance(embedder, OpenRouterEmbedder)
 
     with pytest.raises(TypeError):

@@ -309,6 +309,7 @@ class _Settings:
     openrouter_enable = False
     embedding_provider = "openrouter"
     embedding_dim = 3072
+    gemini_api_key = ""
     openrouter_base_url = "https://openrouter.ai/api/v1"
     openrouter_api_key = ""
     openrouter_agent_model = "deepseek/deepseek-v4-flash"

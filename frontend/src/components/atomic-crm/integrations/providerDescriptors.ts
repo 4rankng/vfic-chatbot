@@ -29,6 +29,8 @@ export type ProviderFormState = {
   minimax_api_key: string;
   openrouter_api_key: string;
   openrouter_agent_model: string;
+  embedding_provider: string;
+  embedding_gemini_api_key: string;
   custom_llm_api_key: string;
   custom_llm_base_url: string;
   custom_llm_agent_model: string;
@@ -141,6 +143,8 @@ export const emptyProviderForm = (): ProviderFormState => ({
   minimax_api_key: "",
   openrouter_api_key: "",
   openrouter_agent_model: "deepseek/deepseek-v4-flash",
+  embedding_provider: "openrouter",
+  embedding_gemini_api_key: "",
   custom_llm_api_key: "",
   custom_llm_base_url: "",
   custom_llm_agent_model: "",
@@ -170,6 +174,8 @@ type OpenRouterUpdatePayload = {
   openrouter_extractor_model?: string;
   openrouter_digest_model?: string;
   llm_default_provider?: LlmProvider;
+  embedding_provider?: "openrouter" | "gemini";
+  embedding_gemini_api_key?: string;
 };
 
 type JevUpdatePayload = {
@@ -286,6 +292,21 @@ export const OPENROUTER_PANEL: ProviderPanelDescriptor = {
       placeholder: "Dán token OpenRouter",
       status: (bundle) =>
         bundle.openRouter?.openrouter_api_key ?? { configured: false },
+    },
+    {
+      kind: "select",
+      formKey: "embedding_provider",
+      label: "Nhà cung cấp Embedding",
+      options: ["openrouter", "gemini"],
+      saved: (bundle) => bundle.openRouter?.embedding_provider ?? "openrouter",
+    },
+    {
+      kind: "secret",
+      formKey: "embedding_gemini_api_key",
+      label: "Gemini API Key",
+      placeholder: "Dán key Gemini",
+      status: (bundle) =>
+        bundle.openRouter?.embedding_gemini_api_key ?? { configured: false },
     },
   ],
   testFieldLabels: { openrouter_api_key: "Access Token" },

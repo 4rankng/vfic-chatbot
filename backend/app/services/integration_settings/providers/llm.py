@@ -22,6 +22,7 @@ from app.core.preamble_cache import (
     cached_openrouter_config,
     evict_local_namespace,
 )
+from app.project_knowledge.domain.embedding import EmbeddingRuntimeConfig
 from app.services.audit_service import record_audit
 from app.services.integration_settings._shared import (
     LLM_DEFAULT_PROVIDER,
@@ -121,6 +122,12 @@ OPENROUTER_SETTING_KEYS = (
     OPENROUTER_DIGEST_MODEL,
     LLM_DEFAULT_PROVIDER,
 )
+# The embedding provider is chosen on the Settings page; the embedded env key
+# (settings.embedding_provider) only seeds the default.
+EMBEDDING_PROVIDER = "embedding_provider"
+EMBEDDING_GEMINI_API_KEY = "embedding_gemini_api_key"
+EMBEDDING_SETTING_KEYS = (EMBEDDING_PROVIDER, EMBEDDING_GEMINI_API_KEY)
+EMBEDDING_PROVIDERS = ("openrouter", "gemini")
 
 
 def _reasoning_mode_value(value: str | None, fallback: str = DEFAULT_LLM_REASONING_MODE) -> str:
@@ -306,9 +313,33 @@ class LlmSettingsMixin:
         cached = await cached_openrouter_config(_load)
         return OpenRouterRuntimeConfig(**cached)
 
+    async def resolve_embedding(self) -> EmbeddingRuntimeConfig:
+        """The embedder provider + credential: settings page first, env default second.
+
+        OpenRouter key resolution rides the cached openrouter config so a turn
+        does one stored-values read regardless of how many embedders it builds.
+        """
+        stored = await self._stored_values(EMBEDDING_SETTING_KEYS)
+        provider = (
+            stored.get(EMBEDDING_PROVIDER) or self.settings.embedding_provider or "openrouter"
+        ).strip().lower()
+        if provider not in EMBEDDING_PROVIDERS:
+            provider = "openrouter"
+        return EmbeddingRuntimeConfig(
+            provider=provider,
+            openrouter_api_key=(await self.resolve_openrouter()).api_key,
+            gemini_api_key=(
+                stored.get(EMBEDDING_GEMINI_API_KEY) or self.settings.gemini_api_key
+            ).strip(),
+            openrouter_embedding_model=self.settings.openrouter_embedding_model,
+        )
+
     async def admin_openrouter_view(self) -> dict:
         cfg = await self.resolve_openrouter()
+        embedding = await self.resolve_embedding()
         return {
+            "embedding_provider": embedding.provider,
+            "embedding_gemini_api_key": _secret_status(embedding.gemini_api_key),
             "openrouter_api_key": _secret_status(cfg.api_key),
             "openrouter_base_url": cfg.base_url,
             "openrouter_agent_model": cfg.agent_model,
@@ -523,13 +554,15 @@ class LlmSettingsMixin:
     ) -> list[str]:
         changed: list[str] = []
         for key, value in values.items():
-            if key not in OPENROUTER_SETTING_KEYS or value is None:
+            if key not in OPENROUTER_SETTING_KEYS + EMBEDDING_SETTING_KEYS or value is None:
+                continue
+            if key == EMBEDDING_PROVIDER and str(value).strip().lower() not in EMBEDDING_PROVIDERS:
                 continue
             if await self._write_setting(
                 key,
                 str(value),
                 actor_id=actor_id,
-                is_secret=key == OPENROUTER_API_KEY,
+                is_secret=key in (OPENROUTER_API_KEY, EMBEDDING_GEMINI_API_KEY),
             ):
                 changed.append(key)
 
