@@ -46,7 +46,12 @@ type FieldProps = {
   /** Record field this control reads and writes. */
   source: string;
   label: string;
-  hint?: ReactNode;
+  /**
+   * One line of guidance under the control. Text, not a node: the library's
+   * `Select` types its `hint` as a string, and keeping one shape across the
+   * controls stops a node from silently rendering as `[object Object]` there.
+   */
+  hint?: string;
   /** Renders the console's required marker and `aria-required`. */
   isRequired?: boolean;
   validate?: ReactAdminInputProps["validate"];
