@@ -485,8 +485,8 @@
     min-width: 0;
   }
 
-  .tailkit-workspace-content .settings-workspace-content .settings-input-action,
-  .tailkit-workspace-content .settings-workspace-content .settings-copy-app-id {
+  .workspace-frame-content .settings-workspace-content .settings-input-action,
+  .workspace-frame-content .settings-workspace-content .settings-copy-app-id {
     position: relative;
     width: 36px;
     min-width: 36px;
@@ -496,10 +496,10 @@
     border-radius: 8px;
   }
 
-  .tailkit-workspace-content
+  .workspace-frame-content
     .settings-workspace-content
     .settings-input-action::after,
-  .tailkit-workspace-content
+  .workspace-frame-content
     .settings-workspace-content
     .settings-copy-app-id::after {
     content: "";
@@ -579,18 +579,18 @@
     grid-template-columns: minmax(0, 1fr) 44px 44px;
   }
 
-  .tailkit-workspace-content .settings-workspace-content .settings-input-action,
-  .tailkit-workspace-content .settings-workspace-content .settings-copy-app-id {
+  .workspace-frame-content .settings-workspace-content .settings-input-action,
+  .workspace-frame-content .settings-workspace-content .settings-copy-app-id {
     width: 44px;
     min-width: 44px;
     height: 44px;
     min-height: 44px !important;
   }
 
-  .tailkit-workspace-content
+  .workspace-frame-content
     .settings-workspace-content
     .settings-input-action::after,
-  .tailkit-workspace-content
+  .workspace-frame-content
     .settings-workspace-content
     .settings-copy-app-id::after {
     content: none;

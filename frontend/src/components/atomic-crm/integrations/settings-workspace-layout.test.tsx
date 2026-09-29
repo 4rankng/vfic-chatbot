@@ -55,8 +55,7 @@ const console = (children: React.ReactNode) => (
         // not expand, so the fixture supplies the one type token these rules
         // consume — the value `--text-body-sm` resolves to. A dropped
         // `font-size` declaration then falls back to the 16px browser default
-        // and goes red, exactly as `tailkit-action-sizing.test.tsx` does for
-        // the action hierarchy.
+        // and goes red.
         "--fs-body-sm": "13px",
       } as React.CSSProperties
     }

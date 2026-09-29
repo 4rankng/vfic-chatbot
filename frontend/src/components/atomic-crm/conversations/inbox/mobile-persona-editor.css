@@ -1135,7 +1135,7 @@
   backdrop-filter: none;
 }
 
-.tailkit-workspace-content .persona-edit-savebar button[data-slot="button"] {
+.workspace-frame-content .persona-edit-savebar button[data-slot="button"] {
   min-height: 44px !important;
   height: 44px !important;
 }
@@ -1248,7 +1248,7 @@
   }
 
   .persona-edit-import-actions [data-slot="button"],
-  .tailkit-workspace-content .persona-edit-savebar button[data-slot="button"],
+  .workspace-frame-content .persona-edit-savebar button[data-slot="button"],
   .persona-assignment-row-actions [data-slot="button"] {
     min-height: 44px !important;
     height: 44px !important;

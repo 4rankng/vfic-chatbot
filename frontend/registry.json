@@ -936,10 +936,6 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/conversations/domain/channel-labels.ts",
-          "type": "registry:component"
-        },
-        {
           "path": "src/components/atomic-crm/conversations/domain/candidate-notes.ts",
           "type": "registry:component"
         },
@@ -1052,10 +1048,6 @@
           "type": "registry:style"
         },
         {
-          "path": "src/components/atomic-crm/kit/tailkit-system.css",
-          "type": "registry:style"
-        },
-        {
           "path": "src/components/atomic-crm/integrations/settings.css",
           "type": "registry:style"
         },
@@ -1081,10 +1073,6 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/inbox/tokens.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/tailkit-redesign.css",
           "type": "registry:style"
         },
         {

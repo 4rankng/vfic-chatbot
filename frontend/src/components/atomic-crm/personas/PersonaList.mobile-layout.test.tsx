@@ -20,7 +20,7 @@ describe("PersonaList mobile layout", () => {
     const screen = await render(
       <TestMessages>
         <div className="workspace-frame">
-          <main className="workspace-frame-content tailkit-workspace-content">
+          <main className="workspace-frame-content">
             <div className="settings-workspace-content">
               <section className="settings-embedded-resource">
                 <div className="persona-workspace-content">

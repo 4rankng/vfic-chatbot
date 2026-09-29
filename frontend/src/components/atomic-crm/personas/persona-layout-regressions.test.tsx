@@ -56,7 +56,7 @@ const studio = (overview: ReactNode) => (
                 <div className="persona-panel-heading">
                   <div className="min-w-0">
                     <h2>Agent</h2>
-                    <p className="text-[length:var(--text-body-sm)] font-medium whitespace-nowrap tabular-nums text-[var(--tt-ink-muted)]">
+                    <p className="text-[length:var(--text-body-sm)] font-medium whitespace-nowrap tabular-nums text-[var(--workspace-ink-muted)]">
                       3 hồ sơ
                     </p>
                   </div>
@@ -80,7 +80,7 @@ const studio = (overview: ReactNode) => (
                   aria-label="Tìm Agent"
                 />
               </label>
-              <div className="persona-directory-surface rounded-sm border border-[var(--tt-border)] bg-[var(--tt-surface-lift)] p-1.5">
+              <div className="persona-directory-surface rounded-sm border border-[var(--workspace-border)] bg-[var(--card)] p-1.5">
                 <div className="persona-directory-list">
                   <article className="tt-list-row persona-directory-row">
                     <div className="persona-directory-main">Tuyển dụng</div>

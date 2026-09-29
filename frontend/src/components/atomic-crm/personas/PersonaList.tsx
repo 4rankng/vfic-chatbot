@@ -181,7 +181,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                     <div className="min-w-0">
                       <h2>Agent</h2>
                       {!isPending ? (
-                        <p className="text-[length:var(--text-body-sm)] font-medium whitespace-nowrap tabular-nums text-[var(--tt-ink-muted)]">
+                        <p className="text-[length:var(--text-body-sm)] font-medium whitespace-nowrap tabular-nums text-[var(--workspace-ink-muted)]">
                           {numberFormatter.format(totalCount)} hồ sơ
                         </p>
                       ) : null}
@@ -227,7 +227,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                   /* `a-c-tables-08` treats the list as one framed surface. The
                      Agent rail is a card list, not a table, so the frame holds
                      the cards instead of the rows carrying their own boxes. */
-                  <div className="persona-directory-surface overflow-hidden rounded-sm border border-[var(--tt-border)] bg-[var(--tt-surface-lift)] p-1.5">
+                  <div className="persona-directory-surface overflow-hidden rounded-sm border border-[var(--workspace-border)] bg-[var(--card)] p-1.5">
                     <div className="tt-list persona-directory-list persona-agent-bubbles">
                       {filteredPersonas.length > 0 ? (
                         filteredPersonas.map((p) => (
@@ -241,7 +241,7 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                           />
                         ))
                       ) : (
-                        <p className="persona-empty-results text-[length:var(--text-body-sm)] text-[var(--tt-ink-muted)]">
+                        <p className="persona-empty-results text-[length:var(--text-body-sm)] text-[var(--workspace-ink-muted)]">
                           Không tìm thấy Agent phù hợp.
                         </p>
                       )}

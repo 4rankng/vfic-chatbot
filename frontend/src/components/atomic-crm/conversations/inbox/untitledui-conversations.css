@@ -27,29 +27,6 @@
     color-mix(in srgb, var(--uu-inbox-brand) 18%, transparent);
 
   /* Replace the previous page-local emerald skin with the product brand. */
-  --tailkit-brand: var(--uu-inbox-brand);
-  --tailkit-brand-hover: var(--uu-inbox-brand-hover);
-  --tailkit-brand-soft: var(--uu-inbox-brand-soft);
-  --tailkit-brand-line: var(--uu-inbox-brand-line);
-  --tailkit-canvas: var(--uu-inbox-canvas);
-  --tailkit-shell: color-mix(
-    in srgb,
-    var(--uu-inbox-surface-subtle) 92%,
-    var(--uu-inbox-brand-soft)
-  );
-  --tailkit-surface: var(--uu-inbox-surface);
-  --tailkit-surface-muted: var(--uu-inbox-surface-subtle);
-  --tailkit-ink: var(--uu-inbox-ink);
-  --tailkit-muted: var(--uu-inbox-muted);
-  --tailkit-faint: var(--uu-inbox-faint);
-  --tailkit-line: var(--uu-inbox-line);
-  --tailkit-line-soft: color-mix(
-    in srgb,
-    var(--uu-inbox-line) 82%,
-    transparent
-  );
-  --tailkit-shadow-xs: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
-
   --brand: var(--uu-inbox-brand);
   --brand-hover: var(--uu-inbox-brand-hover);
   --brand-light: var(--uu-inbox-brand-soft);
@@ -460,8 +437,8 @@
 /* a-c-chat-01 at console density: fill-only bubbles (no border, no shadow),
    `rounded-2xl` with the near bottom corner squared, `p-3` padding and the
    `text-sm` body scale. Inbound sits on the muted surface, outbound on the solid
-   brand fill with white text. Colours resolve through the `--tt-*` role bridge
-   declared in `inbox/tokens.css`. */
+   brand fill with white text. Colours resolve through the console's
+   `--workspace-*` roles, which this sheet re-points at the inbox brand above. */
 .inbox-bg-container .bubble {
   max-width: min(80%, 680px);
   padding: 12px;
@@ -472,14 +449,14 @@
 
 .inbox-bg-container .message-row.user .bubble {
   border-bottom-left-radius: 0;
-  background: var(--tt-surface-muted);
-  color: var(--tt-ink);
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-ink);
 }
 
 .inbox-bg-container .message-row.bot .bubble,
 .inbox-bg-container .message-row.agent .bubble {
   border-bottom-right-radius: 0;
-  background: var(--tt-accent);
+  background: var(--workspace-action);
   color: #ffffff;
 }
 
@@ -496,7 +473,7 @@
 }
 
 .inbox-bg-container .message-row.user .bubble-time-inline {
-  color: var(--tt-ink-muted);
+  color: var(--workspace-ink-muted);
 }
 
 /* The outbound bubble is a solid brand fill, so its meta row is set in white

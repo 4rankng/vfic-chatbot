@@ -77,7 +77,7 @@
 }
 
 /* The list's empty / filtered / error states render the shared kit
-   `EmptyState` (dashed `--tt-border` frame, accent-soft icon disc,
+   `EmptyState` (dashed `--workspace-border` frame, accent-soft icon disc,
    section-title heading, optional action row). The list only supplies the
    inset: the directory is a narrow column, so the frame keeps clear of the rail
    above it and of the panel edges. */

@@ -55,8 +55,8 @@
  * 4. TOKENS ARE EMITTED ON USE, not eagerly, so an unused token costs zero bytes.
  *    A token that looks "missing" from a build is a token nothing references yet.
  *
- * Imported ONCE from src/index.css, after tailkit-tokens.css. Never add a second
- * `@import "tailwindcss"`.
+ * Imported ONCE from src/index.css, after styles/untitledui.css. Never add a
+ * second `@import "tailwindcss"`.
  */
 
 @theme {
@@ -524,16 +524,8 @@
   );
 
   --color-border-primary: var(--border);
-  --color-border-secondary: color-mix(
-    in oklab,
-    var(--border) 72%,
-    var(--card)
-  );
-  --color-border-tertiary: color-mix(
-    in oklab,
-    var(--border) 46%,
-    var(--card)
-  );
+  --color-border-secondary: color-mix(in oklab, var(--border) 72%, var(--card));
+  --color-border-tertiary: color-mix(in oklab, var(--border) 46%, var(--card));
   --color-border-brand: var(--primary);
   --color-border-brand_alt: var(--primary);
 

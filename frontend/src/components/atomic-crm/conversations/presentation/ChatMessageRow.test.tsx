@@ -5,10 +5,10 @@
 // the real component inside the real `.inbox-bg-container` scope rather than on
 // a stylesheet's source text — the TEST-17 shape this repo uses for feature CSS.
 //
-// The fills are compared against probes painted from the same `--tt-*` tokens,
-// so the assertion is "the bubble wears the muted / brand role", not a hex value
-// a palette refresh would invalidate. A transparent probe fails the test loudly
-// instead of letting both sides compare equal.
+// The fills are compared against probes painted from the same `--workspace-*`
+// roles as the bubble, so the assertion is "the bubble wears the muted / brand
+// role", not a hex value a palette refresh would invalidate. A transparent probe
+// fails the test loudly instead of letting both sides compare equal.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
@@ -48,9 +48,12 @@ const frame = (kind: ConversationMessageKind) => (
     </div>
     <span
       data-probe="muted"
-      style={{ backgroundColor: "var(--tt-surface-muted)" }}
+      style={{ backgroundColor: "var(--workspace-surface-muted)" }}
     />
-    <span data-probe="accent" style={{ backgroundColor: "var(--tt-accent)" }} />
+    <span
+      data-probe="accent"
+      style={{ backgroundColor: "var(--workspace-action)" }}
+    />
   </div>
 );
 

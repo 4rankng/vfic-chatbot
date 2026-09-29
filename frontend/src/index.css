@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./styles/untitledui.css";
-@import "./styles/tailkit-tokens.css";
 @import "./styles/untitledui-theme.css";
 
 /* Load only the Latin and Vietnamese WOFF2 subsets used by the console. The
@@ -708,6 +707,103 @@ input:-webkit-autofill:focus {
   overflow-y: auto;
   border-top-left-radius: 1.5rem;
   background: var(--workspace-canvas);
+}
+
+/* --------------------------------------------------------------------------
+   Workspace content chrome.
+   The console contract for everything rendered inside the authenticated shell,
+   scoped to the element every workspace scrolls in (`.workspace-frame-content`,
+   set by layout/workspace-shell.tsx). This is console colour and geometry, not a
+   Tailkit layer: it used to live in the retired
+   src/components/atomic-crm/kit/tailkit-system.css and moved here with the shell.
+   -------------------------------------------------------------------------- */
+.workspace-frame-content :where([data-slot="card"]) {
+  border-color: var(--workspace-border);
+  border-radius: 12px;
+}
+
+.workspace-frame-content :where([data-slot="card-header"]) {
+  border-color: var(--workspace-border);
+}
+
+.workspace-frame-content
+  :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select) {
+  border-color: var(--workspace-border);
+}
+
+.workspace-frame-content :where(table) {
+  font-variant-numeric: tabular-nums;
+}
+
+.workspace-frame-content :where(thead) {
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-ink-muted);
+}
+
+.workspace-frame-content :where(tbody tr) {
+  border-color: var(--workspace-border);
+}
+
+.workspace-frame-content :where(tbody tr:hover) {
+  background: color-mix(in srgb, var(--workspace-teal-soft) 45%, transparent);
+}
+
+/* Disabled solid actions neutralize the fill instead of fading it: white labels
+   over a half-transparent brand fill turned pastel and illegible, so the console
+   swaps to a muted surface + muted ink at full opacity. */
+.workspace-frame-content .tt-btn-primary:disabled,
+.workspace-frame-content .tt-btn-error:disabled {
+  border-color: var(--workspace-border);
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-ink-muted);
+  opacity: 1;
+}
+
+/* One compact desktop action hierarchy for daisyUI-styled actions: small,
+   normal and large text actions are 28/32/36px with 13px semibold labels.
+   The exclusions are part of the contract — icon-only controls stay square,
+   touch controls keep their own height, and conversation rows keep theirs. */
+@media (min-width: 768px) {
+  .workspace-frame-content
+    .tt-btn:not(.conversation):not(.tt-btn-square):not(.tt-btn-circle):not(
+      .tt-btn-sm
+    ):not(.tt-btn-touch) {
+    height: 2rem !important;
+    min-height: 2rem !important;
+    font-size: var(--fs-body-sm) !important;
+    font-weight: var(--fw-semibold);
+  }
+
+  .workspace-frame-content
+    .tt-btn.tt-btn-sm:not(.conversation):not(.tt-btn-square):not(
+      .tt-btn-circle
+    ) {
+    height: 1.75rem !important;
+    min-height: 1.75rem !important;
+    font-size: var(--fs-body-sm) !important;
+    font-weight: var(--fw-semibold);
+  }
+
+  .workspace-frame-content
+    .tt-btn.tt-btn-lg:not(.conversation):not(.tt-btn-square):not(
+      .tt-btn-circle
+    ):not(.tt-btn-touch) {
+    height: 2.25rem !important;
+    min-height: 2.25rem !important;
+    font-size: var(--fs-body-sm) !important;
+    font-weight: var(--fw-semibold);
+  }
+}
+
+/* Every control inside the workspace keeps the 44px touch-target floor at phone
+   widths, whatever height its own variant declares. */
+@media (max-width: 767px) {
+  .workspace-frame-content button:not(.conversation),
+  .workspace-frame-content a[role="button"],
+  .workspace-frame-content input:not([type="checkbox"]):not([type="radio"]),
+  .workspace-frame-content select {
+    min-height: 44px !important;
+  }
 }
 
 /* The ink chrome — topbar and navigation rail are one connected region that

@@ -14,10 +14,9 @@ import untitledTokens from "../../styles/untitledui-theme.css?raw";
  * UI's namespaces verbatim would silently repaint every existing `bg-primary`,
  * `bg-secondary`, `text-primary` and `border-primary` in the console.
  *
- * These assertions pin the resolution of that collision. Like
- * `tailkit-contract.test.ts`, they read source text rather than rendered layout,
- * because this browser-mode project runs only `react()` — `@tailwindcss/vite` is
- * not configured here, so `@theme` is never expanded in the test environment.
+ * These assertions read source text rather than rendered layout, because this
+ * browser-mode project runs only `react()` — `@tailwindcss/vite` is not
+ * configured here, so `@theme` is never expanded in the test environment.
  */
 
 /** Strip comments so prose in the header cannot satisfy an assertion. */
