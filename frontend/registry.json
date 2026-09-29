@@ -19,15 +19,18 @@
       "dependencies": [
         "@radix-ui/react-radio-group@^1.4.0",
         "@tanstack/react-query@^5.90.21",
+        "@untitledui/icons@^0.0.23",
         "dompurify@^3.4.0",
         "lucide-react@^0.542.0",
         "marked@^17.0.1",
         "ra-core@^5.14.7",
         "ra-i18n-polyglot@^5.14.7",
         "react@^19.2.4",
+        "react-aria-components@^1.21.1",
         "react-dropzone@^14.4.1",
         "react-error-boundary@^6.1.2",
         "react-hook-form@^7.88.0",
+        "react-hotkeys-hook@^5.3.3",
         "react-router@^7.17.0",
         "react-router-dom@^7.17.0",
         "socket.io-client@^4.8.3",
@@ -469,11 +472,11 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/layout/workspace-navigation.ts",
+          "path": "src/components/atomic-crm/layout/workspace-shell.tsx",
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/layout/workspace-frame.tsx",
+          "path": "src/components/atomic-crm/layout/workspace-nav-model.ts",
           "type": "registry:component"
         },
         {
@@ -482,10 +485,6 @@
         },
         {
           "path": "src/components/atomic-crm/layout/Layout.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/layout/Header.tsx",
           "type": "registry:component"
         },
         {
@@ -501,11 +500,19 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/layout/topbar/notifications-menu.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/layout/topbar/command-palette.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/layout/topbar/attention-queries.ts",
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/layout/topbar/NotificationsPopover.tsx",
+          "path": "src/components/atomic-crm/layout/topbar/account-menu.tsx",
           "type": "registry:component"
         },
         {
@@ -633,7 +640,15 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/kit/list-table.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/kit/index.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/kit/form-controls.tsx",
           "type": "registry:component"
         },
         {
@@ -921,6 +936,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/conversations/domain/channel-labels.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/domain/candidate-notes.ts",
           "type": "registry:component"
         },
@@ -1005,6 +1024,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/hooks/use-breakpoint.ts",
+          "type": "registry:hook"
+        },
+        {
           "path": "src/lib/vietnameseSearch.ts",
           "type": "registry:lib"
         },
@@ -1026,14 +1049,6 @@
         },
         {
           "path": "src/components/atomic-crm/performance/performance.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/layout/mobile-workspace.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/layout/desktop-workspace.css",
           "type": "registry:style"
         },
         {
