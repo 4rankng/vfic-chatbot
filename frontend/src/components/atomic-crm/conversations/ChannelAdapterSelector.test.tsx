@@ -2,6 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+
+import type { ConversationChannelProvider } from "./domain/conversation-list-filters";
 
 const { mockApiJson } = vi.hoisted(() => ({
   mockApiJson: vi.fn(),
@@ -292,5 +295,43 @@ describe("ChannelAdapterSelector", () => {
     // per badge, once per interval, one cache entry — not one poller each.
     expect(mockApiJson.mock.calls.length).toBe(5);
     expect(queryClient.getQueryCache().getAll()).toHaveLength(1);
+  });
+
+  it("toggles the active filter off and drops the selection highlight", async () => {
+    // Tap-to-filter, tap-again-to-clear: the second tap on the active channel
+    // must clear the selection state (aria-checked/data-state) so no skin
+    // keeps painting it as the active filter.
+    const Harness = () => {
+      const [provider, setProvider] = useState<
+        ConversationChannelProvider | undefined
+      >("zalo_bot");
+      return (
+        <div className="inbox-bg-container">
+          <ChannelAdapterSelectorView
+            provider={provider}
+            counts={{
+              zalo_bot: 0,
+              zalo_oa: 0,
+              facebook_messenger: 0,
+              tingting_oa: 0,
+            }}
+            onProviderChange={setProvider}
+          />
+        </div>
+      );
+    };
+    const screen = await render(<Harness />);
+
+    const zaloBot = screen.getByRole("radio", { name: "Zalo Chatbot" });
+    await expect.element(zaloBot).toBeChecked();
+    await zaloBot.click();
+
+    const option = screen.container.querySelector(
+      '.channel-adapter-option[value="zalo_bot"]',
+    ) as HTMLElement;
+    // aria-checked is the state hook both inbox skins key the highlight on;
+    // data-state on this element belongs to the Tooltip trigger (see the
+    // selector-scope test above).
+    expect(option.getAttribute("aria-checked")).toBe("false");
   });
 });

@@ -141,9 +141,14 @@
     0 4px 10px color-mix(in srgb, var(--workspace-active) 18%, transparent);
 }
 
-.inbox-bg-container .channel-adapter-option:hover {
-  border-color: var(--workspace-active);
-  transform: translateY(-1px);
+/* Hover affordances only where :hover can actually leave: touch devices keep
+   :hover stuck on the last-tapped element, which re-painted the active-colour
+   border after the filter was toggled off — the selection looked never cleared. */
+@media (hover: hover) {
+  .inbox-bg-container .channel-adapter-option:hover {
+    border-color: var(--workspace-active);
+    transform: translateY(-1px);
+  }
 }
 
 .inbox-bg-container .channel-adapter-badge {

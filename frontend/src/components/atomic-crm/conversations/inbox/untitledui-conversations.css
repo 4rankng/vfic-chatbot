@@ -202,10 +202,14 @@
   height: 30px;
 }
 
-.inbox-bg-container .channel-adapter-option:hover {
-  background: var(--uu-inbox-surface);
-  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
-  transform: none;
+/* Touch devices keep :hover stuck after a tap; gate so the hover surface never
+   lingers over a cleared filter selection. */
+@media (hover: hover) {
+  .inbox-bg-container .channel-adapter-option:hover {
+    background: var(--uu-inbox-surface);
+    box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+    transform: none;
+  }
 }
 
 /* Keyed on aria-checked, not data-state: the option is also a TooltipTrigger
