@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
+import { Button } from "@/components/base/buttons/button";
+
 import {
   STAGE_LABELS,
   STAGE_TARGETS,
@@ -11,6 +13,10 @@ import type { PerfMetrics } from "../../usePerformanceStats";
 /**
  * Narrow-screen twin of the stage matrix: the same candidate/internal stage
  * groups, collapsed behind one disclosure per group.
+ *
+ * Each disclosure is an Untitled UI button; it still renders a real `<button>`
+ * as a direct child of `.performance-diagnostic-group`, which is the hook the
+ * phone block in `performance.css` styles.
  */
 export const MobileDiagnostics = ({
   candidate,
@@ -37,14 +43,15 @@ export const MobileDiagnostics = ({
           const open = openGroup === group.id;
           return (
             <section key={group.id} className="performance-diagnostic-group">
-              <button
+              <Button
                 type="button"
+                color="tertiary"
                 aria-expanded={open}
+                iconTrailing={<ChevronDown aria-hidden="true" />}
                 onClick={() => setOpenGroup(open ? null : group.id)}
               >
                 <span>{group.label}</span>
-                <ChevronDown aria-hidden="true" />
-              </button>
+              </Button>
               {open ? (
                 <div className="performance-diagnostic-rows">
                   {group.rows.map((key) => {

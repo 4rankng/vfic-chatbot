@@ -1,4 +1,4 @@
-import { useState, type ComponentProps, type ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import { Form, required, useInput, useNotify } from "ra-core";
 import type { SubmitHandler, FieldValues } from "react-hook-form";
 import { Link, useNavigate } from "react-router";
@@ -10,9 +10,10 @@ import {
   Mail,
   RotateCcw,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+
+import { Button } from "@/components/base/buttons/button";
+import { InputBase, TextField } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
 import { Notification } from "@/components/admin/notification";
 import {
   requestPasswordResetOtp,
@@ -24,6 +25,21 @@ import { AuthShell } from "./AuthShell";
 
 type Step = "email" | "otp";
 
+/**
+ * The recovery flow renders on the same Untitled UI anatomy as the sign-in form:
+ * `TextField` / `Label` / `InputBase` for the fields and `Button` for the three
+ * actions.
+ *
+ * `validationBehavior="aria"` keeps React Aria's default `native` behaviour from
+ * writing `required` onto the input, so react-admin's own validator runs and the
+ * user sees the console's Vietnamese error instead of a browser bubble.
+ * `uu-scope` re-binds the four utility names this console and Untitled UI both
+ * define (`bg-primary`, `bg-secondary`, `text-primary`, `border-primary`) — see
+ * `src/styles/untitledui-theme.css`.
+ *
+ * The password fields compose `InputBase` rather than the composed `Input` so no
+ * English-labelled reveal eye is introduced: the flow has never offered one.
+ */
 export const ForgotPasswordPage = () => {
   const { manifest } = useInstallationContext();
   const notify = useNotify();
@@ -120,17 +136,14 @@ export const ForgotPasswordPage = () => {
                 />
                 <Button
                   type="submit"
-                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-button font-semibold"
-                  disabled={loading}
+                  size="lg"
+                  className="mt-2 h-12 w-full"
+                  isDisabled={loading}
+                  isLoading={loading}
+                  showTextWhileLoading
+                  iconTrailing={loading ? undefined : ArrowRight}
                 >
-                  {loading ? (
-                    <span
-                      className="tt-loading tt-loading-spinner tt-loading-sm"
-                      aria-hidden="true"
-                    />
-                  ) : null}
                   Gửi mã OTP
-                  {!loading ? <ArrowRight className="size-4" /> : null}
                 </Button>
               </Form>
             ) : (
@@ -167,33 +180,28 @@ export const ForgotPasswordPage = () => {
                 />
                 <Button
                   type="submit"
-                  className="mt-2 h-12 w-full cursor-pointer rounded-md text-button font-semibold"
-                  disabled={loading}
+                  size="lg"
+                  className="mt-2 h-12 w-full"
+                  isDisabled={loading}
+                  isLoading={loading}
+                  showTextWhileLoading
+                  iconTrailing={loading ? undefined : ArrowRight}
                 >
-                  {loading ? (
-                    <span
-                      className="tt-loading tt-loading-spinner tt-loading-sm"
-                      aria-hidden="true"
-                    />
-                  ) : null}
                   Đổi mật khẩu
-                  {!loading ? <ArrowRight className="size-4" /> : null}
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
-                  className="h-12 w-full rounded-md text-button font-semibold"
-                  disabled={loading || !canResend}
+                  color="secondary"
+                  size="lg"
+                  className="h-12 w-full"
+                  isDisabled={loading || !canResend}
+                  isLoading={isResending}
+                  showTextWhileLoading
+                  iconLeading={
+                    isResending ? undefined : <RotateCcw className="size-4" />
+                  }
                   onClick={() => resendOtp(email)}
                 >
-                  {isResending ? (
-                    <span
-                      className="tt-loading tt-loading-spinner tt-loading-sm"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <RotateCcw className="size-4" />
-                  )}
                   {cooldownLeft > 0
                     ? `Gửi lại mã (${cooldownLeft}s)`
                     : "Gửi lại mã"}
@@ -220,46 +228,66 @@ export const ForgotPasswordPage = () => {
   );
 };
 
-type RecoveryFieldProps = ComponentProps<"input"> & {
+type RecoveryFieldProps = {
   label: string;
   source: string;
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  type?: "text" | "email" | "password";
+  placeholder?: string;
+  autoComplete?: string;
+  inputMode?: "numeric" | "text";
+  defaultValue?: string;
+  disabled?: boolean;
+  icon: ComponentType<{ className?: string }>;
 };
 
 const RecoveryField = ({
   label,
   source,
-  icon: Icon,
   type = "text",
+  placeholder,
+  autoComplete,
+  inputMode,
   defaultValue,
-  ...inputProps
+  disabled,
+  icon: Icon,
 }: RecoveryFieldProps) => {
   const { id, field, isRequired } = useInput({
     source,
     type,
-    validate: inputProps.disabled ? undefined : required(),
+    validate: disabled ? undefined : required(),
     defaultValue,
   });
 
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id} className="font-semibold text-muted-foreground">
-        {label}
-      </Label>
-      <div className="relative">
-        <Icon
-          aria-hidden
-          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          id={id}
-          type={type}
-          required={isRequired}
-          className="h-12 rounded-md bg-background/70 pl-11 text-control shadow-none placeholder:text-muted-foreground/70 disabled:opacity-100"
-          {...inputProps}
-          {...field}
-        />
-      </div>
-    </div>
+    <TextField
+      id={id}
+      className="uu-scope gap-1.5"
+      name={field.name}
+      type={type}
+      value={typeof field.value === "string" ? field.value : ""}
+      onChange={(value: string) => field.onChange(value)}
+      onBlur={field.onBlur}
+      validationBehavior="aria"
+      isRequired={isRequired}
+      isDisabled={disabled}
+    >
+      <Label>{label}</Label>
+      {/*
+        `[&>button]:hidden` suppresses the primitive's password eye. This flow has
+        never offered a reveal action, and the primitive's eye is labelled in
+        English — the console is Vietnamese-only.
+      */}
+      <InputBase
+        ref={field.ref}
+        type={type}
+        icon={Icon}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
+        isDisabled={disabled}
+        inputClassName="min-h-12"
+        wrapperClassName={type === "password" ? "[&>button]:hidden" : undefined}
+      />
+    </TextField>
   );
 };

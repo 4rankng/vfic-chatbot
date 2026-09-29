@@ -2,7 +2,6 @@ import { useMutation } from "@tanstack/react-query";
 import {
   CircleX,
   Globe2,
-  LoaderCircle,
   LogOut,
   Pencil,
   Save,
@@ -11,26 +10,25 @@ import {
 } from "lucide-react";
 import {
   Form,
+  required,
   useGetIdentity,
   useGetOne,
+  useInput,
   useLocaleState,
   useLocales,
   useLogout,
   useNotify,
   useRecordContext,
   useTranslate,
+  ValidationError,
 } from "ra-core";
 import { useState } from "react";
 import { useFormContext, useFormState } from "react-hook-form";
-import { TextInput } from "@/components/admin/text-input";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/base/buttons/button";
+import { InputBase, TextField } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
+import { Select } from "@/components/base/select/select";
+import type { SelectItemType } from "@/components/base/select/select-shared";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { InboxIcons } from "../conversations/InboxIcons";
 import { apiJson, ApiError } from "@/lib/apiClient";
@@ -170,30 +168,25 @@ const ProfileForm = ({
               <>
                 <Button
                   type="button"
-                  variant="ghost"
+                  color="tertiary"
+                  className="profile-action-button"
+                  iconLeading={<CircleX />}
                   onClick={() => {
                     reset();
                     setEditMode(false);
                   }}
-                  className="profile-action-button tt-btn-touch"
                 >
-                  <CircleX />
                   {translate("ra.action.cancel")}
                 </Button>
                 <Button
                   type="submit"
-                  disabled={!isDirty || isSaving}
-                  className={`profile-action-button profile-save-button tt-btn-touch ${
-                    !isDirty || isSaving
-                      ? "text-[var(--muted-foreground)]!"
-                      : ""
-                  }`}
+                  color="primary"
+                  className="profile-action-button profile-save-button"
+                  isDisabled={!isDirty || isSaving}
+                  isLoading={isSaving}
+                  showTextWhileLoading
+                  iconLeading={isSaving ? undefined : <Save />}
                 >
-                  {isSaving ? (
-                    <LoaderCircle className="size-4 animate-spin" />
-                  ) : (
-                    <Save />
-                  )}
                   {isSaving
                     ? translate("crm.common.saving")
                     : translate("ra.action.save")}
@@ -202,11 +195,11 @@ const ProfileForm = ({
             ) : (
               <Button
                 type="button"
-                variant="outline"
+                color="secondary"
+                className="profile-action-button"
+                iconLeading={<Pencil />}
                 onClick={() => setEditMode(true)}
-                className="profile-action-button tt-btn-touch"
               >
-                <Pencil />
                 {translate("ra.action.edit")}
               </Button>
             )}
@@ -228,11 +221,11 @@ const ProfileForm = ({
           </div>
           <Button
             type="button"
-            variant="outline"
+            color="secondary"
+            className="profile-action-button profile-logout-button"
+            iconLeading={<LogOut className="size-4" />}
             onClick={() => logout()}
-            className="profile-action-button profile-logout-button tt-btn-touch"
           >
-            <LogOut className="size-4" />
             {translate("ra.auth.logout")}
           </Button>
         </div>
@@ -250,23 +243,29 @@ const LanguageSelector = () => {
     return null;
   }
 
+  const items: SelectItemType[] = locales.map((language) => ({
+    id: language.locale,
+    label: language.name,
+  }));
+
   return (
     <div className="profile-field">
       <div className="profile-field-label-row">
         <Globe2 className="size-3.5" aria-hidden="true" />
         <span className="profile-field-label">{translate("crm.language")}</span>
       </div>
-      <Select value={locale} onValueChange={setLocale}>
-        <SelectTrigger className="profile-select-trigger">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {locales.map((language) => (
-            <SelectItem key={language.locale} value={language.locale}>
-              {language.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
+      <Select
+        aria-label={translate("crm.language")}
+        className="uu-scope profile-select-trigger"
+        items={items}
+        selectedKey={locale}
+        onSelectionChange={(key) => {
+          if (key != null) setLocale(String(key));
+        }}
+      >
+        {(item: SelectItemType) => (
+          <Select.Item id={item.id} label={item.label} />
+        )}
       </Select>
     </div>
   );
@@ -285,15 +284,7 @@ const TextRender = ({
   const record = useRecordContext<Profile>();
   const label = `resources.users.fields.${source}`;
   if (isEditMode) {
-    return (
-      <TextInput
-        source={source}
-        label={label}
-        helperText={false}
-        className={`profile-field profile-field-editing ${className ?? ""}`}
-        inputClassName="profile-input"
-      />
-    );
+    return <ProfileTextField source={source} className={className} />;
   }
   return (
     <div className={`profile-field ${className ?? ""}`}>
@@ -304,6 +295,68 @@ const TextRender = ({
         {record?.[source]?.trim() || "Chưa cập nhật"}
       </span>
     </div>
+  );
+};
+
+/**
+ * Editable profile field on Untitled UI's `TextField` / `Label` / `InputBase`.
+ *
+ * `useInput` is react-admin's own hook, so the field registers, validates and
+ * submits exactly like the `TextInput` it replaces — the screen swaps the
+ * control, not the form engine. `validationBehavior="aria"` keeps React Aria's
+ * default `native` behaviour from writing `required` onto the input and letting
+ * the browser block the submit before react-admin validates.
+ *
+ * `uu-scope` and the console's `profile-*` classes both ride the control: the
+ * wrapper re-binds the four utility names this console and Untitled UI both
+ * define (`bg-primary`, `bg-secondary`, `text-primary`, `border-primary`), while
+ * the profile sheet keeps owning the field's density. See
+ * `src/styles/untitledui-theme.css`.
+ */
+const ProfileTextField = ({
+  source,
+  className,
+}: {
+  source: ProfileFieldSource;
+  className?: string;
+}) => {
+  const translate = useTranslate();
+  const label = `resources.users.fields.${source}`;
+  const { id, field, fieldState, isRequired } = useInput({
+    source,
+    validate: required(),
+  });
+  const type = source === "email" ? "email" : "text";
+
+  return (
+    <TextField
+      id={id}
+      className={`profile-field profile-field-editing uu-scope ${className ?? ""}`}
+      name={field.name}
+      type={type}
+      value={typeof field.value === "string" ? field.value : ""}
+      onChange={(value: string) => field.onChange(value)}
+      onBlur={field.onBlur}
+      validationBehavior="aria"
+      isRequired={isRequired}
+      isInvalid={Boolean(fieldState.error)}
+    >
+      <Label className="profile-field-label">
+        {translate(label, { _: source })}
+      </Label>
+      <InputBase
+        ref={field.ref}
+        type={type}
+        autoComplete={source === "email" ? "email" : "name"}
+        isInvalid={Boolean(fieldState.error)}
+        wrapperClassName="profile-input"
+      />
+      {fieldState.error?.message ? (
+        <p role="alert" className="text-helper text-[var(--workspace-danger)]">
+          <ValidationError error={fieldState.error.message} />
+        </p>
+      ) : null}
+    </TextField>
   );
 };
 

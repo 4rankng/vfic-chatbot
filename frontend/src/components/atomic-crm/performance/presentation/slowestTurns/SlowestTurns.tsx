@@ -1,7 +1,8 @@
 import { Fragment, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 
 import {
   LANE_LABELS,
@@ -100,29 +101,31 @@ export const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
                           </Status>
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="performance-expand"
-                            aria-expanded={isOpen}
-                            aria-label={
+                          <ButtonUtility
+                            tooltip={
                               isOpen ? "Thu gọn chi tiết" : "Mở rộng chi tiết"
                             }
+                            size="xs"
+                            color="tertiary"
+                            className="performance-expand"
+                            aria-expanded={isOpen}
                             onClick={() =>
                               setExpandedId(isOpen ? null : turn.id)
                             }
-                          >
-                            {isOpen ? (
-                              <ChevronDown
-                                className="size-4"
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              <ChevronRight
-                                className="size-4"
-                                aria-hidden="true"
-                              />
-                            )}
-                          </button>
+                            icon={
+                              isOpen ? (
+                                <ChevronDown
+                                  className="size-4"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <ChevronRight
+                                  className="size-4"
+                                  aria-hidden="true"
+                                />
+                              )
+                            }
+                          />
                         </td>
                       </tr>
                       {isOpen ? (
@@ -146,19 +149,21 @@ export const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
           {slowTurns.length > 8 ? (
             <Button
               type="button"
-              variant="ghost"
+              color="tertiary"
               size="sm"
               className="performance-show-more"
+              iconTrailing={
+                <ChevronDown
+                  className={showAll ? "is-open size-4" : "size-4"}
+                  aria-hidden="true"
+                />
+              }
               onClick={() => {
                 setShowAll((current) => !current);
                 setExpandedId(null);
               }}
             >
               {showAll ? "Thu gọn" : `Xem thêm ${hiddenCount} lượt`}
-              <ChevronDown
-                className={showAll ? "is-open" : undefined}
-                aria-hidden="true"
-              />
             </Button>
           ) : null}
         </>

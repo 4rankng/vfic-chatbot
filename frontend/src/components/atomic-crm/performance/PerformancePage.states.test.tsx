@@ -63,12 +63,9 @@ describe("PerformancePage wrapper states", () => {
     await expect
       .element(screen.getByRole("heading", { name: "Hiệu suất chatbot" }))
       .toBeVisible();
-    await expect
-      .element(screen.getByLabelText("Đang tải số liệu hiệu suất"))
-      .toBeVisible();
-    expect(
-      screen.container.querySelector(".performance-skeletons"),
-    ).not.toBeNull();
+    const loading = screen.getByLabelText("Đang tải số liệu hiệu suất");
+    await expect.element(loading).toBeVisible();
+    expect(loading.element().getAttribute("role")).toBe("status");
     expect(
       screen.container
         .querySelector(".performance-page")

@@ -1,12 +1,27 @@
 import type { ReactNode } from "react";
 import { ShieldCheck } from "lucide-react";
 
+import { BadgeWithIcon } from "@/components/base/badges/badges";
+
 type AuthShellProps = {
   children: ReactNode;
   productName: string;
 };
 
-/** Shared light-only authentication canvas with a responsive recruiting visual. */
+/**
+ * Shared light-only authentication canvas with a responsive recruiting visual.
+ *
+ * The two identity chips are Untitled UI badges (`BadgeWithIcon`). `uu-scope`
+ * rides each badge because the library and this console both define
+ * `bg-primary` / `bg-secondary` / `text-primary` / `border-primary`; outside it
+ * the chip would paint with the console's meaning. See
+ * `src/styles/untitledui-theme.css`.
+ *
+ * The canvas itself — the `tt-hero` shell, the split brand hero with the
+ * recruiting artwork, the Fraunces display face on the recovery heading, the
+ * `tt-card` framing and every Vietnamese string — is deliberate brand identity
+ * and is kept as it was.
+ */
 export const AuthShell = ({ children, productName }: AuthShellProps) => (
   <main className="tt-hero min-h-svh bg-base-200 p-3 text-base-content sm:p-6 lg:p-8">
     <section
@@ -25,16 +40,26 @@ export const AuthShell = ({ children, productName }: AuthShellProps) => (
           aria-hidden="true"
         />
         <div className="absolute left-4 top-4 lg:hidden">
-          <span className="tt-badge tt-badge-primary tt-badge-soft min-h-7 gap-1.5 px-3 font-semibold">
-            <ShieldCheck className="size-3.5" aria-hidden="true" />
+          <BadgeWithIcon
+            type="pill-color"
+            size="md"
+            color="brand"
+            className="uu-scope"
+            iconLeading={ShieldCheck}
+          >
             Tuyển dụng thông minh
-          </span>
+          </BadgeWithIcon>
         </div>
         <div className="absolute left-10 top-10 hidden max-w-sm lg:block xl:left-14 xl:top-14">
-          <span className="tt-badge tt-badge-primary tt-badge-soft min-h-8 gap-2 px-3 font-semibold">
-            <ShieldCheck className="size-4" aria-hidden="true" />
+          <BadgeWithIcon
+            type="pill-color"
+            size="md"
+            color="brand"
+            className="uu-scope"
+            iconLeading={ShieldCheck}
+          >
             Trung tâm tuyển dụng
-          </span>
+          </BadgeWithIcon>
           <h2 className="mt-6 text-balance text-display font-semibold leading-tight tracking-[-0.035em] text-base-content">
             Kết nối đúng người với đúng cơ hội.
           </h2>

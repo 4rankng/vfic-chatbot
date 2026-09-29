@@ -1,14 +1,14 @@
 import { formatCompactDuration as fmtShortMs } from "../../../reporting/domain/performanceDiagnostics";
+import { conversationChannelLabel } from "../../../conversations/domain/channel-labels";
 import type { PerfMetrics } from "../../usePerformanceStats";
-
-const ADAPTER_LABELS: Record<string, string> = {
-  zalo_bot: "Zalo Chatbot",
-  zalo_oa: "Zalo OA",
-};
 
 /**
  * "So sánh kênh giao gửi" — per-channel delivery, timed to the moment the
  * provider accepted the request rather than the moment the candidate saw it.
+ *
+ * The channel name comes from `conversations/domain/channel-labels`, the single
+ * map every channel-naming surface reads, so this matrix and the inbox can never
+ * label the same provider two different ways.
  */
 export const AdapterComparison = ({ data }: { data: PerfMetrics }) => {
   const rows = data.by_adapter ?? [];
@@ -46,9 +46,7 @@ export const AdapterComparison = ({ data }: { data: PerfMetrics }) => {
               {rows.map((row) => (
                 <tr key={row.adapter}>
                   <td>
-                    <strong>
-                      {ADAPTER_LABELS[row.adapter] ?? row.adapter}
-                    </strong>
+                    <strong>{conversationChannelLabel(row.adapter)}</strong>
                   </td>
                   <td>
                     {row.sent}/{row.turns}

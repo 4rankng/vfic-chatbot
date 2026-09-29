@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
+import { Button } from "@/components/base/buttons/button";
+
 import {
   formatMetricDuration as fmtMs,
   formatStartedAt,
@@ -10,7 +12,14 @@ import {
 import type { PerfSlowTurn } from "../../usePerformanceStats";
 import { Status } from "../primitives";
 
-/** Narrow-screen twin of the slow-turn table row, with its own detail stack. */
+/**
+ * Narrow-screen twin of the slow-turn table row, with its own detail stack.
+ *
+ * The two disclosures are Untitled UI buttons rather than bare `<button>`
+ * elements; each renders a real `<button>` at the same position, so the phone
+ * block in `performance.css` (`.performance-turn-cards > article > button`,
+ * `.performance-mobile-turn-details button`) still owns their geometry.
+ */
 export const MobileTurnCard = ({ turn }: { turn: PerfSlowTurn }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [openDetail, setOpenDetail] = useState<string | null>(null);
@@ -57,21 +66,24 @@ export const MobileTurnCard = ({ turn }: { turn: PerfSlowTurn }) => {
       </div>
       <strong>{fmtMs(turn.total_ms)}</strong>
       <p>{likelyBottleneck(turn)}</p>
-      <button
+      <Button
         type="button"
+        color="tertiary"
         aria-expanded={isOpen}
+        iconTrailing={<ChevronRight aria-hidden="true" />}
         onClick={() => setIsOpen((open) => !open)}
       >
         {isOpen ? "Thu gọn chi tiết" : "Xem chi tiết"}
-        <ChevronRight aria-hidden="true" />
-      </button>
+      </Button>
       {isOpen ? (
         <div className="performance-mobile-turn-details">
           {details.map((detail) => (
             <section key={detail.id}>
-              <button
+              <Button
                 type="button"
+                color="tertiary"
                 aria-expanded={openDetail === detail.id}
+                iconTrailing={<ChevronDown aria-hidden="true" />}
                 onClick={() =>
                   setOpenDetail((current) =>
                     current === detail.id ? null : detail.id,
@@ -79,8 +91,7 @@ export const MobileTurnCard = ({ turn }: { turn: PerfSlowTurn }) => {
                 }
               >
                 <span>{detail.label}</span>
-                <ChevronDown aria-hidden="true" />
-              </button>
+              </Button>
               {openDetail === detail.id ? <p>{detail.value}</p> : null}
             </section>
           ))}

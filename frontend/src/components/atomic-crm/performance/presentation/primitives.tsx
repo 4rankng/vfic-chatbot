@@ -6,6 +6,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
+import { BadgeWithIcon } from "@/components/base/badges/badges";
+
 import type { Tone } from "../../reporting/domain/performanceDiagnostics";
 
 /** Every status/metric surface in the dashboard renders a lucide glyph. */
@@ -14,6 +16,12 @@ export type Icon = ComponentType<{
   "aria-hidden"?: boolean;
 }>;
 
+/**
+ * Tone chip on Untitled UI's `BadgeWithIcon`. `uu-scope` rides the badge
+ * because the library and this console both define `bg-primary` /
+ * `bg-secondary` / `text-primary` / `border-primary`; outside it the chip would
+ * paint with the console's meaning. See `src/styles/untitledui-theme.css`.
+ */
 export const Status = ({
   tone,
   children,
@@ -30,10 +38,23 @@ export const Status = ({
           ? CheckCircle2
           : Activity;
   return (
-    <span className={`performance-status is-${tone}`}>
-      <StatusIcon aria-hidden="true" />
+    <BadgeWithIcon
+      type="pill-color"
+      size="md"
+      color={
+        tone === "danger"
+          ? "error"
+          : tone === "warning"
+            ? "warning"
+            : tone === "success"
+              ? "success"
+              : "gray"
+      }
+      className="uu-scope"
+      iconLeading={StatusIcon}
+    >
       {children}
-    </span>
+    </BadgeWithIcon>
   );
 };
 
