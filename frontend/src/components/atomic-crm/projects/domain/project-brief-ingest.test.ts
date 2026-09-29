@@ -154,6 +154,80 @@ describe("parseProjectBrief — knowledge categories", () => {
   });
 });
 
+describe("parseProjectBrief — plain label lines", () => {
+  // The shape recruiters actually hand over when they are not pasting a
+  // table: one label per line, value on the next line.
+  const LABEL_BRIEF = `Tên dự án *
+LG Display Hải Phòng
+
+Mã dự án *
+lg-display-hai-phong
+
+Tên gọi khác
+LG, LGD
+
+Cách quản lý kiến thức
+Một nội dung
+
+## Giúp ứng viên tìm đúng dự án
+
+Tóm tắt *
+Sản xuất màn hình cho các dòng xe điện.
+
+Địa điểm *
+Hải Phòng
+
+Vị trí tuyển dụng
+Sản xuất, kiểm tra
+
+Điểm nổi bật
+Không yêu cầu kinh nghiệm
+`;
+
+  it("fills the discovery fields the form would otherwise ask for", () => {
+    const brief = parseProjectBrief(LABEL_BRIEF);
+    expect(brief.name).toBe("LG Display Hải Phòng");
+    expect(brief.slug).toBe("lg-display-hai-phong");
+    expect(brief.aliases).toEqual(["LG, LGD"]);
+    expect(brief.summary).toBe("Sản xuất màn hình cho các dòng xe điện.");
+    expect(brief.location).toBe("Hải Phòng");
+    expect(brief.roles).toEqual(["Sản xuất", "kiểm tra"]);
+    expect(brief.highlights).toEqual(["Không yêu cầu kinh nghiệm"]);
+  });
+
+  it("honors the brief's own knowledge-mode line", () => {
+    expect(parseProjectBrief(LABEL_BRIEF).knowledgeMode).toBe("DIRECT_CONTEXT");
+    const brief = parseProjectBrief(
+      "Tên dự án *\nLG\n\nCách quản lý kiến thức\nTheo danh mục",
+    );
+    expect(brief.knowledgeMode).toBe("RAG");
+  });
+
+  it("prefers `Label: value` one-liners when the brief uses them", () => {
+    const brief = parseProjectBrief(
+      "Tên dự án: LG Display Hải Phòng\nĐịa điểm: Hải Phòng\nVị trí tuyển dụng: Sản xuất, kiểm tra",
+    );
+    expect(brief.name).toBe("LG Display Hải Phòng");
+    expect(brief.location).toBe("Hải Phòng");
+    expect(brief.roles).toEqual(["Sản xuất", "kiểm tra"]);
+  });
+
+  it("keeps the overview table canonical when both shapes appear", () => {
+    const brief = parseProjectBrief(
+      "| Tên dự án | 4P ELECTRONIC |\n|---|---|\n\nTên dự án *\nLG Display Hải Phòng",
+    );
+    expect(brief.name).toBe("4P ELECTRONIC");
+  });
+
+  it("never mistakes prose for a label", () => {
+    const brief = parseProjectBrief(
+      "Tên dự án phải dễ nhớ và ngắn gọn\nKhông yêu cầu kinh nghiệm",
+    );
+    expect(brief.name).toBe("");
+    expect(brief.highlights).toEqual([]);
+  });
+});
+
 describe("parseProjectBrief — degenerate input", () => {
   it("returns the empty brief for an empty file", () => {
     const brief = parseProjectBrief("   \n  ");

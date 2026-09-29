@@ -225,17 +225,157 @@ const splitSections = (text: string): BriefSection[] => {
   );
 };
 
-const OVERVIEW_LABELS: readonly (readonly [
-  RegExp,
-  "name" | "aliases" | "address" | "roles" | "summary" | "highlights",
-])[] = [
+type BriefField =
+  | "name"
+  | "aliases"
+  | "address"
+  | "roles"
+  | "summary"
+  | "highlights"
+  | "slug"
+  | "mode";
+
+const OVERVIEW_LABELS: readonly (readonly [RegExp, BriefField])[] = [
   [/^ten du an/, "name"],
   [/^ten (viet tat|thuong goi|goi khac)/, "aliases"],
   [/^(dia chi noi lam viec|dia diem noi lam viec|dia diem)/, "address"],
   [/^vi tri tuyen dung/, "roles"],
   [/^tom tat/, "summary"],
   [/diem noi bat/, "highlights"],
+  [/^ma (du an|project)/, "slug"],
+  [/^cach quan ly kien thuc/, "mode"],
 ] as const;
+
+/** True when a stored overview field carries a value worth keeping. */
+const overviewFieldHasValue = (value: unknown): boolean =>
+  typeof value === "string"
+    ? value.trim().length > 0
+    : Array.isArray(value)
+      ? value.length > 0
+      : value !== undefined && value !== null && value !== "";
+
+/** The mode names a brief writes, folded so marks never decide. */
+const modeFromText = (value: string): ProjectKnowledgeMode | undefined => {
+  const folded = fold(value);
+  if (/mot noi dung/.test(folded)) return "DIRECT_CONTEXT";
+  if (/theo danh muc/.test(folded)) return "RAG";
+  return undefined;
+};
+
+/** `**Tên dự án**`, `Tên dự án *`, `Tên dự án:` — decorations stripped, what
+ *  remains must be exactly a known label: the folded line matches a pattern
+ *  and nothing is left over. The leftover rule is what keeps prose like
+ *  "Tên dự án phải dễ nhớ" from posing as a label. */
+const bareLabelField = (line: string): BriefField | null => {
+  const plain = toPlainText(line).trim();
+  if (!plain || plain.length > 60) return null;
+  const stripped = plain
+    .replace(/^\s*[-*+]\s+/, "")
+    .replace(/[:：*\s]+$/, "")
+    .trim();
+  if (!stripped) return null;
+  const folded = fold(stripped);
+  if (!folded) return null;
+  for (const [pattern, field] of OVERVIEW_LABELS) {
+    if (pattern.test(folded) && folded.replace(pattern, "").trim() === "") {
+      return field;
+    }
+  }
+  return null;
+};
+
+/** `Tên dự án: LG` — label and value on one line, optionally bulleted. */
+const inlineLabeledField = (
+  line: string,
+): { field: BriefField; value: string } | null => {
+  const plain = toPlainText(line)
+    .replace(/^\s*[-*+]\s+/, "")
+    .trim();
+  const match = /^([^:：]{1,60})[:：]\s*(.+)$/.exec(plain);
+  if (!match) return null;
+  const label = match[1].replace(/[*_]/g, "").trim();
+  const folded = fold(label);
+  if (!folded) return null;
+  for (const [pattern, field] of OVERVIEW_LABELS) {
+    if (pattern.test(folded)) return { field, value: match[2].trim() };
+  }
+  return null;
+};
+
+/** Write one labeled value into the accumulator; table-found values are
+ *  merged in later and win, so `??=` never fights the canonical reader. */
+const applyLabeledValue = (
+  into: Partial<Overview>,
+  field: BriefField,
+  rawValue: string,
+): void => {
+  const value = toPlainText(rawValue.split("\n")[0]).trim();
+  if (!value) return;
+  if (field === "name") {
+    into.name ??= value;
+    return;
+  }
+  if (field === "slug") {
+    into.slug ??= value;
+    return;
+  }
+  if (field === "summary") {
+    into.summary ??= value;
+    return;
+  }
+  if (field === "address") {
+    into.address ??= value;
+    return;
+  }
+  if (field === "aliases") into.aliases ??= toAliasList(value);
+  if (field === "roles") into.roles ??= toRoleList(value);
+  if (field === "highlights") into.highlights ??= toList(value);
+  if (field === "mode") into.mode ??= modeFromText(value);
+};
+
+/** The value a bare label owns: the next content line within a short look
+ *  ahead, unless it is itself a label or a table row. */
+const labelValueLine = (
+  lines: readonly string[],
+  start: number,
+): { value: string; index: number } | null => {
+  for (let i = start; i < Math.min(start + 3, lines.length); i += 1) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    if (/^\s*\|/.test(line)) return null;
+    if (inlineLabeledField(line) || bareLabelField(line)) return null;
+    return { value: line.trim(), index: i };
+  }
+  return null;
+};
+
+/** Read the plain `label` → `value` shape briefs write when they are not a
+ *  table: one label per line with the value on the following line, or the
+ *  `Label: value` one-liner. Only fills what the overview table left empty. */
+const readLabeledFields = (
+  sections: readonly BriefSection[],
+): Partial<Overview> => {
+  const found: Partial<Overview> = {};
+  for (const section of sections) {
+    const { lines } = section;
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      if (!line.trim() || /^\s*\|/.test(line)) continue;
+      const inline = inlineLabeledField(line);
+      if (inline) {
+        applyLabeledValue(found, inline.field, inline.value);
+        continue;
+      }
+      const bare = bareLabelField(line);
+      if (!bare) continue;
+      const value = labelValueLine(lines, i + 1);
+      if (!value) continue;
+      applyLabeledValue(found, bare, value.value);
+      i = value.index;
+    }
+  }
+  return found;
+};
 
 type Overview = {
   name: string;
@@ -244,6 +384,8 @@ type Overview = {
   roles: string[];
   summary: string;
   highlights: string[];
+  slug: string;
+  mode: ProjectKnowledgeMode | undefined;
 };
 
 /** Read the `| **Nhãn** | giá trị |` rows of the overview table. A label this
@@ -257,6 +399,8 @@ const readOverview = (sections: readonly BriefSection[]): Overview => {
     roles: [],
     summary: "",
     highlights: [],
+    slug: "",
+    mode: undefined,
   };
   for (const section of sections) {
     for (const line of section.lines) {
@@ -280,6 +424,8 @@ const readOverview = (sections: readonly BriefSection[]): Overview => {
           if (field === "roles") overview.roles = toRoleList(value);
           if (field === "summary") overview.summary = value;
           if (field === "highlights") overview.highlights = toList(value);
+          if (field === "slug") overview.slug = value;
+          if (field === "mode") overview.mode ??= modeFromText(value);
           break;
         }
       }
@@ -435,6 +581,31 @@ export const parseProjectBrief = (text: string): ProjectBrief => {
     for (const answer of answers) place(answer);
   }
 
+  // Plain label lines (and `Label: value` one-liners) fill whatever the
+  // overview table did not state; the table stays canonical when both exist.
+  const merged: Overview = {
+    name: "",
+    aliases: [],
+    address: "",
+    roles: [],
+    summary: "",
+    highlights: [],
+    slug: "",
+    mode: undefined,
+    ...readLabeledFields(sections),
+  };
+  const preferOverview = <K extends keyof Overview>(field: K): void => {
+    if (overviewFieldHasValue(overview[field])) merged[field] = overview[field];
+  };
+  preferOverview("name");
+  preferOverview("aliases");
+  preferOverview("address");
+  preferOverview("roles");
+  preferOverview("summary");
+  preferOverview("highlights");
+  preferOverview("slug");
+  preferOverview("mode");
+
   const categories: Partial<Record<ProjectKnowledgeCategory, string>> = {};
   for (const [category, lines] of bodies) {
     const body = dedupe(lines).join("\n");
@@ -447,18 +618,28 @@ export const parseProjectBrief = (text: string): ProjectBrief => {
   }
 
   const filledCount = Object.keys(categories).length;
-  const knowledgeMode: ProjectKnowledgeMode =
-    filledCount >= CATEGORY_MODE_THRESHOLD ? "RAG" : "DIRECT_CONTEXT";
 
+  const name = merged.name;
+  const explicitSlug = merged.slug.trim();
   return {
-    name: overview.name,
-    slug: overview.name ? slugifyVietnamese(overview.name) : "",
-    aliases: overview.aliases,
-    summary: overview.summary,
-    location: toShortLocation(overview.address),
-    roles: overview.roles,
-    highlights: overview.highlights,
-    knowledgeMode,
+    name,
+    // An explicit `Mã dự án` is trusted verbatim only when it is already
+    // slug-shaped; anything else is normalized like the derived slug is.
+    slug: /^[a-z0-9-]+$/.test(explicitSlug)
+      ? explicitSlug
+      : name
+        ? slugifyVietnamese(explicitSlug || name)
+        : "",
+    aliases: merged.aliases,
+    summary: merged.summary,
+    location: toShortLocation(merged.address),
+    roles: merged.roles,
+    highlights: merged.highlights,
+    // The brief's own `Cách quản lý kiến thức` line outranks the section-count
+    // heuristic; without one, the count decides as before.
+    knowledgeMode:
+      merged.mode ??
+      (filledCount >= CATEGORY_MODE_THRESHOLD ? "RAG" : "DIRECT_CONTEXT"),
     categories,
     faqEntries,
     missingCategories: PROJECT_KNOWLEDGE_CATEGORIES.filter(

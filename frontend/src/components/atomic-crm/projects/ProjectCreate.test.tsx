@@ -98,11 +98,11 @@ const BRIEF = `# PHIẾU THU THẬP
  * the input's `files` list plus a bubbling `change`. The component reads it via
  * `File.text()`, so the payload is a genuine File, not a stubbed handler.
  */
-const uploadBrief = (screen: BriefForm) => {
+const uploadBrief = (screen: BriefForm, text: string = BRIEF) => {
   const input =
     screen.container.querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error("the brief import renders no file input");
-  const file = new File([BRIEF], "phiếu 4P.md", { type: "text/markdown" });
+  const file = new File([text], "phiếu 4P.md", { type: "text/markdown" });
   // A real `FileList` — `input.files` rejects a plain array.
   const transfer = new DataTransfer();
   transfer.items.add(file);
@@ -213,6 +213,69 @@ describe("ProjectCreate — nhập phiếu thông tin từ tệp", () => {
     await expect
       .element(screen.getByLabelText("Tên gọi khác"))
       .toHaveValue("4P Electronics, 4P Hải Phòng");
+  });
+
+  // The shape recruiters hand over without a table: label line, value line.
+  it("fills the same fields from a plain label-line brief", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(
+      screen,
+      [
+        "Tên dự án *",
+        "LG Display Hải Phòng",
+        "",
+        "Mã dự án *",
+        "lg-display-hai-phong",
+        "",
+        "Tên gọi khác",
+        "LG, LGD",
+        "",
+        "Cách quản lý kiến thức",
+        "Một nội dung",
+        "",
+        "## Giúp ứng viên tìm đúng dự án",
+        "",
+        "Tóm tắt *",
+        "Sản xuất màn hình cho các dòng xe điện.",
+        "",
+        "Địa điểm *",
+        "Hải Phòng",
+        "",
+        "Vị trí tuyển dụng",
+        "Sản xuất, kiểm tra",
+        "",
+        "Điểm nổi bật",
+        "Không yêu cầu kinh nghiệm",
+        "",
+      ].join("\n"),
+    );
+
+    await expect
+      .element(screen.getByLabelText("Tên dự án"))
+      .toHaveValue("LG Display Hải Phòng");
+    await expect
+      .element(screen.getByLabelText("Mã dự án"))
+      .toHaveValue("lg-display-hai-phong");
+    await expect
+      .element(screen.getByLabelText("Tên gọi khác"))
+      .toHaveValue("LG, LGD");
+    // The brief's own mode line picked "Một nội dung", so the discovery
+    // fields are visible without a switch.
+    await expect
+      .element(screen.getByRole("radio", { name: /Một nội dung/ }))
+      .toBeChecked();
+    await expect
+      .element(screen.getByLabelText("Tóm tắt *"))
+      .toHaveValue("Sản xuất màn hình cho các dòng xe điện.");
+    await expect
+      .element(screen.getByLabelText("Địa điểm *"))
+      .toHaveValue("Hải Phòng");
+    await expect
+      .element(screen.getByLabelText("Vị trí tuyển dụng"))
+      .toHaveValue("Sản xuất, kiểm tra");
+    await expect
+      .element(screen.getByLabelText("Điểm nổi bật"))
+      .toHaveValue("Không yêu cầu kinh nghiệm");
   });
 
   it("fills the discovery card fields when the recruiter keeps one-page mode", async () => {
