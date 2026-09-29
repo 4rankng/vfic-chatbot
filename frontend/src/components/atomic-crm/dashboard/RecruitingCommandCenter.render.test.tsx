@@ -45,6 +45,18 @@ const LocationProbe = () => {
   );
 };
 
+// `Promise.withResolvers` is ES2024 and this project targets ES2022, so the
+// pending promise is built with an explicit resolver instead.
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+};
+
 describe("RecruitingCommandCenter candidate rows", () => {
   beforeEach(() => {
     mockDataProviderUpdate.mockReset();
@@ -302,6 +314,34 @@ describe("RecruitingCommandCenter candidate rows", () => {
     );
   });
 
+  it("keeps both queue shells labelled while the first fetch is in flight", async () => {
+    // A never-settling request leaves TanStack Query pending, so the panels
+    // render their first-load placeholders rather than an empty queue.
+    mockApiJson.mockImplementation(() => deferred<never>().promise);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <TestMessages>
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <RecruitingCommandCenter />
+          </QueryClientProvider>
+        </MemoryRouter>
+      </TestMessages>,
+    );
+
+    await expect
+      .element(screen.getByLabelText("Đang tải số hội thoại cần xử lý"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByLabelText("Đang tải số ứng viên mới"))
+      .toBeVisible();
+    expect(screen.container.textContent).not.toContain(
+      "Không tải được hội thoại.",
+    );
+  });
+
   it("renders a candidate without a linked conversation as a non-clickable row", async () => {
     const attention = {
       updated_at: "2026-07-12T10:00:00Z",
@@ -459,17 +499,13 @@ describe("RecruitingCommandCenter candidate rows", () => {
 
     await expect
       .element(
-        screen.getByRole("heading", {
-          name: "Không có hội thoại cần xử lý",
-          level: 3,
-        }),
+        screen.getByRole("heading", { name: "Không có hội thoại cần xử lý" }),
       )
       .toBeVisible();
     await expect
       .element(
         screen.getByRole("heading", {
           name: "Chưa có ứng viên có số điện thoại",
-          level: 3,
         }),
       )
       .toBeVisible();

@@ -27,7 +27,10 @@ const ATTENTION_DASHBOARD_ENABLED =
 export const Dashboard = () => (
   <div className="dashboard-workspace">
     <InboxIcons />
-    <section className="dashboard-workspace-content" aria-label="Tổng quan">
+    <section
+      className="dashboard-workspace-content uu-scope"
+      aria-label="Tổng quan"
+    >
       {ATTENTION_DASHBOARD_ENABLED ? (
         <RecruitingCommandCenter />
       ) : (

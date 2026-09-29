@@ -4,7 +4,6 @@ import {
   FileBadge,
   Handshake,
   Home,
-  LoaderCircle,
   MapPin,
   NotepadText,
   Pencil,
@@ -17,21 +16,20 @@ import {
 import { useEffect, useState, type RefObject } from "react";
 import { useTranslate, type TranslateFunction } from "ra-core";
 
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
+  Modal,
+  ModalOverlay,
+} from "@/components/application/modals/modal";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Button } from "@/components/base/buttons/button";
+import { CloseButton } from "@/components/base/buttons/close-button";
+import { InputBase, TextField } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
+import { ProgressBarBase } from "@/components/base/progress-indicators/progress-indicators";
+import { TextArea } from "@/components/base/textarea/textarea";
 
 import { formatCandidateNotes } from "../conversations/domain/candidate-notes";
-import { LeadAvatar } from "../conversations/LeadAvatar";
 import {
   candidateProfileDraft,
   candidateProfileFields,
@@ -145,6 +143,16 @@ const candidateFields = (
   ];
 };
 
+/**
+ * Candidate profile sheet, rendered on Untitled UI's dialog anatomy.
+ *
+ * The whole surface is one React Aria subtree (`ModalOverlay` → `Modal` →
+ * `Dialog`, with React Aria fields and buttons inside), so no Radix
+ * (`@/components/ui/**`) primitive is nested in it. `uu-scope` rides the
+ * overlay because React Aria portals the modal to `document.body`, outside the
+ * dashboard's own scope: without it the library's `bg-primary`/`text-primary`
+ * would resolve to the console's coral action colour.
+ */
 export const CandidateDataDialog = ({
   lead,
   displayName,
@@ -218,230 +226,236 @@ export const CandidateDataDialog = ({
     }
   };
 
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && isSaving) return;
-        onOpenChange(nextOpen);
-      }}
-    >
-      <DialogContent
-        className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          returnFocusRef.current?.focus();
-        }}
-      >
-        <DialogHeader className="border-b border-border px-5 py-4 pr-14 text-left sm:px-6 sm:py-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <LeadAvatar
-              src={displayAvatarUrl ?? lead.avatar_url}
-              alt={`Ảnh đại diện của ${candidateName}`}
-              className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground"
-              iconSize={20}
-            />
-            <div className="min-w-0">
-              <DialogTitle className="truncate text-left">
-                {translate("leads.profile_title")}
-              </DialogTitle>
-              <DialogDescription className="mt-1 truncate text-left">
-                {candidateName} · {candidatePhone}
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
+  const handleOpenChange = (nextOpen: boolean) => {
+    // A save in flight owns the dialog: the close button, Escape and an outside
+    // click all reach here, and each one must be a no-op until it settles.
+    if (!nextOpen && isSaving) return;
+    if (!nextOpen) returnFocusRef.current?.focus();
+    onOpenChange(nextOpen);
+  };
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
-          <section
-            className="rounded-lg border border-border bg-muted/35 p-4"
-            aria-labelledby="candidate-completion-title"
-          >
-            <div className="mb-3 flex items-start justify-between gap-4">
-              <div>
-                <h3
-                  id="candidate-completion-title"
-                  className="text-body font-semibold text-foreground"
-                >
-                  Mức độ hoàn thiện
-                </h3>
-                <p className="mt-1 text-helper text-muted-foreground">
-                  Dữ liệu đã được thu thập trong quá trình tư vấn tuyển dụng.
+  return (
+    <ModalOverlay
+      isOpen={open}
+      onOpenChange={handleOpenChange}
+      isDismissable={!isSaving}
+      isKeyboardDismissDisabled={isSaving}
+      className="uu-scope"
+    >
+      <Modal className="w-full outline-hidden sm:max-w-2xl">
+        <Dialog
+          aria-label={translate("leads.profile_title")}
+          className="flex flex-col gap-0 p-0 outline-hidden"
+        >
+          <header className="sticky top-0 z-10 border-b border-secondary bg-primary px-5 py-4 pr-14 text-left sm:px-6 sm:py-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar
+                size="lg"
+                src={displayAvatarUrl ?? lead.avatar_url}
+                alt={`Ảnh đại diện của ${candidateName}`}
+              />
+              <div className="min-w-0">
+                <h2 className="truncate text-left text-lg font-semibold text-primary">
+                  {translate("leads.profile_title")}
+                </h2>
+                <p className="mt-1 truncate text-left text-sm text-tertiary">
+                  {candidateName} · {candidatePhone}
                 </p>
               </div>
-              <span className="shrink-0 text-label font-semibold text-foreground">
-                {completedFields}/{fields.length} mục
-              </span>
             </div>
-            <Progress
-              value={completionPercent}
-              aria-label={`Đã hoàn thiện ${completionPercent}% hồ sơ ứng viên`}
+            <CloseButton
+              size="sm"
+              slot={null}
+              label={translate("ra.action.close")}
+              isDisabled={isSaving}
+              onPress={() => handleOpenChange(false)}
+              className="absolute top-3 right-3"
             />
-          </section>
+          </header>
 
-          <section
-            className="mt-6"
-            aria-labelledby="candidate-profile-fields-title"
-          >
-            <div className="flex min-h-9 items-center justify-between gap-3">
-              <h3
-                id="candidate-profile-fields-title"
-                className="text-body font-semibold text-foreground"
-              >
-                {editSession ? "Chỉnh sửa dữ liệu" : "Dữ liệu đã thu thập"}
-              </h3>
-              {canEdit && lead.version != null && !editSession ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={startEditing}
+          <div className="px-5 py-5 sm:px-6">
+            <section
+              className="rounded-lg border border-secondary bg-secondary p-4"
+              aria-labelledby="candidate-completion-title"
+            >
+              <div className="mb-3 flex items-start justify-between gap-4">
+                <div>
+                  <h3
+                    id="candidate-completion-title"
+                    className="text-sm font-semibold text-primary"
+                  >
+                    Mức độ hoàn thiện
+                  </h3>
+                  <p className="mt-1 text-xs text-tertiary">
+                    Dữ liệu đã được thu thập trong quá trình tư vấn tuyển dụng.
+                  </p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-primary">
+                  {completedFields}/{fields.length} mục
+                </span>
+              </div>
+              <ProgressBarBase value={completionPercent} />
+              <span className="sr-only">
+                Đã hoàn thiện {completionPercent}% hồ sơ ứng viên
+              </span>
+            </section>
+
+            <section
+              className="mt-6"
+              aria-labelledby="candidate-profile-fields-title"
+            >
+              <div className="flex min-h-9 items-center justify-between gap-3">
+                <h3
+                  id="candidate-profile-fields-title"
+                  className="text-sm font-semibold text-primary"
                 >
-                  <Pencil className="size-3.5" aria-hidden="true" />
-                  Chỉnh sửa
-                </Button>
-              ) : null}
-            </div>
+                  {editSession ? "Chỉnh sửa dữ liệu" : "Dữ liệu đã thu thập"}
+                </h3>
+                {canEdit && lead.version != null && !editSession ? (
+                  <Button
+                    type="button"
+                    color="secondary"
+                    size="sm"
+                    iconLeading={Pencil}
+                    onPress={startEditing}
+                  >
+                    Chỉnh sửa
+                  </Button>
+                ) : null}
+              </div>
 
-            {editSession ? (
-              <form
-                className="mt-4 grid gap-5"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void saveProfile();
-                }}
-              >
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {candidateProfileFields.map((field) => {
-                    const inputId = `dashboard-candidate-${lead.id}-${field.key}`;
-                    return (
-                      <div key={field.key} className="grid min-w-0 gap-1.5">
-                        <Label htmlFor={inputId}>
-                          {translate(field.labelKey)}
-                        </Label>
-                        <Input
+              {editSession ? (
+                <form
+                  className="mt-4 grid gap-5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void saveProfile();
+                  }}
+                >
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {candidateProfileFields.map((field) => {
+                      const inputId = `dashboard-candidate-${lead.id}-${field.key}`;
+                      return (
+                        <TextField
+                          key={field.key}
                           id={inputId}
+                          className="min-w-0"
                           value={editSession.draft[field.key]}
-                          inputMode={field.inputMode}
-                          type={
-                            field.inputMode === "numeric" ? "number" : "text"
-                          }
-                          min={field.min}
-                          max={field.max}
-                          disabled={isSaving}
-                          onChange={(event) =>
+                          isDisabled={isSaving}
+                          onChange={(next) =>
                             setEditSession((current) =>
                               current
                                 ? {
                                     ...current,
                                     draft: {
                                       ...current.draft,
-                                      [field.key]: event.target.value,
+                                      [field.key]: next,
                                     },
                                   }
                                 : current,
                             )
                           }
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+                        >
+                          <Label>{translate(field.labelKey)}</Label>
+                          <InputBase
+                            inputMode={field.inputMode}
+                            type={
+                              field.inputMode === "numeric" ? "number" : "text"
+                            }
+                            min={field.min}
+                            max={field.max}
+                          />
+                        </TextField>
+                      );
+                    })}
+                  </div>
 
-                <div className="grid gap-1.5">
-                  <Label htmlFor={`dashboard-candidate-${lead.id}-notes`}>
-                    {translate("leads.fields.notes")}
-                  </Label>
-                  <Textarea
+                  <TextArea
                     id={`dashboard-candidate-${lead.id}-notes`}
+                    label={translate("leads.fields.notes")}
                     value={editSession.draft.notes}
                     rows={5}
-                    disabled={isSaving}
+                    isDisabled={isSaving}
                     placeholder="CCCD, chỗ ở, xe đưa đón và thông tin khác"
-                    onChange={(event) =>
+                    onChange={(next) =>
                       setEditSession((current) =>
                         current
                           ? {
                               ...current,
-                              draft: {
-                                ...current.draft,
-                                notes: event.target.value,
-                              },
+                              draft: { ...current.draft, notes: next },
                             }
                           : current,
                       )
                     }
                   />
-                </div>
 
-                {saveError ? (
-                  <p
-                    className="rounded-md border border-destructive/35 bg-destructive/5 px-3 py-2 text-helper text-destructive"
-                    role="alert"
-                  >
-                    {saveError}
-                  </p>
-                ) : null}
+                  {saveError ? (
+                    <div role="alert">
+                      <p className="rounded-lg border border-error_subtle bg-error-primary px-3 py-2 text-sm font-medium text-error-primary">
+                        {saveError}
+                      </p>
+                    </div>
+                  ) : null}
 
-                <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-border bg-background pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isSaving}
-                    onClick={cancelEditing}
-                  >
-                    <X className="size-4" aria-hidden="true" />
-                    {translate("ra.action.cancel")}
-                  </Button>
-                  <Button type="submit" disabled={isSaving || !hasChanges}>
-                    {isSaving ? (
-                      <LoaderCircle
-                        className="size-4 animate-spin motion-reduce:animate-none"
+                  <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-secondary bg-primary pt-4">
+                    <Button
+                      type="button"
+                      color="secondary"
+                      iconLeading={X}
+                      isDisabled={isSaving}
+                      onPress={cancelEditing}
+                    >
+                      {translate("ra.action.cancel")}
+                    </Button>
+                    <Button
+                      type="submit"
+                      color="primary"
+                      iconLeading={Save}
+                      isLoading={isSaving}
+                      showTextWhileLoading
+                      isDisabled={isSaving || !hasChanges}
+                    >
+                      {isSaving
+                        ? translate("crm.common.saving")
+                        : translate("crm.common.save_changes")}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 sm:gap-x-6">
+                  {fields.map(({ key, label, value, complete, Icon, wide }) => (
+                    <div
+                      key={key}
+                      className={`grid min-w-0 grid-cols-[20px_minmax(0,1fr)] gap-3 border-b border-secondary py-3.5 ${
+                        wide ? "sm:col-span-2" : ""
+                      }`}
+                    >
+                      <Icon
+                        className="mt-0.5 size-4 text-quaternary"
                         aria-hidden="true"
                       />
-                    ) : (
-                      <Save className="size-4" aria-hidden="true" />
-                    )}
-                    {isSaving
-                      ? translate("crm.common.saving")
-                      : translate("crm.common.save_changes")}
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 sm:gap-x-6">
-                {fields.map(({ key, label, value, complete, Icon, wide }) => (
-                  <div
-                    key={key}
-                    className={`grid min-w-0 grid-cols-[20px_minmax(0,1fr)] gap-3 border-b border-border py-3.5 ${
-                      wide ? "sm:col-span-2" : ""
-                    }`}
-                  >
-                    <Icon
-                      className="mt-0.5 size-4 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0">
-                      <dt className="text-helper font-medium text-muted-foreground">
-                        {label}
-                      </dt>
-                      <dd
-                        className={`mt-1 break-words text-body ${
-                          complete
-                            ? "font-medium text-foreground"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {value}
-                      </dd>
+                      <div className="min-w-0">
+                        <dt className="text-xs font-medium text-tertiary">
+                          {label}
+                        </dt>
+                        <dd
+                          className={`mt-1 break-words text-sm ${
+                            complete
+                              ? "font-medium text-primary"
+                              : "text-quaternary"
+                          }`}
+                        >
+                          {value}
+                        </dd>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </dl>
-            )}
-          </section>
-        </div>
-      </DialogContent>
-    </Dialog>
+                  ))}
+                </dl>
+              )}
+            </section>
+          </div>
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 };

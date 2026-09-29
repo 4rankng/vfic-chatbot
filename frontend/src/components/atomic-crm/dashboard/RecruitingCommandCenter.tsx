@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   CheckCircle2,
   MessageCircle,
   PanelRight,
@@ -14,19 +13,16 @@ import {
   type TranslateFunction,
 } from "ra-core";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { Button as AriaButton } from "react-aria-components";
 import { useNavigate } from "react-router";
 import { VList, WindowVirtualizer } from "virtua";
 
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { AlertFloating } from "@/components/application/alerts/alerts";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Badge } from "@/components/base/badges/badges";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-import { LeadAvatar } from "../conversations/LeadAvatar";
 import { useRoleActions } from "../hooks/useRoleActions";
 import { EmptyState } from "../kit";
 import type { CandidateProfileUpdate } from "../leads/domain/candidateProfile";
@@ -234,21 +230,17 @@ export const RecruitingCommandCenter = ({
       </header>
 
       {showPartialError || (candidatesQuery.isError && candidatesQuery.data) ? (
-        <div
-          className="dashboard-inline-error tt-alert tt-alert-error tt-alert-soft"
-          role="status"
-        >
-          <span>{translate("dashboard.queue_refresh_failed")}</span>
-          <button
-            type="button"
-            className="tt-btn tt-btn-sm tt-btn-error tt-btn-outline"
-            onClick={() => {
+        <div role="status">
+          <AlertFloating
+            color="error"
+            title={translate("dashboard.queue_refresh_failed")}
+            description={translate("crm.common.retry_hint")}
+            confirmLabel={translate("crm.common.retry")}
+            onConfirm={() => {
               void refetch();
               void refetchCandidates();
             }}
-          >
-            {translate("crm.common.retry")}
-          </button>
+          />
         </div>
       ) : null}
 
@@ -285,6 +277,28 @@ export const RecruitingCommandCenter = ({
   );
 };
 
+/**
+ * One panel's count chip: a live, labelled number that stays muted while the
+ * queue is loading, failed or empty and picks up the brand tint once it has
+ * rows. Shared by both panels so the two counts cannot drift apart.
+ */
+const QueueCountBadge = ({
+  label,
+  count,
+  muted,
+}: {
+  label: string;
+  /** `null` renders the placeholder dash (loading or failed). */
+  count: number | null;
+  muted: boolean;
+}) => (
+  <span aria-label={label} aria-live="polite">
+    <Badge size="sm" type="pill-color" color={muted ? "gray" : "brand"}>
+      {count ?? "—"}
+    </Badge>
+  </span>
+);
+
 type PanelState = {
   showSkeleton: boolean;
   showInitialError: boolean;
@@ -320,17 +334,17 @@ const AttentionPanel = ({
           <MessageCircle aria-hidden="true" />
           <h2>{translate("dashboard.todo_title")}</h2>
         </div>
-        <strong
-          className="dashboard-panel-count"
-          aria-label={countLabel}
-          aria-live="polite"
-        >
-          {state.showSkeleton || state.showInitialError ? "—" : rows.length}
-        </strong>
+        <QueueCountBadge
+          label={countLabel}
+          muted={isEmpty || state.showSkeleton || state.showInitialError}
+          count={
+            state.showSkeleton || state.showInitialError ? null : rows.length
+          }
+        />
       </div>
       {isEmpty ? (
         <EmptyState
-          className="m-4"
+          className="mx-auto my-4"
           icon={<CheckCircle2 className="size-6" aria-hidden="true" />}
           title="Không có hội thoại cần xử lý"
           description="Mọi cuộc trò chuyện hiện đã được xử lý. Bạn có thể chuyển sang xem ứng viên mới."
@@ -392,17 +406,15 @@ const CandidatePanel = ({
           <Phone aria-hidden="true" />
           <h2>{translate("dashboard.candidates_title")}</h2>
         </div>
-        <strong
-          className="dashboard-panel-count"
-          aria-label={countLabel}
-          aria-live="polite"
-        >
-          {state.showSkeleton || state.showInitialError ? "—" : count}
-        </strong>
+        <QueueCountBadge
+          label={countLabel}
+          muted={isEmpty || state.showSkeleton || state.showInitialError}
+          count={state.showSkeleton || state.showInitialError ? null : count}
+        />
       </div>
       {isEmpty ? (
         <EmptyState
-          className="m-4"
+          className="mx-auto my-4"
           icon={<UserRoundPlus className="size-6" aria-hidden="true" />}
           title="Chưa có ứng viên có số điện thoại"
           description="Ứng viên sẽ xuất hiện tại đây sau khi cung cấp số liên hệ."
@@ -527,14 +539,7 @@ const CandidateAvatar = ({
 }: {
   name: string;
   src?: string | null;
-}) => (
-  <LeadAvatar
-    className="dashboard-candidate-avatar tt-avatar tt-avatar-placeholder"
-    src={src}
-    alt={`Ảnh đại diện của ${name}`}
-    iconSize={20}
-  />
-);
+}) => <Avatar size="sm" src={src} alt={`Ảnh đại diện của ${name}`} />;
 
 const AttentionRow = ({
   row,
@@ -659,38 +664,48 @@ const CandidateRow = ({
   if (conversationId) {
     return (
       <>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              ref={actionTriggerRef}
-              type="button"
-              className="dashboard-candidate-row"
-              aria-label={`Chọn thao tác cho ${name}, số điện thoại ${phone}`}
-            >
-              {content}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            sideOffset={8}
-            className="dashboard-candidate-action-menu"
+        <Dropdown.Root>
+          <AriaButton
+            ref={actionTriggerRef}
+            type="button"
+            className="dashboard-candidate-row"
+            aria-label={`Chọn thao tác cho ${name}, số điện thoại ${phone}`}
           >
-            <DropdownMenuItem
-              className="dashboard-candidate-action-item"
-              onSelect={() => navigate(`/conversations?id=${conversationId}`)}
+            {content}
+          </AriaButton>
+          <Dropdown.Popover
+            placement="bottom end"
+            className="dashboard-candidate-action-menu uu-scope"
+          >
+            <Dropdown.Menu
+              onAction={(key) => {
+                if (key === "conversation") {
+                  navigate(`/conversations?id=${conversationId}`);
+                }
+                if (key === "candidate-data") {
+                  setIsCandidateDataOpen(true);
+                }
+              }}
             >
-              <MessageCircle aria-hidden="true" />
-              Xem hội thoại
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="dashboard-candidate-action-item"
-              onSelect={() => setIsCandidateDataOpen(true)}
-            >
-              <PanelRight aria-hidden="true" />
-              Dữ liệu ứng viên
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <Dropdown.Item
+                id="conversation"
+                textValue="Xem hội thoại"
+                icon={MessageCircle}
+                label="Xem hội thoại"
+                selectionIndicator="none"
+                className="dashboard-candidate-action-item"
+              />
+              <Dropdown.Item
+                id="candidate-data"
+                textValue="Dữ liệu ứng viên"
+                icon={PanelRight}
+                label="Dữ liệu ứng viên"
+                selectionIndicator="none"
+                className="dashboard-candidate-action-item"
+              />
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown.Root>
         <CandidateDataDialog
           lead={candidate.lead}
           displayName={name}
@@ -726,28 +741,35 @@ const DashboardQueueError = ({
 }) => {
   const translate = useTranslate();
   return (
-    <div className="dashboard-empty-list dashboard-queue-error" role="status">
-      <AlertTriangle className="size-4" aria-hidden="true" />
-      <span>{label}</span>
-      <button
-        className="tt-btn tt-btn-sm tt-btn-outline"
-        type="button"
-        onClick={() => void onRetry()}
-      >
-        {translate("crm.common.retry")}
-      </button>
+    <div role="status" className="m-4">
+      <AlertFloating
+        color="warning"
+        title={label}
+        description={translate("crm.common.retry_hint")}
+        confirmLabel={translate("crm.common.retry")}
+        onConfirm={onRetry}
+      />
     </div>
   );
 };
 
+/**
+ * Console-token placeholder rows for the first-load skeleton. The panels keep
+ * their own shell while the queue resolves, so the list never collapses to
+ * nothing and no layout shift happens when the rows arrive.
+ */
 const DashboardListSkeleton = () => (
   <>
     {Array.from({ length: 3 }).map((_, index) => (
-      <div key={index} className="dashboard-candidate-row is-skeleton">
-        <Skeleton shimmer className="dashboard-candidate-avatar tt-skeleton" />
+      <div
+        key={index}
+        className="dashboard-candidate-row is-skeleton"
+        aria-hidden="true"
+      >
+        <span className="size-8 animate-pulse rounded-full bg-accent" />
         <span className="dashboard-candidate-main">
-          <Skeleton shimmer className="h-4 w-32 rounded-md" />
-          <Skeleton shimmer className="h-3 w-48 rounded-md" />
+          <span className="block h-4 w-32 animate-pulse rounded-md bg-accent" />
+          <span className="block h-3 w-48 animate-pulse rounded-md bg-accent" />
         </span>
         <MessageCircle className="size-4 text-muted-foreground/50" />
       </div>
