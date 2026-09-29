@@ -1,5 +1,66 @@
 # TingTing OA: no human escalation — hotline +84 914 827 988 everywhere
 
+## ADDENDUM — controller review response (2026-09-30; this section's run is the AUTHORITATIVE one)
+
+The controller reviewed an intermediate snapshot and flagged (1) a broken
+import and (2) missed owner rulings. What the current tree actually contains:
+
+1. **The cited break (`tools/__init__.py:36` importing the removed
+   `TINGTING_VERIFY_EXHAUSTED_REPLY`) does not exist at HEAD or in the
+   worktree.** `git show HEAD:backend/app/graph/tools/__init__.py` has no
+   such import, the file is unmodified vs HEAD, `import app.graph.tools`
+   succeeds, and `pytest --collect-only tests/test_graph_runner_turn.py`
+   collects 122 tests. What DID exist was a mid-edit window during the
+   expansion: after the guide constants became builders but before
+   `tools/tingting_identity.py`'s import of the old constant was updated,
+   `import app.graph.tools` failed via that submodule. That window closed
+   within the same working session. Honest sequence note: my final
+   comment-only edits to lanes.py/tingting_guide.py landed after the last
+   full test run of that session — bad discipline; the verification below
+   postdates EVERY edit in this tree. Sweeping every importer of the guide
+   also surfaced one genuinely missed consumer the focused runs never
+   imported: `tests/test_persona.py::test_tingting_support_prompt_excludes_the_recruitment_directory`
+   called the new required-kwarg builder without `hotline` — fixed.
+2. **The two owner rulings (admin-editable field + seeded value) are
+   IMPLEMENTED** — see the scope-expansion section below, which was delivered
+   in the same session (setting service + API schema, Alembic 0058 seed,
+   turn-time reads with no fallback, frontend field). The controller's review
+   quoted this report's ORIGINAL "where the number lives" section, which
+   still described the pre-expansion design; that section is now marked
+   superseded so the report no longer contradicts itself.
+3. **Drift pin moved to the seed, per the ruling:** the only place the
+   digits live in source is the Alembic 0058 seed, now pinned by
+   `test_the_seed_migration_pins_the_owner_approved_hotline` (loads the
+   migration module, asserts the seed value and both guards: upgrade's
+   `WHERE NOT EXISTS` — operator edits win — and downgrade's exact-value
+   DELETE — admin edits survive). The runner-suite drift guard now documents
+   that it pins the BUILDER's formatting with the seed value as input.
+   The 18007228 recruitment inline constant stays untouched.
+
+### Authoritative verification (postdates every edit)
+
+- Unit set (runner_turn, tingting_api incl. the seed-pin test,
+  verify_exhaustion, proactive_turn, lead_extraction, smoke_turn,
+  smoke_turn_progressive, persistence_worker, persona,
+  runtime_surface_inventory, deployment_makefile, concurrency):
+  **450 passed, 1 failed** — the failure is
+  `test_every_http_endpoint_matches_the_reviewed_authority_snapshot`,
+  caused by a teammate's in-flight edit to `backend/app/api/projects.py`
+  (route count 28 vs snapshot 27; their lane, untouched by me, already
+  flagged in the expansion section).
+- Integration lane: migration_roundtrip_walk + support_handoff_reply_send +
+  extraction_intent_escalation_concurrency → **5 passed in 19:35** — 0058
+  survives upgrade→downgrade→upgrade alongside all prior migrations.
+- `ruff check .` clean; `uvx pyright app/graph app/services/tingting_api.py
+  app/services/integration_settings/providers/tingting.py
+  app/schemas/integrations.py scripts/smoke_turn.py` → 0 errors (re-run after
+  the last production edit, which had postdated the earlier pyright pass).
+- Frontend unchanged since its verification: integrations vitest 58 tests
+  green (twice), typecheck clean for my files (the one project-wide error is
+  the teammates' projects lane).
+
+---
+
 ## SCOPE EXPANSION (same session, controller ruling): the hotline is now an admin-editable setting
 
 The owner clarified that +84 914 827 988 must be SEEDED into the settings
@@ -155,12 +216,20 @@ Other OAs keep today's behavior. Implemented following the e1e5d095 pattern
 
 ## Where the hotline number lives
 
-`TINGTING_HOTLINE_REPLY` in `backend/app/graph/tingting_guide.py` — one code
-constant, quoted by persona, guide, and the exhaustion reply. No config
-surface ever existed for hotline numbers (config.py owns none; admin settings
-own only the TingTing API key/base URL), and e1e5d095 set the precedent of
-operator-approved copy as code (18007228 lives the same way in lanes.py for
-the recruitment channels — deliberately unchanged).
+**Superseded by the scope expansion (see the section at the top): the number
+is NOT runtime copy anymore.** The authoritative source is the
+`tingting_hotline` row in `integration_settings`, seeded with +84 914 827 988
+by Alembic 0058 and read at turn time; the only place the digits exist in
+source is the migration's seed, pinned by
+`test_the_seed_migration_pins_the_owner_approved_hotline`. Runtime replies
+are built around the stored value with no fallback constant. (The original
+phase's wording below described the pre-expansion design and is kept only for
+the change history of that intermediate state.)
+
+Original-phase design record: the reply was then the code constant
+`TINGTING_HOTLINE_REPLY`; e1e5d095 had set the precedent of operator-approved
+copy as code (18007228 still lives that way in lanes.py for the recruitment
+channels — deliberately unchanged, different OA surface).
 
 Copy (no hours/callback/email invented; no in-chat human promised):
 
