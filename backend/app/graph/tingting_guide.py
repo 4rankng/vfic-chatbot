@@ -28,7 +28,8 @@ TINGTING_RESET_REDIRECT_REPLY = (
 # promises a consultant ends with the SAME sentence — the lane's escalation
 # hook detects its own handoff replies by that suffix (lanes.py), so a drift in
 # one copy would silently break the needs_human write. Re-exported by lanes.py
-# as TINGTING_HANDOFF_REPLY / OUT_OF_SCOPE_HANDOFF_REPLY.
+# as TINGTING_HANDOFF_REPLY; the recruitment out-of-scope handoff no longer
+# reuses it (operator rule 2026-09-29: candidates get the hotline instead).
 TINGTING_CONSULTANT_HANDOFF_LINE = "Vui lòng chờ chuyên viên tư vấn liên hệ."
 
 # The identity-verification exhaustion reply: the employee has spent all three

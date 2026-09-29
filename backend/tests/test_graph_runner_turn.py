@@ -1,3 +1,14 @@
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false, reportTypedDictNotRequiredAccess=false, reportOptionalSubscript=false, reportOptionalMemberAccess=false, reportReturnType=false, reportOptionalOperand=false, reportOptionalCall=false, reportOperatorIssue=false, reportIndexIssue=false
+#
+# Typed-double convention (mirrors test_integration_settings.py, issue #39
+# option b): the stubs in this file (_FakeAgent, _FakeDB, _Conversations,
+# _FakeZalo, _Svc, …) deliberately implement only the narrow duck-typed surface
+# run_turn exercises, so every construction and GraphDeps assignment trips
+# reportArgumentType/reportAttributeAccessIssue, the outcome assertions index
+# TurnOutcome's optional keys (reportTypedDictNotRequiredAccess), and the
+# optional-flow/single-hit rules fire on assertion lines. Casting the ~130
+# sites would add noise, not safety — the real gate is the behavioral suite
+# below.
 """Characterization tests for graph/runner.run_turn — the bot-turn pipeline.
 
 ``run_turn`` is the reactive brain: agent -> ownership guard -> send.
@@ -2205,17 +2216,29 @@ async def test_a_recruitment_question_on_the_support_oa_hands_off_to_a_human(mon
     assert escalations[0]["preserve_turn_ownership"] is True
 
 
-@pytest.mark.asyncio
-async def test_off_domain_turn_off_the_support_oa_asks_for_a_phone_and_skips_the_model():
-    """An out-of-scope question gets the fixed ask, never a generated answer.
-
-    Production symptom (console, 2026-09-27): a candidate asked an off-domain
-    question on the recruitment Bot channel and received a stale vacancy
-    listing, then a phone ask that never led anywhere. Off-domain is now a code
-    path: ask for the number, because a consultant cannot call someone it has
-    no number for.
+def test_the_recruitment_handoff_reply_sends_the_candidate_to_the_hotline():
+    """Operator rule (2026-09-29): the recruitment escalation points candidates
+    at the hotline instead of promising a waiting consultant. The TingTing
+    support OA keeps the bare consultant line, so the two replies must never
+    drift back together — the support-OA escalation hook matches replies by
+    that suffix, and a recruitment reply sharing it would escalate employees'
+    threads by wording alone.
     """
-    from app.graph.runner import OUT_OF_SCOPE_PHONE_ASK, _agent_turn
+    from app.graph.lanes import OUT_OF_SCOPE_HANDOFF_REPLY, TINGTING_HANDOFF_REPLY
+
+    assert "18007228" in OUT_OF_SCOPE_HANDOFF_REPLY
+    assert OUT_OF_SCOPE_HANDOFF_REPLY != TINGTING_HANDOFF_REPLY
+    assert not OUT_OF_SCOPE_HANDOFF_REPLY.endswith(TINGTING_HANDOFF_REPLY)
+
+
+@pytest.mark.asyncio
+async def test_a_confident_off_domain_turn_replies_with_the_hotline_and_skips_the_model():
+    """An out-of-scope question gets the hotline reply, never a generated answer.
+
+    The hotline IS the handoff (operator rule 2026-09-29): no phone-number
+    interlude, no human queue write, no model call.
+    """
+    from app.graph.runner import OUT_OF_SCOPE_HANDOFF_REPLY, _agent_turn
 
     captured: dict[str, object] = {}
     escalations: list[dict] = []
@@ -2247,96 +2270,10 @@ async def test_off_domain_turn_off_the_support_oa_asks_for_a_phone_and_skips_the
         decisions=TurnDecisions(intent="out_of_scope", intent_confidence=0.9),
     )
 
-    assert reply == OUT_OF_SCOPE_PHONE_ASK
-    assert "số điện thoại" in reply
+    assert reply == OUT_OF_SCOPE_HANDOFF_REPLY
+    assert "18007228" in reply
     assert captured == {}  # no generation at all
-    # Escalating here would set HUMAN mode and starve the thread before the
-    # number ever arrives (webhook returns "starved_human_mode").
-    assert escalations == []
-
-
-@pytest.mark.asyncio
-async def test_the_phone_after_the_off_domain_ask_completes_the_handoff():
-    """The number the bot asked for is what hands the thread to a human."""
-    from app.graph.runner import OUT_OF_SCOPE_HANDOFF_REPLY, OUT_OF_SCOPE_PHONE_ASK, _agent_turn
-
-    captured: dict[str, object] = {}
-    escalations: list[dict] = []
-
-    class _FakeAgent:
-        async def agent(self, user_text, **kwargs):
-            captured.update(kwargs)
-            return "should not run"
-
-    class _Conversations:
-        async def get(self, _conversation_id):
-            return SimpleNamespace(id=CONV_ID, version=7)
-
-        async def escalate_extracted_intent(self, conv, **kwargs):
-            escalations.append(kwargs)
-            return True
-
-    deps = _deps(_FakeZalo(), conversation=_Conversations())
-    deps.agent = _FakeAgent()
-
-    # The runner rewrites "Anh/chị" into the candidate's gender before storing
-    # the reply, so the stored ask no longer matches the constant verbatim.
-    gender_rewritten_ask = OUT_OF_SCOPE_PHONE_ASK.replace("Anh/chị", "Anh")
-    reply = await _agent_turn(
-        BotRunState(conversation_id=CONV_ID, version_at_start=7, user_text="0912345678"),
-        deps,
-        "0912345678",
-        provider="zalo_bot",
-        chat_id="z1",
-        recent_messages=[SimpleNamespace(sender="BOT", body=gender_rewritten_ask)],
-        timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="profile_update", intent_confidence=0.4),
-    )
-
-    assert reply == OUT_OF_SCOPE_HANDOFF_REPLY
-    assert captured == {}
-    assert len(escalations) == 1
-    assert escalations[0]["reason"] == "out_of_scope_handoff"
-    assert escalations[0]["preserve_turn_ownership"] is True
-
-
-@pytest.mark.asyncio
-async def test_an_off_domain_turn_hands_off_immediately_when_the_phone_is_known():
-    """A lead we can already call does not get asked for a number again."""
-    from app.graph.runner import OUT_OF_SCOPE_HANDOFF_REPLY, _agent_turn
-
-    escalations: list[dict] = []
-
-    class _FakeAgent:
-        async def agent(self, user_text, **kwargs):  # noqa: ARG002
-            return "should not run"
-
-    class _Conversations:
-        async def get(self, _conversation_id):
-            return SimpleNamespace(id=CONV_ID, version=7)
-
-        async def escalate_extracted_intent(self, conv, **kwargs):
-            escalations.append(kwargs)
-            return True
-
-    deps = _deps(_FakeZalo(), conversation=_Conversations())
-    deps.agent = _FakeAgent()
-
-    reply = await _agent_turn(
-        BotRunState(conversation_id=CONV_ID, version_at_start=7, user_text="hôm nay trời mưa"),
-        deps,
-        "hôm nay trời mưa",
-        provider="zalo_bot",
-        chat_id="z1",
-        recent_messages=[],
-        timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="out_of_scope", intent_confidence=0.9),
-        lead_row={"phone": "0912345678"},
-    )
-
-    assert reply == OUT_OF_SCOPE_HANDOFF_REPLY
-    assert len(escalations) == 1
-    assert escalations[0]["reason"] == "out_of_scope_handoff"
+    assert escalations == []  # the hotline is the handoff — nobody is queued
 
 
 @pytest.mark.asyncio
@@ -2347,7 +2284,7 @@ async def test_a_barely_confident_off_domain_reading_is_still_answered_by_the_mo
     reading is the expensive error, so the floor guards the start of the flow.
     """
     from app.graph.router import TurnRoute
-    from app.graph.runner import OUT_OF_SCOPE_PHONE_ASK, _agent_turn
+    from app.graph.runner import OUT_OF_SCOPE_HANDOFF_REPLY, _agent_turn
 
     async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
         return "fake system prompt", True
@@ -2390,44 +2327,7 @@ async def test_a_barely_confident_off_domain_reading_is_still_answered_by_the_mo
         monkeypatch.undo()
 
     assert "tuyển công nhân" in reply
-    assert reply != OUT_OF_SCOPE_PHONE_ASK
-
-
-@pytest.mark.asyncio
-async def test_a_recruiting_pivot_during_the_phone_ask_is_answered_not_re_asked():
-    """Changing the subject mid-flow is a normal question, not a repeat ask."""
-    from app.graph.runner import OUT_OF_SCOPE_PHONE_ASK, _agent_turn
-
-    escalations: list[dict] = []
-
-    class _FakeAgent:
-        async def agent(self, user_text, **kwargs):  # noqa: ARG002
-            return "Dạ LG Display đang tuyển công nhân lắp ráp ạ."
-
-    class _Conversations:
-        async def get(self, _conversation_id):
-            return SimpleNamespace(id=CONV_ID, version=7)
-
-        async def escalate_extracted_intent(self, conv, **kwargs):
-            escalations.append(kwargs)
-            return True
-
-    deps = _deps(_FakeZalo(), conversation=_Conversations())
-    deps.agent = _FakeAgent()
-
-    reply = await _agent_turn(
-        BotRunState(conversation_id=CONV_ID, version_at_start=7, user_text="LG còn tuyển không ạ"),
-        deps,
-        "LG còn tuyển không ạ",
-        provider="zalo_bot",
-        chat_id="z1",
-        recent_messages=[SimpleNamespace(sender="BOT", body=OUT_OF_SCOPE_PHONE_ASK)],
-        timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9),
-    )
-
-    assert "LG Display" in reply
-    assert escalations == []
+    assert reply != OUT_OF_SCOPE_HANDOFF_REPLY
 
 
 @pytest.mark.asyncio
