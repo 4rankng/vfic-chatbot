@@ -686,32 +686,98 @@ input:-webkit-autofill:focus {
   --border: var(--workspace-border);
   --input: var(--workspace-border);
   --ring: var(--workspace-focus);
+  display: flex;
+  flex-direction: column;
   height: 100dvh;
   min-height: 100dvh;
-  background: var(--workspace-canvas);
+  background: var(--workspace-shell);
   color: var(--workspace-ink);
   overflow: hidden;
 }
 
-/* Desktop scrolls inside the main region so the sidebar and topbar stay put;
-   below the sidebar breakpoint the page itself scrolls, which keeps mobile
+/* Desktop scrolls inside the main region so the rail and topbar stay put;
+   below the rail breakpoint the page itself scrolls, which keeps mobile
    browser chrome and the on-screen keyboard behaving. */
 .workspace-frame-content {
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
+  border-top-left-radius: 1.5rem;
+  background: var(--workspace-canvas);
+}
+
+/* The ink chrome — topbar and navigation rail are one connected region that
+   wraps the workspace canvas. Untitled UI components inside it resolve their
+   whole vocabulary through the names below, so the chrome stays navy with ivory
+   text and a coral active marker instead of turning into a white sidebar. */
+.workspace-chrome {
+  --color-bg-primary: var(--workspace-shell);
+  --color-bg-primary_hover: var(--workspace-shell-hover);
+  --color-bg-secondary: var(--workspace-shell-active);
+  --color-bg-secondary_hover: var(--workspace-shell-hover);
+  --color-text-primary: var(--workspace-paper);
+  --color-text-secondary: color-mix(
+    in oklab,
+    var(--workspace-paper) 84%,
+    transparent
+  );
+  --color-text-quaternary: color-mix(
+    in oklab,
+    var(--workspace-paper) 62%,
+    transparent
+  );
+  --color-fg-quaternary: color-mix(
+    in oklab,
+    var(--workspace-paper) 62%,
+    transparent
+  );
+  --color-fg-quaternary_hover: var(--workspace-paper);
+  --color-border-secondary: color-mix(
+    in oklab,
+    var(--workspace-paper) 16%,
+    transparent
+  );
+  --color-bg-overlay: var(--workspace-shell);
 }
 
 /* The active destination carries the brand accent: PRO's nav item only tints
    its own surface, and "where am I" needs to survive a glance. */
 .workspace-sidebar [aria-current="page"],
 .workspace-sidebar [aria-current="page"] span {
-  color: var(--workspace-action-strong);
+  color: var(--workspace-paper);
 }
 
 .workspace-sidebar [aria-current="page"] svg {
-  color: var(--workspace-action);
+  color: var(--workspace-action-strong);
+}
+
+.workspace-sidebar [aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  translate: 0 -50%;
+  width: 3px;
+  height: 1.25rem;
+  border-radius: 999px;
+  background: var(--workspace-action);
+}
+
+/* The rail is icon-only: centre each row and drop the label gutter the library
+   component reserves. Nav item markup is library-owned, so alignment is set
+   here rather than by forking the component. */
+.workspace-sidebar a[role="link"] {
+  justify-content: center;
+}
+
+.workspace-sidebar a > svg {
+  margin-inline-end: 0;
+}
+
+.workspace-sidebar li > * {
+  display: flex;
+  justify-content: center;
 }
 
 @media (max-width: 1023px) {
