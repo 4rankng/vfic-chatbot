@@ -65,36 +65,78 @@ type FieldProps = {
  * "render the field's message in Vietnamese".
  */
 const ERROR_PREFIX = "@@react-admin@@";
+const FALLBACK_FIELD_ERROR = "Giá trị chưa hợp lệ.";
 
-const FieldErrorText = ({ error }: { error: string }) => {
-  const translate = useTranslate();
-  let message: unknown = error;
-  let args: Record<string, unknown> = {};
+type FieldError = { message: string; args: Record<string, unknown> };
 
-  if (error.startsWith(ERROR_PREFIX)) {
-    try {
-      const parsed = JSON.parse(error.slice(ERROR_PREFIX.length)) as {
-        message?: unknown;
-        args?: Record<string, unknown>;
-      };
-      message = parsed.message ?? error;
-      args = parsed.args ?? {};
-    } catch {
-      message = error;
+/**
+ * Message and interpolation args from react-admin's error payload, or
+ * `undefined` when the field has no error. Shared by the ReactNode path (most
+ * primitives) and the string path (`Select` and the other primitives whose
+ * `hint` prop is typed `string`), so the two cannot drift.
+ */
+const unwrapFieldError = (
+  error: { message?: string } | undefined,
+): FieldError | undefined => {
+  if (!error) return undefined;
+
+  const raw = error.message;
+  if (!raw) return { message: FALLBACK_FIELD_ERROR, args: {} };
+  if (!raw.startsWith(ERROR_PREFIX)) return { message: raw, args: {} };
+
+  try {
+    const parsed: unknown = JSON.parse(raw.slice(ERROR_PREFIX.length));
+
+    // react-admin encodes the validator result two ways: a bare string
+    // (`required("…")` becomes `@@react-admin@@"…"`) and an object carrying the
+    // message plus its interpolation args (translated validators). Reading only
+    // the object shape renders the fallback for the common case; reading only
+    // the string shape renders the raw envelope.
+    if (typeof parsed === "string") return { message: parsed, args: {} };
+
+    if (parsed && typeof parsed === "object") {
+      const message =
+        "message" in parsed && typeof parsed.message === "string"
+          ? parsed.message
+          : FALLBACK_FIELD_ERROR;
+      // `args` is react-admin's own interpolation map; the object check above is
+      // the only shape guarantee the envelope gives.
+      const args =
+        "args" in parsed && parsed.args && typeof parsed.args === "object"
+          ? (parsed.args as Record<string, unknown>)
+          : {};
+
+      return { message, args };
     }
+
+    return { message: raw, args: {} };
+  } catch {
+    return { message: raw, args: {} };
   }
-
-  if (typeof message !== "string") return <>{error}</>;
-
-  return <>{translate(message, { _: message, ...args })}</>;
 };
 
-const errorNode = (error: { message?: string } | undefined): ReactNode =>
-  error?.message ? (
-    <FieldErrorText error={error.message} />
-  ) : error ? (
-    "Giá trị chưa hợp lệ."
-  ) : undefined;
+const FieldErrorText = ({ error }: { error: FieldError }) => {
+  const translate = useTranslate();
+
+  return <>{translate(error.message, { _: error.message, ...error.args })}</>;
+};
+
+const errorNode = (error: { message?: string } | undefined): ReactNode => {
+  const unwrapped = unwrapFieldError(error);
+  return unwrapped ? <FieldErrorText error={unwrapped} /> : undefined;
+};
+
+/** Same message as {@link errorNode}, as text, for `hint` props typed string. */
+const useFieldErrorText = (
+  error: { message?: string } | undefined,
+): string | undefined => {
+  const translate = useTranslate();
+  const unwrapped = unwrapFieldError(error);
+
+  return unwrapped
+    ? translate(unwrapped.message, { _: unwrapped.message, ...unwrapped.args })
+    : undefined;
+};
 
 /**
  * A labelled form row: label, control, then one line of hint or error. Used by
@@ -263,6 +305,8 @@ export const FormSelect = ({
     label: choice.name,
   }));
   const selected = field.value == null ? null : String(field.value);
+  // Untitled UI's Select types `hint` as a string, so the error travels as text.
+  const errorText = useFieldErrorText(fieldState.error);
 
   return (
     <UntitledSelect
@@ -282,7 +326,7 @@ export const FormSelect = ({
       isRequired={required}
       isDisabled={disabled ?? field.disabled}
       isInvalid={Boolean(fieldState.error)}
-      hint={errorNode(fieldState.error) ?? hint}
+      hint={errorText ?? hint}
     >
       {(item: SelectItemType) => (
         <UntitledSelect.Item id={item.id} label={item.label} />

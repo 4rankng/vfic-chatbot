@@ -66,6 +66,7 @@ export function EmptyState({
   return (
     <UntitledEmptyState
       size="md"
+      role="status"
       className={cx(
         "uu-scope min-h-56 gap-4 rounded-xl border border-secondary bg-primary px-6 py-10",
         className,

@@ -52,7 +52,7 @@ const TRACE_DISCLAIMER =
 const TraceStatus = ({ children }: { children: ReactNode }) => (
   <div
     role="status"
-    className="tt-alert rounded-lg border border-dashed border-border px-4 py-6 text-center text-body text-muted-foreground"
+    className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-body text-muted-foreground"
   >
     {children}
   </div>
@@ -159,7 +159,7 @@ export const DecisionTraceRenderer = ({
       {trace.truncated ? (
         <div
           role="status"
-          className="tt-alert tt-alert-warning tt-alert-soft flex gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-body text-foreground"
+          className="flex gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-body text-foreground"
         >
           <AlertTriangle
             className="mt-0.5 size-4 shrink-0 text-warning-foreground"
@@ -218,7 +218,7 @@ const BotRunTraceDetailContent = ({
       <TraceStatus>
         <span className="inline-flex items-center gap-2">
           <span
-            className="tt-loading tt-loading-spinner tt-loading-sm"
+            className="size-4 shrink-0 animate-pulse rounded-full bg-[var(--workspace-surface-muted)]"
             aria-hidden="true"
           />
           Đang tải dấu vết…
@@ -359,7 +359,7 @@ export const DecisionTracePanel = ({
             <TraceStatus>
               <span className="inline-flex items-center gap-2">
                 <span
-                  className="tt-loading tt-loading-spinner tt-loading-sm"
+                  className="size-4 shrink-0 animate-pulse rounded-full bg-[var(--workspace-surface-muted)]"
                   aria-hidden="true"
                 />
                 Đang tải các lần chạy…

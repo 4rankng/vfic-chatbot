@@ -1,9 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  createHashRouter,
-  RouterProvider,
-  useLocation,
-} from "react-router";
+import { createHashRouter, RouterProvider, useLocation } from "react-router";
 import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +37,8 @@ const LocationProbe = () => {
 const routerDisposers: Array<() => void> = [];
 
 const renderWorkspaceShell = async (initialPath = "/") => {
+  // The console runs on react-admin's hash router, so the shell's
+  // `useHref` links are hash hrefs here too and a click navigates in place.
   window.location.hash = `#${initialPath}`;
   const router = createHashRouter([
     {
@@ -79,7 +77,20 @@ const ADMIN_SECTION_HEADINGS = [
   "Hệ thống",
 ];
 
-const ADMIN_DESTINATIONS = [
+const ADMIN_NAV_HREFS = [
+  "#/",
+  "#/conversations",
+  "#/projects",
+  "#/knowledge_sources",
+  "#/knowledge_bases",
+  "#/personas",
+  "#/users",
+  "#/settings",
+  "#/bot_runs",
+  "#/hieu-suat",
+];
+
+const ADMIN_DESTINATION_LABELS = [
   "Tổng quan",
   "Tin nhắn",
   "Dự án",
@@ -93,19 +104,23 @@ const ADMIN_DESTINATIONS = [
 ];
 
 describe("kernel mobile navigation drawer", () => {
-  it("hides the desktop sidebar at a phone viewport", async () => {
+  it("hands phone widths a drawer affordance instead of the desktop sidebar", async () => {
     await page.viewport(390, 844);
 
     const screen = await renderWorkspaceShell("/");
     const sidebar = screen.container.querySelector<HTMLElement>("aside");
 
     expect(sidebar).toBeInstanceOf(HTMLElement);
-    expect(getComputedStyle(sidebar as HTMLElement).display).toBe("none");
+    // Tailwind utilities are not compiled inside the Vitest browser project,
+    // so the breakpoint contract is checked as the classes the shell ships:
+    // the sidebar exists below `lg` only as a hidden node, and the trigger
+    // disappears from `lg` up.
+    expect(sidebar?.classList.contains("hidden")).toBe(true);
+    expect(sidebar?.classList.contains("lg:flex")).toBe(true);
 
-    // The phone affordance replaces it, and nothing is open yet.
-    await expect
-      .element(screen.getByRole("button", { name: "Mở điều hướng" }))
-      .toBeVisible();
+    const trigger = screen.getByRole("button", { name: "Mở điều hướng" });
+    await expect.element(trigger).toBeVisible();
+    expect(trigger.element().classList.contains("lg:hidden")).toBe(true);
     await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -125,9 +140,9 @@ describe("kernel mobile navigation drawer", () => {
         .toBeVisible();
     }
 
-    for (const label of ADMIN_DESTINATIONS) {
+    for (const label of ADMIN_DESTINATION_LABELS) {
       await expect
-        .element(drawer.getByRole("link", { name: label }))
+        .element(drawer.getByRole("link", { name: label, exact: true }))
         .toBeVisible();
     }
   });
@@ -145,15 +160,17 @@ describe("kernel mobile navigation drawer", () => {
 
     for (const label of ["Tổng quan", "Tin nhắn", "Dự án"]) {
       await expect
-        .element(drawer.getByRole("link", { name: label }))
+        .element(drawer.getByRole("link", { name: label, exact: true }))
         .toBeVisible();
     }
 
     await expect
-      .element(drawer.getByRole("link", { name: "Người dùng" }))
+      .element(drawer.getByRole("link", { name: "Người dùng", exact: true }))
       .not.toBeInTheDocument();
     await expect
-      .element(drawer.getByRole("link", { name: "Nguồn kiến thức" }))
+      .element(
+        drawer.getByRole("link", { name: "Nguồn kiến thức", exact: true }),
+      )
       .not.toBeInTheDocument();
     await expect
       .element(drawer.getByText("Hệ thống", { exact: true }))
@@ -170,7 +187,7 @@ describe("kernel mobile navigation drawer", () => {
 
     await screen
       .getByRole("dialog")
-      .getByRole("link", { name: "Người dùng" })
+      .getByRole("link", { name: "Người dùng", exact: true })
       .click();
 
     await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
@@ -179,16 +196,26 @@ describe("kernel mobile navigation drawer", () => {
       .toHaveTextContent("/users");
   });
 
-  it("keeps the sectioned sidebar navigation on desktop", async () => {
+  it("keeps the icon-first rail navigation available on desktop", async () => {
     await page.viewport(1280, 720);
 
     const screen = await renderWorkspaceShell("/");
-    const sidebar = screen.container.querySelector<HTMLElement>("aside");
+    const sidebar = screen.container.querySelector<HTMLElement>("aside")!;
 
-    expect(getComputedStyle(sidebar as HTMLElement).display).not.toBe("none");
-    await expect
-      .element(screen.getByRole("link", { name: "Hiệu suất" }))
-      .toBeVisible();
+    expect(sidebar.classList.contains("lg:flex")).toBe(true);
+    // The rail is icon-first: every destination is reachable, each label lives
+    // in an sr-only span (plus a hover tooltip), and the section headings belong
+    // to the drawer, not to the rail.
+    expect(
+      [...sidebar.querySelectorAll("nav p")].map((heading) =>
+        heading.textContent?.trim(),
+      ),
+    ).toEqual([]);
+    expect(
+      [...sidebar.querySelectorAll("nav a[href]")].map((link) =>
+        link.getAttribute("href"),
+      ),
+    ).toEqual(ADMIN_NAV_HREFS);
     await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
   });
 });

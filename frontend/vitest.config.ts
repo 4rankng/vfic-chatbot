@@ -63,6 +63,8 @@ export default defineConfig({
             "react-aria-components",
             "react-aria",
             "react-stately",
+            "ra-core",
+            "react-router",
           ],
           exclude: ["playwright", "playwright-core"],
         },
