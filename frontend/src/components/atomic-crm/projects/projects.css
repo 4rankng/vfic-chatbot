@@ -1,48 +1,3 @@
-/* Feature readiness uses text and icons as its primary signal; surface tint
-   supports it without turning ordinary facts into a wall of pills. */
-.project-features-card {
-  border-color: var(--border);
-  background: var(--card);
-  color: var(--foreground);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-}
-.project-readiness-hero {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-.project-readiness-count {
-  color: var(--foreground);
-}
-.project-feature-group-title {
-  color: var(--foreground);
-  font-size: var(--fs-card-title);
-  font-weight: var(--fw-semibold);
-}
-.project-feature-group-count {
-  color: var(--muted-foreground);
-  font-size: var(--fs-meta);
-}
-.project-feature-chip {
-  color: var(--foreground);
-  border-radius: 8px;
-}
-.project-feature-chip-copy {
-  color: var(--foreground);
-}
-.project-feature-chip .text-muted-foreground {
-  color: var(--muted-foreground);
-}
-.project-feature-chip:has(.bg-feature-gap),
-.project-feature-group:has(.text-feature-gap) {
-  border-color: var(--feature-gap-border);
-}
-.project-feature-detail-toggle {
-  border-top: 1px solid var(--border);
-  border-radius: 0;
-}
-
 .project-knowledge-header {
   padding: 2px 0 0;
 }
@@ -137,13 +92,6 @@
   gap: 6px;
 }
 
-.project-edit-status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
 .project-category-workspace {
   min-width: 0;
   display: grid;
@@ -156,6 +104,8 @@
   border-right: 1px solid var(--border);
 }
 
+/* The phone-only category picker is a Untitled UI `Select`, so only its
+   show/hide and box floor are console-owned: the control paints itself. */
 .project-category-mobile-select {
   display: none;
 }
@@ -547,95 +497,9 @@
   padding: 0 0 16px;
 }
 
-.project-mode-fieldset {
-  margin-top: 4px;
-  border-top: 1px solid var(--border);
-  padding-top: 14px;
-}
-
-.project-mode-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.project-mode-option {
-  position: relative;
-  display: flex;
-  min-height: 76px;
-  align-items: flex-start;
-  gap: 10px;
-  cursor: pointer;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
-  background: transparent;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease;
-}
-
-.project-mode-option:hover {
-  background: color-mix(in srgb, var(--surface-hover) 70%, transparent);
-}
-
-.project-mode-option:focus-within {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-
-.project-mode-option.is-selected {
-  border-color: var(--brand);
-  background: color-mix(in srgb, var(--brand-light) 44%, transparent);
-}
-
-.project-mode-indicator {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
-  place-items: center;
-  margin-top: 1px;
-  border: 1.5px solid var(--muted-foreground);
-  border-radius: 999px;
-}
-
-.project-mode-indicator > span {
-  width: 8px;
-  height: 8px;
-  border-radius: inherit;
-  background: transparent;
-}
-
-.project-mode-option.is-selected .project-mode-indicator {
-  border-color: var(--brand);
-}
-
-.project-mode-option.is-selected .project-mode-indicator > span {
-  background: var(--brand);
-}
-
-.project-discovery-section,
-.project-form-section-header {
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-}
-
-.project-form-section-header {
-  min-height: 52px;
-}
-
-.project-form-content {
-  padding-bottom: 0;
-}
-
 @media (max-width: 639px) {
   .project-form-surface {
     padding-inline: 4px;
-  }
-
-  .project-mode-grid {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -800,57 +664,6 @@
   gap: 8px;
 }
 
-.project-ops-panel.is-single-project {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.project-ops-panel.is-single-project .project-selected-summary {
-  border-left: 3px solid var(--brand);
-  padding: 18px 20px;
-}
-
-.project-fact-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 2px 0 0;
-  border-block: 1px solid var(--border);
-}
-
-.project-fact-row > div {
-  min-width: 0;
-  padding: 10px 12px;
-}
-
-.project-fact-row > div + div {
-  border-left: 1px solid var(--border);
-}
-
-.project-fact-row dt {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--ink-muted);
-  font-size: var(--fs-helper);
-  font-weight: 650;
-  line-height: 1.25;
-}
-
-.project-fact-row dt svg {
-  flex: 0 0 auto;
-  color: var(--brand);
-}
-
-.project-fact-row dd {
-  margin: 5px 0 0;
-  overflow: hidden;
-  color: var(--ink);
-  font-size: var(--fs-body);
-  font-weight: 720;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* The rollup is part of the project ledger, not a separate card. */
 .project-rollup-strip {
   min-height: 44px;
@@ -965,147 +778,6 @@
     display: none;
   }
 
-  .project-ops-panel {
-    grid-template-columns: minmax(0, 1fr);
-    overflow: visible;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .project-ops-panel.is-single-project .project-selected-summary {
-    border-left: 3px solid var(--brand);
-    padding: 18px 16px;
-  }
-
-  .project-selector-column {
-    order: 2;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--surface-solid);
-    box-shadow: none;
-  }
-
-  .project-selected-summary {
-    order: 1;
-    gap: 12px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--surface-solid);
-    padding: 16px;
-    box-shadow: none;
-  }
-
-  .project-selected-eyebrow {
-    font-size: var(--fs-helper);
-    font-weight: 700;
-  }
-
-  .project-selected-main {
-    flex-direction: row;
-  }
-
-  .project-selected-summary h2 {
-    font-size: var(--fs-section-title);
-    font-weight: 700;
-    line-height: 24px;
-  }
-
-  .project-selected-actions {
-    width: auto;
-    justify-content: flex-end;
-    gap: 4px;
-  }
-
-  .project-edit-action {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
-    padding: 0;
-  }
-
-  .project-edit-action span {
-    display: none;
-  }
-
-  .project-selected-actions [data-slot="button"] {
-    border-radius: 12px;
-  }
-
-  .project-health-row {
-    gap: 0;
-  }
-
-  .project-health-row .inline-flex {
-    min-height: 28px;
-    border-radius: 999px;
-    font-size: var(--fs-helper);
-    font-weight: 600;
-  }
-
-  .project-fact-row > div {
-    padding: 10px 8px;
-  }
-
-  .project-fact-row dt {
-    gap: 4px;
-    font-size: var(--fs-caption);
-  }
-
-  .project-fact-row dd {
-    font-size: var(--fs-body-sm);
-  }
-
-  .project-selected-summary-text {
-    display: -webkit-box;
-    overflow: hidden;
-    font-size: var(--fs-body);
-    font-weight: 500;
-    line-height: 20px;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
-  .project-section-heading {
-    min-height: 56px;
-    padding: 12px 16px;
-    background: transparent;
-  }
-
-  .project-directory-list {
-    max-height: none;
-  }
-
-  .project-directory-row {
-    min-height: 72px;
-    gap: 12px;
-    padding: 12px 16px;
-  }
-
-  .project-directory-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-  }
-
-  .project-directory-name {
-    font-size: var(--fs-subsection);
-    font-weight: 600;
-    line-height: 20px;
-  }
-
-  .project-directory-meta span {
-    min-height: 20px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    font-size: var(--fs-helper);
-    font-weight: 500;
-  }
-
   .project-detail-stack {
     margin-top: 12px;
   }
@@ -1180,19 +852,6 @@
     width: 100%;
   }
 
-  .project-features-card {
-    border-radius: 16px;
-    box-shadow: none;
-  }
-
-  .project-features-header {
-    padding: 16px;
-  }
-
-  .project-features-content {
-    padding: 16px;
-  }
-
   .project-knowledge-header,
   .project-knowledge-content {
     padding: 16px;
@@ -1214,12 +873,6 @@
     display: block;
     width: 100%;
     min-height: 44px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface-solid);
-    padding: 0 36px 0 12px;
-    color: var(--foreground);
-    font: inherit;
   }
 
   .project-category-card {

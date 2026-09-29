@@ -17,7 +17,11 @@ const mocks = vi.hoisted(() => ({
   deleteSinglePageExternalSource: vi.fn(),
 }));
 
-vi.mock("ra-core", () => ({
+// The list's empty state comes from `../kit`, whose barrel also exports the
+// react-admin bound form controls; those import `useInput` from `ra-core`, so
+// the mock spreads the real module instead of narrowing it to one export.
+vi.mock("ra-core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("ra-core")>()),
   useNotify: () => mocks.notify,
 }));
 

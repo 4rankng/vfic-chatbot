@@ -8,9 +8,9 @@ import {
   useRedirect,
   useTranslate,
 } from "ra-core";
-import { TextInput } from "@/components/admin/text-input";
-import { BooleanInput } from "@/components/admin/boolean-input";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { FormTextInput, FormToggle } from "../kit";
 import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
@@ -66,14 +66,14 @@ const ProjectEditContent = () => {
               className="project-edit-meta mt-1"
               aria-label="Trạng thái dự án"
             >
-              <span
-                className={
-                  project.is_active ? "text-success" : "text-muted-foreground"
-                }
+              <Badge
+                className="uu-scope"
+                type="pill-color"
+                size="sm"
+                color={project.is_active ? "success" : "gray"}
               >
-                <span className="project-edit-status-dot" aria-hidden="true" />
                 {project.is_active ? "Đang hoạt động" : "Đang tắt"}
-              </span>
+              </Badge>
               <span aria-hidden="true">·</span>
               <span>
                 {project.knowledge_mode === "DIRECT_CONTEXT"
@@ -97,21 +97,23 @@ const ProjectEditContent = () => {
         >
           <Form record={project} onSubmit={onSubmit}>
             <div className="project-edit-settings">
-              <TextInput
+              <FormTextInput
                 source="name"
                 label="Tên dự án"
                 className="project-edit-name"
                 isRequired
               />
-              <BooleanInput
+              <FormToggle
                 source="is_active"
                 label="Dự án hoạt động"
                 className="project-edit-active"
               />
               <Button
                 type="submit"
+                color="primary"
+                size="sm"
                 className="project-edit-save"
-                disabled={submitting}
+                isDisabled={submitting}
               >
                 {translate("crm.common.save_changes")}
               </Button>

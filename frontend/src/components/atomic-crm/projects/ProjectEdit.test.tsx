@@ -47,23 +47,18 @@ vi.mock("ra-core", () => ({
   useRedirect: () => mocks.redirect,
 }));
 
-vi.mock("@/components/admin/text-input", () => ({
-  TextInput: ({ label, className }: { label: string; className?: string }) => (
+// The form controls are Untitled UI adapters bound to react-admin's `useInput`,
+// which needs a react-hook-form `FormProvider`; the `Form` stub above is a bare
+// `<form>`, so the two controls are stubbed to keep the assertion about the
+// update payload — not about field plumbing.
+vi.mock("../kit", () => ({
+  FormTextInput: ({ label, className }: { label: string; className?: string }) => (
     <label className={className}>
       {label}
       <input />
     </label>
   ),
-}));
-
-vi.mock("@/components/admin/boolean-input", () => ({
-  BooleanInput: ({
-    label,
-    className,
-  }: {
-    label: string;
-    className?: string;
-  }) => (
+  FormToggle: ({ label, className }: { label: string; className?: string }) => (
     <label className={className}>
       {label}
       <input type="checkbox" />

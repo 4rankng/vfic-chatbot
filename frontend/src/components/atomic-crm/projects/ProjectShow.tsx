@@ -1,6 +1,6 @@
 import { ShowBase, useRecordContext, useRedirect } from "ra-core";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
 import { Pencil } from "lucide-react";
 import type { Project } from "../types";
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
@@ -33,12 +33,10 @@ const ProjectShowContent = () => {
             <header className="project-show-summary-header flex items-center justify-between gap-2 text-section-title">
               <span>Thông tin</span>
               <Badge
-                variant="outline"
-                className={
-                  project.is_active
-                    ? "tt-badge-success tt-badge-soft border-transparent text-success"
-                    : "border-border bg-muted/40 text-muted-foreground"
-                }
+                className="uu-scope"
+                type="pill-color"
+                size="sm"
+                color={project.is_active ? "success" : "gray"}
               >
                 {project.is_active ? "Đang hoạt động" : "Tắt"}
               </Badge>
@@ -81,12 +79,12 @@ const ProjectShowContent = () => {
               <div className="project-show-summary-actions mt-1 flex flex-wrap gap-2">
                 {canEdit && (
                   <Button
-                    variant="outline"
+                    color="secondary"
                     size="sm"
                     className="w-fit"
+                    iconLeading={Pencil}
                     onClick={() => redirect("edit", "projects", project.id)}
                   >
-                    <Pencil className="size-4" />
                     Quản lý dự án
                   </Button>
                 )}

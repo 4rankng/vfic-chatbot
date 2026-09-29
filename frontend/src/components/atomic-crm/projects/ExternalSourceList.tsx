@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNotify } from "ra-core";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Link2 } from "lucide-react";
+import { EmptyState } from "../kit";
 import {
   createSyncWatch,
   nextPollDelay,
@@ -250,19 +251,22 @@ export const ExternalSourceList = ({
   };
 
   if (query.isLoading) {
-    return <Skeleton className="h-20 w-full" />;
+    return (
+      <div className="uu-scope" role="status" aria-label="Đang tải danh sách">
+        <span className="block h-20 w-full animate-pulse rounded-lg bg-tertiary" />
+      </div>
+    );
   }
   if (!rows || rows.length === 0) {
     if (!isSinglePage) {
       return null;
     }
     return (
-      <div
-        className="rounded-lg border border-dashed border-border px-4 py-3 text-body-sm text-muted-foreground"
-        aria-live="polite"
-      >
-        Chưa có nguồn đồng bộ Google Sheet cho trang kiến thức này.
-      </div>
+      <EmptyState
+        icon={<Link2 className="size-6" aria-hidden="true" />}
+        title="Nguồn đồng bộ"
+        description="Chưa có nguồn đồng bộ Google Sheet cho trang kiến thức này."
+      />
     );
   }
 

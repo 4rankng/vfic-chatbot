@@ -6,8 +6,8 @@ import {
   useNotify,
   useRedirect,
 } from "ra-core";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
 import { X } from "lucide-react";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import {
@@ -24,37 +24,6 @@ import { slugifyVietnamese } from "./domain/vietnamese-slug";
 import { ProjectBriefImport } from "./presentation/ProjectBriefImport";
 import { useProjectIngest } from "./presentation/use-project-ingest";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
-
-type FieldProps = {
-  id: string;
-  label: string;
-  value: string;
-  placeholder?: string;
-  required?: boolean;
-  onChange: (value: string) => void;
-};
-
-const Field = ({
-  id,
-  label,
-  value,
-  placeholder,
-  required,
-  onChange,
-}: FieldProps) => (
-  <div className="grid gap-1.5">
-    <label htmlFor={id} className="font-medium">
-      {label}
-      {required ? <span aria-hidden="true"> *</span> : null}
-    </label>
-    <Input
-      id={id}
-      value={value}
-      placeholder={placeholder}
-      onChange={(event) => onChange(event.target.value)}
-    />
-  </div>
-);
 
 /** The brief's own words, shown so a mis-parsed section is visible rather than
  *  silently dropped. These never become form fields: the create schema refuses
@@ -212,34 +181,42 @@ const ProjectCreateForm = () => {
   return (
     <Form onSubmit={onSubmit}>
       <div className="flex flex-col gap-4">
-        <Field
+        <Input
           id="project-name"
+          className="uu-scope"
           label="Tên dự án"
+          isRequired
+          validationBehavior="aria"
           value={name}
           placeholder="LG Display Hải Phòng"
-          required
           onChange={setName}
         />
-        <Field
+        <Input
           id="project-slug"
+          className="uu-scope"
           label="Mã dự án"
+          validationBehavior="aria"
           value={slug}
           placeholder="lg-display-hai-phong"
           onChange={setSlug}
         />
-        <Field
+        <Input
           id="project-aliases"
+          className="uu-scope"
           label="Tên gọi khác"
+          validationBehavior="aria"
           value={aliases}
           placeholder="LG, LGD (không bắt buộc)"
           onChange={setAliases}
         />
-        <Field
+        <Input
           id="project-roles"
+          className="uu-scope"
           label="Vị trí tuyển dụng"
+          isRequired
+          validationBehavior="aria"
           value={roles}
           placeholder="Công nhân sản xuất, Kiểm tra"
-          required
           onChange={setRoles}
         />
         <p className="text-helper text-muted-foreground">
@@ -288,7 +265,7 @@ const ProjectCreateForm = () => {
         <p className="text-helper text-muted-foreground">
           Dự án chỉ hiển thị với ứng viên sau khi bạn bấm «Tạo dự án».
         </p>
-        <Button type="submit" disabled={!canSave}>
+        <Button type="submit" isDisabled={!canSave}>
           {submitting ? "Đang tạo…" : "Tạo dự án"}
         </Button>
       </div>
@@ -314,12 +291,12 @@ export const ProjectCreate = () => {
               </div>
               <Button
                 type="button"
-                variant="outline"
+                color="secondary"
                 size="sm"
+                iconLeading={X}
                 onClick={() => redirect("/projects")}
                 aria-label="Đóng và quay lại danh sách dự án"
               >
-                <X className="size-4" aria-hidden="true" />
                 Đóng
               </Button>
             </header>

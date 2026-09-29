@@ -1,8 +1,11 @@
 import { memo, useEffect, useState } from "react";
 import { BusFront, ChevronLeft, ChevronRight } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Loading01 } from "@untitledui/icons";
+
+import { Badge } from "@/components/base/badges/badges";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "../kit";
 import type { BusRoute, BusTimetableList } from "../types";
 import { getProjectBusTimetable } from "./project-knowledge-service";
 
@@ -71,8 +74,8 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
         <div className="flex items-center gap-2">
           {loading ? (
             <span className="inline-flex items-center gap-1.5 text-body text-muted-foreground">
-              <span
-                className="tt-loading tt-loading-spinner tt-loading-sm text-primary"
+              <Loading01
+                className="size-4 shrink-0 animate-spin text-primary"
                 aria-hidden="true"
               />
               Đang tải…
@@ -89,30 +92,22 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
           )}
           {total > BUS_ROUTE_PAGE_SIZE && (
             <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="size-8"
-                disabled={loading || page <= 1}
+              <ButtonUtility
+                tooltip="Trang trước"
+                size="sm"
+                isDisabled={loading || page <= 1}
                 onClick={() => setPage((value) => Math.max(1, value - 1))}
-                aria-label="Trang trước"
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="size-8"
-                disabled={loading || page >= pageCount}
+                icon={ChevronLeft}
+              />
+              <ButtonUtility
+                tooltip="Trang sau"
+                size="sm"
+                isDisabled={loading || page >= pageCount}
                 onClick={() =>
                   setPage((value) => Math.min(pageCount, value + 1))
                 }
-                aria-label="Trang sau"
-              >
-                <ChevronRight className="size-4" />
-              </Button>
+                icon={ChevronRight}
+              />
             </div>
           )}
         </div>
@@ -129,12 +124,12 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
           ))}
         </div>
       ) : (
-        <p
-          role="status"
-          className="mt-3 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-body text-muted-foreground"
-        >
-          Chưa có lịch xe đưa đón được trích xuất cho dự án này.
-        </p>
+        <EmptyState
+          className="mt-3"
+          icon={<BusFront className="size-6" aria-hidden="true" />}
+          title="Lịch xe đưa đón"
+          description="Chưa có lịch xe đưa đón được trích xuất cho dự án này."
+        />
       )}
     </section>
   );
@@ -149,10 +144,7 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
             {route.route_name}
           </h4>
           {route.route_no && (
-            <Badge
-              variant="outline"
-              className="h-5 rounded-md px-1.5 text-badge"
-            >
+            <Badge className="uu-scope" type="color" size="sm" color="gray">
               Tuyến {route.route_no}
             </Badge>
           )}
@@ -161,7 +153,12 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
           {shiftLabel(route.shift)} • {directionLabel(route.direction)}
         </div>
       </div>
-      <Badge variant="secondary" className="shrink-0 text-badge">
+      <Badge
+        className="uu-scope shrink-0"
+        type="pill-color"
+        size="sm"
+        color="gray"
+      >
         {route.stops.length} điểm
       </Badge>
     </div>
@@ -169,19 +166,22 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
     {route.stops.length > 0 ? (
       <div className="mt-3 flex flex-wrap gap-1.5">
         {route.stops.map((stop) => (
-          <span
+          <Badge
             key={stop.id}
-            className="inline-flex max-w-full items-center gap-1 rounded-md border bg-card px-2 py-1 text-helper"
+            className="uu-scope max-w-full gap-1"
+            type="color"
+            size="sm"
+            color="gray"
           >
             <span className="max-w-[180px] truncate font-medium">
               {stop.stop_name}
             </span>
             {stop.scheduled_time && (
-              <span className="font-mono text-caption text-muted-foreground">
+              <span className="font-mono text-caption text-fg-quaternary">
                 {stop.scheduled_time}
               </span>
             )}
-          </span>
+          </Badge>
         ))}
       </div>
     ) : (
