@@ -989,3 +989,44 @@ async def test_the_hotline_round_trips_and_reads_the_plaintext_seed() -> None:
 
     kept = await service.replace_hotline(None, actor_id=None)
     assert kept["hotline"] == ""  # None keeps the stored value
+
+
+def test_the_seed_migration_pins_the_owner_approved_hotline() -> None:
+    """The digits are pinned at the SEED, never in runtime copy (owner ruling).
+
+    Runtime replies are built from the stored setting, so the only place
+    the owner-approved number may live in source is Alembic 0058. This pins
+    the seed value plus the two guards that keep operator edits
+    authoritative: upgrade inserts only when the row is absent, downgrade
+    deletes only the exact seed value.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "0058_tingting_hotline_setting.py"
+    )
+    spec = importlib.util.spec_from_file_location("seed_0058", migration_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.SEED_VALUE == "+84 914 827 988"
+
+    captured: list[str] = []
+    real_execute = module.op.execute
+    module.op.execute = lambda sql: captured.append(str(sql))
+    try:
+        module.upgrade()
+        module.downgrade()
+    finally:
+        module.op.execute = real_execute
+    upgrade_sql = captured[0]
+    downgrade_sql = captured[1]
+    assert "914827988" in upgrade_sql.replace(" ", "")
+    assert "WHERE NOT EXISTS" in upgrade_sql  # operator edits win over the seed
+    # Downgrade is value-guarded: an admin-edited (re-sealed) row survives.
+    assert "DELETE FROM public.integration_settings" in downgrade_sql
+    assert "'+84 914 827 988'" in downgrade_sql

@@ -2228,9 +2228,11 @@ async def test_a_recruitment_question_on_the_support_oa_points_at_the_hotline():
 def test_the_recruitment_handoff_reply_sends_the_candidate_to_the_hotline():
     """Operator rule (2026-09-29): the recruitment escalation points candidates
     at the VFIC hotline 18007228. The TingTing support OA has its own number
-    (+84 914 827 988, same day's OA ruling — no human works that OA), so the
-    two replies must never drift together: neither channel may inherit the
-    other's escalation copy.
+    (same day's OA ruling — no human works that OA), so the two replies must
+    never drift together: neither channel may inherit the other's escalation
+    copy. The TingTing digits here pin the BUILDER's formatting with the seed
+    value as input — the authoritative pin on the number itself lives at the
+    Alembic 0058 seed (settings-suite test).
     """
     from app.graph.lanes import OUT_OF_SCOPE_HANDOFF_REPLY
 

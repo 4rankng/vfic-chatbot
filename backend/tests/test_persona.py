@@ -292,8 +292,8 @@ def test_tingting_support_prompt_excludes_the_recruitment_directory():
     from app.graph.tingting_guide import tingting_support_system_prompt
 
     for prompt in (
-        tingting_support_system_prompt(include_guide=False),
-        tingting_support_system_prompt(include_guide=True),
+        tingting_support_system_prompt(include_guide=False, hotline="+84 914 827 988"),
+        tingting_support_system_prompt(include_guide=True, hotline="+84 914 827 988"),
     ):
         assert "DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG" not in prompt
         assert "tìm việc chung chung" not in prompt
