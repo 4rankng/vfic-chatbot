@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from time import monotonic
@@ -9,14 +10,15 @@ from time import monotonic
 import pytest
 from sqlalchemy import delete, func, select, text, update
 
+from app.core.config import INGEST_JOB_TIMEOUT_SECONDS
 from app.models.bus import BusRoute, BusStop
 from app.models.company import Company, Project
 from app.models.job import Job
 from app.models.knowledge import (
-    KnowledgeBase,
-    KnowledgeBaseMode,
     KBVersion,
     KBVersionStatus,
+    KnowledgeBase,
+    KnowledgeBaseMode,
     KnowledgeCategory,
     KnowledgeCategoryRevision,
     KnowledgeCategoryRevisionStatus,
@@ -25,9 +27,8 @@ from app.models.knowledge import (
     KnowledgeStatus,
 )
 from app.models.user import Role, User
-from app.core.config import INGEST_JOB_TIMEOUT_SECONDS
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
-from app.shared.domain.errors import ConflictError
+from app.services.job_service import JobService
 from app.services.knowledge.category_contracts import (
     CATEGORY_DEFINITIONS,
     category_checksum,
@@ -37,11 +38,11 @@ from app.services.knowledge.category_service import (
     CategoryActivationError,
     KnowledgeCategoryService,
 )
-from app.services.job_service import JobService
+from app.services.project.repository import ProjectRepository
 from app.services.recommendation.repository import RecommendationRepository
 from app.services.recommendation.scoring import LeadProfile
 from app.services.retrieval.repository import RetrievalRepository
-from app.services.project.repository import ProjectRepository
+from app.shared.domain.errors import ConflictError
 
 pytestmark = pytest.mark.integration
 
@@ -61,7 +62,7 @@ class _CapturingEmbedder(_Embedder):
 
 
 class _FailingEmbedder:
-    async def batch(self, _texts: list[str]) -> list[list[float]]:
+    async def batch(self, texts: list[str]) -> list[list[float]]:
         raise RuntimeError("secret-contact-+84909999999")
 
 
@@ -251,7 +252,9 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     integration_session.add(jobs_revision)
     await integration_session.commit()
 
-    service = KnowledgeCategoryService(integration_session)
+    service = KnowledgeCategoryService(
+        integration_session, enforce_retrieval_selftest=False
+    )
     await service.activate_revision(
         jobs_revision.id,
         _Embedder(),
@@ -564,7 +567,9 @@ async def test_explicit_cutover_requires_all_categories_and_rolls_back(
         categories.append(category)
     await integration_session.commit()
 
-    service = KnowledgeCategoryService(integration_session)
+    service = KnowledgeCategoryService(
+        integration_session, enforce_retrieval_selftest=False
+    )
     cutover = await service.cutover_category_authority(project_id=project.id, actor=actor)
 
     assert cutover.category_authority_started is True
@@ -834,7 +839,9 @@ async def test_maximum_category_batch_completes_within_worker_budget(
     await integration_session.commit()
 
     started_at = monotonic()
-    await KnowledgeCategoryService(integration_session).activate_revision(
+    await KnowledgeCategoryService(
+        integration_session, enforce_retrieval_selftest=False
+    ).activate_revision(
         revision.id,
         _Embedder(),
     )
@@ -846,3 +853,117 @@ async def test_maximum_category_batch_completes_within_worker_budget(
     assert revision.quality_result["inserted_chunk_count"] == 1000
     assert elapsed_seconds < 60
     assert elapsed_seconds < INGEST_JOB_TIMEOUT_SECONDS
+
+
+class _OrthogonalEmbedder:
+    """Distinct one-hot vector per distinct text: nothing retrieves anything."""
+
+    async def batch(self, texts: list[str]) -> list[list[float]]:
+        vectors = []
+        for item in texts:
+            index = int(hashlib.sha256(item.encode("utf-8")).hexdigest(), 16) % 8
+            vectors.append([1.0 if position == index else 0.0 for position in range(8)])
+        return vectors
+
+
+class _SameVectorEmbedder:
+    """One shared vector for every text: every query retrieves everything."""
+
+    async def batch(self, texts: list[str]) -> list[list[float]]:
+        return [[1.0] * 3072 for _ in texts]
+
+
+async def _stage_faq_revision(
+    integration_session,
+) -> tuple[uuid.UUID, str, uuid.UUID, uuid.UUID]:
+    actor = User(
+        email=f"category-{uuid.uuid4().hex}@example.test",
+        password_hash="not-used",
+        role=Role.admin,
+    )
+    project = Project(name="Gate Factory", slug=f"gate-{uuid.uuid4().hex}")
+    integration_session.add_all([actor, project])
+    await integration_session.flush()
+    knowledge_base = KnowledgeBase(
+        name="Gate Factory Knowledge",
+        slug=f"gate-kb-{uuid.uuid4().hex}",
+        mode=KnowledgeBaseMode.RAG,
+        project_id=project.id,
+        created_by=actor.id,
+    )
+    integration_session.add(knowledge_base)
+    await integration_session.flush()
+    project.knowledge_base_id = knowledge_base.id
+    category = KnowledgeCategory(project_id=project.id, category_key="faq")
+    integration_session.add(category)
+    await integration_session.flush()
+
+    question = "Ca làm việc mấy giờ?"
+    source = (
+        "category: faq\nfaq:\n  - id: shift-hours\n"
+        f"    question: {question}\n"
+        "    answer: Ca ngày 08:00-20:00, ca đêm 20:00-08:00.\n"
+    )
+    document = parse_category_yaml("faq", source)
+    revision = KnowledgeCategoryRevision(
+        category_id=category.id,
+        revision_no=1,
+        status=KnowledgeCategoryRevisionStatus.STAGED,
+        source_filename="faq.yaml",
+        source_yaml=source,
+        normalized_payload=document.model_dump(mode="json"),
+        content_sha256=category_checksum(document),
+        created_by=actor.id,
+    )
+    integration_session.add(revision)
+    await integration_session.commit()
+    return revision.id, question, project.id, actor.id
+
+
+async def test_activation_retrieval_selftest_blocks_unreachable_record() -> None:
+    # The gate's failure path rolls back its own session; run the service on an
+    # independent session (mirrors production request isolation) so the staged
+    # rows survive the rollback and the persisted failure can be asserted.
+    from app.core import db as db_module
+
+    async with db_module.async_session() as session:
+        revision_id, question, project_id, actor_id = await _stage_faq_revision(session)
+        try:
+            with pytest.raises(CategoryActivationError):
+                await KnowledgeCategoryService(session).activate_revision(
+                    revision_id,
+                    _OrthogonalEmbedder(),
+                )
+            revision = await session.get(KnowledgeCategoryRevision, revision_id)
+            assert revision is not None
+            await session.refresh(revision)
+            assert revision.status is KnowledgeCategoryRevisionStatus.FAILED
+            assert revision.failure_code == "category_retrieval_selftest_failed"
+            assert revision.error_message is not None
+            assert question in revision.error_message
+        finally:
+            await session.rollback()
+            if project_id is not None:
+                await session.execute(
+                    delete(Project).where(Project.id == project_id)
+                )
+            if actor_id is not None:
+                await session.execute(delete(User).where(User.id == actor_id))
+            await session.commit()
+
+
+async def test_activation_retrieval_selftest_passes_consistent_content(
+    integration_session,
+) -> None:
+    revision_id, _question, _project_id, _actor_id = await _stage_faq_revision(
+        integration_session
+    )
+
+    await KnowledgeCategoryService(integration_session).activate_revision(
+        revision_id,
+        _SameVectorEmbedder(),
+    )
+
+    revision = await integration_session.get(KnowledgeCategoryRevision, revision_id)
+    assert revision.status is KnowledgeCategoryRevisionStatus.ACTIVE
+    assert revision.failure_code is None

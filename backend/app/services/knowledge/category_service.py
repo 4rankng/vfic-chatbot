@@ -5,9 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from time import monotonic
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
@@ -44,6 +45,10 @@ from app.services.knowledge.category_projections import (
     SqlAlchemyCategoryProjectionWriter,
     render_category_units,
 )
+from app.services.knowledge.retrieval_selftest import (
+    RetrievalSelftestError,
+    retrieval_selftest_failures,
+)
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.project_knowledge.application.jobs import (
     EnqueueReceiptUnknown,
@@ -59,6 +64,7 @@ CATEGORY_PROCESSING_LEASE_SECONDS = 3_900
 MAX_CATEGORY_PROCESSING_ATTEMPTS = 3
 CATEGORY_ACTIVATION_FAILURE = "category_activation_failed"
 CATEGORY_RETRY_EXHAUSTED = "category_retry_exhausted"
+CATEGORY_RETRIEVAL_SELFTEST_FAILED = "category_retrieval_selftest_failed"
 
 
 class CategoryActivationError(RuntimeError):
@@ -74,6 +80,7 @@ class KnowledgeCategoryService:
         *,
         jobs: ProjectKnowledgeJobs | None = None,
         projection_writer: CategoryProjectionWriter | None = None,
+        enforce_retrieval_selftest: bool = True,
     ) -> None:
         self.db = db
         self._jobs = jobs
@@ -81,6 +88,9 @@ class KnowledgeCategoryService:
         self._projection_writer = (
             projection_writer or SqlAlchemyCategoryProjectionWriter(db)
         )
+        # Mechanics-only harnesses (fake embedders that model no semantics)
+        # construct with False; production keeps the gate on.
+        self._enforce_retrieval_selftest = enforce_retrieval_selftest
 
     def _job_scheduler(self) -> ProjectKnowledgeJobs:
         if self._jobs is None:
@@ -329,7 +339,9 @@ class KnowledgeCategoryService:
             raise NotFoundError("Category not found")
 
         now = datetime.now(UTC)
-        claim = await self.db.execute(
+        claim = cast(
+            CursorResult[Any],
+            await self.db.execute(
             update(KnowledgeCategoryRevision)
             .where(
                 KnowledgeCategoryRevision.id == revision_id,
@@ -356,7 +368,8 @@ class KnowledgeCategoryService:
                 processing_started_at=now,
                 lease_expires_at=now + timedelta(seconds=CATEGORY_PROCESSING_LEASE_SECONDS),
                 attempt_count=KnowledgeCategoryRevision.attempt_count + 1,
-            )
+                )
+            ),
         )
         await self.db.commit()
         if claim.rowcount != 1:
@@ -385,6 +398,17 @@ class KnowledgeCategoryService:
             embedding_duration_ms = round((monotonic() - embedding_started_at) * 1000)
             if len(vectors) != len(units):
                 raise RuntimeError("embedding provider returned an incomplete category batch")
+            # Retrieval self-test (see retrieval_selftest): before this content
+            # becomes the project's active knowledge, prove each record can be
+            # retrieved by the query its own fields declare. Same blocking
+            # class as an invalid payload — content that cannot be retrieved
+            # cannot serve candidates.
+            if self._enforce_retrieval_selftest:
+                selftest_failures = await retrieval_selftest_failures(
+                    document, units, vectors, embedder
+                )
+                if selftest_failures:
+                    raise RetrievalSelftestError(selftest_failures)
 
             project = await locked_project(self.db, category.project_id)
             category = await locked_category(
@@ -493,6 +517,18 @@ class KnowledgeCategoryService:
                 },
             )
             await self.db.commit()
+        except RetrievalSelftestError as exc:
+            await self.db.rollback()
+            failed = await self.db.get(KnowledgeCategoryRevision, revision_id)
+            if failed is not None and failed.processing_token == claim_token:
+                failed.status = KnowledgeCategoryRevisionStatus.FAILED
+                failed.failure_code = CATEGORY_RETRIEVAL_SELFTEST_FAILED
+                failed.error_message = str(exc)
+                failed.processing_started_at = None
+                failed.lease_expires_at = None
+                failed.processing_token = None
+                await self.db.commit()
+            raise CategoryActivationError(CATEGORY_RETRIEVAL_SELFTEST_FAILED) from None
         except Exception:
             await self.db.rollback()
             failed = await self.db.get(KnowledgeCategoryRevision, revision_id)
@@ -515,9 +551,9 @@ class KnowledgeCategoryService:
         category_key: KnowledgeCategoryKey,
         actor: User,
     ) -> KnowledgeCategoryRevision:
-        await self._require_rag_project(project_id)
-        project = await self._locked_project(project_id)
-        category = await self._locked_category(project_id, category_key)
+        await require_rag_project(self.db, project_id)
+        project = await locked_project(self.db, project_id)
+        category = await locked_category(self.db, project_id, category_key)
         latest = await self.db.scalar(
             select(func.max(KnowledgeCategoryRevision.revision_no)).where(
                 KnowledgeCategoryRevision.category_id == category.id
