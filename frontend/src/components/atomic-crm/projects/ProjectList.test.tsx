@@ -52,6 +52,23 @@ const projects: Project[] = [
 ];
 
 describe("ProjectAccordionList", () => {
+  it("labels active projects as active and inactive ones as drafts", async () => {
+    const screen = await render(
+      <ProjectAccordionList
+        projects={projects}
+        isAdmin={false}
+        canEdit={false}
+        onEdit={vi.fn()}
+        onDeleted={vi.fn()}
+      />,
+    );
+
+    await expect.element(screen.getByText("Đang hoạt động")).toBeVisible();
+    await expect.element(screen.getByText("Bản nháp")).toBeVisible();
+    // The old binary label must not resurface anywhere in the list.
+    expect(screen.container.textContent).not.toContain("Tắt");
+  });
+
   it("shows one-page readiness without applying the RAG feature score", async () => {
     const screen = await render(
       <ProjectAccordionList

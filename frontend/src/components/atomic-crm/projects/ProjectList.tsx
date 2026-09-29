@@ -212,6 +212,11 @@ export const ProjectAccordionList = ({
                     </span>
                   </div>
                   <div className="project-accordion-badges">
+                    {/* Inactive projects are labelled as drafts: the list
+                        payload only carries `is_active`, and per-project
+                        ingest state (Đang nạp / Sẵn sàng / Lỗi nạp) sits
+                        behind one catalog fetch per project, which the list
+                        must not fan out into. Never guess beyond is_active. */}
                     <Badge
                       variant="outline"
                       className={cn(
@@ -220,7 +225,7 @@ export const ProjectAccordionList = ({
                           : "border-border bg-muted/40 text-muted-foreground",
                       )}
                     >
-                      {project.is_active ? "Đang hoạt động" : "Tắt"}
+                      {project.is_active ? "Đang hoạt động" : "Bản nháp"}
                     </Badge>
                     <Badge variant="outline">
                       {project.knowledge_mode === "DIRECT_CONTEXT"
