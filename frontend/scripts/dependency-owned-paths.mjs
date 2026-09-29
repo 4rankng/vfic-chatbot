@@ -26,6 +26,8 @@ export const DEPENDENCY_OWNED_PATHS = [
   "src/components/admin/",
   "src/components/ui/",
   "src/components/base/",
+  "src/components/application/",
+  "src/components/shared-assets/",
   "src/components/foundations/",
   "src/utils/",
   "src/hooks/use-mobile.ts",

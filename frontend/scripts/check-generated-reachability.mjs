@@ -38,6 +38,8 @@ process.chdir(frontendRoot);
 /** Generated, dependency-owned roots. Everything here is CLI output. */
 const GENERATED_ROOTS = [
   "src/components/base",
+  "src/components/application",
+  "src/components/shared-assets",
   "src/components/foundations",
   "src/utils",
 ];
