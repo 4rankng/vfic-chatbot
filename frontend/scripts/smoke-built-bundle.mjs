@@ -94,7 +94,19 @@ const main = async () => {
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
     page.on("console", (message) => {
-      if (message.type() === "error") pageErrors.push(message.text());
+      if (message.type() !== "error") return;
+      // The login screen probes /api/v1/installation/runtime and handles the
+      // failure itself (RuntimeManifestError path). With no local backend the
+      // dev proxy's 502 surfaces as a generic resource-load console error —
+      // environment noise, not an app fault. Everything else stays fatal,
+      // including failed chunk loads and any uncaught page error.
+      if (
+        /Failed to load resource/.test(message.text()) &&
+        message.location()?.url.includes("/api/v1/installation/runtime")
+      ) {
+        return;
+      }
+      pageErrors.push(message.text());
     });
 
     await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
