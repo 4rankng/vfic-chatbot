@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import bump_cache_version
@@ -37,6 +37,7 @@ from app.schemas.projects import (
     FeatureOut,
     FeatureReadiness,
     FeatureUpdate,
+    IngestState,
     ProjectCreate,
     ProjectFaqCreate,
     ProjectFaqOut,
@@ -68,6 +69,82 @@ def _mode_of(
 ) -> KnowledgeBaseMode | None:
     """Look up one knowledge-base mode; a Project's nullable FK reads as None."""
     return modes.get(key) if key is not None else None
+
+
+_REVISION_INGEST_STATE: dict[str, IngestState] = {
+    "STAGED": "ingesting",
+    "PROCESSING": "ingesting",
+    "FAILED": "error",
+    "ACTIVE": "ready",
+    # ARCHIVED/CLEARED revisions never count
+}
+
+_DOCUMENT_INGEST_STATE: dict[str, IngestState] = {
+    "UPLOADED": "ingesting",
+    "PROCESSING": "ingesting",
+    "FAILED": "error",
+    "PUBLISHED": "ready",
+    # ARCHIVED documents never count
+}
+
+_INGEST_STATE_RANK: dict[IngestState, int] = {"ready": 0, "error": 1, "ingesting": 2}
+
+
+async def _ingest_states_by_project(
+    db: AsyncSession, project_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, IngestState]:
+    """Batched knowledge-ingest state per project — one query per source, no N+1.
+
+    Sources: each knowledge category's latest revision (``MAX(revision_no)`` per
+    category) and the project's knowledge documents. Unmapped statuses never
+    count. Precedence: ingesting > error > ready. Projects with no counting rows
+    are absent from the result (caller reads missing as None).
+    """
+    if not project_ids:
+        return {}
+    ids = [str(pid) for pid in project_ids]
+    revision_rows = (
+        await db.execute(
+            text(
+                "SELECT kc.project_id AS project_id, kcr.status::text AS status "
+                "FROM ( "
+                "    SELECT r.category_id AS category_id, MAX(r.revision_no) AS revision_no "
+                "    FROM knowledge_category_revisions r "
+                "    JOIN knowledge_categories c ON c.id = r.category_id "
+                "    WHERE c.project_id = ANY(:ids) "
+                "    GROUP BY r.category_id "
+                ") latest "
+                "JOIN knowledge_category_revisions kcr "
+                "  ON kcr.category_id = latest.category_id "
+                " AND kcr.revision_no = latest.revision_no "
+                "JOIN knowledge_categories kc ON kc.id = kcr.category_id"
+            ),
+            {"ids": ids},
+        )
+    ).all()
+    document_rows = (
+        await db.execute(
+            text(
+                "SELECT DISTINCT kd.project_id AS project_id, kd.status::text AS status "
+                "FROM knowledge_documents kd "
+                "WHERE kd.project_id = ANY(:ids)"
+            ),
+            {"ids": ids},
+        )
+    ).all()
+    states: dict[uuid.UUID, IngestState] = {}
+    for rows, mapping in (
+        (revision_rows, _REVISION_INGEST_STATE),
+        (document_rows, _DOCUMENT_INGEST_STATE),
+    ):
+        for row in rows:
+            state = mapping.get(row.status)
+            if state is None:
+                continue
+            current = states.get(row.project_id)
+            if current is None or _INGEST_STATE_RANK[state] > _INGEST_STATE_RANK[current]:
+                states[row.project_id] = state
+    return states
 
 
 def _enqueue_direct_context_index(
@@ -141,9 +218,10 @@ class ProjectService:
         order: str | None = "desc",
         q: str | None = None,
     ) -> tuple[list[ProjectOut], int]:
-        """List projects with per-project feature readiness attached.
+        """List projects with per-project feature readiness and ingest state attached.
 
-        One batched ``readiness_by_project`` query — no N+1. The catalog total is the
+        Batched aggregates only — no N+1: one ``readiness_by_project`` query plus
+        one ingest-state query per knowledge source. The catalog total is the
         active-feature count.
         """
         rows, row_total = await self.list(
@@ -158,6 +236,7 @@ class ProjectService:
         ready = await repo.readiness_by_project([p.id for p in rows])
         total = await repo.active_catalog_size()
         doc_counts = await self.repo.knowledge_document_counts([p.id for p in rows])
+        ingest = await _ingest_states_by_project(self.db, [p.id for p in rows])
         modes = await self._knowledge_modes([p.knowledge_base_id for p in rows])
         out: list[ProjectOut] = []
         for p in rows:
@@ -165,6 +244,7 @@ class ProjectService:
             o.knowledge_mode = _mode_of(modes, p.knowledge_base_id)
             o.knowledge_document_count = doc_counts.get(p.id, 0)
             o.feature_readiness = FeatureReadiness(ready=ready.get(p.id, 0), total=total)
+            o.ingest_state = ingest.get(p.id)
             out.append(o)
         return out, row_total
 
@@ -172,12 +252,13 @@ class ProjectService:
         return await self._require_project(project_id)
 
     async def get_with_readiness(self, project_id: uuid.UUID) -> ProjectOut:
-        """Single-project get with feature readiness attached."""
+        """Single-project get with feature readiness and ingest state attached."""
         proj = await self._require_project(project_id)
         repo = JobFeatureValueRepo(self.db)
         ready = await repo.readiness_by_project([proj.id])
         total = await repo.active_catalog_size()
         doc_counts = await self.repo.knowledge_document_counts([proj.id])
+        ingest = await _ingest_states_by_project(self.db, [proj.id])
         o = ProjectOut.model_validate(proj)
         o.knowledge_mode = _mode_of(
             await self._knowledge_modes([proj.knowledge_base_id]),
@@ -185,6 +266,7 @@ class ProjectService:
         )
         o.knowledge_document_count = doc_counts.get(proj.id, 0)
         o.feature_readiness = FeatureReadiness(ready=ready.get(proj.id, 0), total=total)
+        o.ingest_state = ingest.get(proj.id)
         return o
 
     async def create(self, body: ProjectCreate, admin: User) -> Project:

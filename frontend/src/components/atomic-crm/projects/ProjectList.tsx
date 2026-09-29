@@ -28,7 +28,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "../kit";
-import { cn } from "@/lib/utils";
 import type { Project } from "../types";
 import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
@@ -168,6 +167,46 @@ const ProjectListContent = () => {
   );
 };
 
+// Four-state project badge driven by the list payload's `ingest_state`.
+const projectStateBadge = (
+  project: Project,
+): {
+  label: string;
+  className: string;
+} => {
+  switch (project.ingest_state) {
+    case "ingesting":
+      return {
+        label: "Đang nạp",
+        className: "tt-badge-secondary tt-badge-soft border-transparent",
+      };
+    case "error":
+      return {
+        label: "Lỗi nạp",
+        className:
+          "tt-badge-error tt-badge-soft border-transparent text-destructive",
+      };
+    case "ready":
+      return {
+        label: "Sẵn sàng",
+        className:
+          "tt-badge-success tt-badge-soft border-transparent text-success",
+      };
+    default:
+      // Legacy payloads without `ingest_state` fall back to is_active.
+      return project.is_active
+        ? {
+            label: "Sẵn sàng",
+            className:
+              "tt-badge-success tt-badge-soft border-transparent text-success",
+          }
+        : {
+            label: "Bản nháp",
+            className: "border-border bg-muted/40 text-muted-foreground",
+          };
+  }
+};
+
 export const ProjectAccordionList = ({
   projects,
   isAdmin,
@@ -192,6 +231,7 @@ export const ProjectAccordionList = ({
       {projects.map((project) => {
         const projectId = String(project.id);
         const readinessText = projectReadinessLabel(project);
+        const stateBadge = projectStateBadge(project);
 
         return (
           <AccordionItem
@@ -212,20 +252,9 @@ export const ProjectAccordionList = ({
                     </span>
                   </div>
                   <div className="project-accordion-badges">
-                    {/* Inactive projects are labelled as drafts: the list
-                        payload only carries `is_active`, and per-project
-                        ingest state (Đang nạp / Sẵn sàng / Lỗi nạp) sits
-                        behind one catalog fetch per project, which the list
-                        must not fan out into. Never guess beyond is_active. */}
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        project.is_active
-                          ? "tt-badge-success tt-badge-soft border-transparent text-success"
-                          : "border-border bg-muted/40 text-muted-foreground",
-                      )}
-                    >
-                      {project.is_active ? "Đang hoạt động" : "Bản nháp"}
+                    {/* Status label comes from the list payload's `ingest_state` field (types.ts). */}
+                    <Badge variant="outline" className={stateBadge.className}>
+                      {stateBadge.label}
                     </Badge>
                     <Badge variant="outline">
                       {project.knowledge_mode === "DIRECT_CONTEXT"

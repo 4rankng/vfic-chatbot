@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.project_knowledge.domain.statuses import KnowledgeBaseMode
+
+IngestState = Literal["ingesting", "ready", "error"]
 
 
 class FeatureReadiness(BaseModel):
@@ -37,6 +39,8 @@ class ProjectOut(BaseModel):
     feature_readiness: FeatureReadiness = Field(
         default_factory=lambda: FeatureReadiness(ready=0, total=0)
     )
+    ingest_state: IngestState | None = None
+    """List-level aggregate of the project's knowledge ingest activity."""
     created_at: datetime
     updated_at: datetime
 

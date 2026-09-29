@@ -290,6 +290,7 @@ export type Project = {
   name: string;
   aliases?: string[];
   is_active: boolean;
+  ingest_state?: "ingesting" | "ready" | "error" | null;
   knowledge_mode?: "RAG" | "DIRECT_CONTEXT" | null;
   summary?: string | null;
   index_card?: ProjectIndexCard;
