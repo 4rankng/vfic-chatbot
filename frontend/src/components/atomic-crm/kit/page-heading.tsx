@@ -61,7 +61,7 @@ export function PageHeading({
           ) : null}
         </div>
         {actions ? (
-          <div className="flex flex-wrap items-center justify-start gap-2 [&_a]:min-h-11 [&_button]:min-h-11 sm:justify-end md:[&_a]:min-h-9 md:[&_button]:min-h-9">
+          <div className="flex flex-wrap items-center justify-start gap-2 [&_a]:min-h-10 [&_button]:min-h-10 sm:justify-end md:[&_a]:min-h-9 md:[&_button]:min-h-9">
             {actions}
           </div>
         ) : null}

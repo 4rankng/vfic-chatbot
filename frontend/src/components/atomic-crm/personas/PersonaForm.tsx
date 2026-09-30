@@ -322,7 +322,7 @@ const PersonaForm = ({
                 setName(event.target.value);
                 if (nameError) setNameError(null);
               }}
-              wrapperClassName="uu-scope h-11 lg:max-w-xl"
+              wrapperClassName="uu-scope h-10 lg:max-w-xl"
               inputClassName="text-control"
             />
             {nameError ? (
@@ -617,7 +617,7 @@ const PersonaForm = ({
                             })
                           }
                           placeholder="VD: 10 22 46"
-                          wrapperClassName="uu-scope h-11"
+                          wrapperClassName="uu-scope h-10"
                           inputClassName="font-mono text-control"
                         />
                       </div>

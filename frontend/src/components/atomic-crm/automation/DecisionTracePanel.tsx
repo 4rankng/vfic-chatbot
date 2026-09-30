@@ -234,7 +234,7 @@ const BotRunTraceDetailContent = ({
           type="button"
           variant="outline"
           size="sm"
-          className="mt-3 min-h-11"
+          className="mt-3 min-h-10"
           onClick={() => void detailQuery.refetch()}
         >
           <RefreshCw className="size-4" aria-hidden="true" />
@@ -374,7 +374,7 @@ export const DecisionTracePanel = ({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="mt-3 min-h-11"
+                className="mt-3 min-h-10"
                 onClick={() => void summariesQuery.refetch()}
               >
                 <RefreshCw className="size-4" aria-hidden="true" />

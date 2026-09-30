@@ -269,7 +269,7 @@
 }
 
 .project-category-editor-actions [data-slot="button"] {
-  min-height: 44px;
+  min-height: 40px;
 }
 
 .project-external-source-row {
@@ -775,7 +775,7 @@
     margin-top: 18px;
   }
 
-  /* The box height belongs to the shell's 44px touch floor (src/index.css);
+  /* The box height belongs to the shell's 40px touch floor (src/index.css);
      the previous 32px + !important could never win it, and the ::after
      hit-pad it compensated with was therefore inert. */
   .project-page-shell .project-command-actions [data-slot="button"] {
@@ -893,7 +893,7 @@
   .project-category-mobile-select {
     display: block;
     width: 100%;
-    min-height: 44px;
+    min-height: 40px;
   }
 
   .project-category-workspace {
