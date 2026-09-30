@@ -11,9 +11,10 @@
 # Memory-limit ledger (OPS-09, re-based 2026-09-28): every service carries a
 # deploy.resources.limits.memory ceiling — postgres 448M, redis 320M, web-blue
 # 512M, web-green 512M, worker-chatbot 4×512M, worker-persistence 512M,
-# worker-ingest 512M, worker-followup 512M, worker-maintenance 384M, scheduler
-# 128M, metrics-watch 128M, frontend 64M, adminer 128M, caddy 128M,
-# oa-profile-backfill 512M (profile-gated). Sum of ceilings ≈ 6.2 GB against
+# worker-ingest 512M, worker-category 256M, worker-followup 512M,
+# worker-maintenance 384M, scheduler 128M, metrics-watch 128M, frontend 64M,
+# adminer 128M, caddy 128M, oa-profile-backfill 512M (profile-gated). Sum of
+# ceilings ≈ 6.5 GB against
 # 3915 MB usable + swap: the limits are per-container KILL FENCES, not
 # reservations. Steady-state RSS is far below each ceiling; the point of a
 # fence is that a runaway container hits ITS cap and gets OOM-killed by Docker
@@ -260,8 +261,6 @@ services:
     restart: unless-stopped
 
   # RQ worker: knowledge ingest / reindex / bus rebuild (slow, Drive-bound).
-  # Queue order is priority: `category` revisions are the UI-blocking steps of
-  # the brief-import loop and drain before the multi-minute document ingests.
   worker-ingest:
     logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
@@ -276,7 +275,7 @@ services:
     # SEC-11: no `--url` — rq 2.10 falls back to os.environ["REDIS_URL"] when the
     # flag is absent (rq/cli/helpers.py:388 -> get_redis_from_config), so env_file
     # already supplies the broker and the credential stops appearing in argv.
-    command: ["rq", "worker", "category", "ingest"]
+    command: ["rq", "worker", "ingest"]
     healthcheck:
       # Loop liveness via the RQ worker registry — see worker-chatbot.
       test: ["CMD-SHELL", "python -c \"import os,socket,sys;from rq import Worker;import redis as r;c=r.from_url(os.environ['REDIS_URL'],socket_connect_timeout=3,socket_timeout=3);sys.exit(0 if any(w.hostname==socket.gethostname() for w in Worker.all(connection=c)) else 1)\""]
@@ -290,6 +289,37 @@ services:
           # Embedding/digestion bursts are the largest single-job heap in the
           # stack; same fence class as the other turn-executing workers.
           memory: 512M
+    restart: unless-stopped
+
+  # RQ worker: category-revision activations only. Separate from worker-ingest
+  # so a multi-minute document ingest never delays the brief-import loop's
+  # 5-15s activations: RQ priority orders queues but cannot preempt a job that
+  # is already running, so latency-critical work needs its own worker.
+  worker-category:
+    logging: *default-logging
+    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
+    env_file: .env
+    environment:
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "2"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    # SEC-11 (see worker-ingest): broker comes from env, never argv.
+    command: ["rq", "worker", "category"]
+    healthcheck:
+      # Loop liveness via the RQ worker registry — see worker-chatbot.
+      test: ["CMD-SHELL", "python -c \"import os,socket,sys;from rq import Worker;import redis as r;c=r.from_url(os.environ['REDIS_URL'],socket_connect_timeout=3,socket_timeout=3);sys.exit(0 if any(w.hostname==socket.gethostname() for w in Worker.all(connection=c)) else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          # Single small jobs (parse -> embed one category's YAML -> activate);
+          # no document digestion, so a fraction of the ingest fence suffices.
+          memory: 256M
     restart: unless-stopped
 
   # rq-scheduler: hourly Drive reconcile, 5-min outbound retry, 30-min proactive follow-up tick.

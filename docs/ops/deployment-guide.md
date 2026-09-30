@@ -26,7 +26,8 @@ remains a registry convenience tag but is never used by `make deploy`.
 | `web-blue` / `web-green` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 each (only **active** receives traffic) | FastAPI (uvicorn, 2 workers since the 2026-09-28 host resize). Expose 8000. Volume `vfic_kb_uploads`. Healthcheck `python urllib /health`. The **active** color is tracked in `/opt/vfic/ACTIVE_COLOR`; Caddy proxies only it. The inactive color is stopped between deploys (kept for instant rollback). |
 | `worker-chatbot` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | **4** (raised from 3 by the 2026-09-28 host resize) | RQ queues `webhook_high` then `recovery` (strict priority: a recovered-turn backlog can never delay a live candidate turn). Chatbot imports and LLM clients are warmed at boot. `stop_grace_period: 180s`; 512 MB limit per container. |
 | `worker-persistence` | `ghcr.io/4rankng/tinghire-be:latest` | **1** | RQ queue `persistence_low` only. Best-effort lead/memory enrichment; isolated so it cannot delay candidate replies. 512 MB limit. |
-| `worker-ingest` | `ghcr.io/4rankng/tinghire-be:latest` | 1 | RQ queue `ingest`. Mount `vfic_kb_uploads`. |
+| `worker-ingest` | `ghcr.io/4rankng/tinghire-be:latest` | 1 | RQ queue `ingest` (document ingestion, KB versions, external-source syncs — the slow lane). Mount `vfic_kb_uploads`. |
+| `worker-category` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | RQ queue `category` only: brief-import category-revision activations (5–15s, UI-blocking). Separate worker so a multi-minute document ingest can never delay them — RQ priority orders queues but cannot preempt a running job. 256 MB limit. |
 | `worker-followup` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
 | `worker-maintenance` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | RQ queue `maintenance` (reconcile sweep + outbound dispatch ticks, split from followup by PERF-12). |
 | `scheduler` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | `rqscheduler`. |
@@ -144,9 +145,9 @@ local lockfile audit is what the gate trusts.
    classes of service are handled differently, because the workers are shared
    across colors (they are keyed to `${IMAGE_TAG}`, not to a color):
    - Services that do **not** consume `webhook_high` (the web color,
-     `worker-persistence`, `worker-ingest`, `worker-followup`, `scheduler`,
-     `worker-maintenance`) are recreated outright — restarting them cannot
-     strand an inbound turn.
+     `worker-persistence`, `worker-ingest`, `worker-category`,
+     `worker-followup`, `scheduler`, `worker-maintenance`) are recreated
+     outright — restarting them cannot strand an inbound turn.
    - The turn workers (`TURN_WORKERS=worker-chatbot`) are recreated **one
      replica at a time** (`rolling_recreate_service`), waiting for a healthy
      replacement before touching the next, so at least `replicas - 1` keep
@@ -183,9 +184,9 @@ local lockfile audit is what the gate trusts.
    - `https://bot.tingting.vip/` returns the frontend root.
    - `Caddyfile` routes the public edge to the new `web-<color>:8000` upstream.
    - `docker compose ps` shows 1 `frontend`, 4 `worker-chatbot`, 1 each of
-     `worker-persistence`, `worker-ingest`, `worker-followup`, `scheduler`, and
-     `worker-maintenance` containers running, with health checks healthy when
-     present.
+     `worker-persistence`, `worker-ingest`, `worker-category`,
+     `worker-followup`, `scheduler`, and `worker-maintenance` containers
+     running, with health checks healthy when present.
    - `web-<color>` `/health/queue` exposes queue depth, busy/total workers,
      LLM latency, recent LLM invokes, and recent Minimax 429 counters.
    - **Turn-pipeline gate**: `python -m scripts.turn_pipeline_check` inside the

@@ -30,7 +30,7 @@ IMAGE_TAG="${IMAGE_TAG:?IMAGE_TAG is required (passed by Makefile)}"
 # dispatcher (worker-maintenance, queue `maintenance` — the component that
 # actually pushes bot replies to Zalo) had been left on 38-hour-old code, and the
 # queue-depth alert poller (metrics-watch) had never been created in production.
-WORKERS="worker-chatbot worker-persistence worker-ingest worker-followup scheduler worker-maintenance metrics-watch"
+WORKERS="worker-chatbot worker-persistence worker-ingest worker-category worker-followup scheduler worker-maintenance metrics-watch"
 # Worker services that consume the inbound turn queue. These are recreated one
 # replica at a time (see rolling_recreate_service) so a listener is always
 # draining `webhook_high`; recreating them together leaves accepted webhooks
@@ -257,6 +257,7 @@ PY
       require_running_service_count "worker-chatbot" &&
       require_running_service_count "worker-persistence" &&
       require_running_service_count "worker-ingest" &&
+      require_running_service_count "worker-category" &&
       require_running_service_count "worker-followup" &&
       require_running_service_count "scheduler" &&
       require_running_service_count "worker-maintenance" &&

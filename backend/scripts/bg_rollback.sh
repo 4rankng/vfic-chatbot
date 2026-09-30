@@ -13,7 +13,7 @@ cd /opt/vfic
 ACTIVE_FILE="/opt/vfic/ACTIVE_COLOR"
 PREV_COLOR_FILE="/opt/vfic/PREV_COLOR"
 PREV_TAG_FILE="/opt/vfic/PREV_TAG"
-WORKERS="worker-chatbot worker-persistence worker-ingest worker-followup scheduler worker-maintenance metrics-watch"
+WORKERS="worker-chatbot worker-persistence worker-ingest worker-category worker-followup scheduler worker-maintenance metrics-watch"
 PUBLIC_BASE_URL="https://bot.tingting.vip"
 
 _count_lines() {

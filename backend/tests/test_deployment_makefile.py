@@ -488,6 +488,7 @@ def _prepare_bg_deploy_sandbox(
                 "frontend": "cid-frontend\\n",
                 "worker-persistence": "cid-worker-persistence\\n",
                 "worker-ingest": "cid-worker-ingest\\n",
+                "worker-category": "cid-worker-category\\n",
                 "worker-followup": "cid-worker-followup\\n",
                 "worker-maintenance": "cid-worker-maintenance\\n",
                 "metrics-watch": "cid-metrics-watch\\n",
@@ -729,6 +730,7 @@ def _prepare_bg_rollback_sandbox(
                 "worker-chatbot": "cid-worker-chatbot-1\\ncid-worker-chatbot-2\\n",
                 "worker-persistence": "cid-worker-persistence\\n",
                 "worker-ingest": "cid-worker-ingest\\n",
+                "worker-category": "cid-worker-category\\n",
                 "worker-followup": "cid-worker-followup\\n",
                 "worker-maintenance": "cid-worker-maintenance\\n",
                 "metrics-watch": "cid-metrics-watch\\n",
@@ -823,7 +825,7 @@ def test_bg_deploy_exec_inaugural_public_verify_failure_keeps_blue_running(tmp_p
     # appear in a blunt force-recreate.
     assert (
         "docker compose up -d --no-deps --force-recreate web-blue"
-        " worker-persistence worker-ingest worker-followup scheduler worker-maintenance"
+        " worker-persistence worker-ingest worker-category worker-followup scheduler worker-maintenance"
         in commands
     )
     assert not [
