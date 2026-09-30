@@ -8,7 +8,7 @@ to the four repositories that own the actual queries:
 - :mod:`.document_repository` — memory match + hybrid document retrieval.
 - :mod:`.faq_repository` — the canonical chunk-based FAQ read arms.
 - :mod:`.catalog_repository` — project/persona catalog + job features, and the
-  default ``RecommendationQueryPort`` implementation.
+  rich active-project fit catalog.
 - :mod:`.timetable_repository` — bus timetable reads.
 
 NO business logic, NO LLM/embedder calls — callers compute the embedding (a
@@ -24,7 +24,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.external_api_core import ExternalApiOutcome
-from app.services.retrieval.catalog_repository import CatalogRepository, RecommendationQueries
+from app.services.retrieval.catalog_repository import CatalogRepository
 from app.services.retrieval.document_repository import DocumentRepository
 from app.services.retrieval.faq_repository import FaqRepository
 from app.services.retrieval.timetable_repository import TimetableRepository
@@ -51,14 +51,13 @@ class RetrievalRepository:
         db: AsyncSession,
         *,
         page_project_ids: tuple[str, ...] | None = None,
-        recommendation: object | None = None,
     ) -> None:
         self.db = db
         # Page-scoped catalog for multi-Page Facebook: when set, the Project
         # catalog surfaces (active_project_ids, active_projects_with_card,
-        # list_active_projects, project_id_by_slug, income_summary_for_active_projects,
-        # recommend_jobs_for_lead/list_active_jobs) are restricted to the Facebook
-        # Page's assigned Project set. None → deployment-wide (Zalo + legacy).
+        # list_active_projects, project_id_by_slug, income_summary_for_active_projects)
+        # are restricted to the Facebook Page's assigned Project set. None →
+        # deployment-wide (Zalo + legacy).
         self.page_project_ids: tuple[str, ...] | None = (
             tuple(page_project_ids) if page_project_ids is not None else None
         )
@@ -66,14 +65,6 @@ class RetrievalRepository:
         self._faq = FaqRepository(db)
         self._catalog = CatalogRepository(db, page_project_ids=self.page_project_ids)
         self._timetable = TimetableRepository(db)
-        # The recruitment query seam: any object satisfying the recruitment
-        # context's RecommendationQueryPort may be injected; the default adapter
-        # owns the lead resolution and page scoping.
-        self._recommendation: object = (
-            recommendation
-            if recommendation is not None
-            else RecommendationQueries(db, page_project_ids=self.page_project_ids)
-        )
 
     @property
     def last_match_degraded(self) -> str | None:
@@ -223,32 +214,6 @@ class RetrievalRepository:
 
     async def income_summary_for_active_projects(self):
         return await self._catalog.income_summary_for_active_projects()
-
-    async def recommend_jobs_for_lead(
-        self, chat_id: str, *, top_k: int = 5, province: str | None = None
-    ):
-        return await self._recommendation.recommend_jobs_for_lead(  # type: ignore[attr-defined]
-            chat_id, top_k=top_k, province=province
-        )
-
-    async def list_active_jobs(
-        self,
-        *,
-        project_slug: str | None = None,
-        role: str | None = None,
-        company: str | None = None,
-        location: str | None = None,
-        top_k: int = 3,
-        sort_by: str | None = None,
-    ):
-        return await self._recommendation.list_active_jobs(  # type: ignore[attr-defined]
-            project_slug=project_slug,
-            role=role,
-            company=company,
-            location=location,
-            top_k=top_k,
-            sort_by=sort_by,
-        )
 
 
 __all__ = ["RetrievalRepository"]

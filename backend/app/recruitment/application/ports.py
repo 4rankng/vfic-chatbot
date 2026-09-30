@@ -41,29 +41,6 @@ class LeadContextQueryPort(Protocol):
     def instruction(self, question: str) -> str: ...
 
 
-class RecommendationQueryPort(Protocol):
-    """Neutral recruitment reads over projected active-job authority."""
-
-    async def recommend_jobs_for_lead(
-        self,
-        chat_id: str,
-        *,
-        top_k: int = 5,
-        province: str | None = None,
-    ) -> Any: ...
-
-    async def list_active_jobs(
-        self,
-        *,
-        project_slug: str | None = None,
-        role: str | None = None,
-        company: str | None = None,
-        location: str | None = None,
-        top_k: int = 3,
-        sort_by: str | None = None,
-    ) -> Any: ...
-
-
 class FollowupEligibilityPort(Protocol):
     """Final per-conversation recruitment follow-up decision."""
 
@@ -132,5 +109,4 @@ __all__ = [
     "PersonaBodyResolver",
     "PersonaFollowupRulesResolver",
     "ProactiveStatePort",
-    "RecommendationQueryPort",
 ]

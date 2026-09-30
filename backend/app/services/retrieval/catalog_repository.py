@@ -2,31 +2,111 @@
 
 The catalog owns the Page-scoped project surfaces (slug resolution, active
 project listings, the master-index card set) plus the per-project job-feature
-rows. The recommendation adapter below is the default implementation of the
-recruitment context's ``RecommendationQueryPort`` for this seam: the retrieval
-facade may instead be handed any object satisfying that port, which keeps the
-graph-injected read surface from instantiating recruitment repositories
-inside method bodies.
+rows. ``list_active_projects`` is the matching authority's read: every active
+project as rich fit features (scope, location, salary), which the graph tool
+ranks against the candidate's stated preferences.
 """
 
 from __future__ import annotations
 
 import logging
 import uuid
+from typing import Any
 
-from sqlalchemy import select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.company import Company, Project
+from app.models.job import Job, JobStatus
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
-from app.services.lead.repository import LeadRepository
-from app.services.recommendation import (
-    ActiveJobLookup,
-    LeadJobRecommendation,
-    LeadProfile,
-    RecommendationRepository,
-)
+from app.recruitment.domain.recommendation import ProjectFeatures, ProjectScopeItem
+from app.services.knowledge.derived_jobs import salary_from_feature
+from app.services.recommendation import RecommendationRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _card_items(value: object) -> list[str]:
+    """Normalize recruiter-authored discovery-card values into clean text items."""
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, list | tuple):
+        values = [item for item in value if isinstance(item, str)]
+    else:
+        return []
+    return [text for item in values if (text := " ".join(item.split()))]
+
+
+def _int_or_none(value: Any) -> int | None:
+    """Best-effort int coercion for discovery-card salary fields."""
+    try:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, str):
+            digits = value.replace(".", "").replace(",", "").strip()
+            return int(digits) if digits.isdigit() else None
+        if isinstance(value, int | float):
+            parsed = int(value)
+            return parsed if parsed >= 0 else None
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
+async def _direct_project_salaries(
+    db: AsyncSession, project_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[int | None, int | None]]:
+    """Batch-fetch ``take_home_income`` salaries for card-only projects.
+
+    Returns ``{project_id: (salary_min, salary_max)}`` parsed via
+    :func:`salary_from_feature`, robust to string-typed or unit-marked values.
+    """
+    if not project_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(
+                JobFeatureValue.project_id,
+                JobFeatureValue.value_json,
+            )
+            .join(
+                WorkerFeatureCatalog,
+                WorkerFeatureCatalog.id == JobFeatureValue.feature_id,
+            )
+            .where(
+                JobFeatureValue.project_id.in_(project_ids),
+                WorkerFeatureCatalog.feature_key == "take_home_income",
+                JobFeatureValue.is_missing.is_(False),
+            )
+        )
+    ).all()
+    salaries: dict[uuid.UUID, tuple[int | None, int | None]] = {}
+    for row in rows:
+        pid = row.project_id
+        if pid in salaries:
+            continue
+        salaries[pid] = salary_from_feature({"value_json": row.value_json or {}})
+    return salaries
+
+
+def _resolve_direct_salary(
+    project: Project,
+    card: dict[str, Any],
+    salary: tuple[int | None, int | None] | None,
+) -> tuple[int | None, int | None]:
+    """Pick a salary source for a card-only project.
+
+    Priority: feature-derived salary > discovery card VND fields.
+    Returns ``(None, None)`` when neither source has data — the agent then answers
+    "tin tuyển dụng chưa ghi rõ" instead of inventing a figure.
+    """
+    if salary is not None:
+        minimum, maximum = salary
+        if minimum is not None or maximum is not None:
+            return minimum, maximum
+    card_min = _int_or_none(card.get("salary_min_vnd"))
+    card_max = _int_or_none(card.get("salary_max_vnd"))
+    return card_min, card_max
 
 
 class CatalogRepository:
@@ -56,31 +136,153 @@ class CatalogRepository:
             return None
         return pid
 
-    async def list_active_projects(self) -> list:
-        """name/slug/summary of active projects (catalog tool)."""
+    async def list_active_projects(self) -> list[ProjectFeatures]:
+        """Every active KB-backed project as rich fit features — never capped.
+
+        One :class:`ProjectFeatures` row per active project: structured scope
+        items from the project's open Job rows (scope predicate copied from the
+        retired job matcher: ACTIVE status, the vacancy rule, the
+        category-authority consistency rule), or — for card-only projects —
+        scope/location from the discovery card and salary from the
+        ``take_home_income`` feature values (card VND fields as fallback). DB
+        errors propagate: the tool maps them to ``unavailable``.
+        """
+        project_predicates = [
+            Project.is_active.is_(True),
+            Project.knowledge_base_id.is_not(None),
+        ]
         if self.page_project_ids is not None:
-            return list(
-                (
-                    await self.db.execute(
-                        text(
-                            "SELECT p.name, p.slug, p.summary FROM projects p "
-                            "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
-                            "AND p.id = ANY(CAST(:pids AS uuid[])) ORDER BY p.name"
-                        ),
-                        {"pids": list(self.page_project_ids)},
-                    )
-                ).all()
+            project_predicates.append(
+                Project.id.in_([uuid.UUID(pid) for pid in self.page_project_ids])
             )
-        return list(
-            (
-                await self.db.execute(
-                    text(
-                        "SELECT p.name, p.slug, p.summary FROM projects p "
-                        "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL ORDER BY p.name"
+        project_rows = (
+            await self.db.execute(
+                select(
+                    Project.id,
+                    Project.slug,
+                    Project.name,
+                    Project.summary,
+                    Project.index_card,
+                    Project.updated_at,
+                )
+                .where(*project_predicates)
+                .order_by(Project.name.asc(), Project.id.asc())
+            )
+        ).all()
+        if not project_rows:
+            return []
+        project_ids = [row.id for row in project_rows]
+
+        job_rows = (
+            await self.db.execute(
+                select(
+                    Job.title,
+                    Job.salary_min,
+                    Job.salary_max,
+                    Job.province,
+                    Job.district,
+                    Job.address,
+                    Job.factory_name,
+                    Company.name.label("company_name"),
+                    Company.project_id.label("project_id"),
+                )
+                .join(Company, Company.id == Job.company_id)
+                .join(Project, Project.id == Company.project_id)
+                .where(
+                    Company.project_id.in_(project_ids),
+                    Job.status == JobStatus.ACTIVE,
+                    func.coalesce(Job.vacancy_count, 1) > 0,
+                    or_(
+                        and_(
+                            Project.category_authority_started.is_(True),
+                            Job.source_category_revision_id.is_not(None),
+                        ),
+                        and_(
+                            Project.category_authority_started.is_(False),
+                            Job.source_category_revision_id.is_(None),
+                        ),
+                    ),
+                )
+                .order_by(Job.updated_at.desc(), Job.id.asc())
+            )
+        ).all()
+
+        scope_by_project: dict[uuid.UUID, list[ProjectScopeItem]] = {}
+        meta_by_project: dict[uuid.UUID, dict[str, Any]] = {}
+        for row in job_rows:
+            scope_by_project.setdefault(row.project_id, []).append(
+                ProjectScopeItem(
+                    title=str(row.title or ""),
+                    salary_min=row.salary_min,
+                    salary_max=row.salary_max,
+                )
+            )
+            meta = meta_by_project.setdefault(row.project_id, {})
+            meta.setdefault("company", str(row.company_name or ""))
+            for key, attr in (
+                ("factory", "factory_name"),
+                ("province", "province"),
+                ("district", "district"),
+                ("address", "address"),
+            ):
+                if not meta.get(key):
+                    meta[key] = str(getattr(row, attr) or "")
+
+        card_only_ids = [pid for pid in project_ids if pid not in scope_by_project]
+        card_salaries = await _direct_project_salaries(self.db, card_only_ids)
+
+        features: list[ProjectFeatures] = []
+        for row in project_rows:
+            scope = scope_by_project.get(row.id)
+            if scope is not None:
+                meta = meta_by_project.get(row.id, {})
+                salary_min = min(
+                    (item.salary_min for item in scope if item.salary_min is not None),
+                    default=None,
+                )
+                salary_max = max(
+                    (item.salary_max for item in scope if item.salary_max is not None),
+                    default=None,
+                )
+                features.append(
+                    ProjectFeatures(
+                        project_id=str(row.id),
+                        slug=str(row.slug or ""),
+                        name=str(row.name or ""),
+                        company=meta.get("company", ""),
+                        factory=meta.get("factory", ""),
+                        province=meta.get("province", ""),
+                        district=meta.get("district", ""),
+                        address=meta.get("address", ""),
+                        summary=str(row.summary or ""),
+                        updated_at=row.updated_at,
+                        salary_min=salary_min,
+                        salary_max=salary_max,
+                        scope=tuple(scope),
                     )
                 )
-            ).all()
-        )
+                continue
+            card = row.index_card or {}
+            roles = _card_items(card.get("roles") or card.get("key_roles"))
+            location = " / ".join(_card_items(card.get("location")))
+            salary_min, salary_max = _resolve_direct_salary(
+                row, card, card_salaries.get(row.id)
+            )
+            features.append(
+                ProjectFeatures(
+                    project_id=str(row.id),
+                    slug=str(row.slug or ""),
+                    name=str(row.name or ""),
+                    company=str(row.name or ""),
+                    province=location,
+                    summary=str(row.summary or ""),
+                    updated_at=row.updated_at,
+                    salary_min=salary_min,
+                    salary_max=salary_max,
+                    scope=tuple(ProjectScopeItem(title=role) for role in roles),
+                )
+            )
+        return features
 
     async def active_projects_with_card(self) -> list:
         """Active projects for the master-index prompt."""
@@ -220,73 +422,3 @@ class CatalogRepository:
         """Verbatim income evidence for active projects (Page-scoped when bound)."""
         scope = list(self.page_project_ids) if self.page_project_ids is not None else None
         return await RecommendationRepository(self.db).income_summary_for_active_projects(scope)
-
-
-class RecommendationQueries:
-    """Default ``RecommendationQueryPort`` implementation for the retrieval seam.
-
-    Resolves the lead once, builds the typed profile, and delegates matching
-    to the recommendation repository. A caller injecting its own port replaces
-    this whole object; the page-scope contract then belongs to the injector
-    (the port signatures carry no scope argument).
-    """
-
-    def __init__(self, db: AsyncSession, *, page_project_ids: tuple[str, ...] | None) -> None:
-        self.db = db
-        self.page_project_ids = page_project_ids
-
-    async def recommend_jobs_for_lead(
-        self, chat_id: str, *, top_k: int = 5, province: str | None = None
-    ):
-        """Return a typed profile-based job recommendation outcome."""
-        try:
-            lead = await LeadRepository(self.db).by_zalo_id(chat_id)
-            profile = LeadProfile.from_lead(lead)
-        except Exception:
-            logger.warning("lead lookup failed for chat_id=%s", chat_id, exc_info=True)
-            return LeadJobRecommendation("unavailable")
-        if not profile.has_any_signal:
-            return LeadJobRecommendation("insufficient_profile")
-        try:
-            page_project_ids = (
-                list(self.page_project_ids) if self.page_project_ids is not None else None
-            )
-            jobs = await RecommendationRepository(self.db).match_jobs(
-                profile, top_k=top_k, province=province, project_ids=page_project_ids
-            )
-        except Exception:
-            logger.warning("recommendation lookup failed for chat_id=%s", chat_id, exc_info=True)
-            return LeadJobRecommendation("unavailable")
-        if not jobs:
-            return LeadJobRecommendation("no_match")
-        return LeadJobRecommendation("matched", tuple(jobs))
-
-    async def list_active_jobs(
-        self,
-        *,
-        project_slug: str | None = None,
-        role: str | None = None,
-        company: str | None = None,
-        location: str | None = None,
-        top_k: int = 3,
-        sort_by: str | None = None,
-    ):
-        """List structured vacancies within the active Agent knowledge base."""
-        catalog = CatalogRepository(self.db, page_project_ids=self.page_project_ids)
-        try:
-            if project_slug:
-                project_id = await catalog.project_id_by_slug(project_slug, active_only=True)
-                project_ids = [str(project_id)] if project_id is not None else []
-            else:
-                project_ids = await catalog.active_project_ids()
-        except Exception:
-            logger.warning("active-project lookup failed for vacancy catalog", exc_info=True)
-            return ActiveJobLookup("unavailable")
-        return await RecommendationRepository(self.db).list_active_jobs(
-            role=role,
-            company=company,
-            location=location,
-            top_k=top_k,
-            project_ids=project_ids,
-            sort_by=sort_by,  # type: ignore[arg-type]
-        )

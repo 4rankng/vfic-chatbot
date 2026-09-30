@@ -1,45 +1,13 @@
-"""Structured Job↔Lead recommendation engine.
+"""Project income summaries for the agent's cross-project comparisons."""
 
-Two-stage ranker over the existing ``jobs`` table (no new tables, no migrations):
-
-* Stage 1 — hard SQL filters (ACTIVE status, vacancy > 0, optional province gate)
-* Stage 2 — weighted Python scoring (:mod:`.scoring`) with matched reasons
-
-Mirrors the research (MiniMax §7.2 hybrid scoring, Google two-stage retrieve+rank,
-ChatGPT "machine-readable matched reasons") on the data columns VFIC already has.
-"""
-
-from app.services.recommendation.availability import (
-    ActiveJob,
-    ActiveJobLookup,
-    ActiveJobLookupStatus,
-    select_matching_active_jobs,
-)
 from app.recruitment.domain.recommendation import (
     ActiveProjectIncomeSummary,
     IncomeFeatureEvidence,
 )
-from app.services.recommendation.repository import LeadJobRecommendation, RecommendationRepository
-from app.services.recommendation.scoring import (
-    JobCandidate,
-    LeadProfile,
-    ScoredJob,
-    parse_salary_band,
-    score_job,
-)
+from app.services.recommendation.repository import RecommendationRepository
 
 __all__ = [
-    "RecommendationRepository",
-    "ActiveJob",
-    "ActiveJobLookup",
-    "ActiveJobLookupStatus",
     "ActiveProjectIncomeSummary",
     "IncomeFeatureEvidence",
-    "LeadJobRecommendation",
-    "select_matching_active_jobs",
-    "JobCandidate",
-    "LeadProfile",
-    "ScoredJob",
-    "parse_salary_band",
-    "score_job",
+    "RecommendationRepository",
 ]
