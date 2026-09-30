@@ -847,7 +847,12 @@ def test_migrated_frontend_feature_layers_have_zero_allowlist_rules() -> None:
 def test_frontend_domain_and_application_layers_do_not_use_browser_io_globals() -> None:
     # Deterministic platform value parsers such as URL and URLSearchParams are
     # allowed. This gate rejects browser state and I/O capabilities that make a
-    # domain/application module depend on a concrete runtime adapter.
+    # domain/application module depend on a concrete runtime adapter. Comments
+    # are stripped before matching: prose that merely mentions a global (a
+    # sentence ending in "document.") is not usage. The regex strip can also
+    # eat comment-like text inside string literals — fine for a tripwire,
+    # since these layers must not carry browser I/O at all.
+    _source_comments = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
     browser_patterns = (
         re.compile(r"\b(?:File|FormData|Blob|AbortSignal|AbortController)\b"),
         re.compile(
@@ -883,7 +888,7 @@ def test_frontend_domain_and_application_layers_do_not_use_browser_io_globals() 
     for path in paths:
         if ".test." in path.name:
             continue
-        source = path.read_text()
+        source = _source_comments.sub(" ", path.read_text())
         for pattern in browser_patterns:
             if match := pattern.search(source):
                 violations.append(
