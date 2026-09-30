@@ -4,6 +4,7 @@ import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-polic
 import {
   getProjectKnowledgeCategories,
   replaceProjectKnowledgeCategory,
+  uploadProjectDocument,
 } from "../project-knowledge-service";
 
 /**
@@ -38,8 +39,15 @@ export type IngestState =
       /** The backend's own words; an empty string when it gave none. */
       message: string;
       activated: readonly ProjectKnowledgeCategory[];
+      /** Non-fatal companion error: the brief-document upload failed. */
+      uploadError?: string;
     }>
-  | Readonly<{ phase: "done"; activated: readonly ProjectKnowledgeCategory[] }>;
+  | Readonly<{
+      phase: "done";
+      activated: readonly ProjectKnowledgeCategory[];
+      /** Non-fatal companion error: the brief-document upload failed. */
+      uploadError?: string;
+    }>;
 
 export type ProjectIngest = Readonly<{
   state: IngestState;
@@ -48,8 +56,19 @@ export type ProjectIngest = Readonly<{
    * starting the next. Order is not cosmetic: a category that references
    * `job_ids` is rejected unless those jobs are already active, so `jobs` must
    * lead the batch.
+   *
+   * `sourceFile` — the original brief file — is uploaded alongside the writes
+   * as a project knowledge document, so the brief stays on record (counted in
+   * the project's documents and searchable) instead of only surviving as
+   * derived YAML. Best-effort: its failure never blocks the writes and rides on
+   * the terminal state's `uploadError`. Callers without a file omit it and the
+   * chain behaves exactly as before.
    */
-  ingest: (projectId: string, writes: readonly IngestWrite[]) => Promise<void>;
+  ingest: (
+    projectId: string,
+    writes: readonly IngestWrite[],
+    sourceFile?: File,
+  ) => Promise<void>;
   /** Stop the chain; a write in flight still resolves but nothing follows it. */
   cancel: () => void;
 }>;
@@ -59,7 +78,8 @@ type WaitOutcome =
   | Readonly<{ ok: false; message: string }>;
 
 /**
- * Runs the create form's knowledge ingest.
+ * Runs a brief's knowledge ingest — the create form's first upload and every
+ * later re-ingest from the project page share this one chain.
  *
  * The project page's `useProjectKnowledgeCatalog` is the right owner for edits,
  * but it fires each write and forgets it — which is fine there, because the
@@ -164,10 +184,25 @@ export const useProjectIngest = (): ProjectIngest => {
   );
 
   const ingest = useCallback(
-    async (projectId: string, writes: readonly IngestWrite[]) => {
+    async (
+      projectId: string,
+      writes: readonly IngestWrite[],
+      sourceFile?: File,
+    ) => {
       cancel();
       const epoch = epochRef.current;
       const activated: ProjectKnowledgeCategory[] = [];
+      // The original brief is uploaded best-effort, alongside the writes: it
+      // must land on record as a project knowledge document, but its failure
+      // never blocks the category chain. Started first and awaited only at the
+      // terminal states, so it rides along the poll waits instead of
+      // serializing behind them, and its error is reported without stopping.
+      let uploadError: string | undefined;
+      const uploadSettled = sourceFile
+        ? uploadProjectDocument(projectId, sourceFile).catch((error: unknown) => {
+            uploadError = (error as Error).message;
+          })
+        : Promise.resolve();
 
       for (const write of writes) {
         if (epoch !== epochRef.current) return;
@@ -188,11 +223,13 @@ export const useProjectIngest = (): ProjectIngest => {
           );
           revisionId = result.revision.id;
         } catch (error) {
+          await uploadSettled;
           setState({
             phase: "failed",
             failed: write.key,
             message: (error as Error).message,
             activated: [...activated],
+            uploadError,
           });
           return;
         }
@@ -200,11 +237,13 @@ export const useProjectIngest = (): ProjectIngest => {
         if (epoch !== epochRef.current) return;
         const outcome = await waitForActive(projectId, revisionId, epoch);
         if (!outcome.ok) {
+          await uploadSettled;
           setState({
             phase: "failed",
             failed: write.key,
             message: outcome.message,
             activated: [...activated],
+            uploadError,
           });
           return;
         }
@@ -212,7 +251,8 @@ export const useProjectIngest = (): ProjectIngest => {
       }
 
       if (epoch !== epochRef.current) return;
-      setState({ phase: "done", activated: [...activated] });
+      await uploadSettled;
+      setState({ phase: "done", activated: [...activated], uploadError });
     },
     [cancel, waitForActive],
   );

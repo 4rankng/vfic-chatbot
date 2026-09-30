@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.embedding import embed_with_fallback
+from app.models.company import Project
 from app.services.knowledge.coercion import (
     DigestError,
     _coerce_feature,
@@ -140,17 +141,34 @@ class KnowledgePipeline:
             "source_chars": digest_sections.total_chars if digest_sections else len(raw),
         }
 
-        # DIRECT_CONTEXT documents carry their own curated content; their
-        # ``projects.index_card`` is the SOURCE OF TRUTH for synthesized jobs and must
-        # not be overwritten by LLM-driven feature/card rebuilds. Skip those side-effects
-        # while still running digest → embed → store so the content is searchable.
-        # ``rebuild_project_jobs`` is also skipped (DIRECT_CONTEXT jobs are synthesized
-        # from ``index_card`` at query time, not from Job rows).
+        # Document ingest must never overwrite a projection-owned card. Two
+        # cases share the rule:
+        #
+        # * DIRECT_CONTEXT documents carry their own curated content; their
+        #   ``projects.index_card`` is the SOURCE OF TRUTH for synthesized jobs
+        #   and must not be overwritten by LLM-driven feature/card rebuilds.
+        #   ``rebuild_project_jobs`` is also skipped (DIRECT_CONTEXT jobs are
+        #   synthesized from ``index_card`` at query time, not from Job rows).
+        # * Category-authoritative projects (``category_authority_started``)
+        #   have their card/features/jobs owned by the category projections, so
+        #   ``extract_product_features``/``sync_canonical_product_features``,
+        #   ``build_project_index``/``_update_canonical_project_card`` and
+        #   ``rebuild_project_jobs`` would clobber what the projections built.
+        #
+        # In both cases digest → embed → store still runs so the document is
+        # searchable. The project row is loaded once per document, only when the
+        # document is project-bound.
         is_direct_context = (doc.metadata_ or {}).get("source") == "direct_context" or getattr(
             doc, "source", None
         ) == "direct_context"
+        project = (
+            await self.db.get(Project, doc.project_id) if doc.project_id is not None else None
+        )
+        projections_own_cards = is_direct_context or bool(
+            project is not None and project.category_authority_started
+        )
 
-        if is_direct_context:
+        if projections_own_cards:
             # Only the core digest → embed → store path is meaningful here. The
             # PUBLISHED stage is set by the outer ``run`` below; nothing else to do.
             pass
@@ -165,8 +183,8 @@ class KnowledgePipeline:
         await self._set_stage(doc, "INDEXING", status="PUBLISHED")
         if canonical_doc is not None and canonical_doc.bus_timetable.routes:
             await self._persist_canonical_bus_timetable(doc, canonical_doc)
-        if is_direct_context:
-            pass  # do not rebuild index_card for DIRECT_CONTEXT (source of truth)
+        if projections_own_cards:
+            pass  # do not rebuild index_card when projections own the card
         elif doc.project_id is not None and canonical_doc is not None:
             await self._update_canonical_project_card(doc, canonical_doc)
         elif doc.project_id is not None:
@@ -175,7 +193,7 @@ class KnowledgePipeline:
             except Exception as exc:  # noqa: BLE001 — index refresh is best-effort
                 logger.warning("project index refresh failed: %s", exc)
 
-        if not is_direct_context and doc.project_id is not None:
+        if not projections_own_cards and doc.project_id is not None:
             from app.services.knowledge.derived_jobs import rebuild_project_jobs
 
             await rebuild_project_jobs(

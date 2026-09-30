@@ -33,6 +33,10 @@ const mocks = vi.hoisted(() => ({
   deleteSinglePageExternalSource: vi.fn(),
   replaceProjectSinglePage: vi.fn(),
   replaceProjectKnowledgeCategory: vi.fn(),
+  /** The brief file's upload to the project document shelf. */
+  uploadProjectDocument: vi.fn(),
+  /** The brief's highlights PATCHed onto the discovery card. */
+  updateProjectDiscoveryCard: vi.fn(),
   listExternalSources: vi.fn(),
 }));
 
@@ -58,6 +62,8 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
   deleteSinglePageExternalSource: mocks.deleteSinglePageExternalSource,
   replaceProjectSinglePage: mocks.replaceProjectSinglePage,
   replaceProjectKnowledgeCategory: mocks.replaceProjectKnowledgeCategory,
+  uploadProjectDocument: mocks.uploadProjectDocument,
+  updateProjectDiscoveryCard: mocks.updateProjectDiscoveryCard,
   listExternalSources: mocks.listExternalSources,
 }));
 
@@ -113,6 +119,37 @@ const deferred = <T,>() => {
   return { promise, resolve };
 };
 
+/** The recruiter brief shape — an overview table plus Q&A sections — that
+ *  carries exactly the jobs, compensation and faq categories the re-ingest
+ *  tests below expect the full write set for. */
+const REUPLOAD_BRIEF = `# PHIẾU THU THẬP
+| **Tên dự án tuyển dụng** | 4P ELECTRONIC |
+| **Tên viết tắt / Tên thường gọi** | 4P Electronics / 4P Hải Phòng |
+| **Địa chỉ nơi làm việc** | Tầng 2 LGE, KCN Tràng Duệ, An Phong, TP. Hải Phòng |
+| **Vị trí tuyển dụng chính** | Công nhân (SMT, PCBA) |
+| **Tóm tắt công việc** | Lắp ráp linh kiện bảng mạch. |
+| **Các điểm nổi bật thu hút** | - Không yêu cầu bằng cấp.<br>- Đóng BHXH đầy đủ. |
+
+### 1. Vị trí tuyển dụng & Công việc cụ thể
+* **Câu hỏi thường gặp:**
+  * Công ty tuyển việc gì?
+* **Thông tin phản hồi:**
+  * **Vị trí tuyển:** Công nhân sản xuất.
+
+### 3. Tiền lương, phụ cấp & Tăng ca
+* **Câu hỏi thường gặp:**
+  * Lương bao nhiêu?
+* **Thông tin phản hồi:**
+  * **Lương cơ bản:** 6.200.000 đồng/tháng.
+`;
+
+/** The same brief with its highlights row removed: a re-ingest of a file
+ *  carrying no "Các điểm nổi bật" facts must send no discovery-card patch. */
+const NO_HIGHLIGHTS_BRIEF = REUPLOAD_BRIEF.replace(
+  /^.*Các điểm nổi bật.*\n/gm,
+  "",
+);
+
 describe("ProjectKnowledgePanel", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -131,6 +168,7 @@ describe("ProjectKnowledgePanel", () => {
     mocks.getProjectKnowledgeCategorySource.mockRejectedValue(
       new ApiError(404, "Chưa có dữ liệu"),
     );
+    mocks.uploadProjectDocument.mockResolvedValue(undefined);
     mocks.listSinglePageExternalSources.mockResolvedValue([]);
     mocks.listExternalSources.mockResolvedValue([]);
     mocks.getProjectKnowledgeCategoryTemplate.mockImplementation(
@@ -827,14 +865,14 @@ describe("ProjectKnowledgePanel", () => {
       expect(mocks.replaceProjectKnowledgeCategory).toHaveBeenCalled(),
     );
 
-    // The chain awaits each activation (2 s poll cadence), so the batch takes
-    // a few seconds before the done report appears.
+    // The chain awaits each activation (2 s poll cadence), so twelve writes
+    // take about half a minute before the done report appears.
     await vi.waitFor(
       () =>
         expect
-          .element(screen.getByText(/Đã nạp xong 2 phần kiến thức/))
+          .element(screen.getByText(/Đã nạp xong 12 phần kiến thức/))
           .toBeVisible(),
-      { timeout: 20000 },
+      { timeout: 60000 },
     );
 
     const keys = mocks.replaceProjectKnowledgeCategory.mock.calls.map(
@@ -842,24 +880,41 @@ describe("ProjectKnowledgePanel", () => {
     );
     // jobs leads the batch — every other write may reference its rows.
     expect(keys[0]).toBe("jobs");
-    // Only what the brief genuinely carries is written; the rest is named.
-    expect(keys).toEqual(["jobs", "faq"]);
+    // The content-driven rule: every category this sheet genuinely carries is
+    // written, jobs first and the rest in catalog order.
+    expect(keys).toEqual([
+      "jobs",
+      "compensation",
+      "requirements",
+      "work_schedules",
+      "benefits",
+      "accommodation",
+      "meals",
+      "transportation",
+      "insurance",
+      "application",
+      "contacts",
+      "faq",
+    ]);
     const jobsYaml = mocks.replaceProjectKnowledgeCategory.mock.calls[0][3];
     expect(jobsYaml).toContain("Nhân viên lắp ráp linh kiện điện tử");
     expect(jobsYaml).not.toContain("vacancies");
 
-    await expect.element(screen.getByText(/Cần nhập tay: /)).toBeVisible();
-    expect(confirm).toHaveBeenCalledWith(
-      "Phiếu sẽ thay thế dữ liệu của các mục có trong tệp sau khi kiểm tra. Tiếp tục?",
-    );
+    // Nothing is left for a human: this sheet carries every category.
+    expect(screen.container.textContent).not.toContain("Cần nhập tay");
+    // Replacements are revisioned (the superseded revision stays archived),
+    // so the writes proceed without asking anyone first.
+    expect(confirm).not.toHaveBeenCalled();
     confirm.mockRestore();
-  });
+  }, 60000);
 
-  it("parses a plain-text (.txt) brief instead of demanding markdown", async () => {
-    // Declining the overwrite confirm keeps this a parser test: reaching the
-    // dialog proves the .txt pick passed the text-file guard and went through
-    // parseProjectBrief + planBriefKnowledge.
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("parses a plain-text (.txt) brief and writes it without prompting", async () => {
+    mocks.replaceProjectKnowledgeCategory.mockImplementation(
+      async (_projectId: string, key: string) => ({
+        revision: { id: `rev-${key}` },
+      }),
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     const screen = await renderPanel(
       <ProjectKnowledgePanel project={project} editable />,
@@ -868,7 +923,7 @@ describe("ProjectKnowledgePanel", () => {
     const input =
       screen.container.querySelector<HTMLInputElement>('input[type="file"]');
     if (!input) throw new Error("the panel renders no brief input");
-    const file = new File([amtranBrief], "phieu-amtran.txt", {
+    const file = new File([REUPLOAD_BRIEF], "phieu-4p.txt", {
       type: "text/plain",
     });
     const transfer = new DataTransfer();
@@ -876,15 +931,24 @@ describe("ProjectKnowledgePanel", () => {
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
 
-    await vi.waitFor(() => expect(confirm).toHaveBeenCalled());
+    // The .txt pick passed the text-file guard and went through
+    // parseProjectBrief + planBriefKnowledge straight into the chain: the
+    // writes proceed with nobody asked to confirm a replacement.
+    await vi.waitFor(
+      () =>
+        expect(screen.getByText(/Đã nạp xong 3 phần kiến thức/)).toBeVisible(),
+      { timeout: 30000 },
+    );
+    const [, firstKey, firstFilename] =
+      mocks.replaceProjectKnowledgeCategory.mock.calls[0];
+    expect(firstKey).toBe("jobs");
+    expect(firstFilename).toBe("jobs.yaml");
     expect(screen.container.textContent).not.toContain("Chỉ chấp nhận tệp");
-    expect(mocks.replaceProjectKnowledgeCategory).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
     confirm.mockRestore();
-  });
+  }, 30000);
 
   it("rejects a non-text file with the text-file message, before any read", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-
     const screen = await renderPanel(
       <ProjectKnowledgePanel project={project} editable />,
     );
@@ -903,10 +967,100 @@ describe("ProjectKnowledgePanel", () => {
     await expect
       .element(screen.getByText("Chỉ chấp nhận tệp văn bản."))
       .toBeVisible();
-    expect(confirm).not.toHaveBeenCalled();
+    // The guard fires before any read: no parse, no chain, no document upload.
     expect(mocks.replaceProjectKnowledgeCategory).not.toHaveBeenCalled();
-    confirm.mockRestore();
+    expect(mocks.uploadProjectDocument).not.toHaveBeenCalled();
   });
+
+  it("re-ingest on a project with active categories rewrites every category, unprompted", async () => {
+    // The categories the new file covers already carry active revisions —
+    // existing content must neither gate the writes nor trigger a prompt.
+    mocks.getProjectKnowledgeCategories.mockResolvedValue({
+      data: ["jobs", "compensation", "faq"].map((key) => ({
+        key,
+        label_vi: key,
+        active_revision_id: `old-${key}`,
+        active_revision_no: 2,
+        latest_revision_id: `old-${key}`,
+        status: "ACTIVE",
+      })),
+      total: 3,
+    });
+    mocks.replaceProjectKnowledgeCategory.mockImplementation(
+      async (_projectId: string, key: string) => ({
+        revision: { id: `rev-${key}` },
+      }),
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("the panel renders no brief input");
+    const file = new File([REUPLOAD_BRIEF], "phieu-4p-cap-nhat.md", {
+      type: "text/markdown",
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(
+      () =>
+        expect(screen.getByText(/Đã nạp xong 3 phần kiến thức/)).toBeVisible(),
+      { timeout: 30000 },
+    );
+    // The full set the file derives, jobs first — no category is skipped for
+    // already having content…
+    expect(
+      mocks.replaceProjectKnowledgeCategory.mock.calls.map((call) => call[1]),
+    ).toEqual(["jobs", "compensation", "faq"]);
+    // …and nobody was asked to confirm the replacement.
+    expect(confirm).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  }, 30000);
+
+  it("uploads the picked brief as a project document alongside the writes", async () => {
+    mocks.replaceProjectKnowledgeCategory.mockImplementation(
+      async (_projectId: string, key: string) => ({
+        revision: { id: `rev-${key}` },
+      }),
+    );
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("the panel renders no brief input");
+    const file = new File([REUPLOAD_BRIEF], "phieu-4p.md", {
+      type: "text/markdown",
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(() =>
+      expect(mocks.uploadProjectDocument).toHaveBeenCalledTimes(1),
+    );
+    const [projectId, uploaded] = mocks.uploadProjectDocument.mock.calls[0];
+    expect(projectId).toBe("project-1");
+    expect((uploaded as File).name).toBe("phieu-4p.md");
+    // The upload rides alongside the category writes, never in their place.
+    await vi.waitFor(
+      () =>
+        expect(screen.getByText(/Đã nạp xong 3 phần kiến thức/)).toBeVisible(),
+      { timeout: 30000 },
+    );
+    expect(
+      mocks.replaceProjectKnowledgeCategory.mock.calls.map((call) => call[1]),
+    ).toEqual(["jobs", "compensation", "faq"]);
+  }, 30000);
 
   it("brings the selected category detail into focus on a small screen", async () => {
     mocks.getProjectKnowledgeCategorySource.mockImplementation(
@@ -954,4 +1108,100 @@ describe("ProjectKnowledgePanel", () => {
       screen.container.querySelector("#project-category-detail"),
     );
   });
+
+  it("re-ingest re-lands the brief's highlight facts on the discovery card", async () => {
+    // Each written revision is accepted immediately (the catalog tracks older
+    // revisions), so the chain completes without stalls.
+    mocks.getProjectKnowledgeCategories.mockResolvedValue({
+      data: ["jobs", "compensation", "faq"].map((key) => ({
+        key,
+        label_vi: key,
+        active_revision_id: `old-${key}`,
+        latest_revision_id: `old-${key}`,
+        status: "ACTIVE",
+      })),
+      total: 3,
+    });
+    mocks.replaceProjectKnowledgeCategory.mockImplementation(
+      async (_projectId: string, key: string) => ({
+        revision: { id: `rev-${key}` },
+      }),
+    );
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("the panel renders no brief input");
+    const file = new File([REUPLOAD_BRIEF], "phieu-4p.md", {
+      type: "text/markdown",
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(
+      () => expect(mocks.updateProjectDiscoveryCard).toHaveBeenCalledTimes(1),
+      { timeout: 30000 },
+    );
+    // Exactly the brief's facts, and nothing else, in the patch body.
+    expect(mocks.updateProjectDiscoveryCard.mock.calls[0]).toEqual([
+      "project-1",
+      {
+        discovery_card: {
+          highlights: ["Không yêu cầu bằng cấp.", "Đóng BHXH đầy đủ."],
+        },
+      },
+    ]);
+    // The card patch rides every re-ingest; the category writes all landed.
+    expect(
+      mocks.replaceProjectKnowledgeCategory.mock.calls.map((call) => call[1]),
+    ).toEqual(["jobs", "compensation", "faq"]);
+  }, 30000);
+
+  it("sends no discovery-card patch when the re-ingested brief carries no highlights", async () => {
+    mocks.getProjectKnowledgeCategories.mockResolvedValue({
+      data: ["jobs", "compensation", "faq"].map((key) => ({
+        key,
+        label_vi: key,
+        active_revision_id: `old-${key}`,
+        latest_revision_id: `old-${key}`,
+        status: "ACTIVE",
+      })),
+      total: 3,
+    });
+    mocks.replaceProjectKnowledgeCategory.mockImplementation(
+      async (_projectId: string, key: string) => ({
+        revision: { id: `rev-${key}` },
+      }),
+    );
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("the panel renders no brief input");
+    const file = new File([NO_HIGHLIGHTS_BRIEF], "phieu-4p-khac.md", {
+      type: "text/markdown",
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(
+      () =>
+        expect(
+          screen.getByText(/Đã nạp xong 3 phần kiến thức/),
+        ).toBeVisible(),
+      { timeout: 30000 },
+    );
+    // No highlight facts, no patch — the card keeps its derived empty list.
+    expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
+  }, 30000);
 });

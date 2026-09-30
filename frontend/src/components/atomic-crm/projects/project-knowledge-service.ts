@@ -43,6 +43,17 @@ export const getProjectKnowledgeCategoryTemplate =
   operations.getCategoryTemplate;
 export const getProjectKnowledgeCategorySource = operations.getCategorySource;
 export const replaceProjectKnowledgeCategory = operations.replaceCategory;
+/**
+ * Store the original source file as a project knowledge document — the brief
+ * the chain parsed stays on record (retrievable, searchable) instead of only
+ * surviving as derived category YAML.
+ */
+export const uploadProjectDocument = async (projectId: string, file: File) =>
+  operations.uploadDocument(projectId, {
+    name: file.name,
+    type: file.type,
+    bytes: await file.arrayBuffer(),
+  });
 export const getProjectSinglePage = operations.getSinglePage;
 export const replaceProjectSinglePage = operations.replaceSinglePage;
 export const updateProjectDiscoveryCard = operations.updateProjectDiscoveryCard;

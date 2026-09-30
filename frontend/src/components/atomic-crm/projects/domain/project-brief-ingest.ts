@@ -678,12 +678,31 @@ const markerPayload = (content: string): string => {
   return colon >= 0 ? content.slice(colon + 1).trim() : "";
 };
 
+/** The cells of a markdown pipe-table row (`| a | b |` → ["a", "b"]); null
+ *  when the line is not a table row. */
+const pipeCells = (line: string): string[] | null => {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return null;
+  return trimmed
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => cell.trim());
+};
+
 /** One Q&A section split into its question list, its answer list and the
  *  plain body that goes into the category. */
 const readSectionBody = (section: BriefSection) => {
   const questions: string[] = [];
   const answers: string[] = [];
   let bucket: "question" | "answer" | null = null;
+  // A markdown pipe FAQ table ("Bảng tổng hợp câu hỏi thường gặp"): its
+  // header row names the question and answer COLUMNS, and each row below is
+  // one Q&A pair. Handled before the marker buckets — without this a row
+  // lands whole in the question bucket, its `| q | a |` text becomes the
+  // "question", and the answer is the empty string the backend contract
+  // rejects (`FaqItem.answer` is `NonEmptyText`).
+  let questionColumn = -1;
+  let answerColumn = -1;
   for (const raw of section.lines) {
     const line = raw.trim();
     if (!line || line === "---") continue;
@@ -694,6 +713,38 @@ const readSectionBody = (section: BriefSection) => {
     // as one prose blob.
     const bullet = BULLET.exec(raw);
     const content = bullet ? bullet[1] : line;
+
+    const cells = pipeCells(content);
+    if (cells) {
+      const headerQuestion = cells.findIndex((cell) =>
+        /cau hoi/i.test(fold(cell)),
+      );
+      const headerAnswer = cells.findIndex((cell) =>
+        /cau tra loi/i.test(fold(cell)),
+      );
+      if (headerQuestion >= 0 && headerAnswer >= 0) {
+        questionColumn = headerQuestion;
+        answerColumn = headerAnswer;
+        continue;
+      }
+      // A separator or skeleton row (`| :--- | :--- |`) carries no knowledge.
+      if (cells.every((cell) => !cell || /^:?-{2,}:?$/.test(cell))) continue;
+      if (questionColumn >= 0 && answerColumn >= 0) {
+        const question = toPlainText(cells[questionColumn] ?? "").trim();
+        if (question) {
+          questions.push(question);
+          // A question whose answer cell is empty travels with an empty
+          // answer, so the plan can drop the pair and name the gap — never
+          // so a record with an empty `answer` reaches the API.
+          answers.push(toPlainText(cells[answerColumn] ?? "").trim());
+        }
+        continue;
+      }
+      // Not a FAQ table — a data table. Falls through to the marker buckets
+      // below: the overview table sits in a section with no bucket and stays
+      // untouched, exactly as before.
+    }
+
     const foldedContent = fold(content);
     if (QUESTION_MARKER.test(foldedContent)) {
       bucket = "question";

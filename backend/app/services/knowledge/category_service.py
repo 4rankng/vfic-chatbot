@@ -470,10 +470,18 @@ class KnowledgeCategoryService:
             )
             if inserted_count != len(units):
                 raise RuntimeError("category chunk insertion count mismatch")
-            if project.category_authority_started:
+            # Legacy projects with pre-built cards stay deferred until
+            # cutover_category_authority replaces the card wholesale; a project
+            # with no card (every brief-created project) has nothing to protect,
+            # so its card is category-owned and safe to project immediately.
+            projection_applied = project.category_authority_started or not (
+                project.index_card or {}
+            )
+            if projection_applied:
                 await self._projection_writer.apply_for_revision(
                     category.project_id, revision, document
                 )
+                project.category_authority_started = True
             if old_revision is not None:
                 old_revision.status = KnowledgeCategoryRevisionStatus.ARCHIVED
             category.active_revision_id = revision.id
@@ -490,7 +498,7 @@ class KnowledgeCategoryService:
                 "embedding_count": len(vectors),
                 "inserted_chunk_count": inserted_count,
                 "projection": (
-                    "complete" if project.category_authority_started else "deferred_until_cutover"
+                    "complete" if projection_applied else "deferred_until_cutover"
                 ),
                 "reference_check": "passed",
                 "normalization_changed": (

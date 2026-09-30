@@ -8,6 +8,7 @@ import type {
 const BASE = "/api/v1/knowledge/projects";
 const projectPath = (projectId: string) =>
   `${BASE}/${encodeURIComponent(projectId)}`;
+const DOCUMENT_UPLOAD_PATH = "/api/v1/knowledge/documents/upload-file";
 const singlePageSourcesPath = (projectId: string) =>
   `${projectPath(projectId)}/single-page/external-sources`;
 
@@ -42,6 +43,19 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       method: "PUT",
       body: { filename, content },
     }),
+
+  uploadDocument: async (projectId, file) => {
+    const form = new FormData();
+    form.append("file", new Blob([file.bytes], { type: file.type }), file.name);
+    form.append("project_id", projectId);
+    const response = await apiRequest(DOCUMENT_UPLOAD_PATH, {
+      method: "POST",
+      body: form,
+    });
+    if (!response.ok) {
+      throw new ApiError(response.status, "Không lưu được tệp vào tài liệu dự án.");
+    }
+  },
 
   getSinglePage: (projectId) =>
     apiJson(`${projectPath(projectId)}/single-page`),

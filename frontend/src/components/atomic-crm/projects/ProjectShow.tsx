@@ -15,6 +15,8 @@ const ProjectShowContent = () => {
   if (!project) return null;
 
   const card = project.index_card ?? {};
+  // Projection-built cards write `roles`; legacy/LLM cards write `key_roles`.
+  const roles = Array.from(new Set(card.roles ?? card.key_roles ?? []));
 
   return (
     <ProjectWorkspaceShell>
@@ -24,8 +26,8 @@ const ProjectShowContent = () => {
             {project.name}
           </h2>
           <p className="mt-1 text-body text-muted-foreground">
-            Xem thẻ danh mục, đặc điểm sản phẩm và FAQ mà Agent dùng trong hội
-            thoại tuyển dụng.
+            Xem danh mục kiến thức, đặc điểm sản phẩm và FAQ mà Agent dùng trong
+            hội thoại tuyển dụng.
           </p>
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
@@ -72,9 +74,9 @@ const ProjectShowContent = () => {
               </div>
               <div className="project-show-fact">
                 <div className="text-helper uppercase tracking-wide text-muted-foreground">
-                  Vị trí
+                  Vị trí tuyển dụng
                 </div>
-                <p>{(card.key_roles ?? []).join(", ") || "—"}</p>
+                <p>{roles.join(", ") || "—"}</p>
               </div>
               <div className="project-show-summary-actions mt-1 flex flex-wrap gap-2">
                 {canEdit && (

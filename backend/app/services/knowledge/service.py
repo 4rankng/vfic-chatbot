@@ -64,6 +64,11 @@ from app.project_knowledge.application.jobs import ProjectKnowledgeJobs
 Embedder = Callable[[str], Awaitable[list[float]]]
 
 
+def _declares_canonical(text: str) -> bool:
+    """True when the document declares the canonical Markdown schema up front."""
+    return "schema_version:" in text[:1000]
+
+
 class KnowledgeService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -164,7 +169,7 @@ class KnowledgeService:
             raise ValueError("Uploaded knowledge file is empty.")
         metadata: dict[str, Any] = {}
         source_version: str | None = str(version.version_no)
-        if "schema_version:" in stats.normalized_text[:1000]:
+        if _declares_canonical(stats.normalized_text):
             repair = repair_canonical_markdown(stats.normalized_text)
             canonical = parse_canonical_markdown(repair.text)
             stats = kb_text_stats(repair.text)
@@ -354,7 +359,7 @@ class KnowledgeService:
         drive_file_id: str | None = None,
         project_id: uuid.UUID | None = None,
     ) -> KnowledgeDocument:
-        await self.assert_mutable(project_id)
+        await self.assert_mutable(project_id, allow_authoritative=True)
         doc = KnowledgeDocument(
             file_name=file_name,
             drive_file_id=drive_file_id,
@@ -376,19 +381,24 @@ class KnowledgeService:
         data: bytes,
         *,
         project_id: uuid.UUID | None = None,
-        require_canonical: bool = False,
     ) -> KnowledgeDocument:
         """Multipart upload: extract text, persist the original, create doc."""
         # SEC-05: the caller already checks Content-Length / the route guard, but
         # the service is the single entry point both upload paths funnel through.
         assert_upload_size(len(data))
         extracted_text, source_metadata = self._extract_upload_text(file_name, content_type, data)
-        enforce_canonical = require_canonical and source_metadata["format"] != "docx"
-        raw_text, repair = self._repair_if_canonical(extracted_text, enforce_canonical)
-        canonical = parse_canonical_markdown(raw_text) if enforce_canonical else None
+        # Canonical-if-declared, the same contract as ``upload_text_file``: a
+        # freeform document (a project brief, say) ingests as-is, while text that
+        # declares the canonical schema is repaired, validated and carries
+        # canonical metadata. A malformed declared-canonical upload is rejected
+        # (``CanonicalValidationError``) instead of silently downgraded.
+        is_canonical = source_metadata["format"] != "docx" and _declares_canonical(extracted_text)
+        repair = repair_canonical_markdown(extracted_text) if is_canonical else None
+        raw_text = repair.text if repair is not None else extracted_text
+        canonical = parse_canonical_markdown(raw_text) if is_canonical else None
         if canonical is not None and project_id is None:
             project_id = await self._resolve_project_from_canonical(canonical)
-        await self.assert_mutable(project_id)
+        await self.assert_mutable(project_id, allow_authoritative=True)
         metadata, version = self._build_canonical_metadata(
             canonical, raw_text, extracted_text, repair
         )
@@ -431,14 +441,6 @@ class KnowledgeService:
             "extraction": extraction_method_for_format(file_format),
             "text_checksum": checksum_text(text),
         }
-
-    @staticmethod
-    def _repair_if_canonical(text: str, require_canonical: bool) -> tuple[str, Any]:
-        """Apply canonical markdown repair if requested. Returns (repaired_text, repair_result)."""
-        if not require_canonical:
-            return text, None
-        repair = repair_canonical_markdown(text)
-        return repair.text, repair
 
     async def _resolve_project_from_canonical(self, canonical: Any) -> uuid.UUID | None:
         """Look up a project by slug from the canonical document metadata."""
@@ -673,7 +675,9 @@ class KnowledgeService:
             raise NotFoundError("KB version not found")
         return version
 
-    async def assert_mutable(self, project_id: uuid.UUID | None) -> None:
+    async def assert_mutable(
+        self, project_id: uuid.UUID | None, *, allow_authoritative: bool = False
+    ) -> None:
         """Precondition for every legacy knowledge mutation on ``project_id``.
 
         Keep Project-owned knowledge exclusive to its selected mode: unowned
@@ -681,13 +685,22 @@ class KnowledgeService:
         Project can only change knowledge through Single-page PUT or a category
         YAML replacement. Callers include the router (fail-fast before enqueueing
         a background ingest) and every legacy mutation method below.
+
+        ``allow_authoritative`` opens the source-document lane — upload and
+        (re)ingest — for an owned Project whose knowledge is category-authoritative
+        (``category_authority_started``). Its card/features/jobs belong to the
+        category projections and the pipeline's card protection keeps document
+        ingest content-only there, so storing or retraining a source document
+        (a project brief, say) cannot clobber the authority.
         """
         if project_id is None:
             return
         project = await self.db.get(Project, project_id)
         if project is None:
             raise NotFoundError("project not found")
-        if getattr(project, "knowledge_base_id", None) is not None:
+        if getattr(project, "knowledge_base_id", None) is not None and not (
+            allow_authoritative and project.category_authority_started
+        ):
             raise ConflictError(
                 "Project knowledge is managed only through its Single-page or category YAML API"
             )

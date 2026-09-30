@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +64,14 @@ from app.project_knowledge.domain.project import (
 
 logger = logging.getLogger(__name__)
 
+# A RAG project's discovery card is DERIVED from its active categories: the
+# category projection rewrites summary/roles/location on every activation but
+# only seeds the keys it preserves (category_projections applies them with
+# setdefault). A discovery-card patch on a RAG project may therefore carry only
+# the preserved keys — patching a derived one would promise a recruiter an edit
+# the next activation silently discards.
+_PROJECTION_PRESERVED_CARD_KEYS = frozenset({"highlights", "eligibility"})
+
 
 def _mode_of(
     modes: dict[uuid.UUID, KnowledgeBaseMode], key: uuid.UUID | None
@@ -87,7 +96,9 @@ _DOCUMENT_INGEST_STATE: dict[str, IngestState] = {
     # ARCHIVED documents never count
 }
 
-_INGEST_STATE_RANK: dict[IngestState, int] = {"ready": 0, "error": 1, "ingesting": 2}
+def _freshness_key(ts: datetime | None) -> tuple[bool, datetime | None]:
+    """Order artifacts by freshness; unstamped rows sort oldest but tie together."""
+    return (ts is not None, ts)
 
 
 async def _ingest_states_by_project(
@@ -97,8 +108,13 @@ async def _ingest_states_by_project(
 
     Sources: each knowledge category's latest revision (``MAX(revision_no)`` per
     category) and the project's knowledge documents. Unmapped statuses never
-    count. Precedence: ingesting > error > ready. Projects with no counting rows
-    are absent from the result (caller reads missing as None).
+    count. The badge describes ingest state now, not history: any in-flight
+    artifact is ``ingesting``; otherwise the freshest artifact (``freshest_at``,
+    the newest of the row's timestamps) decides — ``error`` only when that
+    newest artifact FAILED, so a failure superseded by later successes is
+    history; equal-freshness newest rows count any failure as ``error``. Any
+    remaining artifact is ``ready``. Projects with no counting rows are absent
+    from the result (caller reads missing as None).
     """
     if not project_ids:
         return {}
@@ -106,7 +122,8 @@ async def _ingest_states_by_project(
     revision_rows = (
         await db.execute(
             text(
-                "SELECT kc.project_id AS project_id, kcr.status::text AS status "
+                "SELECT kc.project_id AS project_id, kcr.status::text AS status, "
+                "GREATEST(kcr.created_at, kcr.activated_at) AS freshest_at "
                 "FROM ( "
                 "    SELECT r.category_id AS category_id, MAX(r.revision_no) AS revision_no "
                 "    FROM knowledge_category_revisions r "
@@ -125,14 +142,15 @@ async def _ingest_states_by_project(
     document_rows = (
         await db.execute(
             text(
-                "SELECT DISTINCT kd.project_id AS project_id, kd.status::text AS status "
+                "SELECT kd.project_id AS project_id, kd.status::text AS status, "
+                "GREATEST(kd.created_at, kd.updated_at) AS freshest_at "
                 "FROM knowledge_documents kd "
                 "WHERE kd.project_id = ANY(:ids)"
             ),
             {"ids": ids},
         )
     ).all()
-    states: dict[uuid.UUID, IngestState] = {}
+    artifacts: dict[uuid.UUID, list[tuple[IngestState, datetime | None]]] = {}
     for rows, mapping in (
         (revision_rows, _REVISION_INGEST_STATE),
         (document_rows, _DOCUMENT_INGEST_STATE),
@@ -141,9 +159,17 @@ async def _ingest_states_by_project(
             state = mapping.get(row.status)
             if state is None:
                 continue
-            current = states.get(row.project_id)
-            if current is None or _INGEST_STATE_RANK[state] > _INGEST_STATE_RANK[current]:
-                states[row.project_id] = state
+            artifacts.setdefault(row.project_id, []).append((state, row.freshest_at))
+    states: dict[uuid.UUID, IngestState] = {}
+    for project_id, rows in artifacts.items():
+        if any(state == "ingesting" for state, _ts in rows):
+            states[project_id] = "ingesting"
+            continue
+        newest = max(_freshness_key(ts) for _state, ts in rows)
+        if any(state == "error" and _freshness_key(ts) == newest for state, ts in rows):
+            states[project_id] = "error"
+        else:
+            states[project_id] = "ready"
     return states
 
 
@@ -282,6 +308,9 @@ class ProjectService:
             aliases=[value.strip() for value in body.aliases if value.strip()],
             summary=(body.discovery_card or {}).get("summary"),
             index_card=body.discovery_card or {},
+            # A new project has no legacy card to protect, so category authority
+            # owns its data from birth and the very first activation projects.
+            category_authority_started=True,
         )
         self.db.add(proj)
         try:
@@ -334,12 +363,20 @@ class ProjectService:
                 await self._knowledge_modes([proj.knowledge_base_id]),
                 proj.knowledge_base_id,
             )
-            if mode is not KnowledgeBaseMode.DIRECT_CONTEXT:
+            patch = body.discovery_card
+            if mode is not KnowledgeBaseMode.DIRECT_CONTEXT and not (
+                patch and set(patch) <= _PROJECTION_PRESERVED_CARD_KEYS
+            ):
                 raise ConflictError("RAG discovery cards are derived from active categories")
-            if not body.discovery_card:
+            if not patch:
                 raise ConflictError("Single-page Projects require a discovery card")
-            proj.index_card = body.discovery_card
-            proj.summary = body.discovery_card.get("summary")
+            # MERGE, never replace: the patch body carries only the keys its
+            # caller owns (the brief chain sends `highlights` alone), and a
+            # replace would wipe the projection-built summary/roles/location
+            # on the next re-ingest.
+            proj.index_card = {**(proj.index_card or {}), **patch}
+            if "summary" in patch:
+                proj.summary = patch["summary"]
             proj.discovery_revision += 1
         await record_audit(
             self.db,

@@ -14,6 +14,17 @@ recruiter typed would not surface this record. That is the same class of
 blocking defect as an invalid payload, so activation fails with a dedicated
 code and the offending queries in ``error_message``.
 
+A query must be long enough to BE a retrieval signal. The exact rule: a query
+with fewer than five letters (unicode alphabetic characters — punctuation does
+not count toward the bound) is NOT testable by title alone and is SKIPPED,
+never failed. Role acronyms like "QA", "SMT", "UI", "MV", "PCBA" or "LQC" are
+the motivating case: at acronym length the embedding is noise (measured ~0.38
+against its own record, below the floor, where ordinary titles start at 0.584),
+so one acronym-titled row would otherwise kill an otherwise healthy category —
+exactly the defect this skip exists to prevent. The gate stays strict for every
+normal-length query: a record whose title genuinely disagrees with its content
+still fails activation.
+
 Cost: at most ``RETRIEVAL_SELFTEST_MAX_QUERIES`` extra embedding calls per
 activation, bounded to the first records of the document.
 """
@@ -41,6 +52,13 @@ RETRIEVAL_SELFTEST_MAX_QUERIES = 25
 # category falls back to the record's human-facing label.
 _QUERY_FIELDS = ("question", "title", "name")
 
+# Below this many letters (unicode alphabetic characters; punctuation does not
+# count) a query carries too little lexical signal to embed as a retrieval
+# signal — a role acronym like "QA", "SMT" or "PCBA" measures ~0.38 against its
+# own record, below the floor — so it cannot be judged by title alone and is
+# skipped rather than failed. See the module docstring.
+_MIN_TESTABLE_QUERY_LETTERS = 5
+
 
 class SelftestEmbedder(Protocol):
     async def batch(self, texts: list[str]) -> list[list[float]]: ...
@@ -60,6 +78,20 @@ def _selftest_query(payload: dict[str, Any]) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _query_is_testable(query: str) -> bool:
+    """Whether the query is long enough to be judged by this gate.
+
+    False for acronym-length labels (fewer than ``_MIN_TESTABLE_QUERY_LETTERS``
+    letters) like "QA", "SMT", "UI", "MV", "PCBA" or "LQC": at that length the
+    title-only embedding is noise and cannot retrieve the record's own content
+    either way, so the record is not testable by title alone. It is still
+    activated — being untestable is not a defect — but it never fails (or even
+    spends an embedding call on) the gate. Everything with five or more letters
+    is tested at full strictness.
+    """
+    return sum(1 for ch in query if ch.isalpha()) >= _MIN_TESTABLE_QUERY_LETTERS
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -86,7 +118,10 @@ async def retrieval_selftest_failures(
     ``document`` is the validated category document and ``units``/``vectors``
     are exactly what ``render_category_units`` produced and the embedder
     returned for it — index-aligned. Records without a query-like field are
-    skipped; a document where nothing is testable passes.
+    skipped, as are queries too short to be a retrieval signal
+    (``_query_is_testable`` — role acronyms like "QA" cannot self-retrieve by
+    title alone and must not fail activation for it); a document where nothing
+    is testable passes.
     """
     if len(units) != len(vectors) or not units:
         return []
@@ -98,7 +133,7 @@ async def retrieval_selftest_failures(
     for record in records:
         payload = record.model_dump(mode="json", exclude_none=True)
         query = _selftest_query(payload)
-        if query is not None:
+        if query is not None and _query_is_testable(query):
             queries.append(query)
     if not queries:
         return []

@@ -29,7 +29,10 @@ import { DiscoveryCardEditor } from "./presentation/DiscoveryCardEditor";
 import { FaqAutoSyncSection } from "./presentation/FaqAutoSyncSection";
 import { SinglePageEditor } from "./presentation/SinglePageEditor";
 import { BusTimetableSection } from "./ProjectBusTimetable";
-import type { KnowledgeCategoryKey } from "./project-knowledge-service";
+import {
+  updateProjectDiscoveryCard,
+  type KnowledgeCategoryKey,
+} from "./project-knowledge-service";
 
 type Props = {
   project: Project;
@@ -104,6 +107,12 @@ const BINARY_TYPE =
  * category jobs-first, awaiting real activation per category. A section the
  * sheet does not carry — or only carries as a template instruction — is named
  * "cần nhập tay", never invented.
+ *
+ * Every pick is a full re-ingest: the file is parsed fresh and the complete
+ * write set runs again — an already-active category is superseded, never a
+ * reason to skip — with the file itself uploaded as a project document. No
+ * confirmation gates the run: a superseded revision stays archived and
+ * auditable, so a re-ingest is an update, not a destructive act.
  */
 const BriefIngestSection = ({
   projectId,
@@ -142,17 +151,23 @@ const BriefIngestSection = ({
         );
         return;
       }
-      if (
-        !window.confirm(
-          "Phiếu sẽ thay thế dữ liệu của các mục có trong tệp sau khi kiểm tra. Tiếp tục?",
-        )
-      ) {
-        return;
-      }
       setNeedsHuman(
         plan.needsHuman.map((key) => PROJECT_KNOWLEDGE_CATEGORY_LABELS[key]),
       );
-      await ingest(projectId, plan.writes);
+      // No prompt before the writes: each one supersedes its category's
+      // active revision while the old revision stays archived, so asking
+      // first would only gate an update. The brief file rides along as a
+      // project document (best-effort — its failure never blocks the writes).
+      await ingest(projectId, plan.writes, file);
+      // Every re-ingest re-lands the brief's highlight facts on the discovery
+      // card: the activation projection preserves `highlights` (it only seeds
+      // them), so the facts survive every later projection run. A brief with
+      // no highlights sends nothing — the card keeps its derived empty list.
+      if (brief.highlights.length > 0) {
+        await updateProjectDiscoveryCard(projectId, {
+          discovery_card: { highlights: brief.highlights },
+        });
+      }
     } catch (readError) {
       setError((readError as Error).message);
     } finally {
@@ -214,7 +229,14 @@ const BriefIngestSection = ({
         <p role="alert" className="text-helper text-destructive">
           Nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}» không thành
           công{state.message ? `: ${state.message}` : "."} Dữ liệu đang dùng
-          không thay đổi.
+          của mục này không thay đổi.
+        </p>
+      ) : null}
+      {(state.phase === "done" || state.phase === "failed") &&
+      state.uploadError ? (
+        <p role="alert" className="text-helper text-destructive">
+          Tệp phiếu chưa được lưu vào tài liệu dự án: {state.uploadError}. Nội
+          dung các mục đã nạp vẫn được giữ.
         </p>
       ) : null}
       {error ? (
@@ -312,7 +334,7 @@ const RagCategoriesPanel = ({
         {categories && (
           <div className="project-knowledge-progress" aria-live="polite">
             <strong>
-              {activeCategoryCount}/{categories.length} mục có dữ liệu
+              {activeCategoryCount}/{categories.length} danh mục có dữ liệu
             </strong>
           </div>
         )}

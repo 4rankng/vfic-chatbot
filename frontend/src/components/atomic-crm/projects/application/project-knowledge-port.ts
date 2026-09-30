@@ -26,20 +26,32 @@ export type CancellationSignal = Readonly<{
   onAbort: (listener: () => void) => () => void;
 }>;
 
+/** A source file uploaded as a project knowledge document (multipart). */
+export type ProjectDocumentUpload = Readonly<{
+  name: string;
+  type: string;
+  bytes: ArrayBuffer;
+}>;
+
 /**
- * The recruiter-authored half of a project record: the discovery card the
- * agent matches candidates against, plus the aliases used to recognise the
- * project in a conversation.
+ * A partial write to the recruiter-authored half of a project record: the
+ * discovery card the agent matches candidates against, plus the aliases used to
+ * recognise the project in a conversation. The backend merges the card into the
+ * project's `index_card` — only the keys present here are written — so a caller
+ * sends exactly the keys it owns: the discovery-card draft sends the whole
+ * card, while the brief chain carries `highlights` alone.
  */
 export type ProjectDiscoveryCardPatch = Readonly<{
-  aliases: string[];
-  discovery_card: Readonly<{
-    summary: string;
-    location: string;
-    roles: string[];
-    eligibility: never[];
-    highlights: string[];
-  }>;
+  aliases?: string[];
+  discovery_card: Readonly<
+    Partial<{
+      summary: string;
+      location: string;
+      roles: string[];
+      eligibility: never[];
+      highlights: string[];
+    }>
+  >;
 }>;
 
 export type ProjectKnowledgePort = Readonly<{
@@ -58,6 +70,8 @@ export type ProjectKnowledgePort = Readonly<{
     filename: string,
     content: string,
   ) => Promise<{ revision: KnowledgeCategoryRevision; job_id: string }>;
+  /** Store the original source file as a project knowledge document. */
+  uploadDocument: (projectId: string, file: ProjectDocumentUpload) => Promise<void>;
   getSinglePage: (projectId: string) => Promise<SinglePageKnowledge>;
   replaceSinglePage: (
     projectId: string,

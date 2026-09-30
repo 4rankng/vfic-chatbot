@@ -21,10 +21,13 @@ import pytest
 from sqlalchemy import text
 
 from app.graph.tools import get_product_features
-from app.models.company import Project
+from app.models.company import Company, Project
+from app.models.job import Job, JobStatus
 from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.models.user import Role, User
 from app.services.knowledge import KnowledgePipeline, KnowledgeService
+from app.services.knowledge.prompts import DIGEST_SYSTEM_PROMPT, INDEX_SYSTEM_PROMPT
+from app.services.project.repository import ProjectRepository
 
 pytestmark = pytest.mark.integration
 
@@ -504,3 +507,245 @@ async def test_get_product_features_tool(integration_session, monkeypatch):
 
     miss = await get_product_features(repo, "does-not-exist-slug")
     assert "Không tìm thấy" in miss
+
+
+# ----------------------------------------- projection-owned cards vs legacy cards
+_CARD = {
+    "summary": "Thẻ do danh mục dựng",
+    "key_roles": ["kỹ sư máy"],
+    "location": "Hải Phòng",
+    "highlights": ["Đã kiểm duyệt"],
+}
+
+
+async def _seed_authoritative_project(db, *, category_authoritative: bool) -> Project:
+    """A KB-owned (RAG) project with an active KB version and a projection card.
+
+    ``category_authority_started`` is the only knob: both A/B legs below seed the
+    same shape, so any behavioral difference is the flag's doing.
+    """
+    project = Project(
+        slug=f"lg-{uuid.uuid4().hex[:6]}",
+        name="LG Display",
+        is_active=True,
+        summary="Tóm tắt do danh mục dựng",
+        index_card=dict(_CARD),
+        category_authority_started=category_authoritative,
+    )
+    db.add(project)
+    await db.flush()
+    kb_id = uuid.uuid4()
+    await db.execute(
+        text(
+            "INSERT INTO knowledge_bases (id, slug, name, mode) "
+            "VALUES (:kid, :slug, 'KB', 'RAG')"
+        ),
+        {"kid": str(kb_id), "slug": f"kb-{uuid.uuid4().hex[:6]}"},
+    )
+    version_id = uuid.uuid4()
+    await db.execute(
+        text(
+            "INSERT INTO kb_versions (id, project_id, version_no, status) "
+            "VALUES (:vid, :pid, 1, 'ACTIVE')"
+        ),
+        {"vid": str(version_id), "pid": str(project.id)},
+    )
+    await db.execute(
+        text(
+            "UPDATE projects SET knowledge_base_id = :kid, "
+            "active_kb_version_id = :vid WHERE id = :pid"
+        ),
+        {"kid": str(kb_id), "vid": str(version_id), "pid": str(project.id)},
+    )
+    await db.commit()
+    # The link columns were written as raw SQL; reload them onto the ORM row.
+    await db.refresh(project)
+    return project
+
+
+async def _seed_projection_project(db, *, category_authoritative: bool):
+    """An authoritative-project seed plus the three things an ingest may clobber.
+
+    One usable corpus chunk (gated on ``kb_version_id = active``) so the legacy
+    ``build_project_index`` path has input and WOULD regenerate the card; one
+    ACTIVE job so ``rebuild_project_jobs`` has something to archive; and the
+    brief document under test.
+    """
+    project = await _seed_authoritative_project(
+        db, category_authoritative=category_authoritative
+    )
+    emb = "[" + ",".join(["0.01"] * 3072) + "]"
+    corpus_doc_id = uuid.uuid4()
+    await db.execute(
+        text(
+            "INSERT INTO knowledge_documents "
+            "(id, project_id, file_name, status, stage, source, raw_text) "
+            "VALUES (:did, :pid, 'corpus.txt', 'PUBLISHED', 'PUBLISHED', 'kb_version', :raw)"
+        ),
+        {"did": str(corpus_doc_id), "pid": str(project.id), "raw": "LG Display tuyển kỹ sư máy."},
+    )
+    await db.execute(
+        text(
+            "INSERT INTO knowledge_chunks (id, document_id, kb_version_id, chunk_index, "
+            "chunk_type, content, content_plain, token_count, embedding) "
+            "VALUES (:cid, :did, :vid, 0, 'unit', :content, :content, 8, CAST(:emb AS vector))"
+        ),
+        {
+            "cid": str(uuid.uuid4()),
+            "did": str(corpus_doc_id),
+            "vid": str(project.active_kb_version_id),
+            "content": "LG Display tuyển kỹ sư máy.",
+            "emb": emb,
+        },
+    )
+    company = Company(project_id=project.id, name="LG Display", aliases=["LGD"])
+    db.add(company)
+    await db.flush()
+    job = Job(
+        company_id=company.id,
+        title="Vị trí cũ",
+        status=JobStatus.ACTIVE,
+        vacancy_count=5,
+    )
+    doc = KnowledgeDocument(
+        file_name="phieu.md",
+        source="upload",
+        status=KnowledgeStatus.UPLOADED,
+        stage="UPLOADED",
+        project_id=project.id,
+        raw_text="LG Display tuyển công nhân sản xuất.",
+    )
+    db.add_all([job, doc])
+    await db.commit()
+    return project, doc, job
+
+
+async def test_document_ingest_never_overwrites_projection_owned_cards(
+    integration_session,
+):
+    """A category-authoritative project's card/features/jobs stay projection-built.
+
+    The brief document still digests, embeds and stores (it must stay
+    searchable), but the LLM side-effects are skipped entirely — the recorded
+    prompts prove the feature/index calls never happen, not merely that their
+    writes were undone.
+    """
+    project, doc, job = await _seed_projection_project(
+        integration_session, category_authoritative=True
+    )
+    prompts_seen: list[str] = []
+
+    async def llm_json(system, user):
+        prompts_seen.append(system)
+        if "feature_key" in system:
+            return json.dumps(_features_payload())
+        return json.dumps(_units_payload("LG Display tuyển công nhân sản xuất."))
+
+    await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).run(doc)
+    await integration_session.refresh(doc)
+    await integration_session.refresh(project)
+    await integration_session.refresh(job)
+
+    # digest → embed → store still ran: the brief is stored and searchable.
+    assert doc.status == KnowledgeStatus.PUBLISHED
+    assert DIGEST_SYSTEM_PROMPT in prompts_seen
+    stored = (
+        await integration_session.execute(
+            text("SELECT count(*) FROM knowledge_chunks WHERE document_id = :did"),
+            {"did": str(doc.id)},
+        )
+    ).scalar()
+    assert stored == 1
+
+    # The projection-built card survives verbatim, no features are extracted,
+    # and the job catalog is left to the category projections.
+    assert project.index_card == _CARD
+    assert project.summary == "Tóm tắt do danh mục dựng"
+    assert (await _count_features(integration_session, project.id)).scalar() == 0
+    assert job.status == JobStatus.ACTIVE
+
+    # The product-feature and project-index LLM calls never happen at all.
+    assert all("feature_key" not in system for system in prompts_seen)
+    assert INDEX_SYSTEM_PROMPT not in prompts_seen
+
+
+async def test_document_ingest_still_runs_the_llm_path_for_a_legacy_project(
+    integration_session,
+):
+    """The A/B twin: same seed, ``category_authority_started`` off → LLM path runs.
+
+    The card is regenerated from the corpus, the product features are extracted
+    and the project's job list is rebuilt — exactly the side-effects the
+    authoritative leg suppresses.
+    """
+    project, doc, job = await _seed_projection_project(
+        integration_session, category_authoritative=False
+    )
+    prompts_seen: list[str] = []
+
+    async def llm_json(system, user):
+        prompts_seen.append(system)
+        if "feature_key" in system:
+            return json.dumps(_features_payload())
+        if system == INDEX_SYSTEM_PROMPT:
+            return json.dumps(
+                {
+                    "summary": "Thẻ do LLM dựng",
+                    "key_roles": ["operator"],
+                    "location": "Hải Phòng",
+                    "highlights": [],
+                }
+            )
+        return json.dumps(_units_payload("LG Display tuyển công nhân sản xuất."))
+
+    await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).run(doc)
+    await integration_session.refresh(project)
+    await integration_session.refresh(job)
+
+    catalog_rows = (
+        await integration_session.execute(
+            text("SELECT count(*) FROM worker_feature_catalog WHERE is_active")
+        )
+    ).scalar()
+    assert (await _count_features(integration_session, project.id)).scalar() == catalog_rows
+    assert project.index_card["key_roles"] == ["operator"]
+    assert project.summary == "Thẻ do LLM dựng"
+    assert job.status == JobStatus.ARCHIVED
+    assert any("feature_key" in system for system in prompts_seen)
+    assert INDEX_SYSTEM_PROMPT in prompts_seen
+
+
+async def test_brief_uploads_stay_counted_per_upload(integration_session, monkeypatch):
+    """N multipart brief uploads on an owned, authoritative project → N rows in
+    the project's "Tài liệu", with the raw brief text retrievable.
+
+    Also pins the two gates the brief chain rides on: a freeform text upload is
+    accepted (canonical-if-declared, not canonical-only) and an owned,
+    category-authoritative project accepts source documents.
+    """
+    # Storage is best-effort and out of scope here; the document row is the fact.
+    monkeypatch.setattr(
+        "app.services.knowledge.service.persist_original_upload", lambda *_args: None
+    )
+    project = await _seed_authoritative_project(
+        integration_session, category_authoritative=True
+    )
+    raw = "Tên dự án: 4P ELECTRONIC\nTóm tắt: Lắp ráp linh kiện điện tử."
+    docs = [
+        await KnowledgeService(integration_session).upload_bytes(
+            f"phieu-{index}.md",
+            "text/markdown",
+            raw.encode("utf-8"),
+            project_id=project.id,
+        )
+        for index in range(2)
+    ]
+
+    # The raw brief text rides on each document (retrievable via the raw route).
+    assert [doc.raw_text for doc in docs] == [raw, raw]
+    # One row per upload — the seeded kb_version corpus row is excluded as a
+    # managed document, so the count is exactly the two briefs.
+    counts = await ProjectRepository(integration_session).knowledge_document_counts(
+        [project.id]
+    )
+    assert counts == {project.id: 2}

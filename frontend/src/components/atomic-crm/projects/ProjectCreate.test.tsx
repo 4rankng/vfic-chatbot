@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   replaceCategory: vi.fn(),
   /** Swapped per test to decide what the pipeline reports back. */
   catalog: vi.fn(),
+  /** The brief-document upload: resolves unless a test rejects it. */
+  uploadDoc: vi.fn(),
+  /** The brief's highlights PATCHed onto the discovery card. */
+  updateCard: vi.fn(),
 }));
 
 /** Vitest's browser render result, named by the library rather than inferred
@@ -56,6 +60,8 @@ vi.mock("ra-core", async () => {
 vi.mock("./project-knowledge-service", () => ({
   replaceProjectKnowledgeCategory: mocks.replaceCategory,
   getProjectKnowledgeCategories: mocks.catalog,
+  uploadProjectDocument: mocks.uploadDoc,
+  updateProjectDiscoveryCard: mocks.updateCard,
 }));
 
 vi.mock("./ProjectWorkspaceShell", () => ({
@@ -87,6 +93,10 @@ const BRIEF = `# PHIẾU THU THẬP
 * **Thông tin phản hồi:**
   * **Lương cơ bản:** 6.200.000 đồng/tháng.
 `;
+
+/** The same brief with its highlights row removed: a file carrying no
+ *  "Các điểm nổi bật" facts must send no discovery-card patch at all. */
+const NO_HIGHLIGHTS_BRIEF = BRIEF.replace(/^.*Các điểm nổi bật.*\n/gm, "");
 
 /**
  * Hand the component a real File through the hidden input, the way a pick does:
@@ -146,6 +156,9 @@ describe("ProjectCreate", () => {
     mocks.notify.mockReset();
     mocks.replaceCategory.mockReset();
     mocks.catalog.mockReset();
+    mocks.uploadDoc.mockReset();
+    mocks.updateCard.mockReset();
+    mocks.uploadDoc.mockResolvedValue(undefined);
     mocks.create.mockResolvedValue({ data: { id: "7" } });
     mocks.update.mockResolvedValue({ data: { id: "7" } });
     mocks.replaceCategory.mockImplementation(async (_id, key) => ({
@@ -203,6 +216,9 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     mocks.notify.mockReset();
     mocks.replaceCategory.mockReset();
     mocks.catalog.mockReset();
+    mocks.uploadDoc.mockReset();
+    mocks.updateCard.mockReset();
+    mocks.uploadDoc.mockResolvedValue(undefined);
     mocks.create.mockResolvedValue({ data: { id: "7" } });
     mocks.update.mockResolvedValue({ data: { id: "7" } });
     mocks.replaceCategory.mockImplementation(async (_id, key) => ({
@@ -226,7 +242,7 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     expect(payload).not.toHaveProperty("discovery_card");
   });
 
-  it("writes jobs before faq and never states a vacancy count", async () => {
+  it("writes jobs first and never states a vacancy count", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen);
 
@@ -236,9 +252,9 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     await vi.waitFor(
       () =>
         expect(mocks.replaceCategory.mock.calls.map((call) => call[1])).toEqual(
-          ["jobs", "faq"],
+          ["jobs", "compensation", "faq"],
         ),
-      { timeout: 10000 },
+      { timeout: 20000 },
     );
 
     const jobsCall = mocks.replaceCategory.mock.calls[0];
@@ -274,9 +290,9 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     await vi.waitFor(
       () =>
         expect
-          .element(screen.getByText(/Đã nạp xong 2 phần kiến thức/))
+          .element(screen.getByText(/Đã nạp xong 3 phần kiến thức/))
           .toBeVisible(),
-      { timeout: 10000 },
+      { timeout: 20000 },
     );
     await expect
       .element(screen.getByRole("button", { name: /Tạo dự án/ }))
@@ -290,9 +306,9 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     await vi.waitFor(
       () =>
         expect
-          .element(screen.getByText(/Đã nạp xong 2 phần kiến thức/))
+          .element(screen.getByText(/Đã nạp xong 3 phần kiến thức/))
           .toBeVisible(),
-      { timeout: 10000 },
+      { timeout: 20000 },
     );
     expect(mocks.update).not.toHaveBeenCalled();
 
@@ -306,6 +322,73 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     });
   }, 20000);
 
+  it("needs only the name, the file and one submit click — nothing else", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const screen = await render(<ProjectCreate />);
+
+    // Exactly the admin's required input: a name and a file. No other field
+    // is touched and no control is chosen.
+    await screen.getByLabelText(/^Tên dự án/).fill("LG Display Hải Phòng");
+    uploadBrief(screen);
+
+    // The app does the rest: one draft, every category the file carries
+    // (jobs first), and the brief file itself onto the document shelf.
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    await vi.waitFor(
+      () =>
+        expect(mocks.replaceCategory.mock.calls.map((call) => call[1])).toEqual(
+          ["jobs", "compensation", "faq"],
+        ),
+      { timeout: 20000 },
+    );
+    await vi.waitFor(() => expect(mocks.uploadDoc).toHaveBeenCalledTimes(1), {
+      timeout: 10000,
+    });
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByText(/Đã nạp xong 3 phần kiến thức/))
+          .toBeVisible(),
+      { timeout: 20000 },
+    );
+
+    // One click is the single confirmation point.
+    await screen.getByRole("button", { name: /Tạo dự án/ }).click();
+    await vi.waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
+    expect(mocks.update.mock.calls[0][1]).toMatchObject({
+      id: "7",
+      data: { name: "LG Display Hải Phòng", is_active: true },
+    });
+    expect(mocks.redirect).toHaveBeenCalledWith("show", "projects", "7");
+    // Nothing along the way asked for permission.
+    expect(confirm).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  }, 25000);
+
+  it("re-picked file updates the same draft and re-runs the whole chain", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByText(/Đã nạp xong 3 phần kiến thức/))
+          .toBeVisible(),
+      { timeout: 20000 },
+    );
+
+    // The updated file arrives before the single create click.
+    uploadBrief(screen);
+    await vi.waitFor(
+      () => expect(mocks.replaceCategory.mock.calls.length).toBe(6),
+      { timeout: 20000 },
+    );
+
+    // One project, knowledge updated in place — the second pick never
+    // stranded a second draft — and both files reached the document shelf.
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.uploadDoc).toHaveBeenCalledTimes(2);
+  }, 30000);
+
   it("re-writes the jobs category when the admin edits the role list", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen);
@@ -313,9 +396,9 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     await vi.waitFor(
       () =>
         expect
-          .element(screen.getByText(/Đã nạp xong 2 phần kiến thức/))
+          .element(screen.getByText(/Đã nạp xong 3 phần kiến thức/))
           .toBeVisible(),
-      { timeout: 10000 },
+      { timeout: 20000 },
     );
 
     await screen
@@ -354,10 +437,10 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     expect(mocks.update).not.toHaveBeenCalled();
   }, 20000);
 
-  it("refuses to activate a project with no role to advertise", async () => {
+  it("demands nothing beyond the name and the file — roles stay optional", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen, "Tên dự án: Dự án trống\n");
-    await screen.getByLabelText(/^Vị trí tuyển dụng/).fill("   ");
+    // No role entry and no other field: the single click must still create.
 
     await vi.waitFor(
       () =>
@@ -368,10 +451,18 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     );
     await screen.getByRole("button", { name: /Tạo dự án/ }).click();
 
-    expect(mocks.update).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
+    expect(mocks.update.mock.calls[0][1]).toMatchObject({
+      id: "7",
+      data: { is_active: true },
+    });
     expect(mocks.notify).toHaveBeenCalledWith(
+      "Đã tạo dự án. Kiến thức đã sẵn sàng cho Agent.",
+      { type: "success" },
+    );
+    expect(mocks.notify).not.toHaveBeenCalledWith(
       expect.stringContaining("ít nhất một vị trí tuyển dụng"),
-      { type: "warning" },
+      expect.anything(),
     );
   }, 20000);
 
@@ -409,4 +500,116 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
       expect(mocks.create).not.toHaveBeenCalled();
     },
   );
+
+  it("uploads the original brief file as a project knowledge document", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+
+    await vi.waitFor(() => expect(mocks.uploadDoc).toHaveBeenCalledTimes(1), {
+      timeout: 10000,
+    });
+    const [projectId, file] = mocks.uploadDoc.mock.calls[0];
+    expect(projectId).toBe("7");
+    expect((file as File).name).toBe("phiếu 4P.md");
+    // The upload rides alongside the writes — never in their place.
+    await vi.waitFor(
+      () =>
+        expect(mocks.replaceCategory.mock.calls.map((call) => call[1])).toEqual(
+          ["jobs", "compensation", "faq"],
+        ),
+      { timeout: 10000 },
+    );
+  }, 20000);
+
+  it("still completes the category writes when the document upload rejects", async () => {
+    mocks.uploadDoc.mockRejectedValue(new Error("Máy chủ từ chối tệp."));
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+
+    // Every category still lands…
+    await vi.waitFor(
+      () =>
+        expect(mocks.replaceCategory.mock.calls.map((call) => call[1])).toEqual(
+          ["jobs", "compensation", "faq"],
+        ),
+      { timeout: 10000 },
+    );
+    // …the chain still finishes…
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByText(/Đã nạp xong 3 phần kiến thức/))
+          .toBeVisible(),
+      { timeout: 10000 },
+    );
+    // …the upload's own words surface as a non-fatal error…
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent(
+        /Tệp phiếu chưa được lưu vào tài liệu dự án: Máy chủ từ chối tệp\./,
+      );
+    // …and the recruiter may still create the project.
+    await expect
+      .element(screen.getByRole("button", { name: /Tạo dự án/ }))
+      .toBeEnabled();
+  }, 20000);
+
+  it("never uploads a document on a chain run without a source file", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+
+    await vi.waitFor(
+      () =>
+        expect
+          .element(screen.getByText(/Đã nạp xong 3 phần kiến thức/))
+          .toBeVisible(),
+      { timeout: 10000 },
+    );
+    // An edited role list makes the activation re-write the jobs category — a
+    // chain run with no source file, the legacy caller shape — so it must
+    // behave exactly as before: writes, no upload.
+    await screen
+      .getByLabelText(/^Vị trí tuyển dụng/)
+      .fill("Kiểm tra chất lượng");
+    mocks.uploadDoc.mockClear();
+    mocks.replaceCategory.mockClear();
+    await screen.getByRole("button", { name: /Tạo dự án/ }).click();
+
+    await vi.waitFor(() =>
+      expect(mocks.replaceCategory).toHaveBeenCalledTimes(1),
+    );
+    expect(mocks.uploadDoc).not.toHaveBeenCalled();
+  }, 25000);
+
+  it("lands the brief's highlight facts on the discovery card before the writes", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+
+    await vi.waitFor(() => expect(mocks.updateCard).toHaveBeenCalledTimes(1));
+    // Exactly the brief's facts, and nothing else, in the patch body.
+    expect(mocks.updateCard.mock.calls[0]).toEqual([
+      "7",
+      {
+        discovery_card: {
+          highlights: ["Không yêu cầu bằng cấp.", "Đóng BHXH đầy đủ."],
+        },
+      },
+    ]);
+    // The PATCH rides before the category writes: activation preserves
+    // `highlights`, so the facts are on the card before any projection runs.
+    await vi.waitFor(() => expect(mocks.replaceCategory).toHaveBeenCalled());
+    expect(mocks.updateCard.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.replaceCategory.mock.invocationCallOrder[0],
+    );
+  }, 20000);
+
+  it("sends no discovery-card patch when the brief carries no highlights", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen, NO_HIGHLIGHTS_BRIEF);
+
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(mocks.replaceCategory).toHaveBeenCalled());
+    // No highlight facts, no patch — the card keeps its derived empty list.
+    expect(mocks.updateCard).not.toHaveBeenCalled();
+  }, 20000);
 });

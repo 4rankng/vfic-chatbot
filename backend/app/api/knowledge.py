@@ -380,7 +380,6 @@ async def upload_file(
             file.content_type or "",
             data,
             project_id=project_id,
-            require_canonical=True,
         )
     except CanonicalValidationError as exc:
         raise ValidationError({"errors": exc.errors}) from exc
@@ -399,7 +398,7 @@ async def process(
 ) -> KnowledgeDocumentOut:
     """(Re)run the async LLM training pipeline for a document."""
     doc = await _load(doc_id, db)
-    await KnowledgeService(db).assert_mutable(doc.project_id)
+    await KnowledgeService(db).assert_mutable(doc.project_id, allow_authoritative=True)
     _project_knowledge_jobs.ingest_document(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
 
@@ -422,7 +421,7 @@ async def reindex(
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     doc = await _load(doc_id, db)
-    await KnowledgeService(db).assert_mutable(doc.project_id)
+    await KnowledgeService(db).assert_mutable(doc.project_id, allow_authoritative=True)
     _project_knowledge_jobs.ingest_document(doc.id)
     return KnowledgeDocumentOut.model_validate(doc)
 

@@ -32,17 +32,33 @@ class ProjectRepository:
         self.db = db
 
     async def knowledge_document_counts(self, project_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+        """Count each project's on-record source documents ("Tài liệu").
+
+        Three families count, one row each: the files of the active KB version
+        (``kb_text_files``), the single-page direct file, and uploaded source
+        documents (``knowledge_documents``, brief uploads included) that no other
+        family already represents. Managed ``knowledge_documents`` rows are
+        excluded so a document is counted exactly once: ``kb_version`` documents
+        through their ``kb_text_files`` row, ``direct_context`` through
+        ``knowledge_base_direct_files``, and ``category_yaml`` / ``faq_editor``
+        rows — internal artifacts of the category and FAQ writers — at all.
+        """
         if not project_ids:
             return {}
         rows = (
             await self.db.execute(
                 text(
                     "SELECT p.id AS project_id, "
-                    "count(DISTINCT ktf.id) + count(DISTINCT kbdf.id) AS file_count "
+                    "count(DISTINCT ktf.id) + count(DISTINCT kbdf.id) + count(DISTINCT kd.id) "
+                    "AS file_count "
                     "FROM projects p "
                     "LEFT JOIN kb_text_files ktf ON ktf.kb_version_id = p.active_kb_version_id "
                     "LEFT JOIN knowledge_base_direct_files kbdf "
                     "ON kbdf.knowledge_base_id = p.knowledge_base_id "
+                    "LEFT JOIN knowledge_documents kd ON kd.project_id = p.id "
+                    "AND kd.status::text <> 'ARCHIVED' "
+                    "AND kd.source NOT IN "
+                    "('kb_version', 'category_yaml', 'faq_editor', 'direct_context') "
                     "WHERE p.id = ANY(CAST(:ids AS uuid[])) "
                     "GROUP BY p.id"
                 ),

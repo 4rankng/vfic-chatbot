@@ -16,10 +16,14 @@ The chain drives the real backend ingest code at every step:
    (``replace_project_category`` → ``KnowledgeCategoryService.stage_replacement``)
    writes: parsed document → ``normalized_payload`` → ``content_sha256`` →
    STAGED ``KnowledgeCategoryRevision``.
-3. the jobs projection — ``SqlAlchemyCategoryProjectionWriter.apply_for_revision``,
-   the same call revision activation makes. It rebuilds ``summary``/``roles``/
-   ``location`` and sets ``is_active``, while the create card's highlights
-   survive (``setdefault``).
+3. the real revision activation — ``KnowledgeCategoryService.activate_revision``,
+   the entry the category worker runs (``run_category_revision_job`` →
+   ``activate_revision``). It claims the STAGED revision, embeds it, and —
+   because a fresh project is category-authoritative — applies the jobs
+   projection itself, without anyone calling it by hand: ``summary``/``roles``/
+   ``location`` are rebuilt and ``is_active`` set, while the create card's
+   highlights survive (``setdefault``), and ``quality_result["projection"]``
+   reports "complete".
 
 Step 2 writes the revision row directly instead of calling ``stage_replacement``
 because the two gates are mutually exclusive today: ``ProjectCreate`` admits a
@@ -34,10 +38,16 @@ row level, exactly as the tests around
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from sqlalchemy import Update
+from sqlalchemy.sql.elements import BindParameter
+from sqlalchemy.sql.functions import FunctionElement
+
 from app.graph.context import active_projects_index
+from app.models.company import Project
 from app.models.knowledge import (
     KnowledgeBaseMode,
     KnowledgeCategory,
@@ -46,7 +56,10 @@ from app.models.knowledge import (
 )
 from app.schemas.projects import ProjectCreate
 from app.services.knowledge.category_contracts import category_checksum, parse_category_yaml
-from app.services.knowledge.category_projections import SqlAlchemyCategoryProjectionWriter
+from app.services.knowledge.category_service import (
+    MAX_CATEGORY_PROCESSING_ATTEMPTS,
+    KnowledgeCategoryService,
+)
 from app.services.project import ProjectService
 from app.services.project import service as project_service
 
@@ -126,11 +139,33 @@ class _FakeScalars:
         return self._rows[0] if self._rows else None
 
 
+def _claimable_revision(row) -> bool:
+    """The activation claim's WHERE over row state: attempt cap, claimable status."""
+    return (row.attempt_count or 0) < MAX_CATEGORY_PROCESSING_ATTEMPTS and (
+        row.status
+        in (KnowledgeCategoryRevisionStatus.STAGED, KnowledgeCategoryRevisionStatus.FAILED)
+        or (
+            row.status is KnowledgeCategoryRevisionStatus.PROCESSING
+            and row.lease_expires_at is not None
+            and row.lease_expires_at < datetime.now(UTC)
+        )
+    )
+
+
+class _UnitEmbedder:
+    """Mechanics-only embedder (models no semantics): one identical vector per text."""
+
+    async def batch(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] * 8 for _ in texts]
+
+
 class _FakeSession:
     """AsyncSession stand-in: entity-routed selects, collected adds.
 
     Mirrors ``test_category_projections_sibling_batch._RecordingSession`` with
-    the persistence verbs the create flow and the projection writer use.
+    the persistence verbs the create flow, the activation chain and the
+    projection writer use. The claim UPDATE gets what a real one supplies: its
+    SET values land on every claimable row.
     """
 
     def __init__(self) -> None:
@@ -140,15 +175,55 @@ class _FakeSession:
     def seed(self, entity: type, rows: list) -> None:
         self._rows_by_entity[entity] = rows
 
+    def _rows_of(self, entity: type) -> list:
+        return [
+            row
+            for row in [*self._rows_by_entity.get(entity, []), *self.added]
+            if isinstance(row, entity)
+        ]
+
     async def scalars(self, statement, *args, **kwargs):
         entity = statement.column_descriptions[0]["entity"]
-        return _FakeScalars(self._rows_by_entity.get(entity, []))
+        return _FakeScalars(self._rows_of(entity))
+
+    async def scalar(self, statement, *args, **kwargs):
+        """Single-row lookups (locked_project/locked_category) plus the one
+        aggregate the activation chain runs: select(func.max(revision_no))."""
+        description = statement.column_descriptions[0]
+        if isinstance(description["expr"], FunctionElement):
+            revisions = self._rows_of(KnowledgeCategoryRevision)
+            return max((row.revision_no for row in revisions), default=None)
+        rows = self._rows_of(description["entity"])
+        return rows[0] if rows else None
 
     async def get(self, entity, pk):
-        for row in [*self._rows_by_entity.get(entity, []), *self.added]:
-            if isinstance(row, entity) and getattr(row, "id", None) == pk:
+        for row in self._rows_of(entity):
+            if getattr(row, "id", None) == pk:
                 return row
         return None
+
+    async def execute(self, statement, params=None, **kwargs):
+        if isinstance(statement, Update):
+            values = dict(statement._values)
+            claimed = 0
+            for row in self._rows_of(KnowledgeCategoryRevision):
+                if not _claimable_revision(row):
+                    continue
+                for column, value in values.items():
+                    if column.key == "attempt_count":
+                        row.attempt_count = (row.attempt_count or 0) + 1  # SQL-side increment
+                    else:
+                        # Update._values wraps literals in BindParameter; the
+                        # database stores the bound value, so the row does too.
+                        setattr(
+                            row,
+                            column.key,
+                            value.value if isinstance(value, BindParameter) else value,
+                        )
+                claimed += 1
+            return SimpleNamespace(rowcount=claimed)
+        # text() statements: the category chunk INSERTs; no result rows needed.
+        return SimpleNamespace(rowcount=0)
 
     def add(self, obj) -> None:
         self.added.append(obj)
@@ -163,6 +238,9 @@ class _FakeSession:
                 row.discovery_revision = 0
 
     async def commit(self) -> None:
+        pass
+
+    async def rollback(self) -> None:
         pass
 
     async def refresh(self, obj) -> None:
@@ -208,12 +286,16 @@ async def test_amtran_fixture_brief_ingestion_lands_front_matter_facts_in_index_
     session.add(revision)
     await session.flush()
 
-    # 3. Run the jobs projection — the same call activation makes. It rebuilds
-    #    summary/roles/location and sets is_active; the card's highlights
-    #    survive untouched.
-    await SqlAlchemyCategoryProjectionWriter(session).apply_for_revision(
-        project.id, revision, document
-    )
+    # 3. Drive the real revision activation — the category worker's entry point
+    #    (run_category_revision_job → activate_revision). It claims the STAGED
+    #    revision, embeds it, and — because the fresh project is category
+    #    authoritative — applies the jobs projection itself: summary/roles/
+    #    location rebuilt and is_active set; the card's highlights survive
+    #    untouched. Nobody calls the projection by hand.
+    monkeypatch.setattr(KnowledgeCategoryService, "_repair_caches", AsyncMock())
+    await KnowledgeCategoryService(
+        session, enforce_retrieval_selftest=False
+    ).activate_revision(revision.id, _UnitEmbedder())
 
     card = project.index_card
     assert project.name == FIXTURE_NAME
@@ -222,10 +304,41 @@ async def test_amtran_fixture_brief_ingestion_lands_front_matter_facts_in_index_
     assert FIXTURE_LOCATION in card["location"]
     assert card["highlights"] == FIXTURE_HIGHLIGHTS
 
-    # The projection's own rebuilds prove step 3 ran over the create card.
+    # The projection's own rebuilds prove the real activation projected over
+    # the create card.
     assert card["summary"] == project.summary == _PROJECTION_SUMMARY
     assert project.is_active is True
     assert project.discovery_revision == 1
+
+    # Activation reports reality: nothing deferred, and the card is now
+    # category-owned.
+    assert revision.quality_result["projection"] == "complete"
+    assert project.category_authority_started is True
+
+    # The bot catalog lists only rows passing `is_active AND knowledge_base_id
+    # IS NOT NULL` (retrieval.catalog_repository.active_projects_with_card /
+    # list_active_projects); the projected row passes both predicates.
+    assert project.is_active is True and project.knowledge_base_id is not None
+
+    # ... and the master index gives the agent a substantive line for it.
+    prompt = await active_projects_index(
+        SimpleNamespace(
+            active_projects_with_card=AsyncMock(
+                return_value=[
+                    SimpleNamespace(
+                        slug=project.slug,
+                        name=project.name,
+                        aliases=project.aliases,
+                        summary=project.summary,
+                        index_card=project.index_card,
+                    )
+                ]
+            )
+        )
+    )
+    assert f"{FIXTURE_SLUG} ({FIXTURE_NAME}): {_PROJECTION_SUMMARY}" in prompt
+    assert f"vị trí: {', '.join(FIXTURE_TARGET_POSITIONS)}" in prompt
+    assert f"địa điểm: {FIXTURE_LOCATION}" in prompt
 
 
 async def test_active_projects_index_advertises_the_amtran_brief_facts() -> None:
@@ -256,3 +369,62 @@ async def test_active_projects_index_advertises_the_amtran_brief_facts() -> None
     assert f"vị trí: {', '.join(FIXTURE_TARGET_POSITIONS)}" in prompt
     assert f"địa điểm: {FIXTURE_LOCATION}" in prompt
     assert f"nổi bật: {', '.join(FIXTURE_HIGHLIGHTS)}" in prompt
+
+
+async def test_legacy_carded_project_defers_projection_until_cutover(monkeypatch) -> None:
+    """A legacy project's pre-built card stays untouched at revision activation.
+
+    Legacy cards are owned by their pre-built data until
+    ``cutover_category_authority`` replaces them wholesale, so activation
+    defers the projection (``quality_result`` says so) and the card, summary
+    and authority flag are all preserved.
+    """
+    session = _FakeSession()
+    monkeypatch.setattr(KnowledgeCategoryService, "_repair_caches", AsyncMock())
+    legacy_card = {
+        "summary": "Tóm tắt nhà máy cũ",
+        "roles": ["Thợ máy"],
+        "location": "Bắc Ninh",
+        "highlights": ["Có xe đưa đón"],
+    }
+    project = Project(
+        slug="legacy-nha-may",
+        name="Nhà máy cũ",
+        is_active=True,
+        summary="Tóm tắt nhà máy cũ",
+        index_card=dict(legacy_card),
+        category_authority_started=False,
+    )
+    session.add(project)
+    await session.flush()
+
+    category = KnowledgeCategory(project_id=project.id, category_key="jobs")
+    session.add(category)
+    await session.flush()
+    jobs_yaml = _jobs_yaml()
+    document = parse_category_yaml("jobs", jobs_yaml)
+    revision = KnowledgeCategoryRevision(
+        category_id=category.id,
+        revision_no=1,
+        status=KnowledgeCategoryRevisionStatus.STAGED,
+        source_filename="jobs.yaml",
+        source_yaml=jobs_yaml,
+        normalized_payload=document.model_dump(mode="json"),
+        content_sha256=category_checksum(document),
+    )
+    session.add(revision)
+    await session.flush()
+
+    await KnowledgeCategoryService(
+        session, enforce_retrieval_selftest=False
+    ).activate_revision(revision.id, _UnitEmbedder())
+
+    # Activation ran to completion but deferred the projection.
+    assert revision.status is KnowledgeCategoryRevisionStatus.ACTIVE
+    assert revision.quality_result["projection"] == "deferred_until_cutover"
+
+    # The legacy card is fully preserved: nothing projected over it.
+    assert project.index_card == legacy_card
+    assert project.summary == "Tóm tắt nhà máy cũ"
+    assert project.discovery_revision == 0
+    assert project.category_authority_started is False

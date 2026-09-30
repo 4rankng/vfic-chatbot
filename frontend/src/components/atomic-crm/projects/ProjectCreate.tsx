@@ -21,6 +21,7 @@ import {
   planBriefKnowledge,
 } from "./domain/project-knowledge-yaml";
 import { slugifyVietnamese } from "./domain/vietnamese-slug";
+import { updateProjectDiscoveryCard } from "./project-knowledge-service";
 import { ProjectBriefImport } from "./presentation/ProjectBriefImport";
 import { useProjectIngest } from "./presentation/use-project-ingest";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
@@ -29,7 +30,8 @@ import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
  *  silently dropped. These never become form fields: the create schema refuses
  *  a discovery card on a RAG project ("RAG discovery cards are derived from
  *  active categories"), so the summary and location reach the assistant through
- *  the category YAML the pipeline writes, not through this form. */
+ *  the category YAML the pipeline writes, not through this form. The highlights
+ *  are the one card key the chain does carry — see the PATCH in `onImported`. */
 const CarriedSummary = ({ brief }: { brief: ProjectBrief }) => (
   <dl className="project-brief-carried grid gap-1 text-helper text-muted-foreground">
     {brief.summary ? (
@@ -93,7 +95,11 @@ const ProjectCreateForm = () => {
    * recruiter still reviews everything and still presses `Tạo dự án`; what
    * moved is only WHEN the work starts, not WHO decides it counts.
    */
-  const onImported = async (parsed: ProjectBrief, filename: string) => {
+  const onImported = async (
+    parsed: ProjectBrief,
+    filename: string,
+    file: File,
+  ) => {
     setBrief(parsed);
     setBriefFilename(filename);
     if (parsed.aliases.length > 0) setAliases(parsed.aliases.join(", "));
@@ -104,17 +110,36 @@ const ProjectCreateForm = () => {
 
     setCreatingDraft(true);
     try {
-      const created = await dataProvider.create("projects", {
-        data: {
-          name: (name.trim() || parsed.name || "Dự án mới").trim(),
-          slug: slugifyVietnamese(name.trim() || parsed.name || "du-an-moi"),
-          ...buildProjectCreation({ aliases: parsed.aliases.join(", ") }),
-        },
-      });
-      const id = String(created.data.id);
-      setDraftId(id);
+      // A re-picked file must update the draft the earlier pick created — a
+      // second draft would strand the first — and then re-run the whole chain
+      // from the NEW parse: every category the file carries is written again
+      // and supersedes its previous revision, and the new file joins the
+      // project documents.
+      let id = draftId;
+      if (!id) {
+        const created = await dataProvider.create("projects", {
+          data: {
+            name: (name.trim() || parsed.name || "Dự án mới").trim(),
+            slug: slugifyVietnamese(name.trim() || parsed.name || "du-an-moi"),
+            ...buildProjectCreation({ aliases: parsed.aliases.join(", ") }),
+          },
+        });
+        id = String(created.data.id);
+        setDraftId(id);
+      }
+      // The brief's highlight facts ride the card itself: PATCHed right after
+      // the draft exists and before the category writes, because the
+      // activation projection PRESERVES `highlights` (it only seeds them), so
+      // landing them first is safe and no later projection clobbers them. A
+      // brief with no highlights sends nothing — the card keeps its derived
+      // empty list.
+      if (parsed.highlights.length > 0) {
+        await updateProjectDiscoveryCard(id, {
+          discovery_card: { highlights: parsed.highlights },
+        });
+      }
       setIngestedRoles(parsed.roles.join(", "));
-      await ingest(id, planBriefKnowledge(parsed).writes);
+      await ingest(id, planBriefKnowledge(parsed).writes, file);
     } catch (error) {
       notify((error as Error).message, { type: "error" });
     } finally {
@@ -127,17 +152,14 @@ const ProjectCreateForm = () => {
   /**
    * `Tạo dự án` activates the draft. It never half-activates: if activation is
    * refused, the exact backend reason is shown and the project stays inactive
-   * and invisible to candidates, rather than going live on a guess.
+   * and invisible to candidates, rather than going live on a guess. The form
+   * itself demands nothing beyond the name and the file — the roles are filled
+   * from the brief and stay optional, so no role gate stands between the admin
+   * and this button.
    */
   const onSubmit = async () => {
     if (!draftId) return;
     const roleList = parseCommaList(roles);
-    if (roleList.length === 0) {
-      notify("Cần ít nhất một vị trí tuyển dụng để dự án có thể hoạt động.", {
-        type: "warning",
-      });
-      return;
-    }
     setSubmitting(true);
     try {
       // An edited role list is a real change to the knowledge, so it is written
@@ -177,6 +199,12 @@ const ProjectCreateForm = () => {
   const canSave =
     draftId !== null && !ingesting && !creatingDraft && !submitting;
   const ingestBlocked = state.phase === "failed";
+  // The brief-document upload is best-effort: its error is shown alongside the
+  // outcome, never as a reason to block the category writes or the activation.
+  const uploadError =
+    state.phase === "done" || state.phase === "failed"
+      ? state.uploadError
+      : undefined;
 
   return (
     <Form onSubmit={onSubmit}>
@@ -213,16 +241,15 @@ const ProjectCreateForm = () => {
           id="project-roles"
           className="uu-scope"
           label="Vị trí tuyển dụng"
-          isRequired
           validationBehavior="aria"
           value={roles}
           placeholder="Công nhân sản xuất, Kiểm tra"
           onChange={setRoles}
         />
         <p className="text-helper text-muted-foreground">
-          Mỗi vị trí là một dòng trong danh mục «Vị trí tuyển dụng». Dự án cần
-          ít nhất một vị trí thì Agent mới tư vấn được. Số lượng tuyển không
-          giới hạn nên không cần khai báo.
+          Mỗi vị trí là một dòng trong danh mục «Vị trí tuyển dụng». Có vị trí
+          tuyển dụng thì Agent mới tư vấn được. Số lượng tuyển không giới hạn
+          nên không cần khai báo.
         </p>
 
         <hr className="border-border" />
@@ -231,7 +258,9 @@ const ProjectCreateForm = () => {
           brief={brief}
           filename={briefFilename}
           busy={creatingDraft || ingesting}
-          onImported={(parsed, filename) => void onImported(parsed, filename)}
+          onImported={(parsed, filename, file) =>
+            void onImported(parsed, filename, file)
+          }
         />
 
         {brief ? <CarriedSummary brief={brief} /> : null}
@@ -254,6 +283,12 @@ const ProjectCreateForm = () => {
             công
             {state.message ? `: ${state.message}` : "."} Dự án vẫn là bản nháp
             và chưa hiển thị với ứng viên. Sửa nội dung rồi tải lại tệp.
+          </p>
+        ) : null}
+        {uploadError ? (
+          <p role="alert" className="text-helper text-destructive">
+            Tệp phiếu chưa được lưu vào tài liệu dự án: {uploadError}. Nội dung
+            danh mục vẫn đã được nạp.
           </p>
         ) : null}
         {rolesDirty && draftId ? (
@@ -282,7 +317,7 @@ export const ProjectCreate = () => {
           <div className="project-create-shell mx-auto w-full max-w-4xl">
             <header className="project-editor-header project-form-page-header flex flex-wrap items-start gap-4">
               <div className="mr-auto min-w-0">
-                <p className="text-helper font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <p className="text-caption font-semibold uppercase tracking-[0.06em] text-muted-foreground">
                   Dự án
                 </p>
                 <h1 className="mt-1 text-content-title font-semibold">
