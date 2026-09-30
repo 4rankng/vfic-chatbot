@@ -6,25 +6,17 @@ import {
   useNotify,
   useRefresh,
 } from "ra-core";
-import { Check, ChevronsUpDown, Plus, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { Select as UntitledSelect } from "@/components/base/select/select";
+import type { SelectItemType } from "@/components/base/select/select-shared";
 import type { KnowledgeBase, Project } from "../types";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { normalizeSearch, slugifyProject } from "./projectPickerUtils";
+
+/** Sentinel id for the "create project" row; project ids cannot collide. */
+const CREATE_KEY = "__create__";
+/** Sentinel id for the empty-result row; project ids cannot collide. */
+const EMPTY_KEY = "__empty__";
+
 export const ProjectPicker = ({
   value,
   onChange,
@@ -37,7 +29,6 @@ export const ProjectPicker = ({
   const notify = useNotify();
   const refresh = useRefresh();
   const dataProvider = useDataProvider<CrmDataProvider>();
-  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [localProjects, setLocalProjects] = useState<Project[]>([]);
@@ -80,9 +71,6 @@ export const ProjectPicker = ({
     );
   }, [localProjects, searchedProjects, selectedProjectRecord, trimmedSearch]);
 
-  const selectedProject = availableProjects.find(
-    (project) => String(project.id) === value,
-  );
   const normalizedSearch = normalizeSearch(trimmedSearch);
   const exactMatch = availableProjects.some(
     (project) => normalizeSearch(project.name) === normalizedSearch,
@@ -96,7 +84,6 @@ export const ProjectPicker = ({
 
   const selectProject = (projectId: string) => {
     onChange(projectId);
-    setOpen(false);
     setSearch("");
   };
 
@@ -125,7 +112,6 @@ export const ProjectPicker = ({
       setLocalProjects((current) => [...current, project]);
       onChange(String(project.id));
       notify("Đã tạo dự án.", { type: "success" });
-      setOpen(false);
       setSearch("");
       refresh();
     } catch (err) {
@@ -137,116 +123,49 @@ export const ProjectPicker = ({
     }
   };
 
+  const items: SelectItemType[] = availableProjects.map((project) => ({
+    id: String(project.id),
+    label: project.name,
+    supportingText: project.slug,
+  }));
+  if (canCreate) {
+    items.push({ id: CREATE_KEY, label: createHelpText, isDisabled: creating });
+  } else if (items.length === 0) {
+    items.push({
+      id: EMPTY_KEY,
+      label: "Không tìm thấy dự án.",
+      isDisabled: true,
+    });
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          id={id}
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="tt-btn-touch h-11 w-full justify-between rounded-[9px] border-border bg-background px-3 text-button font-normal"
-        >
-          <span className="truncate">
-            {selectedProject?.name ?? "Chọn dự án"}
-          </span>
-          <ChevronsUpDown className="size-4 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-[min(420px,calc(100vw-3rem))] p-0"
-      >
-        <Command
-          shouldFilter={false}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              canCreate &&
-              availableProjects.length === 0
-            ) {
-              event.preventDefault();
-              void createProject();
-            }
-          }}
-        >
-          <CommandInput
-            value={search}
-            onValueChange={setSearch}
-            placeholder="Tìm hoặc tạo dự án..."
-          />
-          <CommandList>
-            {(availableProjects.length > 0 || trimmedSearch) && (
-              <CommandGroup>
-                {availableProjects.length > 0 ? (
-                  availableProjects.map((project) => (
-                    <CommandItem
-                      key={project.id}
-                      value={`${project.name} ${project.slug}`}
-                      onSelect={() => selectProject(String(project.id))}
-                    >
-                      <Check
-                        className={cn(
-                          "size-4",
-                          value !== String(project.id) && "opacity-0",
-                        )}
-                      />
-                      <span className="min-w-0 flex-1 truncate">
-                        {project.name}
-                      </span>
-                      <span className="kb-mono shrink-0 text-caption text-muted-foreground">
-                        {project.slug}
-                      </span>
-                    </CommandItem>
-                  ))
-                ) : (
-                  <div className="px-2 py-3 text-body text-muted-foreground">
-                    Không tìm thấy dự án.
-                  </div>
-                )}
-              </CommandGroup>
-            )}
-            {canCreate && (
-              <>
-                <CommandSeparator />
-                <CommandGroup>
-                  <CommandItem
-                    value={`create-${trimmedSearch}`}
-                    onSelect={createProject}
-                    disabled={creating}
-                  >
-                    {creating ? (
-                      <RefreshCw className="size-4 animate-spin motion-reduce:animate-none" />
-                    ) : (
-                      <Plus className="size-4" />
-                    )}
-                    <span className="truncate">
-                      Tạo dự án "{trimmedSearch}"
-                    </span>
-                  </CommandItem>
-                </CommandGroup>
-              </>
-            )}
-          </CommandList>
-        </Command>
-        <div className="border-t border-border p-2">
-          <Button
-            type="button"
-            variant={canCreate ? "default" : "ghost"}
-            className="h-11 w-full justify-start rounded-[8px] px-2 text-button"
-            disabled={!canCreate || creating}
-            onClick={() => void createProject()}
-          >
-            {creating ? (
-              <RefreshCw className="size-4 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Plus className="size-4" />
-            )}
-            <span className="truncate">{createHelpText}</span>
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <UntitledSelect.ComboBox
+      id={id}
+      className="uu-scope"
+      aria-label="Dự án"
+      placeholder="Chọn dự án"
+      items={items}
+      selectedKey={value || null}
+      inputValue={search}
+      onInputChange={setSearch}
+      onSelectionChange={(key) => {
+        if (key === CREATE_KEY) {
+          void createProject();
+          return;
+        }
+        if (key === null || key === EMPTY_KEY) return;
+        selectProject(String(key));
+      }}
+      validationBehavior="aria"
+    >
+      {(item: SelectItemType) => (
+        <UntitledSelect.Item
+          id={item.id}
+          label={item.label}
+          supportingText={item.supportingText}
+          isDisabled={item.isDisabled}
+        />
+      )}
+    </UntitledSelect.ComboBox>
   );
 };

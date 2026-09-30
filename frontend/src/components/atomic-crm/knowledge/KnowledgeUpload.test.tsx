@@ -43,7 +43,7 @@ describe("KnowledgeUpload", () => {
       />,
     );
 
-    await screen.getByRole("tab", { name: "Dán văn bản" }).click();
+    await screen.getByRole("radio", { name: "Dán văn bản" }).click();
     await screen
       .getByPlaceholder("Dán nội dung mà chatbot cần tham khảo vào đây...")
       .fill("Thông tin tuyển dụng");
