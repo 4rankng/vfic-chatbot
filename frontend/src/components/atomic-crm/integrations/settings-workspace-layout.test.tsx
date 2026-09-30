@@ -123,8 +123,9 @@ describe("settings workspace density scale", () => {
     )!;
     const styles = getComputedStyle(scoped);
     // The console's scale aliases the shared `--crm-control-height-*` steps, so
-    // the magic 38/36px pair cannot come back: the desktop field and the action
-    // that pairs with it are one 40px tier, and the touch tier is 44px.
+    // the magic 38/36px pair cannot come back: the desktop field, the action
+    // that pairs with it and the touch tier are all one 40px tier (owner cap
+    // 2026-09-30 — no control renders taller than 40px).
     expect(styles.getPropertyValue("--settings-control-height").trim()).toBe(
       "40px",
     );
@@ -132,12 +133,12 @@ describe("settings workspace density scale", () => {
       "40px",
     );
     expect(styles.getPropertyValue("--settings-touch-target").trim()).toBe(
-      "44px",
+      "40px",
     );
-    // The mobile row uses the same 44px touch tier as the trigger it opens —
+    // The mobile row uses the same 40px touch tier as the trigger it opens —
     // the console's single control ceiling.
     expect(styles.getPropertyValue("--settings-mobile-row-height").trim()).toBe(
-      "44px",
+      "40px",
     );
 
     // Scoping, not merely existing: the scale is declared on the settings
@@ -435,8 +436,8 @@ describe("settings action sizing", () => {
     );
     const button = screen.getByRole("button", { name: "Kiểm tra" }).element();
 
-    expect(getComputedStyle(button).minHeight).toBe("44px");
-    expect(getComputedStyle(button).height).toBe("44px");
+    expect(getComputedStyle(button).minHeight).toBe("40px");
+    expect(getComputedStyle(button).height).toBe("40px");
   });
 
   it("keeps the mobile navigation trigger and group rows touch-safe", async () => {
@@ -456,13 +457,13 @@ describe("settings action sizing", () => {
       ".settings-command-header h1",
     )!;
 
-    expect(getComputedStyle(trigger).minHeight).toBe("44px");
+    expect(getComputedStyle(trigger).minHeight).toBe("40px");
     expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     // The collapse row must not re-inherit the details padding that ships with
     // `<details>`, which pushed the chevron off the row.
     expect(getComputedStyle(summary).paddingTop).toBe("0px");
     expect(getComputedStyle(summary).paddingLeft).toBe("0px");
-    expect(getComputedStyle(header).minHeight).toBe("44px");
+    expect(getComputedStyle(header).minHeight).toBe("40px");
     // The page title stays on the shared page-title scale (22px at phone width).
     expect(getComputedStyle(pageTitle).fontSize).toBe("22px");
   });

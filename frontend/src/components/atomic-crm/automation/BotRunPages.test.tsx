@@ -24,6 +24,9 @@ const mocks = vi.hoisted(() => ({
 // are about the page, not about react-admin's controller.
 vi.mock("ra-core", () => ({
   ListBase: ({ children }: { children: ReactNode }) => children,
+  // The kit's ListTable wraps every cell in the record context, so the mock
+  // has to provide the passthrough even though this page asserts no cells.
+  RecordContextProvider: ({ children }: { children: ReactNode }) => children,
   // The kit's index re-exports the form controls, so their hooks have to exist
   // even though this page renders none of them.
   useInput: () => ({}),
