@@ -3,6 +3,7 @@ import { render } from "vitest-browser-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { KnowledgeSource } from "../types";
+import type * as KitModule from "../kit";
 import "../conversations/inbox.css";
 
 vi.mock("./KnowledgeSourceRow", () => ({
@@ -47,10 +48,10 @@ vi.mock("./KnowledgeDetailPanel", () => ({
   ),
 }));
 
-vi.mock("@/components/admin/list-pagination", () => ({
+vi.mock("../kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof KitModule>()),
   ListPagination: () => <div>Phân trang</div>,
 }));
-
 import { KnowledgeSourceWorkspace } from "./KnowledgeSourceList";
 
 const sources: KnowledgeSource[] = [

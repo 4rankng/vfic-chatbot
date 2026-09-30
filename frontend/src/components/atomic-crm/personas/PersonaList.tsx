@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/base/buttons/button";
 import { InputBase } from "@/components/base/input/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ListPagination } from "@/components/admin/list-pagination";
+import { EmptyState, ListPagination } from "../kit";
 import {
   BotMessageSquare,
   ChevronRight,
@@ -19,7 +19,6 @@ import {
   Search,
 } from "lucide-react";
 import type { Persona } from "../types";
-import { EmptyState } from "../kit";
 import { activatePersona } from "./personaService";
 import { PersonaWorkspaceShell } from "./PersonaWorkspaceShell";
 import { PersonaStudioOverview } from "./presentation/PersonaStudioOverview";

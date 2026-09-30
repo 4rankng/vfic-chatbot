@@ -7,8 +7,7 @@ import { InputBase } from "@/components/base/input/input";
 import { Button } from "@/components/base/buttons/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Confirm } from "@/components/admin/confirm";
-import { ListPagination } from "@/components/admin/list-pagination";
-import { EmptyState } from "../kit";
+import { EmptyState, ListPagination } from "../kit";
 import { KnowledgeUpload } from "./KnowledgeUpload";
 import { KnowledgeVersionManager } from "./KnowledgeVersionManager";
 import {
