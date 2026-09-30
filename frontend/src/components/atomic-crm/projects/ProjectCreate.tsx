@@ -22,6 +22,7 @@ import {
 } from "./domain/project-knowledge-yaml";
 import { slugifyVietnamese } from "./domain/vietnamese-slug";
 import { updateProjectDiscoveryCard } from "./project-knowledge-service";
+import { IngestProgressBoard } from "./presentation/IngestProgressBoard";
 import { ProjectBriefImport } from "./presentation/ProjectBriefImport";
 import { useProjectIngest } from "./presentation/use-project-ingest";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
@@ -266,10 +267,13 @@ const ProjectCreateForm = () => {
         {brief ? <CarriedSummary brief={brief} /> : null}
 
         {state.phase === "running" ? (
-          <p role="status" className="text-helper text-foreground">
-            Đang nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (
-            {state.activated.length + 1}/{state.total})…
-          </p>
+          <>
+            <p role="status" className="text-helper text-foreground">
+              Đang nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (
+              {state.activated.length + 1}/{state.total})…
+            </p>
+            <IngestProgressBoard items={state.items} slow={state.slow} />
+          </>
         ) : null}
         {state.phase === "done" ? (
           <p role="status" className="text-helper text-foreground">

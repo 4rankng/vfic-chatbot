@@ -10,12 +10,33 @@ import {
 /**
  * A category revision is reviewed asynchronously: the replace call returns a
  * revision id that only becomes the category's active revision once the
- * pipeline has chunked, embedded and index-checked it. Same cadence and bound
- * as the project page's catalog hook, so a create-form ingest and a later edit
- * behave identically.
+ * pipeline has chunked, embedded and index-checked it. The chain polls the
+ * catalog until each revision lands, and reports every category's live state
+ * while it does.
+ *
+ * Polling is two-stage: the soft budget covers normal processing (a few
+ * seconds per category). Past it, the chain keeps polling through the hard
+ * budget and only flags the run slow — a queued revision behind a heavy
+ * document ingest is still making progress, and reporting it as a failure
+ * would be false. Only a FAILED revision, a request error, or the hard budget
+ * ends the chain as a failure.
  */
 const POLL_INTERVAL_MS = 2000;
-const MAX_POLL_ATTEMPTS = 20;
+const SOFT_POLL_ATTEMPTS = 20;
+const HARD_POLL_ATTEMPTS = 300;
+
+export type IngestItemStatus =
+  | "pending"
+  | "writing"
+  | "queued"
+  | "processing"
+  | "active"
+  | "failed";
+
+export type IngestItemState = Readonly<{
+  key: ProjectKnowledgeCategory;
+  status: IngestItemStatus;
+}>;
 
 export type IngestWrite = Readonly<{
   key: ProjectKnowledgeCategory;
@@ -32,6 +53,10 @@ export type IngestState =
       /** Categories already active, in the order they were written. */
       activated: readonly ProjectKnowledgeCategory[];
       total: number;
+      /** Every category in the batch with its live status, in write order. */
+      items: readonly IngestItemState[];
+      /** The current category outlived the soft poll budget; still working. */
+      slow?: boolean;
     }>
   | Readonly<{
       phase: "failed";
@@ -109,7 +134,12 @@ export const useProjectIngest = (): ProjectIngest => {
   useEffect(() => cancel, [cancel]);
 
   const waitForActive = useCallback(
-    (projectId: string, revisionId: string, epoch: number) =>
+    (
+      projectId: string,
+      revisionId: string,
+      epoch: number,
+      onStatus: (status: "queued" | "processing", slow: boolean) => void,
+    ) =>
       new Promise<WaitOutcome>((resolve) => {
         const attempt = (tries: number) => {
           timerRef.current = window.setTimeout(() => {
@@ -119,7 +149,7 @@ export const useProjectIngest = (): ProjectIngest => {
               return;
             }
             // A hidden tab must not keep hitting the backend; park the hop
-            // rather than spinning the queue in the background.
+            // without consuming budget rather than spinning in the background.
             if (document.visibilityState === "hidden") {
               attempt(tries);
               return;
@@ -155,15 +185,24 @@ export const useProjectIngest = (): ProjectIngest => {
                     item.latest_revision_id === revisionId &&
                     (item.status === "STAGED" || item.status === "PROCESSING"),
                 );
-                if (reviewing && tries < MAX_POLL_ATTEMPTS) {
-                  attempt(tries + 1);
-                  return;
-                }
                 if (reviewing) {
+                  const latest = catalog.data.find(
+                    (item) => item.latest_revision_id === revisionId,
+                  );
+                  const status =
+                    latest?.status === "PROCESSING" ? "processing" : "queued";
+                  // Past the soft budget the run is slow but alive; keep
+                  // polling. The board shows the category as still processing
+                  // instead of declaring a false failure.
+                  onStatus(status, tries >= SOFT_POLL_ATTEMPTS);
+                  if (tries < HARD_POLL_ATTEMPTS) {
+                    attempt(tries + 1);
+                    return;
+                  }
                   resolve({
                     ok: false,
                     message:
-                      "Hệ thống chưa phản hồi kịp. Kiến thức vẫn đang được xử lý.",
+                      "Hệ thống xử lý chậm bất thường. Kiến thức vẫn đang được xử lý; thử nhập lại tệp sau ít phút.",
                   });
                   return;
                 }
@@ -199,18 +238,29 @@ export const useProjectIngest = (): ProjectIngest => {
       // serializing behind them, and its error is reported without stopping.
       let uploadError: string | undefined;
       const uploadSettled = sourceFile
-        ? uploadProjectDocument(projectId, sourceFile).catch((error: unknown) => {
-            uploadError = (error as Error).message;
-          })
+        ? uploadProjectDocument(projectId, sourceFile).catch(
+            (error: unknown) => {
+              uploadError = (error as Error).message;
+            },
+          )
         : Promise.resolve();
 
-      for (const write of writes) {
+      const itemStates = writes.map(
+        (write): IngestItemState => ({ key: write.key, status: "pending" }),
+      );
+      const setItem = (index: number, status: IngestItemStatus): void => {
+        itemStates[index] = { ...itemStates[index], status };
+      };
+
+      for (const [index, write] of writes.entries()) {
         if (epoch !== epochRef.current) return;
+        setItem(index, "writing");
         setState({
           phase: "running",
           current: write.key,
           activated: [...activated],
           total: writes.length,
+          items: itemStates.map((item) => ({ ...item })),
         });
 
         let revisionId: string;
@@ -223,6 +273,7 @@ export const useProjectIngest = (): ProjectIngest => {
           );
           revisionId = result.revision.id;
         } catch (error) {
+          setItem(index, "failed");
           await uploadSettled;
           setState({
             phase: "failed",
@@ -235,8 +286,24 @@ export const useProjectIngest = (): ProjectIngest => {
         }
 
         if (epoch !== epochRef.current) return;
-        const outcome = await waitForActive(projectId, revisionId, epoch);
+        const outcome = await waitForActive(
+          projectId,
+          revisionId,
+          epoch,
+          (status, slow) => {
+            setItem(index, status);
+            setState({
+              phase: "running",
+              current: write.key,
+              activated: [...activated],
+              total: writes.length,
+              items: itemStates.map((item) => ({ ...item })),
+              slow,
+            });
+          },
+        );
         if (!outcome.ok) {
+          setItem(index, "failed");
           await uploadSettled;
           setState({
             phase: "failed",
@@ -247,6 +314,7 @@ export const useProjectIngest = (): ProjectIngest => {
           });
           return;
         }
+        setItem(index, "active");
         activated.push(write.key);
       }
 

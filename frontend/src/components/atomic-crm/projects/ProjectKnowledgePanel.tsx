@@ -22,6 +22,7 @@ import { useCategoryDraft } from "./presentation/use-category-draft";
 import { useFaqAutoSyncNotice } from "./presentation/use-faq-auto-sync-notice";
 import { useProjectKnowledgeCatalog } from "./presentation/use-project-knowledge-catalog";
 import { useProjectIngest } from "./presentation/use-project-ingest";
+import { IngestProgressBoard } from "./presentation/IngestProgressBoard";
 import { useSinglePageDraft } from "./presentation/use-single-page-draft";
 import { ExternalSourceList } from "./ExternalSourceList";
 import { CategoryEditor } from "./presentation/CategoryEditor";
@@ -212,10 +213,13 @@ const BriefIngestSection = ({
         />
       </div>
       {state.phase === "running" ? (
-        <p role="status" className="text-helper text-foreground">
-          Đang nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (
-          {state.activated.length + 1}/{state.total})…
-        </p>
+        <>
+          <p role="status" className="text-helper text-foreground">
+            Đang nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (
+            {state.activated.length + 1}/{state.total})…
+          </p>
+          <IngestProgressBoard items={state.items} slow={state.slow} />
+        </>
       ) : null}
       {state.phase === "done" ? (
         <p role="status" className="text-helper text-foreground">
@@ -228,8 +232,8 @@ const BriefIngestSection = ({
       {state.phase === "failed" ? (
         <p role="alert" className="text-helper text-destructive">
           Nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}» không thành
-          công{state.message ? `: ${state.message}` : "."} Dữ liệu đang dùng
-          của mục này không thay đổi.
+          công{state.message ? `: ${state.message}` : "."} Dữ liệu đang dùng của
+          mục này không thay đổi.
         </p>
       ) : null}
       {(state.phase === "done" || state.phase === "failed") &&
