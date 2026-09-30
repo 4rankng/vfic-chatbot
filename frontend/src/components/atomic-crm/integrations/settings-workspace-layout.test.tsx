@@ -122,11 +122,14 @@ describe("settings workspace density scale", () => {
       ".settings-workspace-content",
     )!;
     const styles = getComputedStyle(scoped);
+    // The console's scale aliases the shared `--crm-control-height-*` steps, so
+    // the magic 38/36px pair cannot come back: the desktop field and the action
+    // that pairs with it are one 40px tier, and the touch tier is 44px.
     expect(styles.getPropertyValue("--settings-control-height").trim()).toBe(
-      "38px",
+      "40px",
     );
     expect(styles.getPropertyValue("--settings-action-height").trim()).toBe(
-      "36px",
+      "40px",
     );
     expect(styles.getPropertyValue("--settings-touch-target").trim()).toBe(
       "44px",
@@ -410,8 +413,10 @@ describe("settings action sizing", () => {
     );
     const button = screen.getByRole("button", { name: "Kiểm tra" }).element();
 
-    expect(getComputedStyle(button).minHeight).toBe("36px");
-    expect(getComputedStyle(button).height).toBe("36px");
+    // The desktop action tier is the shared 40px `--crm-control-height-md`
+    // step — the same one `inbox/features.css` declares for this control.
+    expect(getComputedStyle(button).minHeight).toBe("40px");
+    expect(getComputedStyle(button).height).toBe("40px");
   });
 
   it("restores full mobile touch targets", async () => {

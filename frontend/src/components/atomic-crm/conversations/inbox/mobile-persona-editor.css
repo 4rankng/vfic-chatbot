@@ -788,7 +788,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .persona-editor-shell {
     gap: 10px;
   }
@@ -1207,7 +1207,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .inbox-bg-container .app.persona-app .persona-center-panel {
     overflow: visible;
     overflow-x: clip;

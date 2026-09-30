@@ -274,3 +274,99 @@ final result: passed for the surfaces above
   `npm run lint` fail on it rather than on anything in this pass. Re-run the
   three once that file is whole; the focused suites and the browser evidence
   above are unaffected.
+
+---
+
+## All-screens audit and fix pass
+
+The owner asked for every page and screen to be gone over for visual bugs,
+inconsistencies and inefficiencies, and for all of them to be fixed. Method and
+result:
+
+### How it was audited
+
+- **Four read-only code audits** in parallel, one per slice (conversations/inbox,
+  projects+performance, settings+users+dashboard, global tokens+kit+shell+login),
+  each returning line-referenced findings with the winning cascade rule named and
+  every "dead selector" claim proven by a grep: **70 findings — 3 high, 40
+  medium, 27 low**.
+- **A real-browser sweep of all twelve console routes** at 1440×900 and 390×844,
+  capturing a screenshot per route and measuring, per route: horizontal overflow,
+  elements whose content is clipped by `overflow: hidden`, controls under 24px or
+  over 56px tall, text below 11px, every `h1`/`h2` (colour, size, weight, family,
+  whether a `.uu-scope` ancestor is present), and WCAG contrast for every leaf
+  text node against its first opaque background.
+
+### What the sweep found, and what was fixed
+
+- **Every hairline, input and card edge in the console rendered at ~1.08:1.**
+  `.workspace-frame` re-pointed `--workspace-border` at `--color-base-300`
+  (`#f5ede5`), a surface step, so the settings credential fields were literally
+  borderless. The token now keeps `#e6d8ce`.
+- **Page titles changed colour by screen.** The kit `h1` used `text-primary`,
+  which resolves to library blue inside a `.uu-scope` ancestor and to console ink
+  outside it, so `/knowledge_bases`, `/hieu-suat`, `/profile` and `/bot_runs`
+  painted blue titles while `/`, `/users`, `/projects` painted ink ones. The kit
+  heading now uses the console ink token; all twelve routes measure
+  `rgb(23,32,51)` 22px/700 after the fix.
+- **The profile action buttons were illegible** — library `Button`s without
+  `uu-scope` painted the console slate fill with an ink (2.5:1) or error-red
+  (1.6:1) label. They now carry the scope and render as legible secondary
+  actions.
+- **Inbox.** The channel-adapter tile was declared at four conflicting sizes
+  (44px and 48px were dead), the search field at three (38/42/48), and ~250 lines
+  of `tag-*`/`context-*`/`recipe-*` vocabulary had no render site. The dead
+  geometry and vocabulary are gone (`context-drawer.css` 997→489 lines,
+  `workspace-rail.css` 350→230), leaving one source per value and the owner's
+  ≤40px cap.
+- **Projects.** The phone bottom padding was defeated by a higher-specificity
+  `.inbox-bg-container` rule (48px instead of the intended safe-area clearance);
+  both padding rules now use the compound scope. A 32px `!important` that could
+  never win against the shell's 44px floor was removed.
+- **Settings.** The daisyUI collapse chevron painted over the group meta on the
+  mobile card header (the arrow is absolutely positioned 22.4px from the edge,
+  while the grid only reserved a 20px track). Control heights were consolidated
+  onto one 40px tier, the provider reorder targets went 26px → 36px, and a stack
+  of dead selectors/duplicate blocks/`!important`s was deleted.
+- **Performance.** Three different warning colours in one sheet collapsed to
+  `var(--warning)`; the dead metric tone bar is gone; the phone KPI number no
+  longer renders larger (22px) than its 1440px desktop size.
+- **Knowledge.** The empty-state footer painted a 1065px-wide empty white bar
+  (a stretched grid cell) — it is one row now; `Tải mẫu FAQ` and `Học lại` got
+  the console control edge instead of reading as bare text; the staged-file
+  remove control went 32px → 40px.
+- **Tokens.** Dead selectors, twelve unused accent tokens, six zero-consumer
+  `@utility` composites, unused ramps/animations/radius stops and duplicated
+  declarations were deleted; `--motion-fast` and `--radius-uu-lg` now actually
+  exist (two sheets read them with a fallback that hid the typo); the success
+  colour moved `#4e8a6e` → `#437a5f` so white-on-success reaches 5.01:1
+  (it was 4.05:1 on the `Sẵn sàng` badge).
+
+### Browser evidence after the fixes
+
+Twelve routes × two widths, authenticated, seeded backend:
+
+- 0 clipped elements, 0 controls under 24px, 0 text below 11px, 0 horizontal
+  overflow, no console errors on any route at either width.
+- Every `h1` is ink at the shared page-title role; the type family and weight are
+  the same on every screen.
+- Inbox directory header: rail header 119px (from 194px), search field 299×40
+  desktop / 362×40 phone, channel tile 34px desktop / 40px phone with a 36px
+  icon inside it, and the 11px channel chip on both the row and the opened
+  thread header, carrying the full label on `title`.
+- The remaining contrast lines the sweep prints are false positives: `.sr-only`
+  text and Untitled UI buttons whose fill is a `linear-gradient` (the detector
+  reads `background-color`).
+
+final result: passed for the surfaces above
+
+### Open at the time of writing
+
+- `npm run test:unit:app` reports 125 of 126 files passing (769 tests) and
+  `npx tsc --noEmit` reports one error, both inside a concurrent session's
+  in-flight project-knowledge refactor: `ProjectCreate.test.tsx` cannot resolve
+  `updateProjectDiscoveryCard` because `project-knowledge-operations.ts` is
+  mid-edit, and `ProjectKnowledgePanel.test.tsx:148` has an unused constant. No
+  file changed in this pass is implicated; re-run both once that refactor lands.
+- The `e2e/**/__screenshots__` visual baselines remain stale from earlier
+  commits (`-linux` especially) and were deliberately not regenerated here.

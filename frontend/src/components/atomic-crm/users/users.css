@@ -7,8 +7,10 @@
 }
 
 .user-directory-create {
-  height: 44px !important;
-  min-height: 44px !important;
+  /* 40px is `--crm-control-height-md`, spelled out because this route renders
+     the directory without `inbox/tokens.css`. The mobile touch floor raises it
+     to 44px on its own, so no `!important` is needed to hold either value. */
+  min-height: 40px;
   border-radius: 8px;
   box-shadow: none;
 }
@@ -31,22 +33,27 @@
   overflow: hidden;
   color: var(--workspace-ink);
   font-size: var(--fs-body);
-  font-weight: 720;
+  font-weight: var(--fw-semibold);
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* The metadata shell both cells share; the leading and the type belong to the
+   two elements, so neither rule restates a value the other one loses. */
 .user-directory-identity p,
 .user-directory-created {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 3px 0 0;
   color: var(--workspace-ink-muted);
-  font-size: var(--fs-body-sm);
   line-height: 1.3;
+}
+
+.user-directory-identity p {
+  margin: 3px 0 0;
+  font-size: var(--fs-body-sm);
 }
 
 .user-directory-identity p span {
@@ -101,18 +108,21 @@
   color: var(--workspace-action-strong);
 }
 
+/* The console's one card-header role — the same `--fs-section-title` /
+   `--fw-semibold` pair the settings group card and the dashboard panel header
+   use, so a card's title reads the same on every screen. */
 .user-account-form-header h2 {
   margin: 0;
   color: var(--workspace-ink);
-  font-size: var(--text-section-title);
-  font-weight: 700;
+  font-size: var(--fs-section-title);
+  font-weight: var(--fw-semibold);
   line-height: 1.3;
 }
 
 .user-account-form-header p {
   margin: 3px 0 0;
   color: var(--workspace-ink-muted);
-  font-size: var(--text-body-sm);
+  font-size: var(--fs-body-sm);
   line-height: 1.4;
 }
 
@@ -176,7 +186,6 @@
   .user-directory-create {
     width: auto;
     min-width: max-content;
-    height: 44px;
     padding-inline: 14px;
   }
 

@@ -193,7 +193,7 @@ export const InlineKnowledgeUploader = () => {
                 color="tertiary"
                 size="sm"
                 data-slot="button"
-                className="uu-scope size-8 shrink-0 rounded-[9px] text-[var(--kb-teal)] hover:bg-card/70 hover:text-foreground"
+                className="uu-scope size-10 shrink-0 rounded-[9px] text-[var(--kb-teal)] hover:bg-card/70 hover:text-foreground"
                 onClick={() => setFile(null)}
                 isDisabled={busy}
                 iconLeading={X}
@@ -206,47 +206,51 @@ export const InlineKnowledgeUploader = () => {
             </p>
           )}
 
-          <Button
-            type="button"
-            color="secondary"
-            size="md"
-            data-slot="button"
-            onClick={() => downloadTemplate("knowledge")}
-            iconLeading={Download}
-            className="uu-scope h-10 w-full rounded-[9px] px-4 sm:w-auto"
-          >
-            Tải mẫu KB
-          </Button>
-          <Button
-            type="button"
-            color="secondary"
-            size="md"
-            data-slot="button"
-            onClick={() => downloadTemplate("faq")}
-            iconLeading={Download}
-            className="uu-scope h-10 w-full rounded-[9px] px-4 sm:w-auto"
-          >
-            Tải mẫu FAQ
-          </Button>
-          <Button
-            type="button"
-            size="md"
-            data-slot="button"
-            onClick={submit}
-            isDisabled={!file || !projectChoice || busy}
-            iconLeading={
-              busy ? (
-                <RefreshCw className="size-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Upload className="size-4" />
-              )
-            }
-            className="uu-scope h-10 w-full rounded-[9px] px-4 sm:w-auto"
-          >
-            {busy
-              ? translate("crm.common.uploading")
-              : translate("crm.common.upload")}
-          </Button>
+          {/* One action group, not three grid cells: as trailing grid items a
+              wrapped button stretched to the whole status column. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              color="secondary"
+              size="md"
+              data-slot="button"
+              onClick={() => downloadTemplate("knowledge")}
+              iconLeading={Download}
+              className="uu-scope h-10 w-full rounded-[9px] px-4 [--ring-color-primary:var(--border)] sm:w-auto"
+            >
+              Tải mẫu KB
+            </Button>
+            <Button
+              type="button"
+              color="secondary"
+              size="md"
+              data-slot="button"
+              onClick={() => downloadTemplate("faq")}
+              iconLeading={Download}
+              className="uu-scope h-10 w-full rounded-[9px] px-4 [--ring-color-primary:var(--border)] sm:w-auto"
+            >
+              Tải mẫu FAQ
+            </Button>
+            <Button
+              type="button"
+              size="md"
+              data-slot="button"
+              onClick={submit}
+              isDisabled={!file || !projectChoice || busy}
+              iconLeading={
+                busy ? (
+                  <RefreshCw className="size-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Upload className="size-4" />
+                )
+              }
+              className="uu-scope h-10 w-full rounded-[9px] px-4 sm:w-auto"
+            >
+              {busy
+                ? translate("crm.common.uploading")
+                : translate("crm.common.upload")}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

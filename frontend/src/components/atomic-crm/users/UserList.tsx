@@ -80,7 +80,7 @@ const UserListContent = ({
     <div className="settings-embedded-users-list">
       <header className="user-directory-toolbar">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-content-title font-semibold tracking-tight">
+          <h2 className="truncate text-section-title font-semibold tracking-tight">
             {title}
           </h2>
           <p className="mt-1 text-body-sm text-muted-foreground">

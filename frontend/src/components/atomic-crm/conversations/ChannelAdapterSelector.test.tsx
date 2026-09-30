@@ -89,14 +89,17 @@ describe("ChannelAdapterSelector", () => {
     await expect.element(oaRadio).toBeVisible();
     const oaElement = screen.container.querySelector('[value="zalo_oa"]');
     expect(oaElement).not.toBeNull();
-    // Owner-set density cap: every directory-header control is 40px or less.
-    expect(getComputedStyle(oaElement as Element).width).toBe("40px");
-    expect(getComputedStyle(oaElement as Element).backgroundColor).not.toBe(
-      "rgb(255, 255, 255)",
-    );
+    const oaStyles = getComputedStyle(oaElement as Element);
+    // Owner-set density cap: every directory-header control is 40px or less,
+    // and the channel icon has to fit inside its tile.
+    const tileWidth = Number.parseFloat(oaStyles.width);
+    expect(tileWidth).toBeLessThanOrEqual(40);
+    expect(oaStyles.backgroundColor).not.toBe("rgb(255, 255, 255)");
     expect(
-      getComputedStyle(oaElement?.querySelector("img") as Element).width,
-    ).toBe("44px");
+      Number.parseFloat(
+        getComputedStyle(oaElement?.querySelector("img") as Element).width,
+      ),
+    ).toBeLessThanOrEqual(tileWidth);
     expect(
       oaElement?.querySelector('[data-slot="radio-group-indicator"]'),
     ).toBeNull();

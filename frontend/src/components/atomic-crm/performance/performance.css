@@ -11,9 +11,6 @@
   display: grid;
   align-content: start;
   gap: 1rem;
-  height: 100%;
-  min-height: 100%;
-  overflow-y: auto;
   padding: clamp(1rem, 2.5vw, 2rem);
   color: var(--foreground);
 }
@@ -51,7 +48,9 @@
   letter-spacing: var(--tracking-tight);
 }
 
-.performance-header p,
+/* The kicker is not a muted paragraph: excluding it here lets the rule below
+   own its colour without an `!important` escalation (FE-19: same sheet). */
+.performance-header p:not(.performance-kicker),
 .performance-panel p,
 .performance-metric p,
 .performance-metric small,
@@ -66,7 +65,7 @@
 
 .performance-kicker {
   margin: 0 0 0.25rem;
-  color: var(--primary) !important;
+  color: var(--primary);
   font-size: var(--fs-caption);
   font-weight: var(--fw-bold);
   letter-spacing: var(--tracking-wide);
@@ -97,7 +96,7 @@
 }
 
 .performance-window button {
-  min-height: 1.625rem;
+  min-height: 2rem;
   border-radius: 0.4rem;
   padding: 0.0625rem 0.625rem;
   font-size: var(--fs-body-sm);
@@ -105,7 +104,7 @@
 }
 
 .performance-window button[aria-pressed="true"] {
-  color: #fff;
+  color: var(--primary-foreground);
   background: var(--primary);
 }
 
@@ -174,7 +173,9 @@
 .performance-metric + .performance-metric {
   border-left: 1px solid var(--border);
 }
-.performance-metric::before,
+/* Tone bar: the turn cards are the only surface that keeps one — the KPI tiles
+   carry their tone in the number's colour, and a `display: none` metric rule
+   left the three colour declarations below painting nothing. */
 .performance-turn-cards article::before {
   position: absolute;
   top: -1px;
@@ -185,15 +186,12 @@
   content: "";
   transform: translateX(-50%);
 }
-.performance-metric::before {
-  display: none;
-}
 .performance-metric-heading {
   gap: 0.35rem;
 }
 .performance-metric-heading svg {
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 1rem;
+  height: 1rem;
   color: var(--muted-foreground);
 }
 .performance-metric p,
@@ -207,15 +205,6 @@
   font-size: var(--fs-metric);
   line-height: var(--lh-tight);
   font-variant-numeric: tabular-nums;
-}
-.performance-metric.is-success::before {
-  background: var(--success);
-}
-.performance-metric.is-warning::before {
-  background: var(--warning);
-}
-.performance-metric.is-danger::before {
-  background: var(--danger);
 }
 .performance-metric.is-warning strong {
   color: var(--warning);
@@ -302,7 +291,7 @@
   background: var(--success);
 }
 .performance-legend i.is-tone.is-warning {
-  background: #f5b301;
+  background: var(--warning);
 }
 
 .performance-trend {
@@ -381,7 +370,7 @@
   background: var(--danger);
 }
 .performance-trend-bar.is-warning {
-  background: #f5b301;
+  background: var(--warning);
 }
 .performance-trend-bar.is-success {
   background: var(--success);
@@ -410,7 +399,8 @@
   font-size: var(--fs-meta);
 }
 .performance-chart-note svg {
-  width: 0.95rem;
+  width: 1rem;
+  height: 1rem;
   color: var(--warning);
 }
 
@@ -433,8 +423,8 @@
   border-top: 0;
 }
 .performance-signal-list > li > svg {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1rem;
+  height: 1rem;
 }
 .performance-signal-list li.is-danger > svg {
   color: var(--danger);
@@ -468,6 +458,10 @@
 }
 .performance-signal-list a {
   display: inline-flex;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
   padding: 0.2rem;
   border-radius: 0.35rem;
 }
@@ -530,11 +524,13 @@
   color: var(--foreground);
 }
 
-.performance-slow-turns .performance-table-wrap {
-  max-block-size: none;
-  overflow-x: auto;
-  overflow-y: visible;
+/* Every performance table renders headless-of-band: the shell's tinted
+   `thead` (src/index.css) reads as a stripe across a borderless report panel,
+   which is why the slow-turns table reset it. One reset here, not three. */
+.performance-table-wrap thead {
+  background: transparent;
 }
+
 .performance-slow-turns thead {
   background: transparent;
 }
@@ -745,10 +741,7 @@
 }
 @media (max-width: 720px) {
   .performance-page {
-    height: auto;
-    min-height: 100dvh;
     gap: 12px;
-    overflow: visible;
     padding: 18px 14px calc(96px + env(safe-area-inset-bottom));
   }
 
@@ -788,11 +781,12 @@
   .performance-window {
     min-width: 0;
     padding: 2px;
-    border-radius: 10px;
+    border-radius: 8px;
   }
 
+  /* One control height with the desktop rule above: below 768px the shell's
+     44px touch floor (src/index.css) raises both anyway. */
   .performance-window button {
-    min-height: 36px;
     flex: 1;
     min-width: 0;
     border-radius: 8px;
@@ -802,9 +796,8 @@
   }
 
   .performance-refresh {
-    min-height: 40px;
     justify-content: center;
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 4px 10px;
     font-size: var(--fs-body-sm);
     font-weight: 600;
@@ -834,25 +827,12 @@
     border-top: 1px solid var(--border);
   }
 
-  .performance-metric::before {
-    width: 32px;
-    height: 2px;
-  }
-
   .performance-metric-heading {
     gap: 4px;
   }
 
-  .performance-metric-heading svg {
-    width: 14px;
-    height: 14px;
-  }
-
   .performance-metric strong {
     margin: 6px 0 2px;
-    font-size: 22px;
-    font-weight: 700;
-    line-height: 26px;
   }
 
   .performance-metric p,
@@ -895,7 +875,7 @@
 
   .performance-trend {
     height: 152px;
-    border-radius: 10px;
+    border-radius: 8px;
   }
 
   .performance-legend {
@@ -1120,7 +1100,7 @@
   }
 
   .performance-supporting article {
-    border-radius: 16px;
+    border-radius: 12px;
     padding: 16px;
   }
 

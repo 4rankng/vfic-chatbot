@@ -144,15 +144,18 @@
   --color-neutral-content: #fffaf5;
   --color-info: #466fa0;
   --color-info-content: #ffffff;
-  --color-success: #4e8a6e;
+  --color-success: #437a5f;
   --color-success-content: #ffffff;
   --color-warning: #8c6621;
   --color-warning-content: #ffffff;
   --color-error: #ad5d68;
   --color-error-content: #ffffff;
-  --radius-selector: 0.65rem;
-  --radius-field: 0.55rem;
-  --radius-box: 0.8rem;
+  /* Field radii mirror the shadcn scale below (--radius = 10px → 6/8/10/14px)
+     so a daisyUI `tt-*` control and a shadcn `rounded-*` control in the same
+     form resolve to the same corner. */
+  --radius-selector: 0.5rem; /* 8px  = --radius-md */
+  --radius-field: 0.5rem; /* 8px  = --radius-md */
+  --radius-box: 0.75rem; /* 12px = --radius-panel */
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
@@ -221,29 +224,23 @@
   --color-feature-gap-soft: var(--feature-gap-soft);
   --color-feature-gap-border: var(--feature-gap-border);
 
-  /* TingHire semantic accents. The legacy "teal" aliases remain because older
-     feature CSS consumes them, but their role is now the accessible action colour
-     action color rather than a hue-specific promise. */
-  --color-steel: #6d625c;
-  --color-steel-soft: #f5ede5;
-  /* Tier B — perceptual tint. --primary and --background are real :root vars
-     (not @theme inline), so this resolves per-theme at runtime. */
-  --color-amber-soft: color-mix(
-    in oklab,
-    var(--primary) 13%,
-    var(--background)
-  );
-  --color-ember: #c2750a; /* amber status */
-  --color-ember-soft: color-mix(in oklab, #c2750a 12%, var(--background));
+  /* TingHire semantic accents. Two survive: the emerald status the
+     feature-ready chips read, and the muted dim ink. The former
+     steel/paper/ink/line/ember/amber and "teal" aliases were dead — no
+     feature sheet consumed them and `--color-teal` pointed an English colour
+     name at a rust red, so `bg-teal`/`text-teal` never compiled. */
   --color-muted-dim: #6d625c;
   --color-green: #18845c;
-  --color-teal: #b73522;
-  --color-teal-soft: #ffe1d6;
-  --color-paper: #fff6ed;
-  --color-paper-deep: #f5ede5;
-  --color-ink-900: #172033;
-  --color-ink-500: #6d625c;
-  --color-line: #e6d8ce;
+}
+
+/* Panel corner radius — the one token card/panel frames use. Declared as a
+   plain (non-inline) @theme key so the variable ships to raw CSS consumers
+   (`.workspace-frame-content :where([data-slot="card"])` below, feature
+   sheets) as well as the `rounded-panel` utility. The inline radius ramp above
+   derives its steps from `--radius`; this is the panel step the sheets
+   hardcoded as 12px. */
+@theme {
+  --radius-panel: 12px;
 }
 
 /* Typography scale — site-wide, single source of truth.
@@ -279,7 +276,11 @@
 
   /* Fixed roles — step with the rem root, so no per-token px overrides.
      Headers tightened to restore hierarchy against a 14px body. */
-  --text-content-title: 1rem; /* 16px (was 20px) */
+  /* content-title = document/body headings (Markdown h3, panel titles);
+     section-title = section headings (Markdown h5, sub-section titles). They
+     share a role in spirit but must not share a size, or h3 and h5 render
+     identically — content-title therefore sits one step above. */
+  --text-content-title: 1.0625rem; /* 17px */
   --text-content-title--line-height: 1.4;
   --text-content-title--letter-spacing: -0.01em;
 
@@ -328,14 +329,16 @@
   --text-helper: 0.75rem; /* 12px */
   --text-helper--line-height: 1.5; /* 18px at 12px desktop */
 
-  --text-meta: 0.75rem;
-  --text-meta--line-height: 1.5; /* 18px */
+  /* --text-meta and --text-badge are byte-identical to helper/caption. They are
+     aliases, not a second role: one value, one source. */
+  --text-meta: var(--text-helper);
+  --text-meta--line-height: var(--text-helper--line-height);
 
   --text-caption: 0.71875rem;
   --text-caption--line-height: 1.4545; /* 16px */
 
-  --text-badge: 0.71875rem;
-  --text-badge--line-height: 1.4545;
+  --text-badge: var(--text-caption);
+  --text-badge--line-height: var(--text-caption--line-height);
 }
 
 :root {
@@ -377,6 +380,10 @@
   --tracking-tight: -0.01em;
   --tracking-normal: 0;
   --tracking-wide: 0.06em;
+  /* Motion scale. Hand-written feature transitions read `--motion-fast` (e.g.
+     the dashboard worklist row hover); declaring it here makes that consumer
+     resolve the token instead of its inline 160ms fallback. */
+  --motion-fast: 160ms;
 
   /* Shared authenticated-console roles — TingHire slate, ink, and cream. */
   --workspace-shell: #172033;
@@ -400,16 +407,6 @@
   --workspace-teal-soft: #ffe1d6;
   --workspace-paper: #ffffff;
   --workspace-paper-deep: #f5ede5;
-  --workspace-space-1: 0.25rem;
-  --workspace-space-2: 0.5rem;
-  --workspace-space-3: 0.75rem;
-  --workspace-space-4: 1rem;
-  --workspace-space-6: 1.5rem;
-  --workspace-radius-control: 0.5rem;
-  --workspace-radius-panel: 0.625rem;
-  --workspace-shadow-panel: 0 1px 2px rgba(23, 32, 51, 0.06);
-  --workspace-motion-fast: 160ms;
-  --workspace-motion-standard: 240ms;
   --radius: 10px;
   --background: #fff6ed;
   --foreground: #172033;
@@ -460,7 +457,6 @@
     var(--muted-foreground) 26%,
     var(--background)
   );
-  --grid-color: transparent;
   --shimmer-highlight: rgba(23, 32, 51, 0.06);
 
   --chart-1: #557498;
@@ -493,6 +489,22 @@
   --lead-cold-ink: #687385;
 }
 
+/* --------------------------------------------------------------------------
+   DORMANT dark layer — kept, but unreachable.
+   `components/admin/theme-provider.tsx` pins the app to light
+   (LIGHT_THEME_STATE, and it always removes `.dark`), and the only writer of
+   the class (`ThemeModeToggle`) is exported but never rendered. Nothing can
+   add `.dark`, so this block, `.dark .kb-scope` below and every vendored
+   `dark:` variant ship dead.
+   The console shell is doubly unaffected: `.workspace-frame` re-derives its
+   whole role vocabulary from the daisyUI `tinghire` theme (`color-scheme:
+   light`, `prefersdark: false`), so even a forced `.dark` would not reach the
+   topbar, rail or canvas.
+   Enabling dark is a product change, not a CSS one: add a second daisyUI theme
+   plus a provider that toggles the class, then finish this block (--chart-1..5
+   and the fixed --lead-hot-bg/--lead-warm-bg/--lead-warm-ink tints still hold
+   their light values) and `.dark .kb-scope`.
+   -------------------------------------------------------------------------- */
 .dark {
   --background: #111827;
   --foreground: #fff7f0;
@@ -538,7 +550,6 @@
     var(--muted-foreground) 30%,
     var(--background)
   );
-  --grid-color: oklch(1 0 0 / 0.015); /* rgba(255,255,255,0.015) */
   --shimmer-highlight: oklch(1 0 0 / 0.06); /* rgba(255,255,255,0.06) */
 
   /* Sidebar styling for a seamless premium dark sidebar */
@@ -553,8 +564,11 @@
   ); /* rgba(148,163,184,0.08) */
   --sidebar-ring: #ff8a6f;
 
-  /* Lift fixed ember/steel lead inks so they read on dark tinted surfaces;
-     --primary and the bg tints already adapt via runtime var(). */
+  /* Lift the fixed lead inks so they read on dark tinted surfaces.
+     NOTE: the lead backgrounds are only partly adaptive — `--lead-cold-bg`
+     mixes from `var(--background)` and follows this block, but
+     `--lead-hot-bg`/`--lead-warm-bg` are fixed light tints and would need
+     re-pointing alongside `--chart-1..5` if dark is ever enabled. */
   --lead-hot-ink: oklch(0.68 0.19 29);
   --lead-cold-ink: var(--muted-foreground);
 }
@@ -590,7 +604,7 @@ input:-webkit-autofill:focus {
     --text-display: 1.5rem; /* 24px */
     --text-page-title: 1.375rem; /* 22px */
     --text-metric: 1.25rem; /* 20px */
-    --text-content-title: 1.125rem; /* 18px */
+    --text-content-title: 1.1875rem; /* 19px — stays one step above section-title */
     --text-section-title: 1.125rem; /* 18px */
     --text-subsection: 1rem; /* 16px */
     --text-nav: 0.8125rem; /* 13px */
@@ -603,9 +617,7 @@ input:-webkit-autofill:focus {
     --text-label: 1rem; /* 16px — iOS focus-zoom safe */
     --text-button: 0.875rem; /* 14px */
     --text-helper: 0.75rem; /* 12px */
-    --text-meta: 0.75rem; /* 12px */
-    --text-caption: 0.75rem; /* 12px */
-    --text-badge: 0.75rem; /* 12px */
+    --text-caption: 0.75rem; /* 12px; --text-meta/--text-badge alias it */
   }
 }
 
@@ -633,7 +645,10 @@ input:-webkit-autofill:focus {
     var(--color-base-content) 67%,
     transparent
   );
-  --workspace-border: var(--color-base-300);
+  /* Hairline/border ink stays OFF the surface ramp: `--color-base-300`
+     (#f5ede5) is a surface step, and using it here collapsed every card edge,
+     input border and table rule to ~1.08:1 against the cream canvas. */
+  --workspace-border: #e6d8ce;
   --workspace-focus: var(--color-primary);
   --workspace-action: var(--color-primary);
   --workspace-action-strong: color-mix(
@@ -719,7 +734,7 @@ input:-webkit-autofill:focus {
    -------------------------------------------------------------------------- */
 .workspace-frame-content :where([data-slot="card"]) {
   border-color: var(--workspace-border);
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
 }
 
 .workspace-frame-content :where([data-slot="card-header"]) {
@@ -796,12 +811,23 @@ input:-webkit-autofill:focus {
 }
 
 /* Every control inside the workspace keeps the 44px touch-target floor at phone
-   widths, whatever height its own variant declares. */
+   widths, whatever height its own variant declares. The inbox directory-header
+   channel tiles are the one exemption: the owner capped every control in that
+   header at 40px, so they opt out here instead of escalating a second
+   `!important`. */
 @media (max-width: 767px) {
-  .workspace-frame-content button:not(.conversation),
+  .workspace-frame-content
+    button:not(.conversation):not(.channel-adapter-option),
   .workspace-frame-content a[role="button"],
   .workspace-frame-content input:not([type="checkbox"]):not([type="radio"]),
   .workspace-frame-content select {
+    min-height: 44px !important;
+  }
+
+  /* The chrome sits outside `.workspace-frame-content`, so the floor above never
+     reached the topbar triggers (Button size="sm" = 36px). Same 44px floor. */
+  .workspace-chrome button,
+  .workspace-chrome a[role="button"] {
     min-height: 44px !important;
   }
 }
@@ -848,7 +874,11 @@ input:-webkit-autofill:focus {
 }
 
 .workspace-sidebar [aria-current="page"] svg {
-  color: var(--workspace-action-strong);
+  color: color-mix(
+    in oklab,
+    var(--workspace-action) 55%,
+    var(--workspace-paper)
+  );
 }
 
 .workspace-sidebar [aria-current="page"]::before {
@@ -866,17 +896,16 @@ input:-webkit-autofill:focus {
 /* The rail is icon-only: centre each row and drop the label gutter the library
    component reserves. Nav item markup is library-owned, so alignment is set
    here rather than by forking the component. */
-.workspace-sidebar a[role="link"] {
-  justify-content: center;
-}
-
 .workspace-sidebar a > svg {
   margin-inline-end: 0;
 }
 
+/* 40px console control height for the rail rows (the library's own row caps at
+   36px via max-h-9; min-height wins over max-height, so the row grows). */
 .workspace-sidebar li > * {
   display: flex;
   justify-content: center;
+  min-height: 2.5rem;
 }
 
 @media (max-width: 1023px) {
@@ -982,6 +1011,18 @@ input[type="time"] {
   --accent-foreground: #3d5b82;
   --destructive: #ad5d68;
   --destructive-foreground: #ffffff;
+  /* Status slots. Knowledge surfaces render `Chip tone="success|warning|info"`
+     inside this scope (e.g. StoredKnowledgePanel's reasoning chip), so the
+     scope must define them rather than leaking the outer scope's hue. Values
+     track the console's global status palette. */
+  --success: #0b7e56;
+  --success-soft: #dff7ec;
+  --info: #466fa0;
+  --info-foreground: #ffffff;
+  --info-soft: #e8f0f8;
+  --warning: #8c6621;
+  --warning-foreground: #ffffff;
+  --warning-soft: #f7eedd;
   --border: #e6d8ce;
   --input: #e6d8ce;
   --ring: #7796b6;
@@ -1025,6 +1066,15 @@ input[type="time"] {
   --accent-foreground: #c3d6ea;
   --destructive: oklch(0.68 0.11 12); /* lifted, muted rose */
   --destructive-foreground: oklch(0.17 0.012 245);
+  /* Status slots mirror the global .dark block (see its dormancy note). */
+  --success: oklch(0.72 0.09 155);
+  --success-soft: oklch(0.28 0.03 155);
+  --info: #8fb4dc;
+  --info-foreground: #172033;
+  --info-soft: #1c2c40;
+  --warning: #d0ac72;
+  --warning-foreground: #172033;
+  --warning-soft: #3d3423;
   --border: oklch(0.32 0.012 245);
   --input: oklch(0.32 0.012 245);
   --ring: #a9c2dc;
@@ -1038,24 +1088,6 @@ input[type="time"] {
   --kb-ink-300: oklch(0.6 0.012 245);
   --kb-line-strong: oklch(0.4 0.012 245);
 }
-.login-paper {
-  background-color: var(--background);
-  background-image:
-    linear-gradient(rgba(23, 32, 51, 0.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(23, 32, 51, 0.022) 1px, transparent 1px),
-    linear-gradient(rgba(91, 122, 158, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(91, 122, 158, 0.03) 1px, transparent 1px);
-  background-position:
-    0 0,
-    0 0,
-    14px 14px,
-    14px 14px;
-  background-size:
-    28px 28px,
-    28px 28px,
-    112px 112px,
-    112px 112px;
-}
 .kb-display {
   font-family: var(--kb-font-display);
   font-weight: 600;
@@ -1063,28 +1095,6 @@ input[type="time"] {
 }
 .kb-mono {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-}
-/* Rubber-stamp status motif: rotated, double-bordered, uppercase Fraunces. */
-.kb-stamp {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 9px 5px;
-  border: 1.4px solid currentColor;
-  border-radius: 3px;
-  font-family: var(--kb-font-display);
-  font-weight: 600;
-  font-size: 10.5px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  line-height: 1;
-  white-space: nowrap;
-  transform: rotate(-2deg);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
-}
-.kb-stamp--pending {
-  border-style: dashed;
-  transform: none;
 }
 
 @layer base {
@@ -1107,6 +1117,7 @@ input[type="time"] {
     font-weight: 400;
     font-family: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
     @apply bg-background text-foreground;
+    background-image: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
   }
@@ -1120,12 +1131,6 @@ input[type="time"] {
   textarea {
     font: inherit;
   }
-}
-
-body {
-  background-color: var(--background);
-  background-image: none;
-  font-family: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
 }
 
 /* The authenticated shell owns scrolling inside its content row. Prevent the
@@ -1200,19 +1205,4 @@ body {
     background-repeat: no-repeat;
     animation: vfic-shimmer 1.4s ease-in-out infinite;
   }
-}
-
-/* =========================================================================
-   Untitled UI shell elevation. The ink sidebar uses a warm active surface and
-   the logo connection mark; the topbar keeps a restrained hairline.
-   ========================================================================= */
-.workspace-topbar {
-  box-shadow: 0 1px 0 0 color-mix(in srgb, #000 16%, transparent);
-}
-
-.workspace-navigation-rail .workspace-navigation-link.is-active {
-  background: #fff6ed;
-  color: #172033;
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--color-uu-brand-300) 58%, transparent);
 }

@@ -9,6 +9,10 @@ import {
   ShowBase,
 } from "ra-core";
 import type { Conversation } from "../../types";
+import {
+  conversationChannelLabel,
+  conversationChannelShortLabel,
+} from "../../types";
 import { deleteConversation } from "../application/conversation-operations";
 import { Confirm } from "@/components/admin/confirm";
 import { LeadAvatar } from "../LeadAvatar";
@@ -230,6 +234,19 @@ export const ConversationShowContent = ({
                 )}
                 <div className="person-copy">
                   <div className="person-name-row">
+                    <span
+                      className="conv-channel"
+                      data-channel={
+                        record?.channel_identity?.provider ?? "unknown"
+                      }
+                      title={conversationChannelLabel(
+                        record?.channel_identity?.provider,
+                      )}
+                    >
+                      {conversationChannelShortLabel(
+                        record?.channel_identity?.provider,
+                      )}
+                    </span>
                     {showWorkspacePanel && context.renderPanel ? (
                       <button
                         type="button"

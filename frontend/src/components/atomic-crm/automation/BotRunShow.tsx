@@ -97,6 +97,7 @@ const BotRunShowPage = () => {
   return (
     <PageShell size="narrow">
       <PageHeading
+        className="uu-scope"
         eyebrow="Vận hành"
         title="Chi tiết lần chạy bot"
         subtitle="Kiểm tra dữ liệu chẩn đoán của lượt xử lý."
@@ -125,6 +126,7 @@ const BotRunShowPage = () => {
             type="button"
             color="secondary"
             size="sm"
+            className="uu-scope"
             onClick={() => detailQuery.refetch()}
           >
             {translate("crm.common.retry")}

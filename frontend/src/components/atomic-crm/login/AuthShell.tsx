@@ -58,7 +58,7 @@ export const AuthShell = ({ children, productName }: AuthShellProps) => (
             className="uu-scope"
             iconLeading={ShieldCheck}
           >
-            Trung tâm tuyển dụng
+            Tuyển dụng thông minh
           </BadgeWithIcon>
           <h2 className="mt-6 text-balance text-display font-semibold leading-tight tracking-[-0.035em] text-base-content">
             Kết nối đúng người với đúng cơ hội.
@@ -71,7 +71,7 @@ export const AuthShell = ({ children, productName }: AuthShellProps) => (
       </figure>
 
       <div className="relative flex items-center justify-center bg-base-200/45 px-5 py-7 sm:px-10 sm:py-10 lg:px-8 xl:px-10">
-        <div className="w-full max-w-sm" aria-label={productName}>
+        <div className="w-full max-w-sm">
           <div className="mb-6 px-1">
             <img
               src="/brand/tinghire-logo.png"

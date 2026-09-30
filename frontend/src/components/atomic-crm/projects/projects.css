@@ -1,3 +1,12 @@
+/* One track width for the projects directory. The element also carries the
+   generic `.ops-page-shell`, whose own 1180px loses to the later
+   `personas-project.css` override; declaring the shared value here keeps every
+   ops screen on the same track instead of three (1120/1180/1240). */
+.project-page-shell {
+  width: min(100%, 1180px);
+  gap: 12px;
+}
+
 .project-knowledge-header {
   padding: 2px 0 0;
 }
@@ -97,6 +106,9 @@
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   border-block: 1px solid var(--border);
+  /* Shared box height for the editor's loading skeleton and its textarea, so
+     the load state cannot drift from the editor it stands in for. */
+  --project-editor-box: 320px;
 }
 
 .project-category-navigation {
@@ -410,12 +422,15 @@
 }
 
 /* Disabled save is still an instruction: keep its label readable while
-   signalling that there is nothing new to persist yet. */
-.project-category-save-button:disabled {
+   signalling that there is nothing new to persist yet. The compound scope
+   outranks the Button's own `text-[var(--color-primary-content)]` utility
+   without a second `!important`; when nothing changed, CategoryEditor's
+   `text-[var(--muted-foreground)]!` already paints the same colour. */
+.inbox-bg-container.project-workspace .project-category-save-button:disabled {
   opacity: 1;
   border-color: var(--border);
   background: var(--surface-hover);
-  color: var(--muted-foreground) !important;
+  color: var(--muted-foreground);
 }
 
 .project-category-save-button:disabled svg {
@@ -423,12 +438,12 @@
 }
 
 .project-category-editor-skeleton {
-  height: 320px;
+  height: var(--project-editor-box);
   margin: 14px 0;
 }
 
 .project-category-textarea {
-  min-height: 320px;
+  min-height: var(--project-editor-box);
   margin: 14px 0;
   width: 100%;
   resize: vertical;
@@ -459,9 +474,10 @@
   gap: 8px;
 }
 
+/* The 896px track belongs to the create shell's `max-w-4xl` wrapper; the edit
+   screen has no wrapper, so this surface simply fills its column. */
 .project-form-surface {
   width: 100%;
-  max-width: 896px;
   margin-top: 16px;
   padding: 24px;
   border-block: 1px solid var(--border);
@@ -469,7 +485,6 @@
 }
 
 .project-edit-form-surface {
-  max-width: none;
   padding-block: 16px;
 }
 
@@ -481,7 +496,7 @@
 }
 
 .project-edit-active {
-  min-height: 42px;
+  min-height: var(--crm-control-height-md);
   align-content: center;
 }
 
@@ -514,7 +529,7 @@
   min-height: 40px;
   border-bottom: 1px solid var(--border);
   padding-bottom: 12px;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
 }
 
 .project-show-summary-content {
@@ -528,7 +543,7 @@
 
 .project-show-fact p {
   margin: 2px 0 0;
-  line-height: 1.45;
+  line-height: var(--lh-normal);
 }
 
 .project-show-summary-actions {
@@ -561,8 +576,8 @@
 }
 
 .project-accordion-trigger > svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   margin-top: 2px;
 }
 
@@ -582,17 +597,17 @@
   margin: 3px 0 0;
   color: var(--ink);
   font-size: var(--fs-content-title);
-  font-weight: var(--chat-fw-bold);
-  line-height: var(--crm-lh-heading);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
 }
 
 .project-accordion-slug {
   display: block;
   margin-top: 2px;
   color: var(--ink-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: var(--crm-fs-body-sm);
-  font-weight: var(--chat-fw-medium);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-medium);
 }
 
 .project-accordion-badges {
@@ -624,8 +639,8 @@
   align-items: center;
   gap: 5px;
   color: var(--ink-muted);
-  font-size: var(--crm-fs-hint);
-  font-weight: var(--chat-fw-semibold);
+  font-size: var(--fs-helper);
+  font-weight: var(--fw-semibold);
 }
 
 .project-accordion-facts dt svg {
@@ -635,15 +650,15 @@
 .project-accordion-facts dd {
   margin: 3px 0 0;
   color: var(--ink);
-  font-size: var(--crm-fs-body);
-  font-weight: var(--chat-fw-bold);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
 }
 
 .project-accordion-description {
   margin: 8px 0 0;
   color: var(--ink-muted);
-  font-size: var(--crm-fs-body-sm);
-  line-height: var(--crm-lh-body);
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-normal);
   text-wrap: pretty;
 }
 
@@ -664,15 +679,23 @@
   gap: 8px;
 }
 
-/* The rollup is part of the project ledger, not a separate card. */
+/* The rollup is part of the project ledger, not a separate card: it owns its
+   band geometry, type and colour so the earlier inbox/personas-project.css
+   block has nothing left to contribute. */
 .project-rollup-strip {
   min-height: 44px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0;
   padding: 0;
   border: 0;
   border-block: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
+  color: var(--ink-muted);
+  font-size: var(--fs-helper);
+  font-weight: var(--fw-semibold);
 }
 
 .project-rollup-strip span {
@@ -704,7 +727,11 @@
     pointer-events: none;
   }
 
-  .project-workspace-content {
+  /* Compound scope: the shared `.inbox-bg-container .project-workspace-content`
+     box rule in inbox/base.css is (0,2,0) and wins on specificity before
+     cascade order, which left this padding dead. Same sanctioned form as the
+     ::before safe-area patch above (FE-19). */
+  .inbox-bg-container.project-workspace .project-workspace-content {
     padding: 16px 14px calc(96px + env(safe-area-inset-bottom));
   }
 
@@ -730,8 +757,8 @@
 
   .project-command-header h1 {
     font-size: var(--fs-page-title);
-    font-weight: 700;
-    line-height: 1.2;
+    font-weight: var(--fw-bold);
+    line-height: var(--lh-tight);
   }
 
   .project-command-header p:not(.ops-kicker) {
@@ -739,7 +766,7 @@
     margin-top: 4px;
     font-size: var(--fs-body-sm);
     font-weight: 400;
-    line-height: 18px;
+    line-height: var(--lh-normal);
   }
 
   .project-page-shell .project-command-actions {
@@ -748,22 +775,16 @@
     margin-top: 18px;
   }
 
+  /* The box height belongs to the shell's 44px touch floor (src/index.css);
+     the previous 32px + !important could never win it, and the ::after
+     hit-pad it compensated with was therefore inert. */
   .project-page-shell .project-command-actions [data-slot="button"] {
-    position: relative;
-    height: 32px !important;
-    min-height: 32px !important;
     flex: 0 0 auto;
     margin-block: 6px;
     gap: 6px;
     padding-inline: 10px;
     border-radius: 8px;
     font-size: var(--fs-body-sm);
-  }
-
-  .project-page-shell .project-command-actions [data-slot="button"]::after {
-    content: "";
-    position: absolute;
-    inset: -6px;
   }
 
   .project-rollup-strip {
@@ -807,7 +828,7 @@
 
   .project-single-page-title-label {
     width: 100%;
-    line-height: 1.3;
+    line-height: var(--lh-snug);
   }
 
   .project-single-page-title [data-slot="badge"] {
@@ -875,26 +896,10 @@
     min-height: 44px;
   }
 
-  .project-category-card {
-    min-height: 76px;
-    border-bottom: 0;
-  }
-
-  .project-category-card:nth-child(odd) {
-    border-right: 1px solid var(--border);
-  }
-
-  .project-category-card:nth-last-child(-n + 2) {
-    border-bottom: 0;
-  }
-
-  .project-category-card:last-child {
-    border-right: 0;
-  }
-
   .project-category-workspace {
     display: block;
     border-block: 0;
+    --project-editor-box: 280px;
   }
 
   .project-category-navigation {
@@ -950,19 +955,12 @@
   .project-category-textarea {
     field-sizing: fixed;
     height: min(52dvh, 420px);
-    min-height: 280px;
     resize: none;
   }
 
   .project-accordion-trigger {
     gap: 8px;
     padding: 11px 12px;
-  }
-
-  .project-accordion-trigger > svg {
-    width: 16px;
-    height: 16px;
-    margin-top: 1px;
   }
 
   .project-accordion-heading {
@@ -1019,7 +1017,6 @@
     margin-top: 7px;
     overflow: hidden;
     font-size: var(--fs-body-sm);
-    line-height: 18px;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
@@ -1066,8 +1063,11 @@
     margin-top: 17px;
   }
 
+  /* Icon-only: 44px matches the shell's touch floor so the square stays square.
+     The zero font size keeps the label out of the row but still needs
+     `!important` to beat the Button's own `max-md:text-button` utility. */
   .project-create-button {
-    width: 32px;
+    width: 44px;
     padding: 0;
     font-size: 0 !important;
   }
@@ -1087,50 +1087,12 @@
     justify-content: flex-start;
   }
 
-  .project-category-grid {
-    display: none;
-  }
-
-  .project-category-card {
-    min-height: 68px;
-  }
-
-  .project-category-card:nth-child(odd) {
-    border-right: 1px solid var(--border);
-  }
-
-  .project-category-card:nth-last-child(-n + 2) {
-    border-bottom: 0;
-  }
-
-  .project-category-card:last-child {
-    border-bottom: 0;
-    border-right: 0;
-  }
-
   .project-source-delete {
     min-width: 44px;
   }
 }
 
 @media (max-width: 359px) {
-  .project-category-card {
-    padding-inline: 8px;
-  }
-
-  .project-category-card > div:first-child {
-    gap: 4px;
-  }
-
-  .project-category-name {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .project-category-date {
-    overflow-wrap: anywhere;
-  }
-
   .project-category-editor-actions {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1172,13 +1134,8 @@
     box-shadow: none;
   }
 
-  .project-workspace-content {
+  .inbox-bg-container.project-workspace .project-workspace-content {
     padding: 24px 28px 48px;
-  }
-
-  .project-page-shell {
-    width: min(100%, 1240px);
-    gap: 16px;
   }
 
   .project-command-header {

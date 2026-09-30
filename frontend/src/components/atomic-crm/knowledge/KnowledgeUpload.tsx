@@ -180,7 +180,7 @@ export const KnowledgeUpload = ({
                 data-slot="button"
                 onClick={() => downloadTemplate("knowledge")}
                 iconLeading={Download}
-                className="uu-scope"
+                className="uu-scope [--ring-color-primary:var(--border)]"
               >
                 Tải mẫu KB
               </Button>
@@ -191,7 +191,7 @@ export const KnowledgeUpload = ({
                 data-slot="button"
                 onClick={() => downloadTemplate("faq")}
                 iconLeading={Download}
-                className="uu-scope"
+                className="uu-scope [--ring-color-primary:var(--border)]"
               >
                 Tải mẫu FAQ
               </Button>
@@ -295,7 +295,7 @@ export const KnowledgeUpload = ({
                     color="tertiary"
                     size="sm"
                     data-slot="button"
-                    className="uu-scope size-8 shrink-0"
+                    className="uu-scope size-10 shrink-0"
                     onClick={() => setFile(null)}
                     isDisabled={busy}
                     iconLeading={X}

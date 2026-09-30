@@ -86,7 +86,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .knowledge-workspace-content,
   .settings-workspace-content,
   .profile-workspace-content,
@@ -676,8 +676,8 @@
 
 /* The Agent directory is nested inside the settings console. Keep this
    master-detail view denser than the standalone editor while preserving
-   mobile-sized controls below 760px. */
-@media (min-width: 761px) {
+   mobile-sized controls below 767px. */
+@media (min-width: 768px) {
   .settings-embedded-resource .persona-studio-layout {
     grid-template-columns: minmax(208px, 224px) minmax(0, 1fr);
   }
@@ -821,7 +821,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .persona-page-shell .persona-panel-header .persona-create-action {
     width: auto;
     padding-inline: 12px;

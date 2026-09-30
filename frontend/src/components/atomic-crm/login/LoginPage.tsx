@@ -168,9 +168,8 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
         />
         <ButtonUtility
           tooltip={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-          size="xs"
           color="tertiary"
-          className="absolute right-2 top-1/2 -translate-y-1/2"
+          className="absolute right-2 top-1/2 min-h-10 min-w-10 -translate-y-1/2"
           onClick={() => setVisible((current) => !current)}
           icon={visible ? <EyeOff /> : <Eye />}
         />

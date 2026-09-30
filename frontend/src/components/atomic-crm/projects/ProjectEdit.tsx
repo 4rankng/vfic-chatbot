@@ -56,7 +56,7 @@ const ProjectEditContent = () => {
       <div className="project-workspace-content">
         <div className="project-editor-header project-form-page-header flex flex-wrap items-start gap-3">
           <div className="mr-auto min-w-0">
-            <p className="text-helper font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="text-caption font-semibold uppercase tracking-[0.06em] text-muted-foreground">
               Dự án
             </p>
             <h1 className="mt-1 truncate text-content-title font-semibold">

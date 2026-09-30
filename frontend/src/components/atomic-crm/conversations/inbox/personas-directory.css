@@ -57,7 +57,7 @@
   gap: 5px;
   color: var(--ink-muted);
   font-size: var(--fs-caption);
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
 }
 
 .persona-channel-stats span {
@@ -88,7 +88,7 @@
   background: color-mix(in srgb, var(--primary) 92%, black);
   box-shadow: none;
   font-size: var(--fs-meta);
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
   line-height: 1;
   letter-spacing: 0;
 }

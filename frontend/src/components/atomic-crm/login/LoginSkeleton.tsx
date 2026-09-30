@@ -1,18 +1,25 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
-export const LoginSkeleton = () => {
-  return (
-    <div className="max-w-screen-xl mx-auto h-screen pt-8">
-      <div className="h-full">
-        <div className="max-w-sm mx-auto h-full flex flex-col justify-center gap-8">
-          <Skeleton className="w-full h-[100px]" />
-          <Skeleton className="w-4/5 h-[50px]" />
-          <Skeleton className="w-full h-9" />
-          <Skeleton className="w-full h-9" />
-          <Skeleton className="w-full h-9" />
-          <Skeleton className="w-2/5 h-9" />
-        </div>
-      </div>
+import { AuthShell } from "./AuthShell";
+
+/**
+ * Suspense fallback for the code-split `/forgot-password` route. It renders on
+ * the same `AuthShell` the resolved page paints (split hero + card column,
+ * `min-h-svh`), so the route swap keeps the frame instead of jumping from a
+ * centred 100vh stack — and `min-h-svh` also stops mobile browser chrome from
+ * overflowing the fallback the way `h-screen` did.
+ */
+export const LoginSkeleton = () => (
+  <AuthShell productName="TingHire">
+    <div
+      className="flex flex-col gap-5"
+      role="status"
+      aria-label="Đang tải biểu mẫu"
+    >
+      <Skeleton className="h-8 w-40" />
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-12 w-full" />
     </div>
-  );
-};
+  </AuthShell>
+);

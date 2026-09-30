@@ -12,6 +12,7 @@ export const KnowledgeBaseListContent = () => {
   return (
     <PageShell>
       <PageHeading
+        className="uu-scope"
         eyebrow="Dữ liệu dùng chung"
         title="Kho kiến thức"
         subtitle="Chia sẻ nguồn giữa Agent và dự án."
@@ -56,6 +57,7 @@ export const KnowledgeBaseListContent = () => {
           </p>
         ) : data.length === 0 ? (
           <EmptyState
+            className="max-w-none"
             icon={<BookOpen className="size-6" aria-hidden="true" />}
             title="Chưa có kho kiến thức"
             description="Tạo kho đầu tiên để chia sẻ dữ liệu."

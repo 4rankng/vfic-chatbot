@@ -114,9 +114,6 @@
 
   /* LIGHT MODE VARIABLES */
 
-  --color-alpha-white: rgb(255 255 255);
-  --color-alpha-black: rgb(0 0 0);
-
   /* UTILITY COLORS */
   --color-utility-blue-50: var(--color-blue-50);
   --color-utility-blue-100: var(--color-blue-100);

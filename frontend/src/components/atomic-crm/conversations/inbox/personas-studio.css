@@ -540,7 +540,7 @@
   padding: 18px 14px;
   color: var(--ink-muted);
   font-size: var(--fs-meta);
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
 }
 
 .persona-scope-row {
@@ -566,7 +566,7 @@
   min-width: 0;
   color: var(--ink);
   font-size: var(--fs-body-sm);
-  font-weight: 680;
+  font-weight: var(--fw-bold);
   overflow-wrap: anywhere;
 }
 
@@ -684,7 +684,7 @@
 
 .persona-page-shell .persona-scope-row > span {
   font-size: var(--fs-meta);
-  font-weight: 680;
+  font-weight: var(--fw-bold);
   line-height: 1.3;
 }
 

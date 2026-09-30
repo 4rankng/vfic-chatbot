@@ -169,7 +169,7 @@ const ProfileForm = ({
                 <Button
                   type="button"
                   color="tertiary"
-                  className="profile-action-button"
+                  className="uu-scope profile-action-button"
                   iconLeading={<CircleX />}
                   onClick={() => {
                     reset();
@@ -181,7 +181,7 @@ const ProfileForm = ({
                 <Button
                   type="submit"
                   color="primary"
-                  className="profile-action-button profile-save-button"
+                  className="uu-scope profile-action-button profile-save-button"
                   isDisabled={!isDirty || isSaving}
                   isLoading={isSaving}
                   showTextWhileLoading
@@ -196,7 +196,7 @@ const ProfileForm = ({
               <Button
                 type="button"
                 color="secondary"
-                className="profile-action-button"
+                className="uu-scope profile-action-button"
                 iconLeading={<Pencil />}
                 onClick={() => setEditMode(true)}
               >
@@ -222,7 +222,7 @@ const ProfileForm = ({
           <Button
             type="button"
             color="secondary"
-            className="profile-action-button profile-logout-button"
+            className="uu-scope profile-action-button profile-logout-button"
             iconLeading={<LogOut className="size-4" />}
             onClick={() => logout()}
           >

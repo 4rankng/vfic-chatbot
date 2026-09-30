@@ -46,7 +46,7 @@ class RouteErrorBoundary extends Component<
         <p className="mb-3">Không thể tải trang. Vui lòng tải lại.</p>
         <button
           type="button"
-          className="rounded-md border px-4 py-2"
+          className="min-h-11 rounded-md border border-border px-4 py-2 text-button font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => window.location.reload()}
         >
           Tải lại trang

@@ -52,7 +52,10 @@ export function PageHeading({
               {eyebrow}
             </p>
           ) : null}
-          <h1 className="text-page-title font-bold text-primary">{title}</h1>
+          {/* `text-foreground` (console ink) not `text-primary`: inside an
+              ancestor `.uu-scope` the latter resolves to the library's blue
+              primary, so the same heading rendered two colours. */}
+          <h1 className="text-page-title font-bold text-foreground">{title}</h1>
           {subtitle ? (
             <p className="mt-1 text-body text-tertiary">{subtitle}</p>
           ) : null}

@@ -127,7 +127,7 @@ export const BotRunListContent = () => {
 
   return (
     <PageShell>
-      <PageHeading title="Lần chạy bot" />
+      <PageHeading className="uu-scope" title="Lần chạy bot" />
       <section
         className="mt-4 border-y border-[var(--workspace-border)] bg-[var(--workspace-surface)]"
         aria-label="Nhật ký xử lý"
@@ -136,6 +136,7 @@ export const BotRunListContent = () => {
           <SkeletonRows />
         ) : !data || data.length === 0 ? (
           <EmptyState
+            className="max-w-none"
             icon={<Inbox className="size-6" aria-hidden="true" />}
             title="Chưa có lần chạy bot nào"
             description="Nhật ký sẽ xuất hiện sau lần xử lý đầu tiên."

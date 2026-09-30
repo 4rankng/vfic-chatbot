@@ -58,12 +58,6 @@
   .inbox-bg-container .avatar {
     box-shadow: inset 0 0 0 1px var(--workspace-blue-line);
   }
-
-  .inbox-bg-container .mini-chip.channel.bot,
-  .inbox-bg-container .mini-chip.closed {
-    background: var(--workspace-hover);
-    color: var(--workspace-muted);
-  }
 }
 .inbox-bg-container .conversations::-webkit-scrollbar {
   display: none;
@@ -92,7 +86,6 @@
   width: 100%;
   gap: 8px;
   align-items: center;
-  min-height: 80px;
   padding: 10px 8px;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -201,9 +194,9 @@
   white-space: nowrap;
 }
 .inbox-bg-container .conv-preview-icon {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
   color: #98a2b3;
 }
 .inbox-bg-container .conv-bottom {
@@ -274,41 +267,6 @@
   line-height: 20px;
   white-space: nowrap;
 }
-.inbox-bg-container .mini-chip.bot {
-  color: var(--brand);
-  background: var(--brand-light);
-}
-.inbox-bg-container .mini-chip.handoff {
-  color: var(--inbox-accent);
-  background: var(--inbox-accent-light);
-}
-.inbox-bg-container .mini-chip.manual {
-  color: var(--inbox-accent);
-  background: var(--inbox-accent-light);
-}
-.inbox-bg-container .mini-chip.semi {
-  color: var(--brand);
-  background: var(--brand-light);
-}
-.inbox-bg-container .mini-chip.auto {
-  color: var(--success);
-  background: var(--success-light);
-}
-.inbox-bg-container .mini-chip.closed {
-  color: var(--ink-muted);
-  background: var(--surface-hover);
-}
-.inbox-bg-container .mini-chip.channel {
-  padding-inline: 6px;
-}
-.inbox-bg-container .mini-chip.channel.oa {
-  color: var(--inbox-accent);
-  background: var(--inbox-accent-light);
-}
-.inbox-bg-container .mini-chip.channel.bot {
-  color: var(--ink-muted);
-  background: var(--surface-hover);
-}
 /* Lead-priority chip — TEXT is the accessible signal (readable without colour);
    the tint reinforces via the global lead-priority CSS vars. */
 .inbox-bg-container .mini-chip.priority-hot {
@@ -329,21 +287,13 @@
   height: 12px;
 }
 
-.inbox-bg-container .conv-mode-label {
-  color: var(--ink-faint);
-  font-size: var(--chat-fs-chip);
-  font-weight: var(--chat-fw-semibold);
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
 @media (min-width: 768px) {
   .inbox-bg-container .conversations {
     padding: 0;
   }
 
   .inbox-bg-container .conversation {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 42px minmax(0, 1fr);
     align-items: center;
     gap: 12px;
     height: auto;
@@ -403,8 +353,6 @@
   }
 
   .inbox-bg-container .avatar {
-    width: 44px;
-    height: 44px;
     margin-top: 0;
     border-radius: 50%;
     box-shadow: inset 0 0 0 1px var(--workspace-border);
@@ -457,11 +405,6 @@
     flex-wrap: wrap;
   }
 
-  .inbox-bg-container .conv-mode-label {
-    font-size: var(--chat-fs-chip);
-    color: var(--workspace-faint);
-  }
-
   .inbox-bg-container .mini-chip {
     min-height: 20px;
     padding: 0 8px;
@@ -481,14 +424,16 @@
   }
 }
 
-/* Channel indicator on a directory row.
+/* Channel indicator on a directory row and in the thread header.
  *
  * Which channel a thread belongs to was only visible inside the conversation,
- * never in the list. The chip is deliberately quiet — an 18px pill whose hue
- * matches the adapter tile it came from — and carries the full channel name on
- * the element's `title`, because the employee-support OA's full label cannot
- * fit a row. Scoped by its own class prefix rather than as a descendant of the
- * shared `.inbox-bg-container`, so it adds nothing to the FE-19 ratchet. */
+ * never in the list, and the opened thread had no indicator at all. One quiet
+ * pill serves both surfaces — the row (before the name) and the thread header
+ * (after the name) — whose hue matches the adapter tile it came from, and
+ * carries the full channel name on the element's `title`, because the
+ * employee-support OA's full label cannot fit either surface. Scoped by its own
+ * class prefix rather than as a descendant of the shared `.inbox-bg-container`,
+ * so it adds nothing to the FE-19 ratchet. */
 .conv-channel {
   flex: 0 0 auto;
   align-self: center;
@@ -500,7 +445,7 @@
   border-radius: 6px;
   background: var(--uu-inbox-surface-subtle);
   color: var(--uu-inbox-muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: var(--chat-fw-bold);
   letter-spacing: 0.02em;
   line-height: 1;

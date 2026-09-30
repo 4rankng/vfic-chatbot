@@ -68,7 +68,7 @@ export function EmptyState({
       size="md"
       role="status"
       className={cx(
-        "uu-scope min-h-56 gap-4 rounded-xl border border-secondary bg-primary px-6 py-10",
+        "uu-scope min-h-56 gap-4 rounded-panel border border-secondary bg-primary px-6 py-10",
         className,
       )}
     >
@@ -79,8 +79,14 @@ export function EmptyState({
         {icon}
       </span>
       <UntitledEmptyState.Content className="gap-1">
-        <UntitledEmptyState.Title className="text-section-title font-semibold text-primary [&]:!text-[length:var(--fs-section-title)]">
-          {title}
+        {/* The size lives on an inner span: the primitive's own `text-lg`
+            utility beats a size class passed to Title (and tailwind-merge
+            cannot tell the console's `text-section-title` from a text colour,
+            so it would drop it). The span sidesteps both, so no `!important`
+            escalation is needed. `text-foreground` keeps the title console ink
+            even though this subtree is `.uu-scope` — see page-heading.tsx. */}
+        <UntitledEmptyState.Title className="text-foreground">
+          <span className="text-section-title font-semibold">{title}</span>
         </UntitledEmptyState.Title>
         <UntitledEmptyState.Description className="max-w-sm text-body-sm text-tertiary">
           {description}

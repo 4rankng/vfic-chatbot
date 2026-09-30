@@ -82,7 +82,7 @@ export const KnowledgeRelearnAction = () => {
             )}
           />
         }
-        className="knowledge-relearn-action tt-btn-touch uu-scope h-11 w-full rounded-[9px] sm:w-fit"
+        className="knowledge-relearn-action tt-btn-touch uu-scope h-11 w-full rounded-[9px] [--ring-color-primary:var(--border)] sm:w-fit"
       >
         {reindexPending ? "Đang xếp hàng…" : "Học lại"}
       </Button>
@@ -229,7 +229,7 @@ const KnowledgeSourceListContent = () => {
             placeholder="Tìm tài liệu..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            wrapperClassName="uu-scope h-11 rounded-[9px]"
+            wrapperClassName="uu-scope h-11 rounded-[9px] [--ring-color-primary:var(--border)]"
             inputClassName="text-control"
           />
           <div className="knowledge-filter-actions">

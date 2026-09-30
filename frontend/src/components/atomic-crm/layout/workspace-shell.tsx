@@ -201,7 +201,7 @@ export const WorkspaceShell = ({
         >
           <Button
             color="tertiary"
-            size="sm"
+            size="md"
             iconLeading={Menu}
             aria-label="Mở điều hướng"
             className="rounded-lg lg:hidden"

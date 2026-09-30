@@ -58,6 +58,7 @@ export const KnowledgeBaseCreate = () => {
     <CreateBase resource="knowledge_bases">
       <PageShell size="narrow">
         <PageHeading
+          className="uu-scope"
           eyebrow="Thiết lập kho"
           title="Tạo kho kiến thức"
           subtitle="Chọn chế độ truy cập dữ liệu."
@@ -84,7 +85,7 @@ export const KnowledgeBaseCreate = () => {
             <div className="min-w-0">
               <h2
                 id="knowledge-base-create-form-title"
-                className="text-section-title font-semibold text-primary"
+                className="text-section-title font-semibold text-foreground"
               >
                 Thông tin kho
               </h2>
@@ -126,7 +127,7 @@ export const KnowledgeBaseCreate = () => {
                 <Button
                   color="secondary"
                   size="md"
-                  className="min-h-11"
+                  className="uu-scope min-h-11"
                   onClick={() => redirect("list", "knowledge_bases")}
                   isDisabled={saving}
                 >
@@ -135,7 +136,7 @@ export const KnowledgeBaseCreate = () => {
                 <Button
                   type="submit"
                   size="md"
-                  className="min-h-11"
+                  className="uu-scope min-h-11"
                   isDisabled={saving}
                   isLoading={saving}
                   showTextWhileLoading

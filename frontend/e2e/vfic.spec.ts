@@ -52,10 +52,8 @@ test.describe("current recruitment workspace baseline", () => {
         .getByText("E2E bot reply", { exact: true }),
     ).toBeVisible();
 
-    // Rendered guards carried over from the former tailkit-redesign.css
-    // source-text pins: channel-adapter icons and the reply-mode trigger icon
-    // render at all and grow to their 44px/20px mobile sizes on phones.
-    const isMobile = page.viewportSize().width < 768;
+    // Directory-header density cap: every control in the inbox rail header is
+    // 40px or less, and the adapter icon has to fit inside its tile.
     const detailMarkers = await page.evaluate(() => {
       const computed = (selector: string) => {
         const element = document.querySelector<HTMLElement>(selector);
@@ -66,29 +64,37 @@ test.describe("current recruitment workspace baseline", () => {
           height: styles.height,
         };
       };
+      const searchInput = document.querySelector<HTMLElement>(
+        ".workspace-rail .search input",
+      );
       return {
+        adapterTile: computed(".channel-adapter-option"),
         adapter: computed(".channel-adapter-option img"),
         modeIcon: computed(".mode-menu-trigger-icon .icon"),
         adapterCount: document.querySelectorAll(".channel-adapter-option")
           .length,
+        searchHeight: searchInput ? getComputedStyle(searchInput).height : null,
       };
     });
     expect(detailMarkers.adapterCount).toBeGreaterThan(0);
+    expect(detailMarkers.adapterTile).not.toBeNull();
     expect(detailMarkers.adapter).not.toBeNull();
     expect(detailMarkers.modeIcon).not.toBeNull();
-    if (isMobile) {
-      expect(detailMarkers.adapter.width).toBe("44px");
-      expect(detailMarkers.adapter.height).toBe("44px");
-      expect(detailMarkers.modeIcon.width).toBe("20px");
-      expect(detailMarkers.modeIcon.height).toBe("20px");
-    } else {
-      // Recorded desktop reality: the cascade renders the adapter icon at
-      // 30px, not the 36px the removed source-text pins claimed.
-      expect(detailMarkers.adapter.width).toBe("30px");
-      expect(Number.parseFloat(detailMarkers.modeIcon.width)).toBeGreaterThan(
-        10,
-      );
-    }
+    expect(detailMarkers.searchHeight).not.toBeNull();
+
+    const tile = detailMarkers.adapterTile as { width: string; height: string };
+    const icon = detailMarkers.adapter as { width: string; height: string };
+    expect(Number.parseFloat(tile.width)).toBeLessThanOrEqual(40);
+    expect(Number.parseFloat(tile.height)).toBeLessThanOrEqual(40);
+    expect(Number.parseFloat(icon.width)).toBeLessThanOrEqual(
+      Number.parseFloat(tile.width),
+    );
+    expect(
+      Number.parseFloat(detailMarkers.searchHeight as string),
+    ).toBeLessThanOrEqual(40);
+    expect(Number.parseFloat(detailMarkers.modeIcon.width)).toBeGreaterThan(
+      10,
+    );
 
     await page.getByRole("button", { name: "Đổi chế độ trả lời" }).click();
     const takeOverResponse = page.waitForResponse(

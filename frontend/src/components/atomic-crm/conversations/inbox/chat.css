@@ -132,33 +132,6 @@
   border-radius: 3px;
 }
 
-@media (max-width: 767px) {
-  .inbox-bg-container .candidate-signal-popover {
-    position: absolute;
-    top: calc(100% + 12px);
-    right: auto;
-    left: 0;
-    width: max-content;
-    max-width: calc(100vw - 78px);
-    max-height: min(50dvh, 20rem);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    border-color: var(--border-strong);
-    border-radius: 12px;
-    background: var(--surface-solid);
-    padding: 14px 16px;
-  }
-
-  .inbox-bg-container .candidate-signal-popover::before {
-    display: none;
-  }
-
-  .inbox-bg-container .candidate-signal-value {
-    font-size: var(--chat-fs-body-sm);
-    line-height: var(--chat-lh-body);
-  }
-}
-
 .inbox-bg-container .header-actions {
   display: flex;
   align-items: center;
@@ -181,8 +154,8 @@
   white-space: nowrap;
 }
 .inbox-bg-container .chat-mode-chip .icon {
-  width: 15px;
-  height: 15px;
+  width: 12px;
+  height: 12px;
 }
 .inbox-bg-container .mode-menu-trigger {
   min-height: 40px;
@@ -245,8 +218,8 @@
   color: #475467;
 }
 .inbox-bg-container .mode-menu-trigger-icon .icon {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 .inbox-bg-container .mode-menu-trigger-label {
   min-width: 0;
@@ -332,8 +305,8 @@
 }
 .mode-menu-icon .icon,
 .mode-menu-check .icon {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 .mode-menu-item.human .mode-menu-icon {
   color: #475467;
@@ -362,7 +335,7 @@
   overflow: hidden;
   color: var(--workspace-ink-muted, var(--muted-foreground));
   font-size: var(--fs-meta);
-  font-weight: 450;
+  font-weight: var(--fw-regular);
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -385,10 +358,6 @@
   .inbox-bg-container .header-person {
     flex: 1 1 auto;
     max-width: none;
-  }
-
-  .inbox-bg-container .candidate-signal-strip {
-    margin-top: 4px;
   }
 
   .inbox-bg-container .header-actions {
@@ -964,7 +933,7 @@
 .inbox-bg-container .composer.disabled textarea {
   cursor: default;
   color: var(--ink-muted);
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
   -webkit-text-fill-color: var(--ink-muted);
 }
 .inbox-bg-container .composer.disabled textarea::placeholder {
@@ -975,6 +944,8 @@
 .inbox-bg-container .composer-action {
   width: 34px;
   height: 34px;
+  min-width: 40px;
+  min-height: 40px;
   display: grid;
   place-items: center;
   border-radius: var(--rad-md);

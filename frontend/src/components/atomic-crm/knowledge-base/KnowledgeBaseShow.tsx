@@ -238,6 +238,7 @@ export const KnowledgeBaseShowContent = () => {
   return (
     <PageShell>
       <PageHeading
+        className="uu-scope"
         eyebrow={kb.mode === "RAG" ? "Kho kiến thức RAG" : "Ngữ cảnh trực tiếp"}
         title={kb.name}
         subtitle={

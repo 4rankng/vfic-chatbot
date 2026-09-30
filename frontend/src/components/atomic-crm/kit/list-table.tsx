@@ -119,7 +119,7 @@ export const ListTable = <RecordType extends { id: string | number }>({
     return (
       <div
         className={cx(
-          "uu-scope flex flex-col overflow-hidden rounded-sm border border-secondary bg-primary",
+          "uu-scope flex flex-col overflow-hidden rounded-panel border border-secondary bg-primary",
           className,
         )}
         role="status"
@@ -157,7 +157,7 @@ export const ListTable = <RecordType extends { id: string | number }>({
   return (
     <section
       className={cx(
-        "uu-scope overflow-hidden rounded-sm border border-secondary bg-primary",
+        "uu-scope overflow-hidden rounded-panel border border-secondary bg-primary",
         className,
       )}
     >
@@ -307,7 +307,7 @@ export const ListPagination = ({
         <Pagination.PrevTrigger ariaLabel={previousLabel} asChild>
           <Button
             color="secondary"
-            size="sm"
+            size="md"
             iconLeading={ChevronLeft}
             className={cx(!hasPreviousPage && "cursor-not-allowed")}
           />
@@ -331,7 +331,7 @@ export const ListPagination = ({
                         aria-current={aria["aria-current"]}
                         aria-label={aria["aria-label"]}
                         className={cx(
-                          "flex size-8 items-center justify-center rounded-lg text-[length:var(--fs-body)] font-medium tabular-nums text-tertiary outline-focus-ring transition-colors hover:bg-secondary hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2",
+                          "flex size-10 items-center justify-center rounded-lg text-[length:var(--fs-body)] font-medium tabular-nums text-tertiary outline-focus-ring transition-colors hover:bg-secondary hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2",
                           isSelected && "bg-secondary font-semibold text-primary",
                         )}
                       >
@@ -342,7 +342,7 @@ export const ListPagination = ({
                 ) : (
                   <Pagination.Ellipsis
                     key={item.key}
-                    className="flex size-8 items-center justify-center text-tertiary"
+                    className="flex size-10 items-center justify-center text-tertiary"
                   />
                 ),
               )}
@@ -353,7 +353,7 @@ export const ListPagination = ({
         <Pagination.NextTrigger ariaLabel={nextLabel} asChild>
           <Button
             color="secondary"
-            size="sm"
+            size="md"
             iconLeading={ChevronRight}
             className={cx(!hasNextPage && "cursor-not-allowed")}
           />

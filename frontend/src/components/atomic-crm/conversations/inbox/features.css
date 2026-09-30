@@ -773,7 +773,7 @@
   text-wrap: pretty;
 }
 
-@media (min-width: 761px) {
+@media (min-width: 768px) {
   .inbox-bg-container .settings-workspace-content {
     padding: 18px 20px 36px;
   }

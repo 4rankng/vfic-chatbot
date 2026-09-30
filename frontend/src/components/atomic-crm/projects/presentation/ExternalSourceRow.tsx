@@ -50,15 +50,20 @@ export const ExternalSourceRow = ({
   onRemove,
 }: Props) => {
   const autoDisabled = row.last_status === "FAILED" && !row.auto_sync_enabled;
+  // The name column truncates with an ellipsis, so the full value must stay
+  // reachable for pointer and screen-reader users alike (the URL line below
+  // does the same).
+  const name =
+    "category_key" in row && row.category_key
+      ? row.category_key
+      : `gid=${row.sheet_gid}`;
 
   return (
     <div className="project-external-source-row">
       <div className="project-external-source-identity">
         <div className="project-external-source-heading">
-          <p className="project-external-source-name">
-            {"category_key" in row && row.category_key
-              ? row.category_key
-              : `gid=${row.sheet_gid}`}
+          <p className="project-external-source-name" title={name}>
+            {name}
           </p>
         </div>
         <p className="project-external-source-url" title={row.sheet_url}>

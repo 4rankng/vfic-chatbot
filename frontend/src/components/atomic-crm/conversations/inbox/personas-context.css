@@ -206,5 +206,5 @@
   min-height: 30px;
   border-radius: 8px;
   font-size: var(--fs-meta);
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
 }

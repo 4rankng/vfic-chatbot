@@ -1,16 +1,17 @@
 .settings-workspace-content {
-  --settings-control-height: 38px;
-  --settings-action-height: 36px;
-  --settings-touch-target: 44px;
+  /* One desktop tier for both the field and the action that pairs with it, on
+     the console's control scale: 40px is `--crm-control-height-md`, the step
+     `inbox/features.css` already declares for this console's group actions and
+     `users/users.css` for the directory's create button, so the three sheets
+     cannot drift apart again. The touch tier aliases the same scale. */
+  --settings-control-height: var(--crm-control-height-md);
+  --settings-action-height: var(--crm-control-height-md);
+  --settings-touch-target: var(--crm-control-height-touch);
   --settings-mobile-row-height: 48px;
-  --settings-page-title-size: 22px;
-  --settings-section-title-size: 16px;
-  --settings-space-1: 4px;
   --settings-space-2: 8px;
   --settings-space-3: 12px;
   --settings-space-4: 16px;
   --settings-space-5: 20px;
-  --settings-space-6: 24px;
   --settings-card-radius: 12px;
   --settings-accent-border: color-mix(
     in srgb,
@@ -19,18 +20,13 @@
   );
 }
 
-.settings-header-actions {
-  display: grid;
-  justify-items: end;
-  gap: 0.35rem;
-}
-.settings-save-status {
-  max-width: 20rem;
-  margin: 0;
-  color: var(--muted-foreground);
-  font-size: var(--fs-meta);
-  line-height: var(--lh-snug);
-  text-align: right;
+/* The console's own field boundary. Untitled UI draws an input's edge with a
+   ring — a box-shadow — and the flat-surface contract (`src/flat-surfaces.css`)
+   suppresses every box-shadow inside `#root`, so a field with no border of its
+   own renders with no edge at all. The shell therefore carries the same 1px
+   `--settings-border` its sibling icon actions and read-only value box use. */
+.settings-workspace-content .settings-input {
+  border: 1px solid var(--settings-border);
 }
 
 /* The group's configuration counter is a Untitled UI badge now, so its colour
@@ -103,9 +99,12 @@
   color: var(--success);
 }
 
+/* One desktop action tier, the same 40px `inbox/features.css` declares for the
+   same control inside a group card — no `!important` is needed to hold a value
+   both sheets already agree on. */
 .settings-workspace-content .settings-test-button {
-  min-height: var(--settings-action-height) !important;
-  height: var(--settings-action-height) !important;
+  min-height: var(--settings-action-height);
+  height: var(--settings-action-height);
   border-radius: 8px;
   padding-inline: var(--settings-space-3);
 }
@@ -153,8 +152,8 @@
 
 .settings-embedded-resource [data-slot="button"],
 .settings-embedded-resource .persona-studio-command {
-  min-height: var(--settings-action-height) !important;
-  height: var(--settings-action-height) !important;
+  min-height: var(--settings-action-height);
+  height: var(--settings-action-height);
 }
 
 .settings-advanced {
@@ -166,13 +165,6 @@
 
 .settings-advanced-summary {
   padding-inline: 0 32px;
-}
-
-.settings-page-list li {
-  border-bottom: 1px solid var(--settings-border);
-  border-radius: 0;
-  background: transparent;
-  padding: 10px 0;
 }
 
 /* Settings lives inside the global recruiter shell, so it must not recreate
@@ -209,25 +201,14 @@
 }
 
 @media (max-width: 767px) {
-  .settings-header-actions {
-    width: 100%;
-    justify-items: stretch;
-  }
-  .settings-save-status {
-    max-width: none;
-    text-align: left;
-  }
-}
-
-@media (max-width: 767px) {
   .settings-mobile-topbar {
     position: sticky;
     top: 0;
     z-index: 20;
-    margin: -14px -14px 8px;
+    margin: -12px -12px 8px;
     border-bottom: 1px solid var(--settings-border);
     background: color-mix(in srgb, var(--settings-canvas) 94%, transparent);
-    padding: calc(7px + env(safe-area-inset-top)) 14px 7px;
+    padding: calc(6px + env(safe-area-inset-top)) 12px 6px;
     backdrop-filter: blur(12px);
   }
 
@@ -271,7 +252,7 @@
   .settings-mobile-drawer-label {
     color: var(--ink-muted);
     font-size: var(--fs-caption);
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     letter-spacing: 0;
     line-height: 1.2;
     text-transform: none;
@@ -286,7 +267,7 @@
   .settings-mobile-drawer-current {
     margin-top: 0;
     font-size: var(--fs-body-sm);
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     line-height: 1.2;
   }
 
@@ -311,7 +292,7 @@
   .settings-mobile-drawer-title {
     color: var(--ink);
     font-size: var(--crm-fs-section-title);
-    font-weight: 800;
+    font-weight: var(--fw-bold);
   }
 
   .settings-mobile-drawer-description {
@@ -354,16 +335,6 @@
     padding: 12px 12px calc(88px + env(safe-area-inset-bottom));
   }
 
-  .settings-mobile-topbar {
-    margin: -12px -12px 8px;
-    padding: calc(6px + env(safe-area-inset-top)) 12px 6px;
-  }
-
-  .settings-mobile-drawer-trigger {
-    min-height: 44px;
-    border-radius: 9px;
-  }
-
   .settings-command-header {
     min-height: 0;
     padding: 0;
@@ -376,10 +347,6 @@
     gap: 0;
   }
 
-  .settings-command-header .ops-command-mark {
-    display: none;
-  }
-
   .settings-command-header .ops-kicker {
     font-size: var(--fs-caption);
     letter-spacing: 0.06em;
@@ -387,7 +354,7 @@
 
   .settings-command-header h1 {
     font-size: var(--fs-page-title);
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     line-height: 1.2;
   }
 
@@ -395,7 +362,7 @@
     max-width: 56ch;
     margin-top: 3px;
     font-size: var(--fs-body-sm);
-    font-weight: 400;
+    font-weight: var(--fw-regular);
     line-height: 18px;
   }
 
@@ -411,30 +378,25 @@
     gap: 10px;
   }
 
+  /* The disclosure row reserves the chevron's lane. daisyUI paints the arrow
+     as an absolutely positioned `::after` at `inset-inline-end: 1.4rem` and
+     `.5rem` wide — 22.4-30.4px from the right edge — so an empty grid track
+     could never keep the group meta clear of it. The 2rem inline-end padding
+     holds the lane the arrow actually occupies; `padding: 0` above keeps the
+     other three sides at zero rather than re-inheriting `<details>`'s 1rem. */
   .settings-mobile-group-summary {
     min-height: var(--settings-mobile-row-height);
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 20px;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
     cursor: pointer;
     list-style: none;
     padding: 0;
+    padding-inline-end: 2rem;
   }
 
   .settings-mobile-group-summary::-webkit-details-marker {
     display: none;
-  }
-
-  .settings-mobile-group-summary > svg {
-    width: 16px;
-    height: 16px;
-    margin-right: 12px;
-    color: var(--ink-muted);
-    transition: transform 180ms ease;
-  }
-
-  .settings-mobile-group[open] .settings-mobile-group-summary > svg {
-    transform: rotate(180deg);
   }
 
   .settings-mobile-group .settings-group-header {
@@ -491,7 +453,6 @@
     width: 36px;
     min-width: 36px;
     height: 36px;
-    min-height: 36px !important;
     border: 1px solid var(--settings-border);
     border-radius: 8px;
   }
@@ -516,8 +477,8 @@
   .settings-workspace-content .settings-group .settings-test-button {
     position: relative;
     width: auto;
-    min-height: var(--settings-touch-target) !important;
-    height: var(--settings-touch-target) !important;
+    min-height: var(--settings-touch-target);
+    height: var(--settings-touch-target);
     margin-block: 0;
     border-radius: 8px;
     padding-inline: 14px;
@@ -526,17 +487,12 @@
 
   .settings-embedded-resource [data-slot="button"],
   .settings-embedded-resource .persona-studio-command {
-    min-height: var(--settings-touch-target) !important;
-    height: var(--settings-touch-target) !important;
+    min-height: var(--settings-touch-target);
+    height: var(--settings-touch-target);
   }
 
   .settings-embedded-resource .persona-studio-command input {
     font-size: 16px;
-  }
-
-  .settings-embedded-users .user-directory-toolbar h2 {
-    font-size: var(--settings-section-title-size);
-    line-height: 1.25;
   }
 
   .settings-embedded-users .user-directory-create {
@@ -584,7 +540,6 @@
     width: 44px;
     min-width: 44px;
     height: 44px;
-    min-height: 44px !important;
   }
 
   .workspace-frame-content
@@ -594,12 +549,6 @@
     .settings-workspace-content
     .settings-copy-app-id::after {
     content: none;
-  }
-
-  .settings-workspace-content .settings-group .settings-test-button {
-    min-height: 44px !important;
-    height: 44px !important;
-    margin-block: 0;
   }
 
   .settings-workspace-content .settings-group .settings-test-button::after {
@@ -798,9 +747,14 @@
   width: 100%;
 }
 
+/* The settings console's hint role, declared in full here because this sheet
+   is the one that wins the cascade for it: `inbox/features.css` declares the
+   same class at the caption step, so leaving the weight out of this rule is
+   what made the rendered 13px/600 a combination neither sheet stated. */
 .settings-field-hint {
-  color: var(--ink-muted, #64748b);
+  color: var(--ink-muted);
   font-size: var(--fs-body-sm);
+  font-weight: var(--fw-semibold);
 }
 
 @media (max-width: 767px) {
@@ -949,10 +903,16 @@
     padding: 14px var(--settings-space-4) var(--settings-space-4);
   }
 
-  .settings-group .settings-input,
-  .settings-messenger-credentials-grid .settings-input {
+  /* The height pair lives once, in the unconditional rule above; the desktop
+     tier only adds the larger 14px value type. The Messenger credentials grid
+     is listed separately so it does not restate that pair. */
+  .settings-group .settings-input {
     min-height: var(--settings-control-height);
     height: var(--settings-control-height);
+    font-size: var(--fs-body);
+  }
+
+  .settings-messenger-credentials-grid .settings-input {
     font-size: var(--fs-body);
   }
 
@@ -1266,7 +1226,7 @@
 
 .settings-llm-chain-label {
   font-size: var(--fs-caption);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ink-muted);
@@ -1282,8 +1242,8 @@
   border-radius: 999px;
   background: var(--settings-elevated);
   color: var(--ink);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-semibold);
 }
 
 /* The rank rides inside the pill as a filled counter. */
@@ -1295,9 +1255,9 @@
   border-radius: 999px;
   background: var(--workspace-surface-muted);
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: var(--fs-badge);
   font-style: normal;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
 }
 
 .settings-llm-chain-item.is-default {
@@ -1313,12 +1273,12 @@
 
 .settings-llm-chain-arrow {
   color: var(--ink-faint);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 
 .settings-llm-chain-off,
 .settings-llm-chain-empty {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--ink-muted);
 }
 
@@ -1344,8 +1304,8 @@
   border-radius: 9px;
   background: var(--workspace-surface-muted);
   color: var(--ink-muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-bold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1360,7 +1320,9 @@
   color: var(--ink-faint);
 }
 
-/* Reorder controls: quiet squares in the header meta, accenting on hover. */
+/* Reorder controls: quiet squares in the header meta, accenting on hover. The
+   box is 36px, not the icon's optical size, so the failover chain's only
+   reorder affordance is a real hit target rather than a 26px stamp. */
 .settings-llm-moves {
   display: inline-flex;
   align-items: center;
@@ -1371,8 +1333,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 7px;
@@ -1423,8 +1385,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-semibold);
   color: var(--ink);
   cursor: pointer;
 }
@@ -1439,11 +1401,11 @@
   opacity: 0.5;
 }
 
-/* Read-only model line: same rhythm as an input row, without the affordance. */
+/* Read-only model line: same rhythm as an input row, without the affordance.
+   The size and weight come from the shared label rule above, which outranks
+   this selector; this block owns only the line box. */
 .settings-llm-field-label {
   color: var(--ink);
-  font-size: var(--crm-fs-eyebrow);
-  font-weight: var(--chat-fw-semibold);
   line-height: var(--crm-lh-title);
 }
 
@@ -1451,7 +1413,7 @@
   flex: 0 0 auto;
   color: var(--ink-faint);
   font-size: var(--fs-caption);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .settings-llm-readonly-value {
@@ -1482,7 +1444,7 @@
 }
 
 .settings-llm-testline {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--ink-muted);
   min-width: 0;
   overflow: hidden;
@@ -1516,13 +1478,13 @@
   align-items: center;
   gap: 7px;
   margin-right: auto;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--ink-muted);
 }
 
 .settings-llm-footer.is-dirty .settings-llm-footer-note {
   color: var(--settings-accent-strong);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .settings-llm-footer.is-dirty .settings-llm-footer-note::before {
@@ -1678,7 +1640,6 @@
     width: var(--settings-control-height);
     min-width: var(--settings-control-height);
     height: var(--settings-control-height);
-    min-height: var(--settings-control-height) !important;
     border: 1px solid var(--settings-border);
     border-radius: 8px;
     background: var(--settings-elevated);

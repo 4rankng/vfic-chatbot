@@ -1,6 +1,8 @@
 /* Central typography contract.
-   This file is imported last so shared roles stay consistent across dashboard,
-   settings, profile, knowledge, projects, personas, and chat surfaces. */
+   Import order in `inbox.css`: this file is loaded after the feature sheets but
+   before the Untitled UI conversation skin (`untitledui-conversations.css`, the
+   last import). Both must therefore state the shared `--fs-*` / `--fw-*` roles
+   instead of raw px, so the cascade position cannot decide the contract. */
 
 :where(
   .inbox-bg-container,

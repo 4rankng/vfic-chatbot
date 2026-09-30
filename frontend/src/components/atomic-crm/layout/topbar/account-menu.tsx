@@ -53,9 +53,9 @@ export const AccountMenu = ({ variant = "topbar" }: AccountMenuProps) => {
     variant === "sidebar" ? (
       <Button
         color="tertiary"
-        size="sm"
         aria-label="Mở menu tài khoản"
         className="w-full justify-start"
+        size="md"
       >
         <span className="flex min-w-0 items-center gap-3">
           <Avatar
@@ -77,9 +77,9 @@ export const AccountMenu = ({ variant = "topbar" }: AccountMenuProps) => {
     ) : (
       <Button
         color="tertiary"
-        size="sm"
         aria-label="Mở menu tài khoản"
         className="rounded-lg"
+        size="md"
       >
         <span className="flex items-center gap-2">
           <Avatar

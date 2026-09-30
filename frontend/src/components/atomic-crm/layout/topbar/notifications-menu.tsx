@@ -41,7 +41,7 @@ export const NotificationsMenu = ({ count }: NotificationsMenuProps) => {
     <DialogTrigger isOpen={open} onOpenChange={setOpen}>
       <Button
         color="tertiary"
-        size="sm"
+        size="md"
         iconLeading={Bell}
         aria-label={triggerLabel}
         className="rounded-lg"

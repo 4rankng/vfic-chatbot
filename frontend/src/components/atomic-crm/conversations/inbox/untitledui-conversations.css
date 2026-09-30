@@ -140,29 +140,21 @@
 
 .inbox-bg-container .workspace-rail-kicker {
   color: var(--uu-inbox-brand);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: 700;
   letter-spacing: 0.1em;
 }
 
 .inbox-bg-container .workspace-heading {
   color: var(--uu-inbox-ink);
-  font-size: 16px;
+  font-size: var(--fs-section-title);
   font-weight: 700;
   letter-spacing: -0.015em;
 }
 
-.inbox-bg-container .workspace-conversation-count {
-  height: 24px;
-  min-width: 28px;
-  border-color: var(--uu-inbox-brand-line);
-  background: var(--uu-inbox-brand-soft);
-  color: var(--uu-inbox-brand-hover);
-}
-
 .inbox-bg-container .channel-adapter-options {
   gap: 4px;
-  padding: 3px;
+  padding: 2px;
   border: 1px solid var(--uu-inbox-line);
   border-radius: 10px;
   background: var(--uu-inbox-surface-subtle);
@@ -207,12 +199,13 @@
 .inbox-bg-container .workspace-rail .search input {
   min-height: 40px;
   height: 40px;
+  padding-right: 18px;
   padding-left: 38px;
   border-color: var(--uu-inbox-line-strong);
   border-radius: 10px;
   background: var(--uu-inbox-surface);
   color: var(--uu-inbox-ink);
-  font-size: 13px;
+  font-size: var(--fs-input);
   box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
 }
 
@@ -299,12 +292,12 @@
 
 .inbox-bg-container .conv-name {
   color: var(--uu-inbox-ink);
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
   letter-spacing: -0.006em;
 }
 
 .inbox-bg-container .conv-time {
-  color: var(--uu-inbox-faint);
+  color: var(--uu-inbox-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -319,7 +312,7 @@
 .inbox-bg-container .mini-chip {
   min-height: 22px;
   border-radius: 999px;
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
 }
 
 .inbox-bg-container .mini-chip.priority-hot,
@@ -351,14 +344,14 @@
 
 .inbox-bg-container .person-name {
   color: var(--uu-inbox-ink);
-  font-size: 15px;
+  font-size: var(--fs-subsection);
   font-weight: 700;
   letter-spacing: -0.012em;
 }
 
 .inbox-bg-container .person-subtitle {
   color: var(--uu-inbox-muted);
-  font-size: 12px;
+  font-size: var(--fs-helper);
 }
 
 .inbox-bg-container .icon-btn,
@@ -469,7 +462,7 @@
 .inbox-bg-container .bubble-meta-inline {
   gap: 5px;
   margin-left: 8px;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-variant-numeric: tabular-nums;
 }
 
@@ -560,7 +553,7 @@
 /* Candidate context: open sections separated by rhythm and rules. */
 .inbox-bg-container .profile-header {
   min-height: 72px;
-  height: 72px;
+  height: auto;
   border-color: var(--uu-inbox-line);
   background: rgba(255, 255, 255, 0.96);
 }
@@ -614,8 +607,7 @@
   letter-spacing: 0.07em;
 }
 
-.inbox-bg-container .candidate-progress-score,
-.inbox-bg-container .completion-pill {
+.inbox-bg-container .candidate-progress-score {
   border-color: var(--uu-inbox-brand-line);
   background: var(--uu-inbox-brand-soft);
   color: var(--uu-inbox-brand-hover);
@@ -641,7 +633,7 @@
 
 .inbox-bg-container .section-head h3 {
   color: var(--uu-inbox-ink);
-  font-size: 14px;
+  font-size: var(--fs-body);
   letter-spacing: -0.008em;
 }
 
@@ -686,13 +678,13 @@
 
 .inbox-bg-container .candidate-info-label {
   color: var(--uu-inbox-muted);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 600;
 }
 
 .inbox-bg-container .candidate-info-value {
   color: var(--uu-inbox-muted);
-  font-size: 12px;
+  font-size: var(--fs-helper);
   font-weight: 500;
 }
 
@@ -806,15 +798,20 @@
     flex-basis: 40px;
   }
 
+  /* The tile is capped at 40px, so the icon must fit inside it — the desktop
+     pair is 30px in a 34px tile. */
   .inbox-bg-container .channel-adapter-option img {
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
   }
 
+  /* index.css puts a `min-height: 44px !important` touch floor on every
+     `.workspace-frame-content` input at phone widths. The owner capped every
+     directory-header control at 40px, so this rule has to out-rank that floor;
+     the `!important` is load-bearing, not redundant. */
   .inbox-bg-container .workspace-rail .search input {
     min-height: 40px !important;
     height: 40px;
-    font-size: 16px;
   }
 
   .inbox-bg-container .conversations {
@@ -844,10 +841,6 @@
 
   .inbox-bg-container .bubble {
     max-width: min(86%, calc(100% - 38px));
-  }
-
-  .inbox-bg-container .message-text {
-    font-size: 14px;
   }
 
   .inbox-bg-container .profile-scroll {
