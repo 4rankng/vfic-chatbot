@@ -348,11 +348,11 @@ sequenceDiagram
     WK->>Z: typing heartbeat (every 4s, bot channel)
 
     rect rgb(235, 242, 255)
-    Note over WK,DB: ── vacancy authority split ──
-    alt generic request for all current jobs
-        WK->>WK: bypass FAQ/direct-context and route to required list_active_jobs(top_k=10)
-        WK->>DB: load complete ACTIVE Job catalog
-        WK->>WK: return deterministic safe list from tool evidence
+    Note over WK,DB: ── project matching authority ──
+    alt generic request for current jobs
+        WK->>WK: bypass FAQ/direct-context and route to required list_active_projects
+        WK->>DB: load the complete active project catalog
+        WK->>WK: return ranked project evidence + presentation contract
     else specific company/location/role question and evidence block supports the requested role
         WK->>WK: direct_context_evidence_answer(question, answer)
         WK->>WK: return verbatim Question/Answer block
@@ -379,7 +379,7 @@ sequenceDiagram
         WK->>DB: lead.context(chat_id) → profile + probing question
         WK->>WK: build_agent_user_text (private history + lead + route hint)
         Note over WK,ZS: prefetch tool for high-confidence routes<br/>(search_knowledge / search_bus_timetable)
-        WK->>WK: agent.agent() LLM loop (max 6 iterations)<br/>Redis concurrency semaphore,<br/>tool dispatch = WHERE RAG RETRIEVAL HAPPENS<br/>(search_knowledge, recommend_jobs, get_product_features...)
+        WK->>WK: agent.agent() LLM loop (max 6 iterations)<br/>Redis concurrency semaphore,<br/>tool dispatch = WHERE RAG RETRIEVAL HAPPENS<br/>(search_knowledge, list_active_projects, get_product_features...)
         WK->>WK: grounding.validate_entity_grounding + id strip — remove hallucinated job IDs and unsupported entity claims<br/>+ contact guard → one model rewrite round, else suppress
     end
     end
@@ -562,7 +562,7 @@ honestly as such.
 
 ```
 load_conversation_state -> typing -> direct_context?
-  generic vacancy listing -> required list_active_jobs -> complete ACTIVE Job catalog
+  generic vacancy listing -> required list_active_projects -> complete ranked active project catalog
   direct_context (available) -> evidence block match -> verbatim Question/Answer block
   direct_context (available) -> no evidence block match -> one grounded LLM call over full assigned KB
   direct_context (not available) -> fast lane / FAQ bypass / routed agent
@@ -579,20 +579,24 @@ load_conversation_state -> typing -> direct_context?
 - **Dependencies:** injected via `GraphDeps` (`graph/types.py:32`), wired by
   `build_deps(db)` (`graph/factories.py:65`) which resolves admin-managed
   MiniMax/OpenRouter/Zalo credentials from `integration_settings`.
-- **Vacancy authority:** generic requests such as “đang tuyển gì?” bypass FAQ
-  and focused direct-context resolution, so vacancy turns go straight to
-  required `list_active_jobs(top_k=10)` with no filters. That tool returns a
-  bounded catalog built from structured ACTIVE `Job` rows plus active
-  DIRECT_CONTEXT project discovery cards, but only when `roles` or `key_roles`
-  are explicit on the card. Structured projects are de-duplicated against the
-  job rows, the two sources are interleaved in the output, and the discovery
-  card projection intentionally leaves salary, shifts, benefits, and follow-up
-  details to the full project page. Specific company, location, or role
-  questions use the published recruitment KB as the answer source. In
-  direct-context mode, the system first tries to return a verbatim `Question:`
-  / `Answer:` block from the assigned KB; a canonical answer is only selected
-  when any explicit requested role is supported by that block. Otherwise it
-  falls through to the direct-context LLM call over that full KB. For
+- **Project matching authority:** generic requests such as “đang tuyển gì?” bypass
+  FAQ and focused direct-context resolution, so work-seeking turns go straight to
+  required `list_active_projects` with the criteria the candidate stated
+  (`job_scope`/`location`/`salary_min_vnd`/`company`/`sort_by`; the model composes
+  the arguments — nothing forces `top_k` or caps the list). The tool returns EVERY
+  active project, ranked by fit against the stated preferences and annotated with
+  per-dimension fit notes; salary, location, and job scope are project features
+  the candidate must be happy with, never the answer unit. Its presentation
+  contract owns the probe-then-introduce behavior: when preferences are missing
+  and the candidate did not ask to see everything, the agent asks one compact
+  question first; once preferences are stated (or “xem tất cả”), it introduces the
+  ranked projects. The discovery card projection intentionally leaves salary,
+  shifts, benefits, and follow-up details to the full project page. Specific
+  company, location, or role questions use the published recruitment KB as the
+  answer source. In direct-context mode, the system first tries to return a
+  verbatim `Question:` / `Answer:` block from the assigned KB; a canonical answer
+  is only selected when any explicit requested role is supported by that block.
+  Otherwise it falls through to the direct-context LLM call over that full KB. For
   vacancy-thread factual follow-ups, the runner combines the prior vacancy query
   with the current question until a newer named topic appears, so salary,
   benefits, and other details stay scoped to the same company evidence.
@@ -607,9 +611,10 @@ load_conversation_state -> typing -> direct_context?
   An empty catalog does not block a real answer from published KB evidence for a
   specific vacancy question.
 - **Manifest-scoped runtime handoff:** when a manifest policy is active, the
-  runner preserves the same scoped `allowed_tools`, `lookup_query`, and
-  vacancy-only `required_tool_args` (`{"top_k": 10}` for `list_active_jobs`)
-  while filtering the allowed tools against the manifest's tool registry.
+  runner preserves the same scoped `allowed_tools`, `lookup_query`, and the
+  vacancy `required_tool` (`list_active_projects`, with `required_tool_args`
+  left `None` so the model composes the criteria) while filtering the allowed
+  tools against the manifest's tool registry.
   This keeps the runtime contract identical between the legacy recruitment path
   and the manifest-composed path.
 - **Tools** (`graph/tools.py`, `graph/schemas.py`): `TOOL_SCHEMAS` +
@@ -907,9 +912,9 @@ be shared by another Project.
   that Project slug; model-supplied cross-Project arguments are ignored.
 - The cached agent preamble always carries a compact index of every active Project
   (name, slug, aliases, discovery summary, roles, location, and highlights). Current-hiring
-  questions never rely on that index or semantic search as vacancy authority:
+  questions never rely on that index or semantic search as matching authority:
   generic lists/counts, named factories, named roles, and terse follow-ups in an
-  active vacancy thread all require the complete `list_active_jobs(top_k=10)`
+  active vacancy thread all require the complete `list_active_projects`
   catalog for that turn. Full Project knowledge is loaded only for follow-up details.
 - Legacy and category-derived Jobs/routes coexist physically and every candidate/recruiter
   consumer gates them with `category_authority_started`. Category-derived Jobs use presence as availability. Manual status is not an
@@ -932,7 +937,7 @@ be shared by another Project.
   Focused FAQ-detail turns may also prefetch `get_product_features` alongside
   `search_knowledge` when an isolated retrieval session factory is available;
   EXPLORE turns remain RAG-only.
-- **Tools exposed to agent:** `list_active_jobs`, `search_knowledge`,
+- **Tools exposed to agent:** `list_active_projects`, `search_knowledge`,
   `search_user_memory`, `search_bus_timetable`, `call_project_api` (see §14).
 - **Benchmarks:** `scripts/benchmark_rag.py` (golden-case scoring) and
   `scripts/capture_bus_timetable_golden.py`.

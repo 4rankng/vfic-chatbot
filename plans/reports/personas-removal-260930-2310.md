@@ -49,25 +49,38 @@ Updated to the new five-resource runtime:
 - NEW `backend/tests/test_persona_constant.py` — fallback == constant, seed
   default row == constant, preset row distinct.
 
-### Section 7 ("Lưu ý thêm") — decision record
+### Section 7 ("Lưu ý thêm") — CONFIRMED from the authoritative export
 
-The task paste carried only S1–S6 (7th form slot = S5 per the brief). The
-working tree held an UNCOMMITTED rewrite of `persona.md` (by a concurrent
-session/owner) that added a real §7: real-time grounding for schedules, bus
-timetables and deadlines; listen for worker circumstances (immediate start,
-lodging/KTX, overtime); out-of-scope/complex cases → hotline 1800 7228. The
-concurrent party's `test_persona.py` pins `### 7. Lưu ý thêm` as required. I
-included that §7 text VERBATIM in the constant so nothing is lost and their pin
-passes. S1–S6 are the pasted text unchanged. If the owner wants §7 dropped, it
-is one block in `constant.py` plus the `test_persona.py` topics list.
+Team-lead forwarded the owner's authoritative export
+(`/Users/dev/Downloads/agent.md`, 8395 bytes). All seven sections are now
+verified BYTE-FOR-BYTE against it: a parser extracts each section's "Đã viết"
+value from the export and compares it to the constant's parsed sections —
+`ALL 7 SECTIONS VERBATIM-MATCH`. §7 stays, verbatim. Two fidelity details from
+the export that the earlier paste had flattened: §1's business-info block
+carries real newlines (`Thông tin doanh nghiệp:` and `Tên đầy đủ:` each end a
+line) — the constant matches; §4's export entry places its value above a bare
+"Đã viết" marker with nothing after — the authored text is the same
+"TUYỆT ĐỐI KHÔNG BỊA ĐẶT (NO HALLUCINATION)…" line the constant carries.
+Constant headings keep the repo's numbered editor convention
+(`### 1. Vai trò của tôi` … `### 7. Lưu ý thêm`), which is what the concurrent
+party's test pins and `composePersonaMarkdown`/`parsePersonaMarkdown` require.
 
-### Collision with a concurrent session
+### Collision with a concurrent session — division CONFIRMED by team-lead
 
-While I executed, another session live-edited `test_persona.py`,
-`test_persona_voice.py` (rewrote both to pin the canonical content) and bumped
-`_PROMPT_TEXT_REVISION`. Deconfliction sent to team-lead mid-task; split: they
-keep the two test files, I keep constant/wiring/frontend. I did not edit those
-two files. `git log`/commit-time attribution should keep this in mind.
+The concurrent session keeps `backend/tests/test_persona.py`,
+`backend/tests/test_persona_voice.py` and the graph-side files (context.py,
+config.py, vector.py, clients.py, lanes.py — I made no further edits there).
+I keep `constant.py`, `prompts.py`, `seed/personas.py`, the persona.md
+deletion, `test_persona_constant.py`, and the entire frontend removal.
+Acceptance gate (their pins + my equivalence tests against the constant):
+`cd backend && .venv/bin/python -m pytest tests/test_persona.py
+tests/test_persona_voice.py tests/test_persona_constant.py -p no:randomly -q`
+→ **31 passed**.
+
+`backend/app/graph/context.py` carries 4 docstring lines from me ("persona.md"
+→ "code constant" wording, consistent with prompts.py now using the constant)
+plus the concurrent party's `_PROMPT_TEXT_REVISION = "3"` bump — the file is
+theirs to commit; the controller should let those lines ride their pathspec.
 
 ## Deliberately left (follow-ups, not defects)
 
@@ -97,11 +110,14 @@ two files. `git log`/commit-time attribution should keep this in mind.
 
 ## Verification
 
-- Backend: `pytest tests/test_persona_constant.py tests/test_persona.py
-  tests/test_persona_voice.py tests/test_persona_resolver_convergence.py -p
-  no:randomly` → 36 passed; `test_architecture_boundaries.py` +
-  `test_runtime_surface_inventory.py` → 23 passed; ruff check + format clean on
-  touched files.
+- Acceptance gate: `cd backend && .venv/bin/python -m pytest
+  tests/test_persona.py tests/test_persona_voice.py
+  tests/test_persona_constant.py -p no:randomly -q` → **31 passed**.
+- Export fidelity: scripted byte-for-byte comparison of all 7 constant sections
+  against `/Users/dev/Downloads/agent.md` "Đã viết" values → all match.
+- Backend: `test_persona_resolver_convergence.py` (with the gate files) → 36
+  passed; `test_architecture_boundaries.py` + `test_runtime_surface_inventory.py`
+  → 23 passed; ruff check + format clean on touched files.
 - Frontend: `typecheck` clean; `lint` 0 errors (36 pre-existing warnings, none
   in touched files); `prettier --check` clean after one fix;
   `registry:gen` removal-only; `registry:check` pass.
@@ -110,6 +126,23 @@ two files. `git log`/commit-time attribution should keep this in mind.
   canAccess, featureLayout, SettingsConsolePage.navigation, css-scoping → all
   pass (27 + 16 + 2 + 1).
 - `node scripts/check-doc-links.mjs` → 34 paths / 4 make targets resolve.
+
+## Backend files modified (for pathspec-scoped commits)
+
+Mine to commit:
+
+- `backend/app/services/personas/constant.py` (NEW)
+- `backend/app/graph/prompts.py` (rewritten: AGENT_SYSTEM_PROMPT = constant)
+- `backend/app/graph/persona.md` (DELETED)
+- `backend/scripts/seed/personas.py` (default row seeds the constant)
+- `backend/tests/test_persona_constant.py` (NEW)
+
+Shared / not mine to commit:
+
+- `backend/app/services/personas/service.py` — one docstring line (persona.md
+  → code constant); mine, trivially committable with the block above.
+- `backend/app/graph/context.py` — 4 docstring lines mine, revision bump +
+  surrounding graph work belong to the concurrent session; they commit it.
 
 ## Docs updated
 
@@ -120,11 +153,11 @@ tree, CSS-scoping count), `docs/development/code-standards.md` (5 resources),
 `docs/product/codebase-summary.md` (frontend tree + module table rows; the
 backend `services/personas/` mention correctly stays — the service lives on).
 
-Status: DONE_WITH_CONCERNS
+Status: DONE
 Summary: personas page fully removed (frontend five-resource runtime verified)
 and the persona is a backend code constant wired into both the seed and the
-graph fallback, with S1–S6 verbatim plus the tree's §7 preserved.
-Concerns: concurrent session co-edited backend persona tests/revision (split
-agreed, commits must attribute both parties); §7 inclusion is my call pending
-owner confirmation; persona-named CSS in conversations/inbox left for a
-visual-QA pass.
+graph fallback — all seven sections byte-verified against the owner's export
+`/Users/dev/Downloads/agent.md`; acceptance gate 31 passed.
+Concerns: `backend/app/graph/context.py` is a mixed diff (my 4 docstring lines
++ the concurrent session's revision bump and graph work) — they commit it;
+persona-named CSS in conversations/inbox remains a visual-QA follow-up.

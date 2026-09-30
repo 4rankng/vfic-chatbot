@@ -26,7 +26,6 @@ Scope discipline (directive §6)
 Single-flight applies ONLY to non-personalized paths. The caller is responsible
 for deciding what to coalesce:
 - ✓ ``search_knowledge`` (FAQ / detail / contact) — non-personalized
-- ✗ ``recommend_jobs`` — depends on candidate profile
 - ✗ ``search_user_memory`` — per-candidate
 
 The primitive itself is key-agnostic; the scope discipline lives at the call
