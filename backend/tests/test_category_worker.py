@@ -20,7 +20,7 @@ def test_category_enqueue_returns_stable_job_id(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(utils, "enqueue_job", fake_enqueue)
 
     assert category_worker.enqueue_category_revision(revision_id) == "category-job-123"
-    assert captured["queue_name"] == "ingest"
+    assert captured["queue_name"] == "category"
     assert captured["fn"] is category_worker.run_category_revision_job
     assert captured["args"] == (str(revision_id),)
     assert captured["kwargs"]["return_job_id"] is True

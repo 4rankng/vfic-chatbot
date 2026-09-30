@@ -260,6 +260,8 @@ services:
     restart: unless-stopped
 
   # RQ worker: knowledge ingest / reindex / bus rebuild (slow, Drive-bound).
+  # Queue order is priority: `category` revisions are the UI-blocking steps of
+  # the brief-import loop and drain before the multi-minute document ingests.
   worker-ingest:
     logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
@@ -274,7 +276,7 @@ services:
     # SEC-11: no `--url` — rq 2.10 falls back to os.environ["REDIS_URL"] when the
     # flag is absent (rq/cli/helpers.py:388 -> get_redis_from_config), so env_file
     # already supplies the broker and the credential stops appearing in argv.
-    command: ["rq", "worker", "ingest"]
+    command: ["rq", "worker", "category", "ingest"]
     healthcheck:
       # Loop liveness via the RQ worker registry — see worker-chatbot.
       test: ["CMD-SHELL", "python -c \"import os,socket,sys;from rq import Worker;import redis as r;c=r.from_url(os.environ['REDIS_URL'],socket_connect_timeout=3,socket_timeout=3);sys.exit(0 if any(w.hostname==socket.gethostname() for w in Worker.all(connection=c)) else 1)\""]

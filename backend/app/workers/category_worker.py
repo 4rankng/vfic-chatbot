@@ -13,8 +13,11 @@ def enqueue_category_revision(revision_id: uuid.UUID) -> str:
     from app.workers.utils import enqueue_job
 
     receipt_id = f"category-revision-{revision_id}"
+    # Own queue, drained before `ingest`: a category activation is the
+    # UI-blocking step of the brief-import loop (5-15s of work) and must not
+    # sit behind a multi-minute document ingest on the shared queue.
     job_id = enqueue_job(
-        "ingest",
+        "category",
         run_category_revision_job,
         str(revision_id),
         job_timeout=INGEST_JOB_TIMEOUT_SECONDS,

@@ -243,6 +243,7 @@ async def metrics() -> dict:
             "webhook_high",
             "recovery",
             "persistence_low",
+            "category",
             "ingest",
             "followup",
             "maintenance",
