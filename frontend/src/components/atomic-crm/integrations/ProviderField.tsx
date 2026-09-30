@@ -91,9 +91,7 @@ export const ProviderField = ({
           value={form[field.formKey]}
           placeholder={field.placeholder(bundle)}
           wrapperClassName="settings-input uu-scope"
-          onChange={(event) =>
-            onValueChange(field.formKey, event.target.value)
-          }
+          onChange={(event) => onValueChange(field.formKey, event.target.value)}
         />
       </div>
     );

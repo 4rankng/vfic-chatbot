@@ -104,9 +104,7 @@ describe("kit form controls", () => {
       .element(screen.getByRole("button", { name: /Vai trò/ }))
       .toBeVisible();
     await expect
-      .element(
-        screen.getByRole("switch", { name: "Vô hiệu hóa tài khoản" }),
-      )
+      .element(screen.getByRole("switch", { name: "Vô hiệu hóa tài khoản" }))
       .toBeVisible();
     await expect
       .element(screen.getByRole("checkbox", { name: "Nhận thông báo" }))
@@ -120,10 +118,7 @@ describe("kit form controls", () => {
     await screen.getByRole("button", { name: "Lưu" }).click();
 
     await expect
-      .poll(
-        () =>
-          (screen.container.textContent ?? "").split(EMPTY).length - 1,
-      )
+      .poll(() => (screen.container.textContent ?? "").split(EMPTY).length - 1)
       .toBeGreaterThanOrEqual(2);
     expect(onSubmit).not.toHaveBeenCalled();
   });

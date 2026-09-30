@@ -513,7 +513,9 @@ export const FacebookMessengerIntegrationPage = () => {
             </div>
             <span
               title={
-                appIdConfigured ? undefined : "Cấu hình App ID trước khi kết nối"
+                appIdConfigured
+                  ? undefined
+                  : "Cấu hình App ID trước khi kết nối"
               }
             >
               <Button

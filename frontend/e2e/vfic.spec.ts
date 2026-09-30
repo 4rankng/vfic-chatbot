@@ -92,9 +92,7 @@ test.describe("current recruitment workspace baseline", () => {
     expect(
       Number.parseFloat(detailMarkers.searchHeight as string),
     ).toBeLessThanOrEqual(40);
-    expect(Number.parseFloat(detailMarkers.modeIcon.width)).toBeGreaterThan(
-      10,
-    );
+    expect(Number.parseFloat(detailMarkers.modeIcon.width)).toBeGreaterThan(10);
 
     await page.getByRole("button", { name: "Đổi chế độ trả lời" }).click();
     const takeOverResponse = page.waitForResponse(

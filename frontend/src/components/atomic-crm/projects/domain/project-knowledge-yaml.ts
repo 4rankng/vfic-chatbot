@@ -141,7 +141,8 @@ const isTranscriptMarker = (line: string): boolean =>
 
 /** Every "300.000 VNĐ" / "400.000d" / "8 triệu đồng" amount in a line, as
  *  integers. A multiplier ("triệu") applies to the bare number before it. */
-const AMOUNT = /(\d{1,3}(?:\.\d{3})+|\d+)\s*(triệu|tr)?\s*(?:VNĐ|VND|đồng|đ)/giu;
+const AMOUNT =
+  /(\d{1,3}(?:\.\d{3})+|\d+)\s*(triệu|tr)?\s*(?:VNĐ|VND|đồng|đ)/giu;
 
 const vndValues = (line: string): number[] => {
   const values: number[] = [];
@@ -174,9 +175,7 @@ const TIME_RANGE =
   /(\d{1,2})[:h](\d{2})\s*(?:–|—|-|đến|tới|~|to)\s*(?:lúc\s*)?(\d{1,2})[:h](\d{2})/giu;
 
 /** Every start/end clock range in a line. */
-const timeRanges = (
-  line: string,
-): Readonly<{ start: string; end: string }>[] =>
+const timeRanges = (line: string): Readonly<{ start: string; end: string }>[] =>
   [...line.matchAll(TIME_RANGE)].map((match) => ({
     start: toClock(match[1], match[2]),
     end: toClock(match[3], match[4]),
@@ -245,7 +244,8 @@ export const buildJobsYaml = (
     lines.push(`  - id: ${id}`, `    title: ${yamlString(clamp(role, 5000))}`);
     // The project address genuinely covers every role in it, so carrying it
     // across is transcription rather than invention.
-    if (location) lines.push(`    location: ${yamlString(clamp(location, 500))}`);
+    if (location)
+      lines.push(`    location: ${yamlString(clamp(location, 500))}`);
     lines.push("    aliases: []", "    keywords: []");
   });
   return `${lines.join("\n")}\n`;
@@ -290,7 +290,9 @@ const moneyRows = (
     const cadence = cadenceOf(line);
     if (!cadence) return;
     const parenthetical = /\(([^)]+)\)/.exec(value);
-    const conditions = parenthetical ? clamp(parenthetical[1], 2000) : undefined;
+    const conditions = parenthetical
+      ? clamp(parenthetical[1], 2000)
+      : undefined;
     rows.push({
       name: clamp(name, 5000),
       amountVnd: amounts[0],
@@ -487,14 +489,17 @@ export const buildRequirementsYaml = (body: string): string | null => {
       ? [`    ${key}: []`]
       : [
           `    ${key}:`,
-          ...values.map((value) => `      - ${yamlString(clamp(value, itemMax))}`),
+          ...values.map(
+            (value) => `      - ${yamlString(clamp(value, itemMax))}`,
+          ),
         ];
 
   const record: string[] = ["  - id: yeu-cau-ung-vien", "    job_ids: []"];
   if (ageMin !== null) record.push(`    age_min: ${ageMin}`);
   if (ageMax !== null) record.push(`    age_max: ${ageMax}`);
   record.push(genders ? `    genders: [${genders}]` : "    genders: []");
-  if (education) record.push(`    education: ${yamlString(clamp(education, 1000))}`);
+  if (education)
+    record.push(`    education: ${yamlString(clamp(education, 1000))}`);
   if (experience) {
     record.push(`    experience: ${yamlString(clamp(experience, 1000))}`);
   }
@@ -519,7 +524,10 @@ export const buildWorkSchedulesYaml = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
-  const shifts = new Map<string, { name: string; start: string; end: string }>();
+  const shifts = new Map<
+    string,
+    { name: string; start: string; end: string }
+  >();
   const breaks: string[] = [];
   const rotation: string[] = [];
   const overtime: string[] = [];
@@ -585,7 +593,10 @@ export const buildWorkSchedulesYaml = (body: string): string | null => {
     const hasParenBreak = [...line.matchAll(/\(([^)]*)\)/g)].some(
       (paren) => /nghi/.test(fold(paren[1])) && timeRanges(paren[1]).length > 0,
     );
-    if ((label && /nghi/.test(fold(label)) && ranges.length > 0) || hasParenBreak) {
+    if (
+      (label && /nghi/.test(fold(label)) && ranges.length > 0) ||
+      hasParenBreak
+    ) {
       breaks.push(line);
       continue;
     }
@@ -623,7 +634,9 @@ export const buildWorkSchedulesYaml = (body: string): string | null => {
     }
   }
   if (rotation.length > 0) {
-    record.push(`    rotation: ${yamlMultiline(clamp(rotation.join("\n"), 2000))}`);
+    record.push(
+      `    rotation: ${yamlMultiline(clamp(rotation.join("\n"), 2000))}`,
+    );
   }
   if (breaks.length > 0) {
     record.push(
@@ -632,7 +645,9 @@ export const buildWorkSchedulesYaml = (body: string): string | null => {
     );
   }
   if (overtime.length > 0) {
-    record.push(`    overtime: ${yamlMultiline(clamp(overtime.join("\n"), 3000))}`);
+    record.push(
+      `    overtime: ${yamlMultiline(clamp(overtime.join("\n"), 3000))}`,
+    );
   }
   if (notes.length > 0) {
     record.push(`    notes: ${yamlMultiline(clamp(notes.join("\n"), 3000))}`);
@@ -667,7 +682,9 @@ export const buildBenefitsYaml = (body: string): string | null => {
       `    name: ${yamlString(clamp(name, 5000))}`,
     );
     if (description) {
-      records.push(`    description: ${yamlMultiline(clamp(description, 3000))}`);
+      records.push(
+        `    description: ${yamlMultiline(clamp(description, 3000))}`,
+      );
     }
   });
 
@@ -755,7 +772,10 @@ export const buildMealsYaml = (body: string): string | null => {
     const folded = fold(line);
     const perShift = /\b(\d+)\s*(?:suất|bữa)(?:\s*cơm)?\s*ca\b/iu.exec(line);
     if (mealsPerShift === null && perShift) mealsPerShift = Number(perShift[1]);
-    if (allowance === null && /khong an|khong su dung|ho tro|tien an/.test(folded)) {
+    if (
+      allowance === null &&
+      /khong an|khong su dung|ho tro|tien an/.test(folded)
+    ) {
       const amounts = vndValues(line);
       if (amounts.length === 1) allowance = amounts[0];
     }
@@ -773,13 +793,21 @@ export const buildMealsYaml = (body: string): string | null => {
   }
   if (allowance !== null) record.push(`    allowance_vnd: ${allowance}`);
   if (menu.length > 0) {
-    record.push(`    menu_notes: ${yamlMultiline(clamp(menu.join("\n"), 3000))}`);
+    record.push(
+      `    menu_notes: ${yamlMultiline(clamp(menu.join("\n"), 3000))}`,
+    );
   }
   if (notes.length > 0) {
     record.push(`    notes: ${yamlMultiline(clamp(notes.join("\n"), 3000))}`);
   }
 
-  return ['schema_version: "1.0"', "category: meals", "meals:", ...record, ""].join("\n");
+  return [
+    'schema_version: "1.0"',
+    "category: meals",
+    "meals:",
+    ...record,
+    "",
+  ].join("\n");
 };
 
 /** The `transportation` document. `direction` is REQUIRED and describes the
@@ -791,7 +819,8 @@ export const buildTransportationYaml = (body: string): string | null => {
 
   const foldedAll = fold(lines.join("\n"));
   let direction: "to_factory" | "from_factory" | "round_trip" | null = null;
-  if (/dua don|don tra|hai chieu|2 chieu/.test(foldedAll)) direction = "round_trip";
+  if (/dua don|don tra|hai chieu|2 chieu/.test(foldedAll))
+    direction = "round_trip";
   else if (/\bdon\b/.test(foldedAll)) direction = "to_factory";
   else if (/\btra\b/.test(foldedAll)) direction = "from_factory";
   if (direction === null) return null;
@@ -805,7 +834,9 @@ export const buildTransportationYaml = (body: string): string | null => {
     ? 0
     : lines
         .map((line) =>
-          /phi van tai|phi xe|tien xe|gia ve/.test(fold(line)) ? vndValues(line) : [],
+          /phi van tai|phi xe|tien xe|gia ve/.test(fold(line))
+            ? vndValues(line)
+            : [],
         )
         .find((amounts) => amounts.length === 1)?.[0];
 
@@ -813,11 +844,16 @@ export const buildTransportationYaml = (body: string): string | null => {
   for (const line of lines) {
     const numbered = /^điểm\s*(\d+)\s*[:.]\s*(.*)$/iu.exec(line);
     if (numbered && numbered[2]) {
-      stops.push({ order: Number(numbered[1]), name: clamp(numbered[2], 5000) });
+      stops.push({
+        order: Number(numbered[1]),
+        name: clamp(numbered[2], 5000),
+      });
       continue;
     }
     const listed =
-      /(?:tại|gồm|có)\s*(?:các\s*)?(?:\d+\s*)?điểm\s*[:：]\s*(.+)$/iu.exec(line);
+      /(?:tại|gồm|có)\s*(?:các\s*)?(?:\d+\s*)?điểm\s*[:：]\s*(.+)$/iu.exec(
+        line,
+      );
     if (listed && stops.length === 0) {
       listed[1]
         .split(/,\s*|\s+và\s+/)
@@ -832,7 +868,9 @@ export const buildTransportationYaml = (body: string): string | null => {
 
   const stopLine =
     /^(?:điểm\s*\d+\s*[:.])|(?:tại|gồm|có)\s*(?:các\s*)?(?:\d+\s*)?điểm\s*[:：]/iu;
-  const notes = lines.filter((line) => !(stops.length > 0 && stopLine.test(line)));
+  const notes = lines.filter(
+    (line) => !(stops.length > 0 && stopLine.test(line)),
+  );
 
   const record: string[] = [
     "  - id: tuyen-xe-dua-don",
@@ -915,9 +953,13 @@ export const buildInsuranceYaml = (body: string): string | null => {
   }
   record.push(`    notes: ${yamlMultiline(clamp(lines.join("\n"), 3000))}`);
 
-  return ['schema_version: "1.0"', "category: insurance", "insurance:", ...record, ""].join(
-    "\n",
-  );
+  return [
+    'schema_version: "1.0"',
+    "category: insurance",
+    "insurance:",
+    ...record,
+    "",
+  ].join("\n");
 };
 
 /** The `application` document: the process the brief writes (arrow chains and
@@ -961,7 +1003,9 @@ export const buildApplicationYaml = (body: string): string | null => {
       }
       continue;
     }
-    if (/trong ngay|ngay hom sau|bao lau|thoi gian xu ly|di lam ngay/.test(folded)) {
+    if (
+      /trong ngay|ngay hom sau|bao lau|thoi gian xu ly|di lam ngay/.test(folded)
+    ) {
       if (processingTime === null) processingTime = clamp(line, 1000);
       continue;
     }
@@ -987,7 +1031,10 @@ export const buildApplicationYaml = (body: string): string | null => {
   const listYaml = (key: string, values: readonly string[]) =>
     values.length === 0
       ? [`    ${key}: []`]
-      : [`    ${key}:`, ...values.map((value) => `      - ${yamlString(value)}`)];
+      : [
+          `    ${key}:`,
+          ...values.map((value) => `      - ${yamlString(value)}`),
+        ];
 
   const record: string[] = ["  - id: quy-trinh-ung-tuyen", "    job_ids: []"];
   record.push(...listYaml("application_steps", steps));
@@ -1079,7 +1126,10 @@ export const buildContactsYaml = (body: string): string | null => {
       startDraft(value || label);
       continue;
     }
-    if (label && /sdt|so dien thoai|dien thoai|phone|zalo|hotline/.test(folded)) {
+    if (
+      label &&
+      /sdt|so dien thoai|dien thoai|phone|zalo|hotline/.test(folded)
+    ) {
       const draft = current ?? startDraft(pendingName || label);
       takePhone(draft, value);
       continue;
@@ -1116,7 +1166,11 @@ export const buildContactsYaml = (body: string): string | null => {
       // A bare header line: either the office block ("Thông tin văn phòng
       // công ty") or the role of the people below it.
       if (/van phong/.test(folded)) pendingName = clamp(label, 500);
-      else if (/^(can bo|nhan vien|chuyen vien|nguoi phu trach|admin|quan ly)/.test(folded)) {
+      else if (
+        /^(can bo|nhan vien|chuyen vien|nguoi phu trach|admin|quan ly)/.test(
+          folded,
+        )
+      ) {
         pendingRole = clamp(label, 500);
       }
       continue;
@@ -1124,7 +1178,11 @@ export const buildContactsYaml = (body: string): string | null => {
     // Plain prose: an address line under an office header, a phone with no
     // label, anything else — attached to the block it arrived in.
     const draft = current ?? startDraft(pendingName);
-    if (pendingName && !draft.address && /phong|dia chi/.test(fold(pendingName))) {
+    if (
+      pendingName &&
+      !draft.address &&
+      /phong|dia chi/.test(fold(pendingName))
+    ) {
       draft.address = clamp(line, 1000);
       pendingName = "";
       continue;
@@ -1159,7 +1217,8 @@ export const buildContactsYaml = (body: string): string | null => {
     if (draft.phone) records.push(`    phone: "${draft.phone}"`);
     if (draft.zalo) records.push(`    zalo: "${draft.zalo}"`);
     if (draft.email) records.push(`    email: ${yamlString(draft.email)}`);
-    if (draft.address) records.push(`    address: ${yamlString(draft.address)}`);
+    if (draft.address)
+      records.push(`    address: ${yamlString(draft.address)}`);
     if (draft.workingHours) {
       records.push(`    working_hours: ${yamlString(draft.workingHours)}`);
     }
@@ -1170,9 +1229,13 @@ export const buildContactsYaml = (body: string): string | null => {
     }
   });
 
-  return ['schema_version: "1.0"', "category: contacts", "contacts:", ...records, ""].join(
-    "\n",
-  );
+  return [
+    'schema_version: "1.0"',
+    "category: contacts",
+    "contacts:",
+    ...records,
+    "",
+  ].join("\n");
 };
 
 // ── the plan ───────────────────────────────────────────────────────────────
@@ -1203,7 +1266,10 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
     filename: string;
     content: string;
   }[] = [];
-  const push = (key: ProjectKnowledgeCategory, content: string | null): void => {
+  const push = (
+    key: ProjectKnowledgeCategory,
+    content: string | null,
+  ): void => {
     if (content) writes.push({ key, filename: `${key}.yaml`, content });
   };
 
@@ -1229,13 +1295,28 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
   // category is formatted into that category's schema; a builder returning
   // null (no material, or required fields the brief does not state) leaves the
   // category for `needsHuman` below.
-  push("compensation", buildCompensationYaml(brief.categories.compensation ?? ""));
-  push("requirements", buildRequirementsYaml(brief.categories.requirements ?? ""));
-  push("work_schedules", buildWorkSchedulesYaml(brief.categories.work_schedules ?? ""));
+  push(
+    "compensation",
+    buildCompensationYaml(brief.categories.compensation ?? ""),
+  );
+  push(
+    "requirements",
+    buildRequirementsYaml(brief.categories.requirements ?? ""),
+  );
+  push(
+    "work_schedules",
+    buildWorkSchedulesYaml(brief.categories.work_schedules ?? ""),
+  );
   push("benefits", buildBenefitsYaml(brief.categories.benefits ?? ""));
-  push("accommodation", buildAccommodationYaml(brief.categories.accommodation ?? ""));
+  push(
+    "accommodation",
+    buildAccommodationYaml(brief.categories.accommodation ?? ""),
+  );
   push("meals", buildMealsYaml(brief.categories.meals ?? ""));
-  push("transportation", buildTransportationYaml(brief.categories.transportation ?? ""));
+  push(
+    "transportation",
+    buildTransportationYaml(brief.categories.transportation ?? ""),
+  );
   push("insurance", buildInsuranceYaml(brief.categories.insurance ?? ""));
   push("application", buildApplicationYaml(brief.categories.application ?? ""));
   push("contacts", buildContactsYaml(brief.categories.contacts ?? ""));

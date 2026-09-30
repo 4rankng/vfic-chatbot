@@ -1,8 +1,6 @@
 {
-    "*.{mjs,ts,tsx}": [
-        "eslint --fix"
-    ],
-    "*.{mjs,js,json,ts,tsx,css,md,html}": [
-        "prettier --config ./.prettierrc.json --write --list-different"
-    ]
+  "*.{mjs,ts,tsx}": ["eslint --fix"],
+  "*.{mjs,js,json,ts,tsx,css,md,html}": [
+    "prettier --config ./.prettierrc.json --write --list-different"
+  ]
 }

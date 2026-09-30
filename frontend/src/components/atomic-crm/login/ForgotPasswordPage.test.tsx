@@ -102,9 +102,7 @@ describe("ForgotPasswordPage", () => {
       /Mật khẩu mới/,
       /Xác nhận mật khẩu/,
     ]) {
-      await expect
-        .element(screen.getByRole("textbox", { name }))
-        .toBeVisible();
+      await expect.element(screen.getByRole("textbox", { name })).toBeVisible();
     }
     await expect
       .element(screen.getByRole("button", { name: "Đổi mật khẩu" }))
@@ -131,9 +129,7 @@ describe("ForgotPasswordPage", () => {
     await screen.getByLabelText(/Xác nhận mật khẩu/).fill("khac-mat-khau");
     await screen.getByRole("button", { name: "Đổi mật khẩu" }).click();
 
-    await expect
-      .poll(() => mocks.notify.mock.calls.length)
-      .toBeGreaterThan(0);
+    await expect.poll(() => mocks.notify.mock.calls.length).toBeGreaterThan(0);
     expect(mocks.notify).toHaveBeenCalledWith("Mật khẩu xác nhận không khớp.", {
       type: "error",
     });

@@ -342,7 +342,12 @@ const CATEGORY_SCHEMA: Record<
 /** `MoneyItem`, `ShiftItem` and `BusStopItem` — the nested rows the backend
  *  models type inside a category record. */
 const MONEY_ITEM_FIELDS = ["name", "amount_vnd", "cadence", "conditions"];
-const SHIFT_ITEM_FIELDS = ["name", "start_time", "end_time", "crosses_midnight"];
+const SHIFT_ITEM_FIELDS = [
+  "name",
+  "start_time",
+  "end_time",
+  "crosses_midnight",
+];
 const BUS_STOP_ITEM_FIELDS = ["order", "name", "time", "address"];
 
 /** The backend's `StableId` pattern. */
@@ -482,9 +487,10 @@ const expectContractShape = (write: {
       ).toBe(true);
     }
     for (const field of Object.keys(record)) {
-      expect(schema.fields, `${write.key}.${field} must be a declared field`).toContain(
-        field,
-      );
+      expect(
+        schema.fields,
+        `${write.key}.${field} must be a declared field`,
+      ).toContain(field);
     }
     const id = record.id as string;
     expect(id).toMatch(STABLE_ID);
@@ -557,8 +563,12 @@ describe("planBriefKnowledge — the real recruiter briefs (golden)", () => {
       (write) => write.key === "compensation",
     );
     expect(compensation?.content).toContain("base_salary_vnd: 300000");
-    expect(compensation?.content).toContain("estimated_income_min_vnd: 8000000");
-    expect(compensation?.content).toContain("estimated_income_max_vnd: 9000000");
+    expect(compensation?.content).toContain(
+      "estimated_income_min_vnd: 8000000",
+    );
+    expect(compensation?.content).toContain(
+      "estimated_income_max_vnd: 9000000",
+    );
     // The period the amount is quoted per stays in the prose, since
     // `base_salary_vnd` has no cadence field to carry it.
     expect(compensation?.content).toContain("ca 8 tiếng");
@@ -592,7 +602,9 @@ describe("planBriefKnowledge — the real recruiter briefs (golden)", () => {
 
   it("carries the SDS meal, age and insurance facts in their typed slots", () => {
     const plan = planBriefKnowledge(parseProjectBrief(samsungSdsMd));
-    const byKey = new Map(plan.writes.map((write) => [write.key, write.content]));
+    const byKey = new Map(
+      plan.writes.map((write) => [write.key, write.content]),
+    );
     expect(byKey.get("meals")).toContain("provided: true");
     expect(byKey.get("meals")).toContain("meals_per_shift: 1");
     expect(byKey.get("meals")).toContain("allowance_vnd: 30000");
@@ -605,8 +617,9 @@ describe("planBriefKnowledge — the real recruiter briefs (golden)", () => {
 
   it("names each SDS contact person with their phone", () => {
     const plan = planBriefKnowledge(parseProjectBrief(samsungSdsMd));
-    const contacts = plan.writes.find((write) => write.key === "contacts")
-      ?.content;
+    const contacts = plan.writes.find(
+      (write) => write.key === "contacts",
+    )?.content;
     for (const [name, phone] of [
       ["Mr. Trần Hữu Minh Thái", "0394765767"],
       ["Mr. Vũ Công Toàn", "0901500098"],
@@ -619,7 +632,9 @@ describe("planBriefKnowledge — the real recruiter briefs (golden)", () => {
 
   it("keeps the Amtran no-dorm and no-shuttle facts as stated", () => {
     const plan = planBriefKnowledge(parseProjectBrief(amtranMd));
-    const byKey = new Map(plan.writes.map((write) => [write.key, write.content]));
+    const byKey = new Map(
+      plan.writes.map((write) => [write.key, write.content]),
+    );
     expect(byKey.get("accommodation")).toContain("available: false");
     expect(byKey.get("accommodation")).toContain("chưa có ký túc xá");
     expect(byKey.get("transportation")).toContain("không có tuyến xe đưa đón");
@@ -639,9 +654,7 @@ describe("planBriefKnowledge — the real recruiter briefs (golden)", () => {
     expect(faq).toContain(
       'answer: "Kho Samsung SDS tuyển từ đủ 18 tuổi đến 65 tuổi."',
     );
-    expect(faq).toContain(
-      'question: "Lương cơ bản và phụ cấp là bao nhiêu?"',
-    );
+    expect(faq).toContain('question: "Lương cơ bản và phụ cấp là bao nhiêu?"');
     expect(faq).toContain("300.000 VNĐ");
     // Every emitted record carries a non-empty answer — the exact defect the
     // backend contract rejects (`FaqItem.answer` is `NonEmptyText`, 409 on
@@ -693,7 +706,9 @@ describe("content-driven builders — derivation and honesty", () => {
   });
 
   it("reads crosses_midnight off the clock, not off a label", () => {
-    const yaml = buildWorkSchedulesYaml("Ca Đêm: Từ 20:00 đến 04:00 sáng hôm sau.");
+    const yaml = buildWorkSchedulesYaml(
+      "Ca Đêm: Từ 20:00 đến 04:00 sáng hôm sau.",
+    );
     expect(yaml).toContain('start_time: "20:00"');
     expect(yaml).toContain('end_time: "04:00"');
     expect(yaml).toContain("crosses_midnight: true");

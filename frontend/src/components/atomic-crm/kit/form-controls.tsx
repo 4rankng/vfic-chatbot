@@ -225,7 +225,9 @@ export const FormTextInput = ({
       autoComplete={autoComplete}
       autoFocus={autoFocus}
       value={
-        typeof field.value === "string" ? field.value : String(field.value ?? "")
+        typeof field.value === "string"
+          ? field.value
+          : String(field.value ?? "")
       }
       onChange={(value: string) => field.onChange(value)}
       onBlur={field.onBlur}
@@ -270,7 +272,9 @@ export const FormTextArea = ({
       placeholder={placeholder}
       rows={rows}
       value={
-        typeof field.value === "string" ? field.value : String(field.value ?? "")
+        typeof field.value === "string"
+          ? field.value
+          : String(field.value ?? "")
       }
       onChange={(value: string) => field.onChange(value)}
       onBlur={field.onBlur}
@@ -349,7 +353,11 @@ export const FormToggle = ({
   className,
   id,
 }: FieldProps) => {
-  const { id: inputId, field, fieldState } = useInput({
+  const {
+    id: inputId,
+    field,
+    fieldState,
+  } = useInput({
     source,
     label,
     defaultValue,
@@ -387,7 +395,11 @@ export const FormCheckbox = ({
   className,
   id,
 }: FieldProps) => {
-  const { id: inputId, field, fieldState } = useInput({
+  const {
+    id: inputId,
+    field,
+    fieldState,
+  } = useInput({
     source,
     label,
     defaultValue,

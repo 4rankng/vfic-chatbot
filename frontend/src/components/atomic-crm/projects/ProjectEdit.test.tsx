@@ -52,7 +52,13 @@ vi.mock("ra-core", () => ({
 // `<form>`, so the two controls are stubbed to keep the assertion about the
 // update payload — not about field plumbing.
 vi.mock("../kit", () => ({
-  FormTextInput: ({ label, className }: { label: string; className?: string }) => (
+  FormTextInput: ({
+    label,
+    className,
+  }: {
+    label: string;
+    className?: string;
+  }) => (
     <label className={className}>
       {label}
       <input />

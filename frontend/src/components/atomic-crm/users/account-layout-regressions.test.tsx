@@ -150,12 +150,8 @@ describe("account form validation", () => {
       .fill("Nguyễn Minh Anh");
     await screen.getByRole("button", { name: /Vai trò/ }).click();
     await screen.getByRole("option", { name: "Tuyển dụng" }).click();
-    await screen
-      .getByLabelText(/^Mật khẩu/)
-      .fill("matkhau8");
-    await screen
-      .getByLabelText(/Xác nhận mật khẩu/)
-      .fill("matkhau8");
+    await screen.getByLabelText(/^Mật khẩu/).fill("matkhau8");
+    await screen.getByLabelText(/Xác nhận mật khẩu/).fill("matkhau8");
 
     // The browser's own constraint stops a value with no `@` before the form
     // ever sees it; `a@b` clears that and is still not an address react-admin
@@ -166,8 +162,9 @@ describe("account form validation", () => {
     await expect
       .poll(
         () =>
-          screen.container.textContent?.includes("Email chưa đúng định dạng.") ??
-          false,
+          screen.container.textContent?.includes(
+            "Email chưa đúng định dạng.",
+          ) ?? false,
       )
       .toBe(true);
     expect(create).not.toHaveBeenCalled();
@@ -189,12 +186,8 @@ describe("account form validation", () => {
     await screen
       .getByRole("textbox", { name: "Họ và tên" })
       .fill("Nguyễn Minh Anh");
-    await screen
-      .getByLabelText(/^Mật khẩu/)
-      .fill("matkhau8");
-    await screen
-      .getByLabelText(/Xác nhận mật khẩu/)
-      .fill("matkhau8");
+    await screen.getByLabelText(/^Mật khẩu/).fill("matkhau8");
+    await screen.getByLabelText(/Xác nhận mật khẩu/).fill("matkhau8");
 
     await screen.getByRole("button", { name: /Tạo tài khoản/ }).click();
 

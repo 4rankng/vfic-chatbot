@@ -139,9 +139,7 @@ describe("ProfilePage", () => {
     const screen = await renderProfile();
 
     await screen.getByRole("button", { name: "Sửa" }).click();
-    await screen
-      .getByRole("textbox", { name: /Họ tên/ })
-      .fill("Tên đã sửa");
+    await screen.getByRole("textbox", { name: /Họ tên/ }).fill("Tên đã sửa");
     await screen.getByRole("button", { name: "Hủy" }).click();
 
     expect(mocks.apiJson).not.toHaveBeenCalled();
