@@ -17,6 +17,7 @@ from app.core.cache import bump_kb_caches
 from app.graph import answer_cache, lanes
 from app.graph.direct_context import ProjectTurnContext
 from app.graph.ports import TurnDecisions
+from app.graph.router import TurnRoute
 from app.graph.types import BotRunState, GraphDeps
 from tests.helpers.redis_fake import FakeHashRedis
 
@@ -132,22 +133,31 @@ async def _turn(
     project_context=_DEFAULT_PROJECT,
     lead_row: dict | None = None,
     timings: dict | None = None,
+    route: TurnRoute | None = None,
+    recent_messages: list | None = None,
 ):
     if project_context is _DEFAULT_PROJECT:
         project_context = _project_context()
     timings = {} if timings is None else timings
-    reply = await lanes._agent_turn(
-        _state(),
-        deps,
-        QUESTION,
-        provider="zalo_bot",
-        chat_id="z1",
-        recent_messages=[],
-        timings=timings,
-        decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9),
-        project_context=project_context,
-        lead_row=lead_row,
-    )
+    if route is not None:
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(lanes, "route_from_decisions", lambda *a, **kw: route)
+    try:
+        reply = await lanes._agent_turn(
+            _state(),
+            deps,
+            QUESTION,
+            provider="zalo_bot",
+            chat_id="z1",
+            recent_messages=recent_messages or [],
+            timings=timings,
+            decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9),
+            project_context=project_context,
+            lead_row=lead_row,
+        )
+    finally:
+        if route is not None:
+            monkeypatch.undo()
     return reply, timings
 
 
@@ -217,13 +227,26 @@ async def test_a_different_project_scope_is_a_miss(cache_env):
 
 
 @pytest.mark.asyncio
-async def test_a_kb_prefetch_miss_stores_nothing(cache_env):
+async def test_a_turn_without_tool_evidence_stores_nothing(cache_env):
+    agent = _CountingAgent()
+    deps = _deps(agent=agent, lead=_FakeLead(), slugs={"lg-display": "id-lg"})
+
+    await _turn(deps, timings={"prefetch_hit": False})
+    await _turn(deps, timings={})  # no signal at all
+    await _turn(deps, timings={"tool_calls": 0})  # tool bound but never called
+
+    assert agent.calls == 3
+    assert _answer_keys(cache_env) == []
+
+
+@pytest.mark.asyncio
+async def test_a_no_evidence_reply_is_never_stored(cache_env):
     no_evidence = "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
     agent = _CountingAgent(reply=no_evidence)
     deps = _deps(agent=agent, lead=_FakeLead(), slugs={"lg-display": "id-lg"})
 
-    await _turn(deps, timings={"prefetch_hit": False})
-    await _turn(deps, timings={})  # no prefetch signal at all
+    await _turn(deps, timings={"prefetch_hit": True})
+    await _turn(deps, timings={"prefetch_hit": True})
 
     assert agent.calls == 2
     assert _answer_keys(cache_env) == []
@@ -243,28 +266,84 @@ async def test_a_reply_that_names_the_lead_is_not_stored(cache_env):
 
 
 @pytest.mark.asyncio
-async def test_a_profile_ask_turn_is_never_cached(cache_env):
+async def test_a_profile_ask_turn_is_cached(cache_env):
+    """A generic profile ask must not disable the cache for new candidates."""
     agent = _CountingAgent()
     lead = _FakeLead(question="Số điện thoại của anh là gì?")
-    deps = _deps(agent=agent, lead=lead, slugs={})
+    deps = _deps(agent=agent, lead=lead, slugs={"lg-display": "id-lg"})
 
     await _turn(deps, timings={"prefetch_hit": True})
-    await _turn(deps, timings={"prefetch_hit": True})
+    _reply, timings = await _turn(deps, timings={"prefetch_hit": True})
+
+    assert agent.calls == 1, "the second turn must be served from the cache"
+    assert timings["answer_cache"] == {"hit": True, "tier": "exact", "similarity": 1.0}
+
+
+@pytest.mark.asyncio
+async def test_a_candidate_dependent_tool_allowlist_is_never_cached(cache_env):
+    agent = _CountingAgent()
+    deps = _deps(agent=agent, lead=_FakeLead(), slugs={"lg-display": "id-lg"})
+    # A route whose tools include the memory read: the reply may depend on what
+    # was remembered about this candidate.
+    route = TurnRoute(
+        "faq_detail",
+        "knowledge_lookup",
+        tools=("search_user_memory", "search_knowledge"),
+        reason="job_detail_terms",
+        confidence=0.9,
+    )
+    await _turn(deps, project_context=None, timings={"prefetch_hit": True}, route=route)
+    await _turn(deps, project_context=None, timings={"prefetch_hit": True}, route=route)
 
     assert agent.calls == 2
+    assert agent.allowed_tools_seen == [("search_user_memory", "search_knowledge")] * 2
     assert _answer_keys(cache_env) == []
 
 
 @pytest.mark.asyncio
-async def test_a_non_knowledge_tool_allowlist_is_never_cached(cache_env):
+async def test_a_catalog_turn_with_history_is_never_cached(cache_env):
+    """A catalog query can absorb a preference stated in an earlier turn."""
     agent = _CountingAgent()
-    deps = _deps(agent=agent, lead=_FakeLead(), slugs={})
+    deps = _deps(agent=agent, lead=_FakeLead(), slugs={"lg-display": "id-lg"})
+    route = TurnRoute(
+        "recommend",
+        "structured_lookup",
+        tools=("list_active_projects",),
+        reason="recommendation_terms",
+        confidence=0.9,
+    )
 
-    # No focused project → the route's own tools (get_product_features +
-    # search_knowledge) stay bound, so the reply is not knowledge-only.
-    await _turn(deps, project_context=None, timings={"prefetch_hit": True})
-    await _turn(deps, project_context=None, timings={"prefetch_hit": True})
+    await _turn(deps, project_context=None, timings={"tool_calls": 1}, route=route)
+    _reply, timings = await _turn(
+        deps,
+        project_context=None,
+        timings={"tool_calls": 1},
+        route=route,
+        recent_messages=[{"role": "user", "content": "anh ở Hải Phòng"}],
+    )
 
-    assert agent.calls == 2
-    assert agent.allowed_tools_seen == [("get_product_features", "search_knowledge")] * 2
-    assert _answer_keys(cache_env) == []
+    assert agent.calls == 2, "the history-bearing turn must re-run the agent"
+    assert "answer_cache" not in timings, "the history-bearing turn is not even looked up"
+    # Only the history-free turn stored an entry.
+    assert len(_answer_keys(cache_env)) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_catalog_turn_without_history_is_cached(cache_env):
+    agent = _CountingAgent()
+    deps = _deps(agent=agent, lead=_FakeLead(), slugs={"lg-display": "id-lg"})
+    route = TurnRoute(
+        "recommend",
+        "structured_lookup",
+        tools=("list_active_projects",),
+        reason="recommendation_terms",
+        confidence=0.9,
+    )
+
+    # No routed prefetch exists for the catalog lane: the model calls the tool
+    # itself, so the evidence signal is ``tool_calls``.
+    await _turn(deps, project_context=None, timings={"tool_calls": 1}, route=route)
+    _reply, timings = await _turn(deps, project_context=None, timings={"tool_calls": 1}, route=route)
+
+    assert agent.calls == 1
+    assert timings["answer_cache"] == {"hit": True, "tier": "exact", "similarity": 1.0}

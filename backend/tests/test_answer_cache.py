@@ -125,31 +125,58 @@ def _cacheable(**overrides) -> bool:
         allowed_tools=("search_knowledge",),
         tingting_reset_allowed=False,
         tingting_support_account=False,
-        lead_collection_instruction="",
+        has_conversation_history=False,
         user_text="Lương công nhân LG Display bao nhiêu?",
     )
     kwargs.update(overrides)
     return is_answer_cacheable(**kwargs)
 
 
-def test_only_the_knowledge_only_lane_is_cacheable():
-    assert _cacheable(allowed_tools=("search_knowledge",)) is True
+@pytest.mark.parametrize(
+    "allowed_tools",
+    [
+        ("search_knowledge",),
+        ("get_product_features", "search_knowledge"),
+        ("list_active_projects",),
+        ("list_active_jobs",),
+        ("search_bus_timetable",),
+        ("compare_income",),
+    ],
+)
+def test_project_data_tools_are_cacheable(allowed_tools):
+    """Every tool that serves stateless Project information qualifies."""
+    assert _cacheable(allowed_tools=allowed_tools) is True
 
 
 @pytest.mark.parametrize(
     "allowed_tools",
     [
-        None,
+        None,  # low-confidence route: any tool may be called
         (),
-        ("get_product_features", "search_knowledge"),
-        ("search_knowledge", "list_active_jobs"),
-        ("list_active_jobs",),
+        ("search_user_memory",),
+        ("search_user_memory", "search_knowledge"),
+        ("recommend_projects", "search_knowledge"),
         ("recommend_jobs",),
         ("verify_tingting_identity", "search_knowledge"),
+        ("some_future_tool",),  # unclassified tools fail closed
     ],
 )
-def test_other_tool_allowlists_are_not_cacheable(allowed_tools):
+def test_candidate_dependent_or_unknown_tools_are_not_cacheable(allowed_tools):
     assert _cacheable(allowed_tools=allowed_tools) is False
+
+
+@pytest.mark.parametrize(
+    "allowed_tools", [("list_active_projects",), ("list_active_jobs",)]
+)
+def test_context_composed_catalog_tools_need_a_history_free_turn(allowed_tools):
+    """Their filters can be folded in from an earlier turn."""
+    assert _cacheable(allowed_tools=allowed_tools, has_conversation_history=False) is True
+    assert _cacheable(allowed_tools=allowed_tools, has_conversation_history=True) is False
+
+
+def test_knowledge_tools_ignore_conversation_history():
+    """Their query comes from the current turn, so history cannot change it."""
+    assert _cacheable(has_conversation_history=True) is True
 
 
 def test_tingting_turns_are_not_cacheable():
@@ -157,13 +184,12 @@ def test_tingting_turns_are_not_cacheable():
     assert _cacheable(tingting_support_account=True) is False
 
 
-def test_a_profile_ask_makes_the_reply_candidate_specific():
-    ask = "Hỏi số điện thoại của ứng viên"
-    assert _cacheable(lead_collection_instruction=ask) is False
-    assert _cacheable(lead_collection_instruction="   ") is True
+def test_a_profile_ask_does_not_disqualify_a_generic_reply():
+    """The ask is generic; refusing it would disable the cache for new candidates."""
+    assert _cacheable(user_text="Kho Samsung SDS Đình Vũ có ký túc xá không?") is True
 
 
-def test_a_fragment_is_not_cacheable_even_on_the_knowledge_lane():
+def test_a_fragment_is_not_cacheable_even_on_a_project_data_lane():
     assert _cacheable(user_text="Thế nào?") is False
 
 

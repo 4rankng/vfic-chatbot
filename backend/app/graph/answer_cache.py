@@ -15,11 +15,13 @@ address bucket and the ``knowledge``/``preamble``/``jobs`` version counters:
     :mod:`app.graph.semantic_cache` (and therefore its version-based
     invalidation).
 
-**Eligibility is the load-bearing guard.** A reply is stored only for a turn whose
-tool allowlist is exactly ``search_knowledge`` — no personalization tool, no
-TingTing flow, no profile ask in flight — and only when the KB lookup returned
-usable evidence. A turn with a lead profile to collect, a recommendation, a
-memory read, or a search miss never reaches the write. On top of that,
+**Eligibility is the load-bearing guard.** A reply is stored only for a turn
+whose tools serve stateless Project information (see :data:`_PROJECT_DATA_TOOLS`)
+— no memory read, no profile-ranked recommendation, no TingTing flow — and only
+when the KB lookup returned usable evidence. A profile-collection ask is
+explicitly *not* a disqualifier: the ask is generic and refusing it would mean
+never caching anything for a new candidate, which is the dominant production
+case (verified against the live model). On top of that,
 :func:`is_shareable_reply` refuses to store a reply that names the lead.
 
 Nothing here needs a write-path hook: every mutation of answerable project content
@@ -87,6 +89,33 @@ _MIN_LEAD_IDENTIFIER_CHARS = 3
 
 _LEAD_IDENTIFIER_FIELDS = ("name", "phone", "email")
 
+# Tools whose reply is a function of the question and the Project data alone, so
+# it is the same for every candidate and a repeated question can reuse it.
+#
+# Deliberately absent, and the reason the allowlist (not a deny list) is the
+# guard: ``search_user_memory`` (remembered facts about this candidate), the
+# profile-ranked recommendation tools, and the TingTing account flows. A new
+# tool is therefore refused until someone classifies it here.
+#
+# ``list_active_jobs`` was the vacancy catalog before the 2026-10 rename to
+# ``list_active_projects``; both spellings are accepted while the rename lands.
+_PROJECT_DATA_TOOLS = frozenset(
+    {
+        "search_knowledge",
+        "get_product_features",
+        "search_bus_timetable",
+        "compare_income",
+        "list_active_projects",
+        "list_active_jobs",
+    }
+)
+
+# The subset whose arguments the model composes from the conversation rather than
+# from the current question (filters, location, sort order). Cached only on a
+# turn with no earlier messages, so a preference stated several turns ago cannot
+# be folded into a reply that is then served to another candidate.
+_CONTEXT_COMPOSED_TOOLS = frozenset({"list_active_projects", "list_active_jobs"})
+
 
 @dataclass(frozen=True)
 class AnswerCacheHit:
@@ -112,24 +141,44 @@ def is_standalone_kb_question(user_text: str) -> bool:
 
 def is_answer_cacheable(
     *,
-    allowed_tools,
+    allowed_tools: tuple[str, ...] | None = None,
     tingting_reset_allowed: bool,
     tingting_support_account: bool,
-    lead_collection_instruction: str,
+    has_conversation_history: bool,
     user_text: str,
 ) -> bool:
     """Whether this turn's reply may be reused for a later identical question.
 
-    The tool allowlist is the primary guard: only the knowledge-only lane produces
-    a reply that depends on nothing but the question and the project's KB. A
-    TingTing turn, a profile-collection ask, a recommendation or a memory read all
-    make the reply candidate-specific and are refused here.
+    The tool allowlist is the load-bearing guard, and it encodes one rule: cache
+    a reply only when it is **stateless Project information** — the same answer
+    for every candidate. Everything the bot serves about a Project (its KB, its
+    feature catalog, the active-project/vacancy catalog, the shuttle timetable,
+    cross-project income) qualifies. A reply built with a candidate-dependent
+    tool (``search_user_memory``, a profile-ranked recommendation) or a TingTing
+    account flow never does, and neither does a low-confidence route
+    (``allowed_tools is None``) that could call any tool at all.
+
+    ``has_conversation_history`` narrows the catalog tools whose arguments the
+    model composes itself (filters, location, sort order): with earlier messages
+    in view it can fold in a preference stated several turns ago, which would
+    make the reply candidate-specific even though the question reads standalone.
+    The knowledge tools take their query from the current turn, so they are
+    unaffected.
+
+    A profile-collection ask is deliberately NOT a disqualifier: the ask is a
+    generic instruction ("cho em xin tên để tiện hỗ trợ nhé"), identical for
+    every candidate, and refusing it would mean never caching anything for a new
+    candidate — the dominant production case (verified against the live model).
+    Candidate-specific *content* is caught by :func:`is_shareable_reply`.
     """
     if tingting_reset_allowed or tingting_support_account:
         return False
-    if tuple(allowed_tools or ()) != ("search_knowledge",):
+    tools = tuple(allowed_tools or ())
+    if not tools:
         return False
-    if (lead_collection_instruction or "").strip():
+    if any(name not in _PROJECT_DATA_TOOLS for name in tools):
+        return False
+    if has_conversation_history and any(name in _CONTEXT_COMPOSED_TOOLS for name in tools):
         return False
     return is_standalone_kb_question(user_text)
 

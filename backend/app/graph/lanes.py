@@ -744,16 +744,17 @@ async def _agent_turn(
             round((time.monotonic() - lead_t0) * 1000)
         )
 
-    # Answer cache (read): a repeated knowledge-only question is answered from the
-    # reply a previous turn already sent, with no model call. Eligibility and the
-    # scope token are the same ones the write below uses, so a turn that may be
-    # read is exactly a turn that may be written.
+    # Answer cache (read): a repeated question about stateless Project
+    # information is answered from the reply a previous turn already sent, with
+    # no model call. Eligibility and the scope token are the same ones the write
+    # below uses, so a turn that may be read is exactly a turn that may be
+    # written.
     answer_scope_token = ""
     if is_answer_cacheable(
         allowed_tools=allowed_tools,
         tingting_reset_allowed=tingting_reset_allowed,
         tingting_support_account=tingting_support_account,
-        lead_collection_instruction=lead_collection_instruction,
+        has_conversation_history=bool(recent_messages),
         user_text=user_text,
     ):
         project_scope = await answer_project_scope(
@@ -852,18 +853,21 @@ async def _agent_turn(
         contextual_user_text,
         **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
     )
-    # Answer cache (write): only a knowledge-only turn whose KB lookup returned
-    # usable evidence produced a reply that depends on the question alone. A
-    # prefetch miss (the "không tìm thấy" case) stores nothing, and an absent
-    # timing sink (direct calls, stub agents) disables the write entirely.
-    if (
-        answer_scope_token
-        and timings is not None
-        and timings.get("prefetch_hit") is True
-        and is_shareable_reply(reply, lead_row=lead_row)
-    ):
-        await answer_cache_put(user_text, reply, embedder=deps.embedder, scope=answer_scope_token)
-        timings["answer_cache"]["stored"] = True
+    # Answer cache (write): only a turn that serves stateless Project
+    # information and whose reply was built from tool evidence depends on the
+    # question alone. Two evidence signals are accepted because only the
+    # knowledge/timetable/income/faq lanes run a routed prefetch: the catalog
+    # lane has no prefetch branch, so the model calls its tool itself and
+    # ``tool_calls`` is what proves the reply was grounded. A no-evidence reply
+    # ("không tìm thấy") is refused again by ``is_shareable_reply``, and an
+    # absent timing sink (direct calls, stub agents) disables the write.
+    if answer_scope_token and timings is not None:
+        grounded = timings.get("prefetch_hit") is True or int(timings.get("tool_calls") or 0) > 0
+        if grounded and is_shareable_reply(reply, lead_row=lead_row):
+            await answer_cache_put(
+                user_text, reply, embedder=deps.embedder, scope=answer_scope_token
+            )
+            timings["answer_cache"]["stored"] = True
     return reply
 
 
