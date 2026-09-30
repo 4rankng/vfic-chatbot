@@ -197,3 +197,80 @@ final result: passed
 - Browser QA measured zero horizontal overflow at 390px and 1440px. Mobile
   buttons are 44px high; enabled and disabled foreground/background colors are
   distinct, and no console errors were emitted.
+
+---
+
+## Untitled UI adoption and console-density pass
+
+The console was rebuilt on Untitled UI PRO primitives while keeping the existing
+brand: ink topbar and rail, warm canvas, the three-pane conversation workspace,
+the current information density, and every Vietnamese string. Untitled UI
+supplied structure and components, never a new visual identity.
+
+### What changed
+
+- **Shell.** Full-width ink topbar (brand tile left; notifications and account
+  menu right) over a 72px icon-first rail with tooltips, a slate active marker,
+  and a React Aria `SlideoutMenu` drawer below `lg`. `.workspace-frame` /
+  `.workspace-frame-content` remain the token and scroll roots.
+- **Palette.** The brick-red accent is replaced by a professional slate ramp
+  across the daisyUI theme, the shadcn slots, `.kb-scope`, the login paper and
+  the `--color-uu-brand-*` ramp. Contrast was corrected arithmetically until
+  every pair cleared WCAG AA: `--primary #557498`, ring `#7796b6`,
+  warning `#8c6621`, info `#466fa0`, error `#ad5d68`, success `#0b7e56`, plus
+  dark-mode and on-brand ink corrections.
+- **Token layer.** The retired Tailkit layer's load-bearing geometry moved onto
+  the daisyUI theme tokens. `src/index.css` now owns the console palette and
+  `src/styles/untitledui-theme.css` the library vocabulary, with the four
+  colliding utility names (`bg-primary`, `bg-secondary`, `text-primary`,
+  `border-primary`) pinned to the console on `:root` and re-bound inside
+  `.uu-scope`. `untitledui-theme-contract.test.ts` guards that split.
+- **Kit.** `PageShell`, `PageHeading`, `EmptyState`, `kit/form-controls.tsx` and
+  `kit/list-table.tsx` carry the shared page furniture; dashboard, settings,
+  users, knowledge base, automation, knowledge, personas, conversations, auth,
+  profile, performance and projects were migrated onto them in place.
+
+### Inbox directory header and channel indicator
+
+Two defects the owner flagged, both fixed and verified in a real browser:
+
+- **The header reserved space it did not use.** `.workspace-rail` declared a
+  two-row grid (`"title adapters" / "search search"`) but only `title` and
+  `adapters` were assigned, so the search row had no `grid-area` and the field
+  collapsed to **119×42px** inside a 323px rail, leaving a void beneath it. The
+  tools row is now assigned to `grid-area: search`, the reserved
+  `min-height: 194px` is gone, and the rail's padding and gap are tightened.
+  Measured in the browser at 1440×900: the rail header is now **≤130px** tall
+  (from 194px) and the search field fills the rail width (>200px). Every header
+  control is **≤40px** — channel tiles 44→40, search field 42 (46 on mobile)→40.
+- **A thread's origin was invisible in the list.** Each row now carries an 18px
+  channel chip keyed off `channel_identity.provider`, using a short Vietnamese
+  row label (`Chatbot`, `Zalo OA`, `Messenger`, `TingTing`) added beside the
+  full-label map in `atomic-crm/types.ts`; the full name — including
+  `Zalo OA TingTing (hỗ trợ nhân viên)` — stays on the element's `title`, and
+  notifications and panels keep the full labels. Unknown or absent providers
+  fall back to `Kênh khác`, and the chip is tinted per channel.
+
+The chip is scoped by its own class prefix rather than as a descendant of the
+shared `.inbox-bg-container`, so the FE-19 scoping ratchet is untouched
+(`MAX_UNSCOPED_RULES` stays at 570).
+
+### Browser evidence
+
+- Desktop 1440×900 and phone 390×844, authenticated: rail header compact, search
+  field full width, four channel tiles, and the `Zalo OA` chip on the seeded
+  candidate row. No horizontal overflow at either width.
+- Focused unit run covering the change: `src/components/atomic-crm/conversations`
+  plus `css-scoping.test.ts` — 23 files / 133 tests passed.
+
+final result: passed for the surfaces above
+
+### Open at the time of writing
+
+- The full-suite, lint and build gates were re-run while another session held
+  `src/components/atomic-crm/projects/domain/project-knowledge-yaml.ts`
+  truncated mid-edit (44 lines, unterminated regex at line 45). That file breaks
+  the vite/oxc dependency scan, so `npm run test:unit:app`, `npm run build` and
+  `npm run lint` fail on it rather than on anything in this pass. Re-run the
+  three once that file is whole; the focused suites and the browser evidence
+  above are unaffected.

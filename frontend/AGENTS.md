@@ -190,37 +190,29 @@ and uses `vietnameseCrmMessages.ts`. Do not wire other locales into the app.
 
 For any UI/UX design problem — a new screen, a component, a layout, an empty
 state, a table, a form, a dashboard, or a "this looks wrong" complaint —
-**consult the Untitled UI and Tailkit MCPs before hand-writing Tailwind or
-inventing markup.** That is the default, not an escalation path.
+**consult the Untitled UI MCP before hand-writing Tailwind or inventing
+markup.** That is the default, not an escalation path. The console renders on
+one component layer; the parallel Tailkit layer it used to sit beside was
+retired on 2026-09-30 and must not be reintroduced.
 
-### Tailkit — the drop-in system for console anatomy
+### Tailkit is retired — do not reintroduce it
 
-Tailkit is plain React JSX + Tailwind utilities + inline Heroicons SVG. **It
-needs no installed package**, so it works today.
+Until 2026-09-30 the console carried a second, parallel system: a numeric
+`--color-secondary-50…950` ramp in `src/styles/tailkit-tokens.css`, a `--tt-*`
+token bridge in `kit/tailkit-system.css`, a Tailkit-redesign inbox sheet, and
+two contract tests pinning them. All of it is gone (`4b7ccaf3`); the
+load-bearing control geometry moved onto the daisyUI theme tokens. Two things
+follow:
 
-```
-mcp__tailkit__browse_catalog  (level=categories → subcategories → components)
-mcp__tailkit__search_components / get_component_code (tech: "react")
-```
-
-Identifiers are `<letter>-c-<subcategory>-<nn>`; the recruiter console is the
-`application-ui` package, so `a-c-tables-08`, `a-c-empty-states-03`,
-`a-c-form-layouts-04`, `a-c-statistics-11`, `a-c-navigation-*`. Paste with
-`get_page_templates`-free, direct retrieval; the response is ready JSX.
-
-**Drop-in obligations — the pasted component is not the deliverable:**
-
-1. Keep the JSX; **bind the demo rows to real react-admin data** instead of the
-   hard-coded `Nansi Hart` / `$49,00` placeholders.
-2. **Translate every user-facing string to Vietnamese.** Code, identifiers, and
-   comments stay English.
-3. **Swap demo `hi-*` inline SVGs** for `lucide-react` (the app's icon library)
-   or `@untitledui/icons` once Phase 2 lands, where an equivalent already exists.
-4. **Scope feature CSS under the feature's own workspace class.** Do not add to
-   the unscoped backlog, and do not lower `MAX_UNSCOPED_RULES` in
-   `css-scoping.test.ts` — that number may only go down.
-5. Light theme only. `dark:` variants compile but never match; strip them when
-   they add noise rather than styling a mode that does not exist.
+- No `--tt-*` custom property, Tailkit token file, or pasted Tailkit markup may
+  come back. `tt-*` classes themselves are **daisyUI's prefix**
+  (`@plugin "daisyui" { prefix: "tt-" }` in `src/index.css`), which the shadcn
+  adapters in `components/ui/` still use — that layer is not Tailkit and is not
+  going away.
+- Tailkit's catalog remains a useful *reference* for console anatomy (a table,
+  an empty state, a form layout). Read it for structure if that helps, then
+  build the surface from the installed Untitled UI primitives and the console's
+  own tokens.
 
 ### Untitled UI — installed, and the layer that makes it render
 
@@ -257,14 +249,12 @@ npx untitledui@latest add input --yes       # pulls button/tags/tooltip siblings
   own imports target `@/components/base/...`. Do not hand-edit them; re-run the
   CLI. Do not move them under `components/ui/` or `components/admin/` — those
   belong to the external shadcn registry.
-- **Only the components the app can reach are kept.** The `add badges` and
-  `add input` runs installed 78 files; the whole `foundations/payment-icons` set,
-  the tags set and the payment/date/number/file/group/pin input variants were
-  unreachable from any app import and were deleted, because Tailwind scans *files*
-  rather than import graphs and therefore compiled their utilities into the
-  shipped CSS (**−23.9 kB** measured on the index sheet). The kept set is
-  `base/badges/{badges,badge-types}.tsx`, `base/input/{input,label,hint-text}.tsx`,
-  `base/tooltip/tooltip.tsx`, `foundations/dot-icon.tsx` and `utils/cx.ts`.
+- **Only the components the app can reach are kept.** Tailwind scans *files*,
+  not import graphs, so an unreachable generated file still compiles its
+  utilities into the shipped CSS. The adopted set (application navigation,
+  table, pagination, empty state, alerts, modals, activity feed, loading
+  indicator, slideout menus, command menu, breadcrumbs, plus the base
+  primitives the kit and the screens use) is what the app imports today.
   Re-check before adding a component back:
 
   ```bash
@@ -274,8 +264,10 @@ npx untitledui@latest add input --yes       # pulls button/tags/tooltip siblings
 
   It resolves `@/` and `./` static imports, seeds the traversal with the keep-set
   (so a kept component's own dependencies are not reported as dead) and prints
-  what nothing reaches. Trust it before deleting; `npx untitledui add <component>
-  --yes` re-installs anything pruned.
+  what nothing reaches. It covers `components/base`, `components/application`,
+  `components/shared-assets`, `components/foundations` and `utils`. Trust it
+  before deleting; `npx untitledui add <component> --yes` re-installs anything
+  pruned.
 - **After any `add`, run `npm run prettier:apply`.** The CLI writes its own
   formatting, so a re-installed component can fail `npm run prettier` even though
   the file was clean before — which is how `src/utils/is-react-component.ts` kept
@@ -291,7 +283,10 @@ npx untitledui@latest add input --yes       # pulls button/tags/tooltip siblings
   both define `bg-primary`, `bg-secondary`, `text-primary` and `border-primary`
   with different meanings; `src/styles/untitledui-theme.css` pins the console's
   meaning on `:root` and restores the library's inside `.uu-scope`. Rendering a
-  component without the wrapper gives it the brand coral fill instead of white.
+  component without the wrapper gives it the console's action fill (a slate
+  block) instead of a white surface — the failure looks like unreadable text on
+  a solid panel, not like a type error. `.workspace-chrome` is the inverse
+  scope: it re-points the same vocabulary at the ink topbar and rail.
   `src/components/atomic-crm/untitledui-theme-contract.test.ts` guards the
   collision set.
 - **Two primitive runtimes, two focus models.** React Aria (Untitled UI) and
@@ -303,35 +298,39 @@ npx untitledui@latest add input --yes       # pulls button/tags/tooltip siblings
 
 ### The token contract (load-bearing)
 
-A pasted Tailkit component only renders correctly because
-`src/styles/tailkit-tokens.css` defines the numeric `--color-secondary-50…950`
-scale, the default palette stays intact, `ring-3`/`shadow-xs` compile, and
-`hi-*` needs no CSS. Treat these as protected:
+An Untitled UI component only renders correctly because the names it compiles
+against exist. Three files own that vocabulary, and the split is protected:
 
-- **Never declare `--color-secondary` (no numeric suffix)** in
-  `src/styles/tailkit-tokens.css`. It is a different utility from
-  `--color-secondary-50` in Tailwind v4, but the flat slot is a live shadcn
-  semantic that `src/index.css` redefines five times. A pasted component
-  rendering unstyled is almost always a missing *shaded* token — add the shade
-  to the token file, never an `!important` override in a feature sheet.
-- Do not redefine `--radius` or the `--shadow-*` names the console owns.
+- **`src/index.css` owns the console's palette.** The daisyUI theme `tinghire`,
+  the `:root` / `.dark` / `.kb-scope` semantic slots, the slate ramp, the chart
+  colours and the sonner toast variables are all defined here, once. Feature
+  sheets consume these names; they never redeclare them.
+- **`src/styles/untitledui.css` is the library's base import**, and
+  `src/styles/untitledui-theme.css` is its vocabulary: `--color-utility-*`, the
+  `--color-bg-*` / `--color-text-*` alias families, the
+  `--background-color-*` / `--text-color-*` / `--border-color-*` /
+  `--ring-color-*` / `--outline-color-*` namespaces, `--text-md` /
+  `--text-display-*`, and the `--color-brand-50…950` mapping onto the console's
+  `--color-uu-brand-*` ramp. It is imported exactly once, from the app entry.
+- **Four utility names are defined by both systems** — `bg-primary`,
+  `bg-secondary`, `text-primary`, `border-primary` — and Tailwind resolves
+  `bg-primary` from `--background-color-primary` the moment that key exists. The
+  theme file pins those four to the console's `var(--primary)` /
+  `var(--secondary)` on `:root` and restores the library's meaning inside
+  `.uu-scope` (see above).
+  `src/components/atomic-crm/untitledui-theme-contract.test.ts` fails if a
+  future token would capture a fifth console name, if the four bindings move, or
+  if the layer starts redeclaring the console's type, radius, shadow or font
+  scale.
+
+Treat these as protected too:
+
+- **Never redeclare a flat console token in the theme layer**, and never
+  redefine `--radius` or the `--shadow-*` names the console owns. A second
+  declaration is how one utility ends up with two meanings.
+- **A library component rendering unstyled is a missing token, not a styling
+  bug.** Add the name to `src/styles/untitledui-theme.css`; never patch it with
+  an `!important` override in a feature sheet.
 - Tailwind emits `@theme` variables **on use**, not eagerly, so a fresh build
-  will not contain `--color-secondary-*` until a component actually references
-  one. That is correct behaviour, not a broken import.
-- `src/components/atomic-crm/tailkit-contract.test.ts` asserts the scale, the
-  single import, and the "never override `--color-secondary`" rule. Extend it
-  when a Tailkit component needs a shade that does not exist yet.
-
-**A second token layer sits beside it:** `src/styles/untitledui-theme.css`
-supplies Untitled UI v8's own vocabulary (`--color-utility-*`, the `--color-bg-*`
-/ `--color-text-*` alias families, the `--background-color-*` / `--text-color-*`
-/ `--border-color-*` / `--ring-color-*` / `--outline-color-*` namespaces, and
-`--text-md` / `--text-display-*`). Its one hard constraint: **four utility names
-are defined by both systems** — `bg-primary`, `bg-secondary`, `text-primary`,
-`border-primary` — and Tailwind resolves `bg-primary` from
-`--background-color-primary` the moment that key exists. The file therefore pins
-those four to the console's `var(--primary)` / `var(--secondary)` on `:root` and
-restores Untitled UI's meaning inside `.uu-scope` (see the Untitled UI section
-above). `src/components/atomic-crm/untitledui-theme-contract.test.ts` fails if a
-future token would capture a fifth console name, if the four bindings move, or if
-the layer starts redeclaring the console's type, radius, shadow or font scale.
+  will not contain every mapped name until a component actually references one.
+  That is correct behaviour, not a broken import.
