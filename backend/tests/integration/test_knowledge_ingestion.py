@@ -623,12 +623,14 @@ async def _seed_projection_project(db, *, category_authoritative: bool):
 async def test_document_ingest_never_overwrites_projection_owned_cards(
     integration_session,
 ):
-    """A category-authoritative project's card/features/jobs stay projection-built.
+    """A category-authoritative project keeps its projection-built card and jobs.
 
     The brief document still digests, embeds and stores (it must stay
-    searchable), but the LLM side-effects are skipped entirely — the recorded
-    prompts prove the feature/index calls never happen, not merely that their
-    writes were undone.
+    searchable). Feature extraction RUNS — the category projections never write
+    ``job_feature_values``, so without it the project stays stuck at 0/12 ready
+    — while the card and the Job catalog are left to the projections: the
+    recorded prompts prove the index call never happens and the seeded job
+    survives.
     """
     project, doc, job = await _seed_projection_project(
         integration_session, category_authoritative=True
@@ -657,15 +659,27 @@ async def test_document_ingest_never_overwrites_projection_owned_cards(
     ).scalar()
     assert stored == 1
 
-    # The projection-built card survives verbatim, no features are extracted,
-    # and the job catalog is left to the category projections.
-    assert project.index_card == _CARD
+    # The projection-built card and Job catalog survive verbatim; the feature
+    # values are extracted from the brief. Highlights are the one card slot
+    # extraction refreshes (feature-derived brief facts are authoritative).
+    assert {
+        k: v for k, v in project.index_card.items() if k != "highlights"
+    } == {k: v for k, v in _CARD.items() if k != "highlights"}
+    assert project.index_card["highlights"] == [
+        "10–13 triệu/tháng",
+        "Trả lương theo tuần",
+    ]
     assert project.summary == "Tóm tắt do danh mục dựng"
-    assert (await _count_features(integration_session, project.id)).scalar() == 0
+    catalog_rows = (
+        await integration_session.execute(
+            text("SELECT count(*) FROM worker_feature_catalog WHERE is_active = true")
+        )
+    ).scalar()
+    assert (await _count_features(integration_session, project.id)).scalar() == catalog_rows
     assert job.status == JobStatus.ACTIVE
 
-    # The product-feature and project-index LLM calls never happen at all.
-    assert all("feature_key" not in system for system in prompts_seen)
+    # Features were extracted, but the project-index LLM call never happened.
+    assert any("feature_key" in system for system in prompts_seen)
     assert INDEX_SYSTEM_PROMPT not in prompts_seen
 
 

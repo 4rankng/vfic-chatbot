@@ -148,14 +148,19 @@ class KnowledgePipeline:
         #   ``projects.index_card`` is the SOURCE OF TRUTH for synthesized jobs
         #   and must not be overwritten by LLM-driven feature/card rebuilds.
         #   ``rebuild_project_jobs`` is also skipped (DIRECT_CONTEXT jobs are
-        #   synthesized from ``index_card`` at query time, not from Job rows).
+        #   synthesized from ``index_card`` at query time, not from Job rows),
+        #   and feature extraction is skipped with them: the curated page is
+        #   the recruiter's own wording.
         # * Category-authoritative projects (``category_authority_started``)
-        #   have their card/features/jobs owned by the category projections, so
-        #   ``extract_product_features``/``sync_canonical_product_features``,
-        #   ``build_project_index``/``_update_canonical_project_card`` and
+        #   have their card and Job catalog owned by the category projections,
+        #   so ``build_project_index``/``_update_canonical_project_card`` and
         #   ``rebuild_project_jobs`` would clobber what the projections built.
+        #   Feature extraction still runs: nothing in the category projections
+        #   writes ``job_feature_values`` (the project-list readiness label and
+        #   the feature tools read those), so skipping extraction here left
+        #   every brief-imported project stuck at 0/12 ready.
         #
-        # In both cases digest → embed → store still runs so the document is
+        # In all cases digest → embed → store still runs so the document is
         # searchable. The project row is loaded once per document, only when the
         # document is project-bound.
         is_direct_context = (doc.metadata_ or {}).get("source") == "direct_context" or getattr(
@@ -164,14 +169,22 @@ class KnowledgePipeline:
         project = (
             await self.db.get(Project, doc.project_id) if doc.project_id is not None else None
         )
-        projections_own_cards = is_direct_context or bool(
+        category_authoritative = bool(
             project is not None and project.category_authority_started
         )
+        projections_own_cards = is_direct_context or category_authoritative
 
-        if projections_own_cards:
+        if is_direct_context:
             # Only the core digest → embed → store path is meaningful here. The
             # PUBLISHED stage is set by the outer ``run`` below; nothing else to do.
             pass
+        elif category_authoritative:
+            # Features stay LLM-extracted from the uploaded brief; card and Job
+            # rebuilds remain projection-owned (gated further below).
+            try:
+                await self.extract_product_features(doc, all_units)
+            except Exception as exc:  # noqa: BLE001 — extraction is best-effort
+                logger.warning("product feature extraction failed for doc %s: %s", doc.id, exc)
         elif doc.project_id is not None and canonical_doc is not None:
             await self.sync_canonical_product_features(doc, canonical_doc)
         elif doc.project_id is not None:
