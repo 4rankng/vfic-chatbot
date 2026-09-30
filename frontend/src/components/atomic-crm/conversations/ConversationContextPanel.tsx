@@ -5,10 +5,14 @@ import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { ProgressBar } from "@/components/base/progress-indicators/progress-indicators";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
+import { InputBase, TextField } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
+import { TextArea } from "@/components/base/textarea/textarea";
+import {
+  Dialog,
+  Modal,
+  ModalOverlay,
+} from "@/components/application/slideout-menus/slideout-menu";
 import type { Lead } from "../types";
 import {
   candidateProfileDraft,
@@ -224,29 +228,37 @@ export const ConversationContextPanel = ({
       completionPercent={completionPercent}
       canEdit={canEdit}
       onSave={onSave}
-      onClose={onClose}
+      closeButtonPress={isMobile ? undefined : onClose}
       showClose={!persistent}
     />
   );
 
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-        <SheetContent
-          id="conversation-context-panel"
-          side="right"
-          className="candidate-context-sheet p-0 gap-0 sm:max-w-sm"
-          aria-describedby={undefined}
-          onCloseAutoFocus={onCloseAutoFocus}
-        >
-          <SheetTitle className="sr-only">
-            {translate("leads.profile_title")}
-          </SheetTitle>
-          <div className="inbox-bg-container conversation-context-sheet-body">
-            {content}
-          </div>
-        </SheetContent>
-      </Sheet>
+      <ModalOverlay
+        isOpen={open}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) return;
+          // Preserve the caller's focus contract: the console wants focus back
+          // on the trigger that opened the panel, which the dialog cannot know.
+          onCloseAutoFocus?.(new Event("modal-close-autofocus"));
+          onClose();
+        }}
+        isDismissable
+        className="z-50"
+      >
+        <Modal>
+          <Dialog
+            id="conversation-context-panel"
+            aria-label={translate("leads.profile_title")}
+            className="candidate-context-sheet uu-scope flex flex-col gap-0 p-0 outline-hidden"
+          >
+            <div className="inbox-bg-container conversation-context-sheet-body">
+              {content}
+            </div>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
     );
   }
 
@@ -269,7 +281,7 @@ const CandidateContextBody = ({
   completionPercent,
   canEdit,
   onSave,
-  onClose,
+  closeButtonPress,
   showClose,
 }: {
   lead?: Lead;
@@ -281,7 +293,13 @@ const CandidateContextBody = ({
     changes: Partial<CandidateProfileUpdate>,
     version: number,
   ) => Promise<void>;
-  onClose: () => void;
+  /**
+   * Called by the visible close button. Mobile renders the body inside a React
+   * Aria dialog, where the button's `slot="close"` already closes the modal and
+   * the overlay's `onOpenChange` notifies the owner — passing a handler there
+   * would notify twice.
+   */
+  closeButtonPress?: () => void;
   showClose: boolean;
 }) => {
   const [editSession, setEditSession] = useState<{
@@ -334,7 +352,7 @@ const CandidateContextBody = ({
               size="sm"
               className="uu-scope context-close"
               label="Đóng thông tin ứng viên"
-              onPress={onClose}
+              onPress={closeButtonPress}
             />
           </div>
         ) : null}
@@ -411,60 +429,48 @@ const CandidateContextBody = ({
                 {candidateProfileFields.map((field) => {
                   const inputId = `candidate-profile-${field.key}`;
                   return (
-                    <div key={field.key} className="grid min-w-0 gap-1.5">
-                      <Label htmlFor={inputId}>
-                        {translate(field.labelKey)}
-                      </Label>
-                      <Input
-                        id={inputId}
-                        value={editSession.draft[field.key]}
+                    <TextField
+                      key={field.key}
+                      id={inputId}
+                      className="min-w-0"
+                      value={editSession.draft[field.key]}
+                      isDisabled={isSaving}
+                      onChange={(next) =>
+                        setEditSession((current) =>
+                          current
+                            ? {
+                                ...current,
+                                draft: { ...current.draft, [field.key]: next },
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      <Label>{translate(field.labelKey)}</Label>
+                      <InputBase
                         inputMode={field.inputMode}
                         type={field.inputMode === "numeric" ? "number" : "text"}
                         min={field.min}
                         max={field.max}
-                        disabled={isSaving}
-                        onChange={(event) =>
-                          setEditSession((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  draft: {
-                                    ...current.draft,
-                                    [field.key]: event.target.value,
-                                  },
-                                }
-                              : current,
-                          )
-                        }
                       />
-                    </div>
+                    </TextField>
                   );
                 })}
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="candidate-profile-notes">
-                  Ghi chú (CCCD, chỗ ở, xe đưa đón và thông tin khác)
-                </Label>
-                <Textarea
-                  id="candidate-profile-notes"
-                  value={editSession.draft.notes}
-                  rows={5}
-                  disabled={isSaving}
-                  onChange={(event) =>
-                    setEditSession((current) =>
-                      current
-                        ? {
-                            ...current,
-                            draft: {
-                              ...current.draft,
-                              notes: event.target.value,
-                            },
-                          }
-                        : current,
-                    )
-                  }
-                />
-              </div>
+              <TextArea
+                id="candidate-profile-notes"
+                label="Ghi chú (CCCD, chỗ ở, xe đưa đón và thông tin khác)"
+                value={editSession.draft.notes}
+                rows={5}
+                isDisabled={isSaving}
+                onChange={(next) =>
+                  setEditSession((current) =>
+                    current
+                      ? { ...current, draft: { ...current.draft, notes: next } }
+                      : current,
+                  )
+                }
+              />
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"

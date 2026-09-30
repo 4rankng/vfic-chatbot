@@ -5,10 +5,6 @@
   box-shadow: none !important;
 }
 
-.candidate-context-sheet > [data-slot="sheet-close"] {
-  display: none;
-}
-
 .candidate-context-sheet .conversation-context-sheet-body {
   display: flex;
   flex-direction: column;

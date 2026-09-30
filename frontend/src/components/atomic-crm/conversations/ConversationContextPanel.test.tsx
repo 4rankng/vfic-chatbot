@@ -1,7 +1,17 @@
 import { render } from "vitest-browser-react";
+import { afterEach, vi } from "vitest";
 import type { Lead } from "../types";
 import { ConversationContextPanel } from "./ConversationContextPanel";
 import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
+
+const mobileMock = vi.hoisted(() => ({ isMobile: false }));
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => mobileMock.isMobile,
+}));
+
+afterEach(() => {
+  mobileMock.isMobile = false;
+});
 
 const lead: Lead = {
   id: 1,
@@ -109,6 +119,33 @@ describe("ConversationContextPanel notes", () => {
       .element(screen.getByText("Ứng viên mẫu", { exact: true }).first())
       .toBeVisible();
     expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("opens the candidate context as a named modal on a phone", async () => {
+    mobileMock.isMobile = true;
+    const onClose = vi.fn();
+    const onCloseAutoFocus = vi.fn();
+    const screen = await render(
+      <TestMessages>
+        <ConversationContextPanel
+          lead={lead}
+          open
+          onClose={onClose}
+          onCloseAutoFocus={onCloseAutoFocus}
+        />
+      </TestMessages>,
+    );
+
+    await expect
+      .element(screen.getByRole("dialog", { name: "Thông tin ứng viên" }))
+      .toBeVisible();
+
+    await screen
+      .getByRole("button", { name: "Đóng thông tin ứng viên" })
+      .click();
+
+    await expect.poll(() => onClose.mock.calls.length).toBe(1);
+    expect(onCloseAutoFocus).toHaveBeenCalledTimes(1);
   });
 
   it("does not expose profile editing without recruiter edit permission", async () => {
