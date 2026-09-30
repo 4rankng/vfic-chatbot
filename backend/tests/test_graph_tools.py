@@ -541,6 +541,157 @@ async def test_list_active_jobs_renders_vietnamese_status_without_duplicate_comp
 
 
 @pytest.mark.asyncio
+async def test_list_active_jobs_groups_large_catalogs_and_glosses_jargon(no_cache_io):
+    """The operator persona forbids dumping 5-10 rows on a phone screen.
+
+    With more than four matched jobs the safe reply collapses into one block
+    per company (distinct locations + salary summaries in the header, plain
+    -language titles inside), and internal abbreviations (SMT, QA) are glossed
+    so the candidate never reads bare internal codes.
+    """
+    jobs = (
+        SimpleNamespace(
+            id="11111111-1111-4111-8111-111111111111",
+            title="SMT",
+            company_name="4P Electronics",
+            factory_name="4P",
+            project_name="4P Electronics",
+            project_slug="4p-electronics",
+            province="Hải Phòng",
+            district=None,
+            salary_min=6_300_000,
+            salary_max=16_000_000,
+            vacancy_count=None,
+        ),
+        SimpleNamespace(
+            id="22222222-2222-4222-8222-222222222222",
+            title="PCBA",
+            company_name="4P Electronics",
+            factory_name="4P",
+            project_name="4P Electronics",
+            project_slug="4p-electronics",
+            province="Hải Phòng",
+            district=None,
+            salary_min=6_300_000,
+            salary_max=16_000_000,
+            vacancy_count=None,
+        ),
+        SimpleNamespace(
+            id="33333333-3333-4333-8333-333333333333",
+            title="Chất lượng QA",
+            company_name="4P Electronics",
+            factory_name="4P",
+            project_name="4P Electronics",
+            project_slug="4p-electronics",
+            province="Hải Phòng",
+            district=None,
+            salary_min=6_300_000,
+            salary_max=16_000_000,
+            vacancy_count=None,
+        ),
+        SimpleNamespace(
+            id="44444444-4444-4444-8444-444444444444",
+            title="QA",
+            company_name="AMTRAN",
+            factory_name="AMTRAN",
+            project_name="AMTRAN",
+            project_slug="amtran",
+            province="Hải Phòng",
+            district=None,
+            salary_min=6_300_000,
+            salary_max=None,
+            vacancy_count=None,
+        ),
+        SimpleNamespace(
+            id="55555555-5555-4555-8555-555555555555",
+            title="Nhân viên vận hành máy CNC",
+            company_name="Rorze",
+            factory_name="Rorze",
+            project_name="Rorze",
+            project_slug="rorze",
+            province="KCN Nhật Bản (Nomura), Hồng An, Hải Phòng",
+            district=None,
+            salary_min=14_000_000,
+            salary_max=15_000_000,
+            vacancy_count=None,
+        ),
+    )
+    repo = _make_repo(
+        list_active_jobs=lambda self, **kwargs: _const(
+            SimpleNamespace(status="matched", jobs=jobs)
+        )
+    )
+
+    out = await list_active_jobs(retrieval=repo)
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
+    reply = payload["safe_reply"]
+    # Grouped, not an eleven-line dump: one block per company.
+    assert reply.count("\n- Tại ") == 3
+    assert "- Tại 4P Electronics (Hải Phòng; lương 6,3-16 triệu): " in reply
+    # Abbreviations are glossed in plain worker language...
+    assert "SMT (gắn linh kiện điện tử bằng máy tự động)" in reply
+    assert "PCBA (lắp ráp bo mạch điện tử)" in reply
+    assert "QA (kiểm tra chất lượng sản phẩm)" in reply
+    # ...and NOT double-glossed when the title already says it.
+    assert "Chất lượng QA (kiểm tra" not in reply
+    assert "vận hành máy CNC (máy gia công" not in reply
+    # The structured payload keeps every row for grounding.
+    assert len(payload["jobs"]) == 5
+    assert reply.endswith("Anh/chị muốn tìm hiểu vị trí nào ạ?")
+
+
+@pytest.mark.asyncio
+async def test_list_active_jobs_small_catalog_keeps_per_job_lines_with_glosses(no_cache_io):
+    """Small catalogs keep the one-line-per-job shape, titles glossed."""
+    jobs = (
+        SimpleNamespace(
+            id="11111111-1111-4111-8111-111111111111",
+            title="SMT",
+            company_name="4P Electronics",
+            factory_name="4P",
+            project_name="4P Electronics",
+            project_slug="4p-electronics",
+            province="Hải Phòng",
+            district=None,
+            salary_min=6_300_000,
+            salary_max=None,
+            vacancy_count=None,
+        ),
+        SimpleNamespace(
+            id="22222222-2222-4222-8222-222222222222",
+            title="Nhân viên lắp ráp / Nhân viên vận hành máy CNC",
+            company_name="Rorze",
+            factory_name="Rorze",
+            project_name="Rorze",
+            project_slug="rorze",
+            province="KCN Nhật Bản (Nomura), Hồng An, Hải Phòng",
+            district=None,
+            salary_min=None,
+            salary_max=None,
+            vacancy_count=None,
+        ),
+    )
+    repo = _make_repo(
+        list_active_jobs=lambda self, **kwargs: _const(
+            SimpleNamespace(status="matched", jobs=jobs)
+        )
+    )
+
+    out = await list_active_jobs(retrieval=repo)
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
+    assert payload["safe_reply"] == (
+        "VFIC hiện có các vị trí đang tuyển sau:\n"
+        "- SMT (gắn linh kiện điện tử bằng máy tự động): "
+        "4P Electronics; 4P; Hải Phòng; lương từ 6,3 triệu\n"
+        "- Nhân viên lắp ráp / Nhân viên vận hành máy CNC: "
+        "Rorze; KCN Nhật Bản (Nomura), Hồng An, Hải Phòng\n"
+        "Anh/chị muốn tìm hiểu vị trí nào ạ?"
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("lookup", "expected_status", "forbidden_claim"),
     [

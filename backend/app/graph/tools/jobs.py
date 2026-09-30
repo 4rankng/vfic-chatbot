@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
@@ -76,8 +77,64 @@ def _salary_summary(job: dict[str, object]) -> str:
     )
 
 
+_TITLE_GLOSSES: dict[str, str] = {
+    "SMT": "gắn linh kiện điện tử bằng máy tự động",
+    "PCBA": "lắp ráp bo mạch điện tử",
+    "QA": "kiểm tra chất lượng sản phẩm",
+    "QC": "kiểm tra chất lượng sản phẩm",
+    "LQC": "kiểm tra chất lượng sản phẩm",
+    "IQC": "kiểm tra nguyên vật liệu đầu vào",
+    "CNC": "máy gia công tinh",
+}
+# A gloss is skipped when the title already says what the abbreviation means
+# ("Chất lượng QA", "Kiểm tra hàng - QC", "vận hành máy CNC") — glossing there
+# would read as repetition.
+_GLOSS_SKIP_IF_TITLE_CONTAINS: dict[str, tuple[str, ...]] = {
+    "QA": ("kiểm tra", "chất lượng"),
+    "QC": ("kiểm tra", "chất lượng"),
+    "LQC": ("kiểm tra", "chất lượng"),
+    "IQC": ("kiểm tra", "nguyên"),
+    "CNC": ("vận hành máy", "máy gia công"),
+}
+_ABBREV_TITLE_RE = re.compile(r"\b(SMT|PCBA|QA|QC|LQC|IQC|CNC)\b")
+
+# Grouped presentation threshold: the operator persona forbids dumping 5-10
+# rows on a phone screen, so larger catalogs collapse into per-company blocks
+# ("Tại <công ty> (...): các vị trí") instead of one line per job.
+_GROUP_REPLY_THRESHOLD = 4
+
+
+def _plain_title(title: str) -> str:
+    """Gloss internal jargon abbreviations once each, in place.
+
+    The model relays this renderer's text essentially verbatim, so the
+    operator persona's "dịch thuật ngữ" rule must hold HERE, not only in
+    prompt text the model may weight below its tool evidence.
+    """
+    seen: set[str] = set()
+
+    def _replace(match: re.Match[str]) -> str:
+        token = match.group(0)
+        gloss = _TITLE_GLOSSES.get(token)
+        lowered = title.casefold()
+        if (
+            gloss is None
+            or token in seen
+            or any(marker in lowered for marker in _GLOSS_SKIP_IF_TITLE_CONTAINS.get(token, ()))
+        ):
+            return token
+        seen.add(token)
+        return f"{token} ({gloss})"
+
+    return _ABBREV_TITLE_RE.sub(_replace, title.strip())
+
+
 def _active_jobs_safe_reply(jobs: list[dict[str, object]]) -> str:
     lines = ["VFIC hiện có các vị trí đang tuyển sau:"]
+    if len(jobs) > _GROUP_REPLY_THRESHOLD:
+        lines.extend(_grouped_job_lines(jobs))
+        lines.append("Anh/chị muốn tìm hiểu vị trí nào ạ?")
+        return "\n".join(lines)
     for job in jobs:
         details: list[str] = []
         seen_details: set[str] = set()
@@ -93,10 +150,57 @@ def _active_jobs_safe_reply(jobs: list[dict[str, object]]) -> str:
                 details.append(detail)
                 seen_details.add(normalized)
         suffix = "; ".join(details)
-        title = str(job.get("title") or "Vị trí đang tuyển")
+        title = _plain_title(str(job.get("title") or "Vị trí đang tuyển"))
         lines.append(f"- {title}" + (f": {suffix}" if suffix else ""))
     lines.append("Anh/chị muốn tìm hiểu vị trí nào ạ?")
     return "\n".join(lines)
+
+
+def _grouped_job_lines(jobs: list[dict[str, object]]) -> list[str]:
+    """Collapse a large catalog into one block per company.
+
+    The operator persona forbids dumping 5-10 rows on a phone screen; the
+    grouped block keeps every job reachable (titles inside the block) while
+    the reply stays scannable. Locations and salary summaries are the distinct
+    values across the group, first-seen order.
+    """
+    groups: dict[str, list[dict[str, object]]] = {}
+    for job in jobs:
+        key = str(job.get("company") or job.get("project") or "Dự án khác").strip()
+        groups.setdefault(key, []).append(job)
+
+    lines: list[str] = []
+    for company, group_jobs in groups.items():
+        locations: list[str] = []
+        seen_locations: set[str] = set()
+        salaries: list[str] = []
+        seen_salaries: set[str] = set()
+        titles: list[str] = []
+        seen_titles: set[str] = set()
+        for job in group_jobs:
+            location = str(job.get("province") or job.get("factory") or "").strip()
+            normalized_location = location.casefold()
+            if location and normalized_location not in seen_locations:
+                locations.append(location)
+                seen_locations.add(normalized_location)
+            salary = _salary_summary(job)
+            normalized_salary = salary.casefold()
+            if salary and normalized_salary not in seen_salaries:
+                salaries.append(salary)
+                seen_salaries.add(normalized_salary)
+            title = _plain_title(str(job.get("title") or "Vị trí đang tuyển"))
+            normalized_title = title.casefold()
+            if normalized_title not in seen_titles:
+                titles.append(title)
+                seen_titles.add(normalized_title)
+        header_bits: list[str] = []
+        if locations:
+            header_bits.append(locations[0])
+        if salaries:
+            header_bits.append(" / ".join(salaries[:2]))
+        header = f" ({'; '.join(header_bits)})" if header_bits else ""
+        lines.append(f"- Tại {company}{header}: {'; '.join(titles)}")
+    return lines
 
 
 def _active_jobs_brief_reply(jobs: list[dict[str, object]]) -> str:
@@ -114,7 +218,7 @@ def _active_jobs_brief_reply(jobs: list[dict[str, object]]) -> str:
             _salary_summary(job),
         ]
         suffix = "; ".join(part for part in parts if part)
-        title = str(job.get("title") or "Vị trí đang tuyển")
+        title = _plain_title(str(job.get("title") or "Vị trí đang tuyển"))
         lines.append(f"- {title}" + (f": {suffix}" if suffix else ""))
     return "\n".join(lines)
 
