@@ -79,9 +79,9 @@ release-check:
 	# golden retrieval-correctness benchmark and its gate.
 	@tmp="$$(mktemp -d -t vfic-release.XXXXXX)"; \
 	rc_be=0; rc_fe=0; rc_data=0; \
-	( cd backend && uvx pyright app/graph && .venv/bin/ruff check . && .venv/bin/python -m pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing ) >"$$tmp/backend.log" 2>&1 & \
+	( cd backend && uvx pyright app/graph && .venv/bin/ruff check . && .venv/bin/python -m pytest -q -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing:skip-covered ) >"$$tmp/backend.log" 2>&1 & \
 	be_pid=$$!; \
-	( cd frontend && npm audit --omit=dev --audit-level=high && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app -- --run && npm run test:unit:app:coverage:changed-surface -- --run && npm run build && npm run smoke:built ) >"$$tmp/frontend.log" 2>&1 & \
+	( cd frontend && npm audit --omit=dev --audit-level=high && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app:coverage:changed-surface -- --run && npm run build && npm run smoke:built ) >"$$tmp/frontend.log" 2>&1 & \
 	fe_pid=$$!; \
 	( cd backend && .venv/bin/python -m pytest "tests/integration/test_migration_roundtrip_walk.py::test_chain_reverses_to_base_and_reapplies" "tests/integration/test_migration_roundtrip_walk.py::test_reverse_chain_renders_offline" -p no:randomly -m integration && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp/golden-raw.json" && .venv/bin/python -c 'import json, sys; from pathlib import Path; raw = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")); passed = raw.get("passed"); case_count = raw.get("case_count"); \
 assert isinstance(passed, int) and not isinstance(passed, bool), "benchmark artifact missing integer passed"; \
@@ -95,7 +95,15 @@ Path(sys.argv[2]).write_text(json.dumps({"golden_pass_rate_pct": passed / case_c
 	echo "===== backend lane (exit $$rc_be) ====="; cat "$$tmp/backend.log"; \
 	echo "===== frontend lane (exit $$rc_fe) ====="; cat "$$tmp/frontend.log"; \
 	echo "===== data lane (exit $$rc_data) ====="; cat "$$tmp/data.log"; \
-	rm -rf "$$tmp"; \
+	if [ "$$rc_be" -ne 0 -o "$$rc_fe" -ne 0 -o "$$rc_data" -ne 0 ]; then \
+		echo "!!!! RELEASE-CHECK FAILED — red lane(s):"; \
+		[ "$$rc_be" -ne 0 ] && echo "!!!!   backend (exit $$rc_be) — full log kept at $$tmp/backend.log"; \
+		[ "$$rc_fe" -ne 0 ] && echo "!!!!   frontend (exit $$rc_fe) — full log kept at $$tmp/frontend.log"; \
+		[ "$$rc_data" -ne 0 ] && echo "!!!!   data (exit $$rc_data) — full log kept at $$tmp/data.log"; \
+		echo "!!!! (logs are NOT deleted on failure — scroll up for the lane banner, or open the kept file)"; \
+	else \
+		rm -rf "$$tmp"; \
+	fi; \
 	test "$$rc_be" -eq 0 -a "$$rc_fe" -eq 0 -a "$$rc_data" -eq 0
 
 # Build & push BOTH GHCR images, then deploy to bot.tingting.vip.

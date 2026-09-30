@@ -2,7 +2,7 @@
 #
 # Read by the release gate's backend lane (root Makefile `release-check`) when
 # that lane measures coverage — keep the two in sync:
-#   .venv/bin/pytest -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing
+#   .venv/bin/pytest -q -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing:skip-covered
 # `--cov` carries no path, so the measured tree is `source = app` below.
 # pytest-cov is declared in pyproject.toml's dev extra and reads
 # `report:fail_under` from this file when it computes the total.
@@ -27,8 +27,8 @@ omit =
 #
 # To raise it: run the gate's own invocation, read the TOTAL row, and repeat
 # the same minus-1pt step:
-#   cd backend && .venv/bin/pytest -m "not integration" --cov \
-#       --cov-config=.coveragerc --cov-report=term-missing
+#   cd backend && .venv/bin/pytest -q -m "not integration" --cov \
+#       --cov-config=.coveragerc --cov-report=term-missing:skip-covered
 #
 # Never lower it. If the floor is ever wrong, raise the tests, not the floor.
 fail_under = 75
