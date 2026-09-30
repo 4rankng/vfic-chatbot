@@ -46,14 +46,13 @@ vi.mock("./topbar/account-menu", () => ({
   AccountMenu: () => <div data-testid="account-menu" />,
 }));
 
-const ADMIN_SECTION_HEADINGS = ["Vận hành", "Đội ngũ & Agent", "Hệ thống"];
+const ADMIN_SECTION_HEADINGS = ["Vận hành", "Đội ngũ", "Hệ thống"];
 
 /** Every admin destination, in the order the navigation renders it. */
 const ADMIN_DESTINATIONS: readonly (readonly [string, string])[] = [
   ["Tổng quan", "#/"],
   ["Tin nhắn", "#/conversations"],
   ["Dự án", "#/projects"],
-  ["Agent", "#/personas"],
   ["Người dùng", "#/users"],
   ["Cài đặt", "#/settings"],
   ["Nhật ký bot", "#/bot_runs"],

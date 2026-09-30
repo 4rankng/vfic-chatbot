@@ -66,7 +66,6 @@ ChatBot/
 │   │   │       ├── leads/            kanban + chatops
 │   │   │       ├── dashboard/        RecruitingCommandCenter
 │   │   │       ├── knowledge/        KnowledgeIngestPanel + project workspace
-│   │   │       ├── personas/         persona CRUD + workspace
 │   │   │       ├── projects/         ProjectSidebar / BusTimetable / FaqEditor
 │   │   │       ├── integrations/     ZaloIntegrationPage + FacebookMessengerIntegrationPage
 │   │   │       ├── providers/        dataProvider, authProvider, i18nProvider
@@ -148,7 +147,6 @@ moved.
 | `components/atomic-crm/dashboard/` | RecruitingCommandCenter (Vietnamese metric cards). |
 | `components/atomic-crm/knowledge/` | Layered knowledge contracts, operations, HTTP/download adapters, and presentation workspaces. |
 | `components/atomic-crm/projects/` | ProjectSidebar, ProjectWorkspaceShell, and ProjectKnowledgePanel. Projects own recruiting knowledge, not Agent selection. |
-| `components/atomic-crm/personas/` | Persona domain rules, application ports/actions, HTTP adapter, CRUD, and workspace presentation. |
 | `components/atomic-crm/integrations/` | ZaloIntegrationPage + FacebookMessengerIntegrationPage (admin only). |
 | `lib/` | Shared technical utilities: `apiClient.ts`, `runtime-config.ts`, `utils.ts` (`cn()`), and `vietnameseSearch.ts`. Product behavior stays in feature slices. |
 

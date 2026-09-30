@@ -15,7 +15,6 @@ describe("static recruitment runtime", () => {
       "conversations",
       "bot_runs",
       "projects",
-      "personas",
       "settings",
       "users",
     ]);
@@ -61,12 +60,6 @@ describe("static recruitment runtime", () => {
         roles: undefined,
         section: "operations",
       },
-      {
-        id: "personas",
-        to: "/personas",
-        roles: ["admin"],
-        section: "team",
-      },
       { id: "users", to: "/users", roles: ["admin"], section: "team" },
       {
         id: "settings",
@@ -96,7 +89,6 @@ describe("static recruitment runtime", () => {
       true,
     );
     expect(navigationById.get("projects")?.isActive("/projects/1")).toBe(true);
-    expect(navigationById.get("personas")?.isActive("/personas")).toBe(true);
     expect(navigationById.get("users")?.isActive("/users/7")).toBe(true);
     expect(navigationById.get("users")?.isActive("/settings")).toBe(false);
     expect(navigationById.get("settings")?.isActive("/settings")).toBe(true);

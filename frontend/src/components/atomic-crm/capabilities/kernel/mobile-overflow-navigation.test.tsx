@@ -70,13 +70,12 @@ afterEach(async () => {
   roleActionsState.isAdmin = true;
 });
 
-const ADMIN_SECTION_HEADINGS = ["Vận hành", "Đội ngũ & Agent", "Hệ thống"];
+const ADMIN_SECTION_HEADINGS = ["Vận hành", "Đội ngũ", "Hệ thống"];
 
 const ADMIN_NAV_HREFS = [
   "#/",
   "#/conversations",
   "#/projects",
-  "#/personas",
   "#/users",
   "#/settings",
   "#/bot_runs",
@@ -87,7 +86,6 @@ const ADMIN_DESTINATION_LABELS = [
   "Tổng quan",
   "Tin nhắn",
   "Dự án",
-  "Agent",
   "Người dùng",
   "Cài đặt",
   "Nhật ký bot",

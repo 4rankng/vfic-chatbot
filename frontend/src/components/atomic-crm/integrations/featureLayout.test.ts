@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
  *
  * `_FRONTEND_LAYERED_FEATURE_ROOTS` in
  * `backend/tests/test_architecture_boundaries.py` certifies `knowledge/`,
- * `leads/`, `personas/`, `projects/` and `reporting/` only. Nothing in that
+ * `leads/`, `projects/` and `reporting/` only. Nothing in that
  * matrix fires for `integrations`, so a `domain/`, `application/`,
  * `infrastructure/` or `presentation/` directory here would advertise layers
  * that no rule enforces — the defect the flatten removed. Re-creating one

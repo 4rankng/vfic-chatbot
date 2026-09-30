@@ -37,13 +37,6 @@ const ACTIONS: readonly PaletteAction[] = [
     icon: FolderPlus,
   },
   {
-    id: "action.create-persona",
-    label: "Tạo Agent",
-    to: "/personas/create",
-    icon: UserPlus,
-    adminsOnly: true,
-  },
-  {
     id: "action.create-user",
     label: "Tạo tài khoản",
     to: "/users/create",

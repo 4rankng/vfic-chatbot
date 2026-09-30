@@ -133,7 +133,6 @@ the canonical map; visit each on desktop **and** mobile (390×844) per run.
 | `#/conversations/:id` | show | `conversations/ConversationShow.tsx` | Thread loads; context panel; takeover toggle; send (QA conv only) |
 | `#/bot_runs` | `bot_runs` (read-only audit) | `automation/BotRunList.tsx` | Run cards: outcome, preview, timing; detail view |
 | `#/projects` | `projects` | `projects/ProjectList.tsx` | CRUD cycle on a `QA-*` project; delete confirmation names target |
-| `#/personas` | `personas` | `personas/PersonaList.tsx` | Active persona marked; create/edit; assignments |
 | `#/users` | `users` (admin only) | `users/UserList.tsx` | List/sort/badges; create/edit/delete on `QA-*` user |
 | `#/settings` | `settings` | `integrations/ZaloIntegrationPage.tsx` | Zalo OA config form renders; Messenger section renders on desktop/mobile; secrets masked |
 
@@ -296,7 +295,7 @@ with assertions when adding a CI gate.
 
 ### 5.4 CRUD safety tests (per resource)
 
-For `projects`, `users`, `personas` — exercise the full
+For `projects`, `users` — exercise the full
 create→edit→delete cycle on a `QA-*` record:
 
 1. Submit the create form **empty** → verify validation rejects it.
@@ -458,7 +457,7 @@ bugs get a step-by-step repro with a video and per-step screenshots.
 
 ### Exit checklist (before closing the session)
 
-- [ ] All `QA-*` records deleted (projects, users, personas, knowledge sources)
+- [ ] All `QA-*` records deleted (projects, users, knowledge sources)
 - [ ] Any real record mutated during the run restored to its original value
 - [ ] No test messages left in real candidate conversations
 - [ ] `report.md` summary counts match the issue blocks

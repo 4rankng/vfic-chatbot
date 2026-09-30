@@ -227,7 +227,7 @@ supplied structure and components, never a new visual identity.
   `.uu-scope`. `untitledui-theme-contract.test.ts` guards that split.
 - **Kit.** `PageShell`, `PageHeading`, `EmptyState`, `kit/form-controls.tsx` and
   `kit/list-table.tsx` carry the shared page furniture; dashboard, settings,
-  users, knowledge base, automation, knowledge, personas, conversations, auth,
+  users, knowledge base, automation, knowledge, conversations, auth,
   profile, performance and projects were migrated onto them in place.
 
 ### Inbox directory header and channel indicator

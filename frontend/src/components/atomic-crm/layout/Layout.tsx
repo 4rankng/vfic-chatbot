@@ -24,9 +24,6 @@ export const Layout = ({ children }: { children: ReactNode }) => {
     hashPath.startsWith("/settings") ||
     location.pathname.startsWith("/zalo_integrations") ||
     hashPath.startsWith("/zalo_integrations");
-  const isPersonaWorkspace =
-    location.pathname.startsWith("/personas") ||
-    hashPath.startsWith("/personas");
   const isProjectWorkspace =
     location.pathname.startsWith("/projects") ||
     hashPath.startsWith("/projects");
@@ -37,7 +34,6 @@ export const Layout = ({ children }: { children: ReactNode }) => {
     isDashboardWorkspace ||
     isConversationWorkspace ||
     isIntegrationWorkspace ||
-    isPersonaWorkspace ||
     isProjectWorkspace ||
     isProfileWorkspace ||
     isPerformanceWorkspace;

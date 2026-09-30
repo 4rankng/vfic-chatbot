@@ -25,7 +25,7 @@ const SECTION_ORDER: readonly DestinationSection[] = [
 
 const SECTION_LABELS: Record<DestinationSection, string> = {
   operations: "Vận hành",
-  team: "Đội ngũ & Agent",
+  team: "Đội ngũ",
   system: "Hệ thống",
 };
 

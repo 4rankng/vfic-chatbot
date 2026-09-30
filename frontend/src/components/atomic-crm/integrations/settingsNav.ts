@@ -5,12 +5,11 @@ import {
   MessageCircle,
   MessagesSquare,
   UsersRound,
-  Workflow,
   type LucideIcon,
 } from "lucide-react";
 
 /**
- * Settings navigation: the seven entries of the console rail and the header copy
+ * Settings navigation: the six entries of the console rail and the header copy
  * each one shows. Kept free of JSX so the rail, the mobile drawer and the
  * header all read one source.
  */
@@ -21,7 +20,6 @@ export type SettingsItemId =
   | "settings-llm-providers"
   | "settings-jev"
   | "settings-tingting"
-  | "settings-agents"
   | "settings-users";
 
 export type SettingsSectionNavItem = {
@@ -63,12 +61,6 @@ export const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     Icon: KeyRound,
   },
   {
-    itemId: "settings-agents",
-    label: "Agents",
-    description: "Giọng trả lời",
-    Icon: Workflow,
-  },
-  {
     itemId: "settings-users",
     label: "Người dùng",
     description: "Tài khoản & quyền",
@@ -106,11 +98,6 @@ export const SETTINGS_VIEW_COPY: Record<
     title: "TingTing · Đặt lại mật khẩu",
     description:
       "API key dùng để tra cứu nhân sự và gửi OTP đặt lại mật khẩu qua TingTing.",
-  },
-  "settings-agents": {
-    kicker: "Không gian cài đặt",
-    title: "Agents",
-    description: "Giọng trả lời và adapter sử dụng.",
   },
   "settings-users": {
     kicker: "Không gian cài đặt",

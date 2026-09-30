@@ -110,12 +110,6 @@ describe("kernel capability routes", () => {
         section: "operations",
         roles: undefined,
       },
-      {
-        id: "personas",
-        to: "/personas",
-        section: "team",
-        roles: ["admin"],
-      },
       { id: "users", to: "/users", section: "team", roles: ["admin"] },
       {
         id: "settings",

@@ -160,7 +160,6 @@ vi.mock("./api", () => ({
     disconnect: vi.fn(),
   },
 }));
-vi.mock("../personas/PersonaList", () => ({ PersonaList: () => null }));
 vi.mock("../users/UserList", () => ({ UserList: () => null }));
 
 import { SettingsConsolePage } from "./SettingsConsolePage";

@@ -21,11 +21,7 @@ describe("canAccess", () => {
       ),
     ).toBe(true);
     expect(
-      canAccess(
-        "recruiter",
-        { resource: "personas", action: "list" },
-        resources,
-      ),
+      canAccess("recruiter", { resource: "users", action: "list" }, resources),
     ).toBe(false);
   });
 });

@@ -42,10 +42,6 @@ export const vietnameseCrmMessages = {
       name: "Dự án |||| Dự án",
       forcedCaseName: "Dự án",
     },
-    personas: {
-      name: "Agent |||| Agent",
-      forcedCaseName: "Agent",
-    },
     users: {
       name: "Tài khoản |||| Tài khoản",
       forcedCaseName: "Tài khoản",
@@ -83,15 +79,6 @@ export const vietnameseCrmMessages = {
     candidates_load_failed: "Không tải được ứng viên.",
     save_candidate_success: "Đã cập nhật hồ sơ ứng viên",
     save_candidate_failed: "Không thể cập nhật hồ sơ ứng viên",
-  },
-  personas: {
-    create_agent: "Tạo Agent",
-    status_default: "Mặc định",
-    status_fallback: "Dự phòng",
-    scope_inherits_default:
-      "Chưa có adapter gán riêng, sẽ kế thừa Agent mặc định này.",
-    scope_unused: "Chưa adapter nào dùng Agent này.",
-    followup_schedule_hint: "Lịch nhắc theo mức ưu tiên.",
   },
   performance: {
     error_title: "Không tải được số liệu hiệu suất",

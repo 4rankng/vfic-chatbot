@@ -3,7 +3,7 @@
  *
  * FEATURE IS NOT CERTIFIED — this tree is deliberately flat.
  *
- * `knowledge/`, `leads/`, `personas/`, `projects/` and `reporting/` are
+ * `knowledge/`, `leads/`, `projects/` and `reporting/` are
  * layered because `backend/tests/test_architecture_boundaries.py` enforces
  * them: `_FRONTEND_LAYERED_FEATURE_ROOTS` lists those roots and the test fails
  * on any outward import out of their `domain/`, `application/` and

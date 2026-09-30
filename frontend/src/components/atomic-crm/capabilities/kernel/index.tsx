@@ -1,6 +1,5 @@
 import { Navigate } from "react-router";
 import {
-  Bot,
   Briefcase,
   Gauge,
   Home,
@@ -14,7 +13,6 @@ import users from "../../users";
 import conversations from "../../conversations";
 import automation from "../../automation";
 import projects from "../../projects";
-import personas from "../../personas";
 import integrations from "../../integrations";
 import type {
   CompiledDestination,
@@ -55,15 +53,6 @@ const navigation: readonly CompiledDestination[] = [
     Icon: Briefcase,
     section: "operations",
     isActive: pathStartsWith("/projects"),
-  },
-  {
-    id: "personas",
-    label: "Agent",
-    to: "/personas",
-    Icon: Bot,
-    roles: ["admin"],
-    section: "team",
-    isActive: pathStartsWith("/personas"),
   },
   {
     id: "users",
@@ -173,14 +162,6 @@ const resourceContributions = {
       id: "kernel.resource.projects",
       name: "projects",
       props: projects,
-    },
-  },
-  "kernel.resource.personas": {
-    kind: "resource" as const,
-    resource: {
-      id: "kernel.resource.personas",
-      name: "personas",
-      props: personas,
     },
   },
   "kernel.resource.settings": {

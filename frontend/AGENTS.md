@@ -7,7 +7,7 @@ VFIC recruitment platform. It is a React + react-admin single-page app that
 talks to the **VFIC FastAPI backend** (`/api/v1` REST + Socket.IO).
 The UI is **Vietnamese-only**. It is derived from the open-source
 *Atomic CRM* / *shadcn-admin-kit* template (by Marmelab) but has been
-stripped to six recruitment-console resources.
+stripped to five recruitment-console resources.
 
 > **History:** until 2026-06-26 this app used Supabase directly (PostgREST +
 > Supabase Auth + Realtime). It has been **fully migrated to the FastAPI
@@ -79,15 +79,15 @@ from contributions in `capabilities/kernel/` and `capabilities/recruitment/`;
 | `conversations` | `atomic-crm/conversations/` | Zalo chat inbox + thread |
 | `bot_runs` | `atomic-crm/automation/` | Bot execution audit trail (read-only) |
 | `projects` | `atomic-crm/projects/` | Recruitment project knowledge |
-| `personas` | `atomic-crm/personas/` | Agent persona admin |
 | `settings` | `atomic-crm/integrations/` | Channel integration settings |
 | `users` | `atomic-crm/users/` | Admin user provisioning |
 
 The CRM `users` resource maps to the backend `users` table (formerly Supabase
 `profiles`). `RESOURCE_PATH` in the dataProvider keeps the legacy REST
-aliases, including `knowledge_bases` (the persona KB picker fetches it) and
-`knowledge_sources` → `/api/v1/knowledge/documents`, which no longer has an
-admin page.
+aliases — `knowledge_bases`, `knowledge_sources` → `/api/v1/knowledge/documents`
+and `personas` → `/api/v1/knowledge/personas` — none of which has an admin
+page any more. The agent persona itself is a backend code constant
+(`app/services/personas/constant.py`), not operator-editable content.
 
 ### Directory Structure
 
@@ -104,7 +104,6 @@ src/
 │       ├── layout/         # app shell, header, topbar, notifications
 │       ├── leads/          # recruitment lead feature layers
 │       ├── login/          # auth page
-│       ├── personas/       # personas resource
 │       ├── projects/       # projects resource
 │       ├── providers/      # REST/auth/i18n/realtime adapters
 │       ├── reporting/      # reporting ports, domain logic, HTTP adapter
@@ -156,8 +155,8 @@ own generator once).
 ### Feature CSS Scoping
 
 `.inbox-bg-container` is one shared container class carried by every workspace
-root — inbox, profile, project, persona and settings. A rule nesting
-under it as a *descendant* (`.inbox-bg-container .x`) therefore reaches all five
+root — inbox, profile, project and settings. A rule nesting
+under it as a *descendant* (`.inbox-bg-container .x`) therefore reaches all four
 screens. The scoped form is the compound selector `projects.css` already uses:
 `.inbox-bg-container.project-workspace .x`.
 

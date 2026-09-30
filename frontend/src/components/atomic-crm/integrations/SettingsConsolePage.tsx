@@ -5,7 +5,6 @@ import { useProviderPanels } from "./useProviderPanels";
 import { useSettingsBundle } from "./useSettingsBundle";
 import { useZaloForm } from "./useZaloForm";
 import {
-  AgentsSettingsSection,
   MessengerSettingsSection,
   UsersSettingsSection,
 } from "./EmbeddedSettingsSections";
@@ -81,8 +80,6 @@ export const SettingsConsolePage = () => {
         );
       case "settings-tingting":
         return <TingtingSection />;
-      case "settings-agents":
-        return <AgentsSettingsSection />;
       case "settings-users":
         return <UsersSettingsSection />;
       case "settings-facebook-messenger":
