@@ -837,7 +837,13 @@ input:-webkit-autofill:focus {
    wraps the workspace canvas. Untitled UI components inside it resolve their
    whole vocabulary through the names below, so the chrome stays navy with ivory
    text and an action-coloured active marker instead of turning into a white sidebar. */
-.workspace-chrome {
+/* The chrome element itself carries `uu-scope`, whose library bindings share
+   this rule's (0,1,0) specificity — source order then decided the winner and
+   the ink topbar got the library's mid-grey text (measured 1.29:1 on the
+   account name). The compound form outranks `.uu-scope` regardless of import
+   order, so the ivory vocabulary below actually applies. */
+.workspace-chrome,
+.workspace-chrome.uu-scope {
   --color-bg-primary: var(--workspace-shell);
   --color-bg-primary_hover: var(--workspace-shell-hover);
   --color-bg-secondary: var(--workspace-shell-active);
@@ -865,6 +871,25 @@ input:-webkit-autofill:focus {
     transparent
   );
   --color-bg-overlay: var(--workspace-shell);
+  /* The library's `text-*` utilities consume the `--text-color-*` namespace,
+     not the `--color-text-*` aliases above — re-point that family too, or the
+     topbar keeps rendering the library's grey-on-navy (1.29:1). */
+  --text-color-primary: var(--workspace-paper);
+  --text-color-secondary: color-mix(
+    in oklab,
+    var(--workspace-paper) 84%,
+    transparent
+  );
+  --text-color-tertiary: color-mix(
+    in oklab,
+    var(--workspace-paper) 68%,
+    transparent
+  );
+  --text-color-quaternary: color-mix(
+    in oklab,
+    var(--workspace-paper) 62%,
+    transparent
+  );
 }
 
 /* The active destination carries the brand accent: PRO's nav item only tints
