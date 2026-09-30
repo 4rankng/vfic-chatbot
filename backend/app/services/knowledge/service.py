@@ -435,6 +435,8 @@ class KnowledgeService:
         text = extract_text(file_name, content_type, data, decode_errors="replace")
         if file_format == "docx" and not text.strip():
             raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
+        if file_format == "xlsx" and not text.strip():
+            raise KnowledgeFileExtractionError("XLSX không có dữ liệu để ingest.")
         return text, {
             "format": file_format,
             "mime_type": content_type or (DOCX_MIME_TYPE if file_format == "docx" else None),

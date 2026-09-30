@@ -1,10 +1,10 @@
 """Pure file-format detection and text extraction for knowledge uploads.
 
 Single owner of upload format resolution. Both knowledge upload paths come
-through here: the legacy document upload resolves permissively (any suffix /
-content type, everything else decoded as UTF-8 text), while a KB-version
-release file resolves strictly via ``allowed_formats`` — only the release
-formats are accepted and everything else is rejected.
+through here under one strict contract: only plain text, markdown, DOCX and
+XLSX resolve, YAML is refused by name, and everything else is rejected so the
+route can answer 422. Every accepted format is normalized to text before
+ingest.
 
 The DOCX and XLSX branches parse the OOXML container with the standard library
 and are recorded on the stored document under those distinct provenance values
@@ -26,13 +26,17 @@ from zipfile import BadZipFile, ZipFile
 from xml.etree import ElementTree as ET
 
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 WORD_XML_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
-# The only formats a KB-version release file may carry.
-KB_RELEASE_FORMATS = frozenset({"docx", "markdown", "text"})
+# The only formats a knowledge upload may carry, on either lane. Each one
+# normalizes to ingestable text (OOXML parse or UTF-8 decode).
+KB_RELEASE_FORMATS = frozenset({"docx", "xlsx", "markdown", "text"})
 
 _MARKDOWN_CONTENT_TYPES = frozenset({"text/markdown", "text/x-markdown"})
 _PLAIN_TEXT_CONTENT_TYPES = frozenset({"text/plain", *_MARKDOWN_CONTENT_TYPES})
+_YAML_CONTENT_TYPES = frozenset({"application/yaml", "text/yaml"})
+_YAML_SUFFIXES = frozenset({".yaml", ".yml"})
 
 
 class KnowledgeFileExtractionError(ValueError):
@@ -47,39 +51,32 @@ def _detect_upload_format(
 ) -> str:
     """Resolve an upload's format from its name and declared content type.
 
-    Without ``allowed_formats`` the resolution is permissive: a known suffix or
-    content type wins, anything else falls back to the raw suffix, then the raw
-    content type, then ``"binary"``. This is the legacy document-upload contract.
-
-    With ``allowed_formats`` the resolution is strict: only the KB release
-    formats (.docx, .md, .txt — plus a suffixed-less ``text/*`` body) resolve,
-    and anything else raises ``ValueError`` so the route can answer 422. This
-    is the KB-version release contract; the same files are not interchangeable
-    between the two endpoints.
+    Both lanes share one strict contract: plain text, markdown, DOCX and XLSX
+    are the only accepted knowledge formats, YAML is refused by name so an old
+    habit surfaces as a clear 422 instead of silently ingested markup, and
+    anything else raises ``ValueError`` so the route can answer 422.
+    ``allowed_formats`` narrows the accepted set for callers that want a
+    subset; ``None`` means the full release set.
     """
     suffix = Path(file_name or "").suffix.lower()
     normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if allowed_formats is None:
-        if suffix == ".docx" or normalized_type == DOCX_MIME_TYPE:
-            return "docx"
-        if suffix == ".md" or normalized_type in _MARKDOWN_CONTENT_TYPES:
-            return "markdown"
-        if suffix == ".txt" or normalized_type.startswith("text/"):
-            return "text"
-        return suffix.removeprefix(".") or normalized_type or "binary"
+    if suffix in _YAML_SUFFIXES or normalized_type in _YAML_CONTENT_TYPES:
+        raise ValueError("YAML knowledge files are not accepted; convert to .md or .txt.")
     if suffix == ".docx" or normalized_type == DOCX_MIME_TYPE:
         resolved = "docx"
-    elif suffix == ".md":
+    elif suffix == ".xlsx" or normalized_type == XLSX_MIME_TYPE:
+        resolved = "xlsx"
+    elif suffix in {".md", ".markdown"}:
         resolved = "markdown"
     elif suffix == ".txt":
         resolved = "text"
     elif suffix == "" and normalized_type in _PLAIN_TEXT_CONTENT_TYPES:
         resolved = "markdown" if "markdown" in normalized_type else "text"
     elif normalized_type not in _PLAIN_TEXT_CONTENT_TYPES:
-        raise ValueError("Only .txt and .md knowledge files are supported.")
+        raise ValueError("Only .txt, .md, .docx and .xlsx knowledge files are supported.")
     else:
-        raise ValueError("Knowledge filenames must end in .txt or .md.")
-    if resolved not in allowed_formats:
+        raise ValueError("Knowledge filenames must end in .txt, .md, .docx or .xlsx.")
+    if resolved not in (allowed_formats or KB_RELEASE_FORMATS):
         raise ValueError(f"Knowledge files of type {resolved} are not supported.")
     return resolved
 
@@ -88,6 +85,8 @@ def mime_type_for_format(file_format: str, content_type: str) -> str:
     """The MIME type recorded on a stored document for a resolved upload format."""
     if file_format == "docx":
         return DOCX_MIME_TYPE
+    if file_format == "xlsx":
+        return XLSX_MIME_TYPE
     normalized = (content_type or "").split(";", 1)[0].strip().lower()
     if normalized.startswith("text/"):
         return normalized
@@ -358,7 +357,7 @@ def extract_text(
     """Convert an uploaded source file to ingestable plain text.
 
     Dispatches by detected format: DOCX and XLSX are parsed as OOXML containers;
-    everything text-like (txt, md, csv, JSON, …) is decoded as UTF-8. Raises
+    plain text and markdown are decoded as UTF-8. Raises
     ``KnowledgeFileExtractionError`` on a structurally invalid binary file; an
     undecodable text file surfaces its ``UnicodeDecodeError`` to the caller
     (upload handler) as a hard failure unless the caller asks for

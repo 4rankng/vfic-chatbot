@@ -1,16 +1,12 @@
 """The two knowledge-upload format contracts, both owned by ``file_extraction``.
 
-ARCH-22 collapsed three diverged extraction paths into one owner. The two
-endpoints deliberately resolve formats differently and must keep doing so:
+ARCH-22 collapsed three diverged extraction paths into one owner. Since the
+markdown-only ruling both lanes share one strict contract: plain text,
+markdown, DOCX and XLSX resolve and normalize to text before ingest, YAML is
+refused by name, and anything else is a ``ValueError`` the route maps to 422.
 
-* the legacy document upload (``upload_bytes``) resolves permissively — any
-  suffix / content type is ingested, text decoded as UTF-8 with replacement;
-* the KB-version release upload (``upload_text_file``) resolves strictly —
-  only .docx / .md / .txt resolve, anything else is a ``ValueError`` the route
-  maps to 422.
-
-These tests pin the *behavior* at both boundaries, so a future "unify the
-detectors" change cannot silently widen or narrow either endpoint.
+These tests pin the *behavior* at both boundaries, so neither endpoint can
+silently widen or narrow the shared accepted set.
 
 The provenance block (``source_file.extraction``) is pinned alongside the text
 it describes, because the two are one fact: a document that records
@@ -35,6 +31,7 @@ from app.services.knowledge.file_extraction import (
     is_parsed_format,
     mime_type_for_format,
 )
+from app.schemas.knowledge import UploadRequest
 from app.services.knowledge.service import KnowledgeService
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -124,11 +121,12 @@ def _legacy(file_name: str, content_type: str) -> str:
     return _detect_upload_format(file_name, content_type)
 
 
-def test_the_legacy_upload_ingests_a_csv_the_release_upload_refuses() -> None:
-    # The asymmetry is the contract: the legacy document upload accepts a
-    # spreadsheet/csv, the KB-version release upload does not.
-    assert _legacy("a.csv", "text/csv") == "text"
-    with pytest.raises(ValueError):
+def test_both_lanes_refuse_a_csv() -> None:
+    # The lanes are unified: a CSV is neither plain text nor markdown, so both
+    # refuse it instead of ingesting spreadsheet noise as a document.
+    with pytest.raises(ValueError, match="Only .txt, .md, .docx and .xlsx"):
+        _legacy("a.csv", "text/csv")
+    with pytest.raises(ValueError, match="Only .txt, .md, .docx and .xlsx"):
         _release("a.csv", "text/csv")
 
 
@@ -136,19 +134,23 @@ def test_the_legacy_upload_ingests_a_csv_the_release_upload_refuses() -> None:
     ("file_name", "content_type"),
     [
         ("a.pdf", "application/pdf"),
-        ("a.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         ("a.doc", "application/msword"),
+        ("a.csv", "text/csv"),
     ],
 )
 def test_the_release_upload_refuses_every_non_text_format(file_name, content_type) -> None:
-    with pytest.raises(ValueError, match="Only .txt and .md knowledge files are supported."):
+    with pytest.raises(
+        ValueError, match="Only .txt, .md, .docx and .xlsx knowledge files are supported."
+    ):
         _release(file_name, content_type)
 
 
 def test_a_csv_declared_as_plain_text_is_refused_for_its_suffix() -> None:
     # A wrong-but-plausible Content-Type must not smuggle a .csv past the
     # release contract: the suffix is checked, so this is the other error.
-    with pytest.raises(ValueError, match="Knowledge filenames must end in .txt or .md."):
+    with pytest.raises(
+        ValueError, match="Knowledge filenames must end in .txt, .md, .docx or .xlsx."
+    ):
         _release("a.csv", "text/plain")
 
 
@@ -156,17 +158,29 @@ def test_a_csv_declared_as_plain_text_is_refused_for_its_suffix() -> None:
     ("file_name", "content_type", "expected"),
     [
         ("tuyen-dung.docx", DOCX_MIME, "docx"),
+        ("bang.xlsx", XLSX_MIME, "xlsx"),
         ("kb.md", "text/markdown", "markdown"),
+        ("kb.markdown", "text/markdown", "markdown"),
         ("kb.txt", "text/plain", "text"),
         ("kb.md", "application/octet-stream", "markdown"),
         ("release", "text/plain", "text"),
         ("release", "text/markdown", "markdown"),
     ],
 )
-def test_the_release_upload_accepts_docx_markdown_and_text(
+def test_the_release_upload_accepts_docx_xlsx_markdown_and_text(
     file_name, content_type, expected
 ) -> None:
     assert _release(file_name, content_type) == expected
+
+
+@pytest.mark.parametrize("lane", [_legacy, _release])
+def test_yaml_is_refused_by_name_on_both_lanes(lane) -> None:
+    # The markdown-only ruling: a .yaml upload must surface as a clear 422
+    # telling the operator to convert, never as silently ingested markup.
+    with pytest.raises(ValueError, match="YAML knowledge files are not accepted"):
+        lane("bang.yaml", "text/yaml")
+    with pytest.raises(ValueError, match="YAML knowledge files are not accepted"):
+        lane("bang.yml", "application/yaml")
 
 
 def test_the_release_upload_refuses_a_format_outside_the_allowed_set() -> None:
@@ -215,7 +229,7 @@ def test_the_legacy_upload_records_the_extraction_it_actually_used() -> None:
 
 def test_the_legacy_upload_replaces_undecodable_bytes_in_a_text_upload() -> None:
     text, source_metadata = KnowledgeService._extract_upload_text(
-        "notes.csv", "text/csv", b"ten,l\xe9u"
+        "notes.txt", "text/plain", b"ten,l\xe9u"
     )
 
     assert "l�u" in text
@@ -236,6 +250,7 @@ def test_the_extraction_error_is_a_value_error_so_both_routes_answer_422() -> No
 
 def test_a_stored_document_records_the_mime_type_of_its_resolved_format() -> None:
     assert mime_type_for_format("docx", "") == DOCX_MIME
+    assert mime_type_for_format("xlsx", "") == XLSX_MIME
     assert mime_type_for_format("markdown", "") == "text/markdown"
     assert mime_type_for_format("markdown", "text/plain; charset=utf-8") == "text/plain"
     assert mime_type_for_format("text", "") == "text/plain"
@@ -309,7 +324,6 @@ def test_a_structurally_broken_xlsx_is_refused_rather_than_ingested_as_noise() -
     [
         ("notes.txt", "text/plain", "utf8_decode"),
         ("notes.md", "text/markdown", "utf8_decode"),
-        ("notes.csv", "text/csv", "utf8_decode"),
     ],
 )
 def test_a_plain_text_upload_records_utf8_decode_because_that_is_what_decoded_it(
@@ -365,3 +379,11 @@ def test_the_release_upload_records_the_parser_that_produced_a_docx() -> None:
         )
         == "word_ooxml"
     )
+
+
+def test_the_json_upload_lane_enforces_the_same_format_contract() -> None:
+    assert UploadRequest(file_name="kb.md", content="nội dung").file_name == "kb.md"
+    with pytest.raises(ValueError, match="YAML knowledge files are not accepted"):
+        UploadRequest(file_name="kb.yaml", content="category: jobs")
+    with pytest.raises(ValueError, match="Knowledge filenames must end in"):
+        UploadRequest(file_name="bang.csv", content="a,b")

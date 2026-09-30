@@ -72,9 +72,11 @@ def _units_payload(*contents):
 
 
 # --------------------------------------------------------------------------- extract
-def test_extract_text_csv_txt_md():
-    assert extract_text("a.csv", "text/csv", b"x,y\n1,2\n").strip() == "x,y\n1,2"
+def test_extract_text_txt_md_only():
+    with pytest.raises(ValueError):
+        extract_text("a.csv", "text/csv", b"x,y\n1,2\n")
     assert extract_text("a.txt", "text/plain", "nội dung".encode("utf-8")) == "nội dung"
+    assert extract_text("a.md", "text/markdown", b"# title") == "# title"
     assert extract_text("a.md", "text/markdown", b"# title") == "# title"
 
 

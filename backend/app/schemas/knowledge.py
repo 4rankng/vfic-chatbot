@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.project_knowledge.domain.statuses import KBVersionStatus, KnowledgeStatus
 
@@ -101,6 +101,9 @@ class KnowledgeDocumentListResponse(BaseModel):
     total: int
 
 
+_UPLOAD_FILE_SUFFIXES = frozenset({".txt", ".md", ".markdown", ".docx", ".xlsx"})
+
+
 class UploadRequest(BaseModel):
     """JSON text upload (kept for the Drive path / programmatic clients)."""
 
@@ -110,6 +113,18 @@ class UploadRequest(BaseModel):
     content: str
     drive_file_id: str | None = None
     project_id: uuid.UUID | None = None
+
+    @field_validator("file_name")
+    @classmethod
+    def _accepts_knowledge_file_formats(cls, value: str) -> str:
+        """The JSON lane obeys the same format contract as the multipart lanes."""
+        normalized = value.strip().lower()
+        if normalized.endswith((".yaml", ".yml")):
+            raise ValueError("YAML knowledge files are not accepted; convert to .md or .txt.")
+        dot = normalized.rfind(".")
+        if dot != -1 and normalized[dot:] in _UPLOAD_FILE_SUFFIXES:
+            return value
+        raise ValueError("Knowledge filenames must end in .txt, .md, .docx or .xlsx.")
 
 
 class KBVersionOut(BaseModel):
