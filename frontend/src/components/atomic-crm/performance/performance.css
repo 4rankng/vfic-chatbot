@@ -76,16 +76,6 @@
   gap: 0.375rem;
 }
 
-.performance-window {
-  display: flex;
-  gap: 0.125rem;
-  padding: 0.125rem;
-  border: 1px solid var(--border);
-  border-radius: 0.65rem;
-  background: var(--card);
-}
-
-.performance-window button,
 .performance-refresh,
 .performance-expand,
 .performance-signal-list a,
@@ -93,19 +83,6 @@
   border: 0;
   background: transparent;
   color: var(--muted-foreground);
-}
-
-.performance-window button {
-  min-height: 2rem;
-  border-radius: 0.4rem;
-  padding: 0.0625rem 0.625rem;
-  font-size: var(--fs-body-sm);
-  font-weight: var(--fw-semibold);
-}
-
-.performance-window button[aria-pressed="true"] {
-  color: var(--primary-foreground);
-  background: var(--primary);
 }
 
 .performance-refresh {
@@ -133,7 +110,6 @@
   background: var(--muted);
 }
 .performance-refresh:focus-visible,
-.performance-window button:focus-visible,
 .performance-expand:focus-visible,
 .performance-turn-cards button:focus-visible,
 .performance-signal-list a:focus-visible {
@@ -776,23 +752,6 @@
     grid-template-columns: minmax(0, 1fr) auto;
     width: 100%;
     gap: 6px;
-  }
-
-  .performance-window {
-    min-width: 0;
-    padding: 2px;
-    border-radius: 8px;
-  }
-
-  /* One control height with the desktop rule above: below 768px the shell's
-     44px touch floor (src/index.css) raises both anyway. */
-  .performance-window button {
-    flex: 1;
-    min-width: 0;
-    border-radius: 8px;
-    padding: 3px 8px;
-    font-size: var(--fs-body-sm);
-    font-weight: 600;
   }
 
   .performance-refresh {

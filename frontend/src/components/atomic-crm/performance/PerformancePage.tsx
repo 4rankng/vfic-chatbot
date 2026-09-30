@@ -15,6 +15,10 @@ import {
   getStageTone,
   type Tone,
 } from "../reporting/domain/performanceDiagnostics";
+import {
+  ButtonGroup,
+  ButtonGroupItem,
+} from "@/components/base/button-group/button-group";
 import { PerformanceTrendChart } from "./PerformanceTrendChart";
 import { AttentionQueue } from "./presentation/attentionQueue/AttentionQueue";
 import { AdapterComparison } from "./presentation/adapterComparison/AdapterComparison";
@@ -185,18 +189,22 @@ const PerformancePanel = () => {
           </p>
         </div>
         <div className="performance-header-actions">
-          <div className="performance-window" aria-label="Khoảng thời gian">
+          <ButtonGroup
+            size="sm"
+            className="uu-scope"
+            aria-label="Khoảng thời gian"
+            selectedKeys={[windowKey]}
+            onSelectionChange={(keys) => {
+              const next = [...keys][0];
+              if (next) setWindowKey(next as (typeof WINDOWS)[number]["key"]);
+            }}
+          >
             {WINDOWS.map((window) => (
-              <button
-                key={window.key}
-                type="button"
-                aria-pressed={windowKey === window.key}
-                onClick={() => setWindowKey(window.key)}
-              >
+              <ButtonGroupItem key={window.key} id={window.key}>
                 {window.label}
-              </button>
+              </ButtonGroupItem>
             ))}
-          </div>
+          </ButtonGroup>
           <button
             type="button"
             className="performance-refresh"

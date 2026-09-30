@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
@@ -6,6 +6,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import "@/index.css";
 import "./performance.css";
+import {
+  ButtonGroup,
+  ButtonGroupItem,
+} from "@/components/base/button-group/button-group";
 import { PerformanceTrendChart } from "./PerformanceTrendChart";
 import { Metric } from "./presentation/primitives";
 import type { PerfTrendBucket } from "./usePerformanceStats";
@@ -63,6 +67,27 @@ afterEach(async () => {
   await page.viewport(desktop, 900);
 });
 
+/** The header's segmented window switcher, reproduced from `PerformancePage`. */
+const WindowSwitcher = () => {
+  const [windowKey, setWindowKey] = useState<"1h" | "24h" | "7d">("24h");
+  return (
+    <ButtonGroup
+      size="sm"
+      className="uu-scope"
+      aria-label="Khoảng thời gian"
+      selectedKeys={[windowKey]}
+      onSelectionChange={(keys) => {
+        const next = [...keys][0];
+        if (next) setWindowKey(next as "1h" | "24h" | "7d");
+      }}
+    >
+      <ButtonGroupItem id="1h">1 giờ</ButtonGroupItem>
+      <ButtonGroupItem id="24h">24 giờ</ButtonGroupItem>
+      <ButtonGroupItem id="7d">7 ngày</ButtonGroupItem>
+    </ButtonGroup>
+  );
+};
+
 /** The dashboard header, reproduced from `PerformancePage`'s own markup. */
 const header = () => (
   <header className="performance-header">
@@ -72,11 +97,7 @@ const header = () => (
       <p>Trải nghiệm ứng viên, năng lực xử lý và độ tin cậy giao gửi.</p>
     </div>
     <div className="performance-header-actions">
-      <div className="performance-window" aria-label="Khoảng thời gian">
-        <button type="button" aria-pressed="true">
-          24 giờ
-        </button>
-      </div>
+      <WindowSwitcher />
       <button
         type="button"
         className="performance-refresh"
@@ -214,47 +235,30 @@ describe("performance trend chart layers", () => {
 });
 
 describe("performance header hierarchy", () => {
-  it("keeps the window switcher compact on desktop", async () => {
+  it("marks exactly the chosen window as selected", async () => {
+    // The switcher is one React Aria segmented control; a pixel pin on the
+    // deleted `.performance-window` rules cannot prove that. Selecting a
+    // segment must move the selected marker and leave exactly one behind.
     await page.viewport(desktop, 900);
     const screen = await render(dashboard(header()));
 
-    const window = screen.container.querySelector<HTMLElement>(
-      ".performance-window",
+    const switcher = screen.container.querySelector<HTMLElement>(
+      '[aria-label="Khoảng thời gian"]',
     )!;
-    const segment = screen.container.querySelector<HTMLElement>(
-      ".performance-window button",
-    )!;
-    const refresh = screen.container.querySelector<HTMLElement>(
-      ".performance-refresh",
-    )!;
-
-    // A tightly padded segmented control: the page title owns the visual
-    // weight and the switcher stays a quiet secondary. The switcher and the
-    // refresh control beside it share ONE height — a second height in the same
-    // row was the drift.
-    expect(getComputedStyle(window).padding).toBe("2px");
-    expect(getComputedStyle(segment).minHeight).toBe(
-      getComputedStyle(refresh).minHeight,
+    const segments = Array.from(
+      switcher.querySelectorAll<HTMLButtonElement>("button"),
     );
-  });
+    expect(segments).toHaveLength(3);
+    const selectedLabels = (items: HTMLButtonElement[]) =>
+      items
+        .filter((item) => item.hasAttribute("data-selected"))
+        .map((item) => item.textContent);
 
-  it("keeps one control height on a phone and lets the shell raise it", async () => {
-    // The ≤720px block must not declare a second height: the console's 44px
-    // touch floor (src/index.css) is what makes these controls reachable, so a
-    // phone-only height here would be a dead declaration.
-    await page.viewport(mobile, 900);
-    const screen = await render(dashboard(header()));
+    expect(selectedLabels(segments)).toEqual(["24 giờ"]);
 
-    const segment = screen.container.querySelector<HTMLElement>(
-      ".performance-window button",
-    )!;
-    const refresh = screen.container.querySelector<HTMLElement>(
-      ".performance-refresh",
-    )!;
+    await screen.getByRole("radio", { name: "7 ngày" }).click();
 
-    expect(getComputedStyle(segment).minHeight).toBe(
-      getComputedStyle(refresh).minHeight,
-    );
+    expect(selectedLabels(segments)).toEqual(["7 ngày"]);
   });
 
   it("uses the page title as the top of the mobile type scale", async () => {

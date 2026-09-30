@@ -131,10 +131,22 @@ describe("PerformancePage wrapper states", () => {
       )
       .toBeVisible();
 
-    await screen.getByRole("button", { name: "7 ngày" }).click();
+    await screen.getByRole("radio", { name: "7 ngày" }).click();
     await expect
       .poll(() => usePerformanceStatsMock.mock.calls.at(-1)?.[0])
       .toBe("7d");
+    // The switcher is one segmented control: exactly the clicked window is
+    // marked selected, and the stats hook was re-requested for it.
+    const segments = Array.from(
+      screen.container.querySelectorAll<HTMLButtonElement>(
+        '[aria-label="Khoảng thời gian"] button',
+      ),
+    );
+    expect(
+      segments
+        .filter((segment) => segment.hasAttribute("data-selected"))
+        .map((segment) => segment.textContent),
+    ).toEqual(["7 ngày"]);
     await expect
       .element(
         screen.getByRole("heading", {
