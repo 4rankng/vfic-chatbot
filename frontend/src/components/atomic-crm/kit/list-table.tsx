@@ -1,5 +1,10 @@
 import { useMemo, type ReactNode } from "react";
-import { useListContext, useListPaginationContext, useTranslate } from "ra-core";
+import {
+  RecordContextProvider,
+  useListContext,
+  useListPaginationContext,
+  useTranslate,
+} from "ra-core";
 import { Table } from "@/components/application/table/table";
 import { Pagination } from "@/components/application/pagination/pagination-base";
 import { Button } from "@/components/base/buttons/button";
@@ -16,7 +21,10 @@ import { EmptyState } from "./page-shell";
  * records, loading and error state `useListContext` already provides, and ends
  * with `ListPagination`. Columns and the row actions cell come from the caller,
  * so a screen supplies its own cells and this file owns the surface: one card
- * frame, one count strip, one skeleton, one empty state, one pager.
+ * frame, one count strip, one skeleton, one empty state, one pager. Every cell
+ * body is wrapped in react-admin's `RecordContextProvider`, so a cell component
+ * may call `useRecordContext()` exactly as it would inside react-admin's
+ * `Datagrid`.
  *
  * `uu-scope` on the card is required, not decorative — inside it the four
  * utility names the console and Untitled UI both define (`bg-primary`,
@@ -198,7 +206,16 @@ export const ListTable = <RecordType extends { id: string | number }>({
                 <Table.Cell
                   className={cx("p-3 align-middle", column.cellClassName)}
                 >
-                  {column.cell(record)}
+                  {/* react-admin's `Datagrid` gives every cell a record
+                      context, so cell components may legally call
+                      `useRecordContext()` (the users directory's no-props
+                      badges and row actions do). The wrap must sit inside the
+                      row's children function: React Aria renders only the
+                      cells from that function into the real DOM, so a
+                      provider around the `Table.Row` never wraps them. */}
+                  <RecordContextProvider value={record}>
+                    {column.cell(record)}
+                  </RecordContextProvider>
                 </Table.Cell>
               )}
             </Table.Row>
@@ -295,7 +312,9 @@ export const ListPagination = ({
       <span className="text-[length:var(--fs-helper)] tabular-nums text-tertiary">
         {hasResults
           ? `${pageStart}-${pageEnd} / ${resolvedTotal}`
-          : translate("ra.navigation.page_range_empty", { _: "Không có kết quả" })}
+          : translate("ra.navigation.page_range_empty", {
+              _: "Không có kết quả",
+            })}
       </span>
 
       <Pagination.Root
@@ -332,7 +351,8 @@ export const ListPagination = ({
                         aria-label={aria["aria-label"]}
                         className={cx(
                           "flex size-10 items-center justify-center rounded-lg text-[length:var(--fs-body)] font-medium tabular-nums text-tertiary outline-focus-ring transition-colors hover:bg-secondary hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2",
-                          isSelected && "bg-secondary font-semibold text-primary",
+                          isSelected &&
+                            "bg-secondary font-semibold text-primary",
                         )}
                       >
                         {item.value}

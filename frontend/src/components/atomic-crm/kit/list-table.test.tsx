@@ -4,12 +4,14 @@ import {
   ListBase,
   NotificationContextProvider,
   TestMemoryRouter,
+  useRecordContext,
 } from "ra-core";
 import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "@/index.css";
+import tableSource from "../../application/table/table.tsx?raw";
 import { TestMessages } from "../providers/commons/TestMessages";
 import { ListTable } from "./list-table";
 
@@ -55,11 +57,39 @@ const columns = [
   },
 ];
 
-type MountOptions = {
-  rowActions?: boolean;
+/**
+ * A no-props cell component, exactly like the users directory's badges and row
+ * actions: it can only render if the row provides react-admin's record context.
+ */
+const RoleFromRecord = () => {
+  const record = useRecordContext<Account>();
+  if (!record) return null;
+  return <span>{record.role}</span>;
 };
 
-const mount = ({ rowActions }: MountOptions = {}) =>
+const recordDrivenColumns = [
+  {
+    id: "name",
+    header: "Người dùng",
+    isRowHeader: true,
+    cell: (record: Account) => <span>{record.full_name}</span>,
+  },
+  {
+    id: "role",
+    header: "Vai trò",
+    cell: () => <RoleFromRecord />,
+  },
+];
+
+type MountOptions = {
+  rowActions?: boolean;
+  columns?: typeof columns;
+};
+
+const mount = ({
+  rowActions,
+  columns: columnsProp = columns,
+}: MountOptions = {}) =>
   render(
     <TestMemoryRouter>
       <TestMessages>
@@ -69,7 +99,7 @@ const mount = ({ rowActions }: MountOptions = {}) =>
               <ListBase resource="users" perPage={2}>
                 <ListTable
                   ariaLabel="Danh sách tài khoản"
-                  columns={columns}
+                  columns={columnsProp}
                   rowActions={
                     rowActions
                       ? (record) => (
@@ -101,7 +131,10 @@ beforeEach(() => {
   // A paginating provider, like the REST one: the third record only appears on
   // page two.
   getList.mockImplementation(
-    (_resource: string, params: { pagination?: { page: number; perPage: number } }) => {
+    (
+      _resource: string,
+      params: { pagination?: { page: number; perPage: number } },
+    ) => {
       const { page = 1, perPage = 2 } = params.pagination ?? {};
       const start = (page - 1) * perPage;
       return Promise.resolve({
@@ -123,6 +156,38 @@ const headerTexts = (container: HTMLElement) =>
   );
 
 describe("kit list table", () => {
+  it("hands each row's record to cells that read the record context", async () => {
+    const screen = await mount({ columns: recordDrivenColumns });
+    await expect
+      .element(screen.getByRole("grid", { name: "Danh sách tài khoản" }))
+      .toBeVisible();
+
+    // Both cells are no-props components reading `useRecordContext()` — the
+    // same shape as the users directory's badges and row actions. Each row
+    // must provide its own record, the way react-admin's `Datagrid` does; a
+    // missing context renders these cells as nothing at all.
+    await expect.element(screen.getByText("Tuyển dụng")).toBeVisible();
+    await expect.element(screen.getByText("Quản trị")).toBeVisible();
+    expect(screen.container.querySelectorAll("tbody tr")).toHaveLength(2);
+  });
+
+  it("never generates a box from the row's own ::after", () => {
+    // The vitest lane does not load the Tailwind layer, so the mechanism this
+    // pins cannot be observed in rendered output here — it was reproduced and
+    // fixed against real Chromium: any row-level `after:` utility forces
+    // `content` onto the row's pseudo-element, and a generated box inside a
+    // `<tr>` is wrapped in an anonymous table cell. That phantom auto column
+    // takes an equal share of the fixed layout's leftover width and leaves the
+    // header band short of the table edge. Cell-scoped (`[&>td]:after:*`)
+    // utilities are unaffected — they live inside a cell, not the row.
+    const rowSource = tableSource.slice(
+      tableSource.indexOf("const TableRow"),
+      tableSource.indexOf("TableRow.displayName"),
+    );
+    expect(rowSource).toContain("after:hidden");
+    expect(rowSource).not.toMatch(/(?<![\]>:a-z])after:(?!hidden\b)[a-z]/);
+  });
+
   it("renders one labelled table bound to the list records", async () => {
     const screen = await mount();
     // React Aria renders a focusable data table as a `grid`, so that is the
@@ -167,7 +232,9 @@ describe("kit list table", () => {
 
     await screen.getByRole("button", { name: "Trang tiếp" }).click();
 
-    await expect.poll(() => getList.mock.calls.length).toBeGreaterThanOrEqual(2);
+    await expect
+      .poll(() => getList.mock.calls.length)
+      .toBeGreaterThanOrEqual(2);
     expect(getList.mock.lastCall?.[1]).toMatchObject({
       pagination: { page: 2, perPage: 2 },
     });

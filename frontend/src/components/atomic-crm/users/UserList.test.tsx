@@ -4,6 +4,8 @@ import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type * as RaCoreModule from "ra-core";
+
 import type { UserAccount } from "../types";
 import "@/index.css";
 import "./users.css";
@@ -48,9 +50,13 @@ const { accounts, secondAccount, listState } = vi.hoisted(() => {
 // `UserList` composes the kit's `ListTable`; what matters here is what a
 // recruiter sees — the directory's columns, rows, row action and empty state —
 // not which class names carry it. The kit's own suite covers the real
-// react-admin list context, so this file stubs the context hooks it renders
-// against.
-vi.mock("ra-core", () => ({
+// react-admin list context, so this file stubs the list hooks the page reads.
+// `useRecordContext` is deliberately NOT stubbed: the badges and row actions
+// render from the record context `ListTable` provides per row, and stubbing it
+// once masked a regression where the context was missing entirely (the columns
+// rendered null in production while the tests stayed green).
+vi.mock("ra-core", async (importOriginal) => ({
+  ...(await importOriginal<typeof RaCoreModule>()),
   ListBase: ({ children }: { children: ReactNode }) => children,
   useCreatePath: () => (options: { type: string }) => `/users/${options.type}`,
   // The kit's index re-exports the form controls, so their hooks have to exist
@@ -66,7 +72,6 @@ vi.mock("ra-core", () => ({
   useListPaginationContext: () => listState,
   useNotify: () => vi.fn(),
   usePermissions: () => ({ permissions: "admin", isPending: false }),
-  useRecordContext: () => listState.data[0],
   useRefresh: () => vi.fn(),
   useTranslate: () => (key: string, options?: { smart_count?: number }) =>
     key === "resources.users.name" && options?.smart_count ? "Tài khoản" : key,
@@ -113,12 +118,30 @@ describe("UserList", () => {
     expect(screen.container.textContent).toContain("2 tài khoản");
     await expect.element(screen.getByText("Nguyễn Minh Anh")).toBeVisible();
     await expect.element(screen.getByText("recruiter@vfic.dev")).toBeVisible();
+    // The role and status chips are no-props `useRecordContext()` components:
+    // they render each row's own record or nothing at all. `exact` keeps the
+    // role chip distinct from the page heading's "Quản trị truy cập" eyebrow.
+    await expect
+      .element(screen.getByText("Tuyển dụng", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Quản trị", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Hoạt động", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Vô hiệu", { exact: true }))
+      .toBeVisible();
     // The avatar cell is Untitled UI's `Avatar`, fed the record's initials: the
     // first and last words of a Vietnamese name.
     const avatars = Array.from(
       screen.container.querySelectorAll(".user-directory-cell-avatar"),
     );
-    expect(avatars.map((cell) => cell.textContent?.trim())).toEqual(["NA", "TB"]);
+    expect(avatars.map((cell) => cell.textContent?.trim())).toEqual([
+      "NA",
+      "TB",
+    ]);
     expect(avatars[0]?.querySelector("img")).toBeNull();
   });
 

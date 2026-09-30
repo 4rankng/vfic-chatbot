@@ -319,7 +319,13 @@ const TableRow = <T extends object>({
       {...props}
       className={(state) =>
         cx(
-          "relative outline-focus-ring transition-colors after:pointer-events-none hover:bg-secondary focus-visible:outline-2 focus-visible:-outline-offset-2",
+          // `after:hidden` is load-bearing: any `after:` utility forces
+          // `content` onto the row's own `::after`, and a generated box inside
+          // a `<tr>` is wrapped in an anonymous table cell — a phantom column
+          // that takes an equal share of the fixed layout's leftover width and
+          // leaves the row's cells short of the table edge. The row border
+          // pseudo lives on the cells, not here.
+          "relative outline-focus-ring transition-colors after:hidden hover:bg-secondary focus-visible:outline-2 focus-visible:-outline-offset-2",
           size === "sm" ? "h-14" : "h-18",
           highlightSelectedRow && "selected:bg-secondary",
 
