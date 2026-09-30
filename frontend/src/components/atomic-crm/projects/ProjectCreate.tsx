@@ -17,9 +17,9 @@ import {
 } from "./domain/project-knowledge-policy";
 import type { ProjectBrief } from "./domain/project-brief-ingest";
 import {
-  buildJobsYaml,
+  buildJobsMarkdown,
   planBriefKnowledge,
-} from "./domain/project-knowledge-yaml";
+} from "./domain/project-knowledge-markdown";
 import { slugifyVietnamese } from "./domain/vietnamese-slug";
 import { updateProjectDiscoveryCard } from "./project-knowledge-service";
 import { IngestProgressBoard } from "./presentation/IngestProgressBoard";
@@ -31,7 +31,7 @@ import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
  *  silently dropped. These never become form fields: the create schema refuses
  *  a discovery card on a RAG project ("RAG discovery cards are derived from
  *  active categories"), so the summary and location reach the assistant through
- *  the category YAML the pipeline writes, not through this form. The highlights
+ *  the category markdown the pipeline writes, not through this form. The highlights
  *  are the one card key the chain does carry — see the PATCH in `onImported`. */
 const CarriedSummary = ({ brief }: { brief: ProjectBrief }) => (
   <dl className="project-brief-carried grid gap-1 text-helper text-muted-foreground">
@@ -170,8 +170,8 @@ const ProjectCreateForm = () => {
         await ingest(draftId, [
           {
             key: "jobs",
-            filename: "jobs.yaml",
-            content: buildJobsYaml(roleList),
+            filename: "jobs.md",
+            content: buildJobsMarkdown(roleList),
           },
         ]);
         setIngestedRoles(roles.trim());

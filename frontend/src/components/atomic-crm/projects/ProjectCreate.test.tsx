@@ -259,10 +259,10 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
 
     const jobsCall = mocks.replaceCategory.mock.calls[0];
     expect(jobsCall[0]).toBe("7");
-    expect(jobsCall[2]).toBe("jobs.yaml");
+    expect(jobsCall[2]).toBe("jobs.md");
     expect(jobsCall[3]).toContain("category: jobs");
-    // The recruiter does not manage headcount, so no count is ever written.
-    expect(jobsCall[3]).not.toContain("vacancies");
+    // The recruiter does not manage headcount, so the count renders as an explicit null.
+    expect(jobsCall[3]).toContain("vacancies: null");
   }, 20000);
 
   it("fills the fields from the brief and leaves the typed name alone", async () => {

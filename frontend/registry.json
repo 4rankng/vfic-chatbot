@@ -247,11 +247,11 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/projects/domain/project-knowledge-yaml.ts",
+          "path": "src/components/atomic-crm/projects/domain/project-knowledge-policy.ts",
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/projects/domain/project-knowledge-policy.ts",
+          "path": "src/components/atomic-crm/projects/domain/project-knowledge-markdown.ts",
           "type": "registry:component"
         },
         {

@@ -8,14 +8,24 @@ import type {
 } from "./project-brief-ingest";
 
 /**
- * project-knowledge-yaml — the one place a parsed brief becomes the YAML the
- * knowledge API accepts.
+ * project-knowledge-markdown — the one place a parsed brief becomes the
+ * Category Markdown v1 the knowledge API accepts.
  *
- * The RAG categories are NOT free text: `PUT /categories/{key}` rejects
- * anything but `.yaml`/`.yml`, and each category has its own typed schema. The
- * BACKEND contracts are the source of truth — `category_contracts.py` and
- * `schemas/knowledge_categories.py` — and the tests mirror their required
- * field names as a cross-language contract, so a drift there fails here first.
+ * The RAG categories are NOT free text: `PUT /categories/{key}` accepts one
+ * `.md` document per category, and each category has its own typed schema. The
+ * BACKEND contracts are the source of truth — the renderer
+ * `build_source_markdown` in
+ * `backend/app/services/knowledge/category_markdown.py` and the document
+ * models in `backend/app/schemas/knowledge_categories.py`. `serializeCategoryMarkdown`
+ * reproduces the renderer byte for byte: `---` front-matter naming
+ * `schema_version` and `category`, one `## <list_field>` section, a
+ * `### record: <id>` block per record with every pydantic field in declaration
+ * order (mirrored in `CATEGORY_MARKDOWN_SCHEMAS` below), scalars encoded
+ * type-faithfully (numbers/booleans/null bare, every string double-quoted with
+ * the five escapes), dash lists for scalar lists, markdown tables for the four
+ * table fields, records separated by one blank line, one trailing newline.
+ * The tests mirror the required field names as a cross-language contract, so a
+ * drift there fails here first. This serializer replaces the YAML pipeline.
  *
  * The plan is content-driven, by the owner's ruling ("ingestion pipeline should
  * base on file content to fill in all categories"): every category the brief
@@ -29,12 +39,12 @@ import type {
  * gives it NO material, or its schema's REQUIRED fields cannot be honestly
  * derived from what the brief does give (an `available` flag the brief never
  * states, a route `direction` with no route described). Emitting a document
- * that would fail `parse_category_yaml` is worse than `needsHuman` — invalid
- * YAML lands as a FAILED revision.
+ * that would fail `parse_category_markdown` is worse than `needsHuman` —
+ * invalid source lands as a FAILED revision.
  */
 
-/** Drop the C0 control characters a YAML quoted scalar cannot carry raw
- *  (newlines are handled before this runs; a lone tab survives). */
+/** Drop the C0 control characters a quoted scalar can neither carry raw nor
+ *  escape (tab, newline and carriage return are escaped before this runs). */
 const stripRawControl = (value: string): string => {
   let out = "";
   for (const ch of value) {
@@ -56,21 +66,17 @@ const stripMarks = (value: string): string => {
   return out;
 };
 
-/** A YAML double-quoted scalar: escape the backslash, the quote and the
- *  newline, and refuse anything else that would break the YAML. */
-const yamlString = (value: string): string => {
+/** A Category Markdown double-quoted scalar: escape the five escapable
+ *  characters in the backend renderer's order (backslash, double quote, \n,
+ *  \r, \t) and refuse everything else that would break the document. */
+const markdownString = (value: string): string => {
   const escaped = stripRawControl(
-    value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, " "),
-  );
-  return `"${escaped}"`;
-};
-
-/** Like `yamlString`, but keeps line structure: a newline becomes the escaped
- *  two-character sequence, so a multi-line notes sink stays readable in the
- *  parsed value. */
-const yamlMultiline = (value: string): string => {
-  const escaped = stripRawControl(
-    value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, "\\n"),
+    value
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r")
+      .replace(/\t/g, "\\t"),
   );
   return `"${escaped}"`;
 };
@@ -181,6 +187,310 @@ const timeRanges = (line: string): Readonly<{ start: string; end: string }>[] =>
     end: toClock(match[3], match[4]),
   }));
 
+// ── the emit layer (byte-compatible with the backend renderer) ─────────────
+
+/** One scalar slot. `undefined` means "not stated by the brief" and renders
+ *  as `null` — the same spelling the backend's `model_dump` gives an unset
+ *  optional field, and the same `null` its parser decodes back. */
+export type CategoryScalar = string | number | boolean | null | undefined;
+
+type CategoryValue =
+  | CategoryScalar
+  | readonly CategoryScalar[]
+  | readonly CategoryRow[]
+  | undefined;
+
+/** One row of a table field (`MoneyItem`, `ShiftItem`, `BusStopItem`); a
+ *  column the row omits renders as `null`, exactly like an unset pydantic
+ *  field in `model_dump(mode="json")`. */
+export type CategoryRow = Record<string, CategoryScalar>;
+
+/** One category record. The serializer walks the category's schema, not the
+ *  record, so a key outside the schema never reaches the document. */
+export type CategoryRecord = {
+  id: string;
+  [field: string]: CategoryValue;
+};
+
+/** The envelope one category write carries, mirroring the backend document
+ *  payload (`schema_version`, `category`, the list field's records). */
+export type CategoryPayload = Readonly<{
+  schema_version: "1.0";
+  category: ProjectKnowledgeCategory;
+  records: readonly CategoryRecord[];
+}>;
+
+type MarkdownField =
+  | Readonly<{ name: string; kind: "scalar" }>
+  | Readonly<{ name: string; kind: "list" }>
+  | Readonly<{ name: string; kind: "table"; columns: readonly string[] }>;
+
+/** The record schema of one category, mirroring the pydantic model in
+ *  `backend/app/schemas/knowledge_categories.py` field for field, in
+ *  declaration order — the order the backend renderer writes them in. */
+export type CategoryMarkdownSchema = Readonly<{
+  listField: string;
+  fields: readonly MarkdownField[];
+}>;
+
+const scalarField = (name: string): MarkdownField => ({ name, kind: "scalar" });
+const listField = (name: string): MarkdownField => ({ name, kind: "list" });
+const tableField = (
+  name: string,
+  columns: readonly string[],
+): MarkdownField => ({ name, kind: "table", columns });
+
+const MONEY_COLUMNS = ["name", "amount_vnd", "cadence", "conditions"];
+const SHIFT_COLUMNS = ["name", "start_time", "end_time", "crosses_midnight"];
+const BUS_STOP_COLUMNS = ["order", "name", "time", "address"];
+
+export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
+  Record<ProjectKnowledgeCategory, CategoryMarkdownSchema>
+> = {
+  jobs: {
+    listField: "jobs",
+    fields: [
+      scalarField("id"),
+      scalarField("title"),
+      listField("aliases"),
+      scalarField("location"),
+      scalarField("vacancies"),
+      scalarField("employment_type"),
+      scalarField("summary"),
+      listField("keywords"),
+    ],
+  },
+  compensation: {
+    listField: "compensation",
+    fields: [
+      scalarField("id"),
+      listField("job_ids"),
+      scalarField("base_salary_vnd"),
+      scalarField("estimated_income_min_vnd"),
+      scalarField("estimated_income_max_vnd"),
+      tableField("allowances", MONEY_COLUMNS),
+      tableField("bonuses", MONEY_COLUMNS),
+      scalarField("overtime_notes"),
+      scalarField("payment_notes"),
+    ],
+  },
+  requirements: {
+    listField: "requirements",
+    fields: [
+      scalarField("id"),
+      listField("job_ids"),
+      scalarField("age_min"),
+      scalarField("age_max"),
+      listField("genders"),
+      scalarField("education"),
+      scalarField("experience"),
+      listField("health"),
+      listField("skills"),
+      listField("required_documents"),
+      listField("other"),
+    ],
+  },
+  work_schedules: {
+    listField: "work_schedules",
+    fields: [
+      scalarField("id"),
+      listField("job_ids"),
+      listField("work_days"),
+      tableField("shifts", SHIFT_COLUMNS),
+      scalarField("rotation"),
+      listField("breaks"),
+      scalarField("overtime"),
+      scalarField("notes"),
+    ],
+  },
+  benefits: {
+    listField: "benefits",
+    fields: [
+      scalarField("id"),
+      listField("job_ids"),
+      scalarField("name"),
+      scalarField("description"),
+      scalarField("eligibility"),
+    ],
+  },
+  accommodation: {
+    listField: "accommodation",
+    fields: [
+      scalarField("id"),
+      listField("job_ids"),
+      scalarField("available"),
+      scalarField("type"),
+      scalarField("address"),
+      scalarField("monthly_cost_vnd"),
+      scalarField("deposit_vnd"),
+      listField("included_services"),
+      scalarField("eligibility"),
+      scalarField("notes"),
+    ],
+  },
+  meals: {
+    listField: "meals",
+    fields: [
+      scalarField("id"),
+      listField("job_ids"),
+      scalarField("provided"),
+      scalarField("meals_per_shift"),
+      scalarField("allowance_vnd"),
+      scalarField("menu_notes"),
+      scalarField("eligibility"),
+      scalarField("notes"),
+    ],
+  },
+  transportation: {
+    listField: "transportation",
+    fields: [
+      scalarField("id"),
+      listField("job_ids"),
+      scalarField("name"),
+      scalarField("direction"),
+      listField("service_days"),
+      scalarField("shift"),
+      scalarField("fee_vnd"),
+      tableField("stops", BUS_STOP_COLUMNS),
+      scalarField("notes"),
+    ],
+  },
+  insurance: {
+    listField: "insurance",
+    fields: [
+      scalarField("id"),
+      listField("job_ids"),
+      scalarField("name"),
+      scalarField("provider"),
+      scalarField("employee_contribution"),
+      scalarField("employer_contribution"),
+      listField("coverage"),
+      scalarField("starts_after"),
+      scalarField("eligibility"),
+      scalarField("notes"),
+    ],
+  },
+  application: {
+    listField: "application",
+    fields: [
+      scalarField("id"),
+      listField("job_ids"),
+      listField("application_steps"),
+      listField("required_documents"),
+      scalarField("interview_location"),
+      scalarField("interview_process"),
+      listField("onboarding_steps"),
+      scalarField("processing_time"),
+      scalarField("fees"),
+      scalarField("notes"),
+    ],
+  },
+  contacts: {
+    listField: "contacts",
+    fields: [
+      scalarField("id"),
+      scalarField("name"),
+      scalarField("role"),
+      scalarField("phone"),
+      scalarField("zalo"),
+      scalarField("email"),
+      scalarField("address"),
+      scalarField("working_hours"),
+      scalarField("notes"),
+    ],
+  },
+  faq: {
+    listField: "faq",
+    fields: [
+      scalarField("id"),
+      scalarField("question"),
+      scalarField("answer"),
+      listField("tags"),
+      listField("question_variants"),
+      listField("required_terms"),
+      listField("forbidden_terms"),
+    ],
+  },
+};
+
+/** The backend's `_encode_scalar`: type-faithful on purpose, so the emitted
+ *  document re-parses to the payload that produced it. */
+const encodeScalar = (value: CategoryScalar): string => {
+  if (value === null || value === undefined) return "null";
+  if (value === true) return "true";
+  if (value === false) return "false";
+  if (typeof value === "number") return String(value);
+  return markdownString(value);
+};
+
+/** A schema declares each list field's item shape; the record honours it, so
+ *  reading the items through the declared kind is safe. */
+const listOf = (value: CategoryValue): readonly CategoryScalar[] =>
+  Array.isArray(value) ? (value as readonly CategoryScalar[]) : [];
+const rowsOf = (value: CategoryValue): readonly CategoryRow[] =>
+  Array.isArray(value) ? (value as readonly CategoryRow[]) : [];
+
+/** Render one category payload to Category Markdown v1, byte-compatible with
+ *  `build_source_markdown(payload)` in
+ *  `backend/app/services/knowledge/category_markdown.py`: every schema field
+ *  in declaration order, unstated optionals as `null` and unstated lists as
+ *  `[]`, records separated by one blank line, exactly one trailing newline. */
+export const serializeCategoryMarkdown = (
+  categoryKey: ProjectKnowledgeCategory,
+  payload: CategoryPayload,
+): string => {
+  const schema = CATEGORY_MARKDOWN_SCHEMAS[categoryKey];
+  const lines = [
+    "---",
+    `schema_version: "${payload.schema_version}"`,
+    `category: ${categoryKey}`,
+    "---",
+    "",
+    `## ${schema.listField}`,
+    "",
+  ];
+  for (const record of payload.records) {
+    lines.push(`### record: ${record.id}`);
+    for (const field of schema.fields) {
+      if (field.name === "id") continue;
+      const value = record[field.name];
+      if (field.kind === "scalar") {
+        // The schema declares this slot scalar; the record honours the
+        // declaration, so the array kinds never reach a scalar field.
+        lines.push(`${field.name}: ${encodeScalar(value as CategoryScalar)}`);
+      } else if (field.kind === "list") {
+        const items = listOf(value);
+        if (items.length === 0) {
+          lines.push(`${field.name}: []`);
+          continue;
+        }
+        lines.push(`${field.name}:`);
+        for (const item of items) lines.push(`- ${encodeScalar(item)}`);
+      } else {
+        const rows = rowsOf(value);
+        if (rows.length === 0) {
+          lines.push(`${field.name}: []`);
+          continue;
+        }
+        lines.push(`${field.name}:`);
+        lines.push(`| ${field.columns.join(" | ")} |`);
+        lines.push(`| ${field.columns.map(() => "---").join(" | ")} |`);
+        for (const row of rows) {
+          lines.push(
+            `| ${field.columns
+              .map((column) => encodeScalar(row[column]))
+              .join(" | ")} |`,
+          );
+        }
+      }
+    }
+    lines.push("");
+  }
+  // The backend renderer strips every trailing blank line and closes the
+  // document with exactly one newline.
+  return `${lines.join("\n").replace(/\n+$/, "")}\n`;
+};
+
 // ── the two original builders ──────────────────────────────────────────────
 
 /** The `faq` category document: every question the brief paired with an answer,
@@ -192,63 +502,49 @@ const timeRanges = (line: string): Readonly<{ start: string; end: string }>[] =>
  *  missing either side is dropped HERE — a question without an answer is not
  *  knowledge. The plan names the gap in `needsHuman` instead of shipping a
  *  document the API would reject. */
-export const buildFaqYaml = (
+export const buildFaqMarkdown = (
   entries: readonly ProjectBriefFaqEntry[],
 ): string => {
   const usable = entries.filter(
     (entry) => entry.question.trim() && entry.answer.trim(),
   );
-  const lines = ['schema_version: "1.0"', "category: faq"];
-  if (usable.length === 0) {
-    lines.push("faq: []");
-    return `${lines.join("\n")}\n`;
-  }
-  lines.push("faq:");
   const used = new Map<string, number>();
-  usable.forEach((entry, index) => {
-    const id = claimId(used, entry.question, index);
-    lines.push(
-      `  - id: ${id}`,
-      `    question: ${yamlString(clamp(entry.question, 5000))}`,
-      `    answer: ${yamlString(clamp(entry.answer, 5000))}`,
-      "    tags: []",
-      "    question_variants: []",
-      "    required_terms: []",
-      "    forbidden_terms: []",
-    );
+  return serializeCategoryMarkdown("faq", {
+    schema_version: "1.0",
+    category: "faq",
+    records: usable.map((entry, index) => ({
+      id: claimId(used, entry.question, index),
+      question: clamp(entry.question, 5000),
+      answer: clamp(entry.answer, 5000),
+    })),
   });
-  return `${lines.join("\n")}\n`;
 };
 
 /** The `jobs` category document: one row per role the brief's overview listed.
  *
- *  `vacancies` is intentionally absent. The recruiter does not manage headcount
- *  for these roles, and the schema makes the field optional precisely so an
- *  unknown count stays unknown instead of becoming a confident wrong number in
- *  an answer a candidate will read. `employment_type` likewise: the enum only
- *  accepts forms the sheet would have to state in exactly those terms. */
-export const buildJobsYaml = (
+ *  `vacancies` is intentionally left unset (it renders `null`). The recruiter
+ *  does not manage headcount for these roles, and the schema makes the field
+ *  optional precisely so an unknown count stays unknown instead of becoming a
+ *  confident wrong number in an answer a candidate will read.
+ *  `employment_type` likewise: the enum only accepts forms the sheet would
+ *  have to state in exactly those terms. */
+export const buildJobsMarkdown = (
   roles: readonly string[],
   location = "",
 ): string => {
-  const lines = ['schema_version: "1.0"', "category: jobs"];
   const cleaned = roles.map((role) => role.trim()).filter(Boolean);
-  if (cleaned.length === 0) {
-    lines.push("jobs: []");
-    return `${lines.join("\n")}\n`;
-  }
-  lines.push("jobs:");
   const used = new Map<string, number>();
-  cleaned.forEach((role, index) => {
-    const id = claimId(used, role, index);
-    lines.push(`  - id: ${id}`, `    title: ${yamlString(clamp(role, 5000))}`);
-    // The project address genuinely covers every role in it, so carrying it
-    // across is transcription rather than invention.
-    if (location)
-      lines.push(`    location: ${yamlString(clamp(location, 500))}`);
-    lines.push("    aliases: []", "    keywords: []");
+  return serializeCategoryMarkdown("jobs", {
+    schema_version: "1.0",
+    category: "jobs",
+    records: cleaned.map((role, index) => ({
+      id: claimId(used, role, index),
+      title: clamp(role, 5000),
+      // The project address genuinely covers every role in it, so carrying it
+      // across is transcription rather than invention.
+      ...(location ? { location: clamp(location, 500) } : {}),
+    })),
   });
-  return `${lines.join("\n")}\n`;
 };
 
 // ── content-driven builders ────────────────────────────────────────────────
@@ -304,23 +600,18 @@ const moneyRows = (
   return { rows, used };
 };
 
-const moneyItemYaml = (row: MoneyRow): string[] => {
-  const lines = [
-    `      - name: ${yamlString(row.name)}`,
-    `        amount_vnd: ${row.amountVnd}`,
-    `        cadence: ${row.cadence}`,
-  ];
-  if (row.conditions) {
-    lines.push(`        conditions: ${yamlString(row.conditions)}`);
-  }
-  return lines;
-};
+const moneyItemRow = (row: MoneyRow): CategoryRow => ({
+  name: row.name,
+  amount_vnd: row.amountVnd,
+  cadence: row.cadence,
+  ...(row.conditions ? { conditions: row.conditions } : {}),
+});
 
 /** The `compensation` document: the wage facts the brief states, typed where
  *  the schema is typed (base wage, estimated income range, allowance/bonus
  *  rows with their cadence) and transcribed into the payment/overtime notes
  *  everywhere else. */
-export const buildCompensationYaml = (body: string): string | null => {
+export const buildCompensationMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
@@ -373,50 +664,36 @@ export const buildCompensationYaml = (body: string): string | null => {
     else payment.push(line);
   });
 
-  const record: string[] = ["  - id: luong-thu-nhap", "    job_ids: []"];
-  if (baseSalary !== null) record.push(`    base_salary_vnd: ${baseSalary}`);
+  const record: CategoryRecord = { id: "luong-thu-nhap", job_ids: [] };
+  if (baseSalary !== null) record.base_salary_vnd = baseSalary;
   if (incomeMin !== null && incomeMax !== null) {
-    record.push(
-      `    estimated_income_min_vnd: ${incomeMin}`,
-      `    estimated_income_max_vnd: ${incomeMax}`,
-    );
+    record.estimated_income_min_vnd = incomeMin;
+    record.estimated_income_max_vnd = incomeMax;
   }
   if (allowances.rows.length > 0) {
-    record.push("    allowances:");
-    for (const row of allowances.rows) {
-      record.push(...moneyItemYaml(row));
-    }
+    record.allowances = allowances.rows.map(moneyItemRow);
   }
   if (bonuses.rows.length > 0) {
-    record.push("    bonuses:");
-    for (const row of bonuses.rows) {
-      record.push(...moneyItemYaml(row));
-    }
+    record.bonuses = bonuses.rows.map(moneyItemRow);
   }
   if (overtime.length > 0) {
-    record.push(
-      `    overtime_notes: ${yamlMultiline(clamp(overtime.join("\n"), 3000))}`,
-    );
+    record.overtime_notes = clamp(overtime.join("\n"), 3000);
   }
   if (payment.length > 0) {
-    record.push(
-      `    payment_notes: ${yamlMultiline(clamp(payment.join("\n"), 3000))}`,
-    );
+    record.payment_notes = clamp(payment.join("\n"), 3000);
   }
 
-  return [
-    'schema_version: "1.0"',
-    "category: compensation",
-    "compensation:",
-    ...record,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("compensation", {
+    schema_version: "1.0",
+    category: "compensation",
+    records: [record],
+  });
 };
 
 /** The `requirements` document: the stated age band, gender, education and
  *  experience in their typed slots, everything else (tattoo policy, papers to
  *  bring, personal qualities) as the list items the schema provides. */
-export const buildRequirementsYaml = (body: string): string | null => {
+export const buildRequirementsMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
@@ -484,43 +761,36 @@ export const buildRequirementsYaml = (body: string): string | null => {
     other.push(line);
   }
 
-  const listYaml = (key: string, values: readonly string[], itemMax: number) =>
-    values.length === 0
-      ? [`    ${key}: []`]
-      : [
-          `    ${key}:`,
-          ...values.map(
-            (value) => `      - ${yamlString(clamp(value, itemMax))}`,
-          ),
-        ];
-
-  const record: string[] = ["  - id: yeu-cau-ung-vien", "    job_ids: []"];
-  if (ageMin !== null) record.push(`    age_min: ${ageMin}`);
-  if (ageMax !== null) record.push(`    age_max: ${ageMax}`);
-  record.push(genders ? `    genders: [${genders}]` : "    genders: []");
-  if (education)
-    record.push(`    education: ${yamlString(clamp(education, 1000))}`);
-  if (experience) {
-    record.push(`    experience: ${yamlString(clamp(experience, 1000))}`);
+  const record: CategoryRecord = { id: "yeu-cau-ung-vien", job_ids: [] };
+  if (ageMin !== null) record.age_min = ageMin;
+  if (ageMax !== null) record.age_max = ageMax;
+  if (genders) record.genders = [genders];
+  if (education) record.education = clamp(education, 1000);
+  if (experience) record.experience = clamp(experience, 1000);
+  if (health.length > 0) {
+    record.health = health.map((value) => clamp(value, 2000));
   }
-  record.push(...listYaml("health", health, 2000));
-  record.push(...listYaml("skills", skills, 2000));
-  record.push(...listYaml("required_documents", documents, 2000));
-  record.push(...listYaml("other", other, 2000));
+  if (skills.length > 0) {
+    record.skills = skills.map((value) => clamp(value, 2000));
+  }
+  if (documents.length > 0) {
+    record.required_documents = documents.map((value) => clamp(value, 2000));
+  }
+  if (other.length > 0) {
+    record.other = other.map((value) => clamp(value, 2000));
+  }
 
-  return [
-    'schema_version: "1.0"',
-    "category: requirements",
-    "requirements:",
-    ...record,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("requirements", {
+    schema_version: "1.0",
+    category: "requirements",
+    records: [record],
+  });
 };
 
 /** The `work_schedules` document: every stated shift as `HH:MM` rows (with
  *  `crosses_midnight` read off the clock, not guessed), plus the breaks,
  *  rotation and overtime rules the brief wrote, in their own fields. */
-export const buildWorkSchedulesYaml = (body: string): string | null => {
+export const buildWorkSchedulesMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
@@ -615,93 +885,71 @@ export const buildWorkSchedulesYaml = (body: string): string | null => {
     notes.push(line);
   }
 
-  const record: string[] = ["  - id: lich-lam-viec", "    job_ids: []"];
+  const record: CategoryRecord = { id: "lich-lam-viec", job_ids: [] };
   if (workDays.length > 0) {
-    record.push(
-      "    work_days:",
-      ...workDays.map((day) => `      - ${yamlString(clamp(day, 2000))}`),
-    );
+    record.work_days = workDays.map((day) => clamp(day, 2000));
   }
   if (shifts.size > 0) {
-    record.push("    shifts:");
-    for (const shift of shifts.values()) {
-      record.push(
-        `      - name: ${yamlString(clamp(shift.name, 5000))}`,
-        `        start_time: "${shift.start}"`,
-        `        end_time: "${shift.end}"`,
-        `        crosses_midnight: ${shift.end <= shift.start ? "true" : "false"}`,
-      );
-    }
+    record.shifts = [...shifts.values()].map((shift) => ({
+      name: clamp(shift.name, 5000),
+      start_time: shift.start,
+      end_time: shift.end,
+      crosses_midnight: shift.end <= shift.start,
+    }));
   }
   if (rotation.length > 0) {
-    record.push(
-      `    rotation: ${yamlMultiline(clamp(rotation.join("\n"), 2000))}`,
-    );
+    record.rotation = clamp(rotation.join("\n"), 2000);
   }
   if (breaks.length > 0) {
-    record.push(
-      "    breaks:",
-      ...breaks.map((item) => `      - ${yamlString(clamp(item, 2000))}`),
-    );
+    record.breaks = breaks.map((item) => clamp(item, 2000));
   }
   if (overtime.length > 0) {
-    record.push(
-      `    overtime: ${yamlMultiline(clamp(overtime.join("\n"), 3000))}`,
-    );
+    record.overtime = clamp(overtime.join("\n"), 3000);
   }
   if (notes.length > 0) {
-    record.push(`    notes: ${yamlMultiline(clamp(notes.join("\n"), 3000))}`);
+    record.notes = clamp(notes.join("\n"), 3000);
   }
 
-  return [
-    'schema_version: "1.0"',
-    "category: work_schedules",
-    "work_schedules:",
-    ...record,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("work_schedules", {
+    schema_version: "1.0",
+    category: "work_schedules",
+    records: [record],
+  });
 };
 
 /** The `benefits` document: one row per benefit the brief states. A
  *  `Label: mô tả` line names the benefit after its label; a bare sentence is
  *  its own benefit as written. */
-export const buildBenefitsYaml = (body: string): string | null => {
+export const buildBenefitsMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
   const used = new Map<string, number>();
-  const records: string[] = [];
-  lines.forEach((line, index) => {
+  const records = lines.map((line, index) => {
     const { label, value } = splitLabel(line);
     const name = label && value ? label : line;
     const description = label && value ? value : "";
-    const id = claimId(used, name, index);
-    records.push(
-      `  - id: ${id}`,
-      "    job_ids: []",
-      `    name: ${yamlString(clamp(name, 5000))}`,
-    );
-    if (description) {
-      records.push(
-        `    description: ${yamlMultiline(clamp(description, 3000))}`,
-      );
-    }
+    const record: CategoryRecord = {
+      id: claimId(used, name, index),
+      job_ids: [],
+      name: clamp(name, 5000),
+    };
+    if (description) record.description = clamp(description, 3000);
+    return record;
   });
 
-  return [
-    'schema_version: "1.0"',
-    "category: benefits",
-    "benefits:",
-    ...records,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("benefits", {
+    schema_version: "1.0",
+    category: "benefits",
+    records,
+  });
 };
 
 /** The `accommodation` document. `available` is REQUIRED by the contract and
  *  is a fact: the brief either states a dormitory exists or states it does
  *  not. A body that never answers that question cannot honestly fill the
  *  slot, so it stays in `needsHuman` instead of guessing a flag. */
-export const buildAccommodationYaml = (body: string): string | null => {
+export const buildAccommodationMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
@@ -726,30 +974,28 @@ export const buildAccommodationYaml = (body: string): string | null => {
     )
     .find((amounts) => amounts.length === 1)?.[0];
 
-  const record: string[] = [
-    "  - id: cho-o",
-    "    job_ids: []",
-    `    available: ${available ? "true" : "false"}`,
-  ];
+  const record: CategoryRecord = {
+    id: "cho-o",
+    job_ids: [],
+    available,
+  };
   if (available && /ky tuc xa|ktx/.test(foldedAll)) {
-    record.push('    type: "Ký túc xá"');
+    record.type = "Ký túc xá";
   }
-  if (cost !== undefined) record.push(`    monthly_cost_vnd: ${cost}`);
-  record.push(`    notes: ${yamlMultiline(clamp(lines.join("\n"), 3000))}`);
+  if (cost !== undefined) record.monthly_cost_vnd = cost;
+  record.notes = clamp(lines.join("\n"), 3000);
 
-  return [
-    'schema_version: "1.0"',
-    "category: accommodation",
-    "accommodation:",
-    ...record,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("accommodation", {
+    schema_version: "1.0",
+    category: "accommodation",
+    records: [record],
+  });
 };
 
 /** The `meals` document. Like `accommodation`, the required `provided` flag
  *  must be stated by the brief itself; the per-shift meal count and the
  *  in-lieu allowance are transcribed when the brief numbers them. */
-export const buildMealsYaml = (body: string): string | null => {
+export const buildMealsMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
@@ -783,37 +1029,27 @@ export const buildMealsYaml = (body: string): string | null => {
     else notes.push(line);
   }
 
-  const record: string[] = [
-    "  - id: bua-an",
-    "    job_ids: []",
-    `    provided: ${provided ? "true" : "false"}`,
-  ];
-  if (mealsPerShift !== null) {
-    record.push(`    meals_per_shift: ${mealsPerShift}`);
-  }
-  if (allowance !== null) record.push(`    allowance_vnd: ${allowance}`);
+  const record: CategoryRecord = { id: "bua-an", job_ids: [], provided };
+  if (mealsPerShift !== null) record.meals_per_shift = mealsPerShift;
+  if (allowance !== null) record.allowance_vnd = allowance;
   if (menu.length > 0) {
-    record.push(
-      `    menu_notes: ${yamlMultiline(clamp(menu.join("\n"), 3000))}`,
-    );
+    record.menu_notes = clamp(menu.join("\n"), 3000);
   }
   if (notes.length > 0) {
-    record.push(`    notes: ${yamlMultiline(clamp(notes.join("\n"), 3000))}`);
+    record.notes = clamp(notes.join("\n"), 3000);
   }
 
-  return [
-    'schema_version: "1.0"',
-    "category: meals",
-    "meals:",
-    ...record,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("meals", {
+    schema_version: "1.0",
+    category: "meals",
+    records: [record],
+  });
 };
 
 /** The `transportation` document. `direction` is REQUIRED and describes the
  *  route the brief names ("đưa đón" is pick-up AND return). The pickup points
  *  the brief lists become `stops` in the order it lists them. */
-export const buildTransportationYaml = (body: string): string | null => {
+export const buildTransportationMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
@@ -872,37 +1108,32 @@ export const buildTransportationYaml = (body: string): string | null => {
     (line) => !(stops.length > 0 && stopLine.test(line)),
   );
 
-  const record: string[] = [
-    "  - id: tuyen-xe-dua-don",
-    "    job_ids: []",
-    `    name: ${yamlString(name)}`,
-    `    direction: ${direction}`,
-  ];
-  if (fee !== undefined) record.push(`    fee_vnd: ${fee}`);
+  const record: CategoryRecord = {
+    id: "tuyen-xe-dua-don",
+    job_ids: [],
+    name,
+    direction,
+  };
+  if (fee !== undefined) record.fee_vnd = fee;
   if (stops.length > 0) {
-    record.push("    stops:");
-    for (const stop of stops) {
-      record.push(
-        `      - order: ${stop.order}`,
-        `        name: ${yamlString(stop.name)}`,
-      );
-    }
+    record.stops = stops.map((stop) => ({
+      order: stop.order,
+      name: stop.name,
+    }));
   }
-  record.push(`    notes: ${yamlMultiline(clamp(notes.join("\n"), 3000))}`);
+  record.notes = clamp(notes.join("\n"), 3000);
 
-  return [
-    'schema_version: "1.0"',
-    "category: transportation",
-    "transportation:",
-    ...record,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("transportation", {
+    schema_version: "1.0",
+    category: "transportation",
+    records: [record],
+  });
 };
 
 /** The `insurance` document: the scheme the brief names as `name`, the
  *  statutory schemes it lists as `coverage`, and the enrolment timing it
  *  states in `starts_after`. */
-export const buildInsuranceYaml = (body: string): string | null => {
+export const buildInsuranceMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
@@ -932,40 +1163,29 @@ export const buildInsuranceYaml = (body: string): string | null => {
     /nguyen vong|co nhu cau|dieu kien/.test(fold(line)),
   );
 
-  const record: string[] = [
-    "  - id: bao-hiem",
-    "    job_ids: []",
-    `    name: ${yamlString(clamp(named, 500))}`,
-  ];
-  if (coverage.length > 0) {
-    record.push(
-      "    coverage:",
-      ...coverage.map((item) => `      - ${yamlString(item)}`),
-    );
-  }
-  if (startsAfter) {
-    record.push(`    starts_after: ${yamlString(clamp(startsAfter, 1000))}`);
-  }
+  const record: CategoryRecord = {
+    id: "bao-hiem",
+    job_ids: [],
+    name: clamp(named, 500),
+  };
+  if (coverage.length > 0) record.coverage = coverage;
+  if (startsAfter) record.starts_after = clamp(startsAfter, 1000);
   if (eligibility.length > 0) {
-    record.push(
-      `    eligibility: ${yamlMultiline(clamp(eligibility.join("\n"), 2000))}`,
-    );
+    record.eligibility = clamp(eligibility.join("\n"), 2000);
   }
-  record.push(`    notes: ${yamlMultiline(clamp(lines.join("\n"), 3000))}`);
+  record.notes = clamp(lines.join("\n"), 3000);
 
-  return [
-    'schema_version: "1.0"',
-    "category: insurance",
-    "insurance:",
-    ...record,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("insurance", {
+    schema_version: "1.0",
+    category: "insurance",
+    records: [record],
+  });
 };
 
 /** The `application` document: the process the brief writes (arrow chains and
  *  action lines become steps), the papers it lists, and the interview, timing
  *  and fee facts in their own fields. */
-export const buildApplicationYaml = (body: string): string | null => {
+export const buildApplicationMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
@@ -1028,41 +1248,25 @@ export const buildApplicationYaml = (body: string): string | null => {
     notes.push(line);
   }
 
-  const listYaml = (key: string, values: readonly string[]) =>
-    values.length === 0
-      ? [`    ${key}: []`]
-      : [
-          `    ${key}:`,
-          ...values.map((value) => `      - ${yamlString(value)}`),
-        ];
-
-  const record: string[] = ["  - id: quy-trinh-ung-tuyen", "    job_ids: []"];
-  record.push(...listYaml("application_steps", steps));
-  record.push(...listYaml("required_documents", documents));
-  if (interviewLocation) {
-    record.push(`    interview_location: ${yamlString(interviewLocation)}`);
-  }
+  const record: CategoryRecord = { id: "quy-trinh-ung-tuyen", job_ids: [] };
+  if (steps.length > 0) record.application_steps = steps;
+  if (documents.length > 0) record.required_documents = documents;
+  if (interviewLocation) record.interview_location = interviewLocation;
   if (interview.length > 0) {
-    record.push(
-      `    interview_process: ${yamlMultiline(clamp(interview.join("\n"), 3000))}`,
-    );
+    record.interview_process = clamp(interview.join("\n"), 3000);
   }
-  record.push(...listYaml("onboarding_steps", onboarding));
-  if (processingTime) {
-    record.push(`    processing_time: ${yamlString(processingTime)}`);
-  }
-  if (fees) record.push(`    fees: ${yamlString(fees)}`);
+  if (onboarding.length > 0) record.onboarding_steps = onboarding;
+  if (processingTime) record.processing_time = processingTime;
+  if (fees) record.fees = fees;
   if (notes.length > 0) {
-    record.push(`    notes: ${yamlMultiline(clamp(notes.join("\n"), 3000))}`);
+    record.notes = clamp(notes.join("\n"), 3000);
   }
 
-  return [
-    'schema_version: "1.0"',
-    "category: application",
-    "application:",
-    ...record,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("application", {
+    schema_version: "1.0",
+    category: "application",
+    records: [record],
+  });
 };
 
 /** The `contacts` document: one row per person the brief names. A block
@@ -1070,7 +1274,7 @@ export const buildApplicationYaml = (body: string): string | null => {
  *  under it; an office header collects the address and working hours the
  *  brief states. `ContactItem.name` is REQUIRED, so a row exists only where
  *  the brief names somebody or something. */
-export const buildContactsYaml = (body: string): string | null => {
+export const buildContactsMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
@@ -1206,36 +1410,26 @@ export const buildContactsYaml = (body: string): string | null => {
   if (kept.length === 0) return null;
 
   const used = new Map<string, number>();
-  const records: string[] = [];
-  kept.forEach((draft, index) => {
+  const records = kept.map((draft, index) => {
     const name = clamp(draft.name || "Liên hệ", 500);
-    records.push(
-      `  - id: ${claimId(used, name, index)}`,
-      `    name: ${yamlString(name)}`,
-    );
-    if (draft.role) records.push(`    role: ${yamlString(draft.role)}`);
-    if (draft.phone) records.push(`    phone: "${draft.phone}"`);
-    if (draft.zalo) records.push(`    zalo: "${draft.zalo}"`);
-    if (draft.email) records.push(`    email: ${yamlString(draft.email)}`);
-    if (draft.address)
-      records.push(`    address: ${yamlString(draft.address)}`);
-    if (draft.workingHours) {
-      records.push(`    working_hours: ${yamlString(draft.workingHours)}`);
-    }
+    const record: CategoryRecord = { id: claimId(used, name, index), name };
+    if (draft.role) record.role = draft.role;
+    if (draft.phone) record.phone = draft.phone;
+    if (draft.zalo) record.zalo = draft.zalo;
+    if (draft.email) record.email = draft.email;
+    if (draft.address) record.address = draft.address;
+    if (draft.workingHours) record.working_hours = draft.workingHours;
     if (draft.notes.length > 0) {
-      records.push(
-        `    notes: ${yamlMultiline(clamp(draft.notes.join("\n"), 3000))}`,
-      );
+      record.notes = clamp(draft.notes.join("\n"), 3000);
     }
+    return record;
   });
 
-  return [
-    'schema_version: "1.0"',
-    "category: contacts",
-    "contacts:",
-    ...records,
-    "",
-  ].join("\n");
+  return serializeCategoryMarkdown("contacts", {
+    schema_version: "1.0",
+    category: "contacts",
+    records,
+  });
 };
 
 // ── the plan ───────────────────────────────────────────────────────────────
@@ -1270,7 +1464,7 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
     key: ProjectKnowledgeCategory,
     content: string | null,
   ): void => {
-    if (content) writes.push({ key, filename: `${key}.yaml`, content });
+    if (content) writes.push({ key, filename: `${key}.md`, content });
   };
 
   // `jobs` goes FIRST and always. Every other category's rows may reference
@@ -1286,8 +1480,8 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
   if (roles.length > 0) {
     writes.push({
       key: "jobs",
-      filename: "jobs.yaml",
-      content: buildJobsYaml(roles, brief.location),
+      filename: "jobs.md",
+      content: buildJobsMarkdown(roles, brief.location),
     });
   }
 
@@ -1297,29 +1491,32 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
   // category for `needsHuman` below.
   push(
     "compensation",
-    buildCompensationYaml(brief.categories.compensation ?? ""),
+    buildCompensationMarkdown(brief.categories.compensation ?? ""),
   );
   push(
     "requirements",
-    buildRequirementsYaml(brief.categories.requirements ?? ""),
+    buildRequirementsMarkdown(brief.categories.requirements ?? ""),
   );
   push(
     "work_schedules",
-    buildWorkSchedulesYaml(brief.categories.work_schedules ?? ""),
+    buildWorkSchedulesMarkdown(brief.categories.work_schedules ?? ""),
   );
-  push("benefits", buildBenefitsYaml(brief.categories.benefits ?? ""));
+  push("benefits", buildBenefitsMarkdown(brief.categories.benefits ?? ""));
   push(
     "accommodation",
-    buildAccommodationYaml(brief.categories.accommodation ?? ""),
+    buildAccommodationMarkdown(brief.categories.accommodation ?? ""),
   );
-  push("meals", buildMealsYaml(brief.categories.meals ?? ""));
+  push("meals", buildMealsMarkdown(brief.categories.meals ?? ""));
   push(
     "transportation",
-    buildTransportationYaml(brief.categories.transportation ?? ""),
+    buildTransportationMarkdown(brief.categories.transportation ?? ""),
   );
-  push("insurance", buildInsuranceYaml(brief.categories.insurance ?? ""));
-  push("application", buildApplicationYaml(brief.categories.application ?? ""));
-  push("contacts", buildContactsYaml(brief.categories.contacts ?? ""));
+  push("insurance", buildInsuranceMarkdown(brief.categories.insurance ?? ""));
+  push(
+    "application",
+    buildApplicationMarkdown(brief.categories.application ?? ""),
+  );
+  push("contacts", buildContactsMarkdown(brief.categories.contacts ?? ""));
 
   // The Q&A bank writes only pairs the brief actually answered — the builder
   // drops the rest as a contract rule. A bank with dropped pairs still writes
@@ -1332,8 +1529,8 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
   if (faqEntries.length > 0) {
     writes.push({
       key: "faq",
-      filename: "faq.yaml",
-      content: buildFaqYaml(faqEntries),
+      filename: "faq.md",
+      content: buildFaqMarkdown(faqEntries),
     });
   }
 

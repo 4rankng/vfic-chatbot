@@ -26,7 +26,8 @@ type Props = {
   onSourceCreated: () => void;
 };
 
-/** Detail pane of the selected knowledge category: review state, actions, YAML. */
+/** Detail pane of the selected knowledge category: review state, actions, the
+ *  category's markdown source. */
 export const CategoryEditor = ({
   ref,
   projectId,
@@ -90,7 +91,7 @@ export const CategoryEditor = ({
           </div>
           <p className="project-category-editor-description" aria-live="polite">
             {isEditing
-              ? "Chỉnh sửa YAML trực tiếp, sau đó lưu để hệ thống kiểm tra."
+              ? "Chỉnh sửa nội dung trực tiếp, sau đó lưu để hệ thống kiểm tra."
               : processing
                 ? `Phiên bản mới đang được kiểm tra · ${filename}`
                 : hasCurrentSource

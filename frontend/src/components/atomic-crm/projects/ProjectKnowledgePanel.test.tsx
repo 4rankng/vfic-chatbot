@@ -917,9 +917,10 @@ describe("ProjectKnowledgePanel", () => {
       "contacts",
       "faq",
     ]);
-    const jobsYaml = mocks.replaceProjectKnowledgeCategory.mock.calls[0][3];
-    expect(jobsYaml).toContain("Nhân viên lắp ráp linh kiện điện tử");
-    expect(jobsYaml).not.toContain("vacancies");
+    const jobsMarkdown = mocks.replaceProjectKnowledgeCategory.mock.calls[0][3];
+    expect(jobsMarkdown).toContain("Nhân viên lắp ráp linh kiện điện tử");
+    // Headcount is unknown from the sheet, so the field renders as an explicit null.
+    expect(jobsMarkdown).toContain("vacancies: null");
 
     // Nothing is left for a human: this sheet carries every category.
     expect(screen.container.textContent).not.toContain("Cần nhập tay");
@@ -963,7 +964,7 @@ describe("ProjectKnowledgePanel", () => {
     const [, firstKey, firstFilename] =
       mocks.replaceProjectKnowledgeCategory.mock.calls[0];
     expect(firstKey).toBe("jobs");
-    expect(firstFilename).toBe("jobs.yaml");
+    expect(firstFilename).toBe("jobs.md");
     expect(screen.container.textContent).not.toContain("Chỉ chấp nhận tệp");
     expect(confirm).not.toHaveBeenCalled();
     confirm.mockRestore();

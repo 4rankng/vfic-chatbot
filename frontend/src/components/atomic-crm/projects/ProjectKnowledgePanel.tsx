@@ -21,7 +21,7 @@ import { PROJECT_KNOWLEDGE_CATEGORY_LABELS } from "./domain/project-knowledge-po
 import {
   planBriefKnowledge,
   type BriefKnowledgePlan,
-} from "./domain/project-knowledge-yaml";
+} from "./domain/project-knowledge-markdown";
 import { useCategoryDraft } from "./presentation/use-category-draft";
 import { useFaqAutoSyncNotice } from "./presentation/use-faq-auto-sync-notice";
 import { useProjectKnowledgeCatalog } from "./presentation/use-project-knowledge-catalog";
@@ -49,7 +49,7 @@ type Props = {
 
 /**
  * Knowledge workspace of one project: either the single LLM-fed page
- * (DIRECT_CONTEXT) or the reviewed per-category YAML catalog (RAG).
+ * (DIRECT_CONTEXT) or the reviewed per-category markdown catalog (RAG).
  * Composition only — the application hooks own data access, the presentation
  * modules own the markup.
  */
