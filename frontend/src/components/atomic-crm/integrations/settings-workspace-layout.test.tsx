@@ -134,8 +134,10 @@ describe("settings workspace density scale", () => {
     expect(styles.getPropertyValue("--settings-touch-target").trim()).toBe(
       "44px",
     );
+    // The mobile row uses the same 44px touch tier as the trigger it opens —
+    // the console's single control ceiling.
     expect(styles.getPropertyValue("--settings-mobile-row-height").trim()).toBe(
-      "48px",
+      "44px",
     );
 
     // Scoping, not merely existing: the scale is declared on the settings
@@ -455,12 +457,12 @@ describe("settings action sizing", () => {
     )!;
 
     expect(getComputedStyle(trigger).minHeight).toBe("44px");
-    expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(48);
+    expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     // The collapse row must not re-inherit the details padding that ships with
     // `<details>`, which pushed the chevron off the row.
     expect(getComputedStyle(summary).paddingTop).toBe("0px");
     expect(getComputedStyle(summary).paddingLeft).toBe("0px");
-    expect(getComputedStyle(header).minHeight).toBe("48px");
+    expect(getComputedStyle(header).minHeight).toBe("44px");
     // The page title stays on the shared page-title scale (22px at phone width).
     expect(getComputedStyle(pageTitle).fontSize).toBe("22px");
   });

@@ -530,6 +530,10 @@ describe("SettingsConsolePage navigation", () => {
 
     await screen.getByRole("button", { name: "Mở danh mục cài đặt" }).click();
 
+    await expect
+      .element(screen.getByRole("dialog", { name: "Cài đặt" }))
+      .toBeVisible();
+
     const messengerButton = await screen.getByRole("button", {
       name: /Messenger/,
     });

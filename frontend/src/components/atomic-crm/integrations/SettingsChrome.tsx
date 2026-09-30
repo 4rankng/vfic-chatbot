@@ -1,14 +1,13 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronDown, Menu } from "lucide-react";
+import { DialogTrigger } from "react-aria-components";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  Modal,
+  ModalOverlay,
+} from "@/components/application/slideout-menus/slideout-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import "../conversations/inbox.css";
@@ -81,60 +80,69 @@ const MobileSettingsNav = ({
   activeItemId: SettingsItemId;
   onItemSelect: (itemId: SettingsItemId) => void;
 }) => {
+  const [open, setOpen] = useState(false);
   const activeItem =
     SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
     SETTINGS_NAV_ITEMS[0];
 
   return (
     <div className="settings-mobile-topbar">
-      <Sheet>
-        <SheetTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            className="settings-mobile-drawer-trigger"
-            aria-label="Mở danh mục cài đặt"
-          >
-            <Menu className="size-5" aria-hidden="true" />
-            <span className="min-w-0 flex-1 text-left">
-              <span className="settings-mobile-drawer-label">Cài đặt</span>
-              <span className="settings-mobile-drawer-current">
-                {activeItem.label}
-              </span>
+      <DialogTrigger isOpen={open} onOpenChange={setOpen}>
+        <Button
+          color="secondary"
+          size="md"
+          className="settings-mobile-drawer-trigger"
+          aria-label="Mở danh mục cài đặt"
+          iconLeading={Menu}
+          iconTrailing={ChevronDown}
+        >
+          <span className="min-w-0 flex-1 text-left">
+            <span className="settings-mobile-drawer-label">Cài đặt</span>
+            <span className="settings-mobile-drawer-current">
+              {activeItem.label}
             </span>
-            <ChevronDown className="size-4" aria-hidden="true" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="settings-mobile-drawer">
-          <SheetTitle className="settings-mobile-drawer-title">
-            Cài đặt
-          </SheetTitle>
-          <p className="settings-mobile-drawer-description">
-            Chọn khu vực bạn muốn cấu hình.
-          </p>
-          <nav className="settings-mobile-drawer-list" aria-label="Mục cài đặt">
-            {SETTINGS_NAV_ITEMS.map((item) => {
-              const active = item.itemId === activeItemId;
+          </span>
+        </Button>
+        <ModalOverlay className="z-50 justify-start pl-0 sm:justify-start">
+          <Modal className="settings-mobile-drawer-panel h-full w-full max-w-[85vw] outline-hidden sm:max-w-sm">
+            <Dialog
+              aria-label="Cài đặt"
+              className="settings-mobile-drawer uu-scope flex size-full flex-col items-stretch gap-0"
+            >
+              <h2 className="settings-mobile-drawer-title">Cài đặt</h2>
+              <p className="settings-mobile-drawer-description">
+                Chọn khu vực bạn muốn cấu hình.
+              </p>
+              <nav
+                className="settings-mobile-drawer-list"
+                aria-label="Mục cài đặt"
+              >
+                {SETTINGS_NAV_ITEMS.map((item) => {
+                  const active = item.itemId === activeItemId;
 
-              return (
-                <SheetClose asChild key={item.itemId}>
-                  <button
-                    type="button"
-                    className={`settings-mobile-drawer-item${active ? " is-active" : ""}`}
-                    onClick={() => onItemSelect(item.itemId)}
-                  >
-                    <SettingsNavLinkContent
-                      label={item.label}
-                      description={item.description}
-                      Icon={item.Icon}
-                    />
-                  </button>
-                </SheetClose>
-              );
-            })}
-          </nav>
-        </SheetContent>
-      </Sheet>
+                  return (
+                    <button
+                      key={item.itemId}
+                      type="button"
+                      className={`settings-mobile-drawer-item${active ? " is-active" : ""}`}
+                      onClick={() => {
+                        onItemSelect(item.itemId);
+                        setOpen(false);
+                      }}
+                    >
+                      <SettingsNavLinkContent
+                        label={item.label}
+                        description={item.description}
+                        Icon={item.Icon}
+                      />
+                    </button>
+                  );
+                })}
+              </nav>
+            </Dialog>
+          </Modal>
+        </ModalOverlay>
+      </DialogTrigger>
     </div>
   );
 };

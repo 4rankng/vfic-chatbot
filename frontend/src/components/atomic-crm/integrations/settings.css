@@ -7,7 +7,8 @@
   --settings-control-height: var(--crm-control-height-md);
   --settings-action-height: var(--crm-control-height-md);
   --settings-touch-target: var(--crm-control-height-touch);
-  --settings-mobile-row-height: 48px;
+  /* One row height, capped at the console's 44px touch target. */
+  --settings-mobile-row-height: var(--crm-control-height-touch);
   --settings-space-2: 8px;
   --settings-space-3: 12px;
   --settings-space-4: 16px;
@@ -287,6 +288,14 @@
     color: var(--ink);
     padding: calc(20px + env(safe-area-inset-top)) 14px 18px;
     box-shadow: none;
+  }
+
+  /* The slideout module animates toward the right edge; a left-anchored drawer
+     must slide in from (and out to) the left. Unlayered, so it beats the
+     utility layer that `slide-in-from-right` lives in. */
+  .settings-mobile-drawer-panel {
+    --tw-enter-translate-x: -100%;
+    --tw-exit-translate-x: -100%;
   }
 
   .settings-mobile-drawer-title {
@@ -693,7 +702,7 @@
 }
 
 .settings-messenger-recovery-summary {
-  min-height: 48px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   cursor: pointer;
