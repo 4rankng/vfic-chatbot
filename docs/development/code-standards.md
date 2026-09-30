@@ -138,8 +138,7 @@ surrounding code.
 ### React Admin resource conventions
 - `CRM.tsx` renders resources from `runtime.resources`, built by
   `capabilities/static-recruitment-runtime.ts` from its fixed `RESOURCE_IDS`
-  (8 total: conversations, bot-runs, knowledge-sources, knowledge-bases,
-  projects, personas, settings, users).
+  (6 total: conversations, bot-runs, projects, personas, settings, users).
 - **Hash-based routing** (no browser history router).
 - `RESOURCE_PATH` aliases (in `dataProvider.ts`): `knowledge_sources` →
   `knowledge/documents`, `projects` → `knowledge/projects`, `personas` →

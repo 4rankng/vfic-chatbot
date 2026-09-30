@@ -111,18 +111,6 @@ describe("kernel capability routes", () => {
         roles: undefined,
       },
       {
-        id: "knowledge_sources",
-        to: "/knowledge_sources",
-        section: "knowledge",
-        roles: ["admin"],
-      },
-      {
-        id: "knowledge_bases",
-        to: "/knowledge_bases",
-        section: "knowledge",
-        roles: ["admin"],
-      },
-      {
         id: "personas",
         to: "/personas",
         section: "team",

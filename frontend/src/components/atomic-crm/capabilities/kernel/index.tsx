@@ -1,11 +1,9 @@
 import { Navigate } from "react-router";
 import {
-  BookOpen,
   Bot,
   Briefcase,
   Gauge,
   Home,
-  Library,
   MessageCircle,
   ScrollText,
   Settings,
@@ -15,8 +13,6 @@ import {
 import users from "../../users";
 import conversations from "../../conversations";
 import automation from "../../automation";
-import knowledge from "../../knowledge";
-import knowledgeBases from "../../knowledge-base";
 import projects from "../../projects";
 import personas from "../../personas";
 import integrations from "../../integrations";
@@ -59,24 +55,6 @@ const navigation: readonly CompiledDestination[] = [
     Icon: Briefcase,
     section: "operations",
     isActive: pathStartsWith("/projects"),
-  },
-  {
-    id: "knowledge_sources",
-    label: "Nguồn kiến thức",
-    to: "/knowledge_sources",
-    Icon: BookOpen,
-    roles: ["admin"],
-    section: "knowledge",
-    isActive: pathStartsWith("/knowledge_sources"),
-  },
-  {
-    id: "knowledge_bases",
-    label: "Cơ sở kiến thức",
-    to: "/knowledge_bases",
-    Icon: Library,
-    roles: ["admin"],
-    section: "knowledge",
-    isActive: pathStartsWith("/knowledge_bases"),
   },
   {
     id: "personas",
@@ -187,22 +165,6 @@ const resourceContributions = {
       id: "kernel.resource.bot-runs",
       name: "bot_runs",
       props: automation,
-    },
-  },
-  "kernel.resource.knowledge-sources": {
-    kind: "resource" as const,
-    resource: {
-      id: "kernel.resource.knowledge-sources",
-      name: "knowledge_sources",
-      props: knowledge,
-    },
-  },
-  "kernel.resource.knowledge-bases": {
-    kind: "resource" as const,
-    resource: {
-      id: "kernel.resource.knowledge-bases",
-      name: "knowledge_bases",
-      props: knowledgeBases,
     },
   },
   "kernel.resource.projects": {

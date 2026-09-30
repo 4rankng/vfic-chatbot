@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useHotkeys } from "react-hotkeys-hook";
 import type { FC } from "react";
-import { FolderPlus, Library, UserPlus, UserRound } from "lucide-react";
+import { FolderPlus, UserPlus, UserRound } from "lucide-react";
 
 import { CommandMenu } from "@/components/application/command-menus/command-menu";
 import type { CommandMenuGroupType } from "@/components/application/command-menus/command-menu";
@@ -35,13 +35,6 @@ const ACTIONS: readonly PaletteAction[] = [
     label: "Tạo dự án",
     to: "/projects/create",
     icon: FolderPlus,
-  },
-  {
-    id: "action.create-knowledge-base",
-    label: "Tạo cơ sở kiến thức",
-    to: "/knowledge_bases/create",
-    icon: Library,
-    adminsOnly: true,
   },
   {
     id: "action.create-persona",

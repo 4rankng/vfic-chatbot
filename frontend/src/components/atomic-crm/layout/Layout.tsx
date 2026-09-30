@@ -19,9 +19,6 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   const isConversationWorkspace =
     location.pathname.startsWith("/conversations") ||
     hashPath.startsWith("/conversations");
-  const isKnowledgeWorkspace =
-    location.pathname.startsWith("/knowledge_sources") ||
-    hashPath.startsWith("/knowledge_sources");
   const isIntegrationWorkspace =
     location.pathname.startsWith("/settings") ||
     hashPath.startsWith("/settings") ||
@@ -39,7 +36,6 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   const isFullHeightWorkspace =
     isDashboardWorkspace ||
     isConversationWorkspace ||
-    isKnowledgeWorkspace ||
     isIntegrationWorkspace ||
     isPersonaWorkspace ||
     isProjectWorkspace ||

@@ -70,19 +70,12 @@ afterEach(async () => {
   roleActionsState.isAdmin = true;
 });
 
-const ADMIN_SECTION_HEADINGS = [
-  "Vận hành",
-  "Kiến thức",
-  "Đội ngũ & Agent",
-  "Hệ thống",
-];
+const ADMIN_SECTION_HEADINGS = ["Vận hành", "Đội ngũ & Agent", "Hệ thống"];
 
 const ADMIN_NAV_HREFS = [
   "#/",
   "#/conversations",
   "#/projects",
-  "#/knowledge_sources",
-  "#/knowledge_bases",
   "#/personas",
   "#/users",
   "#/settings",
@@ -94,8 +87,6 @@ const ADMIN_DESTINATION_LABELS = [
   "Tổng quan",
   "Tin nhắn",
   "Dự án",
-  "Nguồn kiến thức",
-  "Cơ sở kiến thức",
   "Agent",
   "Người dùng",
   "Cài đặt",
@@ -166,11 +157,6 @@ describe("kernel mobile navigation drawer", () => {
 
     await expect
       .element(drawer.getByRole("link", { name: "Người dùng", exact: true }))
-      .not.toBeInTheDocument();
-    await expect
-      .element(
-        drawer.getByRole("link", { name: "Nguồn kiến thức", exact: true }),
-      )
       .not.toBeInTheDocument();
     await expect
       .element(drawer.getByText("Hệ thống", { exact: true }))

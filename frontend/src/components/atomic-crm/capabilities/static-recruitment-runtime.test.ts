@@ -14,8 +14,6 @@ describe("static recruitment runtime", () => {
     expect(runtime.resources.map(({ name }) => name)).toEqual([
       "conversations",
       "bot_runs",
-      "knowledge_sources",
-      "knowledge_bases",
       "projects",
       "personas",
       "settings",
@@ -64,18 +62,6 @@ describe("static recruitment runtime", () => {
         section: "operations",
       },
       {
-        id: "knowledge_sources",
-        to: "/knowledge_sources",
-        roles: ["admin"],
-        section: "knowledge",
-      },
-      {
-        id: "knowledge_bases",
-        to: "/knowledge_bases",
-        roles: ["admin"],
-        section: "knowledge",
-      },
-      {
         id: "personas",
         to: "/personas",
         roles: ["admin"],
@@ -110,24 +96,12 @@ describe("static recruitment runtime", () => {
       true,
     );
     expect(navigationById.get("projects")?.isActive("/projects/1")).toBe(true);
-    expect(
-      navigationById.get("knowledge_sources")?.isActive("/knowledge_sources"),
-    ).toBe(true);
-    expect(
-      navigationById.get("knowledge_sources")?.isActive("/knowledge_bases"),
-    ).toBe(false);
-    expect(
-      navigationById.get("knowledge_bases")?.isActive("/knowledge_bases/abc"),
-    ).toBe(true);
     expect(navigationById.get("personas")?.isActive("/personas")).toBe(true);
     expect(navigationById.get("users")?.isActive("/users/7")).toBe(true);
     expect(navigationById.get("users")?.isActive("/settings")).toBe(false);
     expect(navigationById.get("settings")?.isActive("/settings")).toBe(true);
-    expect(
-      navigationById.get("settings")?.isActive("/zalo_integrations"),
-    ).toBe(true);
-    expect(navigationById.get("settings")?.isActive("/knowledge_sources")).toBe(
-      false,
+    expect(navigationById.get("settings")?.isActive("/zalo_integrations")).toBe(
+      true,
     );
     expect(navigationById.get("bot_runs")?.isActive("/bot_runs/1")).toBe(true);
     expect(

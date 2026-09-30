@@ -48,24 +48,6 @@ describe("kernel navigation contract", () => {
     expect(navigation("users").isActive("/profile")).toBe(false);
     expect(navigation("users").isActive("/settings")).toBe(false);
 
-    expect(navigation("knowledge_sources").isActive("/knowledge_sources")).toBe(
-      true,
-    );
-    expect(
-      navigation("knowledge_sources").isActive("/knowledge_sources/doc-1"),
-    ).toBe(true);
-    expect(
-      navigation("knowledge_sources").isActive("/knowledge_bases"),
-    ).toBe(false);
-    expect(navigation("knowledge_sources").isActive("/settings")).toBe(false);
-
-    expect(navigation("knowledge_bases").isActive("/knowledge_bases")).toBe(
-      true,
-    );
-    expect(navigation("knowledge_bases").isActive("/knowledge_sources")).toBe(
-      false,
-    );
-
     expect(navigation("personas").isActive("/personas")).toBe(true);
     expect(navigation("personas").isActive("/personas/new")).toBe(true);
     expect(navigation("personas").isActive("/settings")).toBe(false);
@@ -82,8 +64,6 @@ describe("kernel navigation contract", () => {
     expect(navigation("overview").section).toBe("operations");
     expect(navigation("messages").section).toBe("operations");
     expect(navigation("projects").section).toBe("operations");
-    expect(navigation("knowledge_sources").section).toBe("knowledge");
-    expect(navigation("knowledge_bases").section).toBe("knowledge");
     expect(navigation("personas").section).toBe("team");
     expect(navigation("users").section).toBe("team");
     expect(navigation("settings").section).toBe("system");
@@ -99,10 +79,8 @@ describe("kernel navigation contract", () => {
     expect(settings.isActive("/settings/profile")).toBe(true);
     expect(settings.isActive("/zalo_integrations")).toBe(true);
     expect(settings.isActive("/zalo_integrations/legacy")).toBe(true);
-    // Knowledge, personas and projects are their own sidebar destinations now,
+    // Personas and projects are their own sidebar destinations now,
     // so the settings item must not claim their routes.
-    expect(settings.isActive("/knowledge_sources")).toBe(false);
-    expect(settings.isActive("/knowledge_bases/abc")).toBe(false);
     expect(settings.isActive("/personas")).toBe(false);
     expect(settings.isActive("/users/7")).toBe(false);
     expect(settings.isActive("/projects")).toBe(false);

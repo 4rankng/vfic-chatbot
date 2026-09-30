@@ -38,10 +38,6 @@ export const vietnameseCrmMessages = {
       name: "Lần chạy bot |||| Lần chạy bot",
       forcedCaseName: "Lần chạy bot",
     },
-    knowledge_sources: {
-      name: "Nguồn kiến thức |||| Nguồn kiến thức",
-      forcedCaseName: "Nguồn kiến thức",
-    },
     projects: {
       name: "Dự án |||| Dự án",
       forcedCaseName: "Dự án",

@@ -132,7 +132,6 @@ the canonical map; visit each on desktop **and** mobile (390×844) per run.
 | `#/conversations` | `conversations` | `conversations/ConversationList.tsx` | Switch between the exclusive Zalo Chatbot/Zalo OA icon scopes; URL contains `channel_provider`; adapter badges and selected caption match scoped attention counts; search/queue/reason filters never mix adapters; a nonzero `Tin nhắn` badge opens `?needs_attention=true` and lists only open Human-mode conversations with an unanswered candidate message; Bot/Semi-auto rows stay out until transitioned to Human; mode menu (Human/Semi-auto/Chatbot); composer disabled in chatbot mode |
 | `#/conversations/:id` | show | `conversations/ConversationShow.tsx` | Thread loads; context panel; takeover toggle; send (QA conv only) |
 | `#/bot_runs` | `bot_runs` (read-only audit) | `automation/BotRunList.tsx` | Run cards: outcome, preview, timing; detail view |
-| `#/knowledge_sources` | `knowledge_sources` | `knowledge/KnowledgeSourceList.tsx` | Search; upload dialog (template/project/file/paste-text); pipeline timeline; retrain/download actions |
 | `#/projects` | `projects` | `projects/ProjectList.tsx` | CRUD cycle on a `QA-*` project; delete confirmation names target |
 | `#/personas` | `personas` | `personas/PersonaList.tsx` | Active persona marked; create/edit; assignments |
 | `#/users` | `users` (admin only) | `users/UserList.tsx` | List/sort/badges; create/edit/delete on `QA-*` user |
@@ -297,7 +296,7 @@ with assertions when adding a CI gate.
 
 ### 5.4 CRUD safety tests (per resource)
 
-For `projects`, `users`, `personas`, `knowledge_sources` — exercise the full
+For `projects`, `users`, `personas` — exercise the full
 create→edit→delete cycle on a `QA-*` record:
 
 1. Submit the create form **empty** → verify validation rejects it.
@@ -361,7 +360,7 @@ const t0 = Date.now();
 await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
 console.log('Initial load (networkidle):', Date.now() - t0, 'ms');
 
-for (const route of ['/', '/conversations', '/knowledge_sources', '/projects', '/users']) {
+for (const route of ['/', '/conversations', '/projects', '/users']) {
   const t = Date.now();
   await page.goto(`http://localhost:5173/#${route}`, { waitUntil: 'networkidle' });
   console.log(`Route ${route}:`, Date.now() - t, 'ms');

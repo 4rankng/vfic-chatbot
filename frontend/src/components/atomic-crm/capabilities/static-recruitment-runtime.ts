@@ -18,8 +18,6 @@ const contributions: Readonly<Record<string, ExecutableContribution>> =
 const RESOURCE_IDS = [
   "kernel.resource.conversations",
   "kernel.resource.bot-runs",
-  "kernel.resource.knowledge-sources",
-  "kernel.resource.knowledge-bases",
   "kernel.resource.projects",
   "kernel.resource.personas",
   "kernel.resource.settings",
@@ -38,8 +36,6 @@ const NAVIGATION_IDS = [
   "kernel.navigation.overview",
   "kernel.navigation.messages",
   "kernel.navigation.projects",
-  "kernel.navigation.knowledge_sources",
-  "kernel.navigation.knowledge_bases",
   "kernel.navigation.personas",
   "kernel.navigation.users",
   "kernel.navigation.settings",

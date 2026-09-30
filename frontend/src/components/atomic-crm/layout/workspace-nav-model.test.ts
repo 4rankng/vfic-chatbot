@@ -25,7 +25,6 @@ const destination = (
 const navigation: readonly CompiledDestination[] = [
   destination("overview", "operations", { to: "/" }),
   destination("messages", "operations"),
-  destination("knowledge_sources", "knowledge", { roles: ["admin"] }),
   destination("users", "team", { roles: ["admin"] }),
   destination("settings", "system", { roles: ["admin"] }),
 ];
@@ -47,7 +46,7 @@ describe("workspace navigation model", () => {
 
     expect(
       getWorkspaceSections("admin", navigation).map((section) => section.id),
-    ).toEqual(["operations", "knowledge", "team", "system"]);
+    ).toEqual(["operations", "team", "system"]);
   });
 
   it("normalizes hash and search variants to one path", () => {
@@ -65,8 +64,6 @@ describe("workspace navigation model", () => {
       "/messages?needs_attention=true",
     );
     expect(getWorkspaceDestination(messages, 0)).toBe("/messages");
-    expect(getWorkspaceDestination(navigation[2], 3)).toBe(
-      "/knowledge_sources",
-    );
+    expect(getWorkspaceDestination(navigation[2], 3)).toBe("/users");
   });
 });

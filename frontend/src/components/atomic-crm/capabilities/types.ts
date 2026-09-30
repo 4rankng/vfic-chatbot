@@ -88,7 +88,7 @@ export type CompiledRoute = Readonly<{
  * this id and the layout owns the section headings, so the compiled contract
  * carries identity rather than presentation.
  */
-export type DestinationSection = "operations" | "knowledge" | "team" | "system";
+export type DestinationSection = "operations" | "team" | "system";
 
 export type CompiledDestination = Readonly<{
   id: string;

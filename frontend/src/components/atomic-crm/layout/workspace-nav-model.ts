@@ -19,14 +19,12 @@ export type WorkspaceSection = Readonly<{
 
 const SECTION_ORDER: readonly DestinationSection[] = [
   "operations",
-  "knowledge",
   "team",
   "system",
 ];
 
 const SECTION_LABELS: Record<DestinationSection, string> = {
   operations: "Vận hành",
-  knowledge: "Kiến thức",
   team: "Đội ngũ & Agent",
   system: "Hệ thống",
 };
