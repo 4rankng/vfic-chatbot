@@ -58,7 +58,11 @@ from app.models.knowledge import (
 )
 from app.schemas.projects import ProjectCreate
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
-from app.services.knowledge.category_contracts import category_checksum, parse_category_yaml
+from app.services.knowledge.category_contracts import category_checksum
+from app.services.knowledge.category_markdown import (
+    build_source_markdown,
+    parse_category_markdown,
+)
 from app.services.knowledge.category_projections import SqlAlchemyCategoryProjectionWriter
 from app.services.knowledge.category_service import (
     MAX_CATEGORY_PROCESSING_ATTEMPTS,
@@ -117,19 +121,25 @@ _PROJECTION_SUMMARY = (
 )
 
 
-def _jobs_yaml() -> str:
-    """The jobs category document the brief pipeline writes for these roles
-    (frontend ``buildJobsYaml(roles, location)`` shape)."""
-    lines = ['schema_version: "1.0"', "category: jobs", "jobs:"]
-    for job_id, title in zip(_FIXTURE_JOB_IDS, FIXTURE_TARGET_POSITIONS, strict=True):
-        lines += [
-            f"  - id: {job_id}",
-            f'    title: "{title}"',
-            f'    location: "{FIXTURE_LOCATION}"',
-            "    aliases: []",
-            "    keywords: []",
-        ]
-    return "\n".join(lines) + "\n"
+def _jobs_markdown() -> str:
+    """The jobs Category Markdown v1 document the brief pipeline writes for
+    these roles, rendered with the canonical renderer (front-matter, one
+    ``## jobs`` section, one ``### record:`` block per role)."""
+    payload = {
+        "schema_version": "1.0",
+        "category": "jobs",
+        "jobs": [
+            {
+                "id": job_id,
+                "title": title,
+                "location": FIXTURE_LOCATION,
+                "aliases": [],
+                "keywords": [],
+            }
+            for job_id, title in zip(_FIXTURE_JOB_IDS, FIXTURE_TARGET_POSITIONS, strict=True)
+        ],
+    }
+    return build_source_markdown(payload)
 
 
 class _FakeScalars:
@@ -285,14 +295,14 @@ async def test_amtran_fixture_brief_ingestion_lands_front_matter_facts_in_index_
     category = KnowledgeCategory(project_id=project.id, category_key="jobs")
     session.add(category)
     await session.flush()
-    jobs_yaml = _jobs_yaml()
-    document = parse_category_yaml("jobs", jobs_yaml)
+    jobs_markdown = _jobs_markdown()
+    document = parse_category_markdown("jobs", jobs_markdown)
     revision = KnowledgeCategoryRevision(
         category_id=category.id,
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
-        source_filename="jobs.yaml",
-        source_yaml=jobs_yaml,
+        source_filename="jobs.md",
+        source_yaml=jobs_markdown,
         normalized_payload=document.model_dump(mode="json"),
         content_sha256=category_checksum(document),
         created_by=admin.id,
@@ -426,14 +436,14 @@ async def test_legacy_carded_project_defers_projection_until_cutover(monkeypatch
     category = KnowledgeCategory(project_id=project.id, category_key="jobs")
     session.add(category)
     await session.flush()
-    jobs_yaml = _jobs_yaml()
-    document = parse_category_yaml("jobs", jobs_yaml)
+    jobs_markdown = _jobs_markdown()
+    document = parse_category_markdown("jobs", jobs_markdown)
     revision = KnowledgeCategoryRevision(
         category_id=category.id,
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
-        source_filename="jobs.yaml",
-        source_yaml=jobs_yaml,
+        source_filename="jobs.md",
+        source_yaml=jobs_markdown,
         normalized_payload=document.model_dump(mode="json"),
         content_sha256=category_checksum(document),
     )

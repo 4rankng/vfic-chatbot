@@ -25,6 +25,7 @@ from app.schemas.knowledge_categories import (
     KnowledgeCategoryKey,
 )
 from app.services.knowledge.category_contracts import (
+    CategoryMarkdownError,
     get_category_definition,
     validate_category_payload,
 )
@@ -43,10 +44,6 @@ _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _INT_RE = re.compile(r"-?\d+")
 _SEPARATOR_CELL_RE = re.compile(r":?-{3,}:?")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
-
-
-class CategoryMarkdownError(ValueError):
-    """Raised when category source text is not one well-formed Category Markdown v1 document."""
 
 
 _ESCAPES = (

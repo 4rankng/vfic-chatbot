@@ -2,9 +2,9 @@
 
 A parser turns a fetched CSV document into the *raw payload dict* for one
 :class:`~app.schemas.knowledge_categories.KnowledgeCategoryKey`. The payload is
-the intermediate form; the orchestrator serialises it to canonical YAML and
-validates it through ``parse_category_yaml`` so the result matches the category
-pipeline's own contract exactly.
+the intermediate form; the orchestrator serialises it to canonical Category
+Markdown v1 and validates it through ``parse_category_markdown`` so the result
+matches the category pipeline's own contract exactly.
 
 v1 ships the FAQ parser only (that is the live LG Display sheet). Adding a new
 category later is a new ``@register(KnowledgeCategoryKey.X)`` function — the

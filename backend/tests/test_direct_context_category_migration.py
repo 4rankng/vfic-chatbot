@@ -33,7 +33,7 @@ from app.shared.domain.errors import ConflictError, NotFoundError
 from tests.test_brief_fixture_ingestion import (
     _FakeSession,
     _UnitEmbedder,
-    _jobs_yaml,
+    _jobs_markdown,
 )
 
 
@@ -104,8 +104,8 @@ async def test_stage_admits_direct_context_project_and_seeds_rows(monkeypatch) -
     revision, job_id = await service.stage_replacement(
         project_id=project.id,
         category_key=KnowledgeCategoryKey.JOBS,
-        filename="jobs.yaml",
-        source_yaml=_jobs_yaml(),
+        filename="jobs.md",
+        source_markdown=_jobs_markdown(),
         actor=actor,
     )
 
@@ -122,8 +122,8 @@ async def test_stage_admits_direct_context_project_and_seeds_rows(monkeypatch) -
         await service.stage_replacement(
             project_id=uuid.uuid4(),
             category_key=KnowledgeCategoryKey.JOBS,
-            filename="jobs.yaml",
-            source_yaml=_jobs_yaml(),
+            filename="jobs.md",
+            source_markdown=_jobs_markdown(),
             actor=actor,
         )
 
@@ -150,8 +150,8 @@ async def test_activation_defers_the_legacy_card_until_cutover(monkeypatch) -> N
     revision, _job_id = await service.stage_replacement(
         project_id=project.id,
         category_key=KnowledgeCategoryKey.JOBS,
-        filename="jobs.yaml",
-        source_yaml=_jobs_yaml(),
+        filename="jobs.md",
+        source_markdown=_jobs_markdown(),
         actor=actor,
     )
     await service.activate_revision(revision.id, _UnitEmbedder())

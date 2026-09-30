@@ -255,7 +255,7 @@ class SqlAlchemyCategoryProjectionWriter:
                     shift=_bus_shift(record.shift),
                     direction=direction,
                     mode="company_bus",
-                    source_page="category_yaml",
+                    source_page="category_markdown",
                     notes=record.notes,
                     metadata_={
                         "service_days": record.service_days,

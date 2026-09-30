@@ -88,10 +88,18 @@ async def _seed_direct_context_project(
     return actor, project, knowledge_base
 
 
-def _jobs_yaml() -> str:
+def _jobs_markdown() -> str:
     return (
-        "category: jobs\njobs:\n  - id: migrated-operator\n"
-        "    title: Vận hành máy CNC\n    location: Hải Phòng\n"
+        "---\n"
+        'schema_version: "1.0"\n'
+        "category: jobs\n"
+        "---\n"
+        "\n"
+        "## jobs\n"
+        "\n"
+        "### record: migrated-operator\n"
+        'title: "Vận hành máy CNC"\n'
+        'location: "Hải Phòng"\n'
     )
 
 
@@ -127,8 +135,8 @@ async def test_direct_context_project_stages_cuts_over_and_rolls_back(
     revision, job_id = await service.stage_replacement(
         project_id=project.id,
         category_key=KnowledgeCategoryKey.JOBS,
-        filename="jobs.yaml",
-        source_yaml=_jobs_yaml(),
+        filename="jobs.md",
+        source_markdown=_jobs_markdown(),
         actor=actor,
     )
     assert job_id == "job-1"
@@ -143,8 +151,8 @@ async def test_direct_context_project_stages_cuts_over_and_rolls_back(
         await service.stage_replacement(
             project_id=uuid.uuid4(),
             category_key=KnowledgeCategoryKey.JOBS,
-            filename="jobs.yaml",
-            source_yaml=_jobs_yaml(),
+            filename="jobs.md",
+            source_markdown=_jobs_markdown(),
             actor=actor,
         )
 
@@ -209,8 +217,8 @@ async def test_cutover_still_requires_every_category_prepared(integration_sessio
     revision, _job_id = await service.stage_replacement(
         project_id=project.id,
         category_key=KnowledgeCategoryKey.JOBS,
-        filename="jobs.yaml",
-        source_yaml=_jobs_yaml(),
+        filename="jobs.md",
+        source_markdown=_jobs_markdown(),
         actor=actor,
     )
     await service.activate_revision(revision.id, _Embedder())

@@ -55,10 +55,13 @@ class CategoryReplaceRequest(BaseModel):
 
     @field_validator("filename")
     @classmethod
-    def require_yaml_filename(cls, value: str) -> str:
+    def require_markdown_filename(cls, value: str) -> str:
         filename = value.strip()
-        if not filename.lower().endswith((".yaml", ".yml")):
-            raise ValueError("RAG category uploads accept only .yaml or .yml files")
+        lowered = filename.lower()
+        if lowered.endswith((".yaml", ".yml")):
+            raise ValueError("YAML category files are not accepted; author categories in .md")
+        if not lowered.endswith((".md", ".markdown", ".txt")):
+            raise ValueError("RAG category uploads accept only .md, .markdown or .txt files")
         return filename
 
 

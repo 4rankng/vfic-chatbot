@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
 from app.schemas.knowledge_categories import (
     CATEGORY_DOCUMENT_MODELS,
@@ -212,17 +211,6 @@ def test_table_fields_are_exactly_the_four_expected():
         record_model = _record_model(doc_model, definition.list_field)
         found |= {n for n, kind in _field_kinds(record_model).items() if kind == "table"}
     assert found == {"shifts", "stops", "allowances", "bonuses"}
-
-
-def test_yaml_and_markdown_decode_identically():
-    for key in ("jobs", "transportation", "compensation"):
-        payload = _payload(key)
-        yaml_text = yaml.safe_dump(payload, allow_unicode=True, sort_keys=False)
-        from_yaml = category_contracts.parse_category_yaml(key, yaml_text).model_dump(mode="json")
-        from_markdown = parse_category_markdown(key, build_source_markdown(payload)).model_dump(
-            mode="json"
-        )
-        assert from_yaml == from_markdown == payload, key
 
 
 def test_empty_document_round_trips():

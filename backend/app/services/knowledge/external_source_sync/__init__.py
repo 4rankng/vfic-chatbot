@@ -31,7 +31,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
-import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,11 +40,11 @@ from app.models.knowledge import KnowledgeCategory, KnowledgeCategoryRevision
 from app.models.user import User
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.shared.domain.errors import ConflictError, UpstreamError
-from app.services.knowledge.category_contracts import (
-    EmptyCategoryError,
-    category_checksum,
-    parse_category_yaml,
+from app.services.knowledge.category_contracts import EmptyCategoryError, category_checksum
+from app.services.knowledge.category_markdown import (
+    build_source_markdown as render_category_markdown,
 )
+from app.services.knowledge.category_markdown import parse_category_markdown
 from app.services.knowledge.category_service import KnowledgeCategoryService
 from app.services.knowledge.external_source_sync.parsers import PARSERS
 
@@ -241,16 +240,14 @@ class SheetClient:
         return body
 
 
-def build_source_yaml(payload: dict) -> str:
-    """Canonical, deterministic YAML for a parsed payload.
+def build_source_markdown(payload: dict) -> str:
+    """Canonical, deterministic Category Markdown v1 for a parsed payload.
 
     Determinism matters: ``stage_replacement`` dedups on the exact
-    ``(filename, source_yaml)`` string, so the same payload must always produce
-    the same YAML.
+    ``(filename, source_markdown)`` string, so the same payload must always
+    produce the same markdown.
     """
-    return yaml.safe_dump(
-        payload, sort_keys=True, allow_unicode=True, default_flow_style=False, width=4096
-    )
+    return render_category_markdown(payload)
 
 
 def sanitize_error(exc: Exception) -> str:
@@ -325,9 +322,9 @@ async def _sync_locked(
 
     # Validate through the SAME pipeline the category service uses so the hash
     # below is structurally identical to revision.content_sha256.
-    source_yaml = build_source_yaml(payload)
+    source_markdown = build_source_markdown(payload)
     try:
-        document = parse_category_yaml(category_key, source_yaml)
+        document = parse_category_markdown(category_key, source_markdown)
     except EmptyCategoryError:
         await _mark_failed(db, state, "empty_category")
         return ExternalSourceSyncOutcome(
@@ -349,12 +346,12 @@ async def _sync_locked(
         )
 
     # Stage only — activation is enqueued async by stage_replacement (Finding 4).
-    filename = f"{state.source_kind}_sync_{state.category_key}.yaml"
+    filename = f"{state.source_kind}_sync_{state.category_key}.md"
     try:
         revision, job_id = await KnowledgeCategoryService(db).stage_replacement(
             project_id=state.project_id,
             category_key=category_key,
-            source_yaml=source_yaml,
+            source_markdown=source_markdown,
             filename=filename,
             actor=actor,
         )
@@ -457,7 +454,7 @@ __all__ = [
     "ExternalSourceSyncOutcome",
     "REVOCABLE_FAILURE_REASONS",
     "SheetClient",
-    "build_source_yaml",
+    "build_source_markdown",
     "extract_sheet_id",
     "sanitize_error",
     "sync_external_source",

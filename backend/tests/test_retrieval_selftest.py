@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.knowledge.category_contracts import parse_category_yaml
+from app.services.knowledge.category_markdown import parse_category_markdown
 from app.services.knowledge.category_projections import render_category_units
 from app.services.knowledge.retrieval_selftest import (
     RETRIEVAL_SELFTEST_FLOOR,
@@ -10,59 +10,79 @@ from app.services.knowledge.retrieval_selftest import (
 )
 
 FAQ_SOURCE = (
+    "---\n"
+    'schema_version: "1.0"\n'
     "category: faq\n"
-    "faq:\n"
-    "  - id: shift-hours\n"
-    "    question: Ca làm việc mấy giờ?\n"
-    "    answer: Ca ngày 08:00-20:00, ca đêm 20:00-08:00.\n"
+    "---\n"
+    "\n"
+    "## faq\n"
+    "\n"
+    "### record: shift-hours\n"
+    'question: "Ca làm việc mấy giờ?"\n'
+    'answer: "Ca ngày 08:00-20:00, ca đêm 20:00-08:00."\n'
 )
 
 JOBS_SOURCE = (
+    "---\n"
+    'schema_version: "1.0"\n'
     "category: jobs\n"
-    "jobs:\n"
-    "  - id: assembler\n"
-    "    title: Công nhân lắp ráp\n"
-    "    location: Hải Phòng\n"
-    "    summary: Chi tiết dài chỉ thuộc về vị trí tuyển dụng.\n"
+    "---\n"
+    "\n"
+    "## jobs\n"
+    "\n"
+    "### record: assembler\n"
+    'title: "Công nhân lắp ráp"\n'
+    'location: "Hải Phòng"\n'
+    'summary: "Chi tiết dài chỉ thuộc về vị trí tuyển dụng."\n'
 )
 
 # The defect this gate's skip exists for: real job briefs list whole crews by
 # role acronym. Every title here is under five letters, so none is testable by
 # title alone.
 JOBS_ACRONYM_SOURCE = (
+    "---\n"
+    'schema_version: "1.0"\n'
     "category: jobs\n"
-    "jobs:\n"
-    "  - id: qa\n"
-    "    title: QA\n"
-    "    location: Hải Phòng\n"
-    "    summary: Kiểm tra chất lượng linh kiện điện tử.\n"
-    "  - id: smt\n"
-    "    title: SMT\n"
-    "    location: Hải Phòng\n"
-    "    summary: Vận hành máy dán linh kiện bề mặt.\n"
-    "  - id: ui\n"
-    "    title: UI\n"
-    "    location: Hải Phòng\n"
-    "    summary: Thiết kế giao diện sản phẩm.\n"
-    "  - id: mv\n"
-    "    title: MV\n"
-    "    location: Hải Phòng\n"
-    "    summary: Kiểm tra sản phẩm bằng thị giác máy.\n"
+    "---\n"
+    "\n"
+    "## jobs\n"
+    "\n"
+    "### record: qa\n"
+    'title: "QA"\n'
+    'location: "Hải Phòng"\n'
+    'summary: "Kiểm tra chất lượng linh kiện điện tử."\n'
+    "### record: smt\n"
+    'title: "SMT"\n'
+    'location: "Hải Phòng"\n'
+    'summary: "Vận hành máy dán linh kiện bề mặt."\n'
+    "### record: ui\n"
+    'title: "UI"\n'
+    'location: "Hải Phòng"\n'
+    'summary: "Thiết kế giao diện sản phẩm."\n'
+    "### record: mv\n"
+    'title: "MV"\n'
+    'location: "Hải Phòng"\n'
+    'summary: "Kiểm tra sản phẩm bằng thị giác máy."\n'
 )
 
 # One acronym next to one normal-length title: the skip must cover the short
 # query and nothing else.
 JOBS_MIXED_SOURCE = (
+    "---\n"
+    'schema_version: "1.0"\n'
     "category: jobs\n"
-    "jobs:\n"
-    "  - id: qa\n"
-    "    title: QA\n"
-    "    location: Hải Phòng\n"
-    "    summary: Kiểm tra chất lượng linh kiện điện tử.\n"
-    "  - id: quality-engineer\n"
-    "    title: Kỹ sư kiểm định chất lượng\n"
-    "    location: Hải Phòng\n"
-    "    summary: Đánh giá quy trình kiểm định của nhà máy.\n"
+    "---\n"
+    "\n"
+    "## jobs\n"
+    "\n"
+    "### record: qa\n"
+    'title: "QA"\n'
+    'location: "Hải Phòng"\n'
+    'summary: "Kiểm tra chất lượng linh kiện điện tử."\n'
+    "### record: quality-engineer\n"
+    'title: "Kỹ sư kiểm định chất lượng"\n'
+    'location: "Hải Phòng"\n'
+    'summary: "Đánh giá quy trình kiểm định của nhà máy."\n'
 )
 
 
@@ -79,7 +99,7 @@ class _MappedEmbedder:
 
 
 async def test_passes_when_each_question_retrieves_its_own_record() -> None:
-    document = parse_category_yaml("faq", FAQ_SOURCE)
+    document = parse_category_markdown("faq", FAQ_SOURCE)
     units = render_category_units(document)
     # The question and its record content share one vector: perfect retrieval.
     shared = [1.0, 0.0, 0.0]
@@ -100,7 +120,7 @@ async def test_passes_when_each_question_retrieves_its_own_record() -> None:
 
 
 async def test_fails_with_question_and_similarity_when_record_is_unreachable() -> None:
-    document = parse_category_yaml("faq", FAQ_SOURCE)
+    document = parse_category_markdown("faq", FAQ_SOURCE)
     units = render_category_units(document)
     orthogonal = [0.0, 0.0, 1.0]
     embedder = _MappedEmbedder({"Ca làm việc mấy giờ?": orthogonal})
@@ -116,7 +136,7 @@ async def test_fails_with_question_and_similarity_when_record_is_unreachable() -
 
 
 async def test_jobs_records_query_on_the_title_fallback() -> None:
-    document = parse_category_yaml("jobs", JOBS_SOURCE)
+    document = parse_category_markdown("jobs", JOBS_SOURCE)
     units = render_category_units(document)
     shared = [0.5, 0.5]
     embedder = _MappedEmbedder(
@@ -138,7 +158,7 @@ async def test_acronym_role_titles_are_skipped_not_failed() -> None:
     """Role acronyms ("QA", "SMT", "UI", "MV") cannot self-retrieve by title
     alone — the title embedding is noise at that length — so the gate skips
     them instead of failing the whole category over them."""
-    document = parse_category_yaml("jobs", JOBS_ACRONYM_SOURCE)
+    document = parse_category_markdown("jobs", JOBS_ACRONYM_SOURCE)
     units = render_category_units(document)
     # Every content vector sits opposite the vector the acronyms would embed
     # to: without the skip each title would report best similarity 0.00 and
@@ -164,7 +184,7 @@ async def test_acronym_role_titles_are_skipped_not_failed() -> None:
 async def test_a_long_title_that_cannot_retrieve_its_record_still_fails() -> None:
     """The skip covers untestable short queries only: a normal-length title
     whose content disagrees semantically still fails the gate."""
-    document = parse_category_yaml("jobs", JOBS_SOURCE)
+    document = parse_category_markdown("jobs", JOBS_SOURCE)
     units = render_category_units(document)
     orthogonal = [0.0, 0.0, 1.0]
     embedder = _MappedEmbedder({"Công nhân lắp ráp": orthogonal})
@@ -182,7 +202,7 @@ async def test_a_long_title_that_cannot_retrieve_its_record_still_fails() -> Non
 async def test_short_queries_are_skipped_while_the_long_one_still_fails() -> None:
     """Mixed document: the acronym is outside the gate's reach, the
     normal-length title right next to it is judged at full strictness."""
-    document = parse_category_yaml("jobs", JOBS_MIXED_SOURCE)
+    document = parse_category_markdown("jobs", JOBS_MIXED_SOURCE)
     units = render_category_units(document)
     embedder = _MappedEmbedder({"Kỹ sư kiểm định chất lượng": [1.0, 0.0]})
 

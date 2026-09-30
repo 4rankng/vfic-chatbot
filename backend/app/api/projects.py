@@ -287,7 +287,7 @@ async def replace_project_category(
         project_id=project_id,
         category_key=category_key,
         filename=body.filename,
-        source_yaml=body.content,
+        source_markdown=body.content,
         actor=editor,
     )
     return CategoryReplaceOut(

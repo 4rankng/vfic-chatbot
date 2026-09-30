@@ -13,11 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from yaml.constructor import ConstructorError
-from yaml.events import AliasEvent, CollectionEndEvent, CollectionStartEvent, ScalarEvent
 
 from app.models.knowledge import KnowledgeCategory, KnowledgeCategoryRevision
 from app.schemas.knowledge_categories import (
@@ -36,35 +33,6 @@ from app.services.knowledge.text_ingestion import normalize_kb_value
 
 
 _TEMPLATE_DIR = Path(__file__).with_name("templates") / "categories"
-MAX_CATEGORY_YAML_BYTES = 500_000
-MAX_CATEGORY_YAML_DEPTH = 32
-MAX_CATEGORY_YAML_NODES = 20_000
-MAX_CATEGORY_YAML_SCALAR_CHARS = 20_000
-
-
-class _StrictSafeLoader(yaml.SafeLoader):
-    pass
-
-
-def _construct_unique_mapping(loader, node, deep=False):
-    seen: set[Any] = set()
-    for key_node, _value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        if key in seen:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"duplicate key: {key}",
-                key_node.start_mark,
-            )
-        seen.add(key)
-    return yaml.SafeLoader.construct_mapping(loader, node, deep=deep)
-
-
-_StrictSafeLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_unique_mapping,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,58 +48,58 @@ CATEGORY_DEFINITIONS: tuple[CategoryDefinition, ...] = (
         KnowledgeCategoryKey.JOBS,
         "Vị trí tuyển dụng",
         "jobs",
-        "jobs.yaml",
+        "jobs.md",
     ),
     CategoryDefinition(
         KnowledgeCategoryKey.COMPENSATION,
         "Lương & thu nhập",
         "compensation",
-        "compensation.yaml",
+        "compensation.md",
     ),
     CategoryDefinition(
         KnowledgeCategoryKey.REQUIREMENTS,
         "Yêu cầu ứng viên",
         "requirements",
-        "requirements.yaml",
+        "requirements.md",
     ),
     CategoryDefinition(
         KnowledgeCategoryKey.WORK_SCHEDULES,
         "Ca làm việc",
         "work_schedules",
-        "work_schedules.yaml",
+        "work_schedules.md",
     ),
-    CategoryDefinition(KnowledgeCategoryKey.BENEFITS, "Phúc lợi", "benefits", "benefits.yaml"),
+    CategoryDefinition(KnowledgeCategoryKey.BENEFITS, "Phúc lợi", "benefits", "benefits.md"),
     CategoryDefinition(
         KnowledgeCategoryKey.ACCOMMODATION,
         "Chỗ ở",
         "accommodation",
-        "accommodation.yaml",
+        "accommodation.md",
     ),
-    CategoryDefinition(KnowledgeCategoryKey.MEALS, "Bữa ăn", "meals", "meals.yaml"),
+    CategoryDefinition(KnowledgeCategoryKey.MEALS, "Bữa ăn", "meals", "meals.md"),
     CategoryDefinition(
         KnowledgeCategoryKey.TRANSPORTATION,
         "Đưa đón & lịch xe",
         "transportation",
-        "transportation.yaml",
+        "transportation.md",
     ),
     CategoryDefinition(
         KnowledgeCategoryKey.INSURANCE,
         "Bảo hiểm",
         "insurance",
-        "insurance.yaml",
+        "insurance.md",
     ),
     CategoryDefinition(
         KnowledgeCategoryKey.APPLICATION,
         "Ứng tuyển & nhận việc",
         "application",
-        "application.yaml",
+        "application.md",
     ),
-    CategoryDefinition(KnowledgeCategoryKey.CONTACTS, "Liên hệ", "contacts", "contacts.yaml"),
+    CategoryDefinition(KnowledgeCategoryKey.CONTACTS, "Liên hệ", "contacts", "contacts.md"),
     CategoryDefinition(
         KnowledgeCategoryKey.FAQ,
         "Câu hỏi thường gặp",
         "faq",
-        "faq.yaml",
+        "faq.md",
     ),
 )
 
@@ -146,8 +114,8 @@ class UnknownJobReferenceError(ValueError):
     """Raised when a category references a job absent from the current Jobs category."""
 
 
-class CategoryYamlError(ValueError):
-    """Raised when source text is not one bounded YAML mapping document."""
+class CategoryMarkdownError(ValueError):
+    """Raised when category content is not one well-formed Category Markdown v1 document."""
 
 
 def get_category_definition(key: KnowledgeCategoryKey | str) -> CategoryDefinition:
@@ -157,57 +125,6 @@ def get_category_definition(key: KnowledgeCategoryKey | str) -> CategoryDefiniti
 def load_category_template(key: KnowledgeCategoryKey | str) -> str:
     definition = get_category_definition(key)
     return (_TEMPLATE_DIR / definition.template_filename).read_text(encoding="utf-8")
-
-
-def parse_category_yaml(
-    key: KnowledgeCategoryKey | str,
-    source_yaml: str,
-    *,
-    allow_empty: bool = False,
-) -> CategoryDocument:
-    if len(source_yaml.encode("utf-8")) > MAX_CATEGORY_YAML_BYTES:
-        raise CategoryYamlError("category YAML exceeds the 500 KB limit")
-    try:
-        _validate_yaml_events(source_yaml)
-        documents = list(yaml.load_all(source_yaml, Loader=_StrictSafeLoader))
-    except CategoryYamlError:
-        raise
-    except yaml.YAMLError as exc:
-        raise CategoryYamlError(f"invalid YAML: {exc}") from exc
-    if len(documents) != 1:
-        raise CategoryYamlError("category upload must contain exactly one YAML document")
-    payload = documents[0]
-    if not isinstance(payload, dict):
-        raise CategoryYamlError("category YAML root must be a mapping")
-    return validate_category_payload(key, payload, allow_empty=allow_empty)
-
-
-def _validate_yaml_events(source_yaml: str) -> None:
-    depth = 0
-    nodes = 0
-    for event in yaml.parse(source_yaml):
-        if isinstance(event, AliasEvent):
-            raise CategoryYamlError("YAML aliases are not supported")
-        if isinstance(event, CollectionStartEvent):
-            depth += 1
-            nodes += 1
-            if depth > MAX_CATEGORY_YAML_DEPTH:
-                raise CategoryYamlError(
-                    f"category YAML exceeds the depth limit of {MAX_CATEGORY_YAML_DEPTH}"
-                )
-        elif isinstance(event, CollectionEndEvent):
-            depth -= 1
-        elif isinstance(event, ScalarEvent):
-            nodes += 1
-            if len(event.value) > MAX_CATEGORY_YAML_SCALAR_CHARS:
-                raise CategoryYamlError(
-                    "category YAML scalar exceeds the "
-                    f"{MAX_CATEGORY_YAML_SCALAR_CHARS:,} character limit"
-                )
-        if nodes > MAX_CATEGORY_YAML_NODES:
-            raise CategoryYamlError(
-                f"category YAML exceeds the {MAX_CATEGORY_YAML_NODES:,} node limit"
-            )
 
 
 def validate_category_payload(
@@ -222,7 +139,7 @@ def validate_category_payload(
     if isinstance(records, list) and category_record_limit_exceeded(
         len(records), MAX_CATEGORY_RECORDS
     ):
-        raise CategoryYamlError(
+        raise CategoryMarkdownError(
             f"category exceeds the {MAX_CATEGORY_RECORDS:,} record limit"
         )
     normalized_payload = normalize_kb_value(payload)

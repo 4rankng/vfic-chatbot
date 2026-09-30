@@ -1,7 +1,6 @@
 from copy import deepcopy
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
@@ -9,14 +8,16 @@ from app.models.knowledge import KnowledgeBaseMode
 from app.schemas.projects import ProjectCreate
 from app.services.knowledge.category_contracts import (
     CATEGORY_DEFINITIONS,
-    CategoryYamlError,
     EmptyCategoryError,
     UnknownJobReferenceError,
     category_checksum,
     load_category_template,
-    parse_category_yaml,
     validate_category_payload,
     validate_job_references,
+)
+from app.services.knowledge.category_markdown import (
+    CategoryMarkdownError,
+    parse_category_markdown,
 )
 
 
@@ -81,11 +82,27 @@ def test_project_creation_rejects_incomplete_or_mixed_mode_payload(payload):
         ProjectCreate.model_validate(payload)
 
 
+def _jobs_doc(*records: str) -> str:
+    """One jobs Category Markdown v1 document wrapping the given record blocks."""
+    return (
+        "---\n"
+        'schema_version: "1.0"\n'
+        "category: jobs\n"
+        "---\n"
+        "\n"
+        "## jobs\n"
+        "\n" + "".join(records)
+    )
+
+
 @pytest.mark.parametrize("definition", CATEGORY_DEFINITIONS, ids=lambda value: value.key.value)
 def test_code_owned_template_is_valid_empty_document(definition):
-    payload = yaml.safe_load(load_category_template(definition.key))
+    assert definition.template_filename.endswith(".md")
 
-    document = validate_category_payload(definition.key, payload, allow_empty=True)
+    document = parse_category_markdown(
+        definition.key, load_category_template(definition.key), allow_empty=True
+    )
+    payload = document.model_dump(mode="json")
 
     assert document.category == definition.key
     assert getattr(document, definition.list_field) == []
@@ -196,23 +213,27 @@ def test_checksum_is_deterministic_for_equivalent_key_order():
 
 
 def test_checksum_is_deterministic_for_unicode_and_line_ending_equivalence():
-    first = parse_category_yaml(
-        "contacts",
-        "category: contacts\r\ncontacts:\r\n  - id: recruiter\r\n    name: 'Tư vấn'\r\n",
-    )
-    second = parse_category_yaml(
-        "contacts",
-        "category: contacts\ncontacts:\n  - id: recruiter\n    name: 'Tư vấn'\n",
-    )
+    document_lines = [
+        "---",
+        'schema_version: "1.0"',
+        "category: contacts",
+        "---",
+        "",
+        "## contacts",
+        "",
+        "### record: recruiter",
+        'name: "Tư vấn"',
+    ]
+    first = parse_category_markdown("contacts", "\r\n".join(document_lines) + "\r\n")
+    second = parse_category_markdown("contacts", "\n".join(document_lines) + "\n")
 
     assert first.contacts[0].name == "Tư vấn"
     assert category_checksum(first) == category_checksum(second)
 
 
-def test_yaml_parser_accepts_one_mapping_document():
-    document = parse_category_yaml(
-        "jobs",
-        "category: jobs\njobs:\n  - id: job-1\n    title: Công nhân\n",
+def test_markdown_parser_accepts_one_record_document():
+    document = parse_category_markdown(
+        "jobs", _jobs_doc('### record: job-1\ntitle: "Công nhân"\n')
     )
 
     assert document.jobs[0].id == "job-1"
@@ -221,90 +242,60 @@ def test_yaml_parser_accepts_one_mapping_document():
 @pytest.mark.parametrize(
     ("source", "message"),
     [
-        ("- category\n- jobs\n", "root must be a mapping"),
+        ("## jobs\n", "must start with --- front-matter"),
         (
-            "category: jobs\njobs: []\n---\ncategory: jobs\njobs: []\n",
-            "exactly one YAML document",
+            "---\n"
+            'schema_version: "1.0"\n'
+            "category: jobs\n"
+            "---\n"
+            "\n"
+            "## jobs\n"
+            "\n"
+            "## jobs\n",
+            "duplicate section heading",
         ),
     ],
 )
-def test_yaml_parser_rejects_ambiguous_document_shapes(source, message):
-    with pytest.raises(CategoryYamlError, match=message):
-        parse_category_yaml("jobs", source, allow_empty=True)
+def test_markdown_parser_rejects_ambiguous_document_shapes(source, message):
+    with pytest.raises(CategoryMarkdownError, match=message):
+        parse_category_markdown("jobs", source, allow_empty=True)
 
 
-def test_yaml_parser_rejects_oversized_source_before_parsing():
-    with pytest.raises(CategoryYamlError, match="500 KB"):
-        parse_category_yaml("jobs", "x" * 500_001)
+def test_markdown_parser_rejects_oversized_source_before_parsing():
+    with pytest.raises(CategoryMarkdownError, match="500 KB"):
+        parse_category_markdown("jobs", "x" * 500_001)
 
 
-def test_yaml_parser_rejects_excessive_depth_before_construction():
-    nested = "value"
-    for index in range(34):
-        nested = f"level_{index}:\n  " + nested.replace("\n", "\n  ")
+def test_markdown_parser_rejects_excessive_lines_before_parsing():
+    source = "\n".join(["- tràn dòng"] * 20_001)
 
-    with pytest.raises(CategoryYamlError, match="depth limit"):
-        parse_category_yaml("jobs", nested)
+    with pytest.raises(CategoryMarkdownError, match="20,000 line limit"):
+        parse_category_markdown("jobs", source)
 
 
-def test_yaml_parser_rejects_excessive_scalar_before_construction():
-    source = "category: jobs\njobs:\n  - id: one\n    title: '" + ("x" * 20_001) + "'\n"
+def test_markdown_parser_rejects_excessive_scalar_before_construction():
+    source = _jobs_doc('### record: one\ntitle: "' + "x" * 20_001 + '"\n')
 
-    with pytest.raises(CategoryYamlError, match="scalar exceeds"):
-        parse_category_yaml("jobs", source)
+    with pytest.raises(CategoryMarkdownError, match="scalar exceeds"):
+        parse_category_markdown("jobs", source)
 
 
 def test_category_rejects_more_than_one_thousand_records():
-    rows = "\n".join(f"  - id: job-{index}\n    title: Job {index}" for index in range(1_001))
+    records = "".join(
+        f'### record: job-{index}\ntitle: "Job {index}"\n' for index in range(1_001)
+    )
 
-    with pytest.raises(CategoryYamlError, match="1,000 record limit"):
-        parse_category_yaml("jobs", f"category: jobs\njobs:\n{rows}\n")
-
-
-def test_yaml_parser_rejects_excessive_nodes_before_construction():
-    source = "\n".join(f"key_{index}: value" for index in range(10_001))
-
-    with pytest.raises(CategoryYamlError, match="20,000 node limit"):
-        parse_category_yaml("jobs", source)
+    with pytest.raises(CategoryMarkdownError, match="1,000 record limit"):
+        parse_category_markdown("jobs", _jobs_doc(records))
 
 
 @pytest.mark.parametrize(
-    ("category", "payload"),
+    ("record_block", "message"),
     [
-        (
-            "compensation",
-            {
-                "category": "compensation",
-                "compensation": [{"id": "pay", "base_salary_vnd": "1000000"}],
-            },
-        ),
-        (
-            "accommodation",
-            {
-                "category": "accommodation",
-                "accommodation": [{"id": "dorm", "available": "false"}],
-            },
-        ),
+        ('### record: a\ntitle: "X"\ntitle: "Y"\n', "duplicate field 'title'"),
+        ('### record: a\ntitle: "X"\n### record: a\ntitle: "Y"\n', "duplicate record id 'a'"),
     ],
 )
-def test_authoritative_numeric_and_boolean_fields_reject_quoted_values(category, payload):
-    with pytest.raises(ValidationError):
-        validate_category_payload(category, payload)
-
-
-@pytest.mark.parametrize(
-    ("source", "message"),
-    [
-        (
-            "category: jobs\ncategory: jobs\njobs:\n  - id: one\n    title: One\n",
-            "duplicate key",
-        ),
-        (
-            "category: jobs\ndefaults: &defaults {title: One}\njobs:\n  - id: one\n    <<: *defaults\n",
-            "aliases are not supported",
-        ),
-    ],
-)
-def test_yaml_parser_rejects_duplicate_keys_and_alias_expansion(source, message):
-    with pytest.raises(CategoryYamlError, match=message):
-        parse_category_yaml("jobs", source)
+def test_markdown_parser_rejects_duplicate_fields_and_record_ids(record_block, message):
+    with pytest.raises(CategoryMarkdownError, match=message):
+        parse_category_markdown("jobs", _jobs_doc(record_block))

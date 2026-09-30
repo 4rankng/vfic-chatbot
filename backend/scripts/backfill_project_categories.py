@@ -15,7 +15,6 @@ import sys
 import uuid
 from collections import defaultdict
 
-import yaml
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,8 +35,11 @@ from app.services.audit_service import record_audit
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.knowledge.category_contracts import (
     CATEGORY_DEFINITIONS,
-    MAX_CATEGORY_YAML_BYTES,
     category_checksum,
+)
+from app.services.knowledge.category_markdown import (
+    MAX_CATEGORY_MARKDOWN_BYTES,
+    build_source_markdown,
 )
 from app.services.knowledge.category_service import KnowledgeCategoryService
 from app.services.knowledge.legacy_category_backfill import (
@@ -204,35 +206,30 @@ async def _load_snapshot(db: AsyncSession, project: Project) -> LegacyCategorySn
     )
 
 
-def _source_yaml(document: CategoryDocument) -> str:
-    return yaml.safe_dump(
-        document.model_dump(mode="json", exclude_none=True),
-        allow_unicode=True,
-        sort_keys=False,
-        width=100,
-    )
+def _source_markdown(document: CategoryDocument) -> str:
+    return build_source_markdown(document.model_dump(mode="json", exclude_none=True))
 
 
 def _report(documents: dict[KnowledgeCategoryKey, CategoryDocument]) -> dict[str, object]:
     rows = {}
-    yaml_bytes = {}
+    markdown_bytes = {}
     for definition in CATEGORY_DEFINITIONS:
         document = documents.get(definition.key)
         rows[definition.key.value] = (
             len(getattr(document, definition.list_field)) if document is not None else 0
         )
-        yaml_bytes[definition.key.value] = (
-            len(_source_yaml(document).encode("utf-8")) if document is not None else 0
+        markdown_bytes[definition.key.value] = (
+            len(_source_markdown(document).encode("utf-8")) if document is not None else 0
         )
-        if yaml_bytes[definition.key.value] > MAX_CATEGORY_YAML_BYTES:
+        if markdown_bytes[definition.key.value] > MAX_CATEGORY_MARKDOWN_BYTES:
             raise RuntimeError(
-                f"generated {definition.key.value} YAML exceeds the 500 KB category limit"
+                f"generated {definition.key.value} markdown exceeds the 500 KB category limit"
             )
     return {
         "supported_category_count": len(documents),
         "unsupported_categories": [key for key, count in rows.items() if count == 0],
         "rows": rows,
-        "yaml_bytes": yaml_bytes,
+        "markdown_bytes": markdown_bytes,
     }
 
 
@@ -310,7 +307,7 @@ async def _apply(
             revision_no=int(latest or 0) + 1,
             status=KnowledgeCategoryRevisionStatus.STAGED,
             source_filename=expected_filename,
-            source_yaml=_source_yaml(document),
+            source_yaml=_source_markdown(document),
             normalized_payload=document.model_dump(mode="json"),
             content_sha256=expected_checksum,
             created_by=admin.id,

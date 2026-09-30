@@ -37,9 +37,12 @@ from app.services.knowledge.category_contracts import (
     canonical_category_json,
     category_checksum,
     get_category_definition,
-    parse_category_yaml,
     validate_active_job_references,
     validate_category_payload,
+)
+from app.services.knowledge.category_markdown import (
+    build_source_markdown,
+    parse_category_markdown,
 )
 from app.services.knowledge.category_projections import (
     CategoryProjectionWriter,
@@ -219,7 +222,7 @@ class KnowledgeCategoryService:
         project_id: uuid.UUID,
         category_key: KnowledgeCategoryKey,
         filename: str,
-        source_yaml: str,
+        source_markdown: str,
         actor: User,
     ) -> tuple[KnowledgeCategoryRevision, str]:
         await require_category_project(self.db, project_id)
@@ -227,10 +230,10 @@ class KnowledgeCategoryService:
         # keeps the stage itself and the later cutover readiness check working.
         await _ensure_category_rows(self.db, project_id)
         try:
-            document = parse_category_yaml(category_key, source_yaml)
+            document = parse_category_markdown(category_key, source_markdown)
             await validate_active_job_references(self.db, project_id, document)
         except ValueError as exc:
-            raise ConflictError("Category YAML failed validation") from exc
+            raise ConflictError("Category content failed validation") from exc
         category = await locked_category(self.db, project_id, category_key)
         checksum = category_checksum(document)
         existing = await self.db.scalar(
@@ -238,7 +241,7 @@ class KnowledgeCategoryService:
             .where(
                 KnowledgeCategoryRevision.category_id == category.id,
                 KnowledgeCategoryRevision.source_filename == filename,
-                KnowledgeCategoryRevision.source_yaml == source_yaml,
+                KnowledgeCategoryRevision.source_yaml == source_markdown,
                 KnowledgeCategoryRevision.status.in_(
                     (
                         KnowledgeCategoryRevisionStatus.STAGED,
@@ -265,7 +268,9 @@ class KnowledgeCategoryService:
                 revision_no=int(latest or 0) + 1,
                 status=KnowledgeCategoryRevisionStatus.STAGED,
                 source_filename=filename,
-                source_yaml=source_yaml,
+                # Holds Category Markdown v1 since the markdown cutover; the
+                # column is renamed to source_markdown by migration 0059.
+                source_yaml=source_markdown,
                 normalized_payload=document.model_dump(mode="json"),
                 content_sha256=checksum,
                 created_by=actor.id,
@@ -478,7 +483,7 @@ class KnowledgeCategoryService:
             )
             knowledge_document = KnowledgeDocument(
                 file_name=revision.source_filename,
-                source="category_yaml",
+                source="category_markdown",
                 status=KnowledgeStatus.PUBLISHED,
                 raw_text=revision.source_yaml,
                 metadata_={
@@ -487,7 +492,7 @@ class KnowledgeCategoryService:
                     "category_revision_id": str(revision.id),
                 },
                 project_id=category.project_id,
-                mime_type="application/yaml",
+                mime_type="text/markdown",
                 stage="PUBLISHED",
                 category_revision_id=revision.id,
             )
@@ -609,8 +614,8 @@ class KnowledgeCategoryService:
             category_id=category.id,
             revision_no=int(latest or 0) + 1,
             status=KnowledgeCategoryRevisionStatus.CLEARED,
-            source_filename=f"{category_key.value}.yaml",
-            source_yaml=canonical_category_json(empty_document),
+            source_filename=f"{category_key.value}.md",
+            source_yaml=build_source_markdown(empty_payload),
             normalized_payload=empty_payload,
             content_sha256=category_checksum(empty_document),
             created_by=actor.id,

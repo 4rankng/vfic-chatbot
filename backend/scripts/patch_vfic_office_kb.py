@@ -15,7 +15,6 @@ import hashlib
 import json
 import sys
 
-import yaml
 from sqlalchemy import select
 
 from app.core.cache import bump_kb_caches
@@ -30,6 +29,7 @@ from app.models.user import Role, User
 from app.services.audit_service import record_audit
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.knowledge.category_contracts import CATEGORY_DOCUMENT_MODELS, category_checksum
+from app.services.knowledge.category_markdown import build_source_markdown
 from app.services.knowledge.category_service import KnowledgeCategoryService
 
 PROJECT_SLUG = "lg-display"
@@ -65,8 +65,8 @@ def _faq_id(question: str) -> str:
     return f"faq-{digest}"
 
 
-def _source_yaml(payload: dict) -> str:
-    return yaml.safe_dump(payload, allow_unicode=True, sort_keys=False, width=100)
+def _source_markdown(payload: dict) -> str:
+    return build_source_markdown(payload)
 
 
 async def _patch_category(
@@ -100,7 +100,7 @@ async def _patch_category(
         revision_no=int(latest or 0) + 1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
         source_filename=SOURCE_FILENAME,
-        source_yaml=_source_yaml(document.model_dump(mode="json", exclude_none=True)),
+        source_yaml=_source_markdown(document.model_dump(mode="json", exclude_none=True)),
         normalized_payload=document.model_dump(mode="json"),
         content_sha256=category_checksum(document),
         created_by=admin_id,

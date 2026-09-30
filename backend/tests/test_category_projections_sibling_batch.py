@@ -14,22 +14,34 @@ from types import SimpleNamespace
 
 from app.models.knowledge import KnowledgeCategory, KnowledgeCategoryRevision
 from app.models.job import Job
-from app.services.knowledge.category_contracts import parse_category_yaml
+from app.services.knowledge.category_markdown import parse_category_markdown
 from app.services.knowledge.category_projections import SqlAlchemyCategoryProjectionWriter
 
-_BENEFITS_YAML = (
+_BENEFITS_MARKDOWN = (
+    "---\n"
+    'schema_version: "1.0"\n'
     "category: benefits\n"
-    "benefits:\n"
-    "  - id: health-check\n"
-    "    job_ids: [assembler]\n"
-    "    name: Khám sức khỏe định kỳ\n"
+    "---\n"
+    "\n"
+    "## benefits\n"
+    "\n"
+    "### record: health-check\n"
+    "job_ids:\n"
+    "- assembler\n"
+    'name: "Khám sức khỏe định kỳ"\n'
 )
-_MEALS_YAML = (
+_MEALS_MARKDOWN = (
+    "---\n"
+    'schema_version: "1.0"\n'
     "category: meals\n"
-    "meals:\n"
-    "  - id: lunch\n"
-    "    job_ids: [assembler]\n"
-    "    provided: true\n"
+    "---\n"
+    "\n"
+    "## meals\n"
+    "\n"
+    "### record: lunch\n"
+    "job_ids:\n"
+    "- assembler\n"
+    "provided: true\n"
 )
 
 
@@ -77,10 +89,10 @@ def _revision_row(revision_id: uuid.UUID, payload: dict) -> SimpleNamespace:
 async def test_sibling_reapply_batch_fetches_revisions_and_skips_vanished() -> None:
     session = _RecordingSession()
     project_id = uuid.uuid4()
-    benefits_payload = parse_category_yaml("benefits", _BENEFITS_YAML).model_dump(
+    benefits_payload = parse_category_markdown("benefits", _BENEFITS_MARKDOWN).model_dump(
         mode="json"
     )
-    meals_payload = parse_category_yaml("meals", _MEALS_YAML).model_dump(mode="json")
+    meals_payload = parse_category_markdown("meals", _MEALS_MARKDOWN).model_dump(mode="json")
     benefits_revision_id = uuid.uuid4()
     meals_revision_id = uuid.uuid4()
     vanished_revision_id = uuid.uuid4()

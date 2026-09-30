@@ -32,15 +32,14 @@ from app.services.job_service import JobService
 from app.services.knowledge.category_contracts import (
     CATEGORY_DEFINITIONS,
     category_checksum,
-    parse_category_yaml,
 )
+from app.services.knowledge.category_markdown import parse_category_markdown
 from app.services.knowledge.category_service import (
     CategoryActivationError,
     KnowledgeCategoryService,
 )
 from app.services.project.repository import ProjectRepository
-from app.services.recommendation.repository import RecommendationRepository
-from app.services.recommendation.scoring import LeadProfile
+from app.services.retrieval.catalog_repository import CatalogRepository
 from app.services.retrieval.repository import RetrievalRepository
 from app.shared.domain.errors import ConflictError
 
@@ -97,8 +96,8 @@ async def test_repository_visibility_uses_active_category_and_pre_cutover_legacy
         category_id=category.id,
         revision_no=2,
         status=KnowledgeCategoryRevisionStatus.ACTIVE,
-        source_filename="faq.yaml",
-        source_yaml="category: faq\nfaq: []\n",
+        source_filename="faq.md",
+        source_yaml="---\nschema_version: \"1.0\"\ncategory: faq\n---\n\n## faq\n",
         normalized_payload={"category": "faq", "faq": []},
         content_sha256="a" * 64,
         created_by=actor.id,
@@ -107,8 +106,8 @@ async def test_repository_visibility_uses_active_category_and_pre_cutover_legacy
         category_id=category.id,
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.ARCHIVED,
-        source_filename="faq.yaml",
-        source_yaml="category: faq\nfaq: []\n",
+        source_filename="faq.md",
+        source_yaml="---\nschema_version: \"1.0\"\ncategory: faq\n---\n\n## faq\n",
         normalized_payload={"category": "faq", "faq": []},
         content_sha256="b" * 64,
         created_by=actor.id,
@@ -118,15 +117,15 @@ async def test_repository_visibility_uses_active_category_and_pre_cutover_legacy
     category.active_revision_id = active_revision.id
 
     active_document = KnowledgeDocument(
-        file_name="active-faq.yaml",
-        source="category_yaml",
+        file_name="active-faq.md",
+        source="category_markdown",
         status=KnowledgeStatus.PUBLISHED,
         project_id=project.id,
         category_revision_id=active_revision.id,
     )
     inactive_document = KnowledgeDocument(
-        file_name="inactive-faq.yaml",
-        source="category_yaml",
+        file_name="inactive-faq.md",
+        source="category_markdown",
         status=KnowledgeStatus.PUBLISHED,
         project_id=project.id,
         category_revision_id=inactive_revision.id,
@@ -204,6 +203,9 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         name="Category Factory",
         slug=f"category-{uuid.uuid4().hex}",
         summary=legacy_summary,
+        # Seeded inactive: the admin owns the switch, so even a projection that
+        # runs must leave this value alone.
+        is_active=False,
         index_card={"summary": legacy_summary, "highlights": ["Có xe đưa đón"]},
     )
     integration_session.add_all([actor, project])
@@ -231,19 +233,24 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     await integration_session.flush()
 
     jobs_source = (
+        "---\n"
+        'schema_version: "1.0"\n'
         "category: jobs\n"
-        "jobs:\n"
-        "  - id: assembler\n"
-        "    title: Công nhân lắp ráp\n"
-        "    location: Hải Phòng\n"
-        "    summary: Chi tiết dài chỉ thuộc về vị trí tuyển dụng.\n"
+        "---\n"
+        "\n"
+        "## jobs\n"
+        "\n"
+        "### record: assembler\n"
+        'title: "Công nhân lắp ráp"\n'
+        'location: "Hải Phòng"\n'
+        'summary: "Chi tiết dài chỉ thuộc về vị trí tuyển dụng."\n'
     )
-    jobs_document = parse_category_yaml("jobs", jobs_source)
+    jobs_document = parse_category_markdown("jobs", jobs_source)
     jobs_revision = KnowledgeCategoryRevision(
         category_id=jobs_category.id,
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
-        source_filename="jobs.yaml",
+        source_filename="jobs.md",
         source_yaml=jobs_source,
         normalized_payload=jobs_document.model_dump(mode="json"),
         content_sha256=category_checksum(jobs_document),
@@ -264,7 +271,7 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     await integration_session.refresh(jobs_category)
     await integration_session.refresh(project)
     assert jobs_category.active_revision_id == jobs_revision.id
-    assert project.is_active is True
+    assert project.is_active is False
     assert project.category_authority_started is False
     assert project.summary == legacy_summary
     assert project.index_card["summary"] == legacy_summary
@@ -276,18 +283,24 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     ) == 0
 
     benefits_source = (
+        "---\n"
+        'schema_version: "1.0"\n'
         "category: benefits\n"
-        "benefits:\n"
-        "  - id: health-check\n"
-        "    job_ids: [assembler]\n"
-        "    name: Khám sức khỏe định kỳ\n"
+        "---\n"
+        "\n"
+        "## benefits\n"
+        "\n"
+        "### record: health-check\n"
+        "job_ids:\n"
+        "- assembler\n"
+        'name: "Khám sức khỏe định kỳ"\n'
     )
-    benefits_document = parse_category_yaml("benefits", benefits_source)
+    benefits_document = parse_category_markdown("benefits", benefits_source)
     benefits_revision = KnowledgeCategoryRevision(
         category_id=benefits_category.id,
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
-        source_filename="benefits.yaml",
+        source_filename="benefits.md",
         source_yaml=benefits_source,
         normalized_payload=benefits_document.model_dump(mode="json"),
         content_sha256=category_checksum(benefits_document),
@@ -312,18 +325,23 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     assert job is None
 
     replacement_source = (
+        "---\n"
+        'schema_version: "1.0"\n'
         "category: jobs\n"
-        "jobs:\n"
-        "  - id: assembler\n"
-        "    title: Công nhân lắp ráp điện tử\n"
-        "    location: Hải Phòng\n"
+        "---\n"
+        "\n"
+        "## jobs\n"
+        "\n"
+        "### record: assembler\n"
+        'title: "Công nhân lắp ráp điện tử"\n'
+        'location: "Hải Phòng"\n'
     )
-    replacement_document = parse_category_yaml("jobs", replacement_source)
+    replacement_document = parse_category_markdown("jobs", replacement_source)
     replacement_revision = KnowledgeCategoryRevision(
         category_id=jobs_category.id,
         revision_no=2,
         status=KnowledgeCategoryRevisionStatus.PROCESSING,
-        source_filename="jobs.yaml",
+        source_filename="jobs.md",
         source_yaml=replacement_source,
         normalized_payload=replacement_document.model_dump(mode="json"),
         content_sha256=category_checksum(replacement_document),
@@ -345,8 +363,8 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     reused, receipt_id = await service.stage_replacement(
         project_id=project.id,
         category_key=KnowledgeCategoryKey.JOBS,
-        filename="jobs.yaml",
-        source_yaml=replacement_source,
+        filename="jobs.md",
+        source_markdown=replacement_source,
         actor=actor,
     )
     assert reused.id == replacement_revision.id
@@ -372,28 +390,34 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     ) == 1
 
     transportation_source = (
+        "---\n"
+        'schema_version: "1.0"\n'
         "category: transportation\n"
-        "transportation:\n"
-        "  - id: hp-route\n"
-        "    job_ids: [assembler]\n"
-        "    name: Tuyến Hải Phòng\n"
-        "    direction: round_trip\n"
-        "    shift: ca ngày\n"
-        "    service_days: [thứ 2, thứ 3]\n"
-        "    stops:\n"
-        "      - order: 1\n"
-        "        name: Cầu Rào\n"
-        "        time: '06:30'\n"
-        "      - order: 2\n"
-        "        name: Nhà máy\n"
-        "        time: '07:15'\n"
+        "---\n"
+        "\n"
+        "## transportation\n"
+        "\n"
+        "### record: hp-route\n"
+        "job_ids:\n"
+        "- assembler\n"
+        'name: "Tuyến Hải Phòng"\n'
+        'direction: "round_trip"\n'
+        'shift: "ca ngày"\n'
+        "service_days:\n"
+        '- "thứ 2"\n'
+        '- "thứ 3"\n'
+        "stops:\n"
+        "| order | name | time | address |\n"
+        "| --- | --- | --- | --- |\n"
+        '| 1 | "Cầu Rào" | "06:30" | null |\n'
+        '| 2 | "Nhà máy" | "07:15" | null |\n'
     )
-    transportation_document = parse_category_yaml("transportation", transportation_source)
+    transportation_document = parse_category_markdown("transportation", transportation_source)
     transportation_revision = KnowledgeCategoryRevision(
         category_id=transportation_category.id,
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
-        source_filename="transportation.yaml",
+        source_filename="transportation.md",
         source_yaml=transportation_source,
         normalized_payload=transportation_document.model_dump(mode="json"),
         content_sha256=category_checksum(transportation_document),
@@ -411,24 +435,29 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
     assert route_ids == []
 
     contacts_source = (
+        "---\n"
+        'schema_version: "1.0"\n'
         "category: contacts\n"
-        "contacts:\n"
-        "  - id: recruiter\n"
-        "    name: Bộ phận tuyển dụng\n"
-        "    role: Tư vấn tuyển dụng\n"
-        "    phone: '+84901234567'\n"
-        "    zalo: zalo-recruiter\n"
-        "    email: recruiter@example.test\n"
-        "    address: 12 Đường Nhà Máy, Hải Phòng\n"
-        "    working_hours: 08:00-17:00\n"
-        "    notes: Liên hệ trực tiếp\n"
+        "---\n"
+        "\n"
+        "## contacts\n"
+        "\n"
+        "### record: recruiter\n"
+        'name: "Bộ phận tuyển dụng"\n'
+        'role: "Tư vấn tuyển dụng"\n'
+        'phone: "+84901234567"\n'
+        'zalo: "zalo-recruiter"\n'
+        'email: "recruiter@example.test"\n'
+        'address: "12 Đường Nhà Máy, Hải Phòng"\n'
+        'working_hours: "08:00-17:00"\n'
+        'notes: "Liên hệ trực tiếp"\n'
     )
-    contacts_document = parse_category_yaml("contacts", contacts_source)
+    contacts_document = parse_category_markdown("contacts", contacts_source)
     contacts_revision = KnowledgeCategoryRevision(
         category_id=contacts_category.id,
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
-        source_filename="contacts.yaml",
+        source_filename="contacts.md",
         source_yaml=contacts_source,
         normalized_payload=contacts_document.model_dump(mode="json"),
         content_sha256=category_checksum(contacts_document),
@@ -515,14 +544,34 @@ async def test_explicit_cutover_requires_all_categories_and_rolls_back(
     )
 
     jobs_source = (
-        "category: jobs\njobs:\n  - id: cutover-job\n"
-        "    title: Category operator\n    location: Hải Phòng\n"
+        "---\n"
+        'schema_version: "1.0"\n'
+        "category: jobs\n"
+        "---\n"
+        "\n"
+        "## jobs\n"
+        "\n"
+        "### record: cutover-job\n"
+        'title: "Category operator"\n'
+        'location: "Hải Phòng"\n'
     )
     transportation_source = (
-        "category: transportation\ntransportation:\n"
-        "  - id: category-route\n    job_ids: [cutover-job]\n"
-        "    name: Category route\n    direction: to_factory\n"
-        "    stops:\n      - order: 1\n        name: Category stop\n"
+        "---\n"
+        'schema_version: "1.0"\n'
+        "category: transportation\n"
+        "---\n"
+        "\n"
+        "## transportation\n"
+        "\n"
+        "### record: category-route\n"
+        "job_ids:\n"
+        "- cutover-job\n"
+        'name: "Category route"\n'
+        'direction: "to_factory"\n'
+        "stops:\n"
+        "| order | name | time | address |\n"
+        "| --- | --- | --- | --- |\n"
+        '| 1 | "Category stop" | null | null |\n'
     )
 
     categories: list[KnowledgeCategory] = []
@@ -538,13 +587,20 @@ async def test_explicit_cutover_requires_all_categories_and_rolls_back(
             if definition.key is KnowledgeCategoryKey.JOBS
             else transportation_source
             if definition.key is KnowledgeCategoryKey.TRANSPORTATION
-            else f"category: {definition.key.value}\n{definition.list_field}: []\n"
+            else (
+                "---\n"
+                'schema_version: "1.0"\n'
+                f"category: {definition.key.value}\n"
+                "---\n"
+                "\n"
+                f"## {definition.list_field}\n"
+            )
         )
         is_active = definition.key in {
             KnowledgeCategoryKey.JOBS,
             KnowledgeCategoryKey.TRANSPORTATION,
         }
-        parsed = parse_category_yaml(definition.key, source, allow_empty=not is_active)
+        parsed = parse_category_markdown(definition.key, source, allow_empty=not is_active)
         revision = KnowledgeCategoryRevision(
             category_id=category.id,
             revision_no=1,
@@ -592,15 +648,13 @@ async def test_explicit_cutover_requires_all_categories_and_rolls_back(
     assert listed_total == 1
     assert [job.title for job in listed_jobs] == ["Category operator"]
     assert await JobService(integration_session).get(legacy_job.id) is None
-    visible_after_cutover = await RecommendationRepository(
-        integration_session
-    ).list_active_jobs(project_ids=[str(project.id)], top_k=10)
-    assert [job.title for job in visible_after_cutover.jobs] == ["Category operator"]
-    matched_after_cutover = await RecommendationRepository(integration_session).match_jobs(
-        LeadProfile(desired_job="operator"),
-        top_k=10,
+    catalog_after_cutover = await CatalogRepository(
+        integration_session, page_project_ids=None
+    ).list_active_projects()
+    cutover_scope = next(
+        row for row in catalog_after_cutover if row.project_id == str(project.id)
     )
-    assert [row.job.title for row in matched_after_cutover] == ["Category operator"]
+    assert [item.title for item in cutover_scope.scope] == ["Category operator"]
     routes = list(
         await integration_session.scalars(
             select(BusRoute).where(BusRoute.project_id == project.id).order_by(BusRoute.route_name)
@@ -622,15 +676,23 @@ async def test_explicit_cutover_requires_all_categories_and_rolls_back(
     )
     cutover_jobs_revision_id = jobs_category.active_revision_id
     updated_source = (
-        "category: jobs\njobs:\n  - id: cutover-job\n"
-        "    title: Updated category operator\n    location: Hải Phòng\n"
+        "---\n"
+        'schema_version: "1.0"\n'
+        "category: jobs\n"
+        "---\n"
+        "\n"
+        "## jobs\n"
+        "\n"
+        "### record: cutover-job\n"
+        'title: "Updated category operator"\n'
+        'location: "Hải Phòng"\n'
     )
-    updated_document = parse_category_yaml(KnowledgeCategoryKey.JOBS, updated_source)
+    updated_document = parse_category_markdown(KnowledgeCategoryKey.JOBS, updated_source)
     updated_revision = KnowledgeCategoryRevision(
         category_id=jobs_category.id,
         revision_no=2,
         status=KnowledgeCategoryRevisionStatus.STAGED,
-        source_filename="jobs.yaml",
+        source_filename="jobs.md",
         source_yaml=updated_source,
         normalized_payload=updated_document.model_dump(mode="json"),
         content_sha256=category_checksum(updated_document),
@@ -669,15 +731,13 @@ async def test_explicit_cutover_requires_all_categories_and_rolls_back(
     )
     assert listed_legacy_total == 1
     assert [job.title for job in listed_legacy_jobs] == ["Legacy operator"]
-    visible_after_rollback = await RecommendationRepository(
-        integration_session
-    ).list_active_jobs(project_ids=[str(project.id)], top_k=10)
-    assert [job.title for job in visible_after_rollback.jobs] == ["Legacy operator"]
-    matched_after_rollback = await RecommendationRepository(integration_session).match_jobs(
-        LeadProfile(desired_job="operator"),
-        top_k=10,
+    catalog_after_rollback = await CatalogRepository(
+        integration_session, page_project_ids=None
+    ).list_active_projects()
+    rollback_scope = next(
+        row for row in catalog_after_rollback if row.project_id == str(project.id)
     )
-    assert [row.job.title for row in matched_after_rollback] == ["Legacy operator"]
+    assert [item.title for item in rollback_scope.scope] == ["Legacy operator"]
     remaining_routes = list(
         await integration_session.scalars(
             select(BusRoute).where(BusRoute.project_id == project.id)
@@ -723,26 +783,44 @@ async def test_activation_failure_is_sanitized_and_persisted() -> None:
         await session.flush()
         service = KnowledgeCategoryService(session)
         invalid_source = (
-            "category: contacts\ncontacts:\n  - id: recruiter\n"
-            "    name: Tuyển dụng\n    phone: [SECRET-PHONE-123]\n"
+            "---\n"
+            'schema_version: "1.0"\n'
+            "category: contacts\n"
+            "---\n"
+            "\n"
+            "## contacts\n"
+            "\n"
+            "### record: recruiter\n"
+            'name: "Tuyển dụng"\n'
+            "phone: [SECRET-PHONE-123]\n"
         )
         with pytest.raises(ConflictError) as validation_error:
             await service.stage_replacement(
                 project_id=project.id,
                 category_key=KnowledgeCategoryKey.CONTACTS,
-                filename="contacts.yaml",
-                source_yaml=invalid_source,
+                filename="contacts.md",
+                source_markdown=invalid_source,
                 actor=actor,
             )
         assert "SECRET-PHONE-123" not in str(validation_error.value)
-        assert str(validation_error.value) == "Category YAML failed validation"
-        source = "category: contacts\ncontacts:\n  - id: recruiter\n    name: Tuyển dụng\n"
-        document = parse_category_yaml("contacts", source)
+        assert str(validation_error.value) == "Category content failed validation"
+        source = (
+            "---\n"
+            'schema_version: "1.0"\n'
+            "category: contacts\n"
+            "---\n"
+            "\n"
+            "## contacts\n"
+            "\n"
+            "### record: recruiter\n"
+            'name: "Tuyển dụng"\n'
+        )
+        document = parse_category_markdown("contacts", source)
         failed_revision = KnowledgeCategoryRevision(
             category_id=category.id,
             revision_no=1,
             status=KnowledgeCategoryRevisionStatus.STAGED,
-            source_filename="contacts.yaml",
+            source_filename="contacts.md",
             source_yaml=source,
             normalized_payload=document.model_dump(mode="json"),
             content_sha256=category_checksum(document),
@@ -773,8 +851,8 @@ async def test_activation_failure_is_sanitized_and_persisted() -> None:
                 await service.stage_replacement(
                     project_id=project_id,
                     category_key=KnowledgeCategoryKey.CONTACTS,
-                    filename="contacts.yaml",
-                    source_yaml=source,
+                    filename="contacts.md",
+                    source_markdown=source,
                     actor=actor,
                 )
             await session.refresh(persisted)
@@ -818,18 +896,28 @@ async def test_maximum_category_batch_completes_within_worker_budget(
     category = KnowledgeCategory(project_id=project.id, category_key="jobs")
     integration_session.add(category)
     await integration_session.flush()
-    source = "category: jobs\njobs:\n" + "".join(
-        f"  - id: job-{index}\n"
-        f"    title: Công nhân {index}\n"
-        "    location: Hải Phòng\n"
-        for index in range(1000)
+    source = (
+        "---\n"
+        'schema_version: "1.0"\n'
+        "category: jobs\n"
+        "---\n"
+        "\n"
+        "## jobs\n"
+        "\n"
+        + "".join(
+            f"### record: job-{index}\n"
+            f'title: "Công nhân {index}"\n'
+            'location: "Hải Phòng"\n'
+            "\n"
+            for index in range(1000)
+        )
     )
-    document = parse_category_yaml(KnowledgeCategoryKey.JOBS, source)
+    document = parse_category_markdown(KnowledgeCategoryKey.JOBS, source)
     revision = KnowledgeCategoryRevision(
         category_id=category.id,
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
-        source_filename="jobs.yaml",
+        source_filename="jobs.md",
         source_yaml=source,
         normalized_payload=document.model_dump(mode="json"),
         content_sha256=category_checksum(document),
@@ -900,16 +988,23 @@ async def _stage_faq_revision(
 
     question = "Ca làm việc mấy giờ?"
     source = (
-        "category: faq\nfaq:\n  - id: shift-hours\n"
-        f"    question: {question}\n"
-        "    answer: Ca ngày 08:00-20:00, ca đêm 20:00-08:00.\n"
+        "---\n"
+        'schema_version: "1.0"\n'
+        "category: faq\n"
+        "---\n"
+        "\n"
+        "## faq\n"
+        "\n"
+        "### record: shift-hours\n"
+        f'question: "{question}"\n'
+        'answer: "Ca ngày 08:00-20:00, ca đêm 20:00-08:00."\n'
     )
-    document = parse_category_yaml("faq", source)
+    document = parse_category_markdown("faq", source)
     revision = KnowledgeCategoryRevision(
         category_id=category.id,
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
-        source_filename="faq.yaml",
+        source_filename="faq.md",
         source_yaml=source,
         normalized_payload=document.model_dump(mode="json"),
         content_sha256=category_checksum(document),

@@ -21,12 +21,13 @@ import httpx
 
 from app.schemas.knowledge_categories import FaqDocument, KnowledgeCategoryKey
 from app.services.knowledge import external_source_sync as ess
-from app.services.knowledge.category_contracts import category_checksum, parse_category_yaml
+from app.services.knowledge.category_contracts import category_checksum
+from app.services.knowledge.category_markdown import parse_category_markdown
 from app.services.knowledge.external_source_sync import (
     AUTO_DISABLE_THRESHOLD,
     ExternalSourceSyncError,
     SheetClient,
-    build_source_yaml,
+    build_source_markdown,
     extract_sheet_id,
     sanitize_error,
     sync_external_source,
@@ -44,7 +45,7 @@ def _read(name: str) -> str:
 
 def _checksum_of(csv_text: str) -> str:
     payload = parse_faq_csv(csv_text)
-    document = parse_category_yaml(KnowledgeCategoryKey.FAQ, build_source_yaml(payload))
+    document = parse_category_markdown(KnowledgeCategoryKey.FAQ, build_source_markdown(payload))
     return category_checksum(document)
 
 
@@ -186,13 +187,16 @@ def test_parse_ignores_ordinal_only_section_cell() -> None:
     assert by_q["Q3?"]["tags"] == ["Khi đi phỏng vấn", "Trang phục"]
 
 
-def test_parse_tags_round_trip_through_category_yaml() -> None:
-    """Tags survive parser → canonical YAML → parse_category_yaml → FaqDocument,
-    the path the orchestrator uses to stage an active revision.
+def test_parse_tags_round_trip_through_category_markdown() -> None:
+    """Tags survive parser → canonical Category Markdown v1 →
+    parse_category_markdown → FaqDocument, the path the orchestrator uses to
+    stage an active revision.
     """
     payload = parse_faq_csv(_read("faq_sheet_four_column.csv"))
-    source_yaml = ess.build_source_yaml(payload)
-    document = parse_category_yaml(KnowledgeCategoryKey.FAQ, source_yaml)
+    source_markdown = ess.build_source_markdown(payload)
+    assert "## faq" in source_markdown
+    assert 'schema_version: "1.0"' in source_markdown
+    document = parse_category_markdown(KnowledgeCategoryKey.FAQ, source_markdown)
     by_question = {item.question: item for item in document.faq}
     assert by_question["LG Display tuyển đến bao nhiêu tuổi?"].tags == [
         "Thông tin trước khi phỏng vấn",
@@ -273,9 +277,11 @@ def test_hash_changes_when_answer_edited() -> None:
 def test_hash_matches_revision_content_sha256() -> None:
     """Finding 11: the orchestrator's hash equals what the category pipeline stores."""
     payload = parse_faq_csv(_read("faq_sheet_synthetic.csv"))
-    source_yaml = build_source_yaml(payload)
-    # stage_replacement parses the same YAML + checksums the resulting document.
-    staged_checksum = category_checksum(parse_category_yaml(KnowledgeCategoryKey.FAQ, source_yaml))
+    source_markdown = build_source_markdown(payload)
+    # stage_replacement parses the same markdown + checksums the resulting document.
+    staged_checksum = category_checksum(
+        parse_category_markdown(KnowledgeCategoryKey.FAQ, source_markdown)
+    )
     assert _checksum_of(_read("faq_sheet_synthetic.csv")) == staged_checksum
 
 
@@ -640,7 +646,8 @@ async def test_stage_replacement_called_with_correct_kwargs(
     )
     assert "filename" in captured.kwargs
     assert "source_filename" not in captured.kwargs
-    assert "source_yaml" in captured.kwargs
+    assert "source_markdown" in captured.kwargs
+    assert "source_yaml" not in captured.kwargs
     assert captured.kwargs["actor"] is actor
 
 
