@@ -18,7 +18,7 @@ SLO → measurement mapping
 +---------------------------+-------------------------------------------------+
 | webhook_ack               | Redis sliding window (this module)              |
 | queue_wait                | webhook_to_pickup_ms + preamble_ms on BotRun    |
-| cached_or_deterministic   | end_to_end_ms WHERE lane IN (fast_lane, faq_*)  |
+| cached_or_deterministic   | end_to_end_ms WHERE lane = 'agent'              |
 | rag_ttfb                  | null until streaming lands (P0-6)               |
 | full_answer               | end_to_end_ms WHERE lane = 'agent'              |
 | error_or_timeout_rate     | % of turns WHERE outcome != 'SENT'              |
@@ -391,9 +391,9 @@ async def _latency_rollups(
         # queue_wait (all lanes)
         f"{pct(queue_wait_expr, '0.5')} AS qw_p50, "
         f"{pct(queue_wait_expr, '0.95')} AS qw_p95, "
-        # cached_or_deterministic (fast lanes only)
-        f"{pct(end_to_end_expr, '0.5')} FILTER (WHERE stage_timings->>'lane' IN ('fast_lane','faq_bypass','faq_detail')) AS cd_p50, "
-        f"{pct(end_to_end_expr, '0.95')} FILTER (WHERE stage_timings->>'lane' IN ('fast_lane','faq_bypass','faq_detail')) AS cd_p95, "
+        # cached_or_deterministic (the only lane now emitted is ``agent``)
+        f"{pct(end_to_end_expr, '0.5')} FILTER (WHERE stage_timings->>'lane' = 'agent') AS cd_p50, "
+        f"{pct(end_to_end_expr, '0.95')} FILTER (WHERE stage_timings->>'lane' = 'agent') AS cd_p95, "
         # full_answer (agent lane only)
         f"{pct(end_to_end_expr, '0.5')} FILTER (WHERE stage_timings->>'lane' = 'agent') AS fa_p50, "
         f"{pct(end_to_end_expr, '0.95')} FILTER (WHERE stage_timings->>'lane' = 'agent') AS fa_p95 "

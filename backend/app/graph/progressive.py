@@ -39,7 +39,7 @@ from app.graph.dispatch import (
     _OWNERSHIP_REFRESH_COLUMNS,
     _record_dispatched_outcome,
 )
-from app.graph.grounding import ground_reply
+from app.graph.grounding import _UngroundedContact, ground_reply
 from app.graph.ports import DirectMessageSenderPort
 from app.graph.telemetry import _stamp_db, _stamp_outbound_telemetry
 from app.graph.think_strip import visible_offset
@@ -352,16 +352,27 @@ async def _await_first_bubble(
             min_offset = offset + 1
             continue
         first_bubble_ms = int(round((time.monotonic() - t0) * 1000))
+        grounded_bubble = ground_reply(
+            visible_bubble,
+            list(stream.evidence),
+            # The same text the agent was given (history + current message):
+            # a channel the employee already typed in an earlier turn is not
+            # an invention, and the system prompt carries none of its own.
+            allowed_text=allowed_text,
+            trace_sink=trace_sink,
+        )
+        if isinstance(grounded_bubble, _UngroundedContact):
+            # The bubble named a channel the evidence never had. Send nothing
+            # early; the full-reply path owns the contact repair.
+            logger.info(
+                "progressive bubble contradicted the contact guard; deferring "
+                "conversation=%s trace=%s",
+                state.conversation_id,
+                state.trace_id or "-",
+            )
+            return None
         bubble_text = _finalize_user_visible_reply(
-            ground_reply(
-                visible_bubble,
-                list(stream.evidence),
-                # The same text the agent was given (history + current message):
-                # a channel the employee already typed in an earlier turn is not
-                # an invention, and the system prompt carries none of its own.
-                allowed_text=allowed_text,
-                trace_sink=trace_sink,
-            ),
+            grounded_bubble,
             deps=deps,
             generated=True,
             user_text=state.user_text,
@@ -550,12 +561,14 @@ async def _complete_progressive_prefix(
     timings["progressive_bubbles"] = 2
     # Ground the remainder against the full evidence exactly as the bubble was
     # grounded: each part passes the same job-id/entity guard, independently.
-    return (
-        ground_reply(
-            remainder_raw,
-            list(stream.evidence),
-            allowed_text=allowed_text,
-            trace_sink=trace_sink,
-        ),
-        None,
+    grounded_remainder = ground_reply(
+        remainder_raw,
+        list(stream.evidence),
+        allowed_text=allowed_text,
+        trace_sink=trace_sink,
     )
+    if isinstance(grounded_remainder, _UngroundedContact):
+        # A channel the evidence never had: suppress the remainder rather than
+        # forward an invented contact to the candidate.
+        return "", None
+    return grounded_remainder, None

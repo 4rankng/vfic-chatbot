@@ -267,6 +267,7 @@ def routing_instruction(route: TurnRoute) -> str:
             "từ chối. "
             "Chỉ khi không có hướng dẫn phù hợp mới từ chối nhẹ nhàng và kéo cuộc trò chuyện về "
             "tìm việc, hồ sơ, lịch xe, hoặc vấn đề của nhân viên tại dự án VFIC. "
-            "Không nêu hotline, email hay người liên hệ không có trong dữ liệu tool trả về."
+            "Khi phải từ chối, PHẢI mời ứng viên gọi đúng số hotline VFIC đã nêu trong mục "
+            "SỰ THẬT CỐ ĐỊNH của system prompt; không nêu hotline, email hay người liên hệ nào khác."
         )
     return "Ý định chưa rõ. Trả lời theo mạch hội thoại và dùng công cụ tra cứu khi có câu hỏi tuyển dụng."

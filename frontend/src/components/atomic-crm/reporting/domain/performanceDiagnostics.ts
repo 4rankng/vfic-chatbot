@@ -21,8 +21,6 @@ export const STAGE_LABELS: Record<string, string> = {
 
 export const LANE_LABELS: Record<string, string> = {
   agent: "Agent (LLM)",
-  fast_lane: "Fast lane",
-  faq_bypass: "FAQ bypass",
   unknown: "Không rõ",
 };
 

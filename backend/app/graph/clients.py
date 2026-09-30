@@ -43,8 +43,7 @@ from app.graph.embedders import GeminiEmbedder as GeminiEmbedder
 from app.graph.embedders import OpenRouterEmbedder as OpenRouterEmbedder
 from app.graph.embedders import build_embedder as build_embedder
 from app.graph.grounding import (
-    LANE_UNAVAILABLE_REPLY,
-    VACANCY_LOOKUP_UNAVAILABLE_REPLY,
+    _UngroundedContact,
     active_job_safe_reply as _active_job_safe_reply,
     ground_reply as _ground_reply,
 )
@@ -171,6 +170,7 @@ class _AgentTurn:
         "answer_continuations",
         "continuing_answer",
         "last_round_cut",
+        "contact_repair_depth",
     )
 
     def __init__(
@@ -243,6 +243,9 @@ class _AgentTurn:
         self.answer_continuations = 0
         self.continuing_answer = False
         self.last_round_cut = False
+        # Bounds the contact-veto repair to exactly one rewrite round; a second
+        # violation suppresses the turn instead of looping.
+        self.contact_repair_depth = 0
 
     def scoped_args(self, name: str, args: dict) -> dict:
         """Force the turn's project focus onto a model-supplied tool call."""
@@ -564,11 +567,29 @@ class MiniMaxAgent:
                 if safe_reply is not None:
                     if trace_sink is not None:
                         trace_sink.record_decision("grounding_verdict", "grounded")
-                    return safe_reply
-                logger.warning("compare-income tool returned malformed authority payload")
-                turn.prefetch_hit = False
-                if metrics is not None:
-                    metrics["prefetch_hit"] = False
+                    # The verified render is an authority CONTRACT, not the
+                    # answer: hand it to the model as the only allowed source
+                    # and let the agent author the candidate-facing prose.
+                    turn.tool_results.append(str(prefetched))
+                    await turn.publish_evidence()
+                    messages.append(
+                        SystemMessage(
+                            content=(
+                                "KẾT QUẢ ĐÃ XÁC MINH (nguồn duy nhất được dùng cho câu "
+                                "trả lời này):\n"
+                                f"{safe_reply}\n"
+                                "Hãy viết câu trả lời cho ứng viên bằng chính các số liệu "
+                                "trên. Không thêm, không bớt, không suy diễn số liệu; không "
+                                "gọi thêm công cụ."
+                            )
+                        )
+                    )
+                    turn.schemas = []
+                else:
+                    logger.warning("compare-income tool returned malformed authority payload")
+                    turn.prefetch_hit = False
+                    if metrics is not None:
+                        metrics["prefetch_hit"] = False
         elif faq_detail_route:
             if trace_sink is not None:
                 trace_sink.record_tool_selection("search_knowledge", selected_by="prefetch")
@@ -840,12 +861,7 @@ class MiniMaxAgent:
                     # Still cut after the continuation budget: drop the dangling
                     # fragment instead of a mid-word tail.
                     answer = _drop_dangling_tail(answer)
-                return _ground_reply(
-                    answer,
-                    turn.tool_results,
-                    allowed_text=turn.contact_evidence,
-                    trace_sink=trace_sink,
-                )
+                return await self._ground_or_repair(turn, answer)
             if not calls:
                 raw_content = str(ai.content or "")
                 text_calls = extract_text_tool_calls(raw_content)
@@ -906,15 +922,11 @@ class MiniMaxAgent:
                     continue
                 if required_tool and not turn.required_tool_called:
                     logger.warning("required LLM tool was not called: %s", required_tool)
-                    return await self.direct(
-                        turn.user_text,
-                        system=(
-                            "Bạn là tư vấn viên tuyển dụng. Dữ liệu tuyển dụng bắt buộc chưa được "
-                            "truy xuất thành công. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa "
-                            "thể kiểm tra, không xác nhận có việc và không bịa dữ liệu."
-                        ),
-                        metrics=metrics,
-                        trace_sink=trace_sink,
+                    return await self._compose_with_instruction(
+                        turn,
+                        "Bạn là tư vấn viên tuyển dụng. Dữ liệu tuyển dụng bắt buộc chưa được "
+                        "truy xuất thành công. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa "
+                        "thể kiểm tra, không xác nhận có việc và không bịa dữ liệu.",
                     )
                 turn.answer_parts.append(visible_round)
                 if _should_continue_cut_answer(ai, visible_round, turn.answer_continuations):
@@ -936,12 +948,7 @@ class MiniMaxAgent:
                     # The provider stopped at the cap again: drop the dangling
                     # fragment so the candidate never reads a mid-word tail.
                     final_reply = _drop_dangling_tail(final_reply)
-                return _ground_reply(
-                    final_reply,
-                    turn.tool_results,
-                    allowed_text=turn.contact_evidence,
-                    trace_sink=trace_sink,
-                )
+                return await self._ground_or_repair(turn, final_reply)
             if metrics is not None:
                 metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
                 metrics["tool_rounds"] = metrics.get("tool_rounds", 0) + 1
@@ -990,21 +997,35 @@ class MiniMaxAgent:
                             ),
                         )
                         if safe_reply is not None:
-                            return safe_reply
-                        authority_valid = False
+                            # Authority contract, not the answer: hand the
+                            # verified render to the model and drop to a
+                            # tool-free composition round.
+                            messages.append(
+                                SystemMessage(
+                                    content=(
+                                        "KẾT QUẢ ĐÃ XÁC MINH (nguồn duy nhất được dùng cho "
+                                        "câu trả lời này):\n"
+                                        f"{safe_reply}\n"
+                                        "Hãy viết câu trả lời cho ứng viên bằng chính các số "
+                                        "liệu trên. Không thêm, không bớt, không suy diễn số "
+                                        "liệu; không gọi thêm công cụ."
+                                    )
+                                )
+                            )
+                            turn.schemas = []
+                            schemas = []
+                            bound = active_llm
+                        else:
+                            authority_valid = False
                     elif required_tool == "list_active_jobs":
                         authority_valid = _active_job_safe_reply(out) is not None
                     if not authority_valid:
                         logger.warning("required LLM tool returned invalid evidence: %s", required_tool)
-                        return await self.direct(
-                            turn.user_text,
-                            system=(
-                                "Bạn là tư vấn viên tuyển dụng. Kết quả kiểm tra tuyển dụng không "
-                                "hợp lệ. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể xác minh, "
-                                "không xác nhận có việc và không bịa dữ liệu."
-                            ),
-                            metrics=metrics,
-                            trace_sink=trace_sink,
+                        return await self._compose_with_instruction(
+                            turn,
+                            "Bạn là tư vấn viên tuyển dụng. Kết quả kiểm tra tuyển dụng không "
+                            "hợp lệ. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể xác minh, "
+                            "không xác nhận có việc và không bịa dữ liệu.",
                         )
                 if tool_name == "list_active_jobs":
                     turn.authority_tool_dispatched = True
@@ -1122,15 +1143,11 @@ class MiniMaxAgent:
         metrics = turn.metrics
         trace_sink = turn.trace_sink
         if required_tool and not turn.required_tool_called:
-            return await self.direct(
-                turn.user_text,
-                system=(
-                    "Bạn là tư vấn viên tuyển dụng. Không có dữ liệu tuyển dụng đã xác minh cho "
-                    "lượt này. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể kiểm tra, không "
-                    "xác nhận có việc và không bịa dữ liệu."
-                ),
-                metrics=metrics,
-                trace_sink=trace_sink,
+            return await self._compose_with_instruction(
+                turn,
+                "Bạn là tư vấn viên tuyển dụng. Không có dữ liệu tuyển dụng đã xác minh cho "
+                "lượt này. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể kiểm tra, không "
+                "xác nhận có việc và không bịa dữ liệu.",
             )
         if turn.answer_parts:
             # A continued answer outranks the last message: exhaustion after a
@@ -1138,118 +1155,97 @@ class MiniMaxAgent:
             final = _join_answer_parts(turn.answer_parts)
             if turn.last_round_cut:
                 final = _drop_dangling_tail(final)
-        else:
-            # The loop spent every round on tool calls and never produced a text
-            # answer. ``messages[-1].content`` is the raw ToolMessage payload
-            # here (an ACTIVE_JOB_LOOKUP_JSON dump or a KB chunk) and must never
-            # reach a candidate: the grounding cross-check below waves it through
-            # precisely because the ids inside tool output are by definition in
-            # the surfaced set. The lane's neutral unavailable line is the only
-            # honest reply, and the trace records the degradation.
-            if trace_sink is not None:
-                trace_sink.record_decision("degradation_reason", "tool_loop_exhausted")
-            if metrics is not None:
-                metrics["tool_loop_exhausted"] = True
-            # The agent never composed an answer (budget exhausted), so the
-            # honest unavailable line ships — the LLM-final-decision rule means
-            # there is no composed reply to preserve, and a raw tool dump must
-            # not reach the candidate.
-            final = (
-                VACANCY_LOOKUP_UNAVAILABLE_REPLY
-                if required_tool == "list_active_jobs" or turn.authority_tool_dispatched
-                else LANE_UNAVAILABLE_REPLY
-            )
-        # Sanitize-only grounding: the unavailable line is trusted text, and the
-        # ID/entity + contact guards still apply to anything the model wrote.
-        return _ground_reply(
-            final,
+            return await self._ground_or_repair(turn, final)
+        # The loop spent every round on tool calls and never produced a text
+        # answer. ``messages[-1].content`` is the raw ToolMessage payload here
+        # (an ACTIVE_JOB_LOOKUP_JSON dump or a KB chunk) and must never reach a
+        # candidate. Give the model one tool-free composition round over the
+        # transcript instead of a code-authored unavailable line; an empty
+        # composition suppresses the turn.
+        if trace_sink is not None:
+            trace_sink.record_decision("degradation_reason", "tool_loop_exhausted")
+        if metrics is not None:
+            metrics["tool_loop_exhausted"] = True
+        composed = await self._compose_with_instruction(
+            turn,
+            "Bạn đã tra xong dữ liệu nhưng chưa viết câu trả lời. Hãy trả lời ứng viên "
+            "NGAY bằng tiếng Việt, chỉ dùng dữ liệu công cụ ở trên. Nếu dữ liệu không đủ, "
+            "nói thật là chưa thể kiểm tra thông tin này và đề nghị ứng viên thử lại sau.",
+        )
+        if composed and trace_sink is not None:
+            trace_sink.record_decision("degradation_reason", "tool_loop_composed")
+        return composed
+
+    async def _ground_or_repair(self, turn: _AgentTurn, reply: str) -> str:
+        """Ground ``reply``; on an invented contact, one model rewrite round.
+
+        The contact guard never substitutes code-authored prose: a violation
+        asks the model to rewrite without the offending channel, and a second
+        violation suppresses the turn (``""``). The repair depth bounds this to
+        exactly one rewrite.
+        """
+        from langchain_core.messages import SystemMessage
+
+        trace_sink = turn.trace_sink
+        grounded = _ground_reply(
+            reply,
             turn.tool_results,
             allowed_text=turn.contact_evidence,
             trace_sink=trace_sink,
         )
-
-    async def direct(
-        self,
-        user_text: str,
-        *,
-        system: str,
-        metrics: dict | None = None,
-        trace_sink=None,
-    ) -> str:
-        """One model call for a direct-context KB; no schemas, tools, or prefetch.
-
-        A provider that stops at its output cap is continued exactly as in
-        ``agent`` (see ``answer_repair``): this lane produces
-        candidate-visible prose too, so a cut answer must never ship.
-        """
-        from app.graph.llm_semaphore import get_llm_semaphore
-        from langchain_core.messages import HumanMessage, SystemMessage
-
-        sem = get_llm_semaphore()
-        if trace_sink is not None:
-            trace_sink.record_decision("model_selected", "direct")
-        messages = [SystemMessage(content=system), HumanMessage(content=user_text)]
-        answer_parts: list[str] = []
-        answer_continuations = 0
-        ai = None
-        for _round in range(_MAX_ANSWER_CONTINUATIONS + 1):
-            if metrics is not None:
-                metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
-                metrics["direct_context_llm_calls"] = metrics.get("direct_context_llm_calls", 0) + 1
-            sem_t0 = time.monotonic()
-            async with sem:
-                queue_ms = int((time.monotonic() - sem_t0) * 1000)
-                model_t0 = time.monotonic()
-                ai, backoff_ms = await _llm_call_with_retry(
-                    self.llm,
-                    messages,
-                    metrics=metrics,
-                    fallback_bounds=self.fallback_llms,
-                )
-                model_ms = int((time.monotonic() - model_t0) * 1000)
-            total_ms = int((time.monotonic() - sem_t0) * 1000)
-            if metrics is not None:
-                metrics["llm_invoke_ms"] = metrics.get("llm_invoke_ms", 0) + total_ms
-                metrics["llm_queue_ms"] = metrics.get("llm_queue_ms", 0) + queue_ms
-                metrics["llm_model_ms"] = metrics.get("llm_model_ms", 0) + (model_ms - backoff_ms)
-            await _record_llm_latency(total_ms)
+        if not isinstance(grounded, _UngroundedContact):
+            return grounded
+        if turn.contact_repair_depth >= 1:
             if trace_sink is not None:
-                record_model_turn = getattr(trace_sink, "record_model_turn", None)
-                if callable(record_model_turn):
-                    provider = getattr(self.llm, "trace_provider", "unknown")
-                    # "fallback" is the admin-configured custom provider
-                    # (schema literal DecisionTraceProvider); without it here a
-                    # custom-provider turn is recorded as "unknown".
-                    if provider not in {"minimax", "openrouter", "fallback"}:
-                        provider = "unknown"
-                    record_model_turn(
-                        phase="direct",
-                        provider=provider,
-                        model=str(
-                            getattr(self.llm, "model_name", None)
-                            or getattr(self.llm, "model", None)
-                            or "unknown"
-                        ),
-                        reasoning=_extract_returned_reasoning(ai),
-                        tool_names=[],
-                    )
-            visible_round = strip_provider_artifacts(str(ai.content or ""))
-            answer_parts.append(visible_round)
-            if not _should_continue_cut_answer(ai, visible_round, answer_continuations):
-                break
-            answer_continuations += 1
-            messages.append(SystemMessage(content=_CUT_ANSWER_CONTINUE_INSTRUCTION))
-            _record_answer_continuation(metrics, answer_continuations)
-            logger.warning(
-                "direct answer cut by the provider output cap; continuing %d/%d",
-                answer_continuations,
-                _MAX_ANSWER_CONTINUATIONS,
+                trace_sink.record_decision("grounding_verdict", "suppressed")
+            return ""
+        turn.contact_repair_depth += 1
+        channels = ", ".join(grounded.channels)
+        turn.messages.append(
+            SystemMessage(
+                content=(
+                    "Câu trả lời vừa rồi nêu liên hệ không có trong dữ liệu: "
+                    f"{channels}. Viết lại câu trả lời cho ứng viên, KHÔNG nêu số điện "
+                    "thoại, email, địa chỉ hay người liên hệ nào không có trong dữ liệu "
+                    "công cụ. Nếu cần liên hệ, hãy xin số điện thoại của ứng viên để em "
+                    "liên hệ lại."
+                )
             )
+        )
+        turn.schemas = []
+        turn.iterations_remaining = 1
+        # The rewrite is standalone: without this the joined answer would still
+        # contain the violating round's text.
+        turn.answer_parts = []
+        turn.answer_continuations = 0
+        turn.continuing_answer = False
+        repaired = await self._run_generation_round(turn)
+        if isinstance(repaired, _ContinueTurn) or not repaired:
+            if trace_sink is not None:
+                trace_sink.record_decision("grounding_verdict", "suppressed")
+            return ""
         if trace_sink is not None:
-            trace_sink.record_decision("grounding_verdict", "skipped")
-        answer = _join_answer_parts(answer_parts)
-        if ai is not None and _answer_was_cut(ai):
-            # Still cut after the continuation budget: drop the dangling
-            # fragment rather than send a mid-word tail.
-            answer = _drop_dangling_tail(answer)
-        return answer
+            trace_sink.record_decision("grounding_verdict", "repaired")
+        return repaired
+
+    async def _compose_with_instruction(self, turn: _AgentTurn, instruction: str) -> str:
+        """One final tool-free composition round; ``""`` means suppress the turn.
+
+        Appends ``instruction`` as a SystemMessage, strips tools for the round,
+        and lets the model author the candidate-facing reply. Never returns a
+        code-authored constant: an empty generation suppresses the turn.
+        """
+        from langchain_core.messages import SystemMessage
+
+        turn.messages.append(SystemMessage(content=instruction))
+        turn.schemas = []
+        turn.iterations_remaining = 1
+        # The composition is standalone: stale answer rounds from earlier phases
+        # must not be joined into the final reply.
+        turn.answer_parts = []
+        turn.answer_continuations = 0
+        turn.continuing_answer = False
+        composed = await self._run_generation_round(turn)
+        if isinstance(composed, _ContinueTurn):
+            return ""
+        return composed

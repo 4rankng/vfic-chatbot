@@ -179,8 +179,8 @@ async def test_post_tool_round_reacquires_the_deployment_llm_cap(monkeypatch):
     assert last_acquire > events.index("tool:search_bus_timetable")
 
 
-async def test_tool_loop_exhaustion_never_ships_the_tool_payload(monkeypatch):
-    """A turn with no text round returns the neutral line, not the tool output.
+async def test_tool_loop_exhaustion_composes_instead_of_shipping_the_tool_payload(monkeypatch):
+    """A turn with no text round gets one tool-free composition round, not a canned line.
 
     The tool result below is a payload the grounding cross-check cannot reject
     (its ids are in the surfaced set by construction), so the only thing standing
@@ -188,14 +188,42 @@ async def test_tool_loop_exhaustion_never_ships_the_tool_payload(monkeypatch):
     """
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
-    from app.graph.grounding import LANE_UNAVAILABLE_REPLY
 
     tool_output = '{"ACTIVE_JOB_LOOKUP": {"jobs": [{"id": "job-7"}]}}'
 
     async def handler(_name, _args):
         return tool_output
 
-    # Every round is a tool request, so the budget runs out with no answer.
+    # Two tool rounds exhaust the budget; the third scripted entry is the
+    # tool-free composition round the exhaustion path now runs.
+    llm = _ScriptedLLM(
+        [[{"name": "list_active_projects", "args": {}, "id": "c"}]] * 2
+        + ["Dạ hiện em chưa tra được thông tin, anh/chị thử lại sau nhé."]
+    )
+    metrics: dict[str, object] = {}
+
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
+        "bên mình còn tuyển không?",
+        system="sys",
+        retrieval=_FakeRetrieval(handler),
+        embedder=None,
+        metrics=metrics,
+    )
+
+    assert reply == "Dạ hiện em chưa tra được thông tin, anh/chị thử lại sau nhé."
+    assert tool_output not in reply
+    assert metrics["tool_loop_exhausted"] is True
+
+
+async def test_tool_loop_exhaustion_suppresses_when_the_composition_round_is_empty(monkeypatch):
+    """A tool-free composition round that produces nothing suppresses the turn."""
+    pytest.importorskip("langchain_core")
+    from app.graph.clients import MiniMaxAgent
+
+    async def handler(_name, _args):
+        return '{"ACTIVE_JOB_LOOKUP": {"jobs": [{"id": "job-7"}]}}'
+
+    # Every round is a tool request: the composition round has nothing to say.
     llm = _ScriptedLLM([[{"name": "list_active_projects", "args": {}, "id": "c"}]] * 3)
     metrics: dict[str, object] = {}
 
@@ -207,29 +235,22 @@ async def test_tool_loop_exhaustion_never_ships_the_tool_payload(monkeypatch):
         metrics=metrics,
     )
 
-    assert reply == LANE_UNAVAILABLE_REPLY
-    assert tool_output not in reply
+    assert reply == ""
     assert metrics["tool_loop_exhausted"] is True
 
 
-async def test_vacancy_tool_loop_exhaustion_uses_the_vacancy_wording():
-    """A vacancy turn gets its own neutral line, not the generic one.
-
-    ``list_active_jobs`` dispatched on the model's own initiative (no forced
-    authority tool) with a payload grounding cannot validate is the one shape
-    where the exhaustion text is actually the candidate-facing answer.
-    """
+async def test_vacancy_tool_loop_exhaustion_never_ships_the_raw_payload():
+    """``list_active_jobs`` exhaustion composes too; the raw payload never ships."""
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
-    from app.graph.grounding import (
-        LANE_UNAVAILABLE_REPLY,
-        VACANCY_LOOKUP_UNAVAILABLE_REPLY,
-    )
 
     async def handler(_name, _args):
         return "not-json-at-all"
 
-    llm = _ScriptedLLM([[{"name": "list_active_jobs", "args": {}, "id": "c"}]] * 3)
+    llm = _ScriptedLLM(
+        [[{"name": "list_active_jobs", "args": {}, "id": "c"}]] * 2
+        + ["Dạ em chưa kiểm tra được danh sách việc làm, anh/chị thử lại sau ạ."]
+    )
 
     reply = await MiniMaxAgent(llm, embedder=None, max_iters=2).agent(
         "công ty nào đang tuyển?",
@@ -238,6 +259,5 @@ async def test_vacancy_tool_loop_exhaustion_uses_the_vacancy_wording():
         embedder=None,
     )
 
-    assert reply == VACANCY_LOOKUP_UNAVAILABLE_REPLY
-    assert reply != LANE_UNAVAILABLE_REPLY
+    assert reply == "Dạ em chưa kiểm tra được danh sách việc làm, anh/chị thử lại sau ạ."
     assert "not-json-at-all" not in reply

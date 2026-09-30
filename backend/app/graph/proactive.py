@@ -336,26 +336,30 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         await proactive_state.stamp_attempt(conv, _now())
 
         # 6. Single LLM call → JSON decision
+        proactive_agent_kwargs = {
+            "system": system,
+            "retrieval": deps.retrieval,
+            "embedder": deps.embedder,
+        }
         if project_context is not None and project_context.direct_context is not None:
+            # The retired direct lane is folded in: the KB full text rides in
+            # the prompt and no tool is bound (a tool cannot add evidence the
+            # KB already carries). The agent authors the nudge.
             from app.graph.direct_context import build_direct_system
 
-            raw = await deps.agent.direct(
-                proactive_text,
-                system=build_direct_system(project_context.direct_context),
+            proactive_agent_kwargs["system"] = (
+                f"{system}\n\n"
+                "=== KIẾN THỨC DỰ ÁN (toàn văn, nguồn chính thức) ===\n"
+                f"{build_direct_system(project_context.direct_context)}"
             )
-        else:
-            proactive_agent_kwargs = {
-                "system": system,
-                "retrieval": deps.retrieval,
-                "embedder": deps.embedder,
-            }
-            if (
-                project_context is not None
-                and project_context.state == "FOCUSED"
-                and project_context.knowledge_mode == "RAG"
-            ):
-                proactive_agent_kwargs["forced_project_slug"] = project_context.project_slug
-            raw = await deps.agent.agent(proactive_text, **proactive_agent_kwargs)
+            proactive_agent_kwargs["resolved_tool_registry"] = frozenset()
+        elif (
+            project_context is not None
+            and project_context.state == "FOCUSED"
+            and project_context.knowledge_mode == "RAG"
+        ):
+            proactive_agent_kwargs["forced_project_slug"] = project_context.project_slug
+        raw = await deps.agent.agent(proactive_text, **proactive_agent_kwargs)
         decision = parse_proactive_decision(raw)
 
         # 7. Decision gate

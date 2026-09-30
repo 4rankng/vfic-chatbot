@@ -24,6 +24,7 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
@@ -364,29 +365,23 @@ _PHONE_CANDIDATE_RE = re.compile(
     r"(?<![\d])(?:\+?84|0)(?:[\s.\-()]{0,3}\d){8,11}(?!\d)"
 )
 _EMAIL_CANDIDATE_RE = re.compile(r"(?<![\w.\-])[\w.\-+]+@[\w\-]+(?:\.[\w\-]+)+")
-# Replaces the whole reply, not the offending line: an answer built on an
-# invented channel is unusable even after the number is removed.
-UNVERIFIED_CONTACT_REPLY = (
-    "Dạ phần này em chưa có thông tin đã xác minh để gửi anh/chị ạ. "
-    "Anh/chị để lại số điện thoại, em kiểm tra rồi liên hệ hỗ trợ ngay ạ."
-)
+class _UngroundedContact(NamedTuple):
+    """Signal that the reply stated a contact channel the evidence never had.
+
+    Replaces the former canned ``UNVERIFIED_CONTACT_REPLY``: the guard still
+    refuses to ship an invented hotline, but the caller repairs by asking the
+    model to rewrite rather than substituting code-authored prose. A second
+    violation suppresses the turn (empty reply) instead of re-running.
+    """
+
+    channels: tuple[str, ...]
 
 
 # ── Lane-unavailable replies ─────────────────────────────────────────────────
-# The only text the agent lane may return when it has no answer to give. Owned
-# here beside the other reply constants because the alternative — falling back to
-# ``messages[-1].content`` when the tool loop runs out of rounds — ships the raw
-# ToolMessage payload (an ACTIVE_JOB_LOOKUP_JSON dump or a KB chunk) to the
-# candidate: ``ground_reply`` waves it through precisely because the ids inside
-# tool output are by definition in the surfaced set.
-LANE_UNAVAILABLE_REPLY = (
-    "Hiện tôi chưa thể kiểm tra thông tin này. Bạn vui lòng thử lại sau nhé."
-)
-# Vacancy turns have their own wording; the turn path used to carry a private
-# copy of this string that nothing referenced.
-VACANCY_LOOKUP_UNAVAILABLE_REPLY = (
-    "Hiện tôi chưa thể kiểm tra thông tin tuyển dụng. Bạn vui lòng thử lại sau nhé."
-)
+# There is deliberately no code-authored "unavailable" line any more: a turn
+# that cannot compose an answer gets one final tool-free generation round
+# (``clients.MiniMaxAgent._compose_with_instruction``) and suppresses on empty,
+# so no constant here can ever be shipped to a candidate.
 
 
 def _normalize_phone(raw: str) -> str:
@@ -467,7 +462,7 @@ def ground_reply(
     *,
     allowed_text: str = "",
     trace_sink=None,
-) -> str:
+) -> "str | _UngroundedContact":
     """Validate LLM prose against surfaced evidence without replacing it.
 
     Structured job payloads inform the model but never become a separately
@@ -477,8 +472,9 @@ def ground_reply(
     ``allowed_text`` is the prompt text the model worked from (system prompt +
     the candidate's message). Callers that pass it also arm the contact-channel
     guard: a phone number or e-mail the reply states without support in the tool
-    results or that prompt text is an invention and the reply is replaced by
-    :data:`UNVERIFIED_CONTACT_REPLY`.
+    results or that prompt text is an invention, and this function returns
+    :class:`_UngroundedContact` naming the offending channels so the caller can
+    ask the model to rewrite (never a code-authored replacement).
     """
     for tool_result in reversed(tool_results or []):
         first_line = str(tool_result).partition("\n")[0]
@@ -515,7 +511,7 @@ def ground_reply(
                 logger.warning(
                     "grounding_contact_unverified: %s channel(s)", len(unverified)
                 )
-                return UNVERIFIED_CONTACT_REPLY
+                return _UngroundedContact(channels=tuple(sorted(unverified)))
         if trace_sink is not None:
             trace_sink.record_decision(
                 "grounding_verdict", "sanitized" if sanitized else "grounded"

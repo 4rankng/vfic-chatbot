@@ -66,12 +66,3 @@ class AgentModel(Protocol):
         on_evidence: Callable[[list[str]], Awaitable[None]] | None = None,
         trace_sink: DecisionTraceSink | None = None,
     ) -> str: ...
-
-    async def direct(
-        self,
-        user_text: str,
-        *,
-        system: str,
-        metrics: dict | None = None,
-        trace_sink: DecisionTraceSink | None = None,
-    ) -> str: ...

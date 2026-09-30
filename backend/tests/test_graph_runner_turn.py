@@ -441,7 +441,7 @@ async def test_messenger_turn_persists_messenger_outbox_route(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_project_detail_turn_uses_direct_context_llm():
+async def test_project_detail_turn_folds_direct_context_into_the_agent():
     class _DirectReader:
         async def active_context(self):
             return DirectContext(
@@ -453,12 +453,15 @@ async def test_project_detail_turn_uses_direct_context_llm():
                     "xuất tại Khu công nghiệp Tràng Duệ, An Dương, Hải Phòng."
                 ))
 
+    captured: dict[str, object] = {}
+
     class _DirectAgent:
         calls = 0
 
-        async def direct(self, user_text, *, system, metrics=None):
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
             self.calls += 1
-            assert "KIẾN THỨC ĐƯỢC CUNG CẤP TOÀN VĂN" in system
+            captured["system"] = kwargs.get("system", "")
+            captured["resolved_tool_registry"] = kwargs.get("resolved_tool_registry")
             return "LG Display Hải Phòng tuyển công nhân thời vụ."
 
     conv = _FakeConv()
@@ -476,9 +479,15 @@ async def test_project_detail_turn_uses_direct_context_llm():
             user_text="Công việc ở LG Display làm gì?"),
         deps)
 
-    assert result["outcome"] == "direct_context"
-    assert result["reply"] == "LG Display Hải Phòng tuyển công nhân thời vụ."
+    assert result == {
+        "outcome": "sent",
+        "reply": "LG Display Hải Phòng tuyển công nhân thời vụ.",
+    }
     assert direct_agent.calls == 1
+    # The retired direct lane rides inside the agent lane now: the KB full text
+    # is in the prompt and no tools are bound (a tool cannot add evidence).
+    assert "KIẾN THỨC DỰ ÁN (toàn văn, nguồn chính thức)" in captured["system"]
+    assert captured["resolved_tool_registry"] == frozenset()
 
 
 @pytest.mark.asyncio
@@ -491,7 +500,7 @@ async def test_direct_context_strips_minimax_reasoning_before_delivery():
                 knowledge_text="Rorze đang tuyển nhân viên lắp ráp và vận hành máy CNC.")
 
     class _DirectAgent:
-        async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
             return (
                 '<think>\nThe user is asking "co viec o rorze ko".\n</think>\n\n'
                 "Có bạn nhé! VFIC đang tuyển 2 vị trí tại Rorze."
@@ -514,7 +523,7 @@ async def test_direct_context_strips_minimax_reasoning_before_delivery():
     # The boundary drops the provider thinking block but does not strip the
     # whitespace that followed it — the answer ships as generated.
     visible_reply = "\n\nCó bạn nhé! VFIC đang tuyển 2 vị trí tại Rorze."
-    assert result == {"outcome": "direct_context", "reply": visible_reply}
+    assert result == {"outcome": "sent", "reply": visible_reply}
     assert zalo.sent == [("z1", visible_reply)]
     assert recorded[-1]["reply"] == visible_reply
 
@@ -529,7 +538,7 @@ async def test_direct_context_malformed_think_never_reaches_delivery():
                 knowledge_text="Rorze đang tuyển nhân viên lắp ráp.")
 
     class _DirectAgent:
-        async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
             return "<think\ninternal reasoning from a truncated provider response"
 
     conv = _FakeConv()
@@ -554,7 +563,7 @@ async def test_direct_context_malformed_think_never_reaches_delivery():
 
 
 @pytest.mark.asyncio
-async def test_converged_content_boundary_strips_reasoning_from_curated_lane():
+async def test_project_clarification_is_an_agent_instruction_not_a_canned_reply():
     class _ProjectReader:
         async def resolve(self, conv, user_text):  # noqa: ARG002
             return ProjectTurnContext(
@@ -562,12 +571,21 @@ async def test_converged_content_boundary_strips_reasoning_from_curated_lane():
                 clarification=(
                     "<think>internal routing note</think>"
                     "**Bạn muốn hỏi Rorze hay LG Display?**"
-                ))
+                ),
+                clarification_projects=("Rorze", "LG Display"))
+
+    captured: dict[str, object] = {}
+
+    class _Agent:
+        async def agent(self, user_text, **kwargs):
+            captured["user_text"] = user_text
+            return "**Bạn muốn hỏi Rorze hay LG Display?**"
 
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv)
     zalo = _FakeZalo()
     deps = _deps(zalo, conversation=svc)
+    deps.agent = _Agent()
     deps.direct_context = _ProjectReader()
 
     result = await run_turn(
@@ -578,9 +596,13 @@ async def test_converged_content_boundary_strips_reasoning_from_curated_lane():
         deps)
 
     visible_reply = "**Bạn muốn hỏi Rorze hay LG Display?**"
-    assert result == {"outcome": "project_clarification", "reply": visible_reply}
+    assert result == {"outcome": "sent", "reply": visible_reply}
     assert zalo.sent == [("z1", visible_reply)]
     assert recorded[-1]["reply"] == visible_reply
+    # The retired clarification lane's string is now a mandatory instruction
+    # carried by the route hint; the agent authors the question.
+    assert "PHẢI hỏi lại ứng viên muốn hỏi dự án nào" in captured["user_text"]
+    assert "Rorze, LG Display" in captured["user_text"]
 
 
 @pytest.mark.asyncio
@@ -638,7 +660,7 @@ async def test_terse_vacancy_followup_reaches_contextual_direct_llm():
     class _DirectAgent:
         calls = 0
 
-        async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
             self.calls += 1
             assert "ó viedjc gì" in user_text
             return "LG Display đang tuyển công nhân thời vụ bạn nhé."
@@ -657,7 +679,7 @@ async def test_terse_vacancy_followup_reaches_contextual_direct_llm():
         deps)
 
     assert result == {
-        "outcome": "direct_context",
+        "outcome": "sent",
         "reply": "LG Display đang tuyển công nhân thời vụ bạn nhé.",
     }
     assert direct_agent.calls == 1
@@ -681,7 +703,7 @@ async def test_vacancy_salary_followup_reaches_contextual_direct_llm():
     class _DirectAgent:
         calls = 0
 
-        async def direct(self, user_text, *, system, metrics=None):  # noqa: ARG002
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
             self.calls += 1
             assert "luong bao nhieu da" in user_text
             return "Lương cơ bản 6.030.000 VNĐ/tháng; thu nhập 10-13 triệu VNĐ/tháng."
@@ -705,7 +727,7 @@ async def test_vacancy_salary_followup_reaches_contextual_direct_llm():
             user_text="luong bao nhieu da"),
         deps)
 
-    assert result["outcome"] == "direct_context"
+    assert result["outcome"] == "sent"
     assert "6.030.000 VNĐ/tháng" in result["reply"]
     assert "10-13 triệu VNĐ/tháng" in result["reply"]
     assert direct_agent.calls == 1
@@ -2225,39 +2247,42 @@ async def test_a_recruitment_question_on_the_support_oa_points_at_the_hotline():
     assert escalations == []  # nothing is queued — the hotline is the handoff
 
 
-def test_the_recruitment_handoff_reply_sends_the_candidate_to_the_hotline():
-    """Operator rule (2026-09-29): the recruitment escalation points candidates
-    at the VFIC hotline 18007228. The TingTing support OA has its own number
-    (same day's OA ruling — no human works that OA), so the two replies must
-    never drift together: neither channel may inherit the other's escalation
-    copy. The TingTing digits here pin the BUILDER's formatting with the seed
-    value as input — the authoritative pin on the number itself lives at the
-    Alembic 0058 seed (settings-suite test).
+def test_the_recruitment_handoff_points_at_the_fixed_facts_hotline():
+    """Operator rule (2026-09-29): the off-scope refusal points candidates at the
+    VFIC hotline. The number is no longer a code-authored reply — it lives in the
+    system prompt's SỰ THẬT CỐ ĐỊNH block, and the router instruction tells the
+    model to offer exactly that number. The TingTing support OA has its own
+    number (same day's OA ruling), so the two must never drift together.
     """
-    from app.graph.lanes import OUT_OF_SCOPE_HANDOFF_REPLY
+    from app.graph import context
+    from app.graph.router import TurnRoute, routing_instruction
 
-    assert "18007228" in OUT_OF_SCOPE_HANDOFF_REPLY
+    instruction = routing_instruction(
+        TurnRoute("out_of_scope", "safe_redirect", reason="off_domain_terms")
+    )
+    assert "SỰ THẬT CỐ ĐỊNH" in instruction
+    assert "1800 7228" in context._RUNTIME_RETRIEVAL_RULES
     assert "914827988" in TINGTING_HOTLINE_REPLY.replace(" ", "")
-    assert OUT_OF_SCOPE_HANDOFF_REPLY != TINGTING_HOTLINE_REPLY
-    assert not OUT_OF_SCOPE_HANDOFF_REPLY.endswith(TINGTING_HOTLINE_REPLY)
 
 
 @pytest.mark.asyncio
-async def test_a_confident_off_domain_turn_replies_with_the_hotline_and_skips_the_model():
-    """An out-of-scope question gets the hotline reply, never a generated answer.
+async def test_a_confident_off_domain_turn_is_answered_by_the_model_with_the_hotline_instruction():
+    """An out-of-scope question is refused by the model, not by a canned line.
 
-    The hotline IS the handoff (operator rule 2026-09-29): no phone-number
-    interlude, no human queue write, no model call.
+    Operator rule (2026-09-29): the hotline IS the handoff — no phone-number
+    interlude, no human queue write. The number rides as an instruction (the
+    fixed-facts block plus the route hint); the agent authors the refusal.
     """
-    from app.graph.runner import OUT_OF_SCOPE_HANDOFF_REPLY, _agent_turn
+    from app.graph.runner import _agent_turn
 
     captured: dict[str, object] = {}
     escalations: list[dict] = []
 
     class _FakeAgent:
         async def agent(self, user_text, **kwargs):
-            captured.update(kwargs)
-            return "should not run"
+            captured["user_text"] = user_text
+            captured["system"] = kwargs.get("system", "")
+            return "Dạ phần này em chưa hỗ trợ được. Anh/chị gọi hotline 1800 7228 nhé ạ."
 
     class _Conversations:
         async def get(self, _conversation_id):
@@ -2281,9 +2306,10 @@ async def test_a_confident_off_domain_turn_replies_with_the_hotline_and_skips_th
         decisions=TurnDecisions(intent="out_of_scope", intent_confidence=0.9),
     )
 
-    assert reply == OUT_OF_SCOPE_HANDOFF_REPLY
-    assert "18007228" in reply
-    assert captured == {}  # no generation at all
+    assert reply == "Dạ phần này em chưa hỗ trợ được. Anh/chị gọi hotline 1800 7228 nhé ạ."
+    assert captured != {}  # the model ran
+    assert "1800 7228" in captured["system"]
+    assert "SỰ THẬT CỐ ĐỊNH" in captured["user_text"]
     assert escalations == []  # the hotline is the handoff — nobody is queued
 
 
@@ -2295,7 +2321,7 @@ async def test_a_barely_confident_off_domain_reading_is_still_answered_by_the_mo
     reading is the expensive error, so the floor guards the start of the flow.
     """
     from app.graph.router import TurnRoute
-    from app.graph.runner import OUT_OF_SCOPE_HANDOFF_REPLY, _agent_turn
+    from app.graph.runner import _agent_turn
 
     async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
         return "fake system prompt", True
@@ -2338,7 +2364,6 @@ async def test_a_barely_confident_off_domain_reading_is_still_answered_by_the_mo
         monkeypatch.undo()
 
     assert "tuyển công nhân" in reply
-    assert reply != OUT_OF_SCOPE_HANDOFF_REPLY
 
 
 @pytest.mark.asyncio
@@ -2597,12 +2622,13 @@ def test_tingting_support_account_identity_is_pin_free():
 
 @pytest.mark.asyncio
 async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch):
-    """Pin-unset TingTing turns skip project_clarification and direct-context.
+    """Pin-unset TingTing turns never carry recruitment clarification/direct context.
 
-    Both curated lanes answer from project knowledge, so the identity flag gates
-    them the same way it gates the prompt branch: the support OA falls through to
-    the agent lane, and a recruitment-OA control proves the flag is what rerouted
-    the turn.
+    The agent now authors every reply, so both curated lanes became agent inputs
+    (a mandatory instruction; a folded direct-context block). The identity flag
+    gates them the same way it gates the prompt branch: the support OA gets an
+    empty mandatory instruction, and a recruitment-OA control proves the flag is
+    what withheld it.
     """
     from app.graph.lanes import _resolve_lane
 
@@ -2635,14 +2661,6 @@ async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch)
             self.kwargs = kwargs
             return "ok"
 
-    direct_calls: list[object] = []
-
-    async def _stub_direct_turn(context, *args, **kwargs):  # noqa: ARG001, ARG002
-        direct_calls.append(context)
-        return "direct answer"
-
-    monkeypatch.setattr(lanes, "_direct_context_turn", _stub_direct_turn)
-
     async def _run(conv, project_context):
         agent = _LaneAgent()
         trace = _Trace()
@@ -2673,30 +2691,31 @@ async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch)
     resolution, agent, trace = await _run(tingting_conv, clarification_ctx)
     assert resolution.lane == "agent"
     assert agent.kwargs["tingting_support_account"] is True
-    assert ("lane_selected", "project_clarification") not in trace.decisions
+    assert agent.kwargs["mandatory_instruction"] == ""
 
-    # Control: the same context on the recruitment OA still clarifies.
-    control, _, _ = await _run(recruit_conv, clarification_ctx)
-    assert control.lane == "project_clarification"
-    assert control.candidate == "Anh muốn tìm hiểu lương dự án nào ạ?"
+    # Control: the same context on the recruitment OA still asks the question.
+    control, agent, _ = await _run(recruit_conv, clarification_ctx)
+    assert control.lane == "agent"
+    assert "PHẢI hỏi lại ứng viên muốn hỏi dự án nào" in agent.kwargs["mandatory_instruction"]
 
-    # A direct-context hit on the support OA must not leak project KB text.
+    # A direct-context hit on the support OA must not leak project KB text; the
+    # direct-context block is folded inside ``_agent_turn``, gated the same way.
     direct_ctx = SimpleNamespace(
         clarification=None,
         direct_context=SimpleNamespace(knowledge_base_id=7),
         state="EXPLORE",
         knowledge_mode="DIRECT_CONTEXT",
     )
-    resolution, agent, trace = await _run(tingting_conv, direct_ctx)
+    resolution, agent, _ = await _run(tingting_conv, direct_ctx)
     assert resolution.lane == "agent"
     assert agent.kwargs["tingting_support_account"] is True
-    assert ("lane_selected", "direct_context") not in trace.decisions
-    assert direct_calls == []
+    assert agent.kwargs["mandatory_instruction"] == ""
 
-    # Control: the recruitment OA still takes the direct-context lane.
-    control, _, _ = await _run(recruit_conv, direct_ctx)
-    assert control.lane == "direct_context"
-    assert control.candidate == "direct answer"
+    # Control: the recruitment OA keeps the agent lane with no withheld flag.
+    control, agent, _ = await _run(recruit_conv, direct_ctx)
+    assert control.lane == "agent"
+    assert agent.kwargs["tingting_support_account"] is False
+    assert agent.kwargs["mandatory_instruction"] == ""
 
 
 @pytest.mark.asyncio

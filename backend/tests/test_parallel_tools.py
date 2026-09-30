@@ -496,7 +496,12 @@ async def test_compare_income_prefetches_required_threshold_evidence(monkeypatch
         )
 
     monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
-    llm = _ScriptedLLM(["Rorze có dòng thu nhập bình quân năm chia 12 đạt mốc 20 triệu."])
+    llm = _ScriptedLLM(
+        [
+            "Rorze có thu nhập 14-15 triệu/tháng chưa gồm thưởng; "
+            "20-21 triệu/tháng bình quân năm gồm thưởng."
+        ]
+    )
     agent = MiniMaxAgent(llm, embedder=None, max_iters=3)
     metrics: dict = {}
 
@@ -515,7 +520,9 @@ async def test_compare_income_prefetches_required_threshold_evidence(monkeypatch
     assert "14-15 triệu/tháng chưa gồm thưởng" in reply
     assert "20-21 triệu/tháng bình quân năm gồm thưởng" in reply
     assert dispatched == [("compare_income", {"target_monthly_vnd": 20_000_000})]
-    assert llm.calls == 0
+    # The verified render is handed to the model as evidence; the agent authors
+    # the reply in one composition round (no tools bound).
+    assert llm.calls == 1
     assert llm.bind_calls == 0
     assert metrics["prefetch_hit"] is True
 
@@ -545,7 +552,7 @@ async def test_compare_income_valid_model_retry_returns_deterministic_evidence(m
 
     monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
     llm = _ScriptedLLM(
-        [[{"name": "compare_income", "args": {}, "id": "compare-retry"}]]
+        [[{"name": "compare_income", "args": {}, "id": "compare-retry"}], safe_reply]
     )
 
     reply = await MiniMaxAgent(llm, embedder=None, max_iters=3).agent(
@@ -561,7 +568,8 @@ async def test_compare_income_valid_model_retry_returns_deterministic_evidence(m
 
     assert reply == safe_reply
     assert calls == 2
-    assert llm.calls == 1
+    # Round 1 dispatches the required tool; round 2 is the tool-free composition.
+    assert llm.calls == 2
 
 
 async def test_faq_detail_focused_prefetches_both_knowledge_and_product_features(monkeypatch):

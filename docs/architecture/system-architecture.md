@@ -371,19 +371,16 @@ sequenceDiagram
     end
 
     rect rgb(230, 245, 235)
-    Note over WK: ── no-LLM fast path (zero model calls) ──
-    alt template fast lane (greetings/thanks/help)
-        WK->>WK: fast_lane.match(text) → canned reply
-    else FAQ semantic bypass (Redis-cached embeddings)
-        WK->>WK: faq_bypass.try_answer(text) → canonical KB answer
-    else fall through to agent
+    Note over WK: ── no canned reply lanes: the agent authors every reply ──
+    Note over WK: fast_lane / faq_bypass retired — the only code-authored text<br/>is the two TingTing verbatim strings in _agent_turn
+    alt fall through to agent (every turn)
         WK->>WK: build_system_prompt (persona + active recruitment knowledge projects)
         WK->>WK: route_turn → 8 intents, deterministic (no LLM)
         WK->>DB: lead.context(chat_id) → profile + probing question
         WK->>WK: build_agent_user_text (private history + lead + route hint)
         Note over WK,ZS: prefetch tool for high-confidence routes<br/>(search_knowledge / search_bus_timetable)
         WK->>WK: agent.agent() LLM loop (max 6 iterations)<br/>Redis concurrency semaphore,<br/>tool dispatch = WHERE RAG RETRIEVAL HAPPENS<br/>(search_knowledge, recommend_jobs, get_product_features...)
-        WK->>WK: grounding.validate_entity_grounding + id strip — remove hallucinated job IDs and unsupported entity claims
+        WK->>WK: grounding.validate_entity_grounding + id strip — remove hallucinated job IDs and unsupported entity claims<br/>+ contact guard → one model rewrite round, else suppress
     end
     end
 
@@ -1173,5 +1170,7 @@ deployment-wide integration. See ADR-0012 (which supersedes ADR-0011 for this fl
   re-routes to `employee_support` with reason `employee_support_continuation`, so "sao rồi" keeps
   the tools and answers with the current step.
 - **Contact honesty:** a reply that states a phone number or e-mail absent from the turn's tool
-  results and prompt text is replaced by `grounding.UNVERIFIED_CONTACT_REPLY`, so a refusal can
-  never route a candidate to an invented hotline.
+  results and prompt text never ships as-is: the agent is told which channels were invented and
+  asked to rewrite without them, and a second violation suppresses the turn (empty reply) instead
+  of substituting a code-authored line — so a refusal can never route a candidate to an invented
+  hotline, and the model stays the single author of every reply.

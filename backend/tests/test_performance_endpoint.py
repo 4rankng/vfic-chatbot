@@ -186,7 +186,7 @@ def _standard_routes() -> list[tuple[str, _FakeResult]]:
             _FakeResult(
                 all_rows=[
                     SimpleNamespace(lane="agent", outcome="SENT", n=5),
-                    SimpleNamespace(lane="fast_lane", outcome="SENT", n=3),
+                    SimpleNamespace(lane="agent", outcome="SENT", n=3),
                 ]
             ),
         ),
@@ -298,7 +298,7 @@ async def test_performance_bundle_shape(monkeypatch):
     assert out["percentiles"]["llm_call_per"] == {"p50": 4000, "p95": 7000, "p99": 9000}
     assert out["percentiles"]["llm_calls_per"] == {"p50": 1, "p95": 2, "p99": 3}
     # counts aggregated by lane and by outcome
-    assert out["by_lane"] == {"agent": 5, "fast_lane": 3}
+    assert out["by_lane"] == {"agent": 8}
     assert out["by_outcome"] == {"SENT": 8}
     assert out["by_adapter"] == [
         {

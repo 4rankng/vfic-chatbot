@@ -279,9 +279,6 @@ async def test_non_recruitment_manifest_without_knowledge_authority_fails_closed
 
         async def agent(self, *_args, **_kwargs):
             self.calls += 1
-            return "unsupported vacancy claim"
-
-        async def direct(self, *_args, **_kwargs):
             return "Chưa thể kiểm tra thông tin tuyển dụng."
 
     agent = _Agent()
@@ -303,8 +300,8 @@ async def test_non_recruitment_manifest_without_knowledge_authority_fails_closed
         decisions=TurnDecisions(intent="recommend", intent_confidence=0.94, vacancy_listing=True),
     )
 
-    assert "chưa thể kiểm tra" in reply.lower()
-    assert agent.calls == 0
+    assert reply == "Chưa thể kiểm tra thông tin tuyển dụng."
+    assert agent.calls == 1  # the agent authors the reply; no canned line
 
 
 async def test_manifest_without_job_catalog_authority_fails_closed_for_generic_listing():
@@ -319,9 +316,6 @@ async def test_manifest_without_job_catalog_authority_fails_closed_for_generic_l
 
         async def agent(self, *_args, **_kwargs):
             self.calls += 1
-            return "unsupported catalog claim"
-
-        async def direct(self, *_args, **_kwargs):
             return "Chưa thể kiểm tra thông tin tuyển dụng."
 
     agent = _Agent()
@@ -343,8 +337,8 @@ async def test_manifest_without_job_catalog_authority_fails_closed_for_generic_l
         decisions=TurnDecisions(intent="recommend", intent_confidence=0.94, vacancy_listing=True),
     )
 
-    assert "chưa thể kiểm tra" in reply.lower()
-    assert agent.calls == 0
+    assert reply == "Chưa thể kiểm tra thông tin tuyển dụng."
+    assert agent.calls == 1  # the agent authors the reply; no canned line
 
 
 async def test_non_recruitment_manifest_preserves_generic_catalog_authority():

@@ -43,7 +43,7 @@ def seed_performance_metrics(runs: list[BotRun], messages: list[Message]) -> Non
         else:
             started_at = NOW - timedelta(hours=1, minutes=(index - 15) * 90)
 
-        lane = "fast_lane" if index % 9 == 0 else "faq_bypass" if index % 11 == 0 else "agent"
+        lane = "agent"
         is_critical = index % 17 == 0
         is_warning = not is_critical and index % 7 == 0
         retried_429 = index % 13 == 0
@@ -57,28 +57,15 @@ def seed_performance_metrics(runs: list[BotRun], messages: list[Message]) -> Non
         send_ms = 620 if is_warning else 250 + (index % 4) * 35
         tool_ms = 1_900 if is_critical else 420 if is_warning else 90 + (index % 4) * 35
 
-        if lane == "fast_lane":
-            llm_queue_ms = 0
-            llm_model_ms = 0
-            llm_calls = 0
-            total_ms = 900 + (index % 4) * 120
-            intent = "greeting"
-        elif lane == "faq_bypass":
-            llm_queue_ms = 0
-            llm_model_ms = 0
-            llm_calls = 0
-            total_ms = 1_700 + (index % 4) * 180
-            intent = "faq_detail"
-        else:
-            llm_queue_ms = 1_100 if is_critical else 180 if retried_429 else index % 4 * 30
-            llm_model_ms = (
-                15_800 if is_critical else 10_800 if is_warning else 6_800 + (index % 6) * 420
-            )
-            llm_calls = 2 if is_critical else 1
-            total_ms = (
-                llm_model_ms + llm_queue_ms + lead_ms + system_prompt_ms + db_ms + send_ms + tool_ms
-            )
-            intent = "profile_update" if index % 5 == 0 else "general"
+        llm_queue_ms = 1_100 if is_critical else 180 if retried_429 else index % 4 * 30
+        llm_model_ms = (
+            15_800 if is_critical else 10_800 if is_warning else 6_800 + (index % 6) * 420
+        )
+        llm_calls = 2 if is_critical else 1
+        total_ms = (
+            llm_model_ms + llm_queue_ms + lead_ms + system_prompt_ms + db_ms + send_ms + tool_ms
+        )
+        intent = "profile_update" if index % 5 == 0 else "general"
 
         end_to_end_ms = total_ms + preamble_ms + webhook_to_pickup_ms
         timings = {
@@ -101,20 +88,16 @@ def seed_performance_metrics(runs: list[BotRun], messages: list[Message]) -> Non
             "intent": intent,
             "llm_calls": llm_calls,
             "llm_call_ms": [llm_model_ms] * llm_calls,
-            "tool_calls": 1 if lane == "agent" else 0,
-            "prompt_tokens": 12_000 + index * 110 if lane == "agent" else 0,
-            "completion_tokens": 600 + (index % 6) * 80 if lane == "agent" else 0,
-            "cached_tokens": 4_000 if index % 3 == 0 and lane == "agent" else 0,
+            "tool_calls": 1,
+            "prompt_tokens": 12_000 + index * 110,
+            "completion_tokens": 600 + (index % 6) * 80,
+            "cached_tokens": 4_000 if index % 3 == 0 else 0,
             "retried_429": retried_429,
             "degraded": is_critical,
             "queue_depth": queue_depth,
-            "model_tier": "primary" if lane == "agent" else None,
-            "system_prompt_cache_hit": index % 3 == 0 if lane == "agent" else None,
+            "model_tier": "primary",
+            "system_prompt_cache_hit": index % 3 == 0,
         }
-        if lane == "agent":
-            timings["llm_model_ms"] = llm_model_ms
-        if lane == "faq_bypass":
-            timings["faq_bypass_ms"] = total_ms - db_ms - send_ms
 
         run.started_at = started_at
         run.ended_at = started_at + timedelta(milliseconds=end_to_end_ms)

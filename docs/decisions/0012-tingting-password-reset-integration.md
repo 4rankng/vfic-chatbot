@@ -58,8 +58,11 @@ reset) is identical for all of them.
    refusal while the guide is present), and the agent lane keeps the API tool
    bound even on a focused RAG turn.
 7. Fabricated contact channels are now guarded: a reply stating a phone number
-   or e-mail absent from the turn's tool results and prompt text is replaced by
-   an honest abstention (`grounding.UNVERIFIED_CONTACT_REPLY`).
+   or e-mail absent from the turn's tool results and prompt text is handed back
+   to the model for one rewrite without those channels, and a second violation
+   suppresses the turn rather than routing a candidate to an invented hotline
+   (superseded the canned `grounding.UNVERIFIED_CONTACT_REPLY` replacement when
+   the LLM became the single author of every reply).
 
 8. **The reset flow is step tools with server-side state, not raw endpoints.** The
    first cut let the model drive `call_tingting_api` for all four endpoints, which

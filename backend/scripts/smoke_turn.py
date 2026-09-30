@@ -136,9 +136,6 @@ class _StubAgent:
     async def agent(self, _user_text: str, **_kwargs: object) -> str:
         return SMOKE_REPLY
 
-    async def direct(self, _user_text: str, **_kwargs: object) -> str:
-        return SMOKE_REPLY
-
 
 class _StubStreamingAgent:
     """Streams the canned answer through ``on_delta`` before returning it.
@@ -162,9 +159,6 @@ class _StubStreamingAgent:
             if on_delta is not None:
                 await on_delta(part)
             await asyncio.sleep(0)
-        return SMOKE_STREAM_REPLY
-
-    async def direct(self, _user_text: str, **_kwargs: object) -> str:
         return SMOKE_STREAM_REPLY
 
 
@@ -194,9 +188,6 @@ class _StubFailingStreamingAgent:
             await on_delta(SMOKE_STREAM_REPLY)
         await asyncio.wait_for(self.wire_ack.wait(), timeout=WIRE_ACK_TIMEOUT_SECONDS)
         raise RuntimeError("smoke probe: the agent lane failed after the early bubble was sent")
-
-    async def direct(self, _user_text: str, **_kwargs: object) -> str:
-        raise RuntimeError("smoke probe: the agent lane failed before any bubble")
 
 
 class _StubZalo:

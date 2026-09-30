@@ -246,6 +246,7 @@ class _DirectContextAdapter:
             return ProjectTurnContext(
                 state="EXPLORE",
                 clarification=f"Bạn đang muốn hỏi dự án nào: {names}?",
+                clarification_projects=tuple(entry.name for entry in matches),
             )
 
         selected = matches[0] if matches else None

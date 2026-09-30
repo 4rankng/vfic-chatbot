@@ -1,12 +1,11 @@
-"""Answer lanes: clarification → direct context → agent, and the route
-arguments each of them needs.
+"""Answer lanes: the agent lane and the route arguments it needs.
 
-``_resolve_lane`` picks the lane, runs it, and converts the agent lane's crash
-into a stand-down through the authority gate (the only lane that can fail).
-Everything a lane needs to build its prompt — the tool allowlist, the forced
+``_resolve_lane`` runs the agent lane and converts its crash into a stand-down
+through the authority gate (the only lane that can fail). Everything a lane
+needs to build its prompt — the tool allowlist, the forced
 ``required_tool_args`` for vacancy listing and income comparison, the ground
-evidence query — lives here rather than in the turn entrypoint, so a routing
-change is a change to this module only.
+evidence query, the mandatory per-turn instruction — lives here rather than in
+the turn entrypoint, so a routing change is a change to this module only.
 
 ``_agent_turn`` is injected into ``_resolve_lane`` by ``run_turn``: the
 composition point stays in ``runner.py`` and this module keeps no back-reference
@@ -24,7 +23,6 @@ from app.graph.authority import _authority_gate
 from app.graph.decision_trace import DecisionTraceBuilder
 from app.graph.direct_context import (
     build_direct_system,
-    build_direct_user_text,
 )
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.ports import TurnDecisions
@@ -65,19 +63,11 @@ _INCOME_COMPARE_HINT = (
 # no human works this OA, so nothing here queues one — every would-be
 # escalation returns the fixed hotline reply instead (tingting_guide.py). The
 # reply is the whole handoff; there is no queue write to keep honest.
-
-# Off the support OA, a question outside the bot's scope does not get a
-# generated "let me steer you back to jobs" answer. Operator rule (2026-09-29):
-# the candidate is pointed at the VFIC hotline and nothing else — no
-# phone-number interlude, no human queue write; the hotline IS the handoff.
-# The reply is code, not model output. It deliberately does NOT end with
-# the support reply (tingting_hotline_reply): the support OA has its own
-# number and its own copy, and this channel must never look like an
-# escalation to it.
-OUT_OF_SCOPE_HANDOFF_REPLY = (
-    "Dạ phần này em chưa hỗ trợ được ngay ạ. Anh/chị vui lòng gọi hotline "
-    "18007228 để chuyên viên tư vấn hỗ trợ mình nhé ạ."
-)
+#
+# This and the support-OA hotline reply in ``_agent_turn`` are the ONLY two
+# candidate-facing code-authored replies in the turn path (operator-approved
+# verbatim strings, 2026-09-29). Every other reply is authored by the LLM agent;
+# an off-scope turn is refused by the model under the routing instruction.
 
 
 # The legacy keyword volatile-markers list and the recent-vacancy body scan
@@ -329,6 +319,41 @@ async def _tingting_addressing(state: BotRunState, deps: GraphDeps) -> str:
         return ""
 
 
+async def _compose_reply_without_tools(
+    deps: GraphDeps,
+    user_text: str,
+    *,
+    system: str,
+    metrics: dict | None,
+    trace_sink=None,
+) -> str:
+    """One tool-free agent round the model authors; ``""`` suppresses the turn.
+
+    Replaces the removed ``AgentModel.direct`` seam: the agent lane is the only
+    model entrypoint, so a route that cannot reach its authority tool asks the
+    model for an honest answer with no tools bound rather than shipping a
+    code-authored line. An empty generation suppresses instead of inventing one.
+    """
+    reply = await deps.agent.agent(
+        user_text,
+        **_with_optional_trace(
+            deps.agent.agent,
+            {
+                "system": system,
+                "retrieval": deps.retrieval,
+                "embedder": deps.embedder,
+                "allowed_tools": None,
+                # Empty registry: ``filter_tool_schemas`` then returns no tools,
+                # so this round cannot re-enter a tool loop.
+                "resolved_tool_registry": frozenset(),
+                "metrics": metrics,
+            },
+            trace_sink,
+        ),
+    )
+    return reply or ""
+
+
 async def _agent_turn(
     state: BotRunState,
     deps: GraphDeps,
@@ -346,6 +371,7 @@ async def _agent_turn(
     lead_row: dict | None = None,
     tingting_reset_allowed: bool = False,
     tingting_support_account: bool = False,
+    mandatory_instruction: str = "",
     on_delta=None,
     on_evidence=None,
 ) -> str:
@@ -383,15 +409,6 @@ async def _agent_turn(
             if trace_sink is not None:
                 trace_sink.record_decision("tingting_scope", "support_only_hotline")
             return tingting_hotline_reply(await _tingting_hotline(deps))
-    if not tingting_reset_allowed:
-        # This channel is not the support OA, so the OA branch above never
-        # claimed the turn. A confident off-scope question gets no generated
-        # answer at all: the fixed hotline reply is the whole handoff
-        # (operator rule 2026-09-29 — no human queue write; the hotline is
-        # the escalation path). Below the confidence floor the reading is
-        # "cannot tell", and a wrong handoff costs more than a normal answer.
-        if route.intent == "out_of_scope" and route.confidence >= ROUTE_CONFIDENCE_FLOOR:
-            return OUT_OF_SCOPE_HANDOFF_REPLY
     focused_project = bool(
         project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
     )
@@ -435,20 +452,16 @@ async def _agent_turn(
         if required_authority_tool is not None and not manifest_policy.tool_registry.allows(
             required_authority_tool
         ):
-            return await deps.agent.direct(
+            return await _compose_reply_without_tools(
+                deps,
                 user_text,
-                **_with_optional_trace(
-                    deps.agent.direct,
-                    {
-                        "system": (
+                system=(
                     "Bạn là tư vấn viên tuyển dụng. Công cụ dữ liệu cần thiết hiện không khả dụng. "
                     "Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể kiểm tra thông tin, không "
                     "khẳng định có việc và không bịa dữ liệu."
-                        ),
-                        "metrics": timings,
-                    },
-                    trace_sink,
                 ),
+                metrics=timings,
+                trace_sink=trace_sink,
             )
         composed = await run_manifest_composed_agent(
             user_text,
@@ -472,23 +485,11 @@ async def _agent_turn(
         if composed is not None:
             return composed
         # The manifest policy deactivated mid-turn (the resolve bailed) — a race,
-        # not a normal path. Degrade exactly like the other authority-gates
-        # instead of returning a None reply the runner cannot render.
-        return await deps.agent.direct(
-            user_text,
-            **_with_optional_trace(
-                deps.agent.direct,
-                {
-                    "system": (
-                        "Bạn là tư vấn viên tuyển dụng. Hệ thống đang bảo trì quyền truy cập dữ liệu. "
-                        "Hãy trả lời tự nhiên bằng tiếng Việt rằng tạm chưa tra cứu được thông tin, "
-                        "không khẳng định có việc và không bịa dữ liệu."
-                    ),
-                    "metrics": timings,
-                },
-                trace_sink,
-            ),
-        )
+        # not a normal path. Suppress: there is no agent-composed reply to send
+        # and the turn must never fall back to a code-authored line.
+        if trace_sink is not None:
+            trace_sink.record_decision("degradation_reason", "manifest_deactivated_mid_turn")
+        return ""
 
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
@@ -549,6 +550,29 @@ async def _agent_turn(
                 "để gợi ý một nhóm nhỏ phù hợp; không tải kiến thức chi tiết của mọi dự án."
             )
 
+    # The retired direct-context lane is folded into this agent lane: when the
+    # focused project's KB is in DIRECT_CONTEXT mode its full text rides in the
+    # prompt and the turn runs tool-free (a tool cannot add evidence the KB
+    # already carries). The same route exclusions the old lane used apply.
+    direct_context = (
+        getattr(project_context, "direct_context", None)
+        if project_context is not None
+        else None
+    )
+    direct_context_turn = (
+        direct_context is not None
+        and route.reason != "vacancy_listing"
+        and route.intent != "employee_support"
+        and route.intent != "out_of_scope"
+        and not tingting_reset_allowed
+        and not tingting_support_account
+    )
+    if direct_context_turn and direct_context is not None:
+        system += (
+            "\n\n=== KIẾN THỨC DỰ ÁN (toàn văn, nguồn chính thức) ===\n"
+            f"{build_direct_system(direct_context)}"
+        )
+
     if timings is not None:
         timings["system_prompt_ms"] = int(round((time.monotonic() - sys_t0) * 1000))
         timings["system_prompt_cache_hit"] = sys_prompt_hit
@@ -601,20 +625,16 @@ async def _agent_turn(
         and resolved_tool_registry is not None
         and required_authority_tool not in resolved_tool_registry
     ):
-        return await deps.agent.direct(
+        return await _compose_reply_without_tools(
+            deps,
             user_text,
-            **_with_optional_trace(
-                deps.agent.direct,
-                {
-                    "system": (
+            system=(
                 "Bạn là tư vấn viên tuyển dụng. Công cụ dữ liệu cần thiết hiện không khả dụng. "
                 "Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể kiểm tra thông tin, không "
                 "khẳng định có việc và không bịa dữ liệu."
-                    ),
-                    "metrics": timings,
-                },
-                trace_sink,
             ),
+            metrics=timings,
+            trace_sink=trace_sink,
         )
     focused_rag = (
         project_context is not None
@@ -651,25 +671,28 @@ async def _agent_turn(
             and resolved_tool_registry is not None
             and authority_tool not in resolved_tool_registry
         ):
-            return await deps.agent.direct(
+            return await _compose_reply_without_tools(
+                deps,
                 user_text,
-                **_with_optional_trace(
-                    deps.agent.direct,
-                    {
-                        "system": (
+                system=(
+                    f"{system}\n\n"
                     "Bạn là tư vấn viên tuyển dụng. Dữ liệu của dự án hiện không thể tra cứu. "
                     "Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa có thông tin đã xác minh, "
                     "không khẳng định có việc và không bịa dữ liệu."
-                        ),
-                        "metrics": timings,
-                    },
-                    trace_sink,
                 ),
+                metrics=timings,
+                trace_sink=trace_sink,
             )
         if authority_tool is not None:
             # Detailed Project answers use only the Project-owned category authority.
             # This also keeps legacy global timetable/project tools out of a focused turn.
             allowed_tools = (authority_tool,)
+    if direct_context_turn:
+        # The KB text is already in the prompt, so a tool cannot add evidence:
+        # run the turn tool-free (the retired direct-context lane's behaviour)
+        # with the agent authoring the prose.
+        allowed_tools = None
+        resolved_tool_registry = frozenset()
     # Model tier (Phase 5): low-complexity strategies use the fast model when one
     # is configured. ``should_use_fast_model`` encodes eligibility; the agent no-ops
     # the switch when no fast model was injected (tests / un-configured deployments).
@@ -713,7 +736,9 @@ async def _agent_turn(
         )
 
     route_hint = (
-        _INCOME_COMPARE_HINT
+        mandatory_instruction
+        if mandatory_instruction
+        else _INCOME_COMPARE_HINT
         if compare_income_required_args is not None
         else routing_instruction(
             TurnRoute("recommend", "structured_lookup", reason="vacancy_listing")
@@ -785,31 +810,6 @@ async def _agent_turn(
     return reply
 
 
-async def _direct_context_turn(
-    context,
-    deps: GraphDeps,
-    user_text: str,
-    recent_messages: list[Any],
-    timings: dict,
-    *,
-    trace_sink=None,
-) -> str:
-    timings["lane"] = "direct_context"
-    timings["direct_context_knowledge_base_id"] = context.knowledge_base_id
-    direct_kwargs = {
-        "system": build_direct_system(context),
-        "metrics": timings,
-    }
-    return await deps.agent.direct(
-        build_direct_user_text(
-            current_user_text=user_text,
-            recent_messages=recent_messages,
-            history_token_budget=DIRECT_HISTORY_TOKEN_BUDGET,
-        ),
-        **_with_optional_trace(deps.agent.direct, direct_kwargs, trace_sink),
-    )
-
-
 class _LaneResolution(NamedTuple):
     """What one answer lane produced, consumed by the finalize/dispatch tail.
 
@@ -850,12 +850,12 @@ async def _resolve_lane(
     stream: _ProgressiveStream | None = None,
     agent_turn=None,
 ) -> _LaneResolution:
-    """Select and run the turn's answer lane: clarification → direct → agent.
+    """Select and run the turn's answer lane: the agent authors every reply.
 
-    ``timings['lane']`` and the decision trace record the winner exactly as
-    before; ``faq_metadata`` is reserved for lane provenance metadata. Only
-    the agent lane can fail — a crash stands the turn down through
-    ``_authority_gate`` and surfaces as ``terminal``.
+    ``timings['lane']`` and the decision trace record the winner; ``faq_metadata``
+    is reserved for lane provenance metadata. Only the agent lane can fail — a
+    crash stands the turn down through ``_authority_gate`` and surfaces as
+    ``terminal``.
 
     ``agent_turn`` is the agent-lane callable, supplied by the composition point
     (``run_turn``) so this module never has to reach back into ``runner``. The
@@ -867,57 +867,28 @@ async def _resolve_lane(
     # the fallback key for the agent's lead context.
     contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
     # The support OA never touches recruitment machinery: this identity flag
-    # (pin-free, unlike tingting_reset_allowed) gates the two curated
-    # recruitment lanes below and rides along to the agent's prompt branch.
+    # (pin-free, unlike tingting_reset_allowed) gates the recruitment prompt
+    # branch and rides along to the agent's prompt branch.
     tingting_support_account = _tingting_account_conversation(conv)
-    # An off-scope question must reach ``_agent_turn``, where the fixed
-    # hotline reply lives. Both curated lanes below would otherwise answer it
-    # from project context first and the hotline would never be offered.
-    off_scope = turn_route.intent == "out_of_scope"
+    # A message that matches several projects is ambiguous: the retired
+    # clarification lane returned a code-built question. The agent now authors
+    # that question, driven by a mandatory instruction that wins the route hint.
+    mandatory_instruction = ""
     if (
         project_context is not None
         and project_context.clarification
         and not tingting_reset_allowed
         and not tingting_support_account
-        and not off_scope
+        and turn_route.intent != "out_of_scope"
     ):
-        trace_sink.record_decision("context_selected", "project_clarification")
-        trace_sink.record_decision("lane_selected", "project_clarification")
-        timings["lane"] = "project_clarification"
-        return _LaneResolution(
-            lane="project_clarification",
-            candidate=project_context.clarification,
-            generated=False,
-            outcome_label="project_clarification",
-        )
-
-    direct_context = project_context.direct_context if project_context is not None else None
-    # The direct-context lane carries no tool calls, so it can never reach the
-    # project's API: an employee-support turn must run on the agent lane.
-    if (
-        direct_context is not None
-        and turn_route.reason != "vacancy_listing"
-        and turn_route.intent != "employee_support"
-        and not tingting_reset_allowed
-        and not tingting_support_account
-        and not off_scope
-    ):
-        trace_sink.record_decision("context_selected", "direct_context")
-        trace_sink.record_decision("lane_selected", "direct_context")
-        raw = await _direct_context_turn(
-            direct_context,
-            deps,
-            state.user_text,
-            recent_messages,
-            timings,
-            trace_sink=trace_sink,
-        )
-        state.reply = raw
-        return _LaneResolution(
-            lane="direct_context",
-            candidate=raw,
-            generated=True,
-            outcome_label="direct_context",
+        names = tuple(getattr(project_context, "clarification_projects", ()) or ())
+        if not names:
+            names = (project_context.clarification,)
+        mandatory_instruction = (
+            "NGỮ CẢNH BẮT BUỘC: tin nhắn của ứng viên khớp "
+            f"{len(names)} dự án. PHẢI hỏi lại ứng viên muốn hỏi dự án nào trước khi trả lời; "
+            "KHÔNG trả lời bằng dữ liệu của một dự án, KHÔNG đoán. "
+            "Danh sách: " + ", ".join(names)
         )
 
     # --- agent lane (runs to completion; NO hard cap) ---
@@ -929,7 +900,9 @@ async def _resolve_lane(
     # the reconcile sweep.
     trace_sink.record_decision(
         "context_selected",
-        "focused_rag"
+        "project_clarification"
+        if mandatory_instruction
+        else "focused_rag"
         if (
             project_context is not None
             and project_context.state == "FOCUSED"
@@ -960,6 +933,7 @@ async def _resolve_lane(
                 {
                     "tingting_reset_allowed": tingting_reset_allowed,
                     "tingting_support_account": tingting_support_account,
+                    "mandatory_instruction": mandatory_instruction,
                 },
             )
         )

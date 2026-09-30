@@ -134,20 +134,6 @@ async def test_repeated_seam_is_not_duplicated():
     assert reply.count("TD Plaza: TD Plaza (06:55)") == 1
 
 
-async def test_direct_lane_completes_a_cut_answer():
-    """The direct-context lane produces candidate-visible prose too."""
-    pytest.importorskip("langchain_core")
-    from app.graph.clients import MiniMaxAgent
-
-    llm = _CappedLLM(
-        [("Công việc là kiểm", "length"), (" tra màn hình trước khi xuất xưởng.", "stop")]
-    )
-    reply = await MiniMaxAgent(llm, embedder=None, max_iters=3).direct("hỏi", system="sys")
-
-    assert reply == "Công việc là kiểm tra màn hình trước khi xuất xưởng."
-    assert llm.calls == 2
-
-
 async def test_normal_stop_answer_is_unchanged_and_costs_one_call():
     """A completed generation is never rewritten, and never continued."""
     llm = _CappedLLM([("Câu trả lời trọn vẹn cho người lao động.", "stop")])

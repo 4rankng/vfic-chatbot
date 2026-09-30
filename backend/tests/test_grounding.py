@@ -7,7 +7,7 @@ existing graph client integration path (requires langchain).
 from __future__ import annotations
 
 from app.graph.grounding import (
-    UNVERIFIED_CONTACT_REPLY,
+    _UngroundedContact,
     extract_asserted_entities,
     extract_cited_job_ids,
     extract_contact_channels,
@@ -108,15 +108,15 @@ def test_contact_grounding_ignores_non_phone_numbers():
     assert extract_contact_channels("Lương 15.000.000đ, 3 vị trí, id=1234") == frozenset()
 
 
-def test_ground_reply_replaces_an_invented_contact_reply():
+def test_ground_reply_flags_an_invented_contact_reply():
     result = ground_reply(
         _INVENTED_HOTLINE_REPLY,
         [],
         allowed_text="Anh cần reset mật khẩu payroll LG Display ạ",
     )
-    assert result == UNVERIFIED_CONTACT_REPLY
-    assert "0251" not in result
-    assert "it-helpdesk@" not in result
+    assert isinstance(result, _UngroundedContact)
+    assert "02515436789" in result.channels
+    assert "it-helpdesk@lgdisplay.com" in result.channels
 
 
 def test_ground_reply_keeps_a_contact_answer_sourced_from_a_tool_result():

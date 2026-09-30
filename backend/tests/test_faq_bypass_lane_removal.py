@@ -67,10 +67,9 @@ def test_retired_lane_is_not_a_valid_decision_trace_summary(code):
     ("code", "summary"),
     [
         ("lane_selected", "agent"),
-        ("lane_selected", "direct_context"),
-        ("lane_selected", "project_clarification"),
         ("context_selected", "agent_graph"),
         ("context_selected", "focused_rag"),
+        ("context_selected", "project_clarification"),
     ],
 )
 def test_reachable_lanes_still_render(code, summary):

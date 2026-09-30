@@ -26,6 +26,10 @@ class ProjectTurnContext:
     knowledge_mode: str | None = None
     direct_context: DirectContext | None = None
     clarification: str | None = None
+    # The project names a clarification question was built from. The agent lane
+    # reads it to author the "which project?" question; ``clarification`` keeps
+    # the legacy rendered string for any other reader.
+    clarification_projects: tuple[str, ...] = ()
 
 
 _QUESTION_ANSWER_BLOCK = re.compile(
