@@ -21,8 +21,9 @@ The chain drives the real backend ingest code at every step:
    ``activate_revision``). It claims the STAGED revision, embeds it, and —
    because a fresh project is category-authoritative — applies the jobs
    projection itself, without anyone calling it by hand: ``summary``/``roles``/
-   ``location`` are rebuilt and ``is_active`` set, while the create card's
-   highlights survive (``setdefault``), and ``quality_result["projection"]``
+   ``location`` are rebuilt, while the create card's
+   highlights survive (``setdefault``), ``is_active`` keeps its seeded value
+   (admin activation is the only switch), and ``quality_result["projection"]``
    reports "complete".
 
 Step 2 writes the revision row directly instead of calling ``stage_replacement``
@@ -43,6 +44,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from sqlalchemy import Update
+from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.sql.elements import BindParameter
 from sqlalchemy.sql.functions import FunctionElement
 
@@ -55,7 +57,9 @@ from app.models.knowledge import (
     KnowledgeCategoryRevisionStatus,
 )
 from app.schemas.projects import ProjectCreate
+from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.knowledge.category_contracts import category_checksum, parse_category_yaml
+from app.services.knowledge.category_projections import SqlAlchemyCategoryProjectionWriter
 from app.services.knowledge.category_service import (
     MAX_CATEGORY_PROCESSING_ATTEMPTS,
     KnowledgeCategoryService,
@@ -132,6 +136,10 @@ class _FakeScalars:
     def __init__(self, rows: list) -> None:
         self._rows = rows
 
+    def __iter__(self):
+        # Real ScalarResult iterates row-by-row (``list(scalars(...))``).
+        return iter(self._rows)
+
     def all(self) -> list:
         return list(self._rows)
 
@@ -183,8 +191,14 @@ class _FakeSession:
         ]
 
     async def scalars(self, statement, *args, **kwargs):
-        entity = statement.column_descriptions[0]["entity"]
-        return _FakeScalars(self._rows_of(entity))
+        description = statement.column_descriptions[0]
+        rows = self._rows_of(description["entity"])
+        expr = description["expr"]
+        if isinstance(expr, InstrumentedAttribute):
+            # Column select (e.g. select(Company.id)): return the column value,
+            # not the entity row.
+            return _FakeScalars([getattr(row, expr.key) for row in rows])
+        return _FakeScalars(rows)
 
     async def scalar(self, statement, *args, **kwargs):
         """Single-row lookups (locked_project/locked_category) plus the one
@@ -290,7 +304,7 @@ async def test_amtran_fixture_brief_ingestion_lands_front_matter_facts_in_index_
     #    (run_category_revision_job → activate_revision). It claims the STAGED
     #    revision, embeds it, and — because the fresh project is category
     #    authoritative — applies the jobs projection itself: summary/roles/
-    #    location rebuilt and is_active set; the card's highlights survive
+    #    location rebuilt; the card's highlights survive
     #    untouched. Nobody calls the projection by hand.
     monkeypatch.setattr(KnowledgeCategoryService, "_repair_caches", AsyncMock())
     await KnowledgeCategoryService(
@@ -305,9 +319,10 @@ async def test_amtran_fixture_brief_ingestion_lands_front_matter_facts_in_index_
     assert card["highlights"] == FIXTURE_HIGHLIGHTS
 
     # The projection's own rebuilds prove the real activation projected over
-    # the create card.
+    # the create card — and left the admin-owned is_active switch at its
+    # seeded value (the fresh draft is created inactive).
     assert card["summary"] == project.summary == _PROJECTION_SUMMARY
-    assert project.is_active is True
+    assert project.is_active is False
     assert project.discovery_revision == 1
 
     # Activation reports reality: nothing deferred, and the card is now
@@ -315,10 +330,10 @@ async def test_amtran_fixture_brief_ingestion_lands_front_matter_facts_in_index_
     assert revision.quality_result["projection"] == "complete"
     assert project.category_authority_started is True
 
-    # The bot catalog lists only rows passing `is_active AND knowledge_base_id
-    # IS NOT NULL` (retrieval.catalog_repository.active_projects_with_card /
-    # list_active_projects); the projected row passes both predicates.
-    assert project.is_active is True and project.knowledge_base_id is not None
+    # The knowledge base is attached; the catalog's is_active switch stays
+    # with the admin (ProjectEdit's toggle / Tạo dự án) — no projection flips
+    # it, so the draft is not listed until the admin activates it.
+    assert project.is_active is False and project.knowledge_base_id is not None
 
     # ... and the master index gives the agent a substantive line for it.
     prompt = await active_projects_index(
@@ -339,6 +354,16 @@ async def test_amtran_fixture_brief_ingestion_lands_front_matter_facts_in_index_
     assert f"{FIXTURE_SLUG} ({FIXTURE_NAME}): {_PROJECTION_SUMMARY}" in prompt
     assert f"vị trí: {', '.join(FIXTURE_TARGET_POSITIONS)}" in prompt
     assert f"địa điểm: {FIXTURE_LOCATION}" in prompt
+
+    # Clearing the jobs scope removes only the scope: the derived rows go and
+    # the card drops `roles`, while the preserved highlights and the
+    # admin-owned is_active flag survive untouched.
+    await SqlAlchemyCategoryProjectionWriter(session).clear(
+        project.id, KnowledgeCategoryKey.JOBS
+    )
+    assert "roles" not in project.index_card
+    assert project.index_card["highlights"] == FIXTURE_HIGHLIGHTS
+    assert project.is_active is False
 
 
 async def test_active_projects_index_advertises_the_amtran_brief_facts() -> None:

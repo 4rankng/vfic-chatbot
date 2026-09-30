@@ -385,7 +385,6 @@ class SqlAlchemyCategoryProjectionWriter:
         project.index_card = card
         project.summary = summary
         project.discovery_revision += 1
-        project.is_active = bool(roles)
 
     async def clear(
         self,
@@ -406,9 +405,10 @@ class SqlAlchemyCategoryProjectionWriter:
                 )
             project = await self.db.get(Project, project_id)
             if project is not None:
-                project.index_card = {}
+                card = dict(project.index_card or {})
+                card.pop("roles", None)
+                project.index_card = card
                 project.discovery_revision += 1
-                project.is_active = False
         elif key is KnowledgeCategoryKey.COMPENSATION:
             for job in jobs:
                 job.salary_min = None

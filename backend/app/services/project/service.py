@@ -29,7 +29,6 @@ from app.models.knowledge import (
     KnowledgeBaseDirectFile,
     KnowledgeBaseMode,
     KnowledgeCategory,
-    KnowledgeCategoryRevision,
 )
 from app.models.user import User
 from app.schemas.projects import (
@@ -575,23 +574,7 @@ class ProjectService:
                 has_direct_file=direct_file is not None,
             )
         elif mode is KnowledgeBaseMode.RAG:
-            category = await self.db.scalar(
-                select(KnowledgeCategory).where(
-                    KnowledgeCategory.project_id == project.id,
-                    KnowledgeCategory.category_key == KnowledgeCategoryKey.JOBS.value,
-                )
-            )
-            revision = (
-                await self.db.get(KnowledgeCategoryRevision, category.active_revision_id)
-                if category and category.active_revision_id
-                else None
-            )
-            facts = ProjectActivationFacts(
-                knowledge_mode=mode.value,
-                has_active_jobs=bool(
-                    revision is not None and revision.normalized_payload.get("jobs")
-                ),
-            )
+            facts = ProjectActivationFacts(knowledge_mode=mode.value)
         else:
             facts = ProjectActivationFacts(knowledge_mode=None)
         if error := project_activation_error(facts):
