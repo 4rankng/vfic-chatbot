@@ -220,6 +220,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/presentation/IngestProgressBoard.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/presentation/FaqAutoSyncSection.tsx",
           "type": "registry:component"
         },
