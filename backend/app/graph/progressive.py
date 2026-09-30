@@ -72,10 +72,21 @@ def _next_sendable_offset(
     The offset (not a finalized string) is the bubble boundary, so ``raw[:offset]``
     and ``raw[offset:]`` are a true prefix/suffix pair of one stream: no part of
     the answer can be sent twice, whatever the reply policy later rewrites.
+
+    A dot between two digits is a Vietnamese thousands separator ("30.000 VND"),
+    not a sentence end — cutting there splits one amount across two bubbles.
     """
     for index in range(min_offset - 1, len(raw)):
-        if raw[index] in _BUBBLE_BOUNDARY_CHARS:
-            return index + 1
+        if raw[index] not in _BUBBLE_BOUNDARY_CHARS:
+            continue
+        if (
+            raw[index] == "."
+            and 0 < index < len(raw) - 1
+            and raw[index - 1].isdigit()
+            and raw[index + 1].isdigit()
+        ):
+            continue
+        return index + 1
     return None
 
 

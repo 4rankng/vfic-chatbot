@@ -235,14 +235,19 @@ async def list_active_jobs(
     role: str | None = None,
     company: str | None = None,
     location: str | None = None,
-    top_k: int = 3,
+    top_k: int = 10,
     sort_by: str | None = None,
 ) -> str:
-    """Return bounded, status-labelled evidence from scoped ACTIVE Job rows."""
+    """Return bounded, status-labelled evidence from scoped ACTIVE Job rows.
+
+    The default covers a whole overview in one call: an unfiltered "what jobs
+    exist" question reads across every project, and a small default dropped the
+    lowest-paying project from the ranked cut entirely.
+    """
     try:
         k = max(1, min(int(top_k), 10))
     except (TypeError, ValueError):
-        k = 3
+        k = 10
     if sort_by is not None and sort_by not in _ALLOWED_SORT_BY:
         sort_by = None
     try:

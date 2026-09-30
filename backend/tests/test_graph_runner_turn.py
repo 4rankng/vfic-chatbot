@@ -3759,6 +3759,23 @@ async def test_progressive_empty_remainder_records_one_bot_run(monkeypatch):
     assert stage["progressive_bubbles"] == 1
 
 
+def test_progressive_boundary_never_cuts_inside_a_number():
+    """A dot between digits is a Vietnamese thousands separator, not a period.
+
+    «…hỗ trợ 30.000 VND/ngày…» must stay whole: the bubble boundary is the next
+    real sentence end, so one amount can never straddle two bubbles.
+    """
+    raw = (
+        "Dạ về phúc lợi tại kho, anh/chị được hưởng các quyền lợi sau: "
+        "Cơm ca trưa miễn phí, hoặc hỗ trợ 30.000 VND/ngày nếu không ăn cơm ca. "
+        "Xe đưa đón miễn phí tại các điểm trung tâm nội thành Hải Phòng."
+    )
+    offset = runner._next_sendable_offset(raw, min_offset=1)
+    assert raw[offset - 1] == "."
+    assert "30.000 VND/ngày nếu không ăn cơm ca." in raw[:offset]
+    assert not raw[:offset].rstrip().endswith("30.")
+
+
 @pytest.mark.asyncio
 async def test_progressive_pleasantry_opening_waits_for_the_first_useful_boundary(monkeypatch):
     """A pleasantry-only opening that clears the floor is not sent: the bubble

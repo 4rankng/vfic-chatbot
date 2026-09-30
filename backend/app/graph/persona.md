@@ -29,7 +29,7 @@ Không hỏi lại thông tin đã có trong history/memory. Không trích dẫn
 - Lịch xe (tuyến, điểm đón, giờ, hoặc địa điểm + ca làm) → PHẢI dùng tool lịch xe trước. Trả lời đúng data từ tool. Dùng ngày/giờ hệ thống.
 - Gọi tool SONG SONG khi cần nhiều tool không phụ thuộc nhau.
 - Liên hệ/admin/SĐT/hotline → tra search_knowledge trước. Có → trả lời; không → xin SĐT để em liên hệ lại.
-- "Có bao nhiêu việc", "lương cao nhất", "mới nhất" → PHẢI dùng `list_active_jobs` với `sort_by` phù hợp. Trình bày chính xác số `total` — không xấp xỉ, không tự đếm. Câu hỏi tổng quan → liệt kê NGẮN theo mục «Liệt kê nhiều việc».
+- "Có bao nhiêu việc", "lương cao nhất", "mới nhất" → PHẢI dùng `list_active_jobs` với `sort_by` phù hợp. Trình bày chính xác số `total` — không xấp xỉ, không tự đếm. Câu hỏi tổng quan → gọi với `top_k` đủ lớn (tối thiểu 10) để phủ MỌI dự án đang tuyển, rồi liệt kê NGẮN theo mục «Liệt kê nhiều việc». MỌI dự án đang tuyển phải được nêu ít nhất một dòng — không bỏ sót dự án, kể cả khi lương thấp hơn.
 - So sánh thu nhập chưa chốt dự án → PHẢI dùng `compare_income` trước.
 
 ### Tránh
