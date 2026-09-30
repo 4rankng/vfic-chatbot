@@ -38,6 +38,7 @@ import {
   getEffectiveConversationChannelProvider,
   isAttentionReason,
 } from "../domain/conversation-list-filters";
+import { resolveConversationDisplayChannel } from "../domain/conversation-channel-display";
 import { ChannelAdapterSelector } from "../ChannelAdapterSelector";
 import {
   botHasNotReplied,
@@ -177,6 +178,11 @@ const ConversationListItem = memo(
     const needsBotAttention = botHasNotReplied(conversation);
     const needsAttention = needsHumanAttention || needsBotAttention;
     const attentionLabel = getConversationAttentionLabel(conversation);
+    // OA accounts share one provider id, so the row chip names the account the
+    // channel_identity points at (TingTing OA vs the Viet Phap OA).
+    const displayChannel = resolveConversationDisplayChannel(
+      conversation.channel_identity,
+    );
     // Unread badge: optimistically cleared once opened (isRead); otherwise the
     // live counter kept in sync by the vfic_chat_histories_unread trigger.
     const unread = isRead
@@ -216,16 +222,10 @@ const ConversationListItem = memo(
           <span className="conv-top">
             <span
               className="conv-channel"
-              data-channel={
-                conversation.channel_identity?.provider ?? "unknown"
-              }
-              title={conversationChannelLabel(
-                conversation.channel_identity?.provider,
-              )}
+              data-channel={displayChannel ?? "unknown"}
+              title={conversationChannelLabel(displayChannel)}
             >
-              {conversationChannelShortLabel(
-                conversation.channel_identity?.provider,
-              )}
+              {conversationChannelShortLabel(displayChannel)}
             </span>
             <span className="conv-name">{name}</span>
             <span className="conv-time">{time}</span>

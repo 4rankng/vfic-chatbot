@@ -75,7 +75,7 @@ describe("ChannelAdapterSelector", () => {
       .element(screen.getByRole("radio", { name: "Messenger" }))
       .toBeVisible();
     await expect
-      .element(screen.getByRole("radio", { name: /Zalo OA TingTing/ }))
+      .element(screen.getByRole("radio", { name: /TingTing OA/ }))
       .toBeVisible();
     expect(screen.container.textContent).not.toContain("Kênh đang chọn:");
     await expect.element(screen.getByText("99+")).toBeVisible();
@@ -183,7 +183,7 @@ describe("ChannelAdapterSelector", () => {
       )
       .toBeVisible();
     await expect
-      .element(screen.getByRole("radio", { name: /Zalo OA TingTing/ }))
+      .element(screen.getByRole("radio", { name: /TingTing OA/ }))
       .toBeVisible();
 
     // One unscoped count + one per badge (four now).

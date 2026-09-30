@@ -14,6 +14,7 @@ import {
   conversationChannelShortLabel,
 } from "../../types";
 import { deleteConversation } from "../application/conversation-operations";
+import { resolveConversationDisplayChannel } from "../domain/conversation-channel-display";
 import { channelIcon } from "../channel-icons";
 import { Confirm } from "@/components/admin/confirm";
 import { LeadAvatar } from "../LeadAvatar";
@@ -129,9 +130,13 @@ export const ConversationShowContent = ({
     (option) => option.mode === activeMode,
   );
   const ActiveModeIcon = activeModeOption?.Icon ?? Bot;
-  const channelProvider = record?.channel_identity?.provider;
-  const channelGlyph = channelIcon(channelProvider);
-  const channelLabel = conversationChannelLabel(channelProvider);
+  // OA accounts share one provider id, so the header names the account the
+  // channel_identity points at (TingTing OA vs the Viet Phap OA).
+  const displayChannel = resolveConversationDisplayChannel(
+    record?.channel_identity,
+  );
+  const channelGlyph = channelIcon(displayChannel);
+  const channelLabel = conversationChannelLabel(displayChannel);
 
   useEffect(() => {
     setIsContextOpen(isWideDesktop || shouldOpenCandidatePanel);
@@ -260,9 +265,7 @@ export const ConversationShowContent = ({
                       <>
                         <img
                           className="conv-channel-icon"
-                          data-channel={
-                            record?.channel_identity?.provider ?? "unknown"
-                          }
+                          data-channel={displayChannel ?? "unknown"}
                           src={channelGlyph}
                           alt={channelLabel}
                           title={channelLabel}
@@ -271,22 +274,16 @@ export const ConversationShowContent = ({
                           className="conv-channel-name"
                           title={channelLabel}
                         >
-                          {conversationChannelShortLabel(
-                            record?.channel_identity?.provider,
-                          )}
+                          {conversationChannelShortLabel(displayChannel)}
                         </span>
                       </>
                     ) : (
                       <span
                         className="conv-channel"
-                        data-channel={
-                          record?.channel_identity?.provider ?? "unknown"
-                        }
+                        data-channel={displayChannel ?? "unknown"}
                         title={channelLabel}
                       >
-                        {conversationChannelShortLabel(
-                          record?.channel_identity?.provider,
-                        )}
+                        {conversationChannelShortLabel(displayChannel)}
                       </span>
                     )}
                     {context.contactSubtitle?.secondaryName && (

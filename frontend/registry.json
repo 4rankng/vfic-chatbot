@@ -27,7 +27,6 @@
         "ra-i18n-polyglot@^5.14.7",
         "react@^19.2.4",
         "react-aria-components@^1.21.1",
-        "react-dropzone@^14.4.1",
         "react-error-boundary@^6.1.2",
         "react-hook-form@^7.88.0",
         "react-hotkeys-hook@^5.3.3",
@@ -524,122 +523,6 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/knowledge-base/index.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge-base/KnowledgeBaseShow.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge-base/KnowledgeBaseList.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge-base/KnowledgeBaseCreate.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/usePipelineAutoRefresh.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/useKnowledgeSourceFilters.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/stageTone.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/projectPickerUtils.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/knowledgeUploadConfig.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/knowledgePipelineUtils.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/knowledge-service.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/index.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/StoredKnowledgePanel.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/ProjectPicker.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/PipelineTimeline.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/KnowledgeVersionManager.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/KnowledgeUpload.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/KnowledgeSourceShow.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/KnowledgeSourceRow.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/KnowledgeSourceList.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/KnowledgeSourceEdit.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/KnowledgeDetailPanel.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/InlineKnowledgeUploader.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/infrastructure/http-knowledge-adapter.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/infrastructure/browser-file-download-adapter.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/domain/knowledge-text.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/domain/knowledge-contracts.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/application/knowledge-port.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/knowledge/application/knowledge-operations.ts",
-          "type": "registry:component"
-        },
-        {
           "path": "src/components/atomic-crm/kit/page-shell.tsx",
           "type": "registry:component"
         },
@@ -945,6 +828,10 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/domain/conversation-display.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/domain/conversation-channel-display.ts",
           "type": "registry:component"
         },
         {

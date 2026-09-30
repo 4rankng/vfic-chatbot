@@ -492,8 +492,9 @@ export const CONVERSATION_CHANNEL_LABELS: Record<
   zalo_bot: "Zalo Chatbot",
   zalo_oa: "Zalo OA",
   facebook_messenger: "Messenger",
-  // The employee-support OA: provider zalo_oa, narrowed to the linked account.
-  tingting_oa: "Zalo OA TingTing (hỗ trợ nhân viên)",
+  // The employee-support OA: display channel for zalo_oa rows whose
+  // account_key is "tingting" (resolveConversationDisplayChannel).
+  tingting_oa: "TingTing OA",
 };
 
 /**
@@ -508,7 +509,7 @@ export const CONVERSATION_CHANNEL_SHORT_LABELS: Record<
   zalo_bot: "Chatbot",
   zalo_oa: "Zalo OA",
   facebook_messenger: "Messenger",
-  tingting_oa: "TingTing",
+  tingting_oa: "TingTing OA",
 };
 
 /**
