@@ -302,7 +302,7 @@ async def test_amtran_fixture_brief_ingestion_lands_front_matter_facts_in_index_
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
         source_filename="jobs.md",
-        source_yaml=jobs_markdown,
+        source_markdown=jobs_markdown,
         normalized_payload=document.model_dump(mode="json"),
         content_sha256=category_checksum(document),
         created_by=admin.id,
@@ -443,7 +443,7 @@ async def test_legacy_carded_project_defers_projection_until_cutover(monkeypatch
         revision_no=1,
         status=KnowledgeCategoryRevisionStatus.STAGED,
         source_filename="jobs.md",
-        source_yaml=jobs_markdown,
+        source_markdown=jobs_markdown,
         normalized_payload=document.model_dump(mode="json"),
         content_sha256=category_checksum(document),
     )

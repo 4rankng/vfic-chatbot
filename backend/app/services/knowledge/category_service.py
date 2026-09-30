@@ -241,7 +241,7 @@ class KnowledgeCategoryService:
             .where(
                 KnowledgeCategoryRevision.category_id == category.id,
                 KnowledgeCategoryRevision.source_filename == filename,
-                KnowledgeCategoryRevision.source_yaml == source_markdown,
+                KnowledgeCategoryRevision.source_markdown == source_markdown,
                 KnowledgeCategoryRevision.status.in_(
                     (
                         KnowledgeCategoryRevisionStatus.STAGED,
@@ -268,9 +268,7 @@ class KnowledgeCategoryService:
                 revision_no=int(latest or 0) + 1,
                 status=KnowledgeCategoryRevisionStatus.STAGED,
                 source_filename=filename,
-                # Holds Category Markdown v1 since the markdown cutover; the
-                # column is renamed to source_markdown by migration 0059.
-                source_yaml=source_markdown,
+                source_markdown=source_markdown,
                 normalized_payload=document.model_dump(mode="json"),
                 content_sha256=checksum,
                 created_by=actor.id,
@@ -350,7 +348,7 @@ class KnowledgeCategoryService:
             revision_id=revision.id,
             revision_no=revision.revision_no,
             filename=revision.source_filename,
-            content=revision.source_yaml,
+            content=revision.source_markdown,
             checksum=revision.content_sha256,
             updated_at=revision.activated_at or revision.created_at,
         )
@@ -485,7 +483,7 @@ class KnowledgeCategoryService:
                 file_name=revision.source_filename,
                 source="category_markdown",
                 status=KnowledgeStatus.PUBLISHED,
-                raw_text=revision.source_yaml,
+                raw_text=revision.source_markdown,
                 metadata_={
                     "schema_version": "category-1.0",
                     "category": category.category_key,
@@ -539,7 +537,7 @@ class KnowledgeCategoryService:
                 ),
                 "reference_check": "passed",
                 "normalization_changed": (
-                    canonical_category_json(document) != revision.source_yaml
+                    canonical_category_json(document) != revision.source_markdown
                 ),
                 "warning_codes": [],
                 "error_codes": [],
@@ -615,7 +613,7 @@ class KnowledgeCategoryService:
             revision_no=int(latest or 0) + 1,
             status=KnowledgeCategoryRevisionStatus.CLEARED,
             source_filename=f"{category_key.value}.md",
-            source_yaml=build_source_markdown(empty_payload),
+            source_markdown=build_source_markdown(empty_payload),
             normalized_payload=empty_payload,
             content_sha256=category_checksum(empty_document),
             created_by=actor.id,

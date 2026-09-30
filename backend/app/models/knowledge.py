@@ -110,7 +110,7 @@ class KnowledgeCategory(Base):
 
 
 class KnowledgeCategoryRevision(Base):
-    """Immutable validated YAML revision; active pointer lives on its category."""
+    """Immutable validated Category Markdown v1 revision; active pointer lives on its category."""
 
     __tablename__ = "knowledge_category_revisions"
 
@@ -132,7 +132,7 @@ class KnowledgeCategoryRevision(Base):
         server_default="STAGED",
     )
     source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    source_yaml: Mapped[str] = mapped_column(Text, nullable=False)
+    source_markdown: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
