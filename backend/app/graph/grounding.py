@@ -423,14 +423,15 @@ def validate_contact_grounding(reply: str, evidence: str) -> frozenset[str]:
     return frozenset(stated - extract_contact_channels(evidence))
 
 
-# ── Active-job authority replies ─────────────────────────────────────────────
-# The single owner of reply authority for ``list_active_jobs`` turns: trusted
-# payload validation plus the fail-closed renderers the agent loop calls. Moved
-# here from ``clients.py`` so grounding has one owner instead of two.
+# ── Active-job payload validation ────────────────────────────────────────────
+# ``list_active_jobs`` answers are composed by the LLM agent from the payload
+# (title_plain rows + presentation contract); grounding only validates the
+# composed prose against the surfaced evidence. There is deliberately NO
+# deterministic reply replacement here anymore — the agent owns the final text.
 
 
 def active_job_safe_reply(tool_result: object) -> str | None:
-    """Validate one active-job tool payload and return its trusted renderer output."""
+    """Validate one active-job tool payload and return its presentation contract."""
     first_line = str(tool_result).partition("\n")[0]
     if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
         return None
@@ -525,62 +526,3 @@ def ground_reply(
             trace_sink.record_decision("grounding_verdict", "skipped")
         logger.debug("grounding check skipped (non-fatal)", exc_info=True)
         return reply
-
-
-def negative_job_authority(tool_results: list[str]) -> str | None:
-    """Return the trusted abstention text for a negative active-job lookup.
-
-    Retained for the test-suite invariant that documents the authority-extraction
-    contract. The reply-consistency regex gates that consumed this output were
-    removed (they over-fired and each firing cost a full LLM round-trip); the
-    trusted abstention text is still surfaced through the tool payload and used
-    as the deterministic final reply for an actual authority-tool dispatch.
-    """
-    for tool_result in reversed(tool_results or []):
-        first_line = str(tool_result).partition("\n")[0]
-        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
-            continue
-        try:
-            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
-        except (TypeError, ValueError):
-            return None
-        if not isinstance(payload, dict) or payload.get("status") == "matched":
-            return None
-        safe_reply = active_job_safe_reply(tool_result)
-        return safe_reply
-    return None
-
-
-def matched_job_authority(tool_results: list[str]) -> tuple[str, str] | None:
-    """Return the matched payload row and its trusted renderer output."""
-    for tool_result in reversed(tool_results or []):
-        first_line = str(tool_result).partition("\n")[0]
-        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
-            continue
-        try:
-            payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
-        except (TypeError, ValueError):
-            return None
-        if not isinstance(payload, dict) or payload.get("status") != "matched":
-            return None
-        safe_reply = active_job_safe_reply(tool_result)
-        if safe_reply is None:
-            return None
-        return first_line, safe_reply
-    return None
-
-
-def ground_active_job_reply(reply: str, tool_results: list[str]) -> str:
-    """Fail closed to trusted tool text without spending a third LLM call.
-
-    Active-job results carry a complete candidate-facing ``safe_reply`` rendered
-    from structured evidence. Returning it for an actual ``list_active_jobs``
-    dispatch avoids both the old third model rewrite and partial claim parsers
-    that can miss invented titles, locations, vacancy counts, or salary formats.
-
-    ``reply`` remains the fallback for malformed or non-authority tool output.
-    """
-    matched = matched_job_authority(tool_results)
-    if matched is not None:
-        return matched[1]
-    return negative_job_authority(tool_results) or reply

@@ -33,6 +33,7 @@ from app.graph.tools import (
     search_user_memory,
 )
 from app.graph.income_contract import IncomeVerdict
+from app.graph.tools.jobs import _PRESENTATION_CONTRACT
 
 # The tools package splits tool logic into domain modules; each holds its own
 # module-level binding of get_settings/cache helpers, so the cache fixtures
@@ -492,10 +493,8 @@ async def test_list_active_jobs_formats_bounded_evidence_with_groundable_uuid(no
     assert payload["jobs"][0]["title"] == "Công nhân sản xuất"
     assert payload["jobs"][0]["company"] == "LG Display"
     assert payload["jobs"][0]["vacancy_count"] == 20
-    assert (
-        "LG Display; Tràng Duệ; Hải Phòng; lương 10-14 triệu"
-        in payload["safe_reply"]
-    )
+    assert payload["jobs"][0]["title_plain"] == "Công nhân sản xuất"
+    assert payload["safe_reply"] == _PRESENTATION_CONTRACT
     assert "description" not in payload["jobs"][0]
     assert "requirements" not in payload["jobs"][0]
     assert "benefits" not in payload["jobs"][0]
@@ -532,12 +531,12 @@ async def test_list_active_jobs_renders_vietnamese_status_without_duplicate_comp
     out = await list_active_jobs(retrieval=repo)
 
     payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["safe_reply"] == (
-        "VFIC hiện có các vị trí đang tuyển sau:\n"
-        "- Nhân viên lắp ráp / Nhân viên vận hành máy CNC: "
-        "Rorze; KCN Nhật Bản (Nomura), Hồng An, Hải Phòng\n"
-        "Anh/chị muốn tìm hiểu vị trí nào ạ?"
+    assert payload["safe_reply"] == _PRESENTATION_CONTRACT
+    # "vận hành máy CNC" already names the machine — title stays unglossed.
+    assert payload["jobs"][0]["title_plain"] == (
+        "Nhân viên lắp ráp / Nhân viên vận hành máy CNC"
     )
+    assert payload["jobs"][0]["company"] == "Rorze"
 
 
 @pytest.mark.asyncio
@@ -625,20 +624,22 @@ async def test_list_active_jobs_groups_large_catalogs_and_glosses_jargon(no_cach
     out = await list_active_jobs(retrieval=repo)
 
     payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    reply = payload["safe_reply"]
-    # Grouped, not an eleven-line dump: one block per company.
-    assert reply.count("\n- Tại ") == 3
-    assert "- Tại 4P Electronics (Hải Phòng; lương 6,3-16 triệu): " in reply
-    # Abbreviations are glossed in plain worker language...
-    assert "SMT (gắn linh kiện điện tử bằng máy tự động)" in reply
-    assert "PCBA (lắp ráp bo mạch điện tử)" in reply
-    assert "QA (kiểm tra chất lượng sản phẩm)" in reply
-    # ...and NOT double-glossed when the title already says it.
-    assert "Chất lượng QA (kiểm tra" not in reply
-    assert "vận hành máy CNC (máy gia công" not in reply
+    # Evidence-only contract: the payload is data (title_plain de-jargoned) and
+    # the grouping rule is a presentation instruction — the LLM agent composes
+    # the final reply, so there is no canned candidate-facing text.
+    assert payload["safe_reply"] == _PRESENTATION_CONTRACT
+    assert "nhóm theo dự án/công ty" in _PRESENTATION_CONTRACT
+    assert payload["jobs"][0]["title_plain"] == (
+        "SMT (gắn linh kiện điện tử bằng máy tự động)"
+    )
+    assert payload["jobs"][1]["title_plain"] == "PCBA (lắp ráp bo mạch điện tử)"
+    # "Chất lượng QA" already says it — no double gloss; bare "QA" gets one.
+    assert payload["jobs"][2]["title_plain"] == "Chất lượng QA"
+    assert payload["jobs"][3]["title_plain"] == "QA (kiểm tra chất lượng sản phẩm)"
+    # "vận hành máy CNC" already says it — no gloss.
+    assert payload["jobs"][4]["title_plain"] == "Nhân viên vận hành máy CNC"
     # The structured payload keeps every row for grounding.
     assert len(payload["jobs"]) == 5
-    assert reply.endswith("Anh/chị muốn tìm hiểu vị trí nào ạ?")
 
 
 @pytest.mark.asyncio
@@ -681,13 +682,13 @@ async def test_list_active_jobs_small_catalog_keeps_per_job_lines_with_glosses(n
     out = await list_active_jobs(retrieval=repo)
 
     payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["safe_reply"] == (
-        "VFIC hiện có các vị trí đang tuyển sau:\n"
-        "- SMT (gắn linh kiện điện tử bằng máy tự động): "
-        "4P Electronics; 4P; Hải Phòng; lương từ 6,3 triệu\n"
-        "- Nhân viên lắp ráp / Nhân viên vận hành máy CNC: "
-        "Rorze; KCN Nhật Bản (Nomura), Hồng An, Hải Phòng\n"
-        "Anh/chị muốn tìm hiểu vị trí nào ạ?"
+    assert payload["safe_reply"] == _PRESENTATION_CONTRACT
+    assert payload["jobs"][0]["title_plain"] == (
+        "SMT (gắn linh kiện điện tử bằng máy tự động)"
+    )
+    # "vận hành máy CNC" already says it — no gloss.
+    assert payload["jobs"][1]["title_plain"] == (
+        "Nhân viên lắp ráp / Nhân viên vận hành máy CNC"
     )
 
 
@@ -762,9 +763,11 @@ async def test_list_active_jobs_no_match_surfaces_alternatives_in_safe_reply(no_
     assert payload["status"] == "no_match"
     # Validator contract: a non-matched status must keep jobs empty.
     assert payload["jobs"] == []
-    # Candidate-facing pivot: the alternative title appears in the trusted text.
-    assert "Công nhân sản xuất" in payload["safe_reply"]
+    # Candidate-facing pivot: alternatives are structured rows with de-jargoned
+    # titles, and the safe_reply slot frames them as evidence for the agent.
+    assert payload["alternative_jobs"][0]["title_plain"] == "Công nhân sản xuất"
     assert "Hiện chưa có vị trí đang tuyển phù hợp" in payload["safe_reply"]
+    assert "alternative_jobs" in payload["safe_reply"]
     # Alternatives are structured grounding evidence even though ``jobs`` stays
     # empty, so their IDs and entities can be validated without changing the
     # trusted no-match status.

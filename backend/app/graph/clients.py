@@ -46,7 +46,6 @@ from app.graph.grounding import (
     LANE_UNAVAILABLE_REPLY,
     VACANCY_LOOKUP_UNAVAILABLE_REPLY,
     active_job_safe_reply as _active_job_safe_reply,
-    ground_active_job_reply as _ground_active_job_reply,
     ground_reply as _ground_reply,
 )
 from app.graph.income_contract import safe_reply_from
@@ -929,18 +928,14 @@ class MiniMaxAgent:
                         _MAX_ANSWER_CONTINUATIONS,
                     )
                     continue
-                # Active-job authority turns fail closed to the tool-rendered
-                # safe reply. This removes the former third LLM rewrite while
-                # avoiding partial regex validation of titles, locations,
-                # vacancy counts, and salary formats. Other tools retain the
-                # sanitize-only ID/entity grounding path.
+                # The LLM agent owns the final wording (operator rule: no
+                # deterministic replacement of a composed answer). Job turns
+                # keep the sanitize-only ID/entity grounding path below.
                 final_reply = _join_answer_parts(turn.answer_parts)
                 if _answer_was_cut(ai):
                     # The provider stopped at the cap again: drop the dangling
                     # fragment so the candidate never reads a mid-word tail.
                     final_reply = _drop_dangling_tail(final_reply)
-                if turn.authority_tool_dispatched:
-                    final_reply = _ground_active_job_reply(final_reply, turn.tool_results)
                 return _ground_reply(
                     final_reply,
                     turn.tool_results,
@@ -1155,15 +1150,17 @@ class MiniMaxAgent:
                 trace_sink.record_decision("degradation_reason", "tool_loop_exhausted")
             if metrics is not None:
                 metrics["tool_loop_exhausted"] = True
+            # The agent never composed an answer (budget exhausted), so the
+            # honest unavailable line ships — the LLM-final-decision rule means
+            # there is no composed reply to preserve, and a raw tool dump must
+            # not reach the candidate.
             final = (
                 VACANCY_LOOKUP_UNAVAILABLE_REPLY
                 if required_tool == "list_active_jobs" or turn.authority_tool_dispatched
                 else LANE_UNAVAILABLE_REPLY
             )
-        if turn.authority_tool_dispatched:
-            final = _ground_active_job_reply(str(final or ""), turn.tool_results)
-        # Apply the same deterministic authority boundary on loop exhaustion;
-        # no third LLM rewrite call is needed.
+        # Sanitize-only grounding: the unavailable line is trusted text, and the
+        # ID/entity + contact guards still apply to anything the model wrote.
         return _ground_reply(
             final,
             turn.tool_results,

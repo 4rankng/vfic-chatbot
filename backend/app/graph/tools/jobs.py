@@ -26,6 +26,9 @@ def _active_job_payload(job: object) -> dict[str, object]:
     values: dict[str, object] = {
         "id": _single_line(getattr(job, "id", ""), limit=80),
         "title": _single_line(getattr(job, "title", "")),
+        # The candidate-facing rendering contract: the agent composes from
+        # title_plain so internal abbreviations never reach the candidate.
+        "title_plain": _plain_title(_single_line(getattr(job, "title", ""))),
         "company": _single_line(getattr(job, "company_name", "")),
         "factory": _single_line(getattr(job, "factory_name", "")),
         "project": _single_line(getattr(job, "project_name", "")),
@@ -98,11 +101,6 @@ _GLOSS_SKIP_IF_TITLE_CONTAINS: dict[str, tuple[str, ...]] = {
 }
 _ABBREV_TITLE_RE = re.compile(r"\b(SMT|PCBA|QA|QC|LQC|IQC|CNC)\b")
 
-# Grouped presentation threshold: the operator persona forbids dumping 5-10
-# rows on a phone screen, so larger catalogs collapse into per-company blocks
-# ("Tại <công ty> (...): các vị trí") instead of one line per job.
-_GROUP_REPLY_THRESHOLD = 4
-
 
 def _plain_title(title: str) -> str:
     """Gloss internal jargon abbreviations once each, in place.
@@ -129,98 +127,20 @@ def _plain_title(title: str) -> str:
     return _ABBREV_TITLE_RE.sub(_replace, title.strip())
 
 
-def _active_jobs_safe_reply(jobs: list[dict[str, object]]) -> str:
-    lines = ["VFIC hiện có các vị trí đang tuyển sau:"]
-    if len(jobs) > _GROUP_REPLY_THRESHOLD:
-        lines.extend(_grouped_job_lines(jobs))
-        lines.append("Anh/chị muốn tìm hiểu vị trí nào ạ?")
-        return "\n".join(lines)
-    for job in jobs:
-        details: list[str] = []
-        seen_details: set[str] = set()
-        for value in (
-            job.get("company"),
-            job.get("factory"),
-            job.get("province"),
-            _salary_summary(job),
-        ):
-            detail = str(value or "").strip()
-            normalized = detail.casefold()
-            if detail and normalized not in seen_details:
-                details.append(detail)
-                seen_details.add(normalized)
-        suffix = "; ".join(details)
-        title = _plain_title(str(job.get("title") or "Vị trí đang tuyển"))
-        lines.append(f"- {title}" + (f": {suffix}" if suffix else ""))
-    lines.append("Anh/chị muốn tìm hiểu vị trí nào ạ?")
-    return "\n".join(lines)
-
-
-def _grouped_job_lines(jobs: list[dict[str, object]]) -> list[str]:
-    """Collapse a large catalog into one block per company.
-
-    The operator persona forbids dumping 5-10 rows on a phone screen; the
-    grouped block keeps every job reachable (titles inside the block) while
-    the reply stays scannable. Locations and salary summaries are the distinct
-    values across the group, first-seen order.
-    """
-    groups: dict[str, list[dict[str, object]]] = {}
-    for job in jobs:
-        key = str(job.get("company") or job.get("project") or "Dự án khác").strip()
-        groups.setdefault(key, []).append(job)
-
-    lines: list[str] = []
-    for company, group_jobs in groups.items():
-        locations: list[str] = []
-        seen_locations: set[str] = set()
-        salaries: list[str] = []
-        seen_salaries: set[str] = set()
-        titles: list[str] = []
-        seen_titles: set[str] = set()
-        for job in group_jobs:
-            location = str(job.get("province") or job.get("factory") or "").strip()
-            normalized_location = location.casefold()
-            if location and normalized_location not in seen_locations:
-                locations.append(location)
-                seen_locations.add(normalized_location)
-            salary = _salary_summary(job)
-            normalized_salary = salary.casefold()
-            if salary and normalized_salary not in seen_salaries:
-                salaries.append(salary)
-                seen_salaries.add(normalized_salary)
-            title = _plain_title(str(job.get("title") or "Vị trí đang tuyển"))
-            normalized_title = title.casefold()
-            if normalized_title not in seen_titles:
-                titles.append(title)
-                seen_titles.add(normalized_title)
-        header_bits: list[str] = []
-        if locations:
-            header_bits.append(locations[0])
-        if salaries:
-            header_bits.append(" / ".join(salaries[:2]))
-        header = f" ({'; '.join(header_bits)})" if header_bits else ""
-        lines.append(f"- Tại {company}{header}: {'; '.join(titles)}")
-    return lines
-
-
-def _active_jobs_brief_reply(jobs: list[dict[str, object]]) -> str:
-    """One-line-per-job digest used to suggest alternatives on a no-match.
-
-    Shorter than :func:`_active_jobs_safe_reply`: the LLM has already been told
-    the requested role is unavailable, so it just needs concrete pivots, not a
-    full pitch. Each line is title + company + province + salary only.
-    """
-    lines: list[str] = []
-    for job in jobs:
-        parts = [
-            str(job.get("company") or ""),
-            str(job.get("province") or ""),
-            _salary_summary(job),
-        ]
-        suffix = "; ".join(part for part in parts if part)
-        title = _plain_title(str(job.get("title") or "Vị trí đang tuyển"))
-        lines.append(f"- {title}" + (f": {suffix}" if suffix else ""))
-    return "\n".join(lines)
+# The matched-catalog payload carries EVIDENCE plus a presentation contract —
+# never a ready-made final reply. The operator rule is that the LLM agent makes
+# the final decision on what the candidate reads; the tool's job is accurate
+# data (title_plain already de-jargoned) and the presentation rules the agent
+# must follow when composing.
+_PRESENTATION_CONTRACT = (
+    "Đây là DỮ LIỆU việc làm từ tool — CHƯA phải câu trả lời cho ứng viên. "
+    "Tự soạn câu trả lời theo đúng phong cách persona, tuân thủ: "
+    "(1) không liệt kê tràn danh sách — nếu có hơn 4 vị trí thì nhóm theo dự án/công ty; "
+    "(2) dùng title_plain (đã dịch thuật ngữ sang từ phổ thông) thay vì title; "
+    "(3) mỗi nhóm/vị trí nêu địa điểm và mức lương đúng theo payload, không bịa thêm; "
+    "(4) kết thúc bằng một câu hỏi mở để ứng viên chọn hướng; "
+    "(5) văn bản thuần, ngắn gọn cho người đọc trên điện thoại."
+)
 
 
 def _active_job_tool_result(
@@ -315,14 +235,13 @@ async def _no_match_safe_reply(
             [],
         )
     alt_payload = [_active_job_payload(job) for job in alt_jobs]
-    digest = _active_jobs_brief_reply(alt_payload)
-    return (
-        (
-            f"{head} Hiện đang tuyển các vị trí sau:\n{digest}\n"
-            "Anh/chị muốn tìm hiểu vị trí nào ạ?"
-        ),
-        alt_payload,
+    evidence = (
+        f"{head} Các vị trí đang mở khác nằm trong alternative_jobs "
+        "(title_plain đã dịch thuật ngữ) — hãy nhận trước là chưa có vị trí khớp, "
+        "rồi gợi ý từ alternative_jobs; không bịa ngoài dữ liệu. "
+        f"{_PRESENTATION_CONTRACT}"
     )
+    return (evidence, alt_payload)
 
 
 # Whitelist of accepted ``list_active_jobs`` ``sort_by`` values. The JSON Schema enum
@@ -384,7 +303,7 @@ async def list_active_jobs(
             )
         payload = [_active_job_payload(job) for job in jobs]
         return _active_job_tool_result(
-            "matched", payload, _active_jobs_safe_reply(payload), total=total
+            "matched", payload, _PRESENTATION_CONTRACT, total=total
         )
     if status == "no_match":
         safe_reply, alternative_jobs = await _no_match_safe_reply(

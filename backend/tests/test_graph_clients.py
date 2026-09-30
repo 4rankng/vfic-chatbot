@@ -13,11 +13,7 @@ from app.graph.clients import (
     _openrouter_chat,
     build_embedder,
 )
-from app.graph.grounding import (
-    ground_active_job_reply as _ground_active_job_reply,
-    ground_reply as _ground_reply,
-    negative_job_authority as _negative_job_authority,
-)
+from app.graph.grounding import ground_reply as _ground_reply
 from app.graph.income_contract import IncomeVerdict, build_income_verdict, safe_reply_from
 from app.graph.prefetch import _scope_project_tool_args
 from app.graph.reasoning_compat import (
@@ -93,24 +89,18 @@ def test_vacancy_tool_status_does_not_replace_llm_final_answer():
     )
 
 
-def test_negative_vacancy_authority_requires_llm_abstention_composition():
+def test_negative_vacancy_status_keeps_llm_answer_intact():
+    """No-match stays sanitize-only: the LLM answer is never replaced.
+
+    The operator rule is that the LLM agent owns the final wording; the old
+    trusted-text replacements (negative/matched job authority) are gone and
+    the active-job payload now carries a presentation contract instead of a
+    ready-made reply.
+    """
     no_match = _vacancy_result("no_match", "Không có việc ACTIVE phù hợp.")
 
-    assert _negative_job_authority([no_match]) == "Không có việc ACTIVE phù hợp."
-    # The reply-consistency regex gate was removed. Actual authority turns now
-    # use this trusted renderer output directly, without a third model rewrite.
-
-
-def test_negative_vacancy_reply_uses_trusted_text_without_llm_rewrite():
-    no_match = _vacancy_result("no_match", "Không có việc ACTIVE phù hợp.")
-
-    assert (
-        _ground_active_job_reply("LG đang tuyển, lương 30 triệu.", [no_match])
-        == "Không có việc ACTIVE phù hợp."
-    )
-    assert (
-        _ground_active_job_reply("Hiện chưa có vị trí phù hợp.", [no_match])
-        == "Không có việc ACTIVE phù hợp."
+    assert _ground_reply("LG đang tuyển thợ hàn, lương 30 triệu.", [no_match]) == (
+        "LG đang tuyển thợ hàn, lương 30 triệu."
     )
 
 
@@ -171,34 +161,6 @@ def test_safe_reply_from_consumes_typed_verdict_from_contract():
     assert verdict.status == "matched"
     assert safe_reply_from(verdict, expected_target_monthly_vnd=20_000_000) == verdict.safe_reply
     assert safe_reply_from(verdict, expected_target_monthly_vnd=15_000_000) is None
-
-
-def test_matched_vacancy_reply_uses_structured_safe_reply_deterministically():
-    payload = json.dumps(
-        {
-            "status": "matched",
-            "jobs": [
-                {
-                    "id": "11111111-1111-4111-8111-111111111111",
-                    "title": "Công nhân sản xuất",
-                    "company": "LG Display",
-                    "salary_min": 10_000_000,
-                    "salary_max": 14_000_000,
-                }
-            ],
-            "safe_reply": "LG Display tuyển công nhân, lương 10-14 triệu.",
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    tool_result = f"ACTIVE_JOB_LOOKUP_JSON={payload}"
-
-    assert (
-        _ground_active_job_reply("LG Display tuyển, lương 30 triệu.", [tool_result])
-        == "LG Display tuyển công nhân, lương 10-14 triệu."
-    )
-    grounded = "LG Display tuyển công nhân, lương 10-14 triệu."
-    assert _ground_active_job_reply(grounded, [tool_result]) == grounded
 
 
 def test_malformed_vacancy_tool_payload_does_not_short_circuit_llm_answer():
@@ -705,20 +667,22 @@ def test_custom_chat_leaves_unknown_vendor_reasoning_untouched(monkeypatch):
 # the gate enforces.
 
 def test_authority_override_invariant_documented():
-    """The trusted abstention text is surfaced from the active-job payload.
+    """The presentation contract is surfaced from the active-job payload.
 
-    The reply-consistency regex gates that consumed this output (and fired a
-    third ``self.direct()`` LLM call) were removed — they over-fired on
-    legitimate replies (the no_match safe_reply itself contains "lương" for
-    alternatives; salary reformulation like 7000000→"7 triệu" never matches the
-    raw JSON digits). Actual authority turns now return the structured safe
-    reply directly. This test pins that extraction contract.
+    The deterministic reply replacements are gone — the agent composes the
+    final wording from the payload (title_plain rows + presentation contract).
+    This test pins that the payload still carries the contract text the agent
+    is told to follow.
     """
     fake_active_job_output = (
         'ACTIVE_JOB_LOOKUP_JSON={"status":"no_match","total":0,"jobs":[],'
-        '"safe_reply":"Không có việc ACTIVE."}'
+        '"safe_reply":"DỮ LIỆU việc làm từ tool — CHƯA phải câu trả lời."}'
     )
-    assert _negative_job_authority([fake_active_job_output]) == "Không có việc ACTIVE."
+    from app.graph.grounding import active_job_safe_reply
+
+    assert active_job_safe_reply(fake_active_job_output) == (
+        "DỮ LIỆU việc làm từ tool — CHƯA phải câu trả lời."
+    )
 
 
 def test_ground_reply_preserves_answer_when_no_authority_dispatched():
