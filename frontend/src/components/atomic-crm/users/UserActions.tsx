@@ -129,25 +129,26 @@ export const UserActions = () => {
           <Button
             color="tertiary"
             size="sm"
-            className="size-11"
+            className="size-10"
             iconLeading={MoreHorizontal}
             aria-label={actionLabel}
           />
         </span>
         <Dropdown.Popover className="w-64">
           <Dropdown.Menu onAction={handleAction}>
-            <Dropdown.Item id="edit" href={editHref} icon={Pencil} label="Sửa" />
+            <Dropdown.Item
+              id="edit"
+              href={editHref}
+              icon={Pencil}
+              label="Sửa"
+            />
             <Dropdown.Item
               id="toggle"
               icon={record.disabled ? Power : PowerOff}
               label={record.disabled ? "Kích hoạt" : "Vô hiệu hóa"}
             />
             {!record.disabled ? (
-              <Dropdown.Item
-                id="reset"
-                icon={KeyRound}
-                label="Đổi mật khẩu"
-              />
+              <Dropdown.Item id="reset" icon={KeyRound} label="Đổi mật khẩu" />
             ) : null}
             <Dropdown.Separator />
             <Dropdown.Item id="delete" icon={Trash2}>
