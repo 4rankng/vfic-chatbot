@@ -159,7 +159,7 @@ TOOL_SCHEMAS = [
                     "query": {"type": "string"},
                     "top_k": {
                         "type": "integer",
-                        "description": "Số dự án cần gợi ý, tối đa 5",
+                        "description": "Số dự án cần gợi ý (mặc định 5, tối đa 5)",
                     },
                 },
                 "required": ["query"],

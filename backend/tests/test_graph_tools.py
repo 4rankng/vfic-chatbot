@@ -870,6 +870,31 @@ async def test_recommend_projects_ranks_by_catalog_terms(no_cache_io):
 
 
 @pytest.mark.asyncio
+async def test_recommend_projects_default_shortlist_covers_five_scored_rows(no_cache_io):
+    """Omitting top_k must not hide scored candidates behind the old default of 3.
+
+    The model does the relevance filtering, so the default shortlist is 5 —
+    with six scored projects, exactly the cap's worth are rendered, ranked.
+    """
+    rows = [
+        SimpleNamespace(
+            slug=f"project-{index}",
+            name=f"Project {index}",
+            summary="Tuyển nhân viên kho tại Hải Phòng",
+            index_card={"key_roles": ["nhân viên kho"], "location": "Hải Phòng"},
+        )
+        for index in range(1, 7)
+    ]
+    repo = _make_repo(active_projects_with_card=lambda self: _const(rows))
+
+    out = await recommend_projects(retrieval=repo, query="việc kho tại Hải Phòng")
+
+    rendered = [line for line in out.splitlines() if line.startswith("- ")]
+    assert len(rendered) == 5
+    assert rendered[0].startswith("- project-1")
+
+
+@pytest.mark.asyncio
 async def test_recommend_projects_rejects_substring_only_matches(no_cache_io):
     """`tho`/`han` must not match unrelated `thong`/`nhan` catalog text."""
     rows = [

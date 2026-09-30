@@ -76,18 +76,23 @@ def _project_haystack(row) -> tuple[str, list[str], str]:
 async def recommend_projects(
     retrieval: GraphRetrievalPort,
     query: str,
-    top_k: int = 3,
+    top_k: int = 5,
 ) -> str:
     """Rank active projects for a candidate query using existing catalog metadata.
 
     This is the first recommendation seam: deterministic, schema-free, and cheap.
-    It does not replace the LLM; it gives the agent a small, grounded shortlist
-    plus reasons before the agent calls project feature/detail tools.
+    It does not replace the LLM; it gives the agent a grounded shortlist plus
+    reasons before the agent calls project feature/detail tools.
+
+    The default matches ``rec_top_k`` (recommend_jobs) and the hard cap: the
+    model does the relevance filtering, so omitting ``top_k`` must not hide
+    scored candidates from it — with only a handful of active projects a
+    smaller shortlist hid real options behind a lexical scoring tie.
     """
     try:
         k = max(1, min(int(top_k), 5))
     except (TypeError, ValueError):
-        k = 3
+        k = 5
     rows = await retrieval.active_projects_with_card()
     if not rows:
         return "Hiện chưa có dự án/sản phẩm nào đang hoạt động để gợi ý."
