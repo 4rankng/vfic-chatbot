@@ -198,7 +198,7 @@ export const ConversationShowContent = ({
                 className="icon-btn mobile-toggle list-toggle uu-scope"
                 icon={
                   <svg className="icon" aria-hidden="true">
-                    <use href="#i-menu" />
+                    <use href="#i-panel" />
                   </svg>
                 }
                 onPress={() => onOpenList?.()}

@@ -56,9 +56,6 @@ export const InboxIcons = () => (
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M15 4v16" />
     </symbol>
-    <symbol id="i-menu" viewBox="0 0 24 24">
-      <path d="M4 7h16M4 12h16M4 17h16" />
-    </symbol>
     <symbol id="i-check" viewBox="0 0 24 24">
       <path d="m5 12 4 4L19 6" />
     </symbol>
