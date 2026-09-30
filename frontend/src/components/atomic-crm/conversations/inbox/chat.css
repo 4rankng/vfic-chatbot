@@ -68,26 +68,31 @@
 }
 .inbox-bg-container .person-name-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
 }
+/* Identity envelope (global rule): the name is the single main line and never
+   wraps — it truncates — and the supporting line (channel + phone) is the only
+   second line. Both sizes come from the two small roles: 12px / 11px. */
 .inbox-bg-container .person-name {
   color: var(--ink);
-  font-size: var(--chat-fs-body);
-  font-weight: var(--chat-fw-semibold);
-  line-height: var(--chat-lh-body);
-  overflow-wrap: anywhere;
-  white-space: normal;
+  font-size: var(--fs-helper);
+  font-weight: var(--chat-fw-bold);
+  line-height: var(--chat-lh-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .inbox-bg-container .person-subtitle {
   margin-top: 2px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   color: var(--workspace-ink-muted);
-  font-size: var(--chat-fs-caption);
+  font-size: var(--fs-caption);
   line-height: var(--chat-lh-tight);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .inbox-bg-container .person-subtitle-name {
   font-weight: var(--chat-fw-medium);

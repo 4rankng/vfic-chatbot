@@ -1,9 +1,5 @@
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 
-import messengerIcon from "@/assets/channel-adapters/facebook-messenger.svg";
-import tingtingOaIcon from "@/assets/channel-adapters/tingting-oa.png";
-import zaloChatbotIcon from "@/assets/channel-adapters/zalo-chatbot.png";
-import zaloOaIcon from "@/assets/channel-adapters/zalo-oa.png";
 import { useAttentionCounts } from "@/components/atomic-crm/layout/topbar/useAttentionCounts";
 import {
   Tooltip,
@@ -14,6 +10,7 @@ import {
   type ConversationChannelProvider,
   CONVERSATION_CHANNEL_LABELS,
 } from "../types";
+import { CHANNEL_ICONS } from "./domain/channel-icons";
 import { getChannelProviderSearchParams } from "./domain/conversation-list-filters";
 
 type ChannelAdapterProvider = ConversationChannelProvider;
@@ -24,28 +21,13 @@ type AdapterDefinition = {
   icon: string;
 };
 
-const ADAPTERS: readonly AdapterDefinition[] = [
-  {
-    provider: "zalo_bot",
-    label: CONVERSATION_CHANNEL_LABELS.zalo_bot,
-    icon: zaloChatbotIcon,
-  },
-  {
-    provider: "zalo_oa",
-    label: CONVERSATION_CHANNEL_LABELS.zalo_oa,
-    icon: zaloOaIcon,
-  },
-  {
-    provider: "facebook_messenger",
-    label: CONVERSATION_CHANNEL_LABELS.facebook_messenger,
-    icon: messengerIcon,
-  },
-  {
-    provider: "tingting_oa",
-    label: CONVERSATION_CHANNEL_LABELS.tingting_oa,
-    icon: tingtingOaIcon,
-  },
-];
+const ADAPTERS: readonly AdapterDefinition[] = (
+  ["zalo_bot", "zalo_oa", "facebook_messenger", "tingting_oa"] as const
+).map((provider) => ({
+  provider,
+  label: CONVERSATION_CHANNEL_LABELS[provider],
+  icon: CHANNEL_ICONS[provider],
+}));
 
 const formatAdapterAttentionCount = (count: number): string =>
   count > 99 ? "99+" : String(count);

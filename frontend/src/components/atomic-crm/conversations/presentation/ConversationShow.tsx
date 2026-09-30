@@ -14,6 +14,7 @@ import {
   conversationChannelShortLabel,
 } from "../../types";
 import { deleteConversation } from "../application/conversation-operations";
+import { channelIcon } from "../domain/channel-icons";
 import { Confirm } from "@/components/admin/confirm";
 import { LeadAvatar } from "../LeadAvatar";
 import { ChatThread } from "./ChatThread";
@@ -128,6 +129,9 @@ export const ConversationShowContent = ({
     (option) => option.mode === activeMode,
   );
   const ActiveModeIcon = activeModeOption?.Icon ?? Bot;
+  const channelProvider = record?.channel_identity?.provider;
+  const channelGlyph = channelIcon(channelProvider);
+  const channelLabel = conversationChannelLabel(channelProvider);
 
   useEffect(() => {
     setIsContextOpen(isWideDesktop || shouldOpenCandidatePanel);
@@ -234,19 +238,6 @@ export const ConversationShowContent = ({
                 )}
                 <div className="person-copy">
                   <div className="person-name-row">
-                    <span
-                      className="conv-channel"
-                      data-channel={
-                        record?.channel_identity?.provider ?? "unknown"
-                      }
-                      title={conversationChannelLabel(
-                        record?.channel_identity?.provider,
-                      )}
-                    >
-                      {conversationChannelShortLabel(
-                        record?.channel_identity?.provider,
-                      )}
-                    </span>
                     {showWorkspacePanel && context.renderPanel ? (
                       <button
                         type="button"
@@ -264,33 +255,61 @@ export const ConversationShowContent = ({
                       <span className="person-name">{context.displayName}</span>
                     )}
                   </div>
-                  {context.contactSubtitle && (
-                    <div className="person-subtitle">
-                      {context.contactSubtitle.secondaryName && (
-                        <span className="person-subtitle-name">
-                          {context.contactSubtitle.secondaryName}
-                        </span>
-                      )}
-                      {context.contactSubtitle.secondaryName &&
-                      context.contactSubtitle.phone ? (
+                  <div className="person-subtitle">
+                    {channelGlyph ? (
+                      <>
+                        <img
+                          className="conv-channel-icon"
+                          data-channel={
+                            record?.channel_identity?.provider ?? "unknown"
+                          }
+                          src={channelGlyph}
+                          alt={channelLabel}
+                          title={channelLabel}
+                        />
                         <span
-                          className="person-subtitle-sep"
-                          aria-hidden="true"
+                          className="conv-channel-name"
+                          title={channelLabel}
                         >
-                          ·
+                          {conversationChannelShortLabel(
+                            record?.channel_identity?.provider,
+                          )}
                         </span>
-                      ) : null}
-                      {context.contactSubtitle.phone && (
-                        <span className="person-subtitle-phone">
-                          <Phone
-                            className="person-subtitle-icon"
-                            aria-hidden="true"
-                          />
-                          <span>{context.contactSubtitle.phone}</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
+                      </>
+                    ) : (
+                      <span
+                        className="conv-channel"
+                        data-channel={
+                          record?.channel_identity?.provider ?? "unknown"
+                        }
+                        title={channelLabel}
+                      >
+                        {conversationChannelShortLabel(
+                          record?.channel_identity?.provider,
+                        )}
+                      </span>
+                    )}
+                    {context.contactSubtitle?.secondaryName && (
+                      <span className="person-subtitle-name">
+                        {context.contactSubtitle.secondaryName}
+                      </span>
+                    )}
+                    {context.contactSubtitle?.secondaryName &&
+                    context.contactSubtitle.phone ? (
+                      <span className="person-subtitle-sep" aria-hidden="true">
+                        ·
+                      </span>
+                    ) : null}
+                    {context.contactSubtitle?.phone && (
+                      <span className="person-subtitle-phone">
+                        <Phone
+                          className="person-subtitle-icon"
+                          aria-hidden="true"
+                        />
+                        <span>{context.contactSubtitle.phone}</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="header-actions">

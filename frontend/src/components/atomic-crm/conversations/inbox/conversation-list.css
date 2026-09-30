@@ -475,3 +475,26 @@
   background: color-mix(in srgb, #b7358a 10%, var(--uu-inbox-surface));
   color: #8a2568;
 }
+
+/* The thread header identifies the channel by the same glyph the channel filter
+   uses, at the supporting role's scale. The pill above stays for the list row,
+   which has no icon column of its own. */
+.inbox-bg-container .conv-channel-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.inbox-bg-container .conv-channel-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--uu-inbox-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--chat-fw-bold);
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

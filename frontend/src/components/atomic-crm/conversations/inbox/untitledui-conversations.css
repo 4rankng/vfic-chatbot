@@ -344,14 +344,10 @@
 
 .inbox-bg-container .person-name {
   color: var(--uu-inbox-ink);
-  font-size: var(--fs-subsection);
-  font-weight: 700;
-  letter-spacing: -0.012em;
 }
 
 .inbox-bg-container .person-subtitle {
   color: var(--uu-inbox-muted);
-  font-size: var(--fs-helper);
 }
 
 .inbox-bg-container .icon-btn,
