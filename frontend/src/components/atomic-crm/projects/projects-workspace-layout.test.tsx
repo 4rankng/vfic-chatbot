@@ -118,13 +118,13 @@ describe("project ledger workspace surface", () => {
     )!;
     const styles = getComputedStyle(strip);
     // One continuous band: ruled top and bottom, no fill, no rounding, and a
-    // floor tall enough to hit.
+    // floor tall enough to hit (one 40px tier with the console's control cap).
     expect(styles.borderBlockStartWidth).toBe("1px");
     expect(styles.borderBlockStartStyle).toBe("solid");
     expect(styles.borderBlockEndWidth).toBe("1px");
     expect(styles.borderRadius).toBe("0px");
     expect(styles.backgroundColor).toBe("rgba(0, 0, 0, 0)");
-    expect(styles.minHeight).toBe("44px");
+    expect(styles.minHeight).toBe("40px");
 
     // The chips inside inherit the flat treatment — no pill rounding.
     for (const chip of Array.from(
@@ -360,8 +360,8 @@ describe("project knowledge category editor", () => {
       ".project-category-mobile-select",
     )!;
     expect(getComputedStyle(select).display).toBe("block");
-    // 44px so the select is reachable on a phone.
-    expect(getComputedStyle(select).minHeight).toBe("44px");
+    // 40px so the select is reachable on a phone under the console's cap.
+    expect(getComputedStyle(select).minHeight).toBe("40px");
   });
 
   it("spans the destructive editor action across the row", async () => {
