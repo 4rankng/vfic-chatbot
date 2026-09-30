@@ -80,10 +80,10 @@
 
 /* Conversation workspace rail */
 .inbox-bg-container .workspace-rail {
-  min-height: 194px;
+  min-height: 0;
   display: grid;
-  gap: 12px;
-  padding: 18px 16px 16px;
+  gap: 8px;
+  padding: 10px 12px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-solid);
 }

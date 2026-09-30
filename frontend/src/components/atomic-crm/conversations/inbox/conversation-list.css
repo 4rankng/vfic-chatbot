@@ -155,7 +155,7 @@
 }
 .inbox-bg-container .conv-top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 8px;
   margin-bottom: 0;
@@ -479,4 +479,54 @@
   .inbox-bg-container .conv-state-label.is-human-escalation {
     animation: none;
   }
+}
+
+/* Channel indicator on a directory row.
+ *
+ * Which channel a thread belongs to was only visible inside the conversation,
+ * never in the list. The chip is deliberately quiet — an 18px pill whose hue
+ * matches the adapter tile it came from — and carries the full channel name on
+ * the element's `title`, because the employee-support OA's full label cannot
+ * fit a row. Scoped by its own class prefix rather than as a descendant of the
+ * shared `.inbox-bg-container`, so it adds nothing to the FE-19 ratchet. */
+.conv-channel {
+  flex: 0 0 auto;
+  align-self: center;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--uu-inbox-line);
+  border-radius: 6px;
+  background: var(--uu-inbox-surface-subtle);
+  color: var(--uu-inbox-muted);
+  font-size: 10px;
+  font-weight: var(--chat-fw-bold);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.conv-channel[data-channel="zalo_bot"] {
+  border-color: color-mix(in srgb, #1f7ae0 32%, transparent);
+  background: color-mix(in srgb, #1f7ae0 10%, var(--uu-inbox-surface));
+  color: #17538f;
+}
+
+.conv-channel[data-channel="zalo_oa"] {
+  border-color: color-mix(in srgb, #0f6fbe 32%, transparent);
+  background: color-mix(in srgb, #0f6fbe 10%, var(--uu-inbox-surface));
+  color: #0f5182;
+}
+
+.conv-channel[data-channel="facebook_messenger"] {
+  border-color: color-mix(in srgb, #7b3fe4 30%, transparent);
+  background: color-mix(in srgb, #7b3fe4 10%, var(--uu-inbox-surface));
+  color: #5b2fae;
+}
+
+.conv-channel[data-channel="tingting_oa"] {
+  border-color: color-mix(in srgb, #b7358a 30%, transparent);
+  background: color-mix(in srgb, #b7358a 10%, var(--uu-inbox-surface));
+  color: #8a2568;
 }

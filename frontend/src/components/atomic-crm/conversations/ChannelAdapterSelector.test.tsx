@@ -36,8 +36,8 @@ afterEach(async () => {
 
 describe("ChannelAdapterSelector", () => {
   it("renders an exclusive Vietnamese radio selector and switches scope", async () => {
-    // Compact conversation toolbar keeps the visual control at the 44px
-    // accessible touch-target minimum rather than the previous 48px tile.
+    // Directory-header density cap: the tile is 40px, down from 48px and then
+    // 44px, so the header stays compact at every width.
     // Pin a mobile viewport so the inbox sheet's `@media (max-width: 767px)`
     // rules are the ones under test.
     await page.viewport(414, 896);
@@ -89,7 +89,8 @@ describe("ChannelAdapterSelector", () => {
     await expect.element(oaRadio).toBeVisible();
     const oaElement = screen.container.querySelector('[value="zalo_oa"]');
     expect(oaElement).not.toBeNull();
-    expect(getComputedStyle(oaElement as Element).width).toBe("44px");
+    // Owner-set density cap: every directory-header control is 40px or less.
+    expect(getComputedStyle(oaElement as Element).width).toBe("40px");
     expect(getComputedStyle(oaElement as Element).backgroundColor).not.toBe(
       "rgb(255, 255, 255)",
     );

@@ -497,6 +497,21 @@ export const CONVERSATION_CHANNEL_LABELS: Record<
 };
 
 /**
+ * Row-sized form of the same vocabulary: a conversation row has one line for
+ * the candidate and the channel chip sits beside the name, where the full
+ * support-OA label cannot fit. Kept beside the full map so the two cannot drift.
+ */
+export const CONVERSATION_CHANNEL_SHORT_LABELS: Record<
+  ConversationChannelProvider,
+  string
+> = {
+  zalo_bot: "Chatbot",
+  zalo_oa: "Zalo OA",
+  facebook_messenger: "Messenger",
+  tingting_oa: "TingTing",
+};
+
+/**
  * Label for a raw provider string from the API. Unknown or absent providers
  * read as a neutral channel rather than as an empty cell.
  */
@@ -505,4 +520,12 @@ export const conversationChannelLabel = (
 ): string =>
   isConversationChannelProvider(provider ?? null)
     ? CONVERSATION_CHANNEL_LABELS[provider as ConversationChannelProvider]
+    : "Kênh khác";
+
+/** Row-sized label; falls back to the full label's neutral wording. */
+export const conversationChannelShortLabel = (
+  provider: string | null | undefined,
+): string =>
+  isConversationChannelProvider(provider ?? null)
+    ? CONVERSATION_CHANNEL_SHORT_LABELS[provider as ConversationChannelProvider]
     : "Kênh khác";

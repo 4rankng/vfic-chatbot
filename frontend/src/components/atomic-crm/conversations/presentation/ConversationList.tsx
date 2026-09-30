@@ -17,7 +17,11 @@ import {
   RecordContextProvider,
 } from "ra-core";
 import { useSearchParams } from "react-router";
-import type { Conversation } from "../../types";
+import {
+  conversationChannelLabel,
+  conversationChannelShortLabel,
+  type Conversation,
+} from "../../types";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "../InboxIcons";
 import { EmptyState } from "../../kit";
@@ -210,6 +214,19 @@ const ConversationListItem = memo(
         </LeadAvatar>
         <span className="conv-body">
           <span className="conv-top">
+            <span
+              className="conv-channel"
+              data-channel={
+                conversation.channel_identity?.provider ?? "unknown"
+              }
+              title={conversationChannelLabel(
+                conversation.channel_identity?.provider,
+              )}
+            >
+              {conversationChannelShortLabel(
+                conversation.channel_identity?.provider,
+              )}
+            </span>
             <span className="conv-name">{name}</span>
             <span className="conv-time">{time}</span>
           </span>
@@ -635,7 +652,7 @@ const WorkspaceRail = ({
       </div>
     </div>
     {adapterSlot}
-    <div className="inbox-tools">{searchSlot}</div>
+    <div className="inbox-tools [grid-area:search] min-w-0">{searchSlot}</div>
   </div>
 );
 
