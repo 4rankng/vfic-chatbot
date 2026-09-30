@@ -189,7 +189,8 @@ const PersonaListContent = ({ embedded = false }: PersonaListProps) => {
                   <Button
                     type="button"
                     data-slot="button"
-                    className="persona-create-action tt-btn-touch uu-scope"
+                    size="sm"
+                    className="persona-create-action uu-scope"
                     onClick={() => redirect("create", "personas")}
                     iconLeading={Plus}
                   >

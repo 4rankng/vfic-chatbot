@@ -129,6 +129,9 @@
 .persona-panel-header {
   min-height: 36px;
   display: flex;
+  /* The 224px rail cannot hold the title and the create action side by side;
+     wrap instead of letting the button clip the title. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
