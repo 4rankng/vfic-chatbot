@@ -33,6 +33,10 @@ const mocks = vi.hoisted(() => ({
   deleteSinglePageExternalSource: vi.fn(),
   replaceProjectSinglePage: vi.fn(),
   replaceProjectKnowledgeCategory: vi.fn(),
+  /** The migration's explicit empty state for a brief-carried gap. */
+  clearProjectKnowledgeCategory: vi.fn(),
+  /** The migration's final authority hand-over. */
+  cutoverProjectKnowledgeCategories: vi.fn(),
   /** The brief file's upload to the project document shelf. */
   uploadProjectDocument: vi.fn(),
   /** The brief's highlights PATCHed onto the discovery card. */
@@ -62,6 +66,8 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
   deleteSinglePageExternalSource: mocks.deleteSinglePageExternalSource,
   replaceProjectSinglePage: mocks.replaceProjectSinglePage,
   replaceProjectKnowledgeCategory: mocks.replaceProjectKnowledgeCategory,
+  clearProjectKnowledgeCategory: mocks.clearProjectKnowledgeCategory,
+  cutoverProjectKnowledgeCategories: mocks.cutoverProjectKnowledgeCategories,
   uploadProjectDocument: mocks.uploadProjectDocument,
   updateProjectDiscoveryCard: mocks.updateProjectDiscoveryCard,
   listExternalSources: mocks.listExternalSources,
@@ -169,6 +175,21 @@ describe("ProjectKnowledgePanel", () => {
       new ApiError(404, "Chưa có dữ liệu"),
     );
     mocks.uploadProjectDocument.mockResolvedValue(undefined);
+    mocks.clearProjectKnowledgeCategory.mockResolvedValue({
+      id: "cleared-revision",
+      category_id: "category-cleared",
+      revision_no: 1,
+      status: "CLEARED",
+      source_filename: "cleared.yaml",
+      content_sha256: "checksum",
+      normalized_payload: {},
+      created_at: "2026-07-18T00:00:00Z",
+    });
+    mocks.cutoverProjectKnowledgeCategories.mockResolvedValue({
+      project_id: "project-1",
+      category_authority_started: true,
+      category_cutover_at: "2026-07-18T00:00:00Z",
+    });
     mocks.listSinglePageExternalSources.mockResolvedValue([]);
     mocks.listExternalSources.mockResolvedValue([]);
     mocks.getProjectKnowledgeCategoryTemplate.mockImplementation(
@@ -1196,12 +1217,168 @@ describe("ProjectKnowledgePanel", () => {
 
     await vi.waitFor(
       () =>
-        expect(
-          screen.getByText(/Đã nạp xong 3 phần kiến thức/),
-        ).toBeVisible(),
+        expect(screen.getByText(/Đã nạp xong 3 phần kiến thức/)).toBeVisible(),
       { timeout: 30000 },
     );
     // No highlight facts, no patch — the card keeps its derived empty list.
     expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
+  }, 30000);
+
+  /** The migration affordance lives in its own section; its brief input is
+   *  the one that carries the single-page → catalog cutover. */
+  const migrationInput = (screen: { container: HTMLElement }) => {
+    const input = screen.container.querySelector<HTMLInputElement>(
+      '.project-migration-section input[type="file"]',
+    );
+    if (!input) throw new Error("the migration section renders no brief input");
+    return input;
+  };
+
+  const dropBrief = (input: HTMLInputElement, brief: string, name: string) => {
+    const file = new File([brief], name, { type: "text/markdown" });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  it("offers the single-page migration and keeps it off catalog projects", async () => {
+    mocks.getProjectSinglePage.mockRejectedValue(
+      new ApiError(404, "Chưa có dữ liệu"),
+    );
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    await expect
+      .element(screen.getByText("Chuyển sang kiến thức 12 danh mục"))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("button", {
+          name: "Chuyển sang 12 danh mục — nhập từ tệp .md",
+        }),
+      )
+      .toBeVisible();
+
+    const ragScreen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    expect(
+      ragScreen.container.querySelector(".project-migration-section"),
+    ).toBeNull();
+    expect(ragScreen.container.textContent).not.toContain(
+      "Chuyển sang 12 danh mục",
+    );
+  });
+
+  it("cuts a migrated single-page project over exactly once after the chain lands", async () => {
+    mocks.getProjectSinglePage.mockRejectedValue(
+      new ApiError(404, "Chưa có dữ liệu"),
+    );
+    mocks.replaceProjectKnowledgeCategory.mockImplementation(
+      async (_projectId: string, key: string) => ({
+        revision: { id: `rev-${key}` },
+      }),
+    );
+    // The ingest chain must await real activation: every catalog poll reports
+    // each written revision as ACTIVE, so nothing stalls.
+    mocks.getProjectKnowledgeCategories.mockImplementation(async () => {
+      const rows = (
+        [
+          "jobs",
+          "compensation",
+          "requirements",
+          "work_schedules",
+          "benefits",
+          "accommodation",
+          "meals",
+          "transportation",
+          "insurance",
+          "application",
+          "contacts",
+          "faq",
+        ] as const
+      ).map((key) => ({
+        key,
+        label_vi: key,
+        active_revision_id: `rev-${key}`,
+        latest_revision_id: `rev-${key}`,
+        status: "ACTIVE",
+      }));
+      return { data: rows, total: rows.length };
+    });
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    dropBrief(
+      migrationInput(screen),
+      REUPLOAD_BRIEF,
+      "phieu-rorze-chuyen-doi.md",
+    );
+
+    await vi.waitFor(
+      () =>
+        expect(mocks.cutoverProjectKnowledgeCategories).toHaveBeenCalledTimes(
+          1,
+        ),
+      { timeout: 30000 },
+    );
+    expect(mocks.cutoverProjectKnowledgeCategories).toHaveBeenCalledWith(
+      "project-rorze",
+    );
+    // The brief carries jobs, compensation and faq; every other category is
+    // explicitly cleared first — an empty state, not a gap — in catalog order.
+    expect(
+      mocks.clearProjectKnowledgeCategory.mock.calls.map((call) => call[1]),
+    ).toEqual([
+      "requirements",
+      "work_schedules",
+      "benefits",
+      "accommodation",
+      "meals",
+      "transportation",
+      "insurance",
+      "application",
+      "contacts",
+    ]);
+    // Every clear precedes the one and only cutover call.
+    const cutoverOrder =
+      mocks.cutoverProjectKnowledgeCategories.mock.invocationCallOrder[0];
+    const lastClearOrder =
+      mocks.clearProjectKnowledgeCategory.mock.invocationCallOrder.at(-1) ?? 0;
+    expect(lastClearOrder).toBeLessThan(cutoverOrder);
+    // The record re-read makes the panel come back as the category catalog.
+    expect(mocks.refresh).toHaveBeenCalled();
+    expect(mocks.notify).toHaveBeenCalledWith(
+      "Dự án đã chuyển sang kiến thức 12 danh mục.",
+      { type: "success" },
+    );
+  }, 30000);
+
+  it("leaves the single page untouched when the chain fails before the cutover", async () => {
+    mocks.getProjectSinglePage.mockRejectedValue(
+      new ApiError(404, "Chưa có dữ liệu"),
+    );
+    mocks.replaceProjectKnowledgeCategory.mockRejectedValue(
+      new ApiError(500, "hệ thống quá tải"),
+    );
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    dropBrief(
+      migrationInput(screen),
+      REUPLOAD_BRIEF,
+      "phieu-rorze-that-bai.md",
+    );
+
+    await expect
+      .element(screen.getByText(/Nạp «Vị trí tuyển dụng» không thành công/))
+      .toBeVisible();
+    // No clears, no cutover: nothing moved while the chain never landed.
+    expect(mocks.clearProjectKnowledgeCategory).not.toHaveBeenCalled();
+    expect(mocks.cutoverProjectKnowledgeCategories).not.toHaveBeenCalled();
   }, 30000);
 });

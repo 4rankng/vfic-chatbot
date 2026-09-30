@@ -57,6 +57,14 @@ export type KnowledgeCategoryRevision = Readonly<{
   error_message?: string | null;
 }>;
 
+/** The authority state a cutover reports: the project's knowledge now comes
+ *  from its category revisions, and the console renders the catalog. */
+export type CategoryAuthorityState = Readonly<{
+  project_id: string;
+  category_authority_started: boolean;
+  category_cutover_at: string | null;
+}>;
+
 export type SinglePageKnowledge = Readonly<{
   id: string;
   knowledge_base_id: string;

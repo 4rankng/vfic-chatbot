@@ -82,6 +82,12 @@ export type ProjectIngest = Readonly<{
    * `job_ids` is rejected unless those jobs are already active, so `jobs` must
    * lead the batch.
    *
+   * Resolves true only when the chain reached its done state — every write
+   * active. A failure, the hard poll budget or a cancel resolves false: the
+   * reason is reported through `state`, never a throw, so a caller that
+   * continues past the chain must check this before treating the knowledge as
+   * landed.
+   *
    * `sourceFile` — the original brief file — is uploaded alongside the writes
    * as a project knowledge document, so the brief stays on record (counted in
    * the project's documents and searchable) instead of only surviving as
@@ -93,7 +99,7 @@ export type ProjectIngest = Readonly<{
     projectId: string,
     writes: readonly IngestWrite[],
     sourceFile?: File,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   /** Stop the chain; a write in flight still resolves but nothing follows it. */
   cancel: () => void;
 }>;
@@ -227,7 +233,7 @@ export const useProjectIngest = (): ProjectIngest => {
       projectId: string,
       writes: readonly IngestWrite[],
       sourceFile?: File,
-    ) => {
+    ): Promise<boolean> => {
       cancel();
       const epoch = epochRef.current;
       const activated: ProjectKnowledgeCategory[] = [];
@@ -253,7 +259,7 @@ export const useProjectIngest = (): ProjectIngest => {
       };
 
       for (const [index, write] of writes.entries()) {
-        if (epoch !== epochRef.current) return;
+        if (epoch !== epochRef.current) return false;
         setItem(index, "writing");
         setState({
           phase: "running",
@@ -282,10 +288,10 @@ export const useProjectIngest = (): ProjectIngest => {
             activated: [...activated],
             uploadError,
           });
-          return;
+          return false;
         }
 
-        if (epoch !== epochRef.current) return;
+        if (epoch !== epochRef.current) return false;
         const outcome = await waitForActive(
           projectId,
           revisionId,
@@ -312,15 +318,16 @@ export const useProjectIngest = (): ProjectIngest => {
             activated: [...activated],
             uploadError,
           });
-          return;
+          return false;
         }
         setItem(index, "active");
         activated.push(write.key);
       }
 
-      if (epoch !== epochRef.current) return;
+      if (epoch !== epochRef.current) return false;
       await uploadSettled;
       setState({ phase: "done", activated: [...activated], uploadError });
+      return true;
     },
     [cancel, waitForActive],
   );

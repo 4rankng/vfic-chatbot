@@ -44,6 +44,18 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       body: { filename, content },
     }),
 
+  clearCategory: (projectId, key) =>
+    apiJson(
+      `${projectPath(projectId)}/categories/${encodeURIComponent(key)}/clear`,
+      { method: "POST", body: { confirmation: "CLEAR" } },
+    ),
+
+  cutoverCategories: (projectId) =>
+    apiJson(`${projectPath(projectId)}/categories/cutover`, {
+      method: "POST",
+      body: { confirmation: "CUTOVER" },
+    }),
+
   uploadDocument: async (projectId, file) => {
     const form = new FormData();
     form.append("file", new Blob([file.bytes], { type: file.type }), file.name);
@@ -53,7 +65,10 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       body: form,
     });
     if (!response.ok) {
-      throw new ApiError(response.status, "Không lưu được tệp vào tài liệu dự án.");
+      throw new ApiError(
+        response.status,
+        "Không lưu được tệp vào tài liệu dự án.",
+      );
     }
   },
 

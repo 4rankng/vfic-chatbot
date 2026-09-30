@@ -25,10 +25,11 @@ export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
       filename: string,
       content: string,
     ) => port.replaceCategory(projectId, key, filename, content),
-    uploadDocument: (
-      projectId: string,
-      file: ProjectDocumentUpload,
-    ) => port.uploadDocument(projectId, file),
+    clearCategory: (projectId: string, key: ProjectKnowledgeCategory) =>
+      port.clearCategory(projectId, key),
+    cutoverCategories: (projectId: string) => port.cutoverCategories(projectId),
+    uploadDocument: (projectId: string, file: ProjectDocumentUpload) =>
+      port.uploadDocument(projectId, file),
     getSinglePage: (projectId: string) => port.getSinglePage(projectId),
     replaceSinglePage: (projectId: string, filename: string, text: string) =>
       port.replaceSinglePage(projectId, filename, text),

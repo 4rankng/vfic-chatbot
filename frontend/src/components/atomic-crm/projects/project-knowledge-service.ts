@@ -44,6 +44,14 @@ export const getProjectKnowledgeCategoryTemplate =
 export const getProjectKnowledgeCategorySource = operations.getCategorySource;
 export const replaceProjectKnowledgeCategory = operations.replaceCategory;
 /**
+ * Replace a category's active content with an explicit empty state — the
+ * preparation a migration needs for the categories a brief does not carry, so
+ * the cutover's "every category active or cleared" check can pass.
+ */
+export const clearProjectKnowledgeCategory = operations.clearCategory;
+/** Hand the project's knowledge authority to its category revisions. */
+export const cutoverProjectKnowledgeCategories = operations.cutoverCategories;
+/**
  * Store the original source file as a project knowledge document — the brief
  * the chain parsed stays on record (retrievable, searchable) instead of only
  * surviving as derived category YAML.

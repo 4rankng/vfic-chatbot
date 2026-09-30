@@ -28,6 +28,7 @@ from app.services.knowledge.category_authority import (
     cutover_category_authority,
     locked_category,
     locked_project,
+    require_category_project,
     require_rag_project,
     rollback_category_authority,
 )
@@ -65,6 +66,34 @@ MAX_CATEGORY_PROCESSING_ATTEMPTS = 3
 CATEGORY_ACTIVATION_FAILURE = "category_activation_failed"
 CATEGORY_RETRY_EXHAUSTED = "category_retry_exhausted"
 CATEGORY_RETRIEVAL_SELFTEST_FAILED = "category_retrieval_selftest_failed"
+
+
+async def _ensure_category_rows(db: AsyncSession, project_id: uuid.UUID) -> None:
+    """Create any missing per-category rows so a stage can lock its category.
+
+    A DIRECT_CONTEXT project carries no category rows until its first migration
+    write — they are (project, key) placeholders the lifecycle fills. Seeding
+    all twelve keeps cutover's "every category present" check satisfiable once
+    the brief's own writes and the explicit clears have landed.
+    """
+    existing = set(
+        (
+            await db.scalars(
+                select(KnowledgeCategory.category_key).where(
+                    KnowledgeCategory.project_id == project_id
+                )
+            )
+        ).all()
+    )
+    missing = [
+        KnowledgeCategory(project_id=project_id, category_key=key.value)
+        for key in KnowledgeCategoryKey
+        if key.value not in existing
+    ]
+    for category in missing:
+        db.add(category)
+    if missing:
+        await db.flush()
 
 
 class CategoryActivationError(RuntimeError):
@@ -109,7 +138,7 @@ class KnowledgeCategoryService:
         return self._cache_repair
 
     async def list_catalog(self, project_id: uuid.UUID) -> list[CategoryCatalogItemOut]:
-        await require_rag_project(self.db, project_id)
+        await require_category_project(self.db, project_id)
         categories = list(
             (
                 await self.db.scalars(
@@ -193,7 +222,10 @@ class KnowledgeCategoryService:
         source_yaml: str,
         actor: User,
     ) -> tuple[KnowledgeCategoryRevision, str]:
-        await require_rag_project(self.db, project_id)
+        await require_category_project(self.db, project_id)
+        # A project being migrated has no category rows yet; seeding them here
+        # keeps the stage itself and the later cutover readiness check working.
+        await _ensure_category_rows(self.db, project_id)
         try:
             document = parse_category_yaml(category_key, source_yaml)
             await validate_active_job_references(self.db, project_id, document)
@@ -559,7 +591,7 @@ class KnowledgeCategoryService:
         category_key: KnowledgeCategoryKey,
         actor: User,
     ) -> KnowledgeCategoryRevision:
-        await require_rag_project(self.db, project_id)
+        await require_category_project(self.db, project_id)
         project = await locked_project(self.db, project_id)
         category = await locked_category(self.db, project_id, category_key)
         latest = await self.db.scalar(

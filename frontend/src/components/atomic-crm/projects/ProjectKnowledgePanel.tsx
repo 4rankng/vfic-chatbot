@@ -6,6 +6,7 @@ import {
   Link2,
   Upload,
 } from "lucide-react";
+import { useNotify, useRefresh } from "ra-core";
 
 import { Loading01 } from "@untitledui/icons";
 
@@ -17,7 +18,10 @@ import { cn } from "@/lib/utils";
 import type { Project } from "../types";
 import { parseProjectBrief } from "./domain/project-brief-ingest";
 import { PROJECT_KNOWLEDGE_CATEGORY_LABELS } from "./domain/project-knowledge-policy";
-import { planBriefKnowledge } from "./domain/project-knowledge-yaml";
+import {
+  planBriefKnowledge,
+  type BriefKnowledgePlan,
+} from "./domain/project-knowledge-yaml";
 import { useCategoryDraft } from "./presentation/use-category-draft";
 import { useFaqAutoSyncNotice } from "./presentation/use-faq-auto-sync-notice";
 import { useProjectKnowledgeCatalog } from "./presentation/use-project-knowledge-catalog";
@@ -31,6 +35,8 @@ import { FaqAutoSyncSection } from "./presentation/FaqAutoSyncSection";
 import { SinglePageEditor } from "./presentation/SinglePageEditor";
 import { BusTimetableSection } from "./ProjectBusTimetable";
 import {
+  clearProjectKnowledgeCategory,
+  cutoverProjectKnowledgeCategories,
   updateProjectDiscoveryCard,
   type KnowledgeCategoryKey,
 } from "./project-knowledge-service";
@@ -83,6 +89,9 @@ const SinglePagePanel = ({
         draft={draft}
         editable={editable}
       />
+      {/* The one-brief migration to the 12-category catalog is an admin move:
+          the clear and cutover calls it finishes with are admin endpoints. */}
+      {editable && <MigrationSection projectId={String(project.id)} />}
       {editable && <DiscoveryCardEditor project={project} />}
     </div>
   );
@@ -118,9 +127,19 @@ const BINARY_TYPE =
 const BriefIngestSection = ({
   projectId,
   disabled,
+  buttonLabel = "Nhập từ tệp văn bản (.md khuyến nghị)",
+  onIngested,
 }: {
   projectId: string;
   disabled: boolean;
+  /** The upload button's label; the migration affordance renames it. */
+  buttonLabel?: string;
+  /**
+   * Runs after the chain lands and the brief's highlights are patched onto the
+   * discovery card. A throw surfaces through this section's error state — the
+   * single page and the written categories are untouched either way.
+   */
+  onIngested?: (plan: BriefKnowledgePlan) => Promise<void>;
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const { state, ingest } = useProjectIngest();
@@ -159,7 +178,9 @@ const BriefIngestSection = ({
       // active revision while the old revision stays archived, so asking
       // first would only gate an update. The brief file rides along as a
       // project document (best-effort — its failure never blocks the writes).
-      await ingest(projectId, plan.writes, file);
+      // The chain reports failure through its state, not a throw — so the
+      // continuation checks the landed flag instead of relying on the catch.
+      const landed = await ingest(projectId, plan.writes, file);
       // Every re-ingest re-lands the brief's highlight facts on the discovery
       // card: the activation projection preserves `highlights` (it only seeds
       // them), so the facts survive every later projection run. A brief with
@@ -169,6 +190,7 @@ const BriefIngestSection = ({
           discovery_card: { highlights: brief.highlights },
         });
       }
+      if (landed) await onIngested?.(plan);
     } catch (readError) {
       setError((readError as Error).message);
     } finally {
@@ -200,7 +222,7 @@ const BriefIngestSection = ({
           isDisabled={disabled || ingesting}
           onClick={() => inputRef.current?.click()}
         >
-          Nhập từ tệp văn bản (.md khuyến nghị)
+          {buttonLabel}
         </Button>
         <input
           ref={inputRef}
@@ -248,6 +270,77 @@ const BriefIngestSection = ({
           {error}
         </p>
       ) : null}
+    </section>
+  );
+};
+
+/**
+ * The single-page → 12-category migration: one brief upload runs the same
+ * ingest chain the RAG panel uses, then — only after every carried category is
+ * active — the categories the brief does not carry are explicitly cleared and
+ * the cutover hands the project's knowledge authority to the catalog. The
+ * cutover moves the knowledge base out of DIRECT_CONTEXT, so the panel
+ * re-renders as the category catalog once the project record is re-read; a
+ * failure anywhere before it leaves the single page untouched. The backend's
+ * rollback endpoint restores the captured single-page state afterwards.
+ */
+const MigrationSection = ({ projectId }: { projectId: string }) => {
+  const notify = useNotify();
+  const refresh = useRefresh();
+  const [migrating, setMigrating] = useState(false);
+
+  const migrate = async (plan: BriefKnowledgePlan) => {
+    setMigrating(true);
+    try {
+      // Cutover rejects a project whose categories are neither active nor
+      // explicitly cleared, so every category the brief does not carry is
+      // cleared first — an explicit empty state, not a gap.
+      for (const key of plan.needsHuman) {
+        await clearProjectKnowledgeCategory(projectId, key);
+      }
+      await cutoverProjectKnowledgeCategories(projectId);
+      notify("Dự án đã chuyển sang kiến thức 12 danh mục.", {
+        type: "success",
+      });
+      // The cutover changed what the project record reads as; re-read it so
+      // this panel comes back as the category catalog.
+      refresh();
+    } catch (error) {
+      // The chain itself already landed; name the cutover half so the
+      // recruiter knows the single page is still the live knowledge.
+      throw new Error(
+        `Đã nạp kiến thức nhưng chưa chuyển được sang 12 danh mục: ${
+          (error as Error).message
+        }`,
+      );
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  return (
+    <section
+      className="project-migration-section grid gap-2"
+      aria-label="Chuyển sang kiến thức 12 danh mục"
+    >
+      <div>
+        <h3 className="inline-flex items-center gap-2 text-body font-semibold">
+          <Database className="size-4" aria-hidden="true" />
+          Chuyển sang kiến thức 12 danh mục
+        </h3>
+        <p className="text-helper text-muted-foreground">
+          Dự án này đang dùng kiến thức một trang. Hãy tải lên phiếu thông tin
+          dạng văn bản: hệ thống nạp các danh mục theo tệp, mục nào phiếu không
+          nêu sẽ được đánh dấu trống, rồi dự án chuyển hẳn sang quản lý theo 12
+          danh mục. Trang một trang hiện tại được giữ lại và có thể khôi phục.
+        </p>
+      </div>
+      <BriefIngestSection
+        projectId={projectId}
+        disabled={migrating}
+        buttonLabel="Chuyển sang 12 danh mục — nhập từ tệp .md"
+        onIngested={migrate}
+      />
     </section>
   );
 };

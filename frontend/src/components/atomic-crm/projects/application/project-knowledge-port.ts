@@ -5,6 +5,7 @@ import type {
   Project,
 } from "../../types";
 import type {
+  CategoryAuthorityState,
   ExternalSourceCreatePayload,
   ExternalSourceSyncState,
   FeaturePatch,
@@ -70,8 +71,23 @@ export type ProjectKnowledgePort = Readonly<{
     filename: string,
     content: string,
   ) => Promise<{ revision: KnowledgeCategoryRevision; job_id: string }>;
+  /** Replace a category's active content with an explicit empty state. */
+  clearCategory: (
+    projectId: string,
+    key: ProjectKnowledgeCategory,
+  ) => Promise<KnowledgeCategoryRevision>;
+  /**
+   * Hand the project's knowledge authority to its category revisions: the
+   * cutover that ends a single-page project's DIRECT_CONTEXT rendering. The
+   * backend requires every category to hold an active revision or an explicit
+   * clear before it accepts the call.
+   */
+  cutoverCategories: (projectId: string) => Promise<CategoryAuthorityState>;
   /** Store the original source file as a project knowledge document. */
-  uploadDocument: (projectId: string, file: ProjectDocumentUpload) => Promise<void>;
+  uploadDocument: (
+    projectId: string,
+    file: ProjectDocumentUpload,
+  ) => Promise<void>;
   getSinglePage: (projectId: string) => Promise<SinglePageKnowledge>;
   replaceSinglePage: (
     projectId: string,
