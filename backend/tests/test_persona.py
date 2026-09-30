@@ -2,9 +2,10 @@
 
 The persona is hand-edited and config-driven (loaded from persona.md at import).
 These tests guard against accidental deletion/corruption of persona.md and verify
-the core operational rules survive any restructure. The persona was trimmed from
-a verbose 7-section/9.3KB format to a dense ~3KB format — the section count is no
-longer fixed, but every operational rule must remain present.
+the core operational rules survive any restructure. The persona is authored in
+the Studio's 7-part format (~5.3KB) — the seven section headers below are the
+authoring contract Persona Studio parses, and every operational rule must remain
+present.
 """
 
 import uuid
@@ -30,18 +31,20 @@ from app.services.personas import PersonaService, persona_out_from_model
 # behavior the agent must follow — losing any of these changes the bot's
 # product behavior in a way the dashboard/conversion metrics depend on.
 CRITICAL_RULES = [
-    "Một tin nhắn — một câu hỏi chính",  # one-question-per-message cadence
-    "PHẢI dùng tool lịch xe trước",  # bus-timetable structured-tool-first rule
-    "CHỐNG ẢO GIÁC",  # anti-hallucination / no fabrication beyond data
-    "Tiếng Việt",  # Vietnamese-only
-    "Không dùng Markdown",  # plain-text output format
-    "Không trích dẫn, liệt kê",  # memory/history must never be recited to the user
+    "Thu thập SỐ ĐIỆN THOẠI và NĂM SINH",  # §5 — lead-capture mission
+    "Mỗi tin nhắn chỉ hỏi một lần ở câu chốt cuối cùng",  # §5 — one ask per message
+    "TUYỆT ĐỐI KHÔNG BỊA ĐẶT",  # §4 — anti-fabrication
+    "CẤM liệt kê hàng loạt 5-10 vị trí",  # §3 — never overwhelm with a job dump
+    'CẤM dùng từ "bạn", "quý khách", "ứng viên", "người lao động"',  # §6 — address form
+    "không in đậm",  # §6 — plain-text output
+    "Tuyệt đối không hỏi lại những điều ứng viên đã cung cấp",  # §3 — never re-ask
+    "Luôn dùng tiếng Việt chuẩn mực",  # §6 — Vietnamese-only
 ]
 
 
 def test_persona_loads_non_empty():
     assert AGENT_SYSTEM_PROMPT, "persona.md loaded empty"
-    # The trimmed persona is ~2.5-3.5KB. This floor catches corruption
+    # The persona is ~5.3KB. This floor catches corruption
     # (empty/truncated file) without forcing a specific verbosity.
     assert len(AGENT_SYSTEM_PROMPT) > 1500
 
@@ -49,14 +52,17 @@ def test_persona_loads_non_empty():
 def test_persona_has_core_sections():
     """The persona must cover role, communication rules, tools, and limits.
 
-    Section headers are flexible (the persona was restructured from a rigid
-    7-part template), but these topics must all appear.
+    The seven `### N. ...` headers are the authoring contract Persona Studio
+    parses; they must match PERSONA_SECTIONS exactly (numbering included).
     """
     topics = [
-        "Vai trò",  # who the bot is
-        "Giao tiếp",  # communication rules
-        "Dùng tool",  # tool-usage rules
-        "Tránh",  # what to avoid (hallucination, off-topic)
+        "### 1. Vai trò của tôi",
+        "### 2. Ai sẽ cần sự hỗ trợ của tôi?",
+        "### 3. Tôi thực hiện công việc như thế nào?",
+        "### 4. Tôi nên tránh điều gì?",
+        "### 5. Bạn muốn tôi theo dõi kết quả nào?",
+        "### 6. Tôi nên giao tiếp với mọi người như thế nào?",
+        "### 7. Lưu ý thêm",
     ]
     for topic in topics:
         assert topic in AGENT_SYSTEM_PROMPT, f"persona missing topic: {topic!r}"

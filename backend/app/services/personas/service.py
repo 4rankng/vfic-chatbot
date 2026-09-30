@@ -4,7 +4,7 @@ Extracted from the personas router so the router stays a thin HTTP layer (valida
 delegate -> serialize). ``activate`` transactionally deactivates the other global personas
 first (via the ORM, replacing the router's raw SQL), so the ``personas_one_active_global``
 partial unique index never trips. ``resolve_persona`` (graph) reads the active body_md,
-falling back to persona.md when none is active.
+falling back to the code constant (app.services.personas.constant) when none is active.
 
 Raises domain errors (:class:`NotFoundError`, :class:`ConflictError`) for not-found /
 conflict outcomes; the router maps these to HTTP status codes.

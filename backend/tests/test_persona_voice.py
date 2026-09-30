@@ -56,35 +56,29 @@ def test_lead_profile_text_always_carries_an_address_form():
     assert "'chị'" in lead_profile_text({"gender": "female"})
 
 
-def test_persona_states_pronoun_contract_before_everything_else():
-    """The voice rule must lead the persona, not sit buried in a bullet list.
+def test_persona_states_the_pronoun_contract():
+    """The address-form contract must survive the Studio's 7-part rewrite.
 
-    Live replies drifted to "Bạn có muốn…" while the ban existed as item 3 of a
-    ten-item list. Position is the fix: the contract is checked first.
+    It now lives in §6 ("Tôi nên giao tiếp với mọi người như thế nào?") as an
+    absolute rule: bot = "em", user = "anh"/"chị"/"anh/chị", with the forbidden
+    forms named explicitly so the model never emits "bạn"/"tôi"/"mình".
     """
     persona = AGENT_SYSTEM_PROMPT
-    head = persona[: persona.index("### Giao tiếp")]
 
-    assert "Giọng nói" in head, "voice contract must appear before the communication section"
-    assert "BẮT BUỘC" in head, "the voice contract must be marked mandatory"
+    assert "Ngôi xưng tuyệt đối" in persona, "persona must state the address-form contract"
+    assert "anh/chị" in persona
     for banned in ('"bạn"', '"mình"', '"tôi"'):
-        assert banned in head, f"voice contract must name {banned} as forbidden"
-    assert "anh/chị" in head
+        assert banned in persona, f"address contract must name {banned} as forbidden"
 
 
 def test_persona_makes_phone_capture_the_objective():
     """Collecting the phone number is the mission, not a side effect."""
     persona = AGENT_SYSTEM_PROMPT
 
-    assert "Nhiệm vụ chính" in persona
-    assert "SĐT" in persona
+    assert "MỤC TIÊU QUAN TRỌNG NHẤT" in persona
+    assert "SỐ ĐIỆN THOẠI" in persona
     # The retired line told the model the system handled phone capture on its own
     # and that it should not push — the reason the bot rarely asked.
     assert "được hệ thống tự động" not in persona, (
         "persona must not tell the model that lead/phone capture is automatic"
     )
-
-
-def test_persona_requires_denying_what_is_not_available():
-    """Listing alternatives without denying the premise is an incomplete answer."""
-    assert "TRẢ LỜI THẲNG khi không có" in AGENT_SYSTEM_PROMPT

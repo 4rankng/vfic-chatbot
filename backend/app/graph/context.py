@@ -2,7 +2,7 @@
 
 The persona (the bot's voice + follow-up policy) is resolved from the current
 conversation provider, falling back to the active global persona and then the
-committed ``persona.md``. The active project index is appended so the agent
+code constant (``AGENT_SYSTEM_PROMPT``). The active project index is appended so the agent
 always knows the catalog + slugs and scopes ``search_knowledge`` to the
 relevant project.
 
@@ -58,7 +58,7 @@ _STALE_REFUSAL_RULE_MARKERS = (
 # turn after deploy re-assembles instead of serving the previous text from the
 # 10-min TTL window. DB-side card/persona writes invalidate independently via the
 # NS_PREAMBLE version bump.
-_PROMPT_TEXT_REVISION = "2"
+_PROMPT_TEXT_REVISION = "3"
 
 
 def _strip_stale_refusal_rules(persona: str) -> str:
@@ -82,8 +82,8 @@ async def resolve_effective_persona(
     ``adapters._DirectContextAdapter`` — so a DB persona still carrying the
     legacy privacy/refusal lines the strip exists to remove cannot make the bot
     hedge on one lane and answer normally on the other. Any lookup failure
-    collapses to the committed ``persona.md``, which is this module's
-    best-effort contract.
+    collapses to the committed code constant (``AGENT_SYSTEM_PROMPT``), which
+    is this module's best-effort contract.
 
     Takes :class:`PersonaBodyResolver`, not the full ``GraphRetrievalPort``:
     the direct-context lane hands in a one-method adapter, and demanding the
@@ -151,7 +151,7 @@ async def active_projects_index(retrieval: GraphRetrievalPort) -> str:
 async def build_system_prompt(
     retrieval: GraphRetrievalPort, *, provider: str | None = None
 ) -> tuple[str, bool]:
-    """Persona body + active-product index, with a hard fallback to persona.md.
+    """Persona body + active-product index, with a hard fallback to the code constant.
 
     Returns ``(prompt, cache_hit)``. ``cache_hit`` is True when the prompt came
     from Redis (sub-ms); False when assembled fresh (DB reads) or on any error

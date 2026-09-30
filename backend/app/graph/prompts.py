@@ -1,13 +1,12 @@
 """VFIC chatbot prompts.
 
-The agent persona lives in ``persona.md`` (next to this file) and is loaded at
-import time — edit that Markdown file to tune the bot's 7-part role definition;
-no Python changes are required.
+The agent persona is a code constant — ``app.services.personas.constant`` —
+owned by this repository, not by operator-editable content (the personas admin
+page was removed on 2026-09-30). ``AGENT_SYSTEM_PROMPT`` is the fallback body
+used when no DB persona row is active; the seed fixture writes the same body
+into the ``personas`` table.
 """
 
-from pathlib import Path
+from app.services.personas.constant import DEFAULT_PERSONA_BODY_MD
 
-_PERSONA_PATH = Path(__file__).resolve().parent / "persona.md"
-# Source of truth for the bot's behaviour. Loaded once at import so a missing or
-# corrupt file fails fast at worker startup rather than mid-conversation.
-AGENT_SYSTEM_PROMPT = _PERSONA_PATH.read_text(encoding="utf-8").strip()
+AGENT_SYSTEM_PROMPT = DEFAULT_PERSONA_BODY_MD.strip()
