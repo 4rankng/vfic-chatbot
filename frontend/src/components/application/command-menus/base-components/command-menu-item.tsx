@@ -43,12 +43,16 @@ export type CommandDropdownMenuItemType =
   | CommandDropdownMenuItemAvatarType
   | CommandDropdownMenuItemDotType;
 
-// Omit keys from an object
-function omit(obj: object, keys: string[]): object {
-  const keysToOmit = new Set(keys);
+// Drop the union-discriminator keys before they reach `ListBoxItem`, keeping
+// the rest of the caller's props exactly as typed.
+function omit<T extends object, K extends string>(
+  obj: T,
+  keys: readonly K[],
+): Omit<T, K> {
+  const keysToOmit = new Set<string>(keys);
   return Object.fromEntries(
     Object.entries(obj).filter(([key]) => !keysToOmit.has(key)),
-  );
+  ) as Omit<T, K>;
 }
 
 export type CommandDropdownMenuItemProps = CommandDropdownMenuItemType &
