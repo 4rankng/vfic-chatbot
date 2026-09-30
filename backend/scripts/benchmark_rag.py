@@ -40,6 +40,7 @@ from typing import Any
 from app.core.db import async_session
 from app.graph.clients import GeminiEmbedder
 from app.graph.tools import search_knowledge
+from app.services.retrieval.repository import RetrievalRepository
 
 
 @dataclass(frozen=True)
@@ -94,8 +95,10 @@ async def _run_case(case: RagCase, top_k: int) -> dict[str, Any]:
     embedder = GeminiEmbedder()
     started = perf_counter()
     async with async_session() as db:
+        # `search_knowledge` takes the graph retrieval port, not a bare session:
+        # the benchmark must exercise the same read surface the agent's tools do.
         result = await search_knowledge(
-            db,
+            RetrievalRepository(db),
             embedder.embed,
             case.query,
             project_slug=case.project_slug,
