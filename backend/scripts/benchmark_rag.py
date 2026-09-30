@@ -132,8 +132,14 @@ async def _main() -> int:
     parser.add_argument("--top-k", type=int, default=25)
     parser.add_argument("--min-pass-rate", type=float, default=1.0)
     parser.add_argument("--output", type=Path, help="Optional JSON result path")
+    parser.add_argument("--gate-output", type=Path, help=(
+        "Optional reduced payload with golden_pass_rate_pct as its single "
+        "pass-rate source, consumable by scripts/release_gate_check.py"
+    ))
     args = parser.parse_args()
 
+    if args.gate_output and not args.gold:
+        parser.error("--gate-output is only supported with --gold")
     if args.gold:
         return _run_gold(args)
 
@@ -156,6 +162,19 @@ async def _main() -> int:
         args.output.write_text(text + "\n", encoding="utf-8")
     print(text)
     return 0 if pass_rate >= args.min_pass_rate else 1
+
+
+def _write_gate_output(path: Path, pass_rate: float) -> None:
+    """Write the single-source payload the release gate consumes.
+
+    The raw --output artifact also carries pass_rate and passed/case_count,
+    which extract_golden_pass_rate rejects as ambiguous, so the gate file is
+    reduced to exactly one source.
+    """
+    path.write_text(
+        json.dumps({"golden_pass_rate_pct": pass_rate * 100.0}) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _run_gold(args: argparse.Namespace) -> int:
@@ -247,6 +266,8 @@ def _run_gold(args: argparse.Namespace) -> int:
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+    if args.gate_output:
+        _write_gate_output(args.gate_output, summary.pass_rate)
     return 0 if summary.pass_rate >= args.min_pass_rate else 1
 
 

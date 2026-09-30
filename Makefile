@@ -14,12 +14,12 @@ dev: bootstrap
 	@echo "=== Starting VFIC dev environment (frontend :$(PORT)) ==="
 	$(MAKE) -C backend dev FRONTEND_PORT=$(PORT)
 
-## bootstrap: one-command first run — .env, backend/.venv (Python 3.12 per
-## backend/.python-version) and frontend/node_modules. The venv is built from
-## backend/uv.lock, not re-resolved from pyproject ranges: `frontend/
-## playwright.config.ts` points the e2e lane's BACKEND_PYTHON at this same
-## .venv, so an unpinned resolve makes the tested backend unreproducible
-## (TEST-19). Repeat runs are idempotent and pick up dependency changes.
+# bootstrap: one-command first run — .env, backend/.venv (Python 3.12 per
+# backend/.python-version) and frontend/node_modules. The venv is built from
+# backend/uv.lock, not re-resolved from pyproject ranges: `frontend/
+# playwright.config.ts` points the e2e lane's BACKEND_PYTHON at this same
+# .venv, so an unpinned resolve makes the tested backend unreproducible
+# (TEST-19). Repeat runs are idempotent and pick up dependency changes.
 bootstrap:
 	@test -f backend/.env || { echo "backend/.env: created from .env.example — set real secrets before any deploy"; cp backend/.env.example backend/.env; }
 	@if ! command -v python3.12 >/dev/null 2>&1; then \
@@ -43,6 +43,10 @@ bootstrap:
 
 # Release must be committed and validated before any image is pushed or production is touched.
 # Every gate runs on this machine — there is no CI in the loop.
+# `make deploy` does NOT chain this target — run it explicitly before deploying
+# (deploy-backend / deploy-frontend still do).
+# Heavy gates run as three concurrent lanes (backend | frontend | data); any lane
+# failure fails the release and keeps its full log. Lane contents: docs/ops/deployment-guide.md §3.
 release-check:
 	@dirty="$$(git status --porcelain)"; \
 	if [ -n "$$dirty" ]; then \
@@ -58,36 +62,13 @@ release-check:
 			echo "Release blocked: docs/ops/deployment-guide.md's Alembic HEAD no longer matches alembic heads ($$HEAD_REV) — update section 4 (Alembic migration run)."; exit 1; }
 	@if command -v node >/dev/null 2>&1; then node scripts/check-doc-links.mjs; \
 		else echo "Release blocked: node not found — cannot verify that agent routing (AGENTS.md, standards/) still resolves."; exit 1; fi
-	# The heavy gates are independent of each other, so they run as three
-	# concurrent lanes (backend | frontend | data) instead of one serial chain.
-	# Every original gate still runs and any lane failure still fails the
-	# release; the lanes only stop waiting on each other. Lane logs are kept
-	# and printed whole so a red lane is diagnosable exactly as before.
-	#
-	# backend lane — scoped type gate (app/graph at zero Pyright errors,
-	# OPS-30; backend/pyrightconfig.json binds the project virtualenv), lint
-	# and the full non-integration suite under coverage.
-	# frontend lane — the dependency audit fails the release on a new
-	# high/critical advisory in a package that actually ships (dev-only
-	# tooling is deliberately out of scope — docs/ops/deployment-guide.md §3),
-	# then lint, typecheck, registry, unit tests, changed-surface coverage
-	# and the production build.
-	# data lane — chain reversibility: the roundtrip harness walks head ->
-	# base revision -> head and renders the reverse walk offline, on its own
-	# throwaway database (~2 min; needs the dev Postgres). The 20-minute
-	# per-revision sweep stays in the integration lane. Then the offline
-	# golden retrieval-correctness benchmark and its gate.
 	@tmp="$$(mktemp -d -t vfic-release.XXXXXX)"; \
 	rc_be=0; rc_fe=0; rc_data=0; \
 	( cd backend && uvx pyright app/graph && .venv/bin/ruff check . && .venv/bin/python -m pytest -q -m "not integration" --cov --cov-config=.coveragerc --cov-report=term-missing:skip-covered ) >"$$tmp/backend.log" 2>&1 & \
 	be_pid=$$!; \
 	( cd frontend && npm audit --omit=dev --audit-level=high && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app:coverage:changed-surface -- --run && npm run build && npm run smoke:built ) >"$$tmp/frontend.log" 2>&1 & \
 	fe_pid=$$!; \
-	( cd backend && .venv/bin/python -m pytest "tests/integration/test_migration_roundtrip_walk.py::test_chain_reverses_to_base_and_reapplies" "tests/integration/test_migration_roundtrip_walk.py::test_reverse_chain_renders_offline" -p no:randomly -m integration && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp/golden-raw.json" && .venv/bin/python -c 'import json, sys; from pathlib import Path; raw = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")); passed = raw.get("passed"); case_count = raw.get("case_count"); \
-assert isinstance(passed, int) and not isinstance(passed, bool), "benchmark artifact missing integer passed"; \
-assert isinstance(case_count, int) and not isinstance(case_count, bool) and case_count > 0, "benchmark artifact missing positive integer case_count"; \
-assert 0 <= passed <= case_count, "benchmark artifact has invalid passed/case_count values"; \
-Path(sys.argv[2]).write_text(json.dumps({"golden_pass_rate_pct": passed / case_count * 100.0}), encoding="utf-8")' "$$tmp/golden-raw.json" "$$tmp/golden.json" && RELEASE_GATE_LATENCY_SLO_ENABLED=false .venv/bin/python scripts/release_gate_check.py --golden-results "$$tmp/golden.json" ) >"$$tmp/data.log" 2>&1 & \
+	( cd backend && .venv/bin/python -m pytest "tests/integration/test_migration_roundtrip_walk.py::test_chain_reverses_to_base_and_reapplies" "tests/integration/test_migration_roundtrip_walk.py::test_reverse_chain_renders_offline" -p no:randomly -m integration && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp/golden-raw.json" --gate-output "$$tmp/golden.json" && RELEASE_GATE_LATENCY_SLO_ENABLED=false .venv/bin/python scripts/release_gate_check.py --golden-results "$$tmp/golden.json" ) >"$$tmp/data.log" 2>&1 & \
 	data_pid=$$!; \
 	wait $$be_pid; rc_be=$$?; \
 	wait $$fe_pid; rc_fe=$$?; \
@@ -108,12 +89,15 @@ Path(sys.argv[2]).write_text(json.dumps({"golden_pass_rate_pct": passed / case_c
 
 # Build & push BOTH GHCR images, then deploy to bot.tingting.vip.
 #
+# No release gates here: run `make release-check` first (step 1 of the
+# documented flow — docs/ops/deployment-guide.md §3).
+#
 # This target runs `alembic upgrade head` on the production database, so a bad
 # migration is only recoverable from a dump taken BEFORE the run. The backup
 # therefore still hard-gates the cutover — but it no longer serializes in
 # front of the image pushes: backup and both pushes run concurrently, and the
 # recipe waits for all three (failing on any) before touching production.
-deploy: release-check
+deploy:
 	@echo "=== Backup + frontend/backend image pushes run concurrently ==="
 	@tmp="$$(mktemp -d -t vfic-deploy.XXXXXX)"; \
 	rc_backup=0; rc_fe=0; rc_be=0; \
@@ -171,16 +155,16 @@ seed:
 PROD_SERVER := bot.tingting.vip
 BACKUP_DIR  := $(HOME)/Library/CloudStorage/OneDrive-Personal/backup/vfic_db_backup
 
-## backup: pg_dump the prod DB (custom format) and pull /opt/vfic/.env with it.
-## The .env carries INTEGRATION_SETTINGS_ENCRYPTION_KEY: without it the dump
-## alone cannot be decrypted by a restore (OPS-03). Keeps the newest $(BACKUP_KEEP)
-## dumps; each vfic_env_*.env lives exactly as long as its dump pair (an env copy
-## holds prod secrets, so an orphan whose dump was pruned is deleted, not kept).
-## The remote step resolves IMAGE_TAG from the running active-color web
-## container before any compose call: /opt/vfic/.env has no IMAGE_TAG and the
-## prod compose file guards it with `${IMAGE_TAG:?}` for EVERY subcommand, so a
-## bare `docker compose ps` aborted on interpolation and the backup never ran
-## (OPS-21). Same recipe as scripts/backup-droplet.sh.
+# backup: pg_dump the prod DB (custom format) and pull /opt/vfic/.env with it.
+# The .env carries INTEGRATION_SETTINGS_ENCRYPTION_KEY: without it the dump
+# alone cannot be decrypted by a restore (OPS-03). Keeps the newest $(BACKUP_KEEP)
+# dumps; each vfic_env_*.env lives exactly as long as its dump pair (an env copy
+# holds prod secrets, so an orphan whose dump was pruned is deleted, not kept).
+# The remote step resolves IMAGE_TAG from the running active-color web
+# container before any compose call: /opt/vfic/.env has no IMAGE_TAG and the
+# prod compose file guards it with `${IMAGE_TAG:?}` for EVERY subcommand, so a
+# bare `docker compose ps` aborted on interpolation and the backup never ran
+# (OPS-21). Same recipe as scripts/backup-droplet.sh.
 BACKUP_KEEP := 10
 backup:
 	@echo "=== Starting database backup from production ===" && \
@@ -227,9 +211,9 @@ backup:
 	echo "  Env:  $(BACKUP_DIR)/$${ENV_FILE}" && \
 	echo "  Size: $$(du -h "$(BACKUP_DIR)/$${BACKUP_FILE}" | cut -f1)"
 
-## restore: restore the newest bundle into the local dev DB, failing loudly.
-## psql runs with ON_ERROR_STOP=1 so a partial load can never report success,
-## and the password reset asks first (FORCE=1 skips the prompt) (OPS-20).
+# restore: restore the newest bundle into the local dev DB, failing loudly.
+# psql runs with ON_ERROR_STOP=1 so a partial load can never report success,
+# and the password reset asks first (FORCE=1 skips the prompt) (OPS-20).
 restore:
 	@set -euo pipefail && \
 	echo "=== Starting DB restore ===" && \
@@ -293,15 +277,14 @@ restore:
 # ─── Full droplet backup / restore (delete + spin up later) ────────────────────
 # docs/ops/droplet-backup-restore.md has the full runbook. Redis is intentionally
 # not backed up (scheduler re-registers its ticks; avoids the orphaned-job OOM).
-BACKUPS_DIR := $(CURDIR)/backups
 
-## backup-full: bundle /opt/vfic/.env + DB dump + KB uploads + Caddy TLS → backups/<ts>.zip
+# backup-full: bundle /opt/vfic/.env + DB dump + KB uploads + Caddy TLS → backups/<ts>.zip
+# (the script owns the backups/ path and creates it)
 backup-full:
-	@mkdir -p "$(BACKUPS_DIR)"
 	bash scripts/backup-droplet.sh
 
-## restore-prod: push a bundle onto a FRESH droplet (SSH, mirrors `deploy`).
-## Usage: make restore-prod BUNDLE=backups/vfic-droplet-backup-<TS> [HOST=root@bot.tingting.vip]
+# restore-prod: push a bundle onto a FRESH droplet (SSH, mirrors `deploy`).
+# Usage: make restore-prod BUNDLE=backups/vfic-droplet-backup-<TS> [HOST=root@bot.tingting.vip]
 restore-prod:
 	@test -n "$(BUNDLE)" || { echo "Usage: make restore-prod BUNDLE=backups/vfic-droplet-backup-<TS> [HOST=root@bot.tingting.vip]"; exit 2; }
 	bash scripts/restore-droplet.sh --bundle "$(BUNDLE)" --host "$(or $(HOST),root@bot.tingting.vip)"
