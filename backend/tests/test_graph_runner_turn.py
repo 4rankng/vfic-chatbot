@@ -1285,6 +1285,32 @@ async def test_slow_turn_pulses_typing_but_sends_no_filler(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_typing_heartbeat_survives_provider_failures():
+    """The heartbeat is best-effort: a provider rejecting the typing pulse is
+    swallowed and the cadence continues — a flapping channel must never break
+    a turn (the caller cancels the task before every real send)."""
+
+    class _RaisingZalo:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        async def send_chat_action(self, chat_id: str, action: str) -> None:
+            self.attempts += 1
+            raise RuntimeError("provider down")
+
+    zalo = _RaisingZalo()
+    settings = SimpleNamespace(typing_heartbeat_seconds=3.5)
+    task = asyncio.create_task(runner._status_heartbeat(zalo, "chat-1", settings=settings))
+    await asyncio.sleep(0.05)  # first pulse fires immediately (next_typing = 0)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass  # the cancel is the expected end; the swallow is what is pinned
+    assert zalo.attempts == 1
+
+
+@pytest.mark.asyncio
 async def test_fast_turn_sends_no_filler(monkeypatch):
     """A turn that answers quickly sends only its reply — no filler/ack message."""
     conv = _FakeConv()
