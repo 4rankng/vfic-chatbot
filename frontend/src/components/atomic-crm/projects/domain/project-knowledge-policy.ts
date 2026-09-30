@@ -139,6 +139,25 @@ export const orderProductFeatureSlots = (
   );
 };
 
+/**
+ * The backend's frozen activation-conflict messages, in the console's
+ * Vietnamese. The texts are an API contract (pinned by backend domain tests),
+ * so this maps rather than re-translates at every call site; anything unknown
+ * falls through untouched.
+ */
+const ACTIVATION_CONFLICTS_VI: Readonly<Record<string, string>> = {
+  "RAG Project needs an active Jobs category before activation":
+    "Dự án cần danh mục Tuyển dụng (Jobs) có dữ liệu trước khi bật. Hãy nạp danh mục trước.",
+  "Single-page Project needs a discovery card before activation":
+    "Dự án Một trang cần thẻ khám phá trước khi bật.",
+  "Single-page Project needs its page before activation":
+    "Dự án Một trang cần trang kiến thức trước khi bật.",
+  "Project has no owned knowledge base": "Dự án chưa có kiến thức nền để bật.",
+};
+
+export const projectActivationConflictVi = (message: string): string =>
+  ACTIVATION_CONFLICTS_VI[message] ?? message;
+
 export type NormalizedProjectFaq = Readonly<{
   question: string;
   answer: string;

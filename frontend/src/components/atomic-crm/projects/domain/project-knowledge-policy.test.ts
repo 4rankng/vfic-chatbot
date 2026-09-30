@@ -9,6 +9,7 @@ import {
   normalizeProjectFaq,
   orderProductFeatureSlots,
   parseCommaList,
+  projectActivationConflictVi,
   projectReadinessLabel,
 } from "./project-knowledge-policy";
 
@@ -124,5 +125,28 @@ describe("project knowledge policy", () => {
       "Lương",
       "Phụ cấp",
     ]);
+  });
+});
+
+describe("projectActivationConflictVi", () => {
+  it("maps the frozen activation conflicts to Vietnamese", () => {
+    expect(
+      projectActivationConflictVi(
+        "RAG Project needs an active Jobs category before activation",
+      ),
+    ).toBe(
+      "Dự án cần danh mục Tuyển dụng (Jobs) có dữ liệu trước khi bật. Hãy nạp danh mục trước.",
+    );
+    expect(
+      projectActivationConflictVi(
+        "Single-page Project needs its page before activation",
+      ),
+    ).toBe("Dự án Một trang cần trang kiến thức trước khi bật.");
+  });
+
+  it("falls through for unknown messages", () => {
+    expect(projectActivationConflictVi("Some other failure")).toBe(
+      "Some other failure",
+    );
   });
 });

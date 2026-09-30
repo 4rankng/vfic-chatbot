@@ -16,6 +16,7 @@ import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Project } from "../types";
+import { projectActivationConflictVi } from "./domain/project-knowledge-policy";
 import { DeleteButton } from "@/components/admin";
 
 const ProjectEditContent = () => {
@@ -45,7 +46,9 @@ const ProjectEditContent = () => {
       notify("Đã lưu.", { type: "success" });
       redirect("/projects");
     } catch (e) {
-      notify((e as Error).message, { type: "error" });
+      notify(projectActivationConflictVi((e as Error).message), {
+        type: "error",
+      });
     } finally {
       setSubmitting(false);
     }

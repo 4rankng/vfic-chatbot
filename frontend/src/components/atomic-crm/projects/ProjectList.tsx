@@ -34,6 +34,7 @@ import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 import {
   aggregateProjectFeatureReadiness,
+  projectActivationConflictVi,
   projectReadinessLabel,
 } from "./domain/project-knowledge-policy";
 
@@ -64,8 +65,10 @@ const ProjectListContent = () => {
           });
           refresh();
         },
-        onError: () => {
-          notify(nextActive ? "Không thể bật dự án." : "Không thể tắt dự án.", {
+        onError: (e) => {
+          // The backend's frozen activation conflicts, already mapped to the
+          // console's Vietnamese (see projectActivationConflictVi).
+          notify(projectActivationConflictVi((e as Error).message), {
             type: "error",
           });
         },
