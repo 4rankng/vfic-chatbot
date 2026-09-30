@@ -80,6 +80,15 @@ Path: `backend/app/models/`
 - `KnowledgeChunk` stores embeddings as `vector(3072)` (pgvector) — dim 3072 via OpenRouter/Gemini.
 - HNSW index for ANN search (enabled when `rag_ann_enabled = true`).
 
+### Category revisions
+
+`KnowledgeCategoryRevision` stores its raw authoring content in
+`source_markdown` (renamed from `source_yaml` by migration
+`0059_category_markdown_source`, which also converted stored YAML rows to
+Category Markdown v1). Activated revisions are republished as
+`KnowledgeDocument` rows with `source = 'category_markdown'` and
+`mime_type = 'text/markdown'`.
+
 ### Versioned template ingestion
 
 Knowledge ingestion can use a published, declarative template version pinned to a

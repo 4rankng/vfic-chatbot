@@ -8,7 +8,7 @@ mode when it is created; the mode does not change after content exists.
 | Lane | Raw source preserved | Canonical representation | Activation / retrieval |
 |---|---|---|---|
 | Direct context | Exact page text | Deterministically normalized text plus checksum | Atomic whole-page replace; the focused Project reads the full page |
-| Project categories | Exact YAML per immutable revision | Strict typed payload plus deterministic checksum | Shadow-only prepare first, then explicit Project-wide cutover to category authority |
+| Project categories | Exact Markdown per immutable revision | Strict typed payload plus deterministic checksum | Shadow-only prepare first, then explicit Project-wide cutover to category authority |
 | Legacy KB versions | Uploaded document/version | Canonical Markdown is deterministic; free-form input uses the compatibility digest pipeline | Active legacy version remains readable only before category cutover |
 
 The lifecycle vocabulary is shared across lanes:
@@ -19,6 +19,12 @@ The lifecycle vocabulary is shared across lanes:
 - A **projection** is a derived chunk, Job, route, or stop.
 - The **active pointer** selects authoritative content.
 - A **derived read model** can always be rebuilt from that authority.
+
+Document uploads on the legacy KB-version lane and brief uploads accept `.txt`,
+`.md`, `.markdown`, `.docx` and `.xlsx` only; every accepted format is converted
+to plain text before ingest (DOCX/XLSX are parsed from the OOXML container with
+the standard library). `.yaml`/`.yml` are refused by name, and PDF is not
+supported — there is no extractor.
 
 ## Single-page mode
 
@@ -59,7 +65,7 @@ plane, not a replacement for the page itself.
 
 ## Category mode
 
-The Project has twelve independent YAML categories:
+The Project has twelve independent Markdown categories:
 
 1. Jobs
 2. Compensation
@@ -74,9 +80,16 @@ The Project has twelve independent YAML categories:
 11. Contacts
 12. FAQ
 
-Each category uses its code-owned template. An administrator may paste YAML or upload a
-`.yaml`/`.yml` file. The system preserves the raw YAML in `source_yaml`, stores the normalized
-payload separately, and computes a deterministic checksum from the canonical JSON form. Each
+Each category uses its code-owned template. A template is a fill-in
+questionnaire: every field carries a Vietnamese leading question, so an
+administrator who answers all the questions produces a complete, ingest-ready
+category (the FAQ template included). An administrator pastes Category Markdown
+v1 into the per-category editor — `---` front-matter naming `schema_version`
+and `category`, then one `## <list_field>` section of `### record: <stable-id>`
+blocks (see `backend/app/services/knowledge/category_markdown.py`). The system
+preserves the raw markdown in `source_markdown`, stores the normalized payload
+separately, and computes a deterministic checksum from the canonical JSON
+form. Each
 revision also carries a durable processing token, lease expiry, bounded attempt count, failure
 code, and `quality_result` summary.
 
@@ -91,9 +104,9 @@ reclaimed after worker death, while a stale worker cannot finalize it.
 The Project supplies factory scope, so category files never repeat or reference a factory.
 Cross-category `job_ids` refer only to stable IDs in the same Project's Jobs category.
 
-After cutover, Jobs are a derived read model. Every job present in the active Jobs YAML is available; a missing
+After cutover, Jobs are a derived read model. Every job present in the active Jobs markdown is available; a missing
 job is unavailable. There is no administrator-managed job status. Manual Job, FAQ, and feature
-mutation endpoints are read-only/conflict paths so YAML remains the authority. Replacing Jobs also
+mutation endpoints are read-only/conflict paths so Markdown remains the authority. Replacing Jobs also
 reapplies every active sibling category to the recreated Job rows. Transportation replaces the
 Project's derived bus routes and stops as part of the same category activation.
 

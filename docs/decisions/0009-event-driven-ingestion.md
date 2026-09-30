@@ -7,7 +7,8 @@
 ## Context
 
 The knowledge base (KB) ingestion pipeline must:
-- Accept document uploads (Markdown, PDF, text files).
+- Accept document uploads (Markdown, DOCX, XLSX, and text files; PDF is not
+  supported — there is no extractor).
 - Parse, chunk, embed, and store documents for RAG retrieval.
 - Support versioned KB releases (KBVersion) with atomic activation.
 - Not block the recruiter UI — ingestion can take minutes for large documents.

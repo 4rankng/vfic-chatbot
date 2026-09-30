@@ -464,6 +464,16 @@ The admin-only Project API exposes explicit authority transitions for RAG catego
 | `POST /api/v1/knowledge/projects/{project_id}/categories/cutover` | With JSON body `{ "confirmation": "CUTOVER" }`, require every category to be active or explicitly cleared, snapshot the prior authority, and switch retrieval to category revisions. |
 | `POST /api/v1/knowledge/projects/{project_id}/categories/rollback` | With JSON body `{ "confirmation": "ROLLBACK" }`, restore the saved legacy authority if category pointers have not changed since cutover. |
 
+Category content is authored in Category Markdown v1: the `PUT
+/api/v1/knowledge/projects/{project_id}/categories/{category_key}` body is
+`{filename, content}` where `filename` ends in `.md`, `.markdown` or `.txt`
+(`.yaml`/`.yml` are refused), and `content` is the category's markdown
+document (`---` front-matter plus one `## <list_field>` section of
+`### record: <stable-id>` blocks; `GET .../categories/{key}/template` returns
+the fill-in questionnaire template as `text/markdown`). Document uploads accept
+`.txt`, `.md`, `.markdown`, `.docx` and `.xlsx` and are normalized to plain
+text before ingest; YAML and PDF are not accepted.
+
 Staging, activation, and clear operations do not implicitly change Project-wide retrieval
 authority. Failed or stale workers preserve the prior active pointers and expose stable,
 sanitized failure codes rather than source or provider content.
