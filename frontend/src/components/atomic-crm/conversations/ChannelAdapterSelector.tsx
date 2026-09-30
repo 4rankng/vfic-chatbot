@@ -10,7 +10,7 @@ import {
   type ConversationChannelProvider,
   CONVERSATION_CHANNEL_LABELS,
 } from "../types";
-import { CHANNEL_ICONS } from "./domain/channel-icons";
+import { CHANNEL_ICONS } from "./channel-icons";
 import { getChannelProviderSearchParams } from "./domain/conversation-list-filters";
 
 type ChannelAdapterProvider = ConversationChannelProvider;

@@ -836,6 +836,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/conversations/channel-icons.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/LeadAvatar.tsx",
           "type": "registry:component"
         },

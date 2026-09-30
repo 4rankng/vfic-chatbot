@@ -14,7 +14,7 @@ import {
   conversationChannelShortLabel,
 } from "../../types";
 import { deleteConversation } from "../application/conversation-operations";
-import { channelIcon } from "../domain/channel-icons";
+import { channelIcon } from "../channel-icons";
 import { Confirm } from "@/components/admin/confirm";
 import { LeadAvatar } from "../LeadAvatar";
 import { ChatThread } from "./ChatThread";

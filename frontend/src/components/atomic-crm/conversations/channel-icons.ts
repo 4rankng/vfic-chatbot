@@ -5,7 +5,7 @@ import zaloOaIcon from "@/assets/channel-adapters/zalo-oa.png";
 import {
   type ConversationChannelProvider,
   isConversationChannelProvider,
-} from "../../types";
+} from "../types";
 
 /**
  * The channel glyphs. One source, reused by the channel filter, the conversation
