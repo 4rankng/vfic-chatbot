@@ -17,9 +17,10 @@ from typing import Any
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
 from app.core.vector import vec_literal
+from app.graph.embed_cache import cached_embed
 from app.graph.llm import Embedder
 from app.graph.ports import GraphRetrievalPort
-from app.graph.tools._shared import _cache_digest, _cached_embed
+from app.graph.tools._shared import _cache_digest
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +317,7 @@ async def _search_knowledge_compute(
     Extracted so it can be wrapped by single-flight coalescing. The leader runs
     this directly; followers await its result via pub/sub.
     """
-    raw_emb = await _cached_embed(embedder, query)
+    raw_emb = await cached_embed(embedder, query)
     emb = vec_literal(raw_emb)
 
     # Semantic cache (Phase 5): before hitting the DB, check if a *paraphrased*

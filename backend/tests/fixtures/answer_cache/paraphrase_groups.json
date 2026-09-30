@@ -1,0 +1,76 @@
+[
+  {
+    "id": "lgd-hp-salary",
+    "project_slug": "lg-display-hai-phong",
+    "canonical": "Lương công nhân LG Display Hải Phòng bao nhiêu?",
+    "paraphrases": [
+      "Mức thu nhập của công nhân LG Display Hải Phòng là bao nhiêu?",
+      "Công nhân LG Display Hải Phòng được trả bao nhiêu tiền một tháng?",
+      "Lương ca 3 ở LG Display Hải Phòng khoảng bao nhiêu?",
+      "Đi làm ở LG Display Hải Phòng thì một tháng được bao nhiêu tiền?"
+    ],
+    "negatives": [
+      "LG Display Hải Phòng có ký túc xá cho công nhân không?",
+      "Xe bus đưa đón công nhân LG Display Hải Phòng chạy lúc mấy giờ?",
+      "LG Display Hải Phòng tuyển công nhân nam hay nữ?"
+    ]
+  },
+  {
+    "id": "lgd-hp-accommodation",
+    "project_slug": "lg-display-hai-phong",
+    "canonical": "LG Display Hải Phòng có chỗ ở cho công nhân không?",
+    "paraphrases": [
+      "Công nhân LG Display Hải Phòng có được hỗ trợ ăn ở không?",
+      "Ký túc xá của LG Display Hải Phòng như thế nào?",
+      "Làm ở LG Display Hải Phòng thì công nhân ở đâu?",
+      "LG Display Hải Phòng có bao ăn ở cho người ngoại tỉnh không?"
+    ],
+    "negatives": [
+      "Lương công nhân LG Display Hải Phòng bao nhiêu?",
+      "LG Display Hải Phòng có tuyển công nhân phổ thông không?"
+    ]
+  },
+  {
+    "id": "lgd-bn-salary",
+    "project_slug": "lg-display-bac-ninh",
+    "canonical": "Lương công nhân LG Display Bắc Ninh bao nhiêu?",
+    "paraphrases": [
+      "Mức lương ở LG Display Bắc Ninh là bao nhiêu?",
+      "Công nhân LG Display Bắc Ninh được trả bao nhiêu một tháng?",
+      "Thu nhập của công nhân LG Display Bắc Ninh thế nào?",
+      "Đi làm LG Display Bắc Ninh lương bao nhiêu tiền?"
+    ],
+    "negatives": [
+      "LG Display Bắc Ninh hỗ trợ ăn ở cho công nhân thế nào?",
+      "LG Display Bắc Ninh nằm ở khu công nghiệp nào?"
+    ]
+  },
+  {
+    "id": "samsung-bn-recruitment",
+    "project_slug": "samsung-bac-ninh",
+    "canonical": "Samsung Bắc Ninh tuyển công nhân với mức lương bao nhiêu?",
+    "paraphrases": [
+      "Lương công nhân Samsung Bắc Ninh bao nhiêu?",
+      "Thu nhập của công nhân Samsung Bắc Ninh thế nào?",
+      "Làm ở Samsung Bắc Ninh thì được trả bao nhiêu tiền một tháng?"
+    ],
+    "negatives": [
+      "Samsung Bắc Ninh là nhà máy sản xuất gì?",
+      "Samsung Bắc Ninh có phải làm thêm giờ không?"
+    ]
+  },
+  {
+    "id": "foxconn-na-positions",
+    "project_slug": "foxconn-nghe-an",
+    "canonical": "Foxconn Nghệ An tuyển dụng những vị trí nào?",
+    "paraphrases": [
+      "Foxconn Nghệ An đang tuyển vị trí gì?",
+      "Nhà máy Foxconn Nghệ An cần tuyển công nhân vị trí nào?",
+      "Foxconn Nghệ An có tuyển công nhân phổ thông không?"
+    ],
+    "negatives": [
+      "Foxconn Nghệ An nằm ở đâu?",
+      "Foxconn Nghệ An có xe đưa đón công nhân không?"
+    ]
+  }
+]

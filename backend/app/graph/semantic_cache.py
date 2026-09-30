@@ -6,10 +6,10 @@ query, check it against a small Redis-backed ring of recent query embeddings, an
 return the cached result if cosine similarity exceeds a conservative threshold.
 
 **Scope discipline (critical):** only non-personalized ``search_knowledge`` queries
-are cached. Recommendation / profile / memory queries are never cached semantically
-because the result depends on the specific candidate's lead profile, not just the
+are cached. Profile / memory queries are never cached semantically because the
+result depends on the specific candidate's lead profile, not just the
 query text. The caller (``search_knowledge``) enforces this by being the only wiring
-point; ``recommend_jobs`` / ``search_user_memory`` never call this module.
+point; ``search_user_memory`` never calls this module.
 
 Every entry is namespaced by the retrieval scope it was computed under (see
 :func:`scope_key`). A Page-scoped conversation reaches ``search_knowledge`` with
@@ -21,21 +21,30 @@ a different Page's catalog.
 Implementation is a linear scan over a Redis HASH of recent entries (query vector →
 result). A full HNSW in Redis is YAGNI at current query volumes; the ring is capped
 at ``semantic_cache_capacity`` entries with LRU eviction via a sorted-set timestamp.
-Vectors are stored as packed base64 float16 (the wire format ``graph.tools._shared``
-uses for the embedding cache), and the decode + cosine scan runs on a worker thread
-so a full ring never stalls the event loop.
+Vectors are stored as packed base64 float16 (:mod:`app.core.vector`, the same wire
+format the embedding cache uses), and the decode + cosine scan runs on a worker
+thread so a full ring never stalls the event loop.
+
+**Shared namespace:** the key templates below, the version counter
+(``cache_version("semantic_cache")``) and ``bump_semantic_cache_version`` are shared
+by every caller of this primitive — the evidence cache wired into
+``search_knowledge`` and the answer cache (``app.graph.answer_cache``). Both derive
+from KB content, so ``bump_kb_caches()`` invalidates both namespaces at once and
+neither needs a write-path hook of its own. Callers separate their entries by
+``scope`` only: the scope token is the caller's, and this module never interprets
+it.
 """
 
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import logging
-import struct
 import time
 from dataclasses import dataclass
 from hashlib import sha256
+
+from app.core.vector import pack_vector, unpack_vector
 
 logger = logging.getLogger(__name__)
 
@@ -68,22 +77,6 @@ def scope_key(project_ids: list[str] | None, top_k: int | None = None) -> str:
     if top_k is not None:
         digest.update(f"\x1f{int(top_k)}".encode("utf-8"))
     return digest.hexdigest()[:16]
-
-
-def _pack_vector(vector: list[float]) -> str:
-    """Pack a vector as base64 float16 (same wire format as the embed cache)."""
-    return base64.b64encode(struct.pack(f"<{len(vector)}e", *vector)).decode("ascii")
-
-
-def _unpack_vector(payload: object) -> list[float] | None:
-    """Decode a packed vector; ``None`` for anything undecodable (a miss, not an error)."""
-    if not isinstance(payload, str) or not payload:
-        return None
-    try:
-        blob = base64.b64decode(payload, validate=True)
-        return list(struct.unpack(f"<{len(blob) // 2}e", blob))
-    except Exception:  # noqa: BLE001 — a corrupt value is a cache miss
-        return None
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -138,7 +131,7 @@ def _scan_candidates(
     """
     candidates: list[tuple[str, float]] = []
     for qhash, payload in stored.items():
-        cached_vec = _unpack_vector(payload)
+        cached_vec = unpack_vector(payload)
         if cached_vec is None:
             continue
         sim = _cosine(query_vec, cached_vec)
@@ -149,17 +142,26 @@ def _scan_candidates(
 
 
 async def semantic_cache_get(
-    query_vec: list[float], *, scope: str, threshold: float | None = None
+    query_vec: list[float],
+    *,
+    scope: str,
+    threshold: float | None = None,
+    enabled: bool | None = None,
 ) -> SemanticCacheHit | None:
     """Return a cached result if a similar query exceeds the similarity threshold.
 
     Linear scan over the stored query vectors of ``scope``. Returns ``None`` on
     miss, disabled, or any Redis error (best-effort, non-fatal).
+
+    ``threshold``/``enabled`` default to ``semantic_cache_threshold`` and
+    ``semantic_cache_enabled``; a caller with its own flags (the answer cache)
+    passes both explicitly so the two tiers stay independently switchable while
+    sharing this namespace and its invalidation.
     """
     from app.core.redis import async_value, get_redis
 
     s = _settings()
-    if not getattr(s, "semantic_cache_enabled", False):
+    if not (enabled if enabled is not None else getattr(s, "semantic_cache_enabled", False)):
         return None
     thr = threshold if threshold is not None else getattr(s, "semantic_cache_threshold", 0.95)
     try:
@@ -181,23 +183,40 @@ async def semantic_cache_get(
         return None
 
 
-async def semantic_cache_put(query_vec: list[float], result: str, *, scope: str) -> None:
+async def semantic_cache_put(
+    query_vec: list[float],
+    result: str,
+    *,
+    scope: str,
+    enabled: bool | None = None,
+    capacity: int | None = None,
+    ttl_seconds: int | None = None,
+) -> None:
     """Store a query vector + result under ``scope`` for future similarity matches.
 
-    Enforces LRU eviction at ``semantic_cache_capacity``. Best-effort, non-fatal.
+    Enforces LRU eviction at the effective capacity. Best-effort, non-fatal.
+
+    ``capacity``/``ttl_seconds``/``enabled`` default to
+    ``semantic_cache_capacity`` / ``semantic_cache_ttl_seconds`` /
+    ``semantic_cache_enabled``, so a caller with its own ring budget (the answer
+    cache) passes all three and never reuses the evidence cache's sizing.
     """
     from app.core.redis import get_redis
 
     s = _settings()
-    if not getattr(s, "semantic_cache_enabled", False):
+    if not (enabled if enabled is not None else getattr(s, "semantic_cache_enabled", False)):
         return
-    cap = getattr(s, "semantic_cache_capacity", 200)
-    ttl = getattr(s, "semantic_cache_ttl_seconds", 1800)
+    cap = capacity if capacity is not None else getattr(s, "semantic_cache_capacity", 200)
+    ttl = (
+        ttl_seconds
+        if ttl_seconds is not None
+        else getattr(s, "semantic_cache_ttl_seconds", 1800)
+    )
     try:
         # The hash is over the vector to dedupe near-identical queries that would
         # otherwise bloat the ring; the similarity scan still uses the raw vector.
         qhash = sha256(json.dumps([round(v, 6) for v in query_vec]).encode()).hexdigest()[:32]
-        payload = _pack_vector(query_vec)
+        payload = pack_vector(query_vec)
         r = await get_redis()
         vkey, rkey, tkey = await _keys(scope)
         pipe = r.pipeline()

@@ -13,9 +13,10 @@ import logging
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
 from app.core.vector import vec_literal
+from app.graph.embed_cache import cached_embed
 from app.graph.llm import Embedder
 from app.graph.ports import GraphRetrievalPort
-from app.graph.tools._shared import _cache_digest, _cached_embed
+from app.graph.tools._shared import _cache_digest
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ async def search_user_memory(
         cached = await cache_get_json(cache_key)
         if isinstance(cached, str):
             return cached
-    emb = vec_literal(await _cached_embed(embedder, query))
+    emb = vec_literal(await cached_embed(embedder, query))
     rows = await retrieval.match_memories(emb, top_k, json.dumps({"chat_id": chat_id}))
     if not rows:
         result = "Không có thông tin ghi nhớ về người dùng này."

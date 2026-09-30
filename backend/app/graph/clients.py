@@ -103,6 +103,7 @@ _TURN_METRIC_KEYS = (
     "prefetch_calls",
     "prefetch_ms",
     "rag_cache_lookup_ms",
+    "answer_cache_lookup_ms",
 )
 
 

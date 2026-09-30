@@ -21,7 +21,8 @@ callers keep using ``from app.graph.tools import X`` unchanged.
 
 from __future__ import annotations
 
-from app.graph.tools._shared import _cache_digest, _cached_embed
+from app.graph.embed_cache import cached_embed
+from app.graph.tools._shared import _cache_digest
 from app.graph.tools.catalog import (
     get_product_features,
     list_active_projects,
@@ -80,6 +81,6 @@ __all__ = [
     "reset_tingting_password",
     "_active_job_tool_result",
     "_cache_digest",
-    "_cached_embed",
+    "cached_embed",
     "_format_knowledge_row",
 ]

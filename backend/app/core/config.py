@@ -248,6 +248,20 @@ class Settings(BaseSettings):
     semantic_cache_capacity: int = 200  # max cached queries (LRU-evicted)
     semantic_cache_ttl_seconds: int = 1800  # 30 min
 
+    # Answer cache: reuse the previously sent reply for a repeated, non-personalized
+    # KB question instead of re-running the agent loop. The exact tier (default ON)
+    # requires the same normalized question, the same project scope, the same
+    # knowledge/preamble/jobs versions and the same address bucket — nothing that
+    # determines the answer changed. The paraphrase tier stays OFF until the
+    # calibration harness (scripts/calibrate_answer_cache.py) separates its
+    # max(negatives)/min(paraphrases) boundary; the threshold below is the cosine
+    # floor a paraphrase must clear.
+    answer_cache_enabled: bool = True
+    answer_cache_semantic_enabled: bool = False
+    answer_cache_threshold: float = 0.95
+    answer_cache_capacity: int = 100  # LRU entries per scope (semantic tier only)
+    answer_cache_ttl_seconds: int = 21600  # 6 h Redis-reclamation backstop; versions invalidate
+
     # Token/cost accounting (Phase 6). Per-million-token USD rates for cost estimation.
     # Default to MiniMax M2.7 documented rates; set to 0 to track tokens only (cost=0).
     llm_cost_per_mtok_input: float = 1.0

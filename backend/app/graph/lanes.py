@@ -19,6 +19,14 @@ import time
 from inspect import Parameter, signature
 from typing import Any, NamedTuple
 
+from app.graph.answer_cache import (
+    answer_cache_get,
+    answer_cache_put,
+    answer_project_scope,
+    answer_scope,
+    is_answer_cacheable,
+    is_shareable_reply,
+)
 from app.graph.authority import _authority_gate
 from app.graph.decision_trace import DecisionTraceBuilder
 from app.graph.direct_context import (
@@ -49,6 +57,7 @@ from app.recruitment.domain.recommendation import (
     is_salary_profile_statement,
     parse_salary_band,
 )
+from app.shared.domain.addressing import address_form
 from app.shared.domain.text import normalize_vietnamese_text
 
 logger = logging.getLogger(__name__)
@@ -735,6 +744,42 @@ async def _agent_turn(
             round((time.monotonic() - lead_t0) * 1000)
         )
 
+    # Answer cache (read): a repeated knowledge-only question is answered from the
+    # reply a previous turn already sent, with no model call. Eligibility and the
+    # scope token are the same ones the write below uses, so a turn that may be
+    # read is exactly a turn that may be written.
+    answer_scope_token = ""
+    if is_answer_cacheable(
+        allowed_tools=allowed_tools,
+        tingting_reset_allowed=tingting_reset_allowed,
+        tingting_support_account=tingting_support_account,
+        lead_collection_instruction=lead_collection_instruction,
+        user_text=user_text,
+    ):
+        project_scope = await answer_project_scope(
+            deps.retrieval, getattr(project_context, "project_slug", None)
+        )
+        if project_scope:
+            answer_scope_token = await answer_scope(
+                project_scope=project_scope,
+                address=address_form((lead_row or {}).get("gender")),
+            )
+            cache_t0 = time.monotonic()
+            cached = await answer_cache_get(
+                user_text, embedder=deps.embedder, scope=answer_scope_token
+            )
+            if timings is not None:
+                timings["answer_cache_lookup_ms"] = int(
+                    round((time.monotonic() - cache_t0) * 1000)
+                )
+                timings["answer_cache"] = (
+                    {"hit": True, "tier": cached.tier, "similarity": round(cached.similarity, 3)}
+                    if cached is not None
+                    else {"hit": False}
+                )
+            if cached is not None:
+                return cached.result
+
     route_hint = (
         mandatory_instruction
         if mandatory_instruction
@@ -807,6 +852,18 @@ async def _agent_turn(
         contextual_user_text,
         **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
     )
+    # Answer cache (write): only a knowledge-only turn whose KB lookup returned
+    # usable evidence produced a reply that depends on the question alone. A
+    # prefetch miss (the "không tìm thấy" case) stores nothing, and an absent
+    # timing sink (direct calls, stub agents) disables the write entirely.
+    if (
+        answer_scope_token
+        and timings is not None
+        and timings.get("prefetch_hit") is True
+        and is_shareable_reply(reply, lead_row=lead_row)
+    ):
+        await answer_cache_put(user_text, reply, embedder=deps.embedder, scope=answer_scope_token)
+        timings["answer_cache"]["stored"] = True
     return reply
 
 

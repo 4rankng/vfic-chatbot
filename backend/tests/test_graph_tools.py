@@ -27,7 +27,8 @@ from typing import Any, cast
 
 import pytest
 
-from app.graph import tools
+from app.core.vector import pack_vector, unpack_vector
+from app.graph import embed_cache, tools
 from app.graph.grounding import extract_surfaced_job_ids
 from app.recruitment.domain.recommendation import ActiveProjectIncomeSummary, IncomeFeatureEvidence
 from app.graph.tools import (
@@ -1447,7 +1448,7 @@ async def test_search_knowledge_singleflight_disabled_by_default(monkeypatch, no
 
 
 # ---------------------------------------------------------------------------
-# _cached_embed — normalised key + packed float16 payload
+# cached_embed / packed float16 wire format — normalised key + packed payload
 # ---------------------------------------------------------------------------
 
 
@@ -1463,28 +1464,26 @@ class TestCachedEmbed:
         )
 
     def test_pack_unpack_roundtrip(self):
-        shared = tools._shared
         vec = [0.5, -1.25, 3.0, 0.0]
-        assert shared._unpack_vector(shared._pack_vector(vec)) == vec
+        assert unpack_vector(pack_vector(vec)) == vec
 
     def test_unpack_rejects_legacy_and_corrupt_payloads(self):
-        shared = tools._shared
-        assert shared._unpack_vector([0.1, 0.2]) is None  # legacy JSON array
-        assert shared._unpack_vector("khong-phai-base64 !!") is None
-        assert shared._unpack_vector(None) is None
+        assert unpack_vector([0.1, 0.2]) is None  # legacy JSON array
+        assert unpack_vector("khong-phai-base64 !!") is None
+        assert unpack_vector(None) is None
 
     @pytest.mark.asyncio
     async def test_cache_hit_skips_embedder(self, monkeypatch):
-        monkeypatch.setattr(tools._shared, "get_settings", lambda: self._settings())
-        packed = tools._shared._pack_vector([0.5, 0.25])
+        monkeypatch.setattr(embed_cache, "get_settings", lambda: self._settings())
+        packed = pack_vector([0.5, 0.25])
 
         async def _get(key):
             return packed
 
-        monkeypatch.setattr(tools._shared, "cache_get_json", _get)
+        monkeypatch.setattr(embed_cache, "cache_get_json", _get)
         embedder = _FakeEmbedder()
 
-        out = await tools._shared._cached_embed(embedder, "Luong bao nhieu?")
+        out = await embed_cache.cached_embed(embedder, "Luong bao nhieu?")
 
         assert out == [0.5, 0.25]
         assert embedder.calls == []
@@ -1493,7 +1492,7 @@ class TestCachedEmbed:
     async def test_normalised_variants_share_one_key_and_store_packed(self, monkeypatch):
         """Case/whitespace variants hash to one key; the embedder still
         receives the raw query, and the stored value is the packed string."""
-        monkeypatch.setattr(tools._shared, "get_settings", lambda: self._settings())
+        monkeypatch.setattr(embed_cache, "get_settings", lambda: self._settings())
         gets: list[str] = []
         sets: list[tuple] = []
 
@@ -1504,12 +1503,12 @@ class TestCachedEmbed:
         async def _set(key, value, ttl):
             sets.append((key, value, ttl))
 
-        monkeypatch.setattr(tools._shared, "cache_get_json", _get)
-        monkeypatch.setattr(tools._shared, "cache_set_json", _set)
+        monkeypatch.setattr(embed_cache, "cache_get_json", _get)
+        monkeypatch.setattr(embed_cache, "cache_set_json", _set)
         embedder = _FakeEmbedder(vec=[0.5] * 8)
 
-        await tools._shared._cached_embed(embedder, "  LƯƠNG BAO NHIÊU ")
-        await tools._shared._cached_embed(embedder, "lương bao nhiêu")
+        await embed_cache.cached_embed(embedder, "  LƯƠNG BAO NHIÊU ")
+        await embed_cache.cached_embed(embedder, "lương bao nhiêu")
 
         assert gets[0] == gets[1]
         # The embedder is called with the raw queries, not the normalised form.
@@ -1517,5 +1516,5 @@ class TestCachedEmbed:
         key, value, ttl = sets[0]
         assert key == gets[0]
         assert isinstance(value, str)
-        assert tools._shared._unpack_vector(value) == [0.5] * 8
+        assert unpack_vector(value) == [0.5] * 8
         assert ttl == 60
