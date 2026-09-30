@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { planBriefKnowledge } from "./project-knowledge-markdown";
 import { parseProjectBrief } from "./project-brief-ingest";
 // The three real recruiter briefs, copied verbatim. They are the ingestion
 // contract: whatever these files genuinely carry must land in the knowledge,
 // and whatever they merely demonstrate (samples, instructions) must not.
 import amtranMd from "./fixtures/amtran-vsip-hai-phong.md?raw";
 import fourPElectronicsMd from "./fixtures/four-p-electronics.md?raw";
+import rorzeFaqMd from "./fixtures/rorze-faq.md?raw";
 import samsungSdsMd from "./fixtures/samsung-sds-kho.md?raw";
 
 describe("parseProjectBrief — the real Amtran brief (golden)", () => {
@@ -172,5 +174,31 @@ describe("parseProjectBrief — the real Samsung SDS brief", () => {
 
   it("carries the chatbot Q&A bank as FAQ entries", () => {
     expect(brief.faqEntries.length).toBeGreaterThanOrEqual(12);
+  });
+});
+
+describe("planBriefKnowledge — the real Rorze FAQ-only brief (golden)", () => {
+  // Rorze.md is FAQ-only: no front matter, no jobs body. Its first Q&A is the
+  // only place the job scope is stated; the age Q&A adds no role.
+  const brief = parseProjectBrief(rorzeFaqMd);
+
+  it("pairs both FAQ blocks", () => {
+    // The parser pairs every question-shaped line it finds, so the block
+    // headers ("FAQ: …") and Tags lines ride along — the two real Q&A pairs
+    // are what the mining must see.
+    const questions = brief.faqEntries.map((entry) => entry.question);
+    expect(questions).toContain("Bên công ty đang tuyển công việc gì?");
+    expect(questions).toContain("Rorze tuyển đến bao nhiêu tuổi?");
+  });
+
+  it("writes the job scope the recruiting answer states", () => {
+    const plan = planBriefKnowledge(brief);
+    expect(plan.writes[0].key).toBe("jobs");
+    expect(plan.writes[0].content).toContain('title: "Nhân viên lắp ráp"');
+    expect(plan.writes[0].content).toContain(
+      'title: "Nhân viên vận hành máy CNC"',
+    );
+    // The age Q/A contributes no role.
+    expect(plan.writes[0].content).not.toContain("35 tuổi");
   });
 });

@@ -1,8 +1,0 @@
-schema_version: "1.0"
-category: benefits
-benefits: []
-#  - id: thuong-chuyen-can
-#    job_ids: [cong-nhan-san-xuat]
-#    name: Thưởng chuyên cần
-#    description: Mô tả quyền lợi
-#    eligibility: Điều kiện được hưởng

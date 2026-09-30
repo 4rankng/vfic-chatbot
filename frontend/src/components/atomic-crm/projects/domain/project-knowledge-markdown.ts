@@ -1454,6 +1454,64 @@ const rolesFromJobsBody = (body: string): string[] =>
     .map((line) => /^chức danh\s*[:：]\s*(.*)$/iu.exec(line)?.[1]?.trim() ?? "")
     .filter(Boolean);
 
+// A recruiting Q&A states the job scope in prose ("... tuyển vị trí A và B") —
+// the only scope source in a FAQ-only brief like Rorze.md. A question qualifies
+// only when it asks about the work AND about hiring; a segment becomes a title
+// only when it READS as a role phrase — its folded form leads with one of the
+// role nouns. That lead rule is what keeps label residue ("Vị trí tuyển: …")
+// from becoming a title.
+const FAQ_ROLE_TOPICS = ["cong viec", "vi tri", "viec lam", "nghe"];
+const FAQ_ROLE_RECRUITING = ["tuyen", "tuyen dung"];
+const FAQ_ROLE_SEGMENT_SPLIT = /\s+và\s+|,\s*|\s+với\s+/i;
+const FAQ_ROLE_NOUNS = [
+  "nhan vien",
+  "cong nhan",
+  "ky thuat",
+  "ky su",
+  "lao dong",
+  "nhan cong",
+];
+
+/** Job-scope titles mined from the FAQ's own recruiting answers. */
+export const rolesFromFaqEntries = (
+  entries: readonly ProjectBriefFaqEntry[],
+): string[] => {
+  const roles: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    const question = fold(entry.question);
+    if (
+      !FAQ_ROLE_TOPICS.some((topic) => question.includes(topic)) ||
+      !FAQ_ROLE_RECRUITING.some((word) => question.includes(word))
+    ) {
+      continue;
+    }
+    // The position list follows the first "vị trí" — else the first "tuyển ":
+    // "VFIC đang tuyển vị trí A và B" reads its titles off "vị trí".
+    const answer = entry.answer;
+    const lowered = answer.toLowerCase();
+    const viTriAt = lowered.indexOf("vị trí");
+    const tuyenAt = lowered.indexOf("tuyển ");
+    const anchorAt = viTriAt >= 0 ? viTriAt : tuyenAt;
+    if (anchorAt < 0) continue;
+    const anchorLength = viTriAt >= 0 ? "vị trí".length : "tuyển ".length;
+    for (const raw of answer
+      .slice(anchorAt + anchorLength)
+      .split(FAQ_ROLE_SEGMENT_SPLIT)) {
+      const segment = raw.trim();
+      if (!segment || segment.split(/\s+/).length > 8) continue;
+      const folded = fold(segment);
+      if (!FAQ_ROLE_NOUNS.some((noun) => folded.startsWith(noun))) continue;
+      const key = segment.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      roles.push(segment.charAt(0).toUpperCase() + segment.slice(1));
+      if (roles.length >= 10) return roles;
+    }
+  }
+  return roles;
+};
+
 export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
   const writes: {
     key: ProjectKnowledgeCategory;
@@ -1470,13 +1528,17 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
   // `jobs` goes FIRST and always. Every other category's rows may reference
   // `job_ids`, and the API rejects a write whose references do not resolve
   // against the jobs that are active at that moment — so activating jobs first
-  // is what makes the rest of the batch writable. It is also the category
-  // activation itself requires, so a brief with no role at all has nothing to
-  // activate and the form asks the recruiter for one title instead.
+  // is what makes the rest of the batch writable. The roles fall through three
+  // sources while none names one: the structured overview table, prose
+  // "Chức danh:" lines in the jobs body, then the FAQ's own recruiting answers
+  // — a FAQ-only brief (Rorze.md) still seeds its job scope.
+  const proseRoles = rolesFromJobsBody(brief.categories.jobs ?? "");
   const roles =
     brief.roles.length > 0
       ? brief.roles
-      : rolesFromJobsBody(brief.categories.jobs ?? "");
+      : proseRoles.length > 0
+        ? proseRoles
+        : rolesFromFaqEntries(brief.faqEntries);
   if (roles.length > 0) {
     writes.push({
       key: "jobs",

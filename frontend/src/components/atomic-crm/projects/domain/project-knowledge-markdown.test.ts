@@ -9,6 +9,7 @@ import {
   buildWorkSchedulesMarkdown,
   CATEGORY_MARKDOWN_SCHEMAS,
   planBriefKnowledge,
+  rolesFromFaqEntries,
   serializeCategoryMarkdown,
   type CategoryPayload,
   type CategoryRecord,
@@ -138,6 +139,41 @@ describe("buildJobsMarkdown", () => {
   });
 });
 
+describe("rolesFromFaqEntries", () => {
+  // The Rorze.md pair, verbatim.
+  const SCOPE_FAQ = {
+    question: "Bên công ty đang tuyển công việc gì?",
+    answer:
+      "VFIC đang tuyển vị trí nhân viên lắp ráp và nhân viên vận hành máy CNC",
+  };
+  const AGE_FAQ = {
+    question: "Rorze tuyển đến bao nhiêu tuổi?",
+    answer: "Rorze tuyển từ đủ 18 tuổi đến 35 tuổi.",
+  };
+
+  it("takes both titles from the recruiting answer's position list", () => {
+    expect(rolesFromFaqEntries([SCOPE_FAQ])).toEqual([
+      "Nhân viên lắp ráp",
+      "Nhân viên vận hành máy CNC",
+    ]);
+  });
+
+  it("contributes zero roles when the answer states no position", () => {
+    expect(rolesFromFaqEntries([AGE_FAQ])).toEqual([]);
+  });
+
+  it("ignores an answer whose text is a label line, not a position list", () => {
+    expect(
+      rolesFromFaqEntries([
+        {
+          question: "Bên công ty đang tuyển công việc gì?",
+          answer: "Vị trí tuyển: Công nhân sản xuất.",
+        },
+      ]),
+    ).toEqual([]);
+  });
+});
+
 describe("planBriefKnowledge", () => {
   it("plans jobs before faq so every later write can resolve its job ids", () => {
     const plan = planBriefKnowledge(
@@ -156,6 +192,33 @@ describe("planBriefKnowledge", () => {
     const plan = planBriefKnowledge(briefWith({ faqEntries: [ENTRY] }));
     expect(plan.writes.map((write) => write.key)).toEqual(["faq"]);
     expect(plan.needsHuman).toContain("jobs");
+  });
+
+  it("seeds the job scope from the FAQ's own recruiting answer (Rorze.md)", () => {
+    // The Rorze brief is FAQ-only: no front matter, no jobs body. Its
+    // recruiting Q&A is the only place the job scope is stated.
+    const plan = planBriefKnowledge(
+      briefWith({
+        faqEntries: [
+          {
+            question: "Bên công ty đang tuyển công việc gì?",
+            answer:
+              "VFIC đang tuyển vị trí nhân viên lắp ráp và nhân viên vận hành máy CNC",
+          },
+          {
+            question: "Rorze tuyển đến bao nhiêu tuổi?",
+            answer: "Rorze tuyển từ đủ 18 tuổi đến 35 tuổi.",
+          },
+        ],
+      }),
+    );
+    expect(plan.writes[0].key).toBe("jobs");
+    expect(plan.writes[0].content).toContain('title: "Nhân viên lắp ráp"');
+    expect(plan.writes[0].content).toContain(
+      'title: "Nhân viên vận hành máy CNC"',
+    );
+    expect(plan.writes[0].content).not.toContain("35 tuổi");
+    expect(plan.needsHuman).not.toContain("jobs");
   });
 
   it("names the ten categories that still need a human", () => {

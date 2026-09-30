@@ -72,7 +72,11 @@ export const ProjectBriefImport = ({
     try {
       const text = await file.text();
       const parsed = parseProjectBrief(text);
-      if (!parsed.name && !parsed.categories.jobs) {
+      if (
+        !parsed.name &&
+        !parsed.categories.jobs &&
+        parsed.faqEntries.length === 0
+      ) {
         setError(
           "Không đọc được nội dung dự án từ tệp này. Hãy kiểm tra lại tệp văn bản.",
         );
