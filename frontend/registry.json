@@ -336,6 +336,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/personas/domain/personaMarkdownIngest.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/personas/domain/personaMarkdown.ts",
           "type": "registry:component"
         },
