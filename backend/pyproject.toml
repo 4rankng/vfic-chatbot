@@ -37,6 +37,8 @@ dependencies = [
     # Async support is built in (no extra needed as of 5.x).
     "python-socketio>=5.11,<6.0",
     "python-multipart>=0.0.17,<1.0",
+    # Migration-only since 0059: the one-time category YAML→markdown conversion
+    # is the sole remaining importer. Droppable once prod has run 0059.
     "PyYAML>=6.0.2,<7.0",
     # LLM layer: langchain-core/-openai only. The turn pipeline is a manual node
     # topology (app/graph/runner.py), not the LangGraph engine — no langgraph.

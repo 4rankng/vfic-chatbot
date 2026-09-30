@@ -278,7 +278,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0058_tingting_hotline_setting` (30 Sep 2026). This line is
+- **HEAD:** `0059_category_markdown_source` (1 Oct 2026). This line is
   grepped by the `release-check` docs-drift gate against the live
   `alembic heads` value, so a new migration that does not update it blocks the
   release. `0058` adds the deployment-wide `tingting_hotline` integration
