@@ -34,7 +34,7 @@ CRITICAL_RULES = [
     "Thu thập SỐ ĐIỆN THOẠI và NĂM SINH",  # §5 — lead-capture mission
     "Mỗi tin nhắn chỉ hỏi một lần ở câu chốt cuối cùng",  # §5 — one ask per message
     "TUYỆT ĐỐI KHÔNG BỊA ĐẶT",  # §4 — anti-fabrication
-    "CẤM liệt kê hàng loạt 5-10 vị trí",  # §3 — never overwhelm with a job dump
+    "MỌI dự án đang hoạt động đều có thể xuất hiện — không bỏ sót, không xếp việc lẻ",  # §3 — introduce by project, never a job dump
     'CẤM dùng từ "bạn", "quý khách", "ứng viên", "người lao động"',  # §6 — address form
     "không in đậm",  # §6 — plain-text output
     "Tuyệt đối không hỏi lại những điều ứng viên đã cung cấp",  # §3 — never re-ask
@@ -243,7 +243,7 @@ async def test_active_projects_index_carries_the_vague_seeker_rule():
 
     The rule lives inside the directory block (not the static rules) so it is
     present exactly when the DANH MỤC it points at exists, and hiring claims
-    stay anchored to ``list_active_jobs`` evidence.
+    stay anchored to ``list_active_projects`` evidence.
     """
 
     class _Repo:
@@ -262,7 +262,7 @@ async def test_active_projects_index_carries_the_vague_seeker_rule():
 
     assert "tìm việc chung chung" in prompt
     assert "DANH MỤC" in prompt
-    assert "list_active_jobs" in prompt
+    assert "list_active_projects" in prompt
     assert "không bịa điểm nổi bật" in prompt
 
 
@@ -303,7 +303,7 @@ def test_tingting_support_prompt_excludes_the_recruitment_directory():
     ):
         assert "DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG" not in prompt
         assert "tìm việc chung chung" not in prompt
-        assert "list_active_jobs" not in prompt
+        assert "list_active_projects" not in prompt
 
 
 @pytest.mark.asyncio
