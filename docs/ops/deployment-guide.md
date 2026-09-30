@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-30
 **Production host:** `bot.tingting.vip` (DigitalOcean droplet, 2 vCPU / ~4 GB RAM)
 **Stack path:** `/opt/vfic` · **Git remote:** `git@github.com:4rankng/vfic-chatbot.git` (`main`)
 
@@ -69,11 +69,14 @@ auto-TLS Let's Encrypt (certs in `vfic_caddy_data`). Do not edit
 ## 3. Deploy flow (blue/green)
 
 All targets live in the root `Makefile` (delegates to `backend/Makefile`).
-`make deploy` is the one command that handles the whole thing: release-check →
-build + push both images → blue/green cutover.
+The full deploy sequence: `make release-check` (run it yourself — `make deploy`
+does not chain it) → `make deploy` = build + push both images + blue/green
+cutover.
 
 ### Full deploy (`make deploy`)
-1. `release-check` — a clean committed worktree, exactly one Alembic head with
+1. `make release-check` — the operator-run prerequisite: `make deploy` does
+   not chain it (the `deploy-backend` / `deploy-frontend` fast-tracks still
+   do). It verifies: a clean committed worktree, exactly one Alembic head with
    §4 below matching it, `uv lock --check`, then the scoped Pyright gate on
    `app/graph` (zero errors; `backend/pyrightconfig.json` binds the venv), the
    production-only `npm audit`, backend lint + unit tests, the two-test

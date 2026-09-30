@@ -304,8 +304,10 @@ directly, but treat changes with the weight of an upstream fork:
   the offline golden release gate. The backend integration suite and Playwright
   E2E are manual lanes only (2026-09-26) so a deploy never depends on local dev
   infrastructure.
-- `make deploy` runs `release-check` first and refuses to build or push an image
-  when any gate fails. Run it directly to validate a change without deploying.
+- `make deploy` does not chain `release-check` (since 2026-09-30): run
+  `make release-check` before every deploy; it blocks on a dirty worktree and
+  aborts on the first failing gate. Run it directly to validate a change
+  without deploying.
 - The GitHub Actions workflows (`quality-gates.yml`, `openwiki-update.yml`) were
   removed on 2026-09-26 — deploys are manual anyway, and the gates are the same
   commands run by hand.

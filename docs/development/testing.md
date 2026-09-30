@@ -159,7 +159,7 @@ the E2E database during global teardown.
 
 ## Root Quality Gates
 
-There is no CI. `make release-check` (repo root) is the whole gate set, and it must pass before any image is built or production is touched — `make deploy` invokes it first and aborts on the first failure. Lanes:
+There is no CI. `make release-check` (repo root) is the whole gate set, and it must pass before any image is built or production is touched. `make deploy` does not run it — run `make release-check` before deploying (the `deploy-backend` / `deploy-frontend` fast-tracks still run it as a prerequisite). Lanes:
 
 | Lane | What it runs |
 |---|---|
