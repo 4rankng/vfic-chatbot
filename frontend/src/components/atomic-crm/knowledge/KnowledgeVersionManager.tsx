@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { History, RefreshCw, Send } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { CloseButton } from "@/components/base/buttons/close-button";
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+  Modal,
+  ModalOverlay,
+} from "@/components/application/modals/modal";
 import {
   listKnowledgeBaseVersions,
   publishKnowledgeBaseVersion,
@@ -62,65 +61,93 @@ export const KnowledgeVersionManager = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          className="tt-btn-touch h-11 rounded-[9px]"
-          disabled={!projectId}
-        >
-          <History className="size-4" /> Phiên bản KB
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Phiên bản kiến thức</DialogTitle>
-          <DialogDescription>
-            Chỉ phiên bản READY mới có thể được xuất bản. Việc xuất bản sẽ thay
-            thế toàn bộ KB đang hoạt động của dự án.
-          </DialogDescription>
-        </DialogHeader>
-        {error && <p className="text-body text-destructive">{error}</p>}
-        <div className="max-h-[55vh] space-y-2 overflow-y-auto">
-          {versions.map((version) => (
-            <div key={version.id} className="space-y-2">
-              <div className="flex items-center justify-between gap-3 rounded-md border p-3">
-                <div>
-                  <p className="text-row-title font-medium">
-                    Phiên bản {version.version_no}
+    <DialogTrigger isOpen={open} onOpenChange={setOpen}>
+      <Button
+        color="secondary"
+        size="sm"
+        iconLeading={History}
+        isDisabled={!projectId}
+      >
+        Phiên bản KB
+      </Button>
+      <ModalOverlay className="uu-scope">
+        <Modal className="w-full outline-hidden sm:max-w-xl">
+          <Dialog
+            aria-label="Phiên bản kiến thức"
+            className="flex flex-col gap-0 p-0 outline-hidden"
+          >
+            <header className="sticky top-0 z-10 border-b border-secondary bg-primary px-5 py-4 pr-14 text-left sm:px-6 sm:py-5">
+              <h2 className="text-lg font-semibold text-primary">
+                Phiên bản kiến thức
+              </h2>
+              <p className="mt-1 text-sm text-tertiary">
+                Chỉ phiên bản READY mới có thể được xuất bản. Việc xuất bản sẽ
+                thay thế toàn bộ KB đang hoạt động của dự án.
+              </p>
+              <CloseButton
+                size="sm"
+                label="Đóng"
+                className="absolute top-3 right-3"
+              />
+            </header>
+            <div className="flex flex-col gap-3 px-5 py-5 sm:px-6">
+              {error ? (
+                <p className="rounded-lg border border-error_subtle bg-error-primary px-3 py-2 text-sm font-medium text-error-primary">
+                  {error}
+                </p>
+              ) : null}
+              <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+                {versions.map((version) => (
+                  <div
+                    key={version.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-secondary p-3"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-primary">
+                        Phiên bản {version.version_no}
+                      </p>
+                      <p className="text-xs text-tertiary">
+                        Phiên bản KB theo dự án
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        type="pill-color"
+                        size="sm"
+                        color={version.status === "READY" ? "success" : "gray"}
+                      >
+                        {version.status}
+                      </Badge>
+                      {version.status === "READY" ? (
+                        <Button
+                          color="primary"
+                          size="sm"
+                          isDisabled={busyId === version.id}
+                          iconLeading={
+                            busyId === version.id ? (
+                              <RefreshCw className="size-4 animate-spin" />
+                            ) : (
+                              Send
+                            )
+                          }
+                          onClick={() => void publish(version)}
+                        >
+                          Xuất bản
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+                {versions.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-tertiary">
+                    Chưa có phiên bản KB.
                   </p>
-                  <p className="text-helper text-muted-foreground">
-                    Phiên bản KB theo dự án
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">{version.status}</Badge>
-                  {version.status === "READY" && (
-                    <Button
-                      size="sm"
-                      disabled={busyId === version.id}
-                      onClick={() => void publish(version)}
-                    >
-                      {busyId === version.id ? (
-                        <RefreshCw className="size-4 animate-spin" />
-                      ) : (
-                        <Send className="size-4" />
-                      )}{" "}
-                      Xuất bản
-                    </Button>
-                  )}
-                </div>
+                ) : null}
               </div>
             </div>
-          ))}
-          {versions.length === 0 && (
-            <p className="py-8 text-center text-body text-muted-foreground">
-              Chưa có phiên bản KB.
-            </p>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    </DialogTrigger>
   );
 };
