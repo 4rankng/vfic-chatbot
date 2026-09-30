@@ -15,7 +15,7 @@ from app.models.knowledge import (
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.services.knowledge.derived_jobs import rebuild_project_jobs
-from app.services.recommendation.repository import RecommendationRepository
+from app.services.retrieval.catalog_repository import CatalogRepository
 
 pytestmark = pytest.mark.integration
 
@@ -58,15 +58,14 @@ async def test_active_single_page_project_is_included_in_vacancy_catalog(
     )
     await integration_session.flush()
 
-    lookup = await RecommendationRepository(integration_session).list_active_jobs(
-        role="lắp ráp",
-        project_ids=[str(project.id)],
-        top_k=10,
-    )
-
-    assert lookup.status == "matched"
-    assert [(job.company_name, job.project_slug) for job in lookup.jobs] == [
-        ("Rorze", "rorze-direct")
+    lookup = await CatalogRepository(
+        integration_session, page_project_ids=None
+    ).list_active_projects()
+    rorze = next(row for row in lookup if row.project_id == str(project.id))
+    assert (rorze.company, rorze.slug) == ("Rorze", "rorze-direct")
+    assert [item.title for item in rorze.scope] == [
+        "Nhân viên lắp ráp",
+        "Nhân viên vận hành máy CNC",
     ]
 
 
@@ -87,6 +86,15 @@ async def test_rebuild_project_jobs_mirrors_current_kb_and_is_idempotent(
     )
     integration_session.add(project)
     await integration_session.flush()
+    knowledge_base = KnowledgeBase(
+        project_id=project.id,
+        name="LG Display Knowledge",
+        slug="lg-display-kb",
+        mode=KnowledgeBaseMode.RAG,
+    )
+    integration_session.add(knowledge_base)
+    await integration_session.flush()
+    project.knowledge_base_id = knowledge_base.id
     company = Company(project_id=project.id, name="LG Display", aliases=["LGD"])
     integration_session.add(company)
     await integration_session.flush()
@@ -166,12 +174,11 @@ async def test_rebuild_project_jobs_mirrors_current_kb_and_is_idempotent(
         == 1
     )
 
-    lookup = await RecommendationRepository(integration_session).list_active_jobs(
-        top_k=10,
-        project_ids=[str(project.id)],
-    )
-    assert lookup.status == "matched"
-    assert {job.title for job in lookup.jobs} == {
+    lookup = await CatalogRepository(
+        integration_session, page_project_ids=None
+    ).list_active_projects()
+    rebuilt = next(row for row in lookup if row.project_id == str(project.id))
+    assert {item.title for item in rebuilt.scope} == {
         "Công nhân kiểm tra",
     }
 

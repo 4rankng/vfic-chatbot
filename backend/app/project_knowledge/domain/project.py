@@ -10,7 +10,6 @@ class ProjectActivationFacts:
     knowledge_mode: str | None
     has_discovery_card: bool = False
     has_direct_file: bool = False
-    has_active_jobs: bool = False
 
 
 def project_activation_error(facts: ProjectActivationFacts) -> str | None:
@@ -22,8 +21,6 @@ def project_activation_error(facts: ProjectActivationFacts) -> str | None:
             return "Single-page Project needs its page before activation"
         return None
     if facts.knowledge_mode == "RAG":
-        if not facts.has_active_jobs:
-            return "RAG Project needs an active Jobs category before activation"
         return None
     return "Project has no owned knowledge base"
 

@@ -26,10 +26,7 @@ _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
     "job_advisory": frozenset(
         {
             "compare_income",
-            "list_active_jobs",
             "list_active_projects",
-            "recommend_projects",
-            "recommend_jobs",
             "search_bus_timetable",
             "get_product_features",
         }

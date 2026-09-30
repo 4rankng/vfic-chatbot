@@ -50,7 +50,6 @@ def _answers(**overrides) -> dict:
     answers = {
         "intent": _choice("faq_detail", 0.97),
         "vacancy_listing": _noul(0.02),
-        "sort_by": _choice("none", 0.8),
         "pleasantry": _noul(0.01),
         "recent_vacancy": _noul(0.01),
         "contact_info": _noul(0.01),
@@ -72,7 +71,6 @@ async def test_questions_match_contract() -> None:
     assert set(questions) == {
         "intent",
         "vacancy_listing",
-        "sort_by",
         "pleasantry",
         "recent_vacancy",
         "recent_account_support",
@@ -83,7 +81,6 @@ async def test_questions_match_contract() -> None:
     assert set(build_turn_questions(include_gender=False)) == {
         "intent",
         "vacancy_listing",
-        "sort_by",
         "pleasantry",
         "recent_vacancy",
         "recent_account_support",
@@ -95,7 +92,6 @@ async def test_questions_match_contract() -> None:
     assert set(build_turn_questions(include_profile_name=True)) == {
         "intent",
         "vacancy_listing",
-        "sort_by",
         "pleasantry",
         "recent_vacancy",
         "recent_account_support",
@@ -138,7 +134,7 @@ async def test_route_vacancy_listing_refines_recommend() -> None:
     )
     route = route_from_decisions("công ty còn tuyển không", decisions)
     assert route.strategy == "structured_lookup"
-    assert route.tools == ("list_active_jobs",)
+    assert route.tools == ("list_active_projects",)
     assert route.reason == "vacancy_listing"
 
 
@@ -224,7 +220,6 @@ async def test_client_parses_full_fan_out() -> None:
     client._system_one = AsyncMock(  # noqa: SLF001 — test seam
         return_value=_payload(
             _answers(
-                sort_by=_choice("salary_desc"),
                 recent_vacancy=_noul(0.9),
             )
         )
@@ -232,7 +227,6 @@ async def test_client_parses_full_fan_out() -> None:
     decisions = await client.decide_turn(user_text="x", recent_messages=[])
     assert decisions.intent == "faq_detail"
     assert decisions.intent_confidence == 0.97
-    assert decisions.sort_by == "salary_desc"
     assert decisions.pleasantry is False
     assert decisions.recent_vacancy is True
     assert decisions.degraded is False

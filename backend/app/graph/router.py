@@ -125,7 +125,7 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
         return TurnRoute(
             "recommend",
             "structured_lookup",
-            tools=("list_active_jobs",),
+            tools=("list_active_projects",),
             reason="vacancy_listing",
             confidence=decisions.intent_confidence,
         )
@@ -147,7 +147,7 @@ _INTENT_ROUTES: dict[
 ] = {
     "recommend": (
         "recommendation",
-        ("list_active_jobs", "recommend_jobs", "recommend_projects", "get_product_features"),
+        ("list_active_projects", "get_product_features"),
         "recommendation_terms",
     ),
     "profile_update": ("profile", (), "profile_terms"),
@@ -214,15 +214,19 @@ def routing_instruction(route: TurnRoute) -> str:
     if route.intent == "recommend":
         if route.reason == "vacancy_listing":
             return (
-                "Ý định: xem toàn bộ việc đang tuyển. Bắt buộc gọi list_active_jobs không "
-                "truyền bộ lọc, rồi trả nguyên danh sách việc ACTIVE từ kết quả công cụ; "
-                "không bổ sung vị trí ngoài danh mục."
+                "Ý định: ứng viên hỏi về việc làm. Bắt buộc gọi list_active_projects "
+                "(truyền các tiêu chí ứng viên nêu: job_scope/location/salary_min_vnd/company/"
+                "sort_by; chưa nêu thì gọi không bộ lọc). Trả lời theo hợp đồng trong safe_reply: "
+                "nếu thiếu mong muốn (phạm vi công việc/khu vực/mức lương) và không phải yêu cầu "
+                "xem tất cả → chỉ hỏi tiêu chí, chưa giới thiệu; khi đã có đủ hoặc xem tất cả → "
+                "giới thiệu các dự án phù hợp theo fit_score, mỗi dự án một khối."
             )
         return (
-            "Ý định: gợi ý việc phù hợp. Nếu đã có hồ sơ ứng viên (lương/khu vực/vị trí), "
-            "ưu tiên gọi recommend_jobs(chat_id) để gợi ý việc theo hồ sơ; nếu chưa đủ hồ sơ "
-            "thì dùng recommend_projects. Sau đó gọi get_product_features cho slug dự án đã "
-            "chọn để nêu lý do cụ thể. Chỉ gợi ý việc/dự án có trong dữ liệu."
+            "Ý định: gợi ý việc phù hợp. Ưu tiên gọi list_active_projects với các tiêu chí "
+            "ứng viên nêu (job_scope/location/salary_min_vnd/company/sort_by); chưa nêu đủ "
+            "mong muốn (phạm vi công việc/khu vực/mức lương) thì hỏi ngắn gọn trước. Sau đó "
+            "gọi get_product_features cho slug dự án đã chọn để nêu lý do cụ thể. "
+            "Chỉ gợi ý dự án có trong dữ liệu."
         )
     if route.intent == "profile_update":
         return (

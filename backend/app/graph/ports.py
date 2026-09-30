@@ -23,7 +23,6 @@ from app.recruitment.application.ports import (
     LeadContextQueryPort,
     LeadGenderPort,
     PersonaBodyResolver,
-    RecommendationQueryPort,
 )
 from app.shared.application.outbound import OutboundTelemetry
 
@@ -86,7 +85,6 @@ class TurnDecisions:
     intent: str = "general"
     intent_confidence: float = 0.1
     vacancy_listing: bool = False
-    sort_by: str | None = None
     pleasantry: bool = False
     recent_vacancy: bool = False
     contact_info: bool = False
@@ -216,7 +214,6 @@ class RuntimePolicyPort(Protocol):
 class GraphRetrievalPort(
     ProjectKnowledgeQueryPort,
     PersonaBodyResolver,
-    RecommendationQueryPort,
     Protocol,
 ):
     """Graph-owned query surface composed from bounded-context read ports."""
@@ -224,10 +221,9 @@ class GraphRetrievalPort(
     async def match_memories(self, emb: str, top_k: int, filter_json: str) -> list[Any]: ...
 
     # Recruitment-domain reads the job-feature and income-comparison tools
-    # need. The retrieval facade serves both through its recommendation seam;
-    # they are declared here on the composite port because neither bounded-
-    # context read port owns them (job features and income summaries are
-    # recruitment agent surface, not project-knowledge queries).
+    # need. They are declared here on the composite port because neither
+    # bounded-context read port owns them (job features and income summaries
+    # are recruitment agent surface, not project-knowledge queries).
     async def job_features_for_project(self, project_id: Any) -> list[Any]: ...
     async def income_summary_for_active_projects(self) -> Sequence[Any]: ...
 

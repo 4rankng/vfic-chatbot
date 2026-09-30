@@ -61,11 +61,8 @@ DecisionTraceSummaryCode = Literal[
     "fast",
     "direct",
     "search_user_memory",
-    "list_active_jobs",
     "list_active_projects",
     "search_knowledge",
-    "recommend_projects",
-    "recommend_jobs",
     "search_bus_timetable",
     "get_product_features",
     "passed",
@@ -92,11 +89,8 @@ DecisionTraceSummaryCode = Literal[
 
 DecisionTraceToolName = Literal[
     "search_user_memory",
-    "list_active_jobs",
     "list_active_projects",
     "search_knowledge",
-    "recommend_projects",
-    "recommend_jobs",
     "search_bus_timetable",
     "get_product_features",
 ]
@@ -136,11 +130,8 @@ _DECISION_CODE_SUMMARIES: dict[str, frozenset[str]] = {
     "required_tool_selected": frozenset(
         {
             "search_user_memory",
-            "list_active_jobs",
             "list_active_projects",
             "search_knowledge",
-            "recommend_projects",
-            "recommend_jobs",
             "search_bus_timetable",
             "get_product_features",
                 }

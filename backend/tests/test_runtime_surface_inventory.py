@@ -232,7 +232,14 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # `tingting_hotline` setting — TingtingApiService.hotline and replace_hotline
 # add two reviewed configuration `get` rows (+2 provider_boundary, annotated
 # at the count above); digest recomputed from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "d2b9f1a864f6ca7013351fb2e1ae8ded2d0b3a106dfe7c3e4adf0176ba14c3a9"
+# 2026-09-30: the projects-not-jobs migration removed the sort_by Jev question
+# and its answer parse from graph/decisions.py — a provider-transport file, so
+# its dict `.get` reads count — dropping two `get` invocations at the one
+# `JevDecisionClient.decide_turn` reviewed site (20→18). No site was added,
+# removed, or moved, so EXPECTED_BROAD_BOUNDARY_COUNTS is unchanged; the digest
+# was recomputed from the post-change scan and the prior digest reconstructs
+# exactly from that single count change, so nothing else moved.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "e4ca74f4cf59fb9c18f88ea05ad76ed1e659a1e02fe7975839dd1de5a56fa4de"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

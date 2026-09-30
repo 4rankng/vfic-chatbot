@@ -23,7 +23,8 @@ class ProjectKnowledgeQueryPort(Protocol):
         project_ids: list[str] | None = None,
         query_text: str = "",
     ) -> list[Any]: ...
-    async def list_active_projects(self) -> list[Any]: ...
+    async def list_active_projects(self) -> list[Any]:
+        """Every active project as ``ProjectFeatures`` rows (the fit catalog)."""
     async def search_bus_timetable(
         self, company: str, question: str, limit: int
     ) -> list[Any]: ...

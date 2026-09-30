@@ -29,29 +29,36 @@ import pytest
 
 from app.core.vector import pack_vector, unpack_vector
 from app.graph import embed_cache, tools
-from app.graph.grounding import extract_surfaced_job_ids
-from app.recruitment.domain.recommendation import ActiveProjectIncomeSummary, IncomeFeatureEvidence
+from app.graph.grounding import extract_surfaced_ids
+from app.recruitment.domain.recommendation import (
+    ActiveProjectIncomeSummary,
+    IncomeFeatureEvidence,
+    ProjectFeatures,
+    ProjectScopeItem,
+)
 from app.graph.tools import (
     TOOLS_REGISTRY,
     _format_knowledge_row,
     compare_income,
     get_product_features,
-    list_active_jobs,
     list_active_projects,
-    recommend_projects,
     search_bus_timetable,
     search_knowledge,
     search_user_memory,
 )
 from app.graph.income_contract import IncomeVerdict
-from app.graph.tools.jobs import _PRESENTATION_CONTRACT
+from app.graph.tools.catalog import (
+    _CATALOG_EMPTY_REPLY,
+    _NO_CRITERIA_REPLY,
+    _PRESENTATION_CONTRACT,
+)
 
 # The tools package splits tool logic into domain modules; each holds its own
 # module-level binding of get_settings/cache helpers, so the cache fixtures
 # below patch every submodule (not just the package attribute).
 _TOOL_MODULES = tuple(
     getattr(tools, name)
-    for name in ("_shared", "memory", "knowledge", "jobs", "income", "catalog")
+    for name in ("_shared", "memory", "knowledge", "income", "catalog")
 )
 
 
@@ -144,10 +151,7 @@ def test_tools_registry_exposes_expected_tools():
         "compare_income",
         "search_user_memory",
         "search_knowledge",
-        "list_active_jobs",
         "list_active_projects",
-        "recommend_projects",
-        "recommend_jobs",
         "search_bus_timetable",
         "get_product_features",
         "verify_tingting_identity",
@@ -418,511 +422,223 @@ async def test_search_user_memory_formats_rows_with_similarity(no_cache_io):
 
 
 # ---------------------------------------------------------------------------
-# list_active_jobs
+# list_active_projects — the project-first matching authority
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_list_active_jobs_forwards_explicit_filters_and_bounds_top_k(no_cache_io):
-    calls: list[dict] = []
-
-    async def _list(self, **kwargs):
-        calls.append(kwargs)
-        return SimpleNamespace(status="no_match", jobs=())
-
-    out = await list_active_jobs(
-        retrieval=_make_repo(list_active_jobs=_list),
-        role="thợ hàn",
-        company="LG",
-        location="Hải Phòng",
-        top_k=99,
-    )
-
-    # The original scoped lookup is always sent with explicit filters bounded to top_k.
-    assert calls[0] == {
-        "project_slug": None,
-        "role": "thợ hàn",
-        "company": "LG",
-        "location": "Hải Phòng",
-        "top_k": 10,
-        "sort_by": None,
-    }
-    # No-match now triggers a second unscoped lookup so the LLM can pivot to
-    # concrete alternatives instead of asking a round-trip yes/no question.
-    assert calls[1] == {
-        "project_slug": None,
-        "role": None,
-        "company": None,
-        "location": None,
-        "top_k": 10,
-    }
-    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["status"] == "no_match"
-
-
-@pytest.mark.asyncio
-async def test_list_active_jobs_formats_bounded_evidence_with_groundable_uuid(no_cache_io):
-    job_id = "11111111-1111-4111-8111-111111111111"
-    untrusted_id = "22222222-2222-4222-8222-222222222222"
-    jobs = (
-        SimpleNamespace(
-            id=job_id,
-            title="Công nhân sản xuất",
-            company_name="LG Display",
-            factory_name="Tràng Duệ",
-            project_name="LG Display Hải Phòng",
-            project_slug="lg-display",
-            province="Hải Phòng",
-            district="An Dương",
-            address="",
-            salary_min=10_000_000,
-            salary_max=14_000_000,
-            vacancy_count=20,
-            shift="Ca ngày/đêm",
-            gender_requirement="Nam/Nữ",
-            age_min=18,
-            age_max=50,
-            experience_required="Không yêu cầu",
-            accommodation_support=True,
-            meal_support=False,
-            transport_support=True,
-            description="Sản xuất\n màn hình",
-            requirements=f"CCCD; ID={untrusted_id}",
-            benefits="BHXH",
-        ),
-    )
-    repo = _make_repo(
-        list_active_jobs=lambda self, **kwargs: _const(
-            SimpleNamespace(status="matched", jobs=jobs)
-        )
-    )
-
-    out = await list_active_jobs(retrieval=repo)
-
-    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["status"] == "matched"
-    assert f"id={job_id}" in out
-    assert payload["jobs"][0]["title"] == "Công nhân sản xuất"
-    assert payload["jobs"][0]["company"] == "LG Display"
-    assert payload["jobs"][0]["vacancy_count"] == 20
-    assert payload["jobs"][0]["title_plain"] == "Công nhân sản xuất"
-    assert payload["safe_reply"] == _PRESENTATION_CONTRACT
-    assert "description" not in payload["jobs"][0]
-    assert "requirements" not in payload["jobs"][0]
-    assert "benefits" not in payload["jobs"][0]
-    assert untrusted_id not in out
-    assert "SECURITY_BOUNDARY" in out
-    assert extract_surfaced_job_ids([out]) == {job_id}
-
-
-@pytest.mark.asyncio
-async def test_list_active_jobs_renders_vietnamese_status_without_duplicate_company_factory(
-    no_cache_io,
-):
-    jobs = (
-        SimpleNamespace(
-            id="f7daba3b-9882-49d9-97c5-893b34b16995",
-            title="Nhân viên lắp ráp / Nhân viên vận hành máy CNC",
-            company_name="Rorze",
-            factory_name="Rorze",
-            project_name="Rorze",
-            project_slug="rorze",
-            province="KCN Nhật Bản (Nomura), Hồng An, Hải Phòng",
-            district=None,
-            salary_min=None,
-            salary_max=None,
-            vacancy_count=None,
-        ),
-    )
-    repo = _make_repo(
-        list_active_jobs=lambda self, **kwargs: _const(
-            SimpleNamespace(status="matched", jobs=jobs)
-        )
-    )
-
-    out = await list_active_jobs(retrieval=repo)
-
-    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["safe_reply"] == _PRESENTATION_CONTRACT
-    # "vận hành máy CNC" already names the machine — title stays unglossed.
-    assert payload["jobs"][0]["title_plain"] == (
-        "Nhân viên lắp ráp / Nhân viên vận hành máy CNC"
-    )
-    assert payload["jobs"][0]["company"] == "Rorze"
-
-
-@pytest.mark.asyncio
-async def test_list_active_jobs_groups_large_catalogs_and_glosses_jargon(no_cache_io):
-    """The operator persona forbids dumping 5-10 rows on a phone screen.
-
-    With more than four matched jobs the safe reply collapses into one block
-    per company (distinct locations + salary summaries in the header, plain
-    -language titles inside), and internal abbreviations (SMT, QA) are glossed
-    so the candidate never reads bare internal codes.
-    """
-    jobs = (
-        SimpleNamespace(
-            id="11111111-1111-4111-8111-111111111111",
-            title="SMT",
-            company_name="4P Electronics",
-            factory_name="4P",
-            project_name="4P Electronics",
-            project_slug="4p-electronics",
-            province="Hải Phòng",
-            district=None,
-            salary_min=6_300_000,
-            salary_max=16_000_000,
-            vacancy_count=None,
-        ),
-        SimpleNamespace(
-            id="22222222-2222-4222-8222-222222222222",
-            title="PCBA",
-            company_name="4P Electronics",
-            factory_name="4P",
-            project_name="4P Electronics",
-            project_slug="4p-electronics",
-            province="Hải Phòng",
-            district=None,
-            salary_min=6_300_000,
-            salary_max=16_000_000,
-            vacancy_count=None,
-        ),
-        SimpleNamespace(
-            id="33333333-3333-4333-8333-333333333333",
-            title="Chất lượng QA",
-            company_name="4P Electronics",
-            factory_name="4P",
-            project_name="4P Electronics",
-            project_slug="4p-electronics",
-            province="Hải Phòng",
-            district=None,
-            salary_min=6_300_000,
-            salary_max=16_000_000,
-            vacancy_count=None,
-        ),
-        SimpleNamespace(
-            id="44444444-4444-4444-8444-444444444444",
-            title="QA",
-            company_name="AMTRAN",
-            factory_name="AMTRAN",
-            project_name="AMTRAN",
-            project_slug="amtran",
-            province="Hải Phòng",
-            district=None,
-            salary_min=6_300_000,
-            salary_max=None,
-            vacancy_count=None,
-        ),
-        SimpleNamespace(
-            id="55555555-5555-4555-8555-555555555555",
-            title="Nhân viên vận hành máy CNC",
-            company_name="Rorze",
-            factory_name="Rorze",
-            project_name="Rorze",
-            project_slug="rorze",
-            province="KCN Nhật Bản (Nomura), Hồng An, Hải Phòng",
-            district=None,
-            salary_min=14_000_000,
-            salary_max=15_000_000,
-            vacancy_count=None,
-        ),
-    )
-    repo = _make_repo(
-        list_active_jobs=lambda self, **kwargs: _const(
-            SimpleNamespace(status="matched", jobs=jobs)
-        )
-    )
-
-    out = await list_active_jobs(retrieval=repo)
-
-    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    # Evidence-only contract: the payload is data (title_plain de-jargoned) and
-    # the grouping rule is a presentation instruction — the LLM agent composes
-    # the final reply, so there is no canned candidate-facing text.
-    assert payload["safe_reply"] == _PRESENTATION_CONTRACT
-    assert "nhóm theo dự án/công ty" in _PRESENTATION_CONTRACT
-    assert payload["jobs"][0]["title_plain"] == (
-        "SMT (gắn linh kiện điện tử bằng máy tự động)"
-    )
-    assert payload["jobs"][1]["title_plain"] == "PCBA (lắp ráp bo mạch điện tử)"
-    # "Chất lượng QA" already says it — no double gloss; bare "QA" gets one.
-    assert payload["jobs"][2]["title_plain"] == "Chất lượng QA"
-    assert payload["jobs"][3]["title_plain"] == "QA (kiểm tra chất lượng sản phẩm)"
-    # "vận hành máy CNC" already says it — no gloss.
-    assert payload["jobs"][4]["title_plain"] == "Nhân viên vận hành máy CNC"
-    # The structured payload keeps every row for grounding.
-    assert len(payload["jobs"]) == 5
-
-
-@pytest.mark.asyncio
-async def test_list_active_jobs_small_catalog_keeps_per_job_lines_with_glosses(no_cache_io):
-    """Small catalogs keep the one-line-per-job shape, titles glossed."""
-    jobs = (
-        SimpleNamespace(
-            id="11111111-1111-4111-8111-111111111111",
-            title="SMT",
-            company_name="4P Electronics",
-            factory_name="4P",
-            project_name="4P Electronics",
-            project_slug="4p-electronics",
-            province="Hải Phòng",
-            district=None,
-            salary_min=6_300_000,
-            salary_max=None,
-            vacancy_count=None,
-        ),
-        SimpleNamespace(
-            id="22222222-2222-4222-8222-222222222222",
-            title="Nhân viên lắp ráp / Nhân viên vận hành máy CNC",
-            company_name="Rorze",
-            factory_name="Rorze",
-            project_name="Rorze",
-            project_slug="rorze",
-            province="KCN Nhật Bản (Nomura), Hồng An, Hải Phòng",
-            district=None,
-            salary_min=None,
-            salary_max=None,
-            vacancy_count=None,
-        ),
-    )
-    repo = _make_repo(
-        list_active_jobs=lambda self, **kwargs: _const(
-            SimpleNamespace(status="matched", jobs=jobs)
-        )
-    )
-
-    out = await list_active_jobs(retrieval=repo)
-
-    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["safe_reply"] == _PRESENTATION_CONTRACT
-    assert payload["jobs"][0]["title_plain"] == (
-        "SMT (gắn linh kiện điện tử bằng máy tự động)"
-    )
-    # "vận hành máy CNC" already says it — no gloss.
-    assert payload["jobs"][1]["title_plain"] == (
-        "Nhân viên lắp ráp / Nhân viên vận hành máy CNC"
+def _features(
+    index: int,
+    *,
+    name: str = "",
+    company: str = "",
+    province: str = "",
+    salary_min: int | None = None,
+    salary_max: int | None = None,
+    scope: tuple[ProjectScopeItem, ...] = (),
+) -> ProjectFeatures:
+    return ProjectFeatures(
+        project_id=f"{index:08x}-1111-4111-8111-111111111111",
+        slug=f"project-{index}",
+        name=name or f"Dự án {index}",
+        company=company,
+        province=province,
+        salary_min=salary_min,
+        salary_max=salary_max,
+        scope=scope,
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("lookup", "expected_status", "forbidden_claim"),
-    [
-        (SimpleNamespace(status="catalog_empty", jobs=()), "catalog_empty", "not hiring"),
-        (SimpleNamespace(status="unavailable", jobs=()), "unavailable", "no ACTIVE job matched"),
-        (None, "unavailable", "no ACTIVE job matched"),
-    ],
-)
-async def test_list_active_jobs_statuses_remain_honest(
-    no_cache_io, lookup, expected_status, forbidden_claim
-):
-    repo = _make_repo(list_active_jobs=lambda self, **kwargs: _const(lookup))
-
-    out = await list_active_jobs(retrieval=repo)
-
-    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["status"] == expected_status
-    assert forbidden_claim not in out
-
-
-@pytest.mark.asyncio
-async def test_list_active_jobs_exception_is_status_labelled_unavailable(no_cache_io):
-    async def _raise(self, **kwargs):
-        raise RuntimeError("database unavailable")
-
-    out = await list_active_jobs(retrieval=_make_repo(list_active_jobs=_raise))
-
-    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["status"] == "unavailable"
-    assert "chưa thể kiểm tra" in payload["safe_reply"]
-
-
-@pytest.mark.asyncio
-async def test_list_active_jobs_no_match_surfaces_alternatives_in_safe_reply(no_cache_io):
-    """A no-match must pivot the candidate toward concrete open positions.
-
-    The structured ``jobs`` array stays empty (the validator contract that lets
-    the authority layer trust the abstention status), but ``safe_reply`` now
-    embeds the alternative titles so the LLM can steer the candidate in the
-    same turn instead of asking a round-trip yes/no question.
-    """
-    alt_job = SimpleNamespace(
-        id="33333333-3333-4333-8333-333333333333",
-        title="Công nhân sản xuất",
-        company_name="LG Display",
-        factory_name="Tràng Duệ",
-        project_name="LG Display Hải Phòng",
-        project_slug="lg-display",
+def _rorze() -> ProjectFeatures:
+    """A Rorze-like project: two scope roles, Hải Phòng, 6,3-10 triệu."""
+    return ProjectFeatures(
+        project_id="aaaaaaaa-1111-4111-8111-111111111111",
+        slug="rorze",
+        name="Rorze",
+        company="Rorze",
         province="Hải Phòng",
-        district="",
-        address="",
-        salary_min=10_000_000,
-        salary_max=14_000_000,
-        vacancy_count=20,
+        salary_min=6_300_000,
+        salary_max=10_000_000,
+        scope=(
+            ProjectScopeItem("Nhân viên lắp ráp", 6_300_000, 10_000_000),
+            ProjectScopeItem("Nhân viên vận hành máy CNC", 7_000_000, 11_000_000),
+        ),
     )
 
-    async def _list(self, **kwargs):
-        if kwargs.get("role"):
-            return SimpleNamespace(status="no_match", jobs=())
-        return SimpleNamespace(status="matched", jobs=(alt_job,))
 
-    out = await list_active_jobs(
-        retrieval=_make_repo(list_active_jobs=_list),
-        role="nhân viên lắp ráp",
-    )
-
-    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["status"] == "no_match"
-    # Validator contract: a non-matched status must keep jobs empty.
-    assert payload["jobs"] == []
-    # Candidate-facing pivot: alternatives are structured rows with de-jargoned
-    # titles, and the safe_reply slot frames them as evidence for the agent.
-    assert payload["alternative_jobs"][0]["title_plain"] == "Công nhân sản xuất"
-    assert "Hiện chưa có vị trí đang tuyển phù hợp" in payload["safe_reply"]
-    assert "alternative_jobs" in payload["safe_reply"]
-    # Alternatives are structured grounding evidence even though ``jobs`` stays
-    # empty, so their IDs and entities can be validated without changing the
-    # trusted no-match status.
-    assert payload["alternative_jobs"][0]["id"] == alt_job.id
-    assert payload["alternative_jobs"][0]["company"] == "LG Display"
-    assert f"SURFACED_JOB_IDS=id={alt_job.id}" in out
+def _catalog() -> list[ProjectFeatures]:
+    """Twelve projects — sized to regress the old top_k=10 truncation."""
+    return [_rorze()] + [_features(index) for index in range(2, 13)]
 
 
 @pytest.mark.asyncio
-async def test_list_active_jobs_no_match_without_alternatives_stays_honest(no_cache_io):
-    """If no alternative positions exist either, the reply must not fabricate any.
-
-    Guards against the alternatives lookup accidentally surfacing stale or
-    empty rows as if they were real openings.
-    """
-
-    async def _list(self, **kwargs):
-        if kwargs.get("role"):
-            return SimpleNamespace(status="no_match", jobs=())
-        return SimpleNamespace(status="catalog_empty", jobs=())
-
-    out = await list_active_jobs(
-        retrieval=_make_repo(list_active_jobs=_list),
-        role="nhân viên lắp ráp",
-    )
-
-    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_JOB_LOOKUP_JSON="))
-    assert payload["status"] == "no_match"
-    assert payload["jobs"] == []
-    assert "Hiện chưa có vị trí đang tuyển phù hợp" in payload["safe_reply"]
-    # No fake alternative title leaks in.
-    assert "đang tuyển các vị trí" not in payload["safe_reply"]
-
-
-# ---------------------------------------------------------------------------
-# list_active_projects
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_list_active_projects_empty(no_cache_io):
+async def test_list_active_projects_empty_catalog_reports_catalog_empty(no_cache_io):
     repo = _make_repo(list_active_projects=lambda self: _empty())
     out = await list_active_projects(retrieval=repo)
-    assert out == "Hiện chưa có dự án/sản phẩm nào đang hoạt động."
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert payload["status"] == "catalog_empty"
+    assert payload["total"] == 0
+    assert payload["projects"] == []
+    assert payload["safe_reply"] == _CATALOG_EMPTY_REPLY
+    assert "SURFACED_PROJECT_IDS" not in out
+    assert "SECURITY_BOUNDARY" in out
 
 
 @pytest.mark.asyncio
-async def test_list_active_projects_formats_catalog(no_cache_io):
-    rows = [
-        SimpleNamespace(slug="tai-xe", name="Tài xế", summary="Tuyển tài xế"),
-        SimpleNamespace(slug="khac", name="Khác", summary=None),
-    ]
-    repo = _make_repo(list_active_projects=lambda self: _const(rows))
+async def test_list_active_projects_surfaces_whole_catalog_without_truncation(no_cache_io):
+    """The answer unit is the project: every project surfaces, never top_k-capped."""
+    projects = _catalog()
+    repo = _make_repo(list_active_projects=lambda self: _const(projects))
+
     out = await list_active_projects(retrieval=repo)
-    assert "- tai-xe (Tài xế): Tuyển tài xế" in out
-    assert "- khac (Khác)" in out  # no summary → no trailing colon block
 
-
-# ---------------------------------------------------------------------------
-# recommend_projects — deterministic recommendation seam
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_recommend_projects_empty_catalog(no_cache_io):
-    repo = _make_repo(active_projects_with_card=lambda self: _empty())
-    out = await recommend_projects(retrieval=repo, query="gợi ý việc")
-    assert out == "Hiện chưa có dự án/sản phẩm nào đang hoạt động để gợi ý."
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert payload["status"] == "matched"
+    assert payload["total"] == 12
+    assert len(payload["projects"]) == 12
+    assert payload["safe_reply"] == _PRESENTATION_CONTRACT
+    surfaced_line = out.splitlines()[1]
+    assert surfaced_line.count("id=") == 12
+    assert set(surfaced_line.removeprefix("SURFACED_PROJECT_IDS=").split(",")) == {
+        f"id={project.project_id}" for project in projects
+    }
 
 
 @pytest.mark.asyncio
-async def test_recommend_projects_ranks_by_catalog_terms(no_cache_io):
-    rows = [
-        SimpleNamespace(
-            slug="lg-display",
-            name="LG Display",
-            summary="Tuyển công nhân sản xuất tại Hải Phòng",
-            index_card={"key_roles": ["công nhân sản xuất"], "location": "Hải Phòng"},
+async def test_list_active_projects_company_request_hard_filters_and_notes_fit(no_cache_io):
+    repo = _make_repo(list_active_projects=lambda self: _const(_catalog()))
+
+    out = await list_active_projects(retrieval=repo, company="rorze")
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert payload["status"] == "matched"
+    assert payload["total"] == 1
+    assert [row["slug"] for row in payload["projects"]] == ["rorze"]
+    assert any("công ty" in note for note in payload["projects"][0]["fit_notes"])
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_unmatched_company_is_honest_empty(no_cache_io):
+    """A named company that matches nothing is a matched empty list, not no_match."""
+    repo = _make_repo(list_active_projects=lambda self: _const(_catalog()))
+
+    out = await list_active_projects(retrieval=repo, company="không tồn tại")
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert payload["status"] == "matched"
+    assert payload["total"] == 0
+    assert payload["projects"] == []
+    assert payload["safe_reply"].startswith(_NO_CRITERIA_REPLY)
+    assert "SURFACED_PROJECT_IDS" not in out
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_unknown_slug_returns_not_found(no_cache_io):
+    repo = _make_repo(list_active_projects=lambda self: _const(_catalog()))
+
+    out = await list_active_projects(retrieval=repo, project_slug="nope")
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert payload["status"] == "matched"
+    assert payload["total"] == 0
+    assert payload["projects"] == []
+    assert payload["safe_reply"] == "Không tìm thấy dự án với slug này."
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_focused_slug_keeps_only_that_project(no_cache_io):
+    repo = _make_repo(list_active_projects=lambda self: _const(_catalog()))
+
+    out = await list_active_projects(retrieval=repo, project_slug="rorze")
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert payload["status"] == "matched"
+    assert payload["total"] == 1
+    assert [row["slug"] for row in payload["projects"]] == ["rorze"]
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_fit_notes_cover_matches_gaps_and_glosses(no_cache_io):
+    """Stated preferences score per dimension; notes render honestly and gloss jargon."""
+    projects = [
+        ProjectFeatures(
+            project_id="aaaaaaaa-1111-4111-8111-111111111111",
+            slug="rorze",
+            name="Rorze",
+            company="Rorze",
+            province="Hải Phòng",
+            salary_min=6_300_000,
+            salary_max=10_000_000,
+            scope=(
+                ProjectScopeItem("Nhân viên lắp ráp", 6_300_000, 10_000_000),
+                ProjectScopeItem("Kỹ thuật viên CNC", 7_000_000, 11_000_000),
+            ),
         ),
-        SimpleNamespace(
-            slug="kho-binh-duong",
-            name="Kho Bình Dương",
-            summary="Tuyển kho vận có ký túc xá",
-            index_card={"key_roles": ["nhân viên kho"], "location": "Bình Dương"},
-        ),
+        _features(3, name="Kho Unknown", province="Bình Dương"),
     ]
-    repo = _make_repo(active_projects_with_card=lambda self: _const(rows))
+    repo = _make_repo(list_active_projects=lambda self: _const(projects))
 
-    out = await recommend_projects(
+    out = await list_active_projects(
         retrieval=repo,
-        query="Tôi muốn việc kho ở Bình Dương có ký túc xá",
-        top_k=2,
+        job_scope="lắp ráp",
+        location="Hải Phòng",
+        salary_min_vnd=8_000_000,
     )
 
-    first_line = out.splitlines()[1]
-    assert first_line.startswith("- kho-binh-duong")
-    assert "lý do:" in first_line
-    assert "binh" in first_line or "duong" in first_line
-    assert "get_product_features(project_slug)" in out
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    by_slug = {row["slug"]: row for row in payload["projects"]}
+    rorze = by_slug["rorze"]
+    assert rorze["fit_score"] == 1.0
+    assert "lương 6,3-10 triệu" in " ".join(rorze["fit_notes"])
+    assert all(note.endswith("· khớp") for note in rorze["fit_notes"])
+    assert rorze["job_scope"][1]["title_plain"] == "Kỹ thuật viên CNC (máy gia công tinh)"
+    assert any("máy gia công tinh" in item["title_plain"] for item in rorze["job_scope"])
+    gap = by_slug["project-3"]
+    assert "chưa ghi rõ lương" in gap["fit_notes"]
+    assert "chưa ghi rõ phạm vi công việc" in gap["fit_notes"]
 
 
 @pytest.mark.asyncio
-async def test_recommend_projects_default_shortlist_covers_five_scored_rows(no_cache_io):
-    """Omitting top_k must not hide scored candidates behind the old default of 3.
+async def test_list_active_projects_ignores_malformed_sort_and_salary_arguments(no_cache_io):
+    repo = _make_repo(list_active_projects=lambda self: _const(_catalog()))
 
-    The model does the relevance filtering, so the default shortlist is 5 —
-    with six scored projects, exactly the cap's worth are rendered, ranked.
-    """
-    rows = [
-        SimpleNamespace(
-            slug=f"project-{index}",
-            name=f"Project {index}",
-            summary="Tuyển nhân viên kho tại Hải Phòng",
-            index_card={"key_roles": ["nhân viên kho"], "location": "Hải Phòng"},
-        )
-        for index in range(1, 7)
-    ]
-    repo = _make_repo(active_projects_with_card=lambda self: _const(rows))
+    out = await list_active_projects(
+        retrieval=repo, sort_by="bogus", salary_min_vnd="10 triệu"
+    )
 
-    out = await recommend_projects(retrieval=repo, query="việc kho tại Hải Phòng")
-
-    rendered = [line for line in out.splitlines() if line.startswith("- ")]
-    assert len(rendered) == 5
-    assert rendered[0].startswith("- project-1")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert payload["status"] == "matched"
+    assert payload["total"] == 12
 
 
 @pytest.mark.asyncio
-async def test_recommend_projects_rejects_substring_only_matches(no_cache_io):
-    """`tho`/`han` must not match unrelated `thong`/`nhan` catalog text."""
-    rows = [
-        SimpleNamespace(
-            slug="lg-display",
-            name="LG Display",
-            summary="Lao động phổ thông",
-            index_card={"key_roles": ["lao động phổ thông", "nhân viên sản xuất"]},
-        )
-    ]
-    repo = _make_repo(active_projects_with_card=lambda self: _const(rows))
+async def test_list_active_projects_retrieval_failure_is_status_labelled_unavailable(
+    no_cache_io,
+):
+    async def _raise(self):
+        raise RuntimeError("database unavailable")
 
-    out = await recommend_projects(retrieval=repo, query="bên bạn tuyển thợ hàn CO2 đúng ko?")
+    out = await list_active_projects(retrieval=_make_repo(list_active_projects=_raise))
 
-    assert out.startswith("Không có dự án trong danh mục phù hợp")
-    assert "đang tuyển" in out
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert payload["status"] == "unavailable"
+    assert payload["total"] == 0
+    assert payload["projects"] == []
+    assert payload["safe_reply"] == (
+        "Hiện tôi chưa thể kiểm tra danh mục dự án. Bạn vui lòng thử lại sau nhé."
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_surfaced_ids_match_payload_project_ids(no_cache_io):
+    projects = _catalog()
+    repo = _make_repo(list_active_projects=lambda self: _const(projects))
+
+    out = await list_active_projects(retrieval=repo)
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert extract_surfaced_ids([out]) == {row["id"] for row in payload["projects"]}
+    assert extract_surfaced_ids([out]) == {project.project_id for project in projects}
 
 
 # ---------------------------------------------------------------------------
@@ -1058,85 +774,6 @@ async def test_search_bus_timetable_no_rows_returns_notice(no_cache_io):
     )
     out = await search_bus_timetable(retrieval=repo, company="VFIC", question="x")
     assert out == "Không tìm thấy lịch xe phù hợp."
-
-
-# ---------------------------------------------------------------------------
-# recommend_jobs — structured Job↔Lead recommendation (Phase 2)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_recommend_jobs_empty_returns_fallback_notice(no_cache_io):
-    """Missing profile is distinct from no ACTIVE match and an outage."""
-    from app.services.recommendation import LeadJobRecommendation
-
-    repo = _make_repo(
-        recommend_jobs_for_lead=lambda self, chat_id, **k: _const(
-            LeadJobRecommendation("insufficient_profile")
-        )
-    )
-    out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
-    assert "Chưa đủ thông tin hồ sơ" in out
-
-
-@pytest.mark.asyncio
-async def test_recommend_jobs_formats_scored_results_with_reasons(no_cache_io):
-    """Scored jobs render as a grounded shortlist with matched reasons."""
-    from app.services.recommendation.scoring import JobCandidate, ScoredJob
-
-    scored = [
-        ScoredJob(
-            job=JobCandidate(
-                id="job-1",
-                title="Nhân viên kho",
-                province="Bình Dương",
-                salary_min=10_000_000,
-                salary_max=14_000_000,
-            ),
-            score=0.82,
-            reasons=["vị trí khớp mong muốn", "lương 10-14 triệu phù hợp"],
-        ),
-    ]
-    from app.services.recommendation import LeadJobRecommendation
-
-    repo = _make_repo(
-        recommend_jobs_for_lead=lambda self, chat_id, **k: _const(
-            LeadJobRecommendation("matched", tuple(scored))
-        )
-    )
-    out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
-    assert "GỢI Ý VIỆC LÀM PHÙ HỢP" in out
-    assert "Nhân viên kho" in out
-    assert "job-1" in out
-    assert "10-14 triệu" in out
-    assert "điểm phù hợp: 0.82" in out
-    assert "QUY TẮC:" in out  # grounding rule always appended
-
-
-@pytest.mark.asyncio
-async def test_recommend_jobs_exception_returns_fallback_not_crash(no_cache_io):
-    """A retrieval failure must never be represented as a missing vacancy."""
-
-    async def _boom(self, chat_id, **k):
-        raise RuntimeError("db down")
-
-    repo = _make_repo(recommend_jobs_for_lead=_boom)
-    out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
-    assert "chưa thể tra cứu" in out.lower()
-    assert "chưa có việc" not in out.lower()
-
-
-@pytest.mark.asyncio
-async def test_recommend_jobs_no_match_is_distinct_from_unavailable(no_cache_io):
-    from app.services.recommendation import LeadJobRecommendation
-
-    repo = _make_repo(
-        recommend_jobs_for_lead=lambda self, chat_id, **k: _const(LeadJobRecommendation("no_match"))
-    )
-
-    out = await tools.recommend_jobs(retrieval=repo, chat_id="z1")
-
-    assert out == "Hiện chưa có việc làm đang tuyển phù hợp với hồ sơ này."
 
 
 # ---------------------------------------------------------------------------

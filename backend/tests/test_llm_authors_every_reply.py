@@ -68,7 +68,7 @@ class _ScriptedLLM:
 
 
 class _FakeRetrieval:
-    async def list_active_projects(self, *_args, **_kwargs):
+    async def list_active_projects(self):
         return []
 
     async def match_documents(self, *_args, **_kwargs):
@@ -175,7 +175,7 @@ async def test_tool_loop_exhaustion_ships_model_prose(monkeypatch):
     from app.graph.clients import MiniMaxAgent
 
     async def fake_dispatch(_retrieval, _embedder, _name, _args, **_kwargs):
-        return '{"ACTIVE_JOB_LOOKUP": {"jobs": [{"id": "job-7"}]}}'
+        return '{"ACTIVE_PROJECT_LOOKUP": {"projects": [{"id": "project-7"}]}}'
 
     monkeypatch.setattr("app.graph.clients._dispatch_tool", fake_dispatch)
     model_text = "Dạ hiện em chưa tra được thông tin, anh/chị thử lại sau nhé."

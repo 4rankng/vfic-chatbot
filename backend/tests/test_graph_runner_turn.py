@@ -1772,10 +1772,10 @@ async def test_rag_vacancy_turn_requires_active_job_catalog_for_exact_reported_m
         decisions=TurnDecisions(intent="recommend", intent_confidence=0.94, vacancy_listing=True))
 
     assert reply == "LG Display Tràng Duệ đang tuyển."
-    assert captured["allowed_tools"] == ("list_active_jobs",)
+    assert captured["allowed_tools"] == ("list_active_projects",)
     assert captured["lookup_query"] == query
-    assert captured["required_tool"] == "list_active_jobs"
-    assert captured["required_tool_args"] == {"top_k": 10}
+    assert captured["required_tool"] == "list_active_projects"
+    assert captured["required_tool_args"] is None
 
 
 @pytest.mark.asyncio
@@ -1932,9 +1932,9 @@ async def test_generic_vacancy_listing_requires_active_job_catalog(monkeypatch):
         decisions=TurnDecisions(intent="recommend", intent_confidence=0.94, vacancy_listing=True))
 
     assert reply == "Danh sách việc đang tuyển."
-    assert captured["allowed_tools"] == ("list_active_jobs",)
-    assert captured["required_tool"] == "list_active_jobs"
-    assert captured["required_tool_args"] == {"top_k": 10}
+    assert captured["allowed_tools"] == ("list_active_projects",)
+    assert captured["required_tool"] == "list_active_projects"
+    assert captured["required_tool_args"] is None
 
 
 @pytest.mark.asyncio
@@ -1981,9 +1981,9 @@ async def test_terse_vacancy_followup_keeps_active_job_catalog_authority(monkeyp
         decisions=TurnDecisions(intent="general", intent_confidence=0.5, recent_vacancy=True))
 
     assert reply == "LG Display đang tuyển công nhân thời vụ."
-    assert captured["allowed_tools"] == ("list_active_jobs",)
-    assert captured["required_tool"] == "list_active_jobs"
-    assert captured["required_tool_args"] == {"top_k": 10}
+    assert captured["allowed_tools"] == ("list_active_projects",)
+    assert captured["required_tool"] == "list_active_projects"
+    assert captured["required_tool_args"] is None
 
 
 @pytest.mark.asyncio

@@ -66,7 +66,10 @@ class _FakeRetrieval:
         self._handler = handler
 
     async def list_active_projects(self):
-        return await self._handler("list_active_projects", {})
+        # The port returns ProjectFeatures rows: coerce generic handler returns
+        # so the real tool always runs its happy path.
+        rows = await self._handler("list_active_projects", {})
+        return rows if isinstance(rows, list) else []
 
     async def match_documents(self, *args, **kwargs):  # noqa: ARG002
         return await self._handler("search_knowledge", {})

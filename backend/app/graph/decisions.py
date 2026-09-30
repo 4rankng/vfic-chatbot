@@ -74,13 +74,6 @@ _INTENT_CRITERIA = {
     "general": "Liên quan đến tuyển dụng nhưng ý định chưa rõ",
 }
 
-_SORT_CRITERIA = {
-    "none": "Không yêu cầu sắp xếp",
-    "salary_desc": "Sắp xếp việc làm theo lương từ cao xuống thấp",
-    "salary_asc": "Sắp xếp việc làm theo lương từ thấp lên cao",
-    "created_at": "Xem việc mới đăng / mới nhất trước",
-}
-
 _NOUL_CRITERIA = {"true": "Có", "false": "Không"}
 
 # Profile display labels are provider data the candidate typed themselves: they
@@ -157,14 +150,6 @@ def build_turn_questions(
                 "(không phải gợi ý cá nhân hóa, không phải hỏi chi tiết một việc)"
             ),
             "criteria": _NOUL_CRITERIA,
-        },
-        "sort_by": {
-            "type": "choice",
-            "instructions": (
-                "Khi xem danh sách việc làm, tin nhắn `message` yêu cầu sắp xếp "
-                "theo cách nào?"
-            ),
-            "criteria": _SORT_CRITERIA,
         },
         "pleasantry": {
             "type": "noul",
@@ -321,9 +306,6 @@ class JevDecisionClient:
             logger.warning("jev unusable intent answer=%r; using neutral route", intent)
             return TurnDecisions(degraded=True)
 
-        sort_by = str((answers.get("sort_by") or {}).get("choice") or "none")
-        if sort_by not in _SORT_CRITERIA:
-            sort_by = "none"
         gender = str((answers.get("gender") or {}).get("choice") or "unknown").strip().lower()
         if gender not in _GENDER_CRITERIA:
             gender = "unknown"
@@ -332,7 +314,6 @@ class JevDecisionClient:
             intent=intent,
             intent_confidence=self._confidence(answers.get("intent")),
             vacancy_listing=self._noul(answers.get("vacancy_listing")),
-            sort_by=None if sort_by == "none" else sort_by,
             pleasantry=self._noul(answers.get("pleasantry")),
             gender=gender,
             gender_confidence=self._confidence(answers.get("gender")),

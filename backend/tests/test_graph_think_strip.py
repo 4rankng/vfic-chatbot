@@ -1,4 +1,4 @@
-"""Unit tests for graph/think_strip.py — provider reasoning stripping.
+"""Unit tests for graph/think_strip.py â provider reasoning stripping.
 
 The pre-send answer review layer that used to live in ``graph/safety.py``
 (``fast_safety_filter``, ``DeterministicReplyPolicy``, ``truncate_for_chat``)
@@ -20,14 +20,14 @@ from app.graph.think_strip import (
 
 
 def test_strip_think_reasoning_removes_complete_block():
-    # MiniMax M2 reasoning models emit  thinking…</think>; the deliberation must
-    # never reach the user — only the reply after the closing tag is sent.
+    # MiniMax M2 reasoning models emit  thinkingâ¦</think>; the deliberation must
+    # never reach the user â only the reply after the closing tag is sent.
     out = strip_think_reasoning(
-        " thinkinginternal reasoning SECRETKEY here</think>Chào bạn! 😊"
+        " thinkinginternal reasoning SECRETKEY here</think>ChÃ o báº¡n! ð"
     )
     assert "SECRETKEY" not in out
     assert " thinking" not in out
-    assert out.startswith("Chào bạn")
+    assert out.startswith("ChÃ o báº¡n")
 
 
 def test_strip_think_reasoning_of_reasoning_only_output_is_empty():
@@ -38,9 +38,9 @@ def test_strip_think_reasoning_of_reasoning_only_output_is_empty():
 
 def test_strip_think_reasoning_keeps_plain_reply_untouched():
     # A reply with no think tags is the user-visible answer as generated.
-    out = strip_think_reasoning("Chào bạn, bạn muốn tìm việc ở khu vực nào?")
+    out = strip_think_reasoning("ChÃ o báº¡n, báº¡n muá»n tÃ¬m viá»c á» khu vá»±c nÃ o?")
 
-    assert out == "Chào bạn, bạn muốn tìm việc ở khu vực nào?"
+    assert out == "ChÃ o báº¡n, báº¡n muá»n tÃ¬m viá»c á» khu vá»±c nÃ o?"
 
 
 @pytest.mark.parametrize(
@@ -60,15 +60,15 @@ def test_strip_think_reasoning_discards_unclosed_minimax_think_reasoning(raw):
 
 def test_visible_offset_is_zero_without_think():
     # No deliberation: candidate-visible text starts at the very beginning.
-    assert visible_offset("Chào bạn!") == 0
+    assert visible_offset("ChÃ o báº¡n!") == 0
     assert visible_offset("") == 0
     assert visible_offset(None) == 0
 
 
 def test_visible_offset_points_past_the_last_closing_tag():
-    raw = "\u003cthink\u003eSECRET\u003c/think\u003emid \u003cthink\u003emore\u003c/think\u003eChào bạn!"
+    raw = "\u003cthink\u003eSECRET\u003c/think\u003emid \u003cthink\u003emore\u003c/think\u003eChÃ o báº¡n!"
 
-    assert visible_offset(raw) == raw.index("Chào bạn!")
+    assert visible_offset(raw) == raw.index("ChÃ o báº¡n!")
 
 
 def test_visible_offset_is_none_while_a_think_block_is_open():
@@ -78,14 +78,14 @@ def test_visible_offset_is_none_while_a_think_block_is_open():
     assert visible_offset("mid \u003cthink\u003estill thinking") is None
 
 
-# ── Tool-call markup written as content ─────────────────────────────────────
-# Production delivered `<invoke name="search_knowledge">…` to a candidate: the
+# ââ Tool-call markup written as content âââââââââââââââââââââââââââââââââââââ
+# Production delivered `<invoke name="search_knowledge">â¦` to a candidate: the
 # provider serialized its call into the content instead of the tool_calls field.
 
 _LEAKED_REPLY = (
-    "Dạ, để em kiểm tra thông tin liên hệ của VFIC ngay ạ.\n"
+    "Dáº¡, Äá» em kiá»m tra thÃ´ng tin liÃªn há» cá»§a VFIC ngay áº¡.\n"
     '<invoke name="search_knowledge">\n'
-    '<parameter name="query">hotline liên hệ VFIC số điện thoại admin</parameter>\n'
+    '<parameter name="query">hotline liÃªn há» VFIC sá» Äiá»n thoáº¡i admin</parameter>\n'
     "</invoke>"
 )
 
@@ -95,7 +95,7 @@ def test_extract_text_tool_calls_reads_the_invoke_block():
     assert calls == [
         {
             "name": "search_knowledge",
-            "args": {"query": "hotline liên hệ VFIC số điện thoại admin"},
+            "args": {"query": "hotline liÃªn há» VFIC sá» Äiá»n thoáº¡i admin"},
             "id": "text-call-1",
         }
     ]
@@ -104,11 +104,11 @@ def test_extract_text_tool_calls_reads_the_invoke_block():
 def test_extract_text_tool_calls_reads_several_calls_in_order():
     raw = (
         '<invoke name="search_knowledge"><parameter name="query">a</parameter></invoke>'
-        '<invoke name="list_active_jobs"><parameter name="top_k">5</parameter></invoke>'
+        '<invoke name="list_active_projects"><parameter name="salary_min_vnd">8000000</parameter></invoke>'
     )
     calls = extract_text_tool_calls(raw)
-    assert [call["name"] for call in calls] == ["search_knowledge", "list_active_jobs"]
-    assert calls[1]["args"] == {"top_k": 5}  # a JSON-shaped value keeps its type
+    assert [call["name"] for call in calls] == ["search_knowledge", "list_active_projects"]
+    assert calls[1]["args"] == {"salary_min_vnd": 8000000}  # a JSON-shaped value keeps its type
 
 
 def test_extract_text_tool_calls_ignores_a_nameless_block():
@@ -117,25 +117,25 @@ def test_extract_text_tool_calls_ignores_a_nameless_block():
 
 def test_strip_tool_call_markup_removes_the_block_and_keeps_the_prose():
     assert strip_tool_call_markup(_LEAKED_REPLY).strip() == (
-        "Dạ, để em kiểm tra thông tin liên hệ của VFIC ngay ạ."
+        "Dáº¡, Äá» em kiá»m tra thÃ´ng tin liÃªn há» cá»§a VFIC ngay áº¡."
     )
 
 
 def test_strip_tool_call_markup_drops_an_unclosed_block():
     """A call cut mid-generation is not a reply: nothing after it may ship."""
-    assert strip_tool_call_markup('Chào anh. <invoke name="search_knowledge"> <param') == "Chào anh. "
+    assert strip_tool_call_markup('ChÃ o anh. <invoke name="search_knowledge"> <param') == "ChÃ o anh. "
 
 
 def test_strip_tool_call_markup_removes_a_lone_closing_tag():
-    assert strip_tool_call_markup("Nội dung\n</invoke>") == "Nội dung\n"
+    assert strip_tool_call_markup("Ná»i dung\n</invoke>") == "Ná»i dung\n"
 
 
 def test_strip_provider_artifacts_handles_thinking_and_markup_together():
     raw = " thinkingdeliberation here</think>" + _LEAKED_REPLY
     assert strip_provider_artifacts(raw).strip() == (
-        "Dạ, để em kiểm tra thông tin liên hệ của VFIC ngay ạ."
+        "Dáº¡, Äá» em kiá»m tra thÃ´ng tin liÃªn há» cá»§a VFIC ngay áº¡."
     )
 
 
 def test_strip_provider_artifacts_keeps_a_plain_reply_untouched():
-    assert strip_provider_artifacts("Dạ có ạ.") == "Dạ có ạ."
+    assert strip_provider_artifacts("Dáº¡ cÃ³ áº¡.") == "Dáº¡ cÃ³ áº¡."

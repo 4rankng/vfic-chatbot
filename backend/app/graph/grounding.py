@@ -4,8 +4,8 @@ All three research docs flag this gap: citations exist in tool context but nothi
 validates the final reply actually references retrieved data. This module provides
 pure functions to close that loop:
 
-* ``extract_surfaced_job_ids`` — pull job IDs from tool-result text (what the LLM saw).
-* ``extract_cited_job_ids`` — pull job IDs from the reply (what the LLM claimed).
+* ``extract_surfaced_ids`` — pull IDs from tool-result text (what the LLM saw).
+* ``extract_cited_ids`` — pull IDs from the reply (what the LLM claimed).
 * ``validate_grounding`` — diff the two, return hallucinated IDs + a sanitized reply.
 * ``extract_surfaced_entities`` — pull company/factory/project names from the
   structured tool payloads (the authoritative entity set the reply may reference).
@@ -28,8 +28,8 @@ from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
-# Job IDs surface in tool results as "id=uuid" (from recommend_jobs) or bare UUIDs.
-# We match both the tagged form and standalone UUIDs to catch loose citations.
+# Project IDs surface in tool results as "id=uuid" (from list_active_projects) or bare
+# UUIDs. We match both the tagged form and standalone UUIDs to catch loose citations.
 _JOB_ID_TAG_RE = re.compile(
     r"id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.IGNORECASE
 )
@@ -39,13 +39,15 @@ _BARE_UUID_RE = re.compile(
 
 # Structured tool payloads the agent surfaces. Entity names are pulled from these
 # (not from free-text KB chunks) so the authoritative set matches exactly what the
-# tools returned. Kept in sync with app/graph/tools.py rendering.
-_ACTIVE_JOB_LOOKUP_PREFIX = "ACTIVE_JOB_LOOKUP_JSON="
-_ACTIVE_JOB_LOOKUP_STATUSES = frozenset({"matched", "no_match", "catalog_empty", "unavailable"})
+# tools returned. Kept in sync with app/graph/tools/catalog.py rendering.
+_ACTIVE_PROJECT_LOOKUP_PREFIX = "ACTIVE_PROJECT_LOOKUP_JSON="
+# Statuses the project lookup tool actually emits (``no_match`` is no longer a
+# status: a criteria miss is a ``matched`` empty list with honest notes).
+_ACTIVE_PROJECT_LOOKUP_STATUSES = frozenset({"matched", "catalog_empty", "unavailable"})
 _PRODUCT_FEATURES_HEADER_RE = re.compile(
     r"Đặc điểm sản phẩm\s*—\s*dự án\s*'([^']+)'\s*:", re.IGNORECASE
 )
-# Job-listing JSON carries these per-row keys (see _active_job_payload in tools.py).
+# Project-listing JSON carries these per-row keys (see _project_payload in tools/catalog.py).
 _ENTITY_JSON_KEYS = ("company", "factory", "project")
 
 
@@ -53,8 +55,8 @@ def _extract_ids(text: str, pattern: re.Pattern[str]) -> set[str]:
     return {m.lower() for m in pattern.findall(text or "")}
 
 
-def extract_surfaced_job_ids(tool_results: list[str]) -> set[str]:
-    """All job IDs the LLM was shown via tool results during the turn."""
+def extract_surfaced_ids(tool_results: list[str]) -> set[str]:
+    """All IDs the LLM was shown via tool results during the turn."""
     surfaced: set[str] = set()
     for result in tool_results or []:
         surfaced |= _extract_ids(result, _JOB_ID_TAG_RE)
@@ -62,8 +64,8 @@ def extract_surfaced_job_ids(tool_results: list[str]) -> set[str]:
     return surfaced
 
 
-def extract_cited_job_ids(reply: str) -> set[str]:
-    """All job IDs the reply text references (tagged or bare UUID)."""
+def extract_cited_ids(reply: str) -> set[str]:
+    """All IDs the reply text references (tagged or bare UUID)."""
     text = reply or ""
     return _extract_ids(text, _JOB_ID_TAG_RE) | _extract_ids(text, _BARE_UUID_RE)
 
@@ -104,7 +106,7 @@ def validate_grounding(
     An empty/None ``surfaced_entities`` skips the entity check (no structured
     evidence to diff against — the agent-layer abstain path handles that case).
     """
-    cited = extract_cited_job_ids(reply)
+    cited = extract_cited_ids(reply)
     sanitized = reply
     hallucinated: set[str] = set()
     reason = ""
@@ -149,32 +151,30 @@ def validate_grounding(
 
 
 def _extract_entities_from_json_payload(first_line: str) -> set[str]:
-    """Pull company/factory/project names from one ``ACTIVE_JOB_LOOKUP_JSON=`` row.
+    """Pull company/factory/project names from one ``ACTIVE_PROJECT_LOOKUP_JSON=`` row.
 
-    Reads both ``jobs`` (matched evidence) and ``alternative_jobs`` (the concrete
-    open roles surfaced on a no_match so the model can pivot the candidate).
-    Surfacing alternatives structurally means a no_match turn still gets entity
-    grounding — the model may only name companies/factories that were actually
-    returned — without needing a regex consistency check or a second LLM call.
+    Reads the ``projects`` list (the ranked project catalog the model composes
+    from). Surfacing the whole catalog structurally keeps entity grounding
+    aligned with what was actually returned — the model may only name
+    companies/factories from these rows — without a second LLM call.
     """
     entities: set[str] = set()
     try:
-        payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
+        payload = json.loads(first_line.removeprefix(_ACTIVE_PROJECT_LOOKUP_PREFIX))
     except (TypeError, ValueError):
         return entities
     if not isinstance(payload, dict):
         return entities
-    job_lists = []
-    for key in ("jobs", "alternative_jobs"):
-        value = payload.get(key)
-        if isinstance(value, list):
-            job_lists.append(value)
-    for jobs in job_lists:
-        for job in jobs:
-            if not isinstance(job, dict):
+    project_lists = []
+    value = payload.get("projects")
+    if isinstance(value, list):
+        project_lists.append(value)
+    for projects in project_lists:
+        for project in projects:
+            if not isinstance(project, dict):
                 continue
             for key in _ENTITY_JSON_KEYS:
-                value = job.get(key)
+                value = project.get(key)
                 if isinstance(value, str) and value.strip():
                     entities.add(value.strip())
     return entities
@@ -183,7 +183,7 @@ def _extract_entities_from_json_payload(first_line: str) -> set[str]:
 def extract_surfaced_entities(tool_results: list[str]) -> set[str]:
     """Company/factory/project names the LLM was shown via structured tool results.
 
-    Reads only the authoritative structured payloads (``list_active_jobs`` JSON and
+    Reads only the authoritative structured payloads (``list_active_projects`` JSON and
     ``get_product_features`` headers) — not free-text KB chunks, which can mention a
     factory in passing without establishing an authoritative record. The reply may
     assert properties only about entities in this set.
@@ -192,7 +192,7 @@ def extract_surfaced_entities(tool_results: list[str]) -> set[str]:
     for result in tool_results or []:
         text = str(result or "")
         first_line = text.partition("\n")[0]
-        if first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+        if first_line.startswith(_ACTIVE_PROJECT_LOOKUP_PREFIX):
             entities |= _extract_entities_from_json_payload(first_line)
         for match in _PRODUCT_FEATURES_HEADER_RE.finditer(text):
             entities.add(match.group(1).strip())
@@ -418,38 +418,44 @@ def validate_contact_grounding(reply: str, evidence: str) -> frozenset[str]:
     return frozenset(stated - extract_contact_channels(evidence))
 
 
-# ── Active-job payload validation ────────────────────────────────────────────
-# ``list_active_jobs`` answers are composed by the LLM agent from the payload
-# (title_plain rows + presentation contract); grounding only validates the
+# ── Active-project payload validation ────────────────────────────────────────
+# ``list_active_projects`` answers are composed by the LLM agent from the payload
+# (project rows + presentation contract); grounding only validates the
 # composed prose against the surfaced evidence. There is deliberately NO
 # deterministic reply replacement here anymore — the agent owns the final text.
 
 
-def active_job_safe_reply(tool_result: object) -> str | None:
-    """Validate one active-job tool payload and return its presentation contract."""
+def active_project_safe_reply(tool_result: object) -> str | None:
+    """Validate one active-project tool payload and return its presentation contract."""
     first_line = str(tool_result).partition("\n")[0]
-    if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+    if not first_line.startswith(_ACTIVE_PROJECT_LOOKUP_PREFIX):
         return None
     try:
-        payload = json.loads(first_line.removeprefix(_ACTIVE_JOB_LOOKUP_PREFIX))
+        payload = json.loads(first_line.removeprefix(_ACTIVE_PROJECT_LOOKUP_PREFIX))
     except (TypeError, ValueError):
         return None
     if not isinstance(payload, dict):
         return None
     status = payload["status"] if "status" in payload else None
-    jobs = payload["jobs"] if "jobs" in payload else None
+    projects = payload["projects"] if "projects" in payload else None
+    total = payload["total"] if "total" in payload else None
     safe_reply = payload["safe_reply"] if "safe_reply" in payload else None
-    if status not in _ACTIVE_JOB_LOOKUP_STATUSES or not isinstance(jobs, list):
+    if status not in _ACTIVE_PROJECT_LOOKUP_STATUSES or not isinstance(projects, list):
+        return None
+    if not isinstance(total, int) or isinstance(total, bool):
         return None
     if status == "matched":
-        if not jobs or any(
-            not isinstance(job, dict)
-            or not isinstance(job["id"] if "id" in job else None, str)
-            or not isinstance(job["title"] if "title" in job else None, str)
-            for job in jobs
+        # A matched payload may legitimately carry zero rows (a named company
+        # matched nothing, or an unknown focused slug) — rows that exist must be
+        # groundable project evidence.
+        if any(
+            not isinstance(project, dict)
+            or not isinstance(project.get("id"), str)
+            or not isinstance(project.get("project"), str)
+            for project in projects
         ):
             return None
-    elif jobs:
+    elif projects:
         return None
     if not isinstance(safe_reply, str) or not safe_reply.strip():
         return None
@@ -478,10 +484,10 @@ def ground_reply(
     """
     for tool_result in reversed(tool_results or []):
         first_line = str(tool_result).partition("\n")[0]
-        if not first_line.startswith(_ACTIVE_JOB_LOOKUP_PREFIX):
+        if not first_line.startswith(_ACTIVE_PROJECT_LOOKUP_PREFIX):
             continue
-        if active_job_safe_reply(tool_result) is None:
-            logger.warning("active-job tool returned malformed grounding payload")
+        if active_project_safe_reply(tool_result) is None:
+            logger.warning("active-project tool returned malformed grounding payload")
 
     try:
         from app.core.config import get_settings
@@ -490,7 +496,7 @@ def ground_reply(
             if trace_sink is not None:
                 trace_sink.record_decision("grounding_verdict", "skipped")
             return reply
-        surfaced = extract_surfaced_job_ids(tool_results)
+        surfaced = extract_surfaced_ids(tool_results)
         surfaced_entities = extract_surfaced_entities(tool_results)
         result = validate_grounding(reply, surfaced, surfaced_entities)
         sanitized = False

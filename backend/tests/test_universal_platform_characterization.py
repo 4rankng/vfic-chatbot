@@ -51,7 +51,6 @@ REQUIRED_BEHAVIORAL_BASELINES: dict[str, tuple[str, ...]] = {
     "test_graph_runner_turn": ("run_turn",),
     "test_graph_factories": ("build_deps",),
     "test_lead_extraction": ("CandidateExtractionService",),
-    "test_job_availability": ("select_matching_active_jobs",),
     "test_proactive_followup_rules": ("_rule_allows",),
     "test_dashboard_attention": ("AttentionDashboardOut",),
 }
@@ -61,7 +60,6 @@ REQUIRED_BEHAVIORAL_BASELINES: dict[str, tuple[str, ...]] = {
 _RESOLVED_IN_PRODUCTION = {
     "run_turn": "app.graph.runner",
     "build_deps": "app.graph.factories",
-    "select_matching_active_jobs": "app.services.recommendation.availability",
     "_rule_allows": "app.services.proactive.repository",
 }
 

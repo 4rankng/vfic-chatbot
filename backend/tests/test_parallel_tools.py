@@ -17,9 +17,10 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 
 import pytest
+
+from app.recruitment.domain.recommendation import ProjectFeatures
 
 # The assertions observe scheduling directly, not wall-clock budgets; this
 # timeout only guards against an event-loop hang.
@@ -102,7 +103,10 @@ class _FakeRetrieval:
         self.identity = identity
 
     async def list_active_projects(self):
-        return await self._handler("list_active_projects", {})
+        # The port returns ProjectFeatures rows: coerce generic handler returns
+        # so the real tool always runs its happy path.
+        rows = await self._handler("list_active_projects", {})
+        return rows if isinstance(rows, list) else []
 
     async def match_documents(self, *args, **kwargs):  # noqa: ARG002
         return await self._handler("search_knowledge", {})
@@ -114,7 +118,7 @@ class _FakeRetrieval:
         return await self._handler("search_user_memory", {})
 
     async def active_projects_with_card(self):
-        return await self._handler("recommend_projects", {})
+        return await self._handler("active_projects_with_card", {})
 
     async def search_bus_timetable(self, *args, **kwargs):  # noqa: ARG002
         return await self._handler("search_bus_timetable", {})
@@ -1105,7 +1109,7 @@ async def test_on_evidence_publishes_accumulated_tool_results_before_the_final_r
     from app.graph.clients import MiniMaxAgent
 
     async def handler(name, args):  # noqa: ARG001
-        return [SimpleNamespace(slug="lg-display", name="LG Display", summary="Nhà máy Hải Phòng")]
+        return [ProjectFeatures(project_id="p1", slug="lg-display", name="LG Display", summary="Nhà máy Hải Phòng")]
 
     tool_calls = [{"name": "list_active_projects", "args": {}, "id": "c1"}]
     llm = _ScriptedLLM([tool_calls, "Dạ em xin trả lời."])
@@ -1132,7 +1136,14 @@ async def test_on_evidence_publishes_accumulated_tool_results_before_the_final_r
     )
 
     assert reply == "Dạ em xin trả lời."
-    assert published == [["- lg-display (LG Display): Nhà máy Hải Phòng"]]
+    assert len(published) == 1
+    (evidence,) = published[0]
+    assert evidence.startswith("ACTIVE_PROJECT_LOOKUP_JSON=")
+    body = json.loads(evidence.split("ACTIVE_PROJECT_LOOKUP_JSON=", 1)[1].split("\n", 1)[0])
+    assert body["status"] == "matched"
+    assert body["total"] == 1
+    assert [row["project"] for row in body["projects"]] == ["LG Display"]
+    assert "SURFACED_PROJECT_IDS=id=p1" in evidence
     assert deltas == ["Dạ em xin trả lời."]
     # Evidence is in hand before the answer streams: that ordering is what lets a
     # mid-generation bubble pass the same grounding check as the full reply.
@@ -1145,7 +1156,7 @@ async def test_without_on_evidence_the_agent_loop_is_unchanged():
     from app.graph.clients import MiniMaxAgent
 
     async def handler(name, args):  # noqa: ARG001
-        return [SimpleNamespace(slug="lg-display", name="LG Display", summary="Nhà máy Hải Phòng")]
+        return [ProjectFeatures(project_id="p1", slug="lg-display", name="LG Display", summary="Nhà máy Hải Phòng")]
 
     llm = _ScriptedLLM([[{"name": "list_active_projects", "args": {}, "id": "c1"}], "done"])
     reply = await MiniMaxAgent(llm, embedder=None, max_iters=5).agent(

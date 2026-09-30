@@ -60,7 +60,7 @@ def _scope_project_tool_args(name: str, args: dict, project_slug: str | None) ->
         return scoped
     if name in {
         "search_knowledge",
-        "list_active_jobs",
+        "list_active_projects",
         "get_product_features",
     }:
         scoped["project_slug"] = project_slug

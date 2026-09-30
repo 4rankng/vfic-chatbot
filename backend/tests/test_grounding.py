@@ -1,4 +1,4 @@
-"""Tests for grounding enforcement — prevents citing job_ids/entities not in retrieved data.
+"""Tests for grounding enforcement — prevents citing ids/entities not in retrieved data.
 
 Pure-function tests: no DB, no LLM. The agent-loop wiring is tested via the
 existing graph client integration path (requires langchain).
@@ -9,10 +9,10 @@ from __future__ import annotations
 from app.graph.grounding import (
     _UngroundedContact,
     extract_asserted_entities,
-    extract_cited_job_ids,
+    extract_cited_ids,
     extract_contact_channels,
     extract_surfaced_entities,
-    extract_surfaced_job_ids,
+    extract_surfaced_ids,
     ground_reply,
     validate_contact_grounding,
     validate_entity_grounding,
@@ -24,13 +24,13 @@ JOB_A = "11111111-aaaa-4bbb-8ccc-222222222222"
 JOB_B = "33333333-dddd-4eee-9fff-444444444444"
 JOB_FAKE = "55555555-6666-4777-8888-999999999999"
 
-# Structured tool payloads (mirrors tools.py rendering).
-_ACTIVE_JOB_RESULT = (
-    'ACTIVE_JOB_LOOKUP_JSON={"status":"matched","jobs":['
-    '{"id":"abc","title":"Công nhân","company":"LG Display","factory":"Hải Phòng",'
-    '"project":"LG Display HP","project_slug":"lg-display-hp"}'
-    '],"safe_reply":"VFIC hiện có các vị trí ACTIVE sau:"}\n'
-    "SURFACED_JOB_IDS=id=abc"
+# Structured tool payloads (mirrors tools/catalog.py rendering).
+_ACTIVE_PROJECT_RESULT = (
+    'ACTIVE_PROJECT_LOOKUP_JSON={"status":"matched","total":1,"projects":['
+    '{"id":"abc","project":"LG Display HP","company":"LG Display","factory":"Hải Phòng",'
+    '"province":"Hải Phòng"}'
+    '],"safe_reply":"Đây là DỮ LIỆU DỰ ÁN từ tool:"}\n'
+    "SURFACED_PROJECT_IDS=id=abc"
 )
 _FEATURES_RESULT = (
     "Đặc điểm sản phẩm — dự án 'samsung-bac-ninh':\n"
@@ -44,27 +44,27 @@ _FEATURES_RESULT = (
 
 def test_extract_surfaced_ids_from_tagged_form():
     tool_result = f"- Nhân viên kho (id={JOB_A}); lương 10tr"
-    assert extract_surfaced_job_ids([tool_result]) == {JOB_A}
+    assert extract_surfaced_ids([tool_result]) == {JOB_A}
 
 
 def test_extract_surfaced_ids_handles_multiple_results():
     results = [f"id={JOB_A}", f"id={JOB_B}"]
-    assert extract_surfaced_job_ids(results) == {JOB_A, JOB_B}
+    assert extract_surfaced_ids(results) == {JOB_A, JOB_B}
 
 
 def test_extract_cited_ids_catches_bare_uuid():
     reply = f"Theo tin tuyển dụng {JOB_A}, lương là 10 triệu."
-    assert extract_cited_job_ids(reply) == {JOB_A}
+    assert extract_cited_ids(reply) == {JOB_A}
 
 
 def test_extract_cited_ids_catches_tagged_form():
     reply = f"Việc (id={JOB_B}) có KTX."
-    assert extract_cited_job_ids(reply) == {JOB_B}
+    assert extract_cited_ids(reply) == {JOB_B}
 
 
 def test_extract_ids_empty_on_no_match():
-    assert extract_surfaced_job_ids(["no ids here"]) == set()
-    assert extract_cited_job_ids("just text") == set()
+    assert extract_surfaced_ids(["no ids here"]) == set()
+    assert extract_cited_ids("just text") == set()
 
 
 # --- contact-channel grounding ----------------------------------------------
@@ -187,9 +187,9 @@ def test_validate_grounding_preserves_grounded_content():
 # --- entity surfacing --------------------------------------------------------
 
 
-def test_extract_surfaced_entities_from_active_job_payload():
-    """Company/factory/project names are pulled from the ACTIVE_JOB_LOOKUP_JSON row."""
-    entities = extract_surfaced_entities([_ACTIVE_JOB_RESULT])
+def test_extract_surfaced_entities_from_active_project_payload():
+    """Company/factory/project names are pulled from the ACTIVE_PROJECT_LOOKUP_JSON row."""
+    entities = extract_surfaced_entities([_ACTIVE_PROJECT_RESULT])
     assert "LG Display" in entities
     assert "Hải Phòng" in entities
     assert "LG Display HP" in entities
@@ -212,56 +212,51 @@ def test_extract_surfaced_entities_empty_on_no_payloads():
     assert extract_surfaced_entities(["Không tìm thấy thông tin."]) == set()
 
 
-# A no_match payload now carries ``alternative_jobs`` structurally so the model
-# can pivot the candidate AND the entity-grounding layer can verify it only
-# names companies that were actually surfaced (replacing the removed regex
-# consistency gate that fired a third LLM call). ``jobs`` stays empty so the
-# abstention signal the authority layer keys on is unchanged.
-_NO_MATCH_WITH_ALTERNATIVES = (
-    'ACTIVE_JOB_LOOKUP_JSON={"status":"no_match","jobs":[],"alternative_jobs":['
-    '{"id":"alt1","title":"Công nhân","company":"Samsung","factory":"Bắc Ninh",'
-    '"project":"Samsung Bắc Ninh","project_slug":"samsung-bac-ninh"}'
-    '],"safe_reply":"Hiện chưa có vị trí phù hợp. Hiện đang tuyển Samsung."}\n'
-    "SURFACED_JOB_IDS=id=alt1"
+# The whole ranked catalog is surfaced structurally, so the entity-grounding
+# layer can verify the composed reply only names companies/factories that were
+# actually returned. A criteria miss is a ``matched`` payload with zero rows and
+# honest notes (no ``no_match`` status anymore).
+_MATCHED_PROJECTS_RESULT = (
+    'ACTIVE_PROJECT_LOOKUP_JSON={"status":"matched","total":2,"projects":['
+    '{"id":"p1","project":"Samsung Bắc Ninh","company":"Samsung","factory":"Bắc Ninh"},'
+    '{"id":"p2","project":"LG Display HP","company":"LG Display","factory":"Hải Phòng"}'
+    '],"safe_reply":"Đây là DỮ LIỆU DỰ ÁN từ tool:"}\n'
+    "SURFACED_PROJECT_IDS=id=p1,id=p2"
 )
 
 
-def test_extract_surfaced_entities_reads_alternative_jobs_on_no_match():
-    """No-match alternatives are surfaced as entities, not just safe_reply text.
-
-    This is the structural replacement for the removed regex consistency gate:
-    the entity-grounding layer can now verify a no_match reply names only
-    companies/factories that were actually returned as alternatives.
-    """
-    entities = extract_surfaced_entities([_NO_MATCH_WITH_ALTERNATIVES])
+def test_extract_surfaced_entities_reads_every_project_row():
+    """Every surfaced project row contributes its entity names."""
+    entities = extract_surfaced_entities([_MATCHED_PROJECTS_RESULT])
     assert "Samsung" in entities
     assert "Bắc Ninh" in entities
-    assert "Samsung Bắc Ninh" in entities
+    assert "LG Display" in entities
+    assert "Hải Phòng" in entities
 
 
-def test_validate_grounding_flags_invented_entity_on_no_match_alternative():
-    """An invented company on a no_match turn is hedged, not LLM-rewritten.
+def test_validate_grounding_flags_invented_company_beyond_surfaced_rows():
+    """A company outside the surfaced project rows is flagged, not LLM-rewritten.
 
-    Replaces the old negative-authority regex rewrite (which fired a third LLM
-    call). The reply is preserved and a hedging footer is appended — same
-    sanitize-only pattern used on matched turns.
+    Detection-only: the entity is flagged for the trace, the candidate-facing
+    reply is handed back untouched (no hedging footer) — same sanitize-only
+    pattern used for ID hallucinations.
     """
-    surfaced = extract_surfaced_entities([_NO_MATCH_WITH_ALTERNATIVES])
-    # LG was never returned as an alternative (only Samsung was).
-    reply = "Hiện chưa có vị trí phù hợp. Nhưng LG Display có mức lương 30 triệu."
+    surfaced = extract_surfaced_entities([_MATCHED_PROJECTS_RESULT])
+    # Rorze is not among the surfaced project rows (only Samsung / LG Display).
+    reply = "Hiện chưa có vị trí phù hợp. Nhưng Rorze có mức lương 30 triệu."
     result = validate_grounding(reply, set(), surfaced)
     assert not result.is_grounded
-    assert "lg display" in result.unsupported_entities
+    assert "rorze" in result.unsupported_entities
     # Detection-only: the entity is flagged for the trace, the candidate-facing
     # reply is handed back untouched (no hedging footer).
     assert "chưa được xác minh" not in result.sanitized_reply
     assert result.sanitized_reply == reply
 
 
-def test_validate_grounding_accepts_alternative_entity_on_no_match():
-    """Naming a legitimately-surfaced alternative company is grounded."""
-    surfaced = extract_surfaced_entities([_NO_MATCH_WITH_ALTERNATIVES])
-    reply = "Hiện chưa có vị trí phù hợp. Samsung đang tuyển, bạn muốn xem không?"
+def test_validate_grounding_accepts_surfaced_entity_on_match():
+    """Naming a legitimately-surfaced project company is grounded."""
+    surfaced = extract_surfaced_entities([_MATCHED_PROJECTS_RESULT])
+    reply = "Samsung đang tuyển, bạn muốn xem không?"
     result = validate_grounding(reply, set(), surfaced)
     assert result.is_grounded
 

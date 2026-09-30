@@ -190,21 +190,6 @@ async def _tingting_hotline(deps: GraphDeps) -> str:
         return ""
 
 
-def _vacancy_required_args(decisions: TurnDecisions) -> dict:
-    """Build forced ``list_active_jobs`` args for a vacancy-listing turn.
-
-    Always widens ``top_k`` to 10 so the full catalog is visible. When the
-    candidate asked to sort the catalog (salary direction or newest-first),
-    the Jev ``sort_by`` judgment is injected here because ``required_tool_args``
-    replaces the model's own arguments for the forced first call — without
-    this the LLM's ``sort_by`` would be dropped on the authoritative round.
-    """
-    args: dict = {"top_k": 10}
-    if decisions.sort_by:
-        args["sort_by"] = decisions.sort_by
-    return args
-
-
 def _compare_income_required_args(
     user_text: str,
     *,
@@ -437,12 +422,12 @@ async def _agent_turn(
     )
     if tingting_reset_allowed:
         # The OA has no catalog and no income tool: a stale Jev vacancy flag must
-        # not force `list_active_jobs` onto a turn whose only bound tools are the
+        # not force `list_active_projects` onto a turn whose only bound tools are the
         # reset ones.
         vacancy_catalog_required = False
         compare_income_required_args = None
     required_authority_tool = (
-        "list_active_jobs"
+        "list_active_projects"
         if vacancy_catalog_required
         else "compare_income" if compare_income_required_args is not None else None
     )
@@ -451,7 +436,7 @@ async def _agent_turn(
             route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
         )
         if vacancy_catalog_required:
-            allowed_tools = ("list_active_jobs",)
+            allowed_tools = ("list_active_projects",)
         elif compare_income_required_args is not None:
             allowed_tools = ("compare_income",)
         if allowed_tools is not None:
@@ -479,14 +464,14 @@ async def _agent_turn(
             allowed_tools=allowed_tools,
             lookup_query=evidence_query or user_text,
             required_tool=(
-                "list_active_jobs"
+                "list_active_projects"
                 if vacancy_catalog_required
                 else "compare_income" if compare_income_required_args is not None else None
             ),
+            # The model composes the vacancy criteria args from the conversation;
+            # the tool ranks the whole catalog against whatever the candidate stated.
             required_tool_args=(
-                _vacancy_required_args(decisions)
-                if vacancy_catalog_required
-                else compare_income_required_args
+                None if vacancy_catalog_required else compare_income_required_args
             ),
             metrics=timings,
             trace_sink=trace_sink,
@@ -602,7 +587,7 @@ async def _agent_turn(
     # returns the whole registry when allowed is empty/None).
     allowed_tools = route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
     if vacancy_catalog_required:
-        allowed_tools = ("list_active_jobs",)
+        allowed_tools = ("list_active_projects",)
     elif compare_income_required_args is not None:
         allowed_tools = ("compare_income",)
     resolved_tool_registry = None
@@ -673,7 +658,7 @@ async def _agent_turn(
         authority_tool = (
             None
             if employee_support
-            else "list_active_jobs" if vacancy_catalog_required else "search_knowledge"
+            else "list_active_projects" if vacancy_catalog_required else "search_knowledge"
         )
         if (
             authority_tool is not None
@@ -828,9 +813,9 @@ async def _agent_turn(
     ):
         agent_kwargs["forced_project_slug"] = project_slug
     if vacancy_catalog_required:
-        agent_kwargs["required_tool"] = "list_active_jobs"
-        required_args = _vacancy_required_args(decisions)
-        agent_kwargs["required_tool_args"] = required_args
+        agent_kwargs["required_tool"] = "list_active_projects"
+        # No forced args: the model composes the criteria from the conversation.
+        agent_kwargs["required_tool_args"] = None
     elif compare_income_required_args is not None:
         agent_kwargs["required_tool"] = "compare_income"
         agent_kwargs["required_tool_args"] = compare_income_required_args

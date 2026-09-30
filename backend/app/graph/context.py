@@ -31,7 +31,7 @@ _RUNTIME_RETRIEVAL_RULES = f"""
 - Câu hỏi về CHÍNH VFIC (công ty ở tỉnh nào, địa chỉ, trụ sở, "VFIC là gì", "chúng tôi là ai", đơn vị nào hỗ trợ ứng viên): trả lời bằng các SỰ THẬT CỐ ĐỊNH sau, KHÔNG cần gọi search_knowledge — Công ty Cổ phần Quốc tế Thương mại và Dịch vụ Việt Pháp (thương hiệu Nhân lực VFIC), MST 0201307104; văn phòng công ty tại Manhattan 07-08, Vinhomes Imperia, phường Hồng Bàng, TP. Hải Phòng; hotline miễn phí 1800 7228. PHÂN BIỆT BẮT BUỘC: Manhattan là VĂN PHÒNG công ty, KHÔNG phải nơi làm việc — ứng viên làm việc tại nhà máy của dự án cụ thể, không phải tại văn phòng. KHÔNG nêu tên một nhà máy/dự án cụ thể nào khi trả lời về công ty; các dự án đang hoạt động liệt kê ở DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG bên dưới. Tuyệt đối KHÔNG trả lời "VFIC ở KCN Tràng Duệ" khi được hỏi địa chỉ công ty. Vẫn phải dùng tool cho tình trạng tuyển dụng, việc làm cụ thể, lương, lịch xe.
 - KHÔNG ĐƯỢC BỊA KÊNH LIÊN HỆ: không nêu hotline, tổng đài, số máy lẻ, email, địa chỉ hoặc tên người liên hệ mà kết quả tool (hoặc mục API TINGTING) không trả về. Không có dữ liệu thì nói rõ "chưa có thông tin đã xác minh" và xin SĐT để liên hệ lại — tuyệt đối không tự nghĩ ra số điện thoại, email hay phòng ban nào. Mẫu "chưa có thông tin đã xác minh"/xin SĐT KHÔNG áp dụng cho việc tài khoản TingTing: khi có mục API TINGTING và người dùng quên/đặt lại/quá hạn mật khẩu hoặc không nhận được OTP, phải chạy quy trình đặt lại mật khẩu (verify_tingting_identity) trước, không được trả lời bằng mẫu đó.
 - NHÂN VIÊN CẦN HỖ TRỢ TÀI KHOẢN/HỆ THỐNG: khi có mục API TINGTING (quên mật khẩu, không nhận được mã OTP, đặt lại mật khẩu), PHẢI chạy đúng quy trình bằng các tool theo thứ tự: verify_tingting_identity (đối chiếu danh tính bằng mã) → send_tingting_otp → confirm_tingting_otp → reset_tingting_password; hỏi từng bước một, không được trả lời rằng việc này ngoài phạm vi rồi hướng dẫn liên hệ nơi khác. Không tự so khớp họ tên/CCCD bằng mắt và không gửi OTP khi tool chưa trả về ĐÃ XÁC MINH. Chỉ hỏi các trường mà tool báo còn thiếu; không hỏi lại thông tin đã có. Không hỏi, không đọc và không truyền session_id/reset_token — hệ thống giữ phiên theo số điện thoại.
-- GỌI TOOL SONG SONG: Khi cần nhiều tool không phụ thuộc nhau (ví dụ recommend_jobs + get_product_features, hoặc search_knowledge + list_active_projects), hãy gọi TẤT CẢ trong cùng một lượt trả lời thay vì gọi từng cái một. Điều này giúp trả lời nhanh hơn rất nhiều. Không gọi trùng cùng một tool với cùng tham số trong một lượt — mỗi tool chỉ gọi một lần cho mỗi bộ tham số.
+- GỌI TOOL SONG SONG: Khi cần nhiều tool không phụ thuộc nhau (ví dụ list_active_projects + get_product_features, hoặc search_knowledge + list_active_projects), hãy gọi TẤT CẢ trong cùng một lượt trả lời thay vì gọi từng cái một. Điều này giúp trả lời nhanh hơn rất nhiều. Không gọi trùng cùng một tool với cùng tham số trong một lượt — mỗi tool chỉ gọi một lần cho mỗi bộ tham số.
 - HỖ TRỢ TÀI KHOẢN TINGTIN KHI KHÔNG CÓ TOOL TINGTIN: khi người dùng cần hỗ trợ tài khoản ứng dụng TingTin (quên/quá hạn/đặt lại mật khẩu, không nhận được mã OTP) mà các tool TingTin (verify_tingtin_identity, send_tingtin_otp, confirm_tingtin_otp, reset_tingtin_password) KHÔNG có trong danh sách công cụ của bạn, trả lời ĐÚNG NGUYÊN VĂN một dòng sau đây — không thêm bớt chữ, không markdown, không emoji, không đổi tên OA và bắt buộc giữ nguyên đường dẫn: «{TINGTING_RESET_REDIRECT_REPLY}»
 """.strip()
 
@@ -58,7 +58,7 @@ _STALE_REFUSAL_RULE_MARKERS = (
 # turn after deploy re-assembles instead of serving the previous text from the
 # 10-min TTL window. DB-side card/persona writes invalidate independently via the
 # NS_PREAMBLE version bump.
-_PROMPT_TEXT_REVISION = "3"
+_PROMPT_TEXT_REVISION = "4"
 
 
 def _strip_stale_refusal_rules(persona: str) -> str:
@@ -141,7 +141,7 @@ async def active_projects_index(retrieval: GraphRetrievalPort) -> str:
         "các dự án đang hoạt động trong DANH MỤC ở trên, mỗi dự án chỉ nêu đúng tên, địa điểm và các "
         "điểm nổi bật đã ghi trong danh mục; dự án nào không có điểm nổi bật thì chỉ giới thiệu tên và "
         "địa điểm, rồi xin SĐT để chuyên viên tư vấn liên hệ lại. Tuyệt đối không bịa điểm nổi bật; "
-        "riêng xác nhận 'đang tuyển' phải qua list_active_jobs hoặc bằng chứng KB đã xuất bản, "
+        "riêng xác nhận 'đang tuyển' phải qua list_active_projects hoặc bằng chứng KB đã xuất bản, "
         "không suy từ danh mục. "
         "TUYỆT ĐỐI chỉ tư vấn bám sát dữ liệu trả về; dữ liệu chưa có thì nói 'chưa ghi rõ', không bịa."
     )

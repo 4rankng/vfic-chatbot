@@ -148,11 +148,7 @@ def test_unknown_job_references_collect_only_unknown_unique_ids() -> None:
             ),
             None,
         ),
-        (
-            ProjectActivationFacts("RAG"),
-            "RAG Project needs an active Jobs category before activation",
-        ),
-        (ProjectActivationFacts("RAG", has_active_jobs=True), None),
+        (ProjectActivationFacts("RAG"), None),
     ],
 )
 def test_project_activation_policy_is_framework_free_and_preserves_errors(

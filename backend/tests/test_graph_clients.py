@@ -54,13 +54,9 @@ _DISPATCHED = {
     "compare_income",
     "search_user_memory",
     "search_knowledge",
-    "list_active_jobs",
     "list_active_projects",
-    "recommend_projects",
-    "recommend_jobs",
     "search_bus_timetable",
     "get_product_features",
-    "call_project_api",
     "verify_tingting_identity",
     "send_tingting_otp",
     "confirm_tingting_otp",
@@ -68,20 +64,20 @@ _DISPATCHED = {
 }
 
 
-def _vacancy_result(status: str, safe_reply: str) -> str:
+def _project_lookup_result(status: str, safe_reply: str) -> str:
     payload = json.dumps(
-        {"status": status, "jobs": [], "safe_reply": safe_reply},
+        {"status": status, "total": 0, "projects": [], "safe_reply": safe_reply},
         ensure_ascii=False,
         separators=(",", ":"),
     )
-    return f"ACTIVE_JOB_LOOKUP_JSON={payload}"
+    return f"ACTIVE_PROJECT_LOOKUP_JSON={payload}"
 
 
-def test_vacancy_tool_status_does_not_replace_llm_final_answer():
-    no_match = _vacancy_result("no_match", "Không có việc ACTIVE phù hợp.")
-    unavailable = _vacancy_result("unavailable", "Chưa thể kiểm tra tuyển dụng.")
+def test_project_lookup_status_does_not_replace_llm_final_answer():
+    matched_empty = _project_lookup_result("matched", "Không có dự án nào khớp tiêu chí.")
+    unavailable = _project_lookup_result("unavailable", "Chưa thể kiểm tra danh mục dự án.")
 
-    assert _ground_reply("LG đang tuyển thợ hàn, lương 30 triệu.", [no_match]) == (
+    assert _ground_reply("LG đang tuyển thợ hàn, lương 30 triệu.", [matched_empty]) == (
         "LG đang tuyển thợ hàn, lương 30 triệu."
     )
     assert _ground_reply("VFIC không còn tuyển vị trí nào.", [unavailable]) == (
@@ -89,15 +85,15 @@ def test_vacancy_tool_status_does_not_replace_llm_final_answer():
     )
 
 
-def test_negative_vacancy_status_keeps_llm_answer_intact():
-    """No-match stays sanitize-only: the LLM answer is never replaced.
+def test_empty_project_match_keeps_llm_answer_intact():
+    """A criteria miss stays sanitize-only: the LLM answer is never replaced.
 
     The operator rule is that the LLM agent owns the final wording; the old
     trusted-text replacements (negative/matched job authority) are gone and
-    the active-job payload now carries a presentation contract instead of a
+    the active-project payload now carries a presentation contract instead of a
     ready-made reply.
     """
-    no_match = _vacancy_result("no_match", "Không có việc ACTIVE phù hợp.")
+    no_match = _project_lookup_result("matched", "Không có dự án nào khớp tiêu chí.")
 
     assert _ground_reply("LG đang tuyển thợ hàn, lương 30 triệu.", [no_match]) == (
         "LG đang tuyển thợ hàn, lương 30 triệu."
@@ -163,22 +159,27 @@ def test_safe_reply_from_consumes_typed_verdict_from_contract():
     assert safe_reply_from(verdict, expected_target_monthly_vnd=15_000_000) is None
 
 
-def test_malformed_vacancy_tool_payload_does_not_short_circuit_llm_answer():
+def test_malformed_project_tool_payload_does_not_short_circuit_llm_answer():
     assert _ground_reply(
-        "LG đang tuyển thợ hàn.", ["ACTIVE_JOB_LOOKUP_JSON={not-json}"]
+        "LG đang tuyển thợ hàn.", ["ACTIVE_PROJECT_LOOKUP_JSON={not-json}"]
     ) == "LG đang tuyển thợ hàn."
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"status": "invented", "jobs": [], "safe_reply": "LG đang tuyển."},
-        {"status": "matched", "jobs": [], "safe_reply": "LG đang tuyển."},
-        {"status": "no_match", "jobs": [{"id": "1", "title": "X"}], "safe_reply": "Không có."},
+        {"status": "invented", "total": 0, "projects": [], "safe_reply": "LG đang tuyển."},
+        {"status": "matched", "total": 1, "projects": [{"id": 5}], "safe_reply": "LG đang tuyển."},
+        {
+            "status": "catalog_empty",
+            "total": 1,
+            "projects": [{"id": "11111111-1111-4111-8111-111111111111"}],
+            "safe_reply": "Không có.",
+        },
     ],
 )
-def test_semantically_invalid_vacancy_payload_does_not_replace_llm_answer(payload):
-    result = "ACTIVE_JOB_LOOKUP_JSON=" + json.dumps(payload, ensure_ascii=False)
+def test_semantically_invalid_project_payload_does_not_replace_llm_answer(payload):
+    result = "ACTIVE_PROJECT_LOOKUP_JSON=" + json.dumps(payload, ensure_ascii=False)
 
     assert _ground_reply("LG đang tuyển.", [result]) == "LG đang tuyển."
 
@@ -198,13 +199,13 @@ async def test_disabled_known_tool_never_reaches_its_repository_handler(monkeypa
         called = True
         return "must not run"
 
-    monkeypatch.setattr("app.graph.schemas.recommend_jobs", forbidden)
+    monkeypatch.setattr("app.graph.schemas.search_bus_timetable", forbidden)
 
     result = await _dispatch_tool(
         object(),
         object(),
-        "recommend_jobs",
-        {"chat_id": "x"},
+        "search_bus_timetable",
+        {"company": "VFIC", "question": "lịch xe"},
         resolved_registry=frozenset({"search_knowledge"}),
     )
 
@@ -213,33 +214,40 @@ async def test_disabled_known_tool_never_reaches_its_repository_handler(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_dispatch_list_active_jobs_forwards_optional_filters(monkeypatch):
+async def test_dispatch_list_active_projects_forwards_optional_filters(monkeypatch):
     calls: list[dict] = []
 
-    async def fake_list_active_jobs(retrieval, **kwargs):
+    async def fake_list_active_projects(retrieval, **kwargs):
         calls.append({"retrieval": retrieval, **kwargs})
-        return "STATUS: no_match"
+        return "ACTIVE_PROJECT_LOOKUP_JSON={}"
 
-    monkeypatch.setattr("app.graph.schemas.list_active_jobs", fake_list_active_jobs)
+    monkeypatch.setattr("app.graph.schemas.list_active_projects", fake_list_active_projects)
     retrieval = object()
 
     result = await _dispatch_tool(
         retrieval,
         None,
-        "list_active_jobs",
-        {"role": "thợ hàn", "company": "LG", "location": "Hải Phòng", "top_k": 7},
+        "list_active_projects",
+        {
+            "project_slug": "rorze",
+            "company": "Rorze",
+            "job_scope": "lắp ráp",
+            "location": "Hải Phòng",
+            "salary_min_vnd": 10_000_000,
+            "sort_by": "salary_desc",
+        },
     )
 
-    assert result == "STATUS: no_match"
+    assert result == "ACTIVE_PROJECT_LOOKUP_JSON={}"
     assert calls == [
         {
             "retrieval": retrieval,
-            "project_slug": None,
-            "role": "thợ hàn",
-            "company": "LG",
+            "project_slug": "rorze",
+            "company": "Rorze",
+            "job_scope": "lắp ráp",
             "location": "Hải Phòng",
-            "top_k": 7,
-            "sort_by": None,
+            "salary_min_vnd": 10_000_000,
+            "sort_by": "salary_desc",
         }
     ]
 
@@ -277,25 +285,23 @@ def test_every_tool_schema_name_is_dispatchable():
     assert "get_product_features" in names  # the newest tool is wired end-to-end
 
 
-def test_list_active_jobs_schema_exposes_only_optional_bounded_filters():
+def test_list_active_projects_schema_exposes_only_optional_filters():
     schema = next(
-        item["function"] for item in TOOL_SCHEMAS if item["function"]["name"] == "list_active_jobs"
+        item["function"] for item in TOOL_SCHEMAS if item["function"]["name"] == "list_active_projects"
     )
 
     assert "required" not in schema["parameters"]
     assert set(schema["parameters"]["properties"]) == {
         "project_slug",
-        "role",
         "company",
+        "job_scope",
         "location",
-        "top_k",
+        "salary_min_vnd",
         "sort_by",
     }
-    assert schema["parameters"]["properties"]["top_k"] == {
+    assert schema["parameters"]["properties"]["salary_min_vnd"] == {
         "type": "integer",
-        "minimum": 1,
-        "maximum": 10,
-        "description": "Số việc tối đa cần trả về, mặc định 3.",
+        "description": "Mức lương tối thiểu ứng viên mong muốn (VND/tháng).",
     }
     assert schema["parameters"]["properties"]["sort_by"]["enum"] == [
         "updated_at",
@@ -314,9 +320,9 @@ def test_list_active_jobs_schema_exposes_only_optional_bounded_filters():
             {"query": "lương", "project_slug": "lg-display"},
         ),
         (
-            "list_active_jobs",
-            {"top_k": 5},
-            {"top_k": 5, "project_slug": "lg-display"},
+            "list_active_projects",
+            {"job_scope": "lắp ráp"},
+            {"job_scope": "lắp ráp", "project_slug": "lg-display"},
         ),
     ],
 )
@@ -656,10 +662,10 @@ def test_custom_chat_leaves_unknown_vendor_reasoning_untouched(monkeypatch):
 # (no tool context) — telling the user "không có dữ liệu".
 #
 # Root cause: the authority guards scanned ``tool_results`` for the
-# ``ACTIVE_JOB_LOOKUP_JSON=`` prefix and could match any tool output that
-# happened to start with it, even when list_active_jobs was never dispatched.
+# ``ACTIVE_PROJECT_LOOKUP_JSON=`` prefix and could match any tool output that
+# happened to start with it, even when list_active_projects was never dispatched.
 # The fix gates the override on an internal ``authority_tool_dispatched`` flag
-# set only when list_active_jobs actually ran.
+# set only when list_active_projects actually ran.
 #
 # These tests pin the invariant that the guard cannot fire from a stray prefix
 # match in a non-authority tool result. The full agent() integration path is
@@ -667,37 +673,39 @@ def test_custom_chat_leaves_unknown_vendor_reasoning_untouched(monkeypatch):
 # the gate enforces.
 
 def test_authority_override_invariant_documented():
-    """The presentation contract is surfaced from the active-job payload.
+    """The presentation contract is surfaced from the active-project payload.
 
     The deterministic reply replacements are gone — the agent composes the
-    final wording from the payload (title_plain rows + presentation contract).
+    final wording from the payload (project rows + presentation contract).
     This test pins that the payload still carries the contract text the agent
-    is told to follow.
+    is told to follow and that its validation gates required-tool authority.
     """
-    fake_active_job_output = (
-        'ACTIVE_JOB_LOOKUP_JSON={"status":"no_match","total":0,"jobs":[],'
-        '"safe_reply":"DỮ LIỆU việc làm từ tool — CHƯA phải câu trả lời."}'
+    fake_active_project_output = (
+        'ACTIVE_PROJECT_LOOKUP_JSON={"status":"matched","total":1,"projects":'
+        '[{"id":"11111111-1111-4111-8111-111111111111","project":"Rorze","company":"Rorze"}],'
+        '"safe_reply":"DỮ LIỆU DỰ ÁN từ tool — CHƯA phải câu trả lời."}\n'
+        "SURFACED_PROJECT_IDS=id=11111111-1111-4111-8111-111111111111"
     )
-    from app.graph.grounding import active_job_safe_reply
+    from app.graph.grounding import active_project_safe_reply
 
-    assert active_job_safe_reply(fake_active_job_output) == (
-        "DỮ LIỆU việc làm từ tool — CHƯA phải câu trả lời."
+    assert active_project_safe_reply(fake_active_project_output) == (
+        "DỮ LIỆU DỰ ÁN từ tool — CHƯA phải câu trả lời."
     )
 
 
 def test_ground_reply_preserves_answer_when_no_authority_dispatched():
-    """When list_active_jobs was not dispatched, _ground_reply is the only path.
+    """When list_active_projects was not dispatched, _ground_reply is the only path.
 
-    A search_knowledge turn that happens to contain an ACTIVE_JOB_LOOKUP prefix
+    A search_knowledge turn that happens to contain an ACTIVE_PROJECT_LOOKUP prefix
     somewhere in its (multi-line) output must NOT replace the LLM's reply.
     ``_ground_reply`` itself never replaces content on a prefix match — it only
-    validates job-id hallucinations — so this test pins the no-replacement
+    validates project-id hallucinations — so this test pins the no-replacement
     behavior that the gated override relies on.
     """
     search_knowledge_style_output = (
         "knowledge_chunks_result:\n"
         "Ca ngày: 08:00-20:00\nCa đêm: 20:00-08:00\n"
-        "ACTIVE_JOB_LOOKUP_JSON={\"status\":\"no_match\"}"  # stray line deep inside
+        'ACTIVE_PROJECT_LOOKUP_JSON={"status":"matched"}'  # stray line deep inside
     )
     grounded_reply = "LG Display làm ca ngày 08:00-20:00 và ca đêm 20:00-08:00."
     # _ground_reply never substitutes the reply based on a prefix match; only the

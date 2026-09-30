@@ -44,7 +44,7 @@ from app.graph.embedders import OpenRouterEmbedder as OpenRouterEmbedder
 from app.graph.embedders import build_embedder as build_embedder
 from app.graph.grounding import (
     _UngroundedContact,
-    active_job_safe_reply as _active_job_safe_reply,
+    active_project_safe_reply as _active_project_safe_reply,
     ground_reply as _ground_reply,
 )
 from app.graph.income_contract import safe_reply_from
@@ -277,8 +277,6 @@ class _AgentTurn:
         )
         if self.forced_project_slug and name in {
             "list_active_projects",
-            "recommend_projects",
-            "recommend_jobs",
             "search_bus_timetable",
         }:
             return "Công cụ khám phá nhiều dự án không khả dụng khi cuộc trò chuyện đang tập trung vào một dự án."
@@ -737,7 +735,7 @@ class MiniMaxAgent:
             required_tool and required_tool in prefetched_tools
         )
         turn.authority_tool_dispatched = bool(
-            required_tool == "list_active_jobs" and turn.required_tool_called
+            required_tool == "list_active_projects" and turn.required_tool_called
         )
         return _CONTINUE_TURN
     async def _run_generation_round(self, turn: _AgentTurn) -> str | _ContinueTurn:
@@ -1018,8 +1016,8 @@ class MiniMaxAgent:
                             bound = active_llm
                         else:
                             authority_valid = False
-                    elif required_tool == "list_active_jobs":
-                        authority_valid = _active_job_safe_reply(out) is not None
+                    elif required_tool == "list_active_projects":
+                        authority_valid = _active_project_safe_reply(out) is not None
                     if not authority_valid:
                         logger.warning("required LLM tool returned invalid evidence: %s", required_tool)
                         return await self._compose_with_instruction(
@@ -1028,7 +1026,7 @@ class MiniMaxAgent:
                             "hợp lệ. Hãy trả lời tự nhiên bằng tiếng Việt rằng chưa thể xác minh, "
                             "không xác nhận có việc và không bịa dữ liệu.",
                         )
-                if tool_name == "list_active_jobs":
+                if tool_name == "list_active_projects":
                     turn.authority_tool_dispatched = True
                 turn.tool_results.append(str(out))
                 messages.append(

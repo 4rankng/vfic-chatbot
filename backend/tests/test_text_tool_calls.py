@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.graph.runner import _finalize_user_visible_reply
+from app.recruitment.domain.recommendation import ProjectFeatures
 
 pytestmark = pytest.mark.timeout(30)
 
@@ -65,7 +66,7 @@ class _FakeRetrieval:
 
     async def list_active_projects(self):
         self.project_calls += 1
-        return [SimpleNamespace(slug="lg-display", name="LG Display", summary="")]
+        return [ProjectFeatures(project_id="p1", slug="lg-display", name="LG Display")]
 
 
 async def test_a_text_tool_call_is_dispatched_and_the_markup_never_ships():

@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 
 import pytest
+
+from app.recruitment.domain.recommendation import ProjectFeatures
 
 # The assertions observe acquisition ORDER, not wall-clock budgets; this only
 # guards against an event-loop hang.
@@ -70,15 +71,16 @@ class _FakeRetrieval:
 
     ``_dispatch_tool`` forwards each tool its own argument shape (e.g.
     ``search_bus_timetable(retrieval, company, question, strict_company=...)``),
-    and ``list_active_projects`` renders ``row.slug/.name/.summary`` — so the
-    handler's return value has to be the right shape per tool, not a string.
+    and ``list_active_projects`` takes no arguments and returns
+    ``ProjectFeatures`` rows — so the handler's return value has to be the
+    right shape per tool, not a string.
     """
 
     def __init__(self, handler, identity: str = "shared") -> None:
         self._handler = handler
         self.identity = identity
 
-    async def list_active_projects(self, *_args, **_kwargs):
+    async def list_active_projects(self):
         return await self._handler("list_active_projects", {})
 
     async def match_documents(self, *_args, **_kwargs):
@@ -91,7 +93,7 @@ class _FakeRetrieval:
         return await self._handler("search_user_memory", {})
 
     async def active_projects_with_card(self, *_args, **_kwargs):
-        return await self._handler("recommend_projects", {})
+        return await self._handler("active_projects_with_card", {})
 
     async def search_bus_timetable(self, *_args, **_kwargs):
         return await self._handler("search_bus_timetable", {})
@@ -153,7 +155,7 @@ async def test_post_tool_round_reacquires_the_deployment_llm_cap(monkeypatch):
     async def handler(name, _args):
         events.append(f"tool:{name}")
         if name == "list_active_projects":
-            return [SimpleNamespace(slug="lg-display", name="LG Display", summary="")]
+            return [ProjectFeatures(project_id="p1", slug="lg-display", name="LG Display")]
         return f"result-{name}"
 
     tool_calls = [
@@ -188,11 +190,10 @@ async def test_tool_loop_exhaustion_composes_instead_of_shipping_the_tool_payloa
     """
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
-
-    tool_output = '{"ACTIVE_JOB_LOOKUP": {"jobs": [{"id": "job-7"}]}}'
+    from app.graph.tools.catalog import list_active_projects
 
     async def handler(_name, _args):
-        return tool_output
+        return [ProjectFeatures(project_id="project-7", slug="du-an-7", name="Dự án 7")]
 
     # Two tool rounds exhaust the budget; the third scripted entry is the
     # tool-free composition round the exhaustion path now runs.
@@ -211,6 +212,7 @@ async def test_tool_loop_exhaustion_composes_instead_of_shipping_the_tool_payloa
     )
 
     assert reply == "Dạ hiện em chưa tra được thông tin, anh/chị thử lại sau nhé."
+    tool_output = await list_active_projects(_FakeRetrieval(handler))
     assert tool_output not in reply
     assert metrics["tool_loop_exhausted"] is True
 
@@ -221,7 +223,7 @@ async def test_tool_loop_exhaustion_suppresses_when_the_composition_round_is_emp
     from app.graph.clients import MiniMaxAgent
 
     async def handler(_name, _args):
-        return '{"ACTIVE_JOB_LOOKUP": {"jobs": [{"id": "job-7"}]}}'
+        return [ProjectFeatures(project_id="project-7", slug="du-an-7", name="Dự án 7")]
 
     # Every round is a tool request: the composition round has nothing to say.
     llm = _ScriptedLLM([[{"name": "list_active_projects", "args": {}, "id": "c"}]] * 3)
@@ -240,15 +242,16 @@ async def test_tool_loop_exhaustion_suppresses_when_the_composition_round_is_emp
 
 
 async def test_vacancy_tool_loop_exhaustion_never_ships_the_raw_payload():
-    """``list_active_jobs`` exhaustion composes too; the raw payload never ships."""
+    """``list_active_projects`` exhaustion composes too; the raw payload never ships."""
     pytest.importorskip("langchain_core")
     from app.graph.clients import MiniMaxAgent
+    from app.graph.tools.catalog import list_active_projects
 
     async def handler(_name, _args):
-        return "not-json-at-all"
+        return [ProjectFeatures(project_id="project-7", slug="du-an-7", name="Dự án 7")]
 
     llm = _ScriptedLLM(
-        [[{"name": "list_active_jobs", "args": {}, "id": "c"}]] * 2
+        [[{"name": "list_active_projects", "args": {}, "id": "c"}]] * 2
         + ["Dạ em chưa kiểm tra được danh sách việc làm, anh/chị thử lại sau ạ."]
     )
 
@@ -259,5 +262,6 @@ async def test_vacancy_tool_loop_exhaustion_never_ships_the_raw_payload():
         embedder=None,
     )
 
+    tool_output = await list_active_projects(_FakeRetrieval(handler))
     assert reply == "Dạ em chưa kiểm tra được danh sách việc làm, anh/chị thử lại sau ạ."
-    assert "not-json-at-all" not in reply
+    assert tool_output not in reply

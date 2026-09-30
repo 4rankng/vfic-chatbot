@@ -43,7 +43,7 @@
       "kind": "route",
       "user_text": "tôi muốn tìm việc lái xe",
       "expected_strategy": "recommendation",
-      "expected_tools": ["list_active_jobs", "recommend_jobs", "recommend_projects", "get_product_features"]
+      "expected_tools": ["list_active_projects", "get_product_features"]
     },
     {
       "kind": "reply",
