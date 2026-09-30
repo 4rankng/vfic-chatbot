@@ -89,11 +89,11 @@ def test_chunks_have_unique_ids() -> None:
     """Chunk IDs must be unique so retrieval results are unambiguous."""
     chunks = load_chunks()
     ids = [c.id for c in chunks]
-    assert len(ids) == len(set(ids)), "duplicate chunk id in chunks.yaml"
+    assert len(ids) == len(set(ids)), "duplicate chunk id in chunks.json"
 
 
 def test_expected_chunk_ids_reference_real_chunks() -> None:
-    """Every expected_chunk_id in cases.yaml must exist in chunks.yaml."""
+    """Every expected_chunk_id in cases.json must exist in chunks.json."""
     chunks = load_chunks()
     cases = load_cases()
     chunk_ids = {c.id for c in chunks}

@@ -6,7 +6,7 @@ embeddings are checked into `embeddings.json` so CI never calls the OpenRouter
 embedding API. This script is the only place that calls the real
 `openai/text-embedding-3-large` model for the gold set.
 
-Run manually when `chunks.yaml` or `cases.yaml` change:
+Run manually when `chunks.json` or `cases.json` change:
 
     cd backend
     .venv/bin/python scripts/seed_rag_gold_embeddings.py

@@ -1,7 +1,6 @@
 """Load Vietnamese RAG gold-set fixtures and build test retrieval rows.
 
-The loader is a **pure function module** — no I/O except reading the YAML +
-JSON fixture files. It builds the same row shape the real
+The loader is a **pure function module** — no I/O except reading the JSON fixture files. It builds the same row shape the real
 ``RetrievalRepository.match_documents`` returns (``SimpleNamespace`` with
 ``id``, ``similarity``, ``content``, ``document_id``, ``section_path``,
 ``source_file``, ``source_label``, ``chunk_sha256``) so the gold gate can
@@ -10,7 +9,7 @@ exercise the actual fusion + dedup + rerank code paths without a database.
 Embeddings live in ``embeddings.json`` keyed by chunk ID and case ID. They
 are pre-computed once by ``backend/scripts/seed_rag_gold_embeddings.py``
 using the real ``text-embedding-3-large`` model — that script is run manually
-when ``chunks.yaml`` or ``cases.yaml`` change; CI never calls the embedding
+when ``chunks.json`` or ``cases.json`` change; CI never calls the embedding
 API. Vector-arm cosine similarity is computed at load time against the
 query's canned embedding.
 """
@@ -24,11 +23,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import yaml
-
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "rag_gold"
-CHUNKS_YAML = FIXTURE_DIR / "chunks.yaml"
-CASES_YAML = FIXTURE_DIR / "cases.yaml"
+CHUNKS_JSON = FIXTURE_DIR / "chunks.json"
+CASES_JSON = FIXTURE_DIR / "cases.json"
 EMBEDDINGS_JSON = FIXTURE_DIR / "embeddings.json"
 BASELINE_JSON = FIXTURE_DIR / "baseline.json"
 
@@ -54,7 +51,7 @@ class GoldCase:
 
 @dataclass(frozen=True)
 class GoldChunk:
-    """A synthetic KB chunk from ``chunks.yaml``."""
+    """A synthetic KB chunk from ``chunks.json``."""
 
     id: str
     project_slug: str
@@ -76,23 +73,22 @@ class LoadedGold:
     chunks_by_project: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
-def _load_yaml(path: Path) -> Any:
+def _load_json(path: Path) -> Any:
     if not path.exists():
         raise FileNotFoundError(f"fixture missing: {path}")
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_chunks(path: Path = CHUNKS_YAML) -> tuple[GoldChunk, ...]:
-    """Parse ``chunks.yaml`` into immutable :class:`GoldChunk` records.
+def load_chunks(path: Path = CHUNKS_JSON) -> tuple[GoldChunk, ...]:
+    """Parse ``chunks.json`` into immutable :class:`GoldChunk` records.
 
     Content is stripped; ``chunk_sha256`` is computed when missing so the
     Phase 4 sha256-dedup path can be exercised even before the column is
     populated by the production pipeline.
     """
-    raw = _load_yaml(path)
+    raw = _load_json(path)
     if not isinstance(raw, list):
-        raise ValueError(f"{path}: expected a YAML list of chunks")
+        raise ValueError(f"{path}: expected a JSON list of chunks")
     seen_ids: set[str] = set()
     chunks: list[GoldChunk] = []
     for index, item in enumerate(raw):
@@ -123,11 +119,11 @@ def load_chunks(path: Path = CHUNKS_YAML) -> tuple[GoldChunk, ...]:
     return tuple(chunks)
 
 
-def load_cases(path: Path = CASES_YAML) -> tuple[GoldCase, ...]:
-    """Parse ``cases.yaml`` into immutable :class:`GoldCase` records."""
-    raw = _load_yaml(path)
+def load_cases(path: Path = CASES_JSON) -> tuple[GoldCase, ...]:
+    """Parse ``cases.json`` into immutable :class:`GoldCase` records."""
+    raw = _load_json(path)
     if not isinstance(raw, list):
-        raise ValueError(f"{cases_path_err(path)}: expected a YAML list of cases")
+        raise ValueError(f"{cases_path_err(path)}: expected a JSON list of cases")
     seen_ids: set[str] = set()
     cases: list[GoldCase] = []
     for index, item in enumerate(raw):
@@ -251,8 +247,8 @@ def _chunk_to_row(similarity: float, chunk: GoldChunk) -> SimpleNamespace:
 
 
 def load_gold(
-    chunks_path: Path = CHUNKS_YAML,
-    cases_path: Path = CASES_YAML,
+    chunks_path: Path = CHUNKS_JSON,
+    cases_path: Path = CASES_JSON,
     embeddings_path: Path = EMBEDDINGS_JSON,
 ) -> LoadedGold:
     """Load cases + chunks + embeddings and index chunks by project_slug."""
