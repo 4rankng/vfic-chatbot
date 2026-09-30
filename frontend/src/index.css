@@ -810,25 +810,26 @@ input:-webkit-autofill:focus {
   }
 }
 
-/* Every control inside the workspace keeps the 44px touch-target floor at phone
-   widths, whatever height its own variant declares. The inbox directory-header
-   channel tiles are the one exemption: the owner capped every control in that
-   header at 40px, so they opt out here instead of escalating a second
-   `!important`. */
+/* Every control inside the workspace keeps a 40px touch-target floor at phone
+   widths, whatever height its own variant declares (owner cap 2026-09-30: no
+   button renders taller than 40px, so the floor and the global ceiling agree).
+   The inbox directory-header channel tiles are the one exemption: the owner
+   capped every control in that header at 40px, so they opt out here instead of
+   escalating a second `!important`. */
 @media (max-width: 767px) {
   .workspace-frame-content
     button:not(.conversation):not(.channel-adapter-option),
   .workspace-frame-content a[role="button"],
   .workspace-frame-content input:not([type="checkbox"]):not([type="radio"]),
   .workspace-frame-content select {
-    min-height: 44px !important;
+    min-height: 40px !important;
   }
 
   /* The chrome sits outside `.workspace-frame-content`, so the floor above never
-     reached the topbar triggers (Button size="sm" = 36px). Same 44px floor. */
+     reached the topbar triggers (Button size="sm" = 36px). Same 40px floor. */
   .workspace-chrome button,
   .workspace-chrome a[role="button"] {
-    min-height: 44px !important;
+    min-height: 40px !important;
   }
 }
 
@@ -1219,8 +1220,9 @@ input[type="time"] {
       (`--text-helper` / `--text-meta` / `--text-badge`). No module declares a
       third small size.
    2. Control text — textboxes, selects and dropdown options — is 12px.
-   3. Nothing button-like renders taller than 44px (the console's touch
-      target). `data-allow-tall` is the single, explicit opt-out, reserved for
+   3. Nothing button-like renders taller than 40px (owner cap 2026-09-30,
+      replacing the previous 44px touch target; the mobile floor matches).
+      `data-allow-tall` is the single, explicit opt-out, reserved for
       surfaces that are a drop target rather than a control.
    ═════════════════════════════════════════════════════════════════════════ */
 
@@ -1243,5 +1245,5 @@ input[type="time"] {
   [role="option"],
   [role="menuitem"]
 ):not([data-allow-tall]) {
-  max-height: 44px;
+  max-height: 40px;
 }

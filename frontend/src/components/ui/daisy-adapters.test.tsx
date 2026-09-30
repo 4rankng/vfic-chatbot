@@ -67,19 +67,19 @@ describe("daisyUI shared adapters", () => {
       .not.toHaveClass("text-primary-foreground")
     await expect
       .element(screen.getByRole("button", { name: "Tiếp tục" }))
-      .toHaveClass("h-8", "px-3", "max-md:h-11")
+      .toHaveClass("h-8", "px-3", "max-md:h-10")
     await expect
       .element(screen.getByRole("button", { name: "Gọn" }))
-      .toHaveClass("h-7", "px-2.5", "max-md:h-11")
+      .toHaveClass("h-7", "px-2.5", "max-md:h-10")
     await expect
       .element(screen.getByRole("button", { name: "Tạo mới" }))
-      .toHaveClass("h-9", "px-4", "max-md:h-11")
+      .toHaveClass("h-9", "px-4", "max-md:h-10")
     await expect
       .element(screen.getByRole("button", { name: "Mở tác vụ" }))
-      .toHaveClass("size-9", "max-md:size-11")
+      .toHaveClass("size-9", "max-md:size-10")
     await expect
       .element(screen.getByRole("button", { name: "Thao tác cảm ứng" }))
-      .toHaveClass("tt-btn-touch", "h-11")
+      .toHaveClass("tt-btn-touch", "h-10")
     await expect
       .element(screen.getByRole("button", { name: "Xem lại" }))
       .toHaveClass("tt-btn-outline")
