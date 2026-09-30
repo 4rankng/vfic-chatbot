@@ -40,8 +40,7 @@ class ProjectRepository:
         family already represents. Managed ``knowledge_documents`` rows are
         excluded so a document is counted exactly once: ``kb_version`` documents
         through their ``kb_text_files`` row, ``direct_context`` through
-        ``knowledge_base_direct_files``, and ``category_yaml`` /
-        ``category_markdown`` / ``faq_editor`` rows — internal artifacts of the
+        ``knowledge_base_direct_files``, and ``category_markdown`` / ``faq_editor`` rows — internal artifacts of the
         category and FAQ writers — at all.
         """
         if not project_ids:
@@ -59,7 +58,7 @@ class ProjectRepository:
                     "LEFT JOIN knowledge_documents kd ON kd.project_id = p.id "
                     "AND kd.status::text <> 'ARCHIVED' "
                     "AND kd.source NOT IN "
-                    "('kb_version', 'category_yaml', 'category_markdown', 'faq_editor', 'direct_context') "
+                    "('kb_version', 'category_markdown', 'faq_editor', 'direct_context') "
                     "WHERE p.id = ANY(CAST(:ids AS uuid[])) "
                     "GROUP BY p.id"
                 ),
