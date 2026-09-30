@@ -1247,8 +1247,9 @@ input[type="time"] {
    2. Control text — textboxes, selects and dropdown options — is 12px.
    3. Nothing button-like renders taller than 40px (owner cap 2026-09-30,
       replacing the previous 44px touch target; the mobile floor matches).
-      `data-allow-tall` is the single, explicit opt-out, reserved for
-      surfaces that are a drop target rather than a control.
+      `data-allow-tall` is the single, explicit opt-out for compound
+      interactive surfaces — a trigger that carries a whole row card (the
+      accordion), or a surface that is a drop target rather than a control.
    ═════════════════════════════════════════════════════════════════════════ */
 
 /* 2 — control text. Checkboxes/radios/ranges have no text of their own. */
