@@ -885,7 +885,7 @@
   .performance-diagnostic-group > button,
   .performance-mobile-turn-details button {
     width: 100%;
-    min-height: 44px;
+    min-height: 40px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1016,7 +1016,7 @@
     line-height: 20px;
   }
   .performance-turn-cards > article > button {
-    min-height: 44px;
+    min-height: 40px;
     display: inline-flex;
     align-items: center;
     justify-content: space-between;

@@ -683,7 +683,7 @@
    band geometry, type and colour so the earlier inbox/personas-project.css
    block has nothing left to contribute. */
 .project-rollup-strip {
-  min-height: 44px;
+  min-height: 40px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -699,7 +699,7 @@
 }
 
 .project-rollup-strip span {
-  min-height: 44px;
+  min-height: 40px;
   flex: 0 0 auto;
   padding: 0 16px;
   border-radius: 0;
@@ -949,7 +949,7 @@
   .project-category-editor-actions [data-slot="button"] {
     min-width: 0;
     width: 100%;
-    min-height: 44px;
+    min-height: 40px;
   }
 
   .project-category-textarea {
@@ -1038,7 +1038,7 @@
 
   .project-accordion-actions [data-slot="button"] {
     width: 100%;
-    min-height: 44px;
+    min-height: 40px;
   }
 
   .project-external-source-actions {
@@ -1050,7 +1050,7 @@
   .project-external-source-sync-button,
   .project-source-delete {
     width: 100%;
-    min-height: 44px;
+    min-height: 40px;
   }
 }
 

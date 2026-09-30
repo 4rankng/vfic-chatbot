@@ -702,7 +702,7 @@
 }
 
 .settings-messenger-recovery-summary {
-  min-height: 44px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   cursor: pointer;

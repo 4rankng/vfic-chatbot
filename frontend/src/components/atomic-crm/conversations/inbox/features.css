@@ -48,7 +48,7 @@
 .knowledge-page-shell .knowledge-source-pagination a,
 .knowledge-page-shell .knowledge-detail-actions button,
 .knowledge-page-shell .knowledge-unit-more {
-  min-height: 44px !important;
+  min-height: 40px !important;
 }
 
 .knowledge-page-shell .knowledge-command-actions button,
@@ -420,7 +420,7 @@
 
 .knowledge-unit-more {
   width: 100%;
-  min-height: 44px;
+  min-height: 40px;
   margin-top: 8px;
 }
 
@@ -429,7 +429,7 @@
 }
 
 .knowledge-pipeline-toggle {
-  min-height: 44px;
+  min-height: 40px;
   padding: 10px 4px;
   border-block: 1px solid var(--border);
 }
@@ -587,7 +587,7 @@
 
 .settings-side-nav-link {
   position: relative;
-  min-height: 44px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -982,7 +982,7 @@
 
 .profile-input,
 .profile-select-trigger {
-  min-height: 44px;
+  min-height: 40px;
   border-color: var(--border);
   border-radius: 8px;
   background: color-mix(
@@ -1006,7 +1006,7 @@
 }
 
 .profile-action-button {
-  min-height: 44px !important;
+  min-height: 40px !important;
   height: 44px !important;
   border-radius: 8px;
   padding-inline: 12px;
@@ -1193,7 +1193,7 @@
 
 .settings-group .settings-input {
   width: 100%;
-  min-height: 44px;
+  min-height: 40px;
   border-color: var(--settings-border);
   border-radius: 8px;
   background: var(--settings-elevated);
@@ -1204,7 +1204,7 @@
 }
 
 .settings-switch-row {
-  min-height: 44px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;

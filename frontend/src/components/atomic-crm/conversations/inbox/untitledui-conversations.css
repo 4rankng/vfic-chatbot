@@ -801,7 +801,7 @@
     height: 36px;
   }
 
-  /* index.css puts a `min-height: 44px !important` touch floor on every
+  /* index.css puts a `min-height: 40px !important` touch floor on every
      `.workspace-frame-content` input at phone widths. The owner capped every
      directory-header control at 40px, so this rule has to out-rank that floor;
      the `!important` is load-bearing, not redundant. */

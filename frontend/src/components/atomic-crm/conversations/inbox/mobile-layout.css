@@ -128,7 +128,7 @@
   }
 
   .inbox-bg-container .workspace-title-row {
-    min-height: 44px;
+    min-height: 40px;
   }
 
   .inbox-bg-container .workspace-heading {
@@ -370,7 +370,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    min-height: 44px;
+    min-height: 40px;
   }
   .conversation-actions-menu .conversation-actions-item svg {
     width: 20px;
@@ -450,7 +450,7 @@
        target. Width grows automatically for the labelled .has-unseen variant. */
     width: 44px;
     height: 44px;
-    min-height: 44px;
+    min-height: 40px;
   }
   .inbox-bg-container .new-message-jump.has-unseen {
     width: auto;
