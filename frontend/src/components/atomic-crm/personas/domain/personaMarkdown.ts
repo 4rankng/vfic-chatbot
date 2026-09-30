@@ -63,7 +63,7 @@ const emptyPersonaSections = (): PersonaSectionValues =>
 const normalizeSectionTitle = (value: string) =>
   value.trim().toLowerCase().replace(/\s+/g, " ");
 
-const stripTemplateHint = (value: string, hint: string) => {
+export const stripTemplateHint = (value: string, hint: string) => {
   const trimmed = value.trim();
   if (
     (trimmed.startsWith("(") && trimmed.endsWith(")")) ||

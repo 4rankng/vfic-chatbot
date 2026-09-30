@@ -171,7 +171,9 @@ describe("PersonaForm", () => {
     // disabled attribute, the label and the spinner.
     const savingButton = screen.getByRole("button", { name: "Đang lưu…" });
     await expect.element(savingButton).toBeDisabled();
-    expect(savingButton.element().querySelector(".animate-spin")).not.toBeNull();
+    expect(
+      savingButton.element().querySelector(".animate-spin"),
+    ).not.toBeNull();
     await expect
       .element(screen.getByText("Lưu thay đổi"))
       .not.toBeInTheDocument();
@@ -186,7 +188,9 @@ describe("PersonaForm", () => {
       expect(saveButton(screen).elements()).toHaveLength(1),
     );
     await expect.element(saveButton(screen)).toBeEnabled();
-    expect(saveButton(screen).element().querySelector(".animate-spin")).toBeNull();
+    expect(
+      saveButton(screen).element().querySelector(".animate-spin"),
+    ).toBeNull();
   });
 
   it("sends the composed persona payload on save", async () => {
@@ -221,6 +225,59 @@ describe("PersonaForm", () => {
     saved.resolve(undefined);
   });
 
+  it("fills the sections from an uploaded .md file and reports the misses", async () => {
+    const screen = await renderForm({
+      ...initialPersonaValues,
+      name: "Agent chính",
+      knowledge_base_id: "kb-1",
+    });
+
+    const input = screen.container.querySelector<HTMLInputElement>(
+      'input[aria-label="Chọn tệp markdown Agent"]',
+    );
+    if (!input) throw new Error("the form renders no markdown upload input");
+    const markdown = [
+      "## Vai trò của tôi:",
+      "Tư vấn ứng viên 24/7.",
+      "",
+      "**7. Lưu ý thêm**",
+      "Giờ hành chính.",
+      "",
+      "## Ghi chú riêng",
+      "Không chia sẻ ra ngoài.",
+    ].join("\n");
+    const file = new File([markdown], "persona.md", {
+      type: "text/markdown",
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    // The fill is a plain form fill: the section textareas carry the parsed
+    // content (closed disclosures included) and nothing has been saved yet.
+    await vi.waitFor(() =>
+      expect(
+        screen.container.querySelector<HTMLTextAreaElement>(
+          "#persona-section-0",
+        )?.value,
+      ).toBe("Tư vấn ứng viên 24/7."),
+    );
+    expect(
+      screen.container.querySelector<HTMLTextAreaElement>("#persona-section-6")
+        ?.value,
+    ).toBe("Giờ hành chính.");
+
+    // The unrecognized heading and the untouched sections are reported, never
+    // invented.
+    await expect
+      .element(screen.getByText(/Không nhận diện được mục: Ghi chú riêng/))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText(/Chưa có nội dung cho mục: /))
+      .toBeVisible();
+  });
+
   it("re-enables the save action after a failed save", async () => {
     // PersonaForm deliberately does not catch: PersonaCreate/PersonaEdit own
     // the error notify, so the rejection escapes the form via `void submit()`.
@@ -248,7 +305,9 @@ describe("PersonaForm", () => {
       // The failed save is retryable: the action comes back with the same
       // label, not stuck on the saving copy.
       await expect.element(saveButton(screen)).toBeEnabled();
-      expect(saveButton(screen).element().querySelector(".animate-spin")).toBeNull();
+      expect(
+        saveButton(screen).element().querySelector(".animate-spin"),
+      ).toBeNull();
       expect(escapedErrors).toEqual([new Error("Không lưu được Agent.")]);
 
       // Retrying goes through, so the form is not wedged after a failure.

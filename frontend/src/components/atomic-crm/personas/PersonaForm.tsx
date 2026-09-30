@@ -40,6 +40,10 @@ import {
   type PersonaSectionValues,
 } from "./domain/personaMarkdown";
 import {
+  parsePersonaMarkdownFile,
+  validatePersonaFileUpload,
+} from "./domain/personaMarkdownIngest";
+import {
   FOLLOWUP_SCORE_ORDER,
   normalizePersonaFollowupRules,
   parseFollowupCadenceHours,
@@ -79,6 +83,7 @@ const PersonaForm = ({
   const notify = useNotify();
   const translate = useTranslate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mdUploadInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(initial.name);
   const [sectionValues, setSectionValues] = useState<PersonaSectionValues>(
     () => parsePersonaMarkdown(initial.body_md).sections,
@@ -95,6 +100,10 @@ const PersonaForm = ({
   );
   const [submitting, setSubmitting] = useState(false);
   const [importing, setImporting] = useState(false);
+  /** Hard rejection (binary, oversize) of the plain .md upload. */
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  /** Non-blocking report of what the upload could not map to a section. */
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(
     null,
@@ -210,6 +219,45 @@ const PersonaForm = ({
       notify(message, { type: "error" });
     } finally {
       setImporting(false);
+    }
+  };
+
+  /** Client-side .md fill of the seven Prompt Agent sections: the file never
+   *  leaves the tab, the parser proposes, and the recruiter reviews before the
+   *  normal save persists it. The guard mirrors the brief import. */
+  const onMarkdownFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploadError(null);
+    setUploadWarning(null);
+
+    const rejection = validatePersonaFileUpload(file);
+    if (rejection) {
+      setUploadError(rejection);
+      return;
+    }
+
+    try {
+      const parsed = parsePersonaMarkdownFile(await file.text());
+      setSectionValues(parsed.sections);
+      setExtraMarkdown(parsed.extraMarkdown);
+      setUploadWarning(
+        [
+          parsed.unknownHeadings.length > 0
+            ? `Không nhận diện được mục: ${parsed.unknownHeadings.join(", ")}.`
+            : null,
+          parsed.emptySections.length > 0
+            ? `Chưa có nội dung cho mục: ${parsed.emptySections.join(", ")}.`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ") || null,
+      );
+    } catch (readError) {
+      setUploadError(
+        (readError as Error).message || "Không đọc được tệp. Vui lòng thử lại.",
+      );
     }
   };
 
@@ -370,6 +418,18 @@ const PersonaForm = ({
               size="md"
               data-slot="button"
               className="tt-btn-touch uu-scope"
+              isDisabled={importing}
+              onClick={() => mdUploadInputRef.current?.click()}
+              iconLeading={<Upload className="size-4" />}
+            >
+              Tải lên tệp .md
+            </Button>
+            <Button
+              type="button"
+              color="secondary"
+              size="md"
+              data-slot="button"
+              className="tt-btn-touch uu-scope"
               isDisabled={importing || !knowledgeBaseId}
               aria-busy={importing}
               onClick={() => fileInputRef.current?.click()}
@@ -390,8 +450,26 @@ const PersonaForm = ({
               className="hidden"
               onChange={onPersonaFileChange}
             />
+            <input
+              ref={mdUploadInputRef}
+              type="file"
+              accept=".md,.txt,.markdown,text/plain,text/markdown"
+              className="hidden"
+              aria-label="Chọn tệp markdown Agent"
+              onChange={onMarkdownFileChange}
+            />
           </div>
         </details>
+        {uploadError ? (
+          <p role="alert" className="text-helper font-medium text-destructive">
+            {uploadError}
+          </p>
+        ) : null}
+        {uploadWarning ? (
+          <p role="status" className="text-helper text-warning">
+            {uploadWarning}
+          </p>
+        ) : null}
 
         <div className="persona-edit-grid">
           <div className="persona-edit-main">
@@ -559,11 +637,7 @@ const PersonaForm = ({
                                 stage.value,
                               )}
                               onChange={(checked) =>
-                                toggleFollowupStage(
-                                  score,
-                                  stage.value,
-                                  checked,
-                                )
+                                toggleFollowupStage(score, stage.value, checked)
                               }
                             />
                           ))}
