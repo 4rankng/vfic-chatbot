@@ -1,3 +1,12 @@
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false, reportTypedDictNotRequiredAccess=false, reportOptionalSubscript=false, reportOptionalMemberAccess=false, reportReturnType=false, reportOptionalOperand=false, reportOptionalCall=false, reportOperatorIssue=false, reportIndexIssue=false
+#
+# Typed-double convention (mirrors test_graph_runner_turn.py and
+# test_integration_settings.py, issue #39 option b): the stubs here
+# (_FakeEmbedder, _Repo, SimpleNamespace rows) deliberately implement only the
+# narrow duck-typed surface each tool exercises, so every retrieval= hand-off
+# trips reportArgumentType/reportAttributeAccessIssue and the outcome
+# assertions index optional TypedDict keys. Casting ~110 sites would add noise,
+# not safety — the real gate is the behavioral suite below.
 """Characterization tests for graph/tools.py — the agent's retrieval tool layer.
 
 These pin two things that every graph-layer refactor must preserve:
@@ -14,6 +23,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -223,13 +233,14 @@ async def test_compare_income_formats_threshold_evidence(no_cache_io):
     assert out.status == "matched"
     assert out.target_monthly_vnd == 20_000_000
     payload = out.projects
-    assert payload[0]["project_slug"] == "rorze"
-    assert "comparison" not in payload[0]
+    first_row = cast(dict[str, Any], payload[0])
+    assert first_row["project_slug"] == "rorze"
+    assert "comparison" not in first_row
     assert "comparison" not in payload[1]
     assert "14-15 triệu/tháng" in out
     assert "20-21 triệu/tháng" in out
     assert "Kỳ lương" in out
-    assert [item["feature_key"] for item in payload[0]["evidence"]] == [
+    assert [item["feature_key"] for item in first_row["evidence"]] == [
         "take_home_income",
         "salary_transparency",
         "overtime_rate",
