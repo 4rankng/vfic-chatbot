@@ -429,7 +429,7 @@
 }
 
 .knowledge-pipeline-toggle {
-  min-height: 48px;
+  min-height: 44px;
   padding: 10px 4px;
   border-block: 1px solid var(--border);
 }
@@ -587,7 +587,7 @@
 
 .settings-side-nav-link {
   position: relative;
-  min-height: 48px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: 10px;

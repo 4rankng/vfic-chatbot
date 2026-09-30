@@ -334,8 +334,8 @@
   --text-meta: var(--text-helper);
   --text-meta--line-height: var(--text-helper--line-height);
 
-  --text-caption: 0.71875rem;
-  --text-caption--line-height: 1.4545; /* 16px */
+  --text-caption: 0.6875rem; /* 11px */
+  --text-caption--line-height: 1rem; /* 16px */
 
   --text-badge: var(--text-caption);
   --text-badge--line-height: var(--text-caption--line-height);
@@ -1205,4 +1205,43 @@ input[type="time"] {
     background-repeat: no-repeat;
     animation: vfic-shimmer 1.4s ease-in-out infinite;
   }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   GLOBAL CONTROL ENVELOPE — one rule set for every screen.
+
+   Owner rule (2026-09-30): the console keeps ONE typographic and control
+   envelope instead of re-deciding it per module. Unlayered and last in the
+   file, so it beats `@layer` utilities and every module rule of equal or lower
+   specificity.
+
+   1. Small text roles are exactly 11px (`--text-caption`, set above) or 12px
+      (`--text-helper` / `--text-meta` / `--text-badge`). No module declares a
+      third small size.
+   2. Control text — textboxes, selects and dropdown options — is 12px.
+   3. Nothing button-like renders taller than 44px (the console's touch
+      target). `data-allow-tall` is the single, explicit opt-out, reserved for
+      surfaces that are a drop target rather than a control.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* 2 — control text. Checkboxes/radios/ranges have no text of their own. */
+:is(input, select, textarea):not(
+  [type="checkbox"],
+  [type="radio"],
+  [type="range"]
+),
+:is([role="option"], [role="menuitem"]) {
+  font-size: var(--text-helper) !important;
+}
+
+/* 3 — control height ceiling. */
+:is(
+  button,
+  input,
+  select,
+  [role="button"],
+  [role="option"],
+  [role="menuitem"]
+):not([data-allow-tall]) {
+  max-height: 44px;
 }

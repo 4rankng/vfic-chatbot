@@ -345,9 +345,6 @@
     gap: 6px;
     justify-content: flex-end;
   }
-  .inbox-bg-container .person-name {
-    font-size: var(--chat-fs-body);
-  }
   .inbox-bg-container .mode-menu-trigger {
     width: 44px;
     height: 44px;
@@ -373,7 +370,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    min-height: 48px;
+    min-height: 44px;
   }
   .conversation-actions-menu .conversation-actions-item svg {
     width: 20px;

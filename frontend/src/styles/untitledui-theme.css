@@ -509,14 +509,17 @@
     var(--card)
   );
   --color-text-tertiary_hover: var(--color-text-secondary);
+  /* 58% → 68%: at 12px the 58% mix rendered rgb(110,116,128) — 4.39:1 on the
+     canvas, under the 4.5:1 small-text floor. The higher foreground share keeps
+     the same visual role and clears the floor on every light surface. */
   --color-text-quaternary: color-mix(
     in oklab,
-    var(--foreground) 58%,
+    var(--foreground) 68%,
     var(--card)
   );
   --color-text-placeholder: color-mix(
     in oklab,
-    var(--foreground) 58%,
+    var(--foreground) 68%,
     var(--card)
   );
 
