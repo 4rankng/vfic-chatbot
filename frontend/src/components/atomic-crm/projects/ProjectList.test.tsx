@@ -1,5 +1,6 @@
 import { render } from "vitest-browser-react";
 import { describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import type { Project } from "../types";
 
 vi.mock("./ProjectKnowledgePanel", () => ({
@@ -7,16 +8,19 @@ vi.mock("./ProjectKnowledgePanel", () => ({
     project,
     editable,
     canManageSources,
+    toolbar,
   }: {
     project: Project;
     editable?: boolean;
     canManageSources?: boolean;
+    toolbar?: ReactNode;
   }) => (
     <div
       data-testid={`knowledge-${project.id}`}
       data-editable={String(Boolean(editable))}
       data-can-manage-sources={String(Boolean(canManageSources))}
     >
+      {toolbar}
       {project.knowledge_mode === "DIRECT_CONTEXT"
         ? "Kiến thức một trang"
         : "Kiến thức theo danh mục"}

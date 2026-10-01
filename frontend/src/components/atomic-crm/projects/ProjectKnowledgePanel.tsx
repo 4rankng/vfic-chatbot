@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   AlertCircle,
   ChevronRight,
@@ -50,6 +50,8 @@ type Props = {
   project: Project;
   editable?: boolean;
   canManageSources?: boolean;
+  /** Row-leading controls (edit/toggle/delete) shown beside the KB export. */
+  toolbar?: ReactNode;
 };
 
 /**
@@ -62,15 +64,21 @@ export const ProjectKnowledgePanel = ({
   project,
   editable = false,
   canManageSources = editable,
+  toolbar,
 }: Props) => {
   return (
     <div className="space-y-3">
-      {canManageSources && (
-        <ProjectKnowledgeExport
-          key={String(project.id)}
-          projectId={String(project.id)}
-        />
-      )}
+      {toolbar || canManageSources ? (
+        <div className="project-knowledge-toolbar">
+          {toolbar}
+          {canManageSources && (
+            <ProjectKnowledgeExport
+              key={String(project.id)}
+              projectId={String(project.id)}
+            />
+          )}
+        </div>
+      ) : null}
       {project.knowledge_mode === "DIRECT_CONTEXT" ? (
         <SinglePagePanel project={project} editable={canManageSources} />
       ) : (
@@ -461,14 +469,9 @@ const RagCategoriesPanel = ({
           <Database className="size-5" aria-hidden="true" />
           Kiến thức theo danh mục
         </h2>
-      </header>
-      <div className="project-knowledge-content">
         <p className="project-knowledge-description">
           Việc làm có trong file = đang tuyển.
         </p>
-        <div className="project-knowledge-full-template">
-          <ProjectKnowledgeTemplate projectId={projectId} />
-        </div>
         {categories && (
           <div className="project-knowledge-progress" aria-live="polite">
             <strong>
@@ -476,6 +479,11 @@ const RagCategoriesPanel = ({
             </strong>
           </div>
         )}
+        <div className="project-knowledge-full-template">
+          <ProjectKnowledgeTemplate projectId={projectId} />
+        </div>
+      </header>
+      <div className="project-knowledge-content">
         {canManageSources &&
           editable &&
           (project.category_authority_started === false ? (

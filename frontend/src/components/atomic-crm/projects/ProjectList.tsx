@@ -431,59 +431,6 @@ export const ProjectAccordionList = ({
               </div>
             </AccordionTrigger>
             <AccordionContent className="project-accordion-content">
-              {(canEdit || isAdmin) && (
-                <div className="project-accordion-actions">
-                  {canEdit && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onEdit(project)}
-                    >
-                      <Pencil className="size-4" aria-hidden="true" />
-                      Sửa dự án
-                    </Button>
-                  )}
-                  {canEdit && onToggleActive && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        isTogglingActive ||
-                        (!project.is_active &&
-                          (project.ingest_state === "ingesting" ||
-                            project.ingest_state === "error"))
-                      }
-                      aria-label={
-                        project.is_active
-                          ? `Tắt dự án ${project.name}`
-                          : `Bật dự án ${project.name}`
-                      }
-                      onClick={() => onToggleActive(project)}
-                    >
-                      {project.is_active ? (
-                        <PowerOff className="size-4" aria-hidden="true" />
-                      ) : (
-                        <Power className="size-4" aria-hidden="true" />
-                      )}
-                      {project.is_active ? "Tắt dự án" : "Bật dự án"}
-                    </Button>
-                  )}
-                  {isAdmin && (
-                    <DeleteButton
-                      record={project}
-                      resource="projects"
-                      label="Xóa dự án"
-                      size="sm"
-                      variant="outline"
-                      redirect={false}
-                      successMessage="Đã xóa dự án."
-                      mutationOptions={{ onSuccess: onDeleted }}
-                    />
-                  )}
-                </div>
-              )}
               {!project.is_active &&
                 (project.ingest_state === "ingesting" ||
                   project.ingest_state === "error") && (
@@ -497,6 +444,61 @@ export const ProjectAccordionList = ({
                 project={project}
                 editable={canEdit}
                 canManageSources={isAdmin}
+                toolbar={
+                  canEdit || isAdmin ? (
+                    <div className="project-accordion-actions">
+                      {canEdit && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onEdit(project)}
+                        >
+                          <Pencil className="size-4" aria-hidden="true" />
+                          Sửa dự án
+                        </Button>
+                      )}
+                      {canEdit && onToggleActive && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            isTogglingActive ||
+                            (!project.is_active &&
+                              (project.ingest_state === "ingesting" ||
+                                project.ingest_state === "error"))
+                          }
+                          aria-label={
+                            project.is_active
+                              ? `Tắt dự án ${project.name}`
+                              : `Bật dự án ${project.name}`
+                          }
+                          onClick={() => onToggleActive(project)}
+                        >
+                          {project.is_active ? (
+                            <PowerOff className="size-4" aria-hidden="true" />
+                          ) : (
+                            <Power className="size-4" aria-hidden="true" />
+                          )}
+                          {project.is_active ? "Tắt dự án" : "Bật dự án"}
+                        </Button>
+                      )}
+                      {isAdmin && (
+                        <DeleteButton
+                          record={project}
+                          resource="projects"
+                          label="Xóa dự án"
+                          size="sm"
+                          variant="outline"
+                          redirect={false}
+                          successMessage="Đã xóa dự án."
+                          mutationOptions={{ onSuccess: onDeleted }}
+                        />
+                      )}
+                    </div>
+                  ) : undefined
+                }
               />
             </AccordionContent>
           </AccordionItem>

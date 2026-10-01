@@ -7,8 +7,29 @@
   gap: 12px;
 }
 
-.project-knowledge-header {
-  padding: 2px 0 0;
+/* Knowledge section band: title + legend left, counter + template right, in
+   one row — the header doubles as the section divider. */
+.inbox-bg-container.project-workspace .project-knowledge-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Row-leading project controls left, KB export right, in one operations
+   row instead of two full-width rows of air. */
+.inbox-bg-container.project-workspace .project-knowledge-toolbar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.inbox-bg-container.project-workspace .project-knowledge-toolbar > :last-child {
+  margin-left: auto;
 }
 
 .project-knowledge-title {
@@ -65,7 +86,7 @@
 .project-knowledge-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 20px;
+  gap: 16px;
   padding: 0;
 }
 
@@ -75,13 +96,12 @@
   text-wrap: pretty;
 }
 
-.project-knowledge-progress {
+/* The counter rides the header band's right edge; the divider it used to
+   carry is the header's own border now. */
+.inbox-bg-container.project-workspace .project-knowledge-progress {
   display: flex;
   align-items: baseline;
-  justify-content: flex-end;
-  gap: 16px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+  margin-left: auto;
 }
 
 .project-edit-meta,
@@ -880,7 +900,6 @@
     width: 100%;
   }
 
-  .project-knowledge-header,
   .project-knowledge-content {
     padding: 16px;
   }
@@ -1215,14 +1234,10 @@
   }
 
   .project-accordion-content {
-    gap: 18px;
-    padding: 20px 4px 28px;
+    gap: 12px;
+    padding: 16px 4px 20px;
     border-top: 1px solid var(--border);
     background: transparent;
-  }
-
-  .project-knowledge-header {
-    padding-top: 0;
   }
 
   .project-category-grid {
@@ -1320,6 +1335,38 @@
 
   .inbox-bg-container.project-workspace .project-brief-import {
     padding: 12px;
+  }
+
+  /* The section band stacks on phones: title row, legend row, then the
+     counter and template download sharing the last row. */
+  .inbox-bg-container.project-workspace .project-knowledge-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title title"
+      "desc desc"
+      "progress template";
+    align-items: center;
+    padding: 4px 0 10px;
+  }
+
+  .inbox-bg-container.project-workspace .project-knowledge-title {
+    grid-area: title;
+  }
+
+  .inbox-bg-container.project-workspace .project-knowledge-description {
+    grid-area: desc;
+  }
+
+  .inbox-bg-container.project-workspace .project-knowledge-progress {
+    grid-area: progress;
+    margin-left: 0;
+    justify-self: start;
+  }
+
+  .inbox-bg-container.project-workspace .project-knowledge-full-template {
+    grid-area: template;
+    justify-self: end;
   }
 }
 
