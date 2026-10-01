@@ -175,3 +175,15 @@ def test_strip_markdown_decorations_drops_replacement_characters():
     assert strip_markdown_decorations(raw) == (
         "gần Thuỷ Nguyên hơn, để n điện thoại nhé ạ"
     )
+
+
+def test_next_sendable_offset_skips_terminators_inside_parentheses():
+    """The observed production cut orphaned the ')' of '(...huyện ngoài ạ?)'."""
+    from app.graph.progressive import _next_sendable_offset
+
+    raw = "Để em hỏi: (nội thành Hải Phòng hay huyện ngoài ạ?)\n\n- Anh/chị muốn làm công việc gì ạ?"
+    offset = _next_sendable_offset(raw, min_offset=10)
+    # The '?' inside the parenthetical is not a boundary; the cut lands right
+    # after the ')' that closes it.
+    assert raw[:offset].endswith("ạ?)\n")
+    assert raw[offset:].startswith("\n- Anh/chị muốn làm công việc gì ạ?")

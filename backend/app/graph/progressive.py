@@ -75,16 +75,30 @@ def _next_sendable_offset(
 
     A dot between two digits is a Vietnamese thousands separator ("30.000 VND"),
     not a sentence end — cutting there splits one amount across two bubbles.
+
+    A terminator inside unclosed parentheses ("...huyện ngoài ạ?)" — the
+    observed production cut orphaned the ")") is not a boundary either: the
+    parenthetical belongs to the sentence it annotates, so the bubble waits
+    until the closing paren rebalances the prefix.
     """
-    for index in range(min_offset - 1, len(raw)):
-        if raw[index] not in _BUBBLE_BOUNDARY_CHARS:
+    depth = 0
+    for index, char in enumerate(raw):
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth > 0:
+            depth -= 1
+        if index < min_offset - 1:
+            continue
+        if char not in _BUBBLE_BOUNDARY_CHARS:
             continue
         if (
-            raw[index] == "."
+            char == "."
             and 0 < index < len(raw) - 1
             and raw[index - 1].isdigit()
             and raw[index + 1].isdigit()
         ):
+            continue
+        if depth > 0:
             continue
         return index + 1
     return None
