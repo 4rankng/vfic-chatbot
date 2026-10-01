@@ -12,6 +12,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin, require_recruiter
@@ -53,6 +54,7 @@ from app.schemas.project_single_page_sync import (
     SinglePageExternalSourceOut,
 )
 from app.services.knowledge.category_contracts import (
+    build_project_knowledge_template,
     get_category_definition,
     load_category_template,
 )
@@ -255,6 +257,27 @@ async def get_project_category_template(
         label_vi=definition.label_vi,
         filename=definition.template_filename,
         content=load_category_template(category_key),
+    )
+
+
+@router.get("/{project_id}/knowledge-template")
+async def get_project_knowledge_template(
+    project_id: uuid.UUID,
+    _user: Any = Depends(require_recruiter),
+    db: AsyncSession = Depends(get_project_knowledge_db),
+) -> PlainTextResponse:
+    """One download containing EVERY category template, in canonical order.
+
+    Each section is preceded by the questions candidates actually ask about
+    that category, so a recruiter filling this single file produces a complete
+    KB instead of discovering twelve separate per-category templates.
+    """
+    await KnowledgeCategoryService(db).list_catalog(project_id)
+    return PlainTextResponse(
+        build_project_knowledge_template(),
+        headers={
+            "Content-Disposition": 'attachment; filename="mau-kb-du-an.md"'
+        },
     )
 
 

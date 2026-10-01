@@ -35,6 +35,9 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       `${projectPath(projectId)}/categories/${encodeURIComponent(key)}/template`,
     ),
 
+  getFullTemplate: (projectId) =>
+    apiJson(`${projectPath(projectId)}/knowledge-template`),
+
   getCategorySource: (projectId, key) =>
     apiJson(`${projectPath(projectId)}/categories/${encodeURIComponent(key)}`),
 

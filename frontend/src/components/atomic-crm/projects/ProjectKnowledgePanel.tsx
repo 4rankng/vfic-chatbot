@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ChevronRight,
   Database,
+  Download,
   Link2,
   Upload,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import { BusTimetableSection } from "./ProjectBusTimetable";
 import {
   clearProjectKnowledgeCategory,
   cutoverProjectKnowledgeCategories,
+  getProjectKnowledgeFullTemplate,
   updateProjectDiscoveryCard,
   type KnowledgeCategoryKey,
 } from "./project-knowledge-service";
@@ -429,6 +431,29 @@ const RagCategoriesPanel = ({
         <p className="project-knowledge-description">
           Việc làm có trong file = đang tuyển.
         </p>
+        <div className="project-knowledge-full-template">
+          <Button
+            type="button"
+            color="secondary"
+            size="sm"
+            className="uu-scope"
+            iconLeading={Download}
+            onClick={async () => {
+              const { filename, content } =
+                await getProjectKnowledgeFullTemplate(projectId);
+              const url = URL.createObjectURL(
+                new Blob([content], { type: "text/markdown;charset=utf-8" }),
+              );
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = filename;
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Tải mẫu KB đầy đủ
+          </Button>
+        </div>
         {categories && (
           <div className="project-knowledge-progress" aria-live="polite">
             <strong>

@@ -61,6 +61,7 @@ export type ProjectKnowledgePort = Readonly<{
     projectId: string,
     key: ProjectKnowledgeCategory,
   ) => Promise<KnowledgeCategoryTemplate>;
+  getFullTemplate: (projectId: string) => Promise<KnowledgeCategoryTemplate>;
   getCategorySource: (
     projectId: string,
     key: ProjectKnowledgeCategory,

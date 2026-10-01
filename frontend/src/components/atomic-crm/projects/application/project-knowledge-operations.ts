@@ -17,6 +17,7 @@ export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
     getCategories: (projectId: string) => port.getCategories(projectId),
     getCategoryTemplate: (projectId: string, key: ProjectKnowledgeCategory) =>
       port.getCategoryTemplate(projectId, key),
+    getFullTemplate: (projectId: string) => port.getFullTemplate(projectId),
     getCategorySource: (projectId: string, key: ProjectKnowledgeCategory) =>
       port.getCategorySource(projectId, key),
     replaceCategory: (
