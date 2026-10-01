@@ -6,6 +6,7 @@ from app.services.knowledge.category_markdown import parse_category_markdown
 from app.services.knowledge.category_projections import render_category_units
 from app.services.knowledge.retrieval_selftest import (
     RETRIEVAL_SELFTEST_FLOOR,
+    RETRIEVAL_SELFTEST_TITLE_FLOOR,
     retrieval_selftest_failures,
 )
 
@@ -188,7 +189,46 @@ async def test_a_long_title_that_cannot_retrieve_its_record_still_fails() -> Non
     assert len(failures) == 1
     assert "Công nhân lắp ráp" in failures[0]
     assert "0.00" in failures[0]
-    assert f"{RETRIEVAL_SELFTEST_FLOOR:.2f}" in failures[0]
+    assert f"{RETRIEVAL_SELFTEST_TITLE_FLOOR:.2f}" in failures[0]
+
+
+async def test_borderline_title_label_passes_while_question_floor_holds() -> None:
+    """Production calibration (AMTRAN): jobs crews share one summary, so a
+    short label like "Xưởng Nhựa" measured 0.47 against its own record —
+    reachable, killed by the question floor. Label fallbacks judge at 0.45;
+    a question at the same similarity still fails at 0.50."""
+    jobs_document = parse_category_markdown("jobs", JOBS_SOURCE)
+    jobs_units = render_category_units(jobs_document)
+    # cos([1, 1.878], [1, 0]) ≈ 0.47 — the measured AMTRAN "Xưởng Nhựa" case.
+    borderline = [1.0, 1.878]
+    embedder = _MappedEmbedder(
+        {
+            "Công nhân lắp ráp": borderline,
+            jobs_units[0]["content"]: [1.0, 0.0],
+        }
+    )
+
+    failures = await retrieval_selftest_failures(
+        jobs_document, jobs_units, [[1.0, 0.0]], embedder
+    )
+
+    assert failures == []
+
+    faq_document = parse_category_markdown("faq", FAQ_SOURCE)
+    faq_units = render_category_units(faq_document)
+    faq_embedder = _MappedEmbedder(
+        {
+            "Ca làm việc mấy giờ?": borderline,
+            faq_units[0]["content"]: [1.0, 0.0],
+        }
+    )
+
+    faq_failures = await retrieval_selftest_failures(
+        faq_document, faq_units, [[1.0, 0.0]], faq_embedder
+    )
+
+    assert len(faq_failures) == 1
+    assert "0.50" in faq_failures[0]
 
 
 async def test_short_queries_are_skipped_while_the_long_one_still_fails() -> None:

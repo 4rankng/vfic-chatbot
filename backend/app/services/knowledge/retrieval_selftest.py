@@ -42,6 +42,15 @@ from app.project_knowledge.domain.category_catalog import get_category_definitio
 # Recalibrate if the embedding model changes.
 RETRIEVAL_SELFTEST_FLOOR = 0.50
 
+# Title/name-fallback queries carry a lower floor. Production jobs briefs list
+# whole role crews over ONE shared summary paragraph, so a short label's
+# embedding against its own shared chunk sits systematically below a real
+# question: AMTRAN's "Xưởng Nhựa" measured 0.47 against its own record —
+# legitimately reachable, killed by the 0.50 question floor. Question-field
+# queries keep the calibrated 0.50; label fallbacks get 0.45, which still
+# rejects genuinely broken records (4P's mangled "KHO [MAT" measured 0.43).
+RETRIEVAL_SELFTEST_TITLE_FLOOR = 0.45
+
 # Bound the extra embedding spend per activation. The first records are the
 # ones recruiters wrote first; a gate over a bounded sample still catches a
 # systematically broken document.
@@ -71,11 +80,17 @@ class RetrievalSelftestError(RuntimeError):
         self.failures = failures
 
 
-def _selftest_query(payload: dict[str, Any]) -> str | None:
+def _selftest_query(payload: dict[str, Any]) -> tuple[str, str] | None:
+    """The record's most query-like field and the field name that supplied it.
+
+    The field name decides the floor: a recruiter-written `question` is a real
+    retrieval query, while a `title`/`name` fallback is a short label whose
+    embedding over a shared summary sits systematically lower.
+    """
     for field in _QUERY_FIELDS:
         value = payload.get(field)
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            return value.strip(), field
     return None
 
 
@@ -129,24 +144,33 @@ async def retrieval_selftest_failures(
         return []
     records = getattr(document, definition_field)[:RETRIEVAL_SELFTEST_MAX_QUERIES]
     queries: list[str] = []
+    query_fields: list[str] = []
     record_vectors: list[list[float]] = []
     for index, record in enumerate(records):
         payload = record.model_dump(mode="json", exclude_none=True)
-        query = _selftest_query(payload)
-        if query is not None and _query_is_testable(query):
+        query_field = _selftest_query(payload)
+        if query_field is not None and _query_is_testable(query_field[0]):
+            query, field = query_field
             queries.append(query)
+            query_fields.append(field)
             record_vectors.append(vectors[index])
     if not queries:
         return []
     query_vectors = await embedder.batch(queries)
     failures: list[str] = []
-    floor_text = f"{RETRIEVAL_SELFTEST_FLOOR:.2f}"
-    for query, query_vector, record_vector in zip(queries, query_vectors, record_vectors, strict=True):
+    for query, field, query_vector, record_vector in zip(
+        queries, query_fields, query_vectors, record_vectors, strict=True
+    ):
+        floor = (
+            RETRIEVAL_SELFTEST_FLOOR
+            if field == "question"
+            else RETRIEVAL_SELFTEST_TITLE_FLOOR
+        )
         similarity = _cosine(query_vector, record_vector)
-        if not math.isfinite(similarity) or similarity < RETRIEVAL_SELFTEST_FLOOR:
+        if not math.isfinite(similarity) or similarity < floor:
             failures.append(
                 f'"{query}" would not retrieve its own record '
-                f"(own-record similarity {similarity:.2f} < {floor_text})"
+                f"(own-record similarity {similarity:.2f} < {floor:.2f})"
             )
     return failures
 
