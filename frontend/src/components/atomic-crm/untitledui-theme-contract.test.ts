@@ -169,4 +169,33 @@ describe("Untitled UI token contract", () => {
         "console; see the header of src/styles/untitledui-theme.css",
     ).toEqual([]);
   });
+
+  it("binds the modal scrim to a fixed dark role, not a surface", () => {
+    // The console alias block is declared last inside `@theme`, so the LAST
+    // declaration is the one that wins; the library default higher up is dark
+    // and the bug was the console alias overriding it with a light surface.
+    const declarations = [
+      ...(
+        /@theme\s*\{([\s\S]*?)\n\}/.exec(
+          withoutComments(untitledTokens),
+        )?.[1] ?? ""
+      ).matchAll(/^\s*--color-bg-overlay\s*:\s*([^;]+);/gm),
+    ];
+    const value = declarations.at(-1)?.[1]?.trim();
+
+    // Every `bg-overlay/70` overlay (phone drawer, command palette, candidate
+    // sheet) reads this. Pointing it at a light surface bleached the page
+    // instead of dimming it, so the panel read as un-elevated.
+    expect(value, "the scrim must darken what it covers").toBe(
+      "var(--workspace-shell)",
+    );
+    // React Aria portals these overlays to document.body, outside both
+    // `.workspace-frame` and the light-only chrome scope, so the value has to
+    // hold on its own. `--foreground` inverts to near-white under `.dark`,
+    // which would bring the light wash back in the dark theme.
+    expect(
+      value,
+      "a theme-inverting token would repaint the scrim in dark mode",
+    ).not.toContain("--foreground");
+  });
 });

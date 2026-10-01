@@ -494,7 +494,19 @@
   --color-bg-tertiary: var(--background);
   --color-bg-quaternary: color-mix(in oklab, var(--muted) 65%, var(--border));
   --color-bg-active: var(--accent);
-  --color-bg-overlay: var(--popover);
+  /* A modal scrim has to DARKEN what it covers. Aliasing this to `--popover`
+     (a near-white surface) made every `bg-overlay/70` overlay — the phone
+     navigation drawer, the command palette, the candidate sheet — paint a
+     translucent cream wash over the page, so opening a drawer bleached the
+     workspace instead of dimming it and the panel read as un-elevated.
+
+     `--workspace-shell`, not `--foreground`: the scrim is a fixed dim, and
+     React Aria portals these overlays to `document.body` — outside both
+     `.workspace-frame` and the light-only chrome scope. `--foreground` inverts
+     to near-white under `.dark`, which would restore the light wash there;
+     the ink role holds `#172033` in both themes. This matches the value the
+     `.workspace-chrome` scope already binds for the same token. */
+  --color-bg-overlay: var(--workspace-shell);
 
   --color-text-primary: var(--foreground);
   --color-text-secondary: color-mix(

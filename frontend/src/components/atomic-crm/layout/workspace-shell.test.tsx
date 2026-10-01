@@ -194,6 +194,28 @@ describe("WorkspaceShell phone drawer", () => {
       )
       .toEqual(["Dự án"]);
   });
+
+  // The drawer used to carry its width on the inner Dialog while the panel
+  // stayed `w-full`, so the panel box was wider than the visible surface: a
+  // strip of scrim showed beside the drawer and the slide-in animation moved
+  // a box wider than anything painted. These are class contracts because this
+  // project generates no Tailwind utilities (see the note above).
+  it("sizes the sliding panel, not the dialog inside it", async () => {
+    await page.viewport(390, 844);
+
+    const screen = await renderWorkspaceShell("/conversations");
+    await screen.getByRole("button", { name: "Mở điều hướng" }).click();
+
+    const drawer = screen.getByRole("dialog");
+    await expect.element(drawer).toBeVisible();
+
+    const panel = drawer.element().parentElement;
+    expect(panel).not.toBeNull();
+    expect(panel!.className).toContain("w-72");
+    expect(panel!.className).toContain("max-w-[85vw]");
+    // The dialog fills the panel instead of re-declaring a narrower width.
+    expect(drawer.element().className).not.toMatch(/(^|\s)w-72(\s|$)/);
+  });
 });
 
 describe("WorkspaceShell topbar", () => {

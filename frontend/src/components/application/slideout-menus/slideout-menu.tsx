@@ -85,21 +85,30 @@ interface SlideoutMenuProps
   children:
     | ReactNode
     | ((children: AriaModalRenderProps & { close: () => void }) => ReactNode);
+  /**
+   * Classes for the sliding panel itself (the `Modal`).
+   *
+   * The panel — not the inner `Dialog` — is what carries the width: it is the
+   * element anchored to the viewport edge and the one the slide-in animation
+   * transforms. Sizing the `Dialog` instead left the panel's box wider than the
+   * visible surface, so the scrim showed through in a strip beside the drawer
+   * and the animation moved a mostly-invisible box. `className` styles the
+   * scrim; this styles the panel. `SettingsChrome.tsx` composes the two
+   * primitives directly to get the same split.
+   */
+  panelClassName?: string;
   dialogClassName?: string;
 }
 
-const Menu = ({ children, dialogClassName, ...props }: SlideoutMenuProps) => {
+const Menu = ({
+  children,
+  dialogClassName,
+  panelClassName,
+  ...props
+}: SlideoutMenuProps) => {
   return (
     <ModalOverlay {...props}>
-      <Modal
-        className={(state) =>
-          cx(
-            typeof props.className === "function"
-              ? props.className(state)
-              : props.className,
-          )
-        }
-      >
+      <Modal className={panelClassName}>
         {(state) => (
           <Dialog className={dialogClassName}>
             {({ close }) => {

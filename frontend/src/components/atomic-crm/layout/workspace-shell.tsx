@@ -206,7 +206,13 @@ export const WorkspaceShell = ({
             aria-label="Mở điều hướng"
             className="rounded-lg lg:hidden"
           />
-          <SlideoutMenu dialogClassName="uu-scope w-72 max-w-[85vw]">
+          <SlideoutMenu
+            dialogClassName="uu-scope"
+            // The width belongs on the panel: it is the box anchored to the
+            // viewport edge, so the drawer sits flush right with no strip of
+            // scrim showing beside it.
+            panelClassName="uu-scope w-72 max-w-[85vw]"
+          >
             {({ close }) => (
               <>
                 <SlideoutMenu.Header
