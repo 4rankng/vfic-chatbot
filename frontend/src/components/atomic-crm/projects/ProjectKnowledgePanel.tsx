@@ -216,6 +216,7 @@ const BriefIngestSection = ({
           type="button"
           color="secondary"
           size="sm"
+          className="uu-scope"
           iconLeading={Upload}
           isLoading={ingesting}
           showTextWhileLoading

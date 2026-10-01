@@ -370,3 +370,73 @@ final result: passed for the surfaces above
   file changed in this pass is implicated; re-run both once that refactor lands.
 - The `e2e/**/__screenshots__` visual baselines remain stale from earlier
   commits (`-linux` especially) and were deliberately not regenerated here.
+
+## Second all-screens pass (2026-10-01)
+
+Owner asked again for every page, subpage and component to be checked for visual
+defects and for all of them to be fixed. Method: a real-browser sweep of the
+eleven authenticated routes plus `/forgot-password` and the login page, at
+1440×900 and 390×844, measuring per route — document and per-element horizontal
+overflow, elements clipped by `overflow: hidden` (excluding `text-overflow:
+ellipsis` and scroll owners), controls under 24px or over 56px, text below 11px,
+WCAG contrast for every leaf text node against its first opaque background, and
+every `h1`'s colour/size/weight/family. Popovers and dialogs were opened and
+measured as well, since they mount in portals outside the surface they belong
+to.
+
+### Root causes found and fixed
+
+All four are the same class of defect: a rule the console owns outranking the
+system it is layered against.
+
+- **`conversations/inbox/base.css` — the workspace button reset was unlayered.**
+  `.inbox-bg-container button { color: inherit }` beat every Tailwind `text-*`
+  utility (they live in `@layer utilities`), so inside a workspace root a button
+  could not paint its own label ink. Cost: the project list, project detail and
+  project create buttons rendered `--primary` (slate) ink on the `--primary`
+  action fill — **3.37:1** — and the create-page submit lost its `text-white`
+  the same way. Moved into `@layer base`.
+- **Untitled UI controls rendered without `.uu-scope`.** Outside the scope the
+  library's `bg-primary` resolves to the console's action fill, so a
+  `color="secondary"` button paints the library's dark secondary ink on slate.
+  Fixed on the project create page (close, import, submit), the project
+  knowledge panel's import button, and the users create page's footer
+  (**1.96:1** on "Hủy"). The topbar account menu, the notifications panel and
+  the users row-actions menu are portals, so they sat outside the chrome's
+  scope too and painted **slate-on-slate (1.0–1.33:1)**; each popover root now
+  carries the scope.
+- **`index.html` — the unlayered shell style owned the body font.** The
+  template-leftover `body { font-family: sans-serif }` outranked the app's
+  `@layer base` font rule, so every screen that does not set its own family
+  (users, bot runs, performance, the bot-run detail) rendered in the system sans
+  while the workspaces rendered Be Vietnam Pro. Removed; all eleven routes now
+  measure Be Vietnam Pro on `body` and on `h1`.
+- **`-foreground` ink used as bare text.** `text-warning-foreground` is white —
+  the ink for text on a filled warning surface — but `botRunMeta`'s suppressed
+  outcome, the decision-trace warning icon and the `tag-stack` warning tone
+  painted it straight onto cream. The "Đã chặn" run label was **1.02:1**
+  (invisible). All three use `text-warning` now.
+
+### Browser evidence after the fixes
+
+Eleven routes × two widths, authenticated, seeded backend:
+
+- 0 horizontal overflow, 0 clipped elements, 0 text below 11px, no console or
+  page errors on any route at either width.
+- Contrast: clean except the soft-tint pairs listed below.
+- Menus, dialogs, the command palette, the category editor and the delete
+  confirmations re-measured after the scope fix: all ≥ 5.8:1.
+
+### Accepted deviations (not fixed, deliberately)
+
+`--success` / `--destructive` on a tinted surface land just under AA and the ink
+is already the darkest step the palette defines:
+
+| Element | Ratio | Why it is left alone |
+|---|---|---|
+| `Sẵn sàng` badge (`text-success` on `tt-badge-soft`) | 4.41:1 | daisyUI's soft variant tints from `currentColor`, so darkening the ink darkens the fill with it — a real fix is dropping the tint from the whole state-pill family, a design change, not a defect repair |
+| `Xóa dự án` (outline button, `text-destructive` on cream) | 4.33:1 | passes at 4.56:1 on white; the miss is the cream surface, and the token is shared by every error affordance in the console |
+| `Cập nhật <date>` metadata on the cream card | 4.49:1 | at the threshold within measurement rounding |
+
+Both are legible, and changing either token restyles every error/success surface
+in the console — a design-system decision, not a visual-defect fix.

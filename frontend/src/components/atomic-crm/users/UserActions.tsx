@@ -134,7 +134,7 @@ export const UserActions = () => {
             aria-label={actionLabel}
           />
         </span>
-        <Dropdown.Popover className="w-64">
+        <Dropdown.Popover className="uu-scope w-64">
           <Dropdown.Menu onAction={handleAction}>
             <Dropdown.Item
               id="edit"

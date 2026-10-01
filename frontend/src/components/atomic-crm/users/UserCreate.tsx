@@ -125,14 +125,14 @@ export const UserCreate = () => {
                   href={listHref}
                   color="secondary"
                   size="md"
-                  className="user-account-secondary-action min-h-11 max-[760px]:w-full"
+                  className="uu-scope user-account-secondary-action min-h-11 max-[760px]:w-full"
                 >
                   Hủy
                 </Button>
                 <Button
                   type="submit"
                   size="md"
-                  className="user-account-submit min-h-11 max-[760px]:w-full"
+                  className="uu-scope user-account-submit min-h-11 max-[760px]:w-full"
                   isDisabled={isSubmitting}
                   isLoading={isSubmitting}
                   showTextWhileLoading

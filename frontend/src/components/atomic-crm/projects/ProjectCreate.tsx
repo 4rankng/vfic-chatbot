@@ -304,7 +304,7 @@ const ProjectCreateForm = () => {
         <p className="text-helper text-muted-foreground">
           Dự án chỉ hiển thị với ứng viên sau khi bạn bấm «Tạo dự án».
         </p>
-        <Button type="submit" isDisabled={!canSave}>
+        <Button type="submit" className="uu-scope" isDisabled={!canSave}>
           {submitting ? "Đang tạo…" : "Tạo dự án"}
         </Button>
       </div>
@@ -332,6 +332,7 @@ export const ProjectCreate = () => {
                 type="button"
                 color="secondary"
                 size="sm"
+                className="uu-scope"
                 iconLeading={X}
                 onClick={() => redirect("/projects")}
                 aria-label="Đóng và quay lại danh sách dự án"

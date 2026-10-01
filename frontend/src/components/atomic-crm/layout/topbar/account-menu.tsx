@@ -98,7 +98,7 @@ export const AccountMenu = ({ variant = "topbar" }: AccountMenuProps) => {
   return (
     <Dropdown.Root>
       {trigger}
-      <Dropdown.Popover placement="bottom end" className="w-60">
+      <Dropdown.Popover placement="bottom end" className="uu-scope w-60">
         <Dropdown.Menu onAction={handleAction}>
           <Dropdown.Item
             id="profile"

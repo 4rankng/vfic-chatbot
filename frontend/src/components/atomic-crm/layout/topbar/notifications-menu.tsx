@@ -52,7 +52,10 @@ export const NotificationsMenu = ({ count }: NotificationsMenuProps) => {
           </Badge>
         ) : null}
       </Button>
-      <Dropdown.Popover placement="bottom end" className="w-90 max-w-[90vw]">
+      <Dropdown.Popover
+        placement="bottom end"
+        className="uu-scope w-90 max-w-[90vw]"
+      >
         <Dialog aria-label="Thông báo" className="outline-hidden">
           <div className="flex items-center gap-3 border-b border-secondary px-4 py-3">
             <div className="flex min-w-0 flex-col">

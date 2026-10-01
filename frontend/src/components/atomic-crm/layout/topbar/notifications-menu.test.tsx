@@ -153,4 +153,16 @@ describe("NotificationsMenu", () => {
 
     await expect.poll(() => refetch.mock.calls.length).toBe(1);
   });
+
+  // The panel is a React Aria popover, so it mounts in a portal at the end of
+  // the document — outside the topbar's `.uu-scope`. Unscoped, the library's
+  // `bg-primary` resolves to the console's slate action fill and the whole
+  // panel painted slate-on-slate (1.17:1).
+  it("scopes the portal panel two trees away from the chrome", async () => {
+    needsAttention(sampleRows);
+    await openMenu(sampleRows.length);
+
+    const panel = page.getByRole("dialog", { name: "Thông báo", exact: true });
+    expect(panel.element().closest(".uu-scope")).not.toBeNull();
+  });
 });

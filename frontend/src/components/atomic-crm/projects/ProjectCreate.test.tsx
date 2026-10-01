@@ -206,6 +206,26 @@ describe("ProjectCreate", () => {
       .element(screen.getByLabelText(/^Mã dự án/))
       .toHaveValue("lg-display-hai-phong");
   });
+
+  // Every Untitled UI control on this page must sit in a `.uu-scope` subtree.
+  // Without it the library's `bg-primary` resolves to the console's slate
+  // action fill, so the secondary buttons painted dark secondary ink on slate
+  // (3.4:1) and the primary submit lost its `text-white` to the workspace's
+  // `color: inherit` reset (also 3.4:1).
+  it("scopes every Untitled UI control on the page", async () => {
+    const screen = await render(<ProjectCreate />);
+
+    const controls = [
+      screen.getByRole("button", { name: "Đóng và quay lại danh sách dự án" }),
+      screen.getByRole("button", { name: "Nhập từ file" }),
+      screen.getByRole("button", { name: "Tạo dự án" }),
+    ];
+
+    for (const control of controls) {
+      await expect.element(control).toBeVisible();
+      expect(control.element().closest(".uu-scope")).not.toBeNull();
+    }
+  });
 });
 
 describe("ProjectCreate — nạp ngay khi chọn tệp", () => {

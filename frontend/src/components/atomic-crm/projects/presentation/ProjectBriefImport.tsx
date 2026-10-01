@@ -115,6 +115,7 @@ export const ProjectBriefImport = ({
           type="button"
           color="secondary"
           size="sm"
+          className="uu-scope"
           iconLeading={Upload}
           isLoading={reading && busy}
           showTextWhileLoading

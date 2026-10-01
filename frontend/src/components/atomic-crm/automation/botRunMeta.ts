@@ -23,7 +23,11 @@ export const OUTCOME_META: Record<
   suppressed: {
     label: "Đã chặn",
     badgeColor: "warning",
-    indicatorClasses: "text-warning-foreground",
+    // `text-warning-foreground` is white — it is the ink for a filled warning
+    // surface, not for a bare label on the cream card. The row paints the
+    // marker and the label with `currentColor` on paper, so it has to be the
+    // amber ink, like its `sent`/`error` siblings.
+    indicatorClasses: "text-warning",
   },
   error: {
     label: "Lỗi",

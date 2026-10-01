@@ -62,10 +62,15 @@
     />
     <title>TingHire</title>
     <style>
+      /* The splash loader's own box; the app owns `font-family` (the inline
+         `sans-serif` this template shipped with is unlayered and therefore
+         outranked every `@layer base` body rule, painting the whole console —
+         users, bot runs, performance — in the system sans instead of Be
+         Vietnam Pro). The loader text is `text-indent`-hidden, so the family
+         was never doing anything here. */
       body {
         margin: 0;
         padding: 0;
-        font-family: sans-serif;
       }
 
       /* Prevent accidental double-tap zoom on interactive elements */

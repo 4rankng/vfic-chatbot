@@ -53,9 +53,18 @@
 .inbox-bg-container textarea {
   font: inherit;
 }
-.inbox-bg-container button {
-  color: inherit;
-  cursor: pointer;
+/* Layered on purpose. Unlayered, this rule beat EVERY Tailwind utility (all of
+   which live in `@layer utilities`), so a button's own `text-*` ink never
+   applied inside a workspace root: the projects workspace painted `--primary`
+   ink on a `--primary` action fill (3.4:1, screenshots read as washed-out
+   labels). `@layer base` keeps the inherit default for plain buttons — it
+   still outranks the preflight's bare `button` selector — while letting a
+   declared utility win. */
+@layer base {
+  .inbox-bg-container button {
+    color: inherit;
+    cursor: pointer;
+  }
 }
 .inbox-bg-container button:focus-visible,
 .inbox-bg-container input:focus-visible,

@@ -114,7 +114,13 @@ describe("account form controls", () => {
     // 44px is the console's touch target; the kit buttons carry `min-h-11`
     // themselves now that the sheet no longer sizes them.
     expect(submit.element().className).toContain("min-h-11");
-    expect(screen.getByRole("link", { name: "Hủy" })).toBeDefined();
+    // Both footer controls are Untitled UI `Button`s: without `.uu-scope` the
+    // secondary one resolves `bg-primary` to the console's slate action fill
+    // and paints the library's dark secondary ink on it (1.96:1).
+    expect(submit.element().closest(".uu-scope")).not.toBeNull();
+    const cancel = screen.getByRole("link", { name: "Hủy" });
+    expect(cancel).toBeDefined();
+    expect(cancel.element().closest(".uu-scope")).not.toBeNull();
 
     await page.viewport(phone, 844);
     await expect.element(submit).toBeVisible();

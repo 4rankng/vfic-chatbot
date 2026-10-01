@@ -39,7 +39,7 @@ export const BotRunRow = ({ run }: { run: BotRun }) => {
             {meta.label}
           </span>
           <span aria-hidden="true">·</span>
-          <span className="font-mono text-[0.7rem] text-foreground/60">
+          <span className="font-mono text-[0.7rem] text-foreground/70">
             #{run.id}
           </span>
           <span aria-hidden="true">·</span>

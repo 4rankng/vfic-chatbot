@@ -39,6 +39,7 @@ vi.mock("ra-core", () => ({
 }));
 
 import { BotRunListContent } from "./BotRunList";
+import { outcomeMeta } from "./botRunMeta";
 import { BotRunShowContent } from "./BotRunShow";
 import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
@@ -156,5 +157,27 @@ describe("Bot run pages", () => {
       .element(screen.getByText("Đã kiểm tra dữ liệu trước khi trả lời."))
       .toBeVisible();
     expect(screen.container.querySelector("[data-slot='card']")).toBeNull();
+  });
+
+  // A `-foreground` token is the ink for text sitting ON a filled warning
+  // surface. The outcome marker paints itself and its label with `currentColor`
+  // straight onto the cream card, so a `-foreground` token there is white on
+  // cream and the "Đã chặn" run simply vanished. Every outcome owes a plain ink.
+  it("gives every outcome an ink, never a filled-surface foreground", async () => {
+    for (const outcome of ["sent", "suppressed", "error"] as const) {
+      const indicator = outcomeMeta(outcome).indicatorClasses;
+      expect(indicator, outcome).toMatch(/^text-/);
+      expect(indicator, outcome).not.toMatch(/-foreground$/);
+    }
+
+    mocks.list.data = [{ ...run, outcome: "suppressed" }];
+    const screen = await render(<BotRunListContent />);
+    const marker = screen.container.querySelector<HTMLElement>(
+      "[data-slot='bot-run-outcome']",
+    );
+
+    expect(marker).not.toBeNull();
+    expect(marker!.textContent).toBe("Đã chặn");
+    expect(getComputedStyle(marker!).color).not.toBe("rgb(255, 255, 255)");
   });
 });
