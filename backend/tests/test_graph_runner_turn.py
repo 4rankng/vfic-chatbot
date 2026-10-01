@@ -1463,8 +1463,11 @@ async def test_overlong_clean_reply_ships_as_generated(monkeypatch):
         _deps(zalo, conversation=svc))
 
     assert res["outcome"] == "sent"
-    # The reply is the generated answer, not truncated and not the fallback.
-    assert res["reply"] == long_reply
+    # The reply is compacted into Zalo's no-"See more" window: a prefix of the
+    # generated answer, cut at a sentence boundary — never the fallback.
+    assert len(res["reply"]) <= 450
+    assert long_reply.startswith(res["reply"].rstrip())
+    assert res["reply"].rstrip().endswith((".", "!", "?"))
     assert "Mình không trả lời được" not in res["reply"]
 
 
@@ -3859,7 +3862,12 @@ async def test_progressive_short_greeting_answer_never_sends_early(monkeypatch):
 
     assert res["outcome"] == "sent"
     assert len(svc.dispatched) == 1
-    assert svc.dispatched[0]["text"] == raw
+    # Past the wait cap the whole answer ships as one message — compacted into
+    # the no-"See more" window: a boundary-cut prefix of the generated text.
+    shipped = svc.dispatched[0]["text"]
+    assert len(shipped) <= 450
+    assert raw.startswith(shipped.rstrip())
+    assert shipped.rstrip().endswith((".", "!", "?"))
     stage = recorded[0]["stage_timings"]
     assert "progressive_send" not in stage
     assert "progressive_first_bubble_skipped" not in stage
@@ -3881,7 +3889,11 @@ async def test_progressive_pleasantry_only_answer_never_sends_early(monkeypatch)
 
     assert res["outcome"] == "sent"
     assert len(svc.dispatched) == 1
-    assert svc.dispatched[0]["text"] == raw
+    # No early bubble, and the shipped single message is compacted into the
+    # no-"See more" window: a prefix of the generated filler, boundary-cut.
+    shipped = svc.dispatched[0]["text"]
+    assert len(shipped) <= 450
+    assert raw.startswith(shipped.rstrip())
     stage = recorded[0]["stage_timings"]
     assert stage["progressive_first_bubble_skipped"] == "no_substance"
     assert "progressive_send" not in stage
@@ -3902,7 +3914,12 @@ async def test_progressive_wait_cap_falls_back_to_the_whole_reply(monkeypatch):
 
     assert res["outcome"] == "sent"
     assert len(svc.dispatched) == 1
-    assert svc.dispatched[0]["text"] == raw
+    # Past the wait cap the whole answer ships as one message — compacted into
+    # the no-"See more" window: a boundary-cut prefix of the generated text.
+    shipped = svc.dispatched[0]["text"]
+    assert len(shipped) <= 450
+    assert raw.startswith(shipped.rstrip())
+    assert shipped.rstrip().endswith((".", "!", "?"))
     stage = recorded[0]["stage_timings"]
     assert "progressive_send" not in stage
     assert "progressive_first_bubble_skipped" not in stage
