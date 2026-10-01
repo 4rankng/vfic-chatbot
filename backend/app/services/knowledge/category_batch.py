@@ -356,7 +356,15 @@ class TrainingCategoryBatch:
                     if isinstance(exc, RetrievalSelftestError)
                     else "category_activation_failed"
                 )
-                failed.error_message = "Category preparation failed"
+                # The selftest's str() carries the offending queries and their
+                # own-record similarities — the detail this gate exists to
+                # surface (mirrors KnowledgeCategoryService.activate_revision).
+                # Other causes keep the generic operator message.
+                failed.error_message = (
+                    str(exc)
+                    if isinstance(exc, RetrievalSelftestError)
+                    else "Category preparation failed"
+                )
                 failed.processing_token = failed.lease_expires_at = failed.processing_started_at = (
                     None
                 )

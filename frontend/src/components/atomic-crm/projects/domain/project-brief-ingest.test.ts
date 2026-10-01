@@ -103,6 +103,33 @@ describe("parseProjectBrief — discovery fields", () => {
     expect(roles).toContain("KHO (MAT, PPS)");
   });
 
+  it("keeps a square-bracket group whole inside the role cell", () => {
+    // Production incident: "KHO [MAT, PPS]" was torn into the junk records
+    // "KHO [MAT" and "PPS]" by a comma split that only guarded parentheses;
+    // the retrieval selftest then refused the mangled "KHO [MAT" record.
+    const brief = parseProjectBrief(
+      [
+        "## PHẦN I: THÔNG TIN TỔNG QUAN VỀ DỰ ÁN",
+        "",
+        "| Hạng mục thông tin | Mô tả nội dung |",
+        "| :--- | :--- |",
+        "| **Tên dự án tuyển dụng** | 4P ELECTRONIC |",
+        "| **Địa chỉ nơi làm việc** | Hải Phòng |",
+        "| **Vị trí tuyển dụng chính** | Công nhân sản xuất điện tử (SMT, PCBA, KHO [MAT, PPS], QA) |",
+      ].join("\n"),
+    );
+    expect(brief.roles).toContain("KHO [MAT, PPS]");
+    expect(brief.roles).not.toContain("KHO [MAT");
+    expect(brief.roles).not.toContain("PPS]");
+  });
+
+  it("breaks a standalone square-bracket role into its own skills", () => {
+    const brief = parseProjectBrief(
+      "Tên dự án: 4P ELECTRONIC\nĐịa điểm: Hải Phòng\nVị trí tuyển dụng: KHO [MAT, PPS]",
+    );
+    expect(brief.roles).toEqual(["KHO", "MAT", "PPS"]);
+  });
+
   it("reads the summary and splits the <br>-joined highlight cell", () => {
     const brief = parsed();
     expect(brief.summary).toBe(

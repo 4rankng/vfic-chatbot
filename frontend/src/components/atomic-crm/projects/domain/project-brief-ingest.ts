@@ -127,16 +127,18 @@ const toShortLocation = (value: string): string => {
   return last.replace(/^(TP|Thành phố|Tỉnh)\.?\s+/i, "").trim() || value.trim();
 };
 
-/** Split on commas that are NOT inside parentheses. The real brief writes
+/** Split on commas that are NOT inside a bracket group. The real brief writes
  *  "Công nhân sản xuất điện tử (SMT, PCBA, KHO (MAT, PPS), …)" — a plain
- *  comma split tears "KHO (MAT" and "PPS)" apart. */
+ *  comma split tears "KHO (MAT" and "PPS)" apart. Square-bracket groups tear
+ *  the same way: "KHO [MAT, PPS]" split on its comma produced the production
+ *  junk records "KHO [MAT" and "PPS]". Both pair shapes guard their commas. */
 const splitTopLevel = (value: string): string[] => {
   const parts: string[] = [];
   let depth = 0;
   let buffer = "";
   for (const char of value) {
-    if (char === "(") depth += 1;
-    else if (char === ")") depth = Math.max(0, depth - 1);
+    if (char === "(" || char === "[") depth += 1;
+    else if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
     if (char === "," && depth === 0) {
       parts.push(buffer);
       buffer = "";
@@ -148,13 +150,14 @@ const splitTopLevel = (value: string): string[] => {
   return parts.map((part) => part.trim()).filter(Boolean);
 };
 
-/** The recruiter's own comma list, with a parenthetical tail broken out so
+/** The recruiter's own comma list, with a bracketed tail broken out so
  *  each skill stands on its own while its inner commas stay inside it. */
 const toRoleList = (value: string): string[] =>
   toList(value)
     .flatMap((item) => {
-      const open = item.indexOf("(");
-      const close = item.lastIndexOf(")");
+      const openMatch = /[([]/.exec(item);
+      const open = openMatch ? openMatch.index : -1;
+      const close = Math.max(item.lastIndexOf(")"), item.lastIndexOf("]"));
       if (open === -1 || close <= open) return splitTopLevel(item);
       const head = item.slice(0, open).trim();
       const tail = splitTopLevel(item.slice(open + 1, close));

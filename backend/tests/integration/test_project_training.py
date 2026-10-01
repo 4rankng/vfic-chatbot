@@ -677,6 +677,42 @@ async def test_failed_category_preparation_preserves_published_features_card_and
     )
 
 
+async def test_failed_selftest_preparation_persists_the_offending_query(
+    integration_session, monkeypatch
+):
+    """The batch failure path must keep the gate's detail, not a generic string.
+
+    Production incident: the training batch overwrote the retrieval selftest's
+    per-record diagnostics with "Category preparation failed", leaving only a
+    bare "Cập nhật lỗi" card. The service path (activate_revision) already
+    stores str(exc); the batch path must match.
+    """
+
+    async def failing_selftest(document, units, vectors, embedder):
+        return [
+            '"Có cần kinh nghiệm không?" would not retrieve its own record '
+            "(own-record similarity 0.00 < 0.50)"
+        ]
+
+    monkeypatch.setattr(
+        "app.services.knowledge.category_batch.retrieval_selftest_failures",
+        failing_selftest,
+    )
+    db = integration_session
+    actor, project, doc = await _upload(db, monkeypatch)
+    with pytest.raises(CategoryActivationError):
+        await _train(db, doc)
+    revision = await db.scalar(
+        select(KnowledgeCategoryRevision).where(
+            KnowledgeCategoryRevision.status == KnowledgeCategoryRevisionStatus.FAILED
+        )
+    )
+    assert revision is not None
+    assert revision.failure_code == "category_retrieval_selftest_failed"
+    assert "Có cần kinh nghiệm không?" in (revision.error_message or "")
+    assert revision.error_message != "Category preparation failed"
+
+
 async def test_cutover_sql_failure_rolls_back_features_pointers_and_projections(
     atomic_session, monkeypatch
 ):
