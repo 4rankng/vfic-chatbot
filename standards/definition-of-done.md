@@ -97,8 +97,9 @@ DONE
 ### 10. Agent routing still resolves
 - If you added, moved, renamed, or deleted anything this repository's agents are
   routed to, run `node scripts/check-doc-links.mjs` from the repo root. It fails
-  when a routed path or `make` target named in `.claude/CLAUDE.md`, `AGENTS.md`,
-  or this directory no longer exists. The root `Makefile` `release-check` gate
+  when a routed path or `make` target named in `AGENTS.md` or this directory
+  no longer exists. Machine-local .claude files are not instruction sources.
+  The root `Makefile` `release-check` gate
   runs it.
 
 ## What "Done" is NOT

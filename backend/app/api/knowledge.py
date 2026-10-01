@@ -35,6 +35,7 @@ from app.schemas.knowledge import (
     KnowledgeDocumentUpdate,
     KnowledgeDocumentListResponse,
     KnowledgeDocumentOut,
+    ProjectTrainingPlan,
     KnowledgeStatus,
     SearchTestRequest,
     SearchTestResult,
@@ -369,25 +370,40 @@ async def upload(
 async def upload_file(
     file: UploadFile = File(...),
     project_id: uuid.UUID | None = Form(None),
+    category_plan: str | None = Form(None, max_length=2_000_000),
     _admin: Any = Depends(require_admin),
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     """Multipart upload: extract text, store original, enqueue the training pipeline."""
     data = await read_upload_within_limit(file)
+    plan = None
+    if category_plan is not None:
+        try:
+            plan = ProjectTrainingPlan.model_validate_json(category_plan)
+        except ValueError as exc:
+            raise ValidationError("Kế hoạch nạp danh mục chưa hợp lệ. Vui lòng kiểm tra tệp rồi thử lại.") from exc
     try:
         doc = await KnowledgeService(db).upload_bytes(
             file.filename or "upload",
             file.content_type or "",
             data,
             project_id=project_id,
+            training_plan=plan,
+            actor=_admin,
         )
     except CanonicalValidationError as exc:
         raise ValidationError({"errors": exc.errors}) from exc
     except KnowledgeFileExtractionError as exc:
         raise ValidationError({"errors": [str(exc)]}) from exc
     await record_audit_safe(db, "upload_knowledge", _admin.id, str(doc.id))
-    _project_knowledge_jobs.ingest_document(doc.id)
+    await _queue_document(doc, db, reuse_completed=True)
     return KnowledgeDocumentOut.model_validate(doc)
+
+
+async def _queue_document(doc, db, *, reuse_completed=False) -> None:
+    await KnowledgeService(db).queue_document(
+        doc, jobs=_project_knowledge_jobs, reuse_completed=reuse_completed,
+    )
 
 
 @router.post("/documents/{doc_id}/process", response_model=KnowledgeDocumentOut)
@@ -398,8 +414,8 @@ async def process(
 ) -> KnowledgeDocumentOut:
     """(Re)run the async LLM training pipeline for a document."""
     doc = await _load(doc_id, db)
-    await KnowledgeService(db).assert_mutable(doc.project_id, allow_authoritative=True)
-    _project_knowledge_jobs.ingest_document(doc.id)
+    await KnowledgeService(db).assert_source_reprocessable(doc)
+    await _queue_document(doc, db)
     return KnowledgeDocumentOut.model_validate(doc)
 
 
@@ -421,8 +437,8 @@ async def reindex(
     db: AsyncSession = Depends(get_project_knowledge_db),
 ) -> KnowledgeDocumentOut:
     doc = await _load(doc_id, db)
-    await KnowledgeService(db).assert_mutable(doc.project_id, allow_authoritative=True)
-    _project_knowledge_jobs.ingest_document(doc.id)
+    await KnowledgeService(db).assert_source_reprocessable(doc)
+    await _queue_document(doc, db)
     return KnowledgeDocumentOut.model_validate(doc)
 
 

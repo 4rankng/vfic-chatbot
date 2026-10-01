@@ -67,7 +67,9 @@ export const test = base.extend<{
       }
       await provide();
     },
-    { auto: true },
+    // Database reset runs Alembic and password hashing before the UI test.
+    // Match its subprocess budget without changing the browser test timeout.
+    { auto: true, timeout: 120_000 },
   ],
   networkGuard: [
     async ({ page }, provide) => {

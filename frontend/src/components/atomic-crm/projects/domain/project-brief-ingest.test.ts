@@ -1,6 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { parseProjectBrief, type ProjectBrief } from "./project-brief-ingest";
 
+it("extracts named categories from one plain-text file without Markdown headings", () => {
+  const brief = parseProjectBrief(`Tên dự án: Xưởng Hải Phòng
+Địa chỉ: KCN VSIP, Hải Phòng
+Vị trí tuyển dụng: Công nhân
+Lương: Lương cơ bản 6.000.000 đồng/tháng
+Yêu cầu: Từ 18 tuổi, không cần kinh nghiệm
+Lịch làm việc: Giờ hành chính
+Chỗ ở: Không có ký túc xá
+Bữa ăn: Có bữa trưa miễn phí
+Liên hệ: Bộ phận tuyển dụng, 0901234567`);
+  expect(brief.name).toBe("Xưởng Hải Phòng");
+  expect(brief.location).toBe("Hải Phòng");
+  expect(brief.roles).toEqual(["Công nhân"]);
+  expect(brief.categories.compensation).toContain("6.000.000");
+  expect(brief.categories.requirements).toContain("Từ 18 tuổi");
+  expect(brief.categories.work_schedules).toContain("Giờ hành chính");
+  expect(brief.categories.accommodation).toContain("Không có ký túc xá");
+  expect(brief.categories.meals).toContain("Có bữa trưa miễn phí");
+  expect(brief.missingCategories).toContain("insurance");
+});
+
 /** A trimmed but structurally faithful slice of the real brief: the overview
  *  table, the Q&A markers, the `<br>`-joined highlight cell, the LaTeX process
  *  arrow, and the numbered section headings. */

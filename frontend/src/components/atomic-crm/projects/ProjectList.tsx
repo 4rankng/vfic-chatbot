@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ListBase,
   useListContext,
@@ -28,6 +28,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "../kit";
+import { Input } from "@/components/base/input/input";
+import { Select } from "@/components/base/select/select";
+import { Button as FilterButton } from "@/components/base/buttons/button";
 import type { Project } from "../types";
 import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
@@ -39,7 +42,35 @@ import {
 } from "./domain/project-knowledge-policy";
 
 const ProjectListContent = () => {
-  const { data, isPending, total } = useListContext<Project>();
+  const {
+    data,
+    isPending,
+    error,
+    total,
+    page,
+    perPage,
+    filterValues,
+    displayedFilters,
+    setFilters,
+  } = useListContext<Project>();
+  const [query, setQuery] = useState(String(filterValues.q ?? ""));
+  const [status, setStatus] = useState(
+    typeof filterValues.is_active === "boolean"
+      ? String(filterValues.is_active)
+      : "all",
+  );
+  useEffect(() => setQuery(String(filterValues.q ?? "")), [filterValues.q]);
+  useEffect(
+    () =>
+      setStatus(
+        typeof filterValues.is_active === "boolean"
+          ? String(filterValues.is_active)
+          : "all",
+      ),
+    [filterValues.is_active],
+  );
+  const hasFilters =
+    Boolean(filterValues.q) || typeof filterValues.is_active === "boolean";
   const { isAdmin, canEdit } = useRoleActions();
   const refresh = useRefresh();
   const redirect = useRedirect();
@@ -113,31 +144,77 @@ const ProjectListContent = () => {
                   size="sm"
                   onClick={() => redirect("create", "projects")}
                   className="project-create-button"
+                  aria-label="Tạo dự án"
                 >
-                  <Plus className="size-4" />
+                  <Plus className="size-4" aria-hidden="true" />
                   Tạo dự án
                 </Button>
               )}
             </div>
           </header>
 
+          <ProjectDirectoryFilters
+            query={query}
+            status={status}
+            onQueryChange={(next) => {
+              setQuery(next);
+              setFilters(
+                {
+                  ...filterValues,
+                  q: next,
+                  is_active: status === "all" ? undefined : status === "true",
+                },
+                displayedFilters,
+                true,
+              );
+            }}
+            onStatusChange={(next) => {
+              setStatus(next);
+              setFilters(
+                {
+                  ...filterValues,
+                  q: query,
+                  is_active: next === "all" ? undefined : next === "true",
+                },
+                displayedFilters,
+                true,
+              );
+            }}
+            onClear={() => {
+              setQuery("");
+              setStatus("all");
+              setFilters({}, displayedFilters, true);
+            }}
+          />
+
           {projects.length > 0 && (
             <section
               className="project-rollup-strip"
               aria-label="Tóm tắt dự án"
             >
-              <span>{projectTotal} dự án</span>
-              <span>{activeCount} đang bật</span>
-              <span>{documentCount} tài liệu</span>
+              <span>
+                {projectTotal} dự án{hasFilters ? " phù hợp" : ""}
+              </span>
+              <span>Trang này: {activeCount} đang bật</span>
+              <span>{documentCount} tài liệu trên trang</span>
               <span>
                 {readiness.total > 0
-                  ? `${readiness.ready}/${readiness.total} sẵn sàng`
-                  : "Chưa đo readiness"}
+                  ? `${readiness.ready}/${readiness.total} danh mục sẵn sàng trên trang`
+                  : "Chưa đo độ sẵn sàng"}
               </span>
             </section>
           )}
 
-          {isPending ? (
+          {error ? (
+            <div role="alert" className="project-directory-error">
+              <p>
+                Không tải được danh sách dự án. Kiểm tra kết nối rồi thử lại.
+              </p>
+              <Button variant="outline" onClick={refresh}>
+                Thử lại
+              </Button>
+            </div>
+          ) : isPending ? (
             <ProjectAccordionSkeleton />
           ) : projects.length > 0 ? (
             <ProjectAccordionList
@@ -152,13 +229,17 @@ const ProjectListContent = () => {
           ) : (
             <EmptyState
               icon={<Boxes className="size-6" />}
-              title="Chưa có dự án"
-              description="Tạo dự án mới hoặc tải kiến thức để agent có ngữ cảnh tư vấn."
+              title={hasFilters ? "Không có dự án phù hợp" : "Chưa có dự án"}
+              description={
+                hasFilters
+                  ? "Thử tên khác hoặc xóa bộ lọc để xem tất cả dự án."
+                  : "Tạo dự án mới hoặc tải kiến thức để trợ lý có ngữ cảnh tư vấn."
+              }
               className="min-h-[420px]"
             />
           )}
 
-          {projectTotal > 25 && (
+          {(projectTotal > perPage || page > 1) && (
             <ListPagination
               rowsPerPageOptions={[10, 25, 50, 100]}
               className="ops-pagination"
@@ -169,6 +250,54 @@ const ProjectListContent = () => {
     </ProjectWorkspaceShell>
   );
 };
+
+const PROJECT_STATUS_OPTIONS = [
+  { id: "all", label: "Tất cả dự án" },
+  { id: "true", label: "Đang tuyển dụng" },
+  { id: "false", label: "Chưa bật tuyển dụng" },
+];
+
+export const ProjectDirectoryFilters = ({
+  query,
+  status,
+  onQueryChange,
+  onStatusChange,
+  onClear,
+}: {
+  query: string;
+  status: string;
+  onQueryChange: (query: string) => void;
+  onStatusChange: (status: string) => void;
+  onClear: () => void;
+}) => (
+  <section
+    className="uu-scope project-directory-filters"
+    aria-label="Tìm và lọc dự án"
+  >
+    <Input
+      label="Tìm dự án"
+      name="project-search"
+      type="search"
+      value={query}
+      onChange={onQueryChange}
+      placeholder="Tên, mã hoặc nội dung dự án…"
+    />
+    <Select
+      label="Trạng thái tuyển dụng"
+      popoverClassName="uu-scope"
+      items={PROJECT_STATUS_OPTIONS}
+      selectedKey={status}
+      onSelectionChange={(key) => onStatusChange(String(key))}
+    >
+      {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+    </Select>
+    {(query || status !== "all") && (
+      <FilterButton color="secondary" size="md" onClick={onClear}>
+        Xóa bộ lọc
+      </FilterButton>
+    )}
+  </section>
+);
 
 // Four-state project badge driven by the list payload's `ingest_state`.
 const projectStateBadge = (
@@ -190,18 +319,28 @@ const projectStateBadge = (
           "tt-badge-error tt-badge-soft border-transparent text-destructive",
       };
     case "ready":
+      if (project.knowledge_document_count === 0) {
+        return project.is_active
+          ? {
+              label: "Đang tuyển dụng",
+              className: "border-border bg-muted/40 text-muted-foreground",
+            }
+          : {
+              label: "Bản nháp",
+              className: "border-border bg-muted/40 text-muted-foreground",
+            };
+      }
       return {
         label: "Sẵn sàng",
         className:
           "tt-badge-success tt-badge-soft border-transparent text-success",
       };
     default:
-      // Legacy payloads without `ingest_state` fall back to is_active.
+      // Availability alone does not prove that the knowledge was trained.
       return project.is_active
         ? {
-            label: "Sẵn sàng",
-            className:
-              "tt-badge-success tt-badge-soft border-transparent text-success",
+            label: "Đang tuyển dụng",
+            className: "border-border bg-muted/40 text-muted-foreground",
           }
         : {
             label: "Bản nháp",
@@ -310,7 +449,12 @@ export const ProjectAccordionList = ({
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={isTogglingActive}
+                      disabled={
+                        isTogglingActive ||
+                        (!project.is_active &&
+                          (project.ingest_state === "ingesting" ||
+                            project.ingest_state === "error"))
+                      }
                       aria-label={
                         project.is_active
                           ? `Tắt dự án ${project.name}`
@@ -340,6 +484,14 @@ export const ProjectAccordionList = ({
                   )}
                 </div>
               )}
+              {!project.is_active &&
+                (project.ingest_state === "ingesting" ||
+                  project.ingest_state === "error") && (
+                  <p className="text-helper text-muted-foreground">
+                    Hoàn tất nạp và xử lý lỗi kiến thức trước khi bật tuyển
+                    dụng.
+                  </p>
+                )}
               <ProjectKnowledgePanel
                 key={projectId}
                 project={project}

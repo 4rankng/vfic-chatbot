@@ -822,7 +822,7 @@ const ConversationListContent = () => {
 
   return (
     <div
-      className={`inbox-bg-container ${
+      className={`inbox-bg-container conversation-workspace ${
         isMobile && detailOpen ? "conversation-open" : ""
       }`}
     >

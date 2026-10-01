@@ -214,7 +214,8 @@ async def test_disabled_known_tool_never_reaches_its_repository_handler(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_dispatch_list_active_projects_forwards_optional_filters(monkeypatch):
+@pytest.mark.parametrize("strict_criteria", [None, False, True])
+async def test_dispatch_list_active_projects_forwards_optional_filters(monkeypatch, strict_criteria):
     calls: list[dict] = []
 
     async def fake_list_active_projects(retrieval, **kwargs):
@@ -224,18 +225,21 @@ async def test_dispatch_list_active_projects_forwards_optional_filters(monkeypat
     monkeypatch.setattr("app.graph.schemas.list_active_projects", fake_list_active_projects)
     retrieval = object()
 
+    filters = {
+        "project_slug": "rorze",
+        "company": "Rorze",
+        "job_scope": "lắp ráp",
+        "location": "Hải Phòng",
+        "salary_min_vnd": 10_000_000,
+        "sort_by": "salary_desc",
+    }
+    if strict_criteria is not None:
+        filters["strict_criteria"] = strict_criteria
     result = await _dispatch_tool(
         retrieval,
         None,
         "list_active_projects",
-        {
-            "project_slug": "rorze",
-            "company": "Rorze",
-            "job_scope": "lắp ráp",
-            "location": "Hải Phòng",
-            "salary_min_vnd": 10_000_000,
-            "sort_by": "salary_desc",
-        },
+        filters,
     )
 
     assert result == "ACTIVE_PROJECT_LOOKUP_JSON={}"
@@ -248,6 +252,7 @@ async def test_dispatch_list_active_projects_forwards_optional_filters(monkeypat
             "location": "Hải Phòng",
             "salary_min_vnd": 10_000_000,
             "sort_by": "salary_desc",
+            "strict_criteria": strict_criteria if strict_criteria is not None else False,
         }
     ]
 
@@ -298,11 +303,14 @@ def test_list_active_projects_schema_exposes_only_optional_filters():
         "location",
         "salary_min_vnd",
         "sort_by",
+        "strict_criteria",
     }
     assert schema["parameters"]["properties"]["salary_min_vnd"] == {
         "type": "integer",
+        "minimum": 1,
         "description": "Mức lương tối thiểu ứng viên mong muốn (VND/tháng).",
     }
+    assert schema["parameters"]["properties"]["strict_criteria"]["type"] == "boolean"
     assert schema["parameters"]["properties"]["sort_by"]["enum"] == [
         "updated_at",
         "salary_desc",

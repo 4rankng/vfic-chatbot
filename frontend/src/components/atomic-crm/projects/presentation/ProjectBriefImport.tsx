@@ -7,6 +7,7 @@ import {
   type ProjectBrief,
 } from "../domain/project-brief-ingest";
 import { PROJECT_KNOWLEDGE_CATEGORY_LABELS } from "../domain/project-knowledge-policy";
+import { planBriefKnowledge } from "../domain/project-knowledge-markdown";
 
 type Props = {
   /** Fired with the parsed brief AND the file itself. The parent fills the
@@ -72,11 +73,7 @@ export const ProjectBriefImport = ({
     try {
       const text = await file.text();
       const parsed = parseProjectBrief(text);
-      if (
-        !parsed.name &&
-        !parsed.categories.jobs &&
-        parsed.faqEntries.length === 0
-      ) {
+      if (!parsed.name && planBriefKnowledge(parsed).writes.length === 0) {
         setError(
           "Không đọc được nội dung dự án từ tệp này. Hãy kiểm tra lại tệp văn bản.",
         );
@@ -117,16 +114,17 @@ export const ProjectBriefImport = ({
           size="sm"
           className="uu-scope"
           iconLeading={Upload}
-          isLoading={reading && busy}
+          isLoading={reading || busy}
           showTextWhileLoading
           isDisabled={reading || busy}
           onClick={() => inputRef.current?.click()}
         >
-          {reading && busy ? "Đang nạp…" : "Nhập từ file"}
+          {reading ? "Đang đọc tệp…" : busy ? "Đang nạp…" : "Nhập từ tệp"}
         </Button>
         <input
           ref={inputRef}
           type="file"
+          hidden
           accept=".md,.txt,.markdown,text/plain,text/markdown"
           className="sr-only"
           aria-label="Chọn tệp phiếu thông tin dự án"
@@ -135,9 +133,10 @@ export const ProjectBriefImport = ({
         />
       </div>
       <p className="text-helper text-muted-foreground">
-        Tải lên một tệp văn bản (.md là định dạng được khuyến nghị). Ngay khi
-        chọn tệp, hệ thống tạo dự án nháp và bắt đầu nạp kiến thức — bạn vẫn xem
-        lại và sửa trước khi bấm «Tạo dự án».
+        Tải lên một tệp văn bản tối đa 2 MB (.txt hoặc .md). Hệ thống lưu tệp,
+        tạo dự án nháp và nạp các danh mục từ nội dung thực tế. Bạn có thể rời
+        trang trong khi hệ thống xử lý, rồi kiểm tra dự án trước khi bật tuyển
+        dụng.
       </p>
       {error ? (
         <p role="alert" className="text-helper text-destructive">
@@ -168,8 +167,8 @@ const ImportSummary = ({
     >
       <p className="flex items-center gap-2 text-helper text-foreground">
         <FileText className="size-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">
-          Đã đọc <strong>{filename}</strong> — điền sẵn {filled.length}/12 phần
+        <span className="project-brief-summary-copy">
+          Đã đọc <strong>{filename}</strong> — nhận diện {filled.length}/12 phần
           kiến thức
           {brief.faqEntries.length > 0
             ? ` và ${brief.faqEntries.length} câu hỏi thường gặp`

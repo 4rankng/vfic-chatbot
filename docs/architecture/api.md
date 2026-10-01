@@ -474,6 +474,26 @@ the fill-in questionnaire template as `text/markdown`). Document uploads accept
 `.txt`, `.md`, `.markdown`, `.docx` and `.xlsx` and are normalized to plain
 text before ingest; YAML and PDF are not accepted.
 
+`POST /api/v1/knowledge/documents/upload-file` accepts an optional multipart
+`category_plan` JSON field alongside `file` and `project_id`:
+`{"writes":[{"key":"jobs","filename":"jobs.md","content":"..."}]}`.
+The plan contains at most twelve unique category keys; the backend validates
+the complete proposal before storing it. This admin-only operation retains
+the source and queues a resumable project training batch. Omitting the plan
+preserves the existing document upload contract.
+
+Document responses expose an additive `project_training` receipt, or `null`
+for uploads without a plan. Its `status` is `QUEUED`, `PROCESSING`, `COMPLETED`,
+or `FAILED`; `current` identifies the current category, `completed` lists
+confirmed category keys, and `error` is a sanitized failure message. Read it
+through `GET /api/v1/knowledge/documents/{id}`. Retry a retained failed source
+through `POST /api/v1/knowledge/documents/{id}/process`. An accepted upload
+continues in the worker when the browser disconnects; a `201` upload response
+is queue acceptance rather than proof that training has completed. Activating
+an inactive project returns `409` while its latest non-archived training source
+is unfinished or failed; it must be `PUBLISHED` with a `COMPLETED` receipt.
+Existing active projects can still be edited during replacement processing.
+
 Staging, activation, and clear operations do not implicitly change Project-wide retrieval
 authority. Failed or stale workers preserve the prior active pointers and expose stable,
 sanitized failure codes rather than source or provider content.

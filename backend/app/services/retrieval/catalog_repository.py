@@ -163,6 +163,7 @@ class CatalogRepository:
                     Project.name,
                     Project.summary,
                     Project.index_card,
+                    Project.aliases,
                     Project.updated_at,
                 )
                 .where(*project_predicates)
@@ -259,6 +260,7 @@ class CatalogRepository:
                         salary_min=salary_min,
                         salary_max=salary_max,
                         scope=tuple(scope),
+                        aliases=tuple(_card_items(getattr(row, "aliases", None))),
                     )
                 )
                 continue
@@ -280,6 +282,7 @@ class CatalogRepository:
                     salary_min=salary_min,
                     salary_max=salary_max,
                     scope=tuple(ProjectScopeItem(title=role) for role in roles),
+                    aliases=tuple(_card_items(getattr(row, "aliases", None))),
                 )
             )
         return features

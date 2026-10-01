@@ -43,6 +43,12 @@ describe("ConversationContextPanel notes", () => {
       </TestMessages>,
     );
 
+    await expect
+      .element(screen.getByText(/Cần bổ sung số điện thoại để liên hệ/))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText(/Họ tên được khuyến khích/))
+      .toBeVisible();
     await expect.element(screen.getByRole("list")).toBeVisible();
     const noteItems = screen.getByRole("listitem").all();
     expect(noteItems).toHaveLength(2);
@@ -74,6 +80,15 @@ describe("ConversationContextPanel notes", () => {
     await screen
       .getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" })
       .click();
+    await expect
+      .element(screen.getByLabelText("Họ tên"))
+      .toHaveAttribute("autocomplete", "name");
+    await expect
+      .element(screen.getByLabelText("Số điện thoại"))
+      .toHaveAttribute("type", "tel");
+    await expect
+      .element(screen.getByLabelText("Số điện thoại"))
+      .toHaveAttribute("autocomplete", "tel");
     await screen.getByLabelText("Họ tên").fill("  Nguyễn Hùng  ");
     await screen.getByLabelText("Tuổi").fill("32");
     await screen

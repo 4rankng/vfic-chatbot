@@ -42,11 +42,15 @@ export const IngestProgressBoard = ({
   items,
   slow = false,
 }: IngestProgressBoardProps) => (
-  <ul role="list" className="m-0 flex list-none flex-col gap-1 p-0">
+  <ul
+    role="list"
+    aria-label="Tiến độ nạp kiến thức"
+    className="project-ingest-progress m-0 flex list-none flex-col gap-1 p-0"
+  >
     {items.map((item) => (
       <li
         key={item.key}
-        className="flex items-center justify-between gap-3 text-helper"
+        className="project-ingest-progress-row flex items-center justify-between gap-3 text-helper"
       >
         <span className="flex items-center gap-2">
           <span aria-hidden="true">{MARK[item.status]}</span>

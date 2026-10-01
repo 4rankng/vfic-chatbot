@@ -287,7 +287,11 @@ export const CandidateDataDialog = ({
                     Mức độ hoàn thiện
                   </h3>
                   <p className="mt-1 text-xs text-tertiary">
-                    Dữ liệu đã được thu thập trong quá trình tư vấn tuyển dụng.
+                    {lead.phone?.trim()
+                      ? "Đã có số điện thoại để liên hệ."
+                      : "Cần bổ sung số điện thoại để liên hệ."}{" "}
+                    Họ tên được khuyến khích; nguyện vọng và năm sinh có thể bổ
+                    sung sau.
                   </p>
                 </div>
                 <span className="shrink-0 text-sm font-semibold text-primary">
@@ -339,6 +343,7 @@ export const CandidateDataDialog = ({
                         <TextField
                           key={field.key}
                           id={inputId}
+                          name={field.key}
                           className="min-w-0"
                           value={editSession.draft[field.key]}
                           isDisabled={isSaving}
@@ -360,7 +365,18 @@ export const CandidateDataDialog = ({
                           <InputBase
                             inputMode={field.inputMode}
                             type={
-                              field.inputMode === "numeric" ? "number" : "text"
+                              field.inputMode === "numeric"
+                                ? "number"
+                                : field.inputMode === "tel"
+                                  ? "tel"
+                                  : "text"
+                            }
+                            autoComplete={
+                              field.key === "name"
+                                ? "name"
+                                : field.key === "phone"
+                                  ? "tel"
+                                  : "off"
                             }
                             min={field.min}
                             max={field.max}

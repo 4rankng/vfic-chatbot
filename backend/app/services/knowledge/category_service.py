@@ -224,6 +224,7 @@ class KnowledgeCategoryService:
         filename: str,
         source_markdown: str,
         actor: User,
+        schedule: bool = True,
     ) -> tuple[KnowledgeCategoryRevision, str]:
         await require_category_project(self.db, project_id)
         # A project being migrated has no category rows yet; seeding them here
@@ -298,6 +299,10 @@ class KnowledgeCategoryService:
             raise ConflictError(
                 "Category processing retry limit reached; submit corrected content"
             )
+        # A durable source-document batch owns execution itself. It still uses
+        # the same revision validation, audit, retries and activation lifecycle.
+        if not schedule:
+            return revision, f"category-revision-{revision.id}"
         if (
             revision.status is KnowledgeCategoryRevisionStatus.PROCESSING
             and revision.lease_expires_at is not None
@@ -360,6 +365,8 @@ class KnowledgeCategoryService:
         *,
         start_category_authority: bool = False,
         claim_token: uuid.UUID | None = None,
+        training_document_id: uuid.UUID | None = None,
+        training_token: uuid.UUID | None = None,
     ) -> None:
         started_at = monotonic()
         claim_token = claim_token or uuid.uuid4()
@@ -446,6 +453,12 @@ class KnowledgeCategoryService:
                     raise RetrievalSelftestError(selftest_failures)
 
             project = await locked_project(self.db, category.project_id)
+            if training_document_id is not None:
+                from app.services.knowledge.training_guard import ensure_training_owner
+
+                if training_token is None:
+                    raise ConflictError("Project training requires its processing token")
+                await ensure_training_owner(self.db, training_document_id, category.project_id, training_token)
             category = await locked_category(
                 self.db,
                 category.project_id,

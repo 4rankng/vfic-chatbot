@@ -1451,87 +1451,39 @@ class TestGreetingGate:
 # lead_collection_question — priority + same-turn guards
 # ---------------------------------------------------------------------------
 class TestLeadCollectionQuestion:
-    """Tests for the probing question selection."""
+    """Phone is mandatory; recommended profile fields never block contact."""
 
     _ask = staticmethod(lead_collection_question)
 
-    def _msg(self, sender, body):
-        return SimpleNamespace(sender=sender, body=body, delivery_status="SENT")
+    def test_new_lead_asks_mobile_first(self):
+        question = self._ask(lead=None, current_user_text="xin chào", recent_messages=[])
+        assert "điện thoại di động" in question
+        assert "họ tên" not in question
 
-    def test_new_lead_asks_name(self):
-        q = self._ask(lead=None, current_user_text="xin chào", recent_messages=[])
-        assert "tên" in q.lower()
+    @pytest.mark.parametrize("lead", [{}, {"name": "Dũng"}, {"desired_job": "Rorze"}])
+    def test_optional_fields_do_not_change_mobile_priority(self, lead):
+        question = self._ask(lead=lead, current_user_text="tìm việc", recent_messages=[])
+        assert "điện thoại" in question
 
-    def test_has_name_no_phone_asks_phone(self):
-        lead = {"name": "Dũng"}
-        q = self._ask(lead=lead, current_user_text="hello", recent_messages=[])
-        assert "điện thoại" in q.lower()
+    @pytest.mark.parametrize("lead", [
+        {"phone": "0987654321"},
+        {"name": "Dũng", "phone": "0987654321"},
+        {"phone": "+84 987 654 321", "desired_job": "Rorze"},
+    ])
+    def test_valid_mobile_stops_mandatory_profile_questions(self, lead):
+        assert self._ask(lead=lead, current_user_text="ok", recent_messages=[]) == ""
 
-    def test_has_name_phone_asks_desired_job(self):
-        lead = {"name": "Dũng", "phone": "0987654321"}
-        q = self._ask(lead=lead, current_user_text="hello", recent_messages=[])
-        assert "vị trí" in q.lower() or "công việc" in q.lower()
+    @pytest.mark.parametrize("phone", ["0987", "02412345678", "0123456789", "09876543210"])
+    def test_invalid_mobile_still_requires_contact_number(self, phone):
+        question = self._ask(lead={"phone": phone}, current_user_text="ok", recent_messages=[])
+        assert "điện thoại" in question
 
-    def test_has_job_asks_region(self):
-        lead = {"name": "Dũng", "phone": "0987", "desired_job": "kho"}
-        q = self._ask(lead=lead, current_user_text="ok", recent_messages=[])
-        assert "tỉnh" in q.lower() or "thành" in q.lower()
+    def test_current_mobile_is_not_reasked_while_extraction_is_queued(self):
+        assert self._ask(lead=None, current_user_text="SĐT +84 987 654 321", recent_messages=[]) == ""
 
-    def test_has_region_asks_living_area(self):
-        lead = {"name": "Dũng", "phone": "0987", "desired_job": "kho", "region": "Hải Phòng"}
-        q = self._ask(lead=lead, current_user_text="ok", recent_messages=[])
-        assert "sinh sống" in q.lower()
-
-    def test_has_living_asks_salary(self):
-        lead = {
-            "name": "Dũng",
-            "phone": "0987",
-            "desired_job": "kho",
-            "region": "Hải Phòng",
-            "living_area": "An Lão",
-        }
-        q = self._ask(lead=lead, current_user_text="ok", recent_messages=[])
-        assert "lương" in q.lower()
-
-    def test_all_fields_returns_empty(self):
-        lead = {
-            "name": "Dũng",
-            "phone": "0987",
-            "desired_job": "kho",
-            "region": "HP",
-            "living_area": "An Lão",
-            "expected_salary": "8tr",
-            "notes": "xăm kín",
-        }
-        q = self._ask(lead=lead, current_user_text="ok", recent_messages=[])
-        assert q == ""
-
-    def test_current_text_has_phone_skips_phone_ask(self):
-        lead = {"name": "Dũng"}
-        q = self._ask(lead=lead, current_user_text="sdt 0987654321", recent_messages=[])
-        # Should not ask for phone — user just gave it
-        assert "điện thoại" not in q.lower()
-
-    def test_current_text_has_job_keyword_skips_job_ask(self):
-        lead = {"name": "Dũng", "phone": "0987"}
-        q = self._ask(lead=lead, current_user_text="tôi muốn làm công nhân", recent_messages=[])
-        assert "vị trí" not in q.lower() and "công việc" not in q.lower()
-
-    def test_current_text_has_salary_keyword_skips_salary_ask(self):
-        lead = {
-            "name": "Dũng",
-            "phone": "0987",
-            "desired_job": "kho",
-            "region": "HP",
-            "living_area": "An Lão",
-        }
-        q = self._ask(lead=lead, current_user_text="lương 8 triệu là được", recent_messages=[])
-        assert "lương" not in q.lower() or q == ""
-
-    def test_current_text_has_region_keyword_skips_region_ask(self):
-        lead = {"name": "Dũng", "phone": "0987", "desired_job": "kho"}
-        q = self._ask(lead=lead, current_user_text="tôi ở Hải Phòng", recent_messages=[])
-        assert "tỉnh" not in q.lower() and "thành" not in q.lower()
+    def test_two_numbers_require_candidate_to_identify_contact(self):
+        question = self._ask(lead=None, current_user_text="0987654321 hoặc 0912345678", recent_messages=[])
+        assert "điện thoại" in question
 
 
 # ---------------------------------------------------------------------------

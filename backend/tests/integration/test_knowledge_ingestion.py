@@ -32,6 +32,7 @@ from app.services.project.repository import ProjectRepository
 pytestmark = pytest.mark.integration
 
 VEC = [0.01] * 3072
+FEATURE_SOURCE = "LG Display tuyển operator. thu nhập 10-13 triệu. Trả lương theo tuần. Có xe đưa đón Thái Bình."
 
 
 class _FakeEmbedder:
@@ -86,12 +87,14 @@ def _features_payload():
                 "value_text": "Trả lương theo tuần",
                 "is_highlight": True,
                 "strength_score": 0.95,
+                "evidence_text": "Trả lương theo tuần",
             },
             {
                 "feature_key": "commute_support",
                 "value_text": "Có xe đưa đón Thái Bình",
                 "is_highlight": False,
                 "strength_score": 0.7,
+                "evidence_text": "Có xe đưa đón Thái Bình",
             },
         ]
     }
@@ -332,7 +335,7 @@ async def test_reconcile_drops_removed_files(integration_session):
 async def test_extract_writes_one_row_per_active_catalog_feature(integration_session):
     proj = await _seed_project(integration_session)
     doc = await _make_doc(
-        integration_session, "LG Display tuyển operator lương 10-13 triệu.", project_id=proj.id
+        integration_session, FEATURE_SOURCE, project_id=proj.id
     )
 
     async def llm_json(system, user):
@@ -378,7 +381,7 @@ async def test_extract_writes_one_row_per_active_catalog_feature(integration_ses
 
 async def test_extract_is_idempotent_on_rerun(integration_session):
     proj = await _seed_project(integration_session)
-    doc = await _make_doc(integration_session, "LG Display.", project_id=proj.id)
+    doc = await _make_doc(integration_session, FEATURE_SOURCE, project_id=proj.id)
 
     async def llm_json(system, user):
         return json.dumps(_features_payload())
@@ -398,7 +401,7 @@ async def test_extract_is_idempotent_on_rerun(integration_session):
 
 async def test_extract_syncs_project_highlights(integration_session):
     proj = await _seed_project(integration_session)
-    doc = await _make_doc(integration_session, "LG Display.", project_id=proj.id)
+    doc = await _make_doc(integration_session, FEATURE_SOURCE, project_id=proj.id)
 
     async def llm_json(system, user):
         return json.dumps(_features_payload())
@@ -416,7 +419,7 @@ async def test_pipeline_run_extracts_features(integration_session):
     proj = await _seed_project(integration_session)
     doc = await _make_doc(
         integration_session,
-        "LG Display tuyển operator lương 10-13 triệu trả theo tuần.",
+        FEATURE_SOURCE,
         project_id=proj.id,
     )
 
@@ -458,7 +461,7 @@ async def test_pipeline_run_survives_bad_extraction(integration_session):
 # ----------------------------------------------------------------- agent tool
 async def test_get_product_features_tool(integration_session, monkeypatch):
     proj = await _seed_project(integration_session)
-    doc = await _make_doc(integration_session, "LG Display.", project_id=proj.id)
+    doc = await _make_doc(integration_session, FEATURE_SOURCE, project_id=proj.id)
 
     async def llm_json(system, user):
         return json.dumps(_features_payload())
@@ -613,7 +616,7 @@ async def _seed_projection_project(db, *, category_authoritative: bool):
         status=KnowledgeStatus.UPLOADED,
         stage="UPLOADED",
         project_id=project.id,
-        raw_text="LG Display tuyển công nhân sản xuất.",
+        raw_text="LG Display tuyển công nhân sản xuất. " + FEATURE_SOURCE,
     )
     db.add_all([job, doc])
     await db.commit()

@@ -285,12 +285,12 @@ const CATEGORY_BY_HEADING: readonly (readonly [
   // No bare "tăng ca": a schedule section titled "…& Quy định tăng ca" is
   // still the schedule section; the old sheet's salary sections all say
   // "lương"/"phụ cấp" anyway.
-  [/tien luong|phu cap|thu nhap/, "compensation"],
+  [/tien luong|phu cap|thu nhap|^luong\b/, "compensation"],
   [
-    /ca lam viec|ca kip|lich kip|thoi gian lam viec|lam viec may gio/,
+    /ca lam viec|ca kip|lich kip|lich lam viec|thoi gian lam viec|lam viec may gio/,
     "work_schedules",
   ],
-  [/an uong|cho o|ky tuc|thue tro/, "meals"],
+  [/an uong|cho o|ky tuc|thue tro|bua an/, "meals"],
   [/xe dua don|tuyen xe dua/, "transportation"],
   [/bao hiem|kham suc khoe/, "insurance"],
   [/moi truong lam viec|bao ho lao dong|phuc loi/, "benefits"],
@@ -299,6 +299,7 @@ const CATEGORY_BY_HEADING: readonly (readonly [
     "application",
   ],
   [/lien he|dau moi ho tro|thu muc/, "contacts"],
+  [/^faq$/, "faq"],
 ] as const;
 
 /** Two sections genuinely straddle two categories. Routing only the matching
@@ -328,6 +329,10 @@ const BULLET_OVERRIDES: readonly (readonly [
 
 const HEADING = /^#{1,6}\s+(.*)$/;
 const BULLET = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/;
+/** Plain-text briefs need no Markdown. Restrict labels to short, named
+ *  categories so sentences containing "lương" cannot become headings. */
+const PLAIN_CATEGORY_LABEL =
+  /^(?:tien luong|luong(?: va thuong)?|thu nhap|phu cap|yeu cau(?: tuyen dung)?|ca lam viec|lich lam viec|thoi gian lam viec|phuc loi|cho o|ky tuc xa|an uong|bua an|xe dua don|bao hiem|ung tuyen|quy trinh ung tuyen|lien he|faq|cau hoi thuong gap)$/;
 
 /** A heading plus every line under it, in document order. `depth` is the
  *  heading's `#` count; a deeper section inherits its nearest shallower
@@ -352,6 +357,18 @@ const splitSections = (text: string): BriefSection[] => {
       sections.push(current);
       continue;
     }
+    const labeled = /^\s*(?:\d+[.)]\s*)?([^:：]{1,60})[:：]\s*(.*)$/.exec(
+      toPlainText(line),
+    );
+    if (labeled && PLAIN_CATEGORY_LABEL.test(fold(labeled[1]))) {
+      current = {
+        title: labeled[1],
+        lines: labeled[2] ? [labeled[2]] : [],
+        depth: 2,
+      };
+      sections.push(current);
+      continue;
+    }
     current.lines.push(line);
   }
   return sections.filter((section) =>
@@ -372,7 +389,7 @@ type BriefField =
 const OVERVIEW_LABELS: readonly (readonly [RegExp, BriefField])[] = [
   [/^ten du an/, "name"],
   [/^ten (viet tat|thuong goi|goi khac|doanh nghiep tiep nhan)/, "aliases"],
-  [/^(dia chi noi lam viec|dia diem noi lam viec|dia diem)/, "address"],
+  [/^(dia chi(?: noi lam viec)?|dia diem noi lam viec|dia diem)/, "address"],
   [/^vi tri (tuyen dung|tuyen dung chinh)/, "roles"],
   [/^tom tat/, "summary"],
   [/diem noi bat/, "highlights"],
@@ -774,6 +791,8 @@ const readSectionBody = (section: BriefSection) => {
 
 const categoryForHeading = (title: string): ProjectKnowledgeCategory | null => {
   const folded = fold(title);
+  if (/^(cho o|ky tuc xa|thue tro)(?:\s*[:：])?$/.test(folded))
+    return "accommodation";
   for (const [pattern, category] of CATEGORY_BY_HEADING) {
     if (pattern.test(folded)) return category;
   }

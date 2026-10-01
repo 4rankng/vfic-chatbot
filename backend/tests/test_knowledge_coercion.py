@@ -33,6 +33,21 @@ def _catalog(**kw):
     return SimpleNamespace(**defaults)
 
 
+def test_extracted_feature_requires_a_quote_that_exists_in_the_source():
+    raw = {"value_text": "Miễn phí nhà ở", "evidence_text": "Miễn phí nhà ở", "is_highlight": True}
+    value = _coerce_feature(raw, _catalog(), source_text="Lương 6 triệu. Chưa có thông tin nhà ở.")
+    assert value["is_missing"] is True
+    assert value["needs_clarification"] is True
+    assert value["is_highlight"] is False
+    assert value["evidence_text"] is None
+
+
+def test_extracted_feature_quote_accepts_source_whitespace_formatting():
+    raw = {"value_text": "Lương 6 triệu", "evidence_text": "Lương  6 triệu"}
+    value = _coerce_feature(raw, _catalog(), source_text="Vị trí công nhân. Lương\n6 triệu.")
+    assert value["is_missing"] is False
+
+
 # --------------------------------------------------------------------------- _coerce_unit
 def test_coerce_unit_happy_preserves_fields():
     unit = _coerce_unit(

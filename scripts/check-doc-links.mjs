@@ -185,6 +185,13 @@ for (const document of SCANNED_DOCUMENTS) {
 
     if (!isCheckablePath(token)) continue;
     const relativePath = token.replace(/\/+$/, "");
+    // The constitution describes the ignored local directory, but cannot
+    // require its contents. Keep actual routes into it failing on every host.
+    if (relativePath === ".claude") continue;
+    if (relativePath.startsWith(".claude/")) {
+      errors.push(`${document}: \`${token}\` routes into machine-local instructions`);
+      continue;
+    }
     if (checkedPaths.has(relativePath)) continue;
     checkedPaths.add(relativePath);
     if (!existsSync(join(ROOT, relativePath))) {

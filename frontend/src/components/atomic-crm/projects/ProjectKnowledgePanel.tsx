@@ -176,18 +176,14 @@ const BriefIngestSection = ({
       setNeedsHuman(
         plan.needsHuman.map((key) => PROJECT_KNOWLEDGE_CATEGORY_LABELS[key]),
       );
-      // No prompt before the writes: each one supersedes its category's
-      // active revision while the old revision stays archived, so asking
-      // first would only gate an update. The brief file rides along as a
-      // project document (best-effort — its failure never blocks the writes).
-      // The chain reports failure through its state, not a throw — so the
-      // continuation checks the landed flag instead of relying on the catch.
+      // The source and its plan are queued together; the worker confirms
+      // category activation before discovery claims can be updated.
       const landed = await ingest(projectId, plan.writes, file);
       // Every re-ingest re-lands the brief's highlight facts on the discovery
       // card: the activation projection preserves `highlights` (it only seeds
       // them), so the facts survive every later projection run. A brief with
       // no highlights sends nothing — the card keeps its derived empty list.
-      if (brief.highlights.length > 0) {
+      if (landed && brief.highlights.length > 0) {
         await updateProjectDiscoveryCard(projectId, {
           discovery_card: { highlights: brief.highlights },
         });
@@ -230,6 +226,7 @@ const BriefIngestSection = ({
         <input
           ref={inputRef}
           type="file"
+          hidden
           accept=".md,.txt,.markdown,text/plain,text/markdown"
           className="sr-only"
           aria-label="Chọn tệp phiếu thông tin dự án"
@@ -256,16 +253,10 @@ const BriefIngestSection = ({
       ) : null}
       {state.phase === "failed" ? (
         <p role="alert" className="text-helper text-destructive">
-          Nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}» không thành
-          công{state.message ? `: ${state.message}` : "."} Dữ liệu đang dùng của
-          mục này không thay đổi.
-        </p>
-      ) : null}
-      {(state.phase === "done" || state.phase === "failed") &&
-      state.uploadError ? (
-        <p role="alert" className="text-helper text-destructive">
-          Tệp phiếu chưa được lưu vào tài liệu dự án: {state.uploadError}. Nội
-          dung các mục đã nạp vẫn được giữ.
+          Chưa xác nhận hoàn tất «
+          {PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}»
+          {state.message ? `: ${state.message}` : "."} Kiểm tra trạng thái danh
+          mục trước khi nạp lại. Các phần đã xác nhận vẫn được giữ.
         </p>
       ) : null}
       {error ? (
@@ -336,6 +327,9 @@ const MigrationSection = ({ projectId }: { projectId: string }) => {
           dạng văn bản: hệ thống nạp các danh mục theo tệp, mục nào phiếu không
           nêu sẽ được đánh dấu trống, rồi dự án chuyển hẳn sang quản lý theo 12
           danh mục. Trang một trang hiện tại được giữ lại và có thể khôi phục.
+          Giữ trang này mở để hoàn tất bước chuyển. Nếu rời trang, hãy quay lại
+          và chọn cùng tệp để tiếp tục; kiến thức một trang vẫn được dùng cho
+          đến khi chuyển xong.
         </p>
       </div>
       <BriefIngestSection
@@ -462,7 +456,13 @@ const RagCategoriesPanel = ({
           </div>
         )}
         {canManageSources && editable && (
-          <BriefIngestSection projectId={projectId} disabled={false} />
+          <BriefIngestSection
+            projectId={projectId}
+            disabled={false}
+            onIngested={async () => {
+              await catalog.reload();
+            }}
+          />
         )}
         <div className="project-category-workspace">
           <nav

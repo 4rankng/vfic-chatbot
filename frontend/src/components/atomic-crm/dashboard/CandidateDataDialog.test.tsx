@@ -41,6 +41,12 @@ describe("CandidateDataDialog", () => {
     );
 
     await screen.getByRole("button", { name: "Chỉnh sửa" }).click();
+    await expect
+      .element(screen.getByLabelText("Số điện thoại"))
+      .toHaveAttribute("type", "tel");
+    await expect
+      .element(screen.getByLabelText("Số điện thoại"))
+      .toHaveAttribute("autocomplete", "tel");
     await screen
       .getByLabelText("Công việc mong muốn")
       .fill("Công nhân sản xuất");
@@ -77,5 +83,8 @@ describe("CandidateDataDialog", () => {
       .element(screen.getByRole("button", { name: "Chỉnh sửa" }))
       .not.toBeInTheDocument();
     await expect.element(screen.getByText("Dữ liệu đã thu thập")).toBeVisible();
+    await expect
+      .element(screen.getByText(/Đã có số điện thoại để liên hệ/))
+      .toBeVisible();
   });
 });

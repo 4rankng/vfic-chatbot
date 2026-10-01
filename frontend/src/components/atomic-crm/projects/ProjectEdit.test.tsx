@@ -115,6 +115,12 @@ describe("ProjectEdit", () => {
       screen.container.querySelector(".project-form-section-header"),
     ).toBeNull();
 
+    expect(
+      screen
+        .getByRole("button", { name: "Lưu thay đổi" })
+        .element()
+        .closest(".uu-scope"),
+    ).not.toBeNull();
     await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
 
     await vi.waitFor(() => {

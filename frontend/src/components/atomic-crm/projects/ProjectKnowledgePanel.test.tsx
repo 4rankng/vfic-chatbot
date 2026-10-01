@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   cutoverProjectKnowledgeCategories: vi.fn(),
   /** The brief file's upload to the project document shelf. */
   uploadProjectDocument: vi.fn(),
+  getProjectTrainingDocument: vi.fn(),
   /** The brief's highlights PATCHed onto the discovery card. */
   updateProjectDiscoveryCard: vi.fn(),
   listExternalSources: vi.fn(),
@@ -69,6 +70,7 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
   clearProjectKnowledgeCategory: mocks.clearProjectKnowledgeCategory,
   cutoverProjectKnowledgeCategories: mocks.cutoverProjectKnowledgeCategories,
   uploadProjectDocument: mocks.uploadProjectDocument,
+  getProjectTrainingDocument: mocks.getProjectTrainingDocument,
   updateProjectDiscoveryCard: mocks.updateProjectDiscoveryCard,
   listExternalSources: mocks.listExternalSources,
 }));
@@ -87,6 +89,13 @@ const project: Project = {
   created_at: "2026-07-18T00:00:00Z",
   updated_at: "2026-07-18T00:00:00Z",
 };
+
+const plannedWrites = () =>
+  (mocks.uploadProjectDocument.mock.calls.at(-1)?.[2] ?? []) as Array<{
+    key: string;
+    filename: string;
+    content: string;
+  }>;
 
 const singlePageProject: Project = {
   ...project,
@@ -174,7 +183,18 @@ describe("ProjectKnowledgePanel", () => {
     mocks.getProjectKnowledgeCategorySource.mockRejectedValue(
       new ApiError(404, "Chưa có dữ liệu"),
     );
-    mocks.uploadProjectDocument.mockResolvedValue(undefined);
+    mocks.uploadProjectDocument.mockResolvedValue({ id: "training-document" });
+    mocks.getProjectTrainingDocument.mockImplementation(async () => ({
+      id: "training-document",
+      status: "PUBLISHED",
+      error: null,
+      project_training: {
+        status: "COMPLETED",
+        current: null,
+        completed: plannedWrites().map((write) => write.key),
+        error: null,
+      },
+    }));
     mocks.clearProjectKnowledgeCategory.mockResolvedValue({
       id: "cleared-revision",
       category_id: "category-cleared",
@@ -883,7 +903,7 @@ describe("ProjectKnowledgePanel", () => {
     input.dispatchEvent(new Event("change", { bubbles: true }));
 
     await vi.waitFor(() =>
-      expect(mocks.replaceProjectKnowledgeCategory).toHaveBeenCalled(),
+      expect(mocks.uploadProjectDocument).toHaveBeenCalled(),
     );
 
     // The chain awaits each activation (2 s poll cadence), so twelve writes
@@ -896,9 +916,7 @@ describe("ProjectKnowledgePanel", () => {
       { timeout: 60000 },
     );
 
-    const keys = mocks.replaceProjectKnowledgeCategory.mock.calls.map(
-      (call) => call[1],
-    );
+    const keys = plannedWrites().map((write) => write.key);
     // jobs leads the batch — every other write may reference its rows.
     expect(keys[0]).toBe("jobs");
     // The content-driven rule: every category this sheet genuinely carries is
@@ -917,7 +935,7 @@ describe("ProjectKnowledgePanel", () => {
       "contacts",
       "faq",
     ]);
-    const jobsMarkdown = mocks.replaceProjectKnowledgeCategory.mock.calls[0][3];
+    const jobsMarkdown = plannedWrites()[0].content;
     expect(jobsMarkdown).toContain("Nhân viên lắp ráp linh kiện điện tử");
     // Headcount is unknown from the sheet, so the field renders as an explicit null.
     expect(jobsMarkdown).toContain("vacancies: null");
@@ -961,8 +979,7 @@ describe("ProjectKnowledgePanel", () => {
         expect(screen.getByText(/Đã nạp xong 3 phần kiến thức/)).toBeVisible(),
       { timeout: 30000 },
     );
-    const [, firstKey, firstFilename] =
-      mocks.replaceProjectKnowledgeCategory.mock.calls[0];
+    const { key: firstKey, filename: firstFilename } = plannedWrites()[0];
     expect(firstKey).toBe("jobs");
     expect(firstFilename).toBe("jobs.md");
     expect(screen.container.textContent).not.toContain("Chỉ chấp nhận tệp");
@@ -1037,9 +1054,11 @@ describe("ProjectKnowledgePanel", () => {
     );
     // The full set the file derives, jobs first — no category is skipped for
     // already having content…
-    expect(
-      mocks.replaceProjectKnowledgeCategory.mock.calls.map((call) => call[1]),
-    ).toEqual(["jobs", "compensation", "faq"]);
+    expect(plannedWrites().map((write) => write.key)).toEqual([
+      "jobs",
+      "compensation",
+      "faq",
+    ]);
     // …and nobody was asked to confirm the replacement.
     expect(confirm).not.toHaveBeenCalled();
     confirm.mockRestore();
@@ -1079,9 +1098,11 @@ describe("ProjectKnowledgePanel", () => {
         expect(screen.getByText(/Đã nạp xong 3 phần kiến thức/)).toBeVisible(),
       { timeout: 30000 },
     );
-    expect(
-      mocks.replaceProjectKnowledgeCategory.mock.calls.map((call) => call[1]),
-    ).toEqual(["jobs", "compensation", "faq"]);
+    expect(plannedWrites().map((write) => write.key)).toEqual([
+      "jobs",
+      "compensation",
+      "faq",
+    ]);
   }, 30000);
 
   it("brings the selected category detail into focus on a small screen", async () => {
@@ -1129,6 +1150,20 @@ describe("ProjectKnowledgePanel", () => {
     expect(document.activeElement).toBe(
       screen.container.querySelector("#project-category-detail"),
     );
+  });
+
+  it("does not publish new highlights when a source update fails", async () => {
+    mocks.uploadProjectDocument.mockRejectedValue(
+      new Error("Máy chủ từ chối tệp."),
+    );
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    dropBrief(input, REUPLOAD_BRIEF, "phieu-that-bai.txt");
+    await expect.element(screen.getByText(/Máy chủ từ chối tệp/)).toBeVisible();
+    expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
   });
 
   it("re-ingest re-lands the brief's highlight facts on the discovery card", async () => {
@@ -1179,9 +1214,16 @@ describe("ProjectKnowledgePanel", () => {
       },
     ]);
     // The card patch rides every re-ingest; the category writes all landed.
-    expect(
-      mocks.replaceProjectKnowledgeCategory.mock.calls.map((call) => call[1]),
-    ).toEqual(["jobs", "compensation", "faq"]);
+    expect(plannedWrites().map((write) => write.key)).toEqual([
+      "jobs",
+      "compensation",
+      "faq",
+    ]);
+    await vi.waitFor(() =>
+      expect(
+        mocks.getProjectKnowledgeCategories.mock.calls.length,
+      ).toBeGreaterThan(1),
+    );
   }, 30000);
 
   it("sends no discovery-card patch when the re-ingested brief carries no highlights", async () => {
@@ -1362,7 +1404,7 @@ describe("ProjectKnowledgePanel", () => {
     mocks.getProjectSinglePage.mockRejectedValue(
       new ApiError(404, "Chưa có dữ liệu"),
     );
-    mocks.replaceProjectKnowledgeCategory.mockRejectedValue(
+    mocks.uploadProjectDocument.mockRejectedValue(
       new ApiError(500, "hệ thống quá tải"),
     );
 
@@ -1376,10 +1418,11 @@ describe("ProjectKnowledgePanel", () => {
     );
 
     await expect
-      .element(screen.getByText(/Nạp «Vị trí tuyển dụng» không thành công/))
+      .element(screen.getByText(/Chưa xác nhận hoàn tất «Vị trí tuyển dụng»/))
       .toBeVisible();
     // No clears, no cutover: nothing moved while the chain never landed.
     expect(mocks.clearProjectKnowledgeCategory).not.toHaveBeenCalled();
     expect(mocks.cutoverProjectKnowledgeCategories).not.toHaveBeenCalled();
+    expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
   }, 30000);
 });

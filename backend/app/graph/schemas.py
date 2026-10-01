@@ -91,7 +91,16 @@ TOOL_SCHEMAS = [
                     },
                     "salary_min_vnd": {
                         "type": "integer",
+                        "minimum": 1,
                         "description": "Mức lương tối thiểu ứng viên mong muốn (VND/tháng).",
+                    },
+                    "strict_criteria": {
+                        "type": "boolean",
+                        "description": (
+                            "Chỉ bật khi anh/chị yêu cầu CHỈ dự án đáp ứng các điều kiện. "
+                            "Mọi tiêu chí đã nêu phải có bằng chứng khớp; mục chưa rõ không tính khớp. "
+                            "Mặc định false để xếp độ phù hợp và trình bày các lựa chọn trung thực."
+                        ),
                     },
                     "sort_by": {
                         "type": "string",
@@ -353,6 +362,7 @@ async def _dispatch_tool(
                 location=args.get("location"),
                 salary_min_vnd=args.get("salary_min_vnd"),
                 sort_by=args.get("sort_by"),
+                strict_criteria=args.get("strict_criteria", False),
             )
         elif name == "compare_income":
             result = await compare_income(

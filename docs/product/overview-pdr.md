@@ -99,6 +99,10 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
   from an explicit candidate self-introduction or an admin/recruiter correction.
   Deferred extraction must not replace an existing canonical name unless the
   current candidate message explicitly states a new name.
+- **Recruitment intake priority:** a valid mobile number is mandatory; full
+  name is highly recommended; nguyện vọng is useful; birth year is optional.
+  Missing optional fields must not block project consultation or follow-up
+  once the candidate has supplied a valid mobile number.
 - **FR-4.2** Kanban supports stage PATCH, assign, tag, follow-up tasks,
   chatops actions.
 - **FR-4.3** Open `lead_stage` PATCH issue tracked in roadmap (current state

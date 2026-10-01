@@ -26,6 +26,38 @@ to plain text before ingest (DOCX/XLSX are parsed from the OOXML container with
 the standard library). `.yaml`/`.yml` are refused by name, and PDF is not
 supported — there is no extractor.
 
+## One-file project training
+
+The project create form and **Nhập từ tệp** action accept one project brief.
+The console extracts the supplied facts into the twelve category contracts,
+preserves the source file, and uploads the category proposal in the same
+request. Missing sections stay marked for review; absence of a salary, age
+limit, benefit, or hiring contact never authorizes an invented value.
+
+Once the backend accepts the upload, the ingest worker owns the batch. It
+processes Jobs before categories that reference job IDs and saves category
+revision checkpoints on the retained source document. Closing the browser
+stops observation, not training. The console follows the document's
+`project_training` receipt and reports completion only after the worker
+confirms the proposed categories. A category or feature extraction failure is
+visible and the retained source can be retried through the document process
+endpoint or by uploading the same file again. Each category cutover is atomic;
+a batch may publish earlier categories before a later category fails. Its
+receipt preserves that partial progress for retry. The previous active
+revision of a failed replacement remains available. An unchanged completed
+source is reused, while a different newer brief supersedes an interrupted
+older batch. Categories absent from a replacement brief keep their existing
+knowledge until the administrator explicitly reviews or clears them.
+
+New projects remain drafts until confirmed knowledge is available and the
+administrator completes creation. Activation through the list, editor, or API
+requires the latest non-archived training source to be published with a completed
+receipt. Existing active projects remain available during replacement training.
+For existing projects, successful sibling
+categories do not hide an unresolved failure in another category. Historical
+document failures superseded by a newer successful document do not keep the
+project in an error state.
+
 ## Single-page mode
 
 - The Project has one `.txt` or `.md` page.
@@ -148,6 +180,15 @@ Normal factual answers are composed by the LLM. Empty-table handlers, legacy FAQ
 and deterministic evidence renderers cannot become the final answer. If generated vacancy prose
 conflicts with the authoritative job result, the LLM rewrites it from the verified result; the
 common consistent path does not pay for an extra model call.
+
+Recruitment intake prioritizes a valid mobile number as the only mandatory
+contact field. Full name is highly recommended, nguyện vọng is useful when
+provided, and birth year is optional. Once a mobile number is captured, missing
+optional fields do not block project advice or recruiter follow-up. Names and
+contact details come from candidate evidence rather than project documents.
+Looking at a project is not evidence of an application: the candidate must
+express that intention. Role, location, and salary preferences improve matching
+but are not prerequisites for browsing active projects.
 
 Legacy version, document-ingest, reindex, and feature-extraction mutations are rejected once a
 Project owns either knowledge mode. They remain read-only only so pre-cutover LG evidence can be

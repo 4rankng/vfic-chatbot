@@ -28,6 +28,9 @@ const ProjectEditContent = () => {
   const dataProvider = useDataProvider<CrmDataProvider>();
   const [submitting, setSubmitting] = useState(false);
   if (!project) return null;
+  const activationBlocked =
+    !project.is_active &&
+    (project.ingest_state === "ingesting" || project.ingest_state === "error");
 
   const onSubmit = async (data: Record<string, unknown>) => {
     setSubmitting(true);
@@ -110,13 +113,21 @@ const ProjectEditContent = () => {
                 source="is_active"
                 label="Dự án hoạt động"
                 className="project-edit-active"
+                disabled={activationBlocked}
+                hint={
+                  activationBlocked
+                    ? "Hoàn tất nạp và xử lý lỗi kiến thức trước khi bật tuyển dụng."
+                    : undefined
+                }
               />
               <Button
                 type="submit"
                 color="primary"
                 size="sm"
-                className="project-edit-save"
+                className="uu-scope project-edit-save"
                 isDisabled={submitting}
+                isLoading={submitting}
+                showTextWhileLoading
               >
                 {translate("crm.common.save_changes")}
               </Button>

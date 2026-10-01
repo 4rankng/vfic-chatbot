@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any, Awaitable, Callable
 
 from sqlalchemy import func, select, text
@@ -36,7 +37,7 @@ from app.models.user import User
 from app.schemas.knowledge import KnowledgeDocumentUpdate
 from app.services.audit_service import record_audit
 from app.services.ingestion.limits import assert_upload_size
-from app.shared.domain.errors import ConflictError, NotFoundError
+from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
 from app.services.knowledge import LLMJson
 from app.services.knowledge.canonical import (
     CANONICAL_SCHEMA_VERSIONS,
@@ -83,6 +84,68 @@ class KnowledgeService:
 
     async def get(self, doc_id: uuid.UUID) -> KnowledgeDocument | None:
         return await self.db.get(KnowledgeDocument, doc_id)
+
+    async def assert_source_reprocessable(self, doc: KnowledgeDocument) -> None:
+        if (doc.metadata_ or {}).get("project_training"):
+            from app.services.knowledge.category_authority import require_category_project
+
+            await require_category_project(self.db, doc.project_id)
+        else:
+            await self.assert_mutable(doc.project_id, allow_authoritative=True)
+
+    async def queue_document(self, doc, *, jobs, reuse_completed=False) -> None:
+        """Persist truthful retry state and require broker acceptance of its source."""
+        from app.services.knowledge.project_training import training_progress
+
+        async def locked_source():
+            if doc.project_id is not None:
+                await self.db.scalar(select(Project.id).where(Project.id == doc.project_id).with_for_update())
+            return await self.db.scalar(
+                select(KnowledgeDocument).where(KnowledgeDocument.id == doc.id).with_for_update()
+                .execution_options(populate_existing=True)
+            )
+
+        locked = await locked_source()
+        if locked is None:
+            raise NotFoundError("document not found")
+        training = (locked.metadata_ or {}).get("project_training")
+        if training is not None:
+            lease = training.get("lease_expires_at")
+            if lease and datetime.fromisoformat(lease) > datetime.now(UTC):
+                await self.db.commit()
+                return
+            if reuse_completed and (locked.digest_meta or {}).get("project_training", {}).get("status") == "COMPLETED":
+                await self.db.commit()
+                return
+            training_progress(locked, status="QUEUED", current=None, error=None)
+            locked.metadata_ = {**(locked.metadata_ or {}), "project_training": {
+                **training, "processing_token": None, "lease_expires_at": None,
+            }}
+        locked.status = KnowledgeStatus.UPLOADED
+        locked.stage = "EXTRACTED"
+        locked.error = None
+        await self.db.commit()
+        try:
+            jobs.ingest_document(locked.id)
+        except Exception as exc:
+            latest = await locked_source()
+            progress = (latest.digest_meta or {}).get("project_training", {}) if latest is not None else {}
+            if progress.get("status") == "COMPLETED":
+                await self.db.commit()
+                return  # A broker receipt was lost after the worker completed.
+            latest_training = (latest.metadata_ or {}).get("project_training", {}) if latest is not None else {}
+            lease = latest_training.get("lease_expires_at")
+            alive = bool(lease and datetime.fromisoformat(lease) > datetime.now(UTC))
+            if latest is not None and not alive:
+                latest.status = KnowledgeStatus.FAILED
+                latest.stage = "FAILED"
+                latest.error = "Hàng đợi xử lý chưa sẵn sàng. Vui lòng thử xử lý lại tệp đã lưu."
+                if training is not None:
+                    training_progress(latest, status="FAILED", error=latest.error)
+                await self.db.commit()
+            else:
+                await self.db.commit()
+            raise UpstreamError("Hàng đợi xử lý chưa sẵn sàng. Vui lòng thử xử lý lại tệp đã lưu.") from exc
 
     async def get_version(self, version_id: uuid.UUID) -> KBVersion | None:
         return await self.db.get(KBVersion, version_id)
@@ -381,11 +444,23 @@ class KnowledgeService:
         data: bytes,
         *,
         project_id: uuid.UUID | None = None,
+        training_plan=None,
+        actor=None,
     ) -> KnowledgeDocument:
         """Multipart upload: extract text, persist the original, create doc."""
         # SEC-05: the caller already checks Content-Length / the route guard, but
         # the service is the single entry point both upload paths funnel through.
         assert_upload_size(len(data))
+        training_created_at = None
+        if training_plan is not None:
+            from app.services.knowledge.project_training import validate_training_plan
+
+            if project_id is None or actor is None:
+                raise KnowledgeFileExtractionError("Chọn dự án và dùng tài khoản quản trị để nạp kiến thức.")
+            try:
+                validate_training_plan(training_plan)
+            except ValueError as exc:
+                raise KnowledgeFileExtractionError("Nội dung danh mục chưa hợp lệ. Vui lòng kiểm tra tệp rồi thử lại.") from exc
         extracted_text, source_metadata = self._extract_upload_text(file_name, content_type, data)
         # Canonical-if-declared, the same contract as ``upload_text_file``: a
         # freeform document (a project brief, say) ingests as-is, while text that
@@ -398,11 +473,51 @@ class KnowledgeService:
         canonical = parse_canonical_markdown(raw_text) if is_canonical else None
         if canonical is not None and project_id is None:
             project_id = await self._resolve_project_from_canonical(canonical)
-        await self.assert_mutable(project_id, allow_authoritative=True)
+        if training_plan is None:
+            await self.assert_mutable(project_id, allow_authoritative=True)
+        else:
+            from app.services.knowledge.category_authority import require_category_project
+
+            await require_category_project(self.db, project_id)
+        if training_plan is not None:
+            # Serialize source retention against a worker's final category
+            # cutover check, so an older source cannot publish over this one.
+            await self.db.scalar(select(Project).where(Project.id == project_id).with_for_update())
         metadata, version = self._build_canonical_metadata(
             canonical, raw_text, extracted_text, repair
         )
         metadata["source_file"] = source_metadata
+        if training_plan is not None:
+            if not raw_text.strip():
+                raise KnowledgeFileExtractionError("Tệp kiến thức không có nội dung. Vui lòng chọn tệp khác.")
+            metadata["project_training"] = {
+                **training_plan.model_dump(mode="json"),
+                "actor_id": str(actor.id),
+                "plan_sha256": checksum_text(training_plan.model_dump_json()),
+            }
+            existing = await self.db.scalar(
+                select(KnowledgeDocument).where(
+                    KnowledgeDocument.project_id == project_id,
+                    KnowledgeDocument.source == "upload",
+                    KnowledgeDocument.metadata_["project_training"]["plan_sha256"].as_string()
+                    .is_not(None),
+                    KnowledgeDocument.status != KnowledgeStatus.ARCHIVED,
+                ).order_by(KnowledgeDocument.created_at.desc()).limit(1)
+            )
+            if existing is not None and (
+                (existing.metadata_ or {}).get("source_file", {}).get("text_checksum")
+                == source_metadata["text_checksum"]
+                and (existing.metadata_ or {}).get("project_training", {}).get("plan_sha256")
+                == metadata["project_training"]["plan_sha256"]
+            ):
+                return existing
+            # now() is a transaction-start timestamp in PostgreSQL. Stamp
+            # after the project lock instead, preserving actual source order
+            # even when requests began their transactions in reverse order.
+            training_created_at = max(
+                datetime.now(UTC),
+                existing.created_at + timedelta(microseconds=1) if existing is not None else datetime.min.replace(tzinfo=UTC),
+            )
         storage_path = persist_original_upload(file_name, data)
         doc = KnowledgeDocument(
             file_name=file_name,
@@ -415,8 +530,13 @@ class KnowledgeService:
             project_id=project_id,
             status=KnowledgeStatus.UPLOADED,
             stage="EXTRACTED" if raw_text.strip() else "UPLOADED",
+            digest_meta={"project_training": {
+                "status": "QUEUED", "current": None, "completed": [], "error": None,
+            }} if training_plan is not None else {},
         )
         self.db.add(doc)
+        if training_created_at is not None:
+            doc.created_at = training_created_at
         await self.db.commit()
         await self.db.refresh(doc)
         return doc

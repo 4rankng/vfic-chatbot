@@ -90,6 +90,16 @@ describe("project knowledge policy", () => {
     ).toEqual({ ready: 7, total: 16 });
   });
 
+  it("shows unknown readiness instead of implying a zero-sized catalog is measured", () => {
+    expect(
+      projectReadinessLabel({
+        knowledge_mode: "RAG",
+        knowledge_document_count: 0,
+        feature_readiness: { ready: 0, total: 0 },
+      }),
+    ).toBe("Chưa đo");
+  });
+
   it("orders and pads feature slots using the API catalog total", () => {
     const low = feature(2);
     const high = feature(9);

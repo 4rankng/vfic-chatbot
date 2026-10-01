@@ -129,6 +129,7 @@ class ProjectFeatures:
     salary_min: int | None = None
     salary_max: int | None = None
     scope: tuple[ProjectScopeItem, ...] = ()
+    aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -206,7 +207,7 @@ def _matches_filter(
 
 
 def _company_fields(project: ProjectFeatures) -> tuple[str, ...]:
-    return (project.name, project.company, project.factory)
+    return (project.name, project.company, project.factory, project.slug, *project.aliases)
 
 
 def _job_scope_dimension(project: ProjectFeatures, job_scope: str) -> FitDimension:
@@ -233,9 +234,9 @@ def _location_dimension(project: ProjectFeatures, location: str) -> FitDimension
         return FitDimension("location", 0.5, location, "")
     terms = _filter_terms(location)
     tokens = set().union(*(_field_search_tokens(field) for field in fields if field))
-    if any(term in tokens for term in terms):
+    if terms and all(term in tokens for term in terms):
         score = 1.0
-    elif any(_matches_identity_typo(term, tokens) for term in terms):
+    elif any(term in tokens or _matches_identity_typo(term, tokens) for term in terms):
         score = 0.5
     else:
         score = 0.0
@@ -313,14 +314,17 @@ def rank_projects(
     location: str | None = None,
     salary_min_vnd: int | None = None,
     sort_by: SortBy | None = None,
+    strict_criteria: bool = False,
 ) -> FitLookup:
     """Fit every active project against the stated preferences, best fit first.
 
     The returned list is never capped: the answer unit is the project catalog,
     so ``total`` is the number of projects in ``fits``. A named ``company`` is a
     request, not a preference — it hard-filters the catalog; every other
-    criterion only scores fit, and a low fit stays in the list with honest
-    notes.
+    criterion scores fit, and a low fit stays in the list with honest notes.
+    ``strict_criteria`` is for an explicit "only matching projects" request;
+    every stated criterion then needs source-backed full evidence. Unknown
+    values are not silently treated as matches.
     """
     if not projects:
         return FitLookup("catalog_empty")
@@ -350,6 +354,19 @@ def rank_projects(
         )
         for project in candidates
     ]
+    if strict_criteria:
+        scope_terms = _filter_terms(job_scope)
+        fits = [
+            fit
+            for fit in fits
+            if all(dimension.score == 1.0 for dimension in fit.dimensions)
+            and (
+                not scope_terms
+                or any(
+                    _matches_filter(scope_terms, (item.title,)) for item in fit.project.scope
+                )
+            )
+        ]
 
     if sort_by in {"salary_desc", "salary_asc"}:
         fits.sort(

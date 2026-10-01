@@ -110,9 +110,9 @@ def _plain_title(title: str) -> str:
 _PRESENTATION_CONTRACT = (
     "Đây là DỮ LIỆU DỰ ÁN từ tool — CHƯA phải câu trả lời cho ứng viên. "
     "Tự soạn câu trả lời theo đúng phong cách persona, tuân thủ: "
-    "(1) nếu ứng viên chưa nêu đủ mong muốn (phạm vi công việc / khu vực / mức lương) "
-    "và không yêu cầu xem tất cả → CHỈ hỏi ngắn gọn phần còn thiếu, chưa giới thiệu dự án nào; "
-    "(2) khi đã có mong muốn hoặc ứng viên xem tất cả → giới thiệu theo DỰ ÁN, "
+    "(1) nếu chưa rõ mong muốn và không yêu cầu xem dự án → hỏi một câu ngắn để hiểu nhu cầu; "
+    "không bắt khai đủ công việc/khu vực/mức lương mới tư vấn; "
+    "(2) khi đã có bất kỳ tiêu chí, đã nêu dự án hoặc muốn xem các lựa chọn → giới thiệu theo DỰ ÁN, "
     "mỗi dự án một khối: tên dự án, khu vực, mức lương, phạm vi công việc; "
     "xếp theo fit_score và nêu fit_notes trung thực, không bịa; "
     "(3) số dự án là total trong payload — không tự đếm, không bịa; "
@@ -181,6 +181,7 @@ def _project_payload(fit: ProjectFit) -> dict[str, object]:
         "district": _single_line(project.district),
         "address": _single_line(project.address),
         "summary": _single_line(project.summary),
+        "aliases": [_single_line(alias) for alias in project.aliases],
         "salary_min": project.salary_min,
         "salary_max": project.salary_max,
         "updated_at": project.updated_at.isoformat() if project.updated_at else None,
@@ -251,6 +252,7 @@ async def list_active_projects(
     location: str | None = None,
     salary_min_vnd: int | None = None,
     sort_by: str | None = None,
+    strict_criteria: bool = False,
 ) -> str:
     """Fit EVERY active project against the candidate's stated preferences.
 
@@ -260,8 +262,13 @@ async def list_active_projects(
     """
     if sort_by is not None and sort_by not in _ALLOWED_SORT_BY:
         sort_by = None
-    if isinstance(salary_min_vnd, bool) or not isinstance(salary_min_vnd, int):
+    if (
+        isinstance(salary_min_vnd, bool)
+        or not isinstance(salary_min_vnd, int)
+        or salary_min_vnd <= 0
+    ):
         salary_min_vnd = None
+    strict_criteria = strict_criteria is True
     try:
         rows = await retrieval.list_active_projects()
     except Exception:
@@ -280,6 +287,7 @@ async def list_active_projects(
         location=location,
         salary_min_vnd=salary_min_vnd,
         sort_by=sort_by,  # type: ignore[arg-type]
+        strict_criteria=strict_criteria,
     )
     if lookup.status == "catalog_empty":
         return _project_tool_result("catalog_empty", [], _CATALOG_EMPTY_REPLY, total=0)
@@ -348,6 +356,12 @@ async def get_product_features(
     (structured, non-RAG data reaching the agent). The agent is told to advise ONLY from
     this and to answer "chưa ghi rõ" for missing features rather than invent.
     """
+    repo = retrieval
+    # Availability is checked before cache access: deactivating a project must
+    # immediately stop candidate-facing feature reads, even with a warm cache.
+    pid = await repo.project_id_by_slug(project_slug, active_only=True)
+    if pid is None:
+        return f"Không tìm thấy dự án/sản phẩm với slug '{project_slug}'."
     s = get_settings()
     # Product features change only when jobs are re-imported; cache the formatted
     # result keyed by the knowledge version so FAQ/project edits invalidate it.
@@ -357,10 +371,6 @@ async def get_product_features(
         cached = await cache_get_json(cache_key)
         if isinstance(cached, str):
             return cached
-    repo = retrieval
-    pid = await repo.project_id_by_slug(project_slug)
-    if pid is None:
-        return f"Không tìm thấy dự án/sản phẩm với slug '{project_slug}'."
     rows = await repo.job_features_for_project(pid)
     if not rows:
         return (

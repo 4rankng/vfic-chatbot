@@ -26,6 +26,8 @@ from app.models.conversation import (
 from app.services.conversation.state import ConversationState, utcnow
 from tests.integration._conv_factory import make_zalo_conversation
 
+pytestmark = pytest.mark.integration
+
 
 class _NoopEvents:
     async def message_created(self, _message, _conversation) -> None:

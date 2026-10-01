@@ -78,13 +78,14 @@ const ProjectCreateForm = () => {
   const [ingestedRoles, setIngestedRoles] = useState("");
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [sourceReady, setSourceReady] = useState(false);
 
   // The slug is derived, never typed: a hand-typed one contradicts the name it
   // is supposed to identify, and the brief's own slug loses to the name the
   // recruiter actually typed above it.
   useEffect(() => {
-    if (name.trim()) setSlug(slugifyVietnamese(name));
-  }, [name]);
+    if (!draftId && name.trim()) setSlug(slugifyVietnamese(name));
+  }, [name, draftId]);
 
   useEffect(() => cancel, [cancel]);
 
@@ -102,6 +103,7 @@ const ProjectCreateForm = () => {
     file: File,
   ) => {
     setBrief(parsed);
+    setSourceReady(false);
     setBriefFilename(filename);
     if (parsed.aliases.length > 0) setAliases(parsed.aliases.join(", "));
     if (parsed.roles.length > 0) setRoles(parsed.roles.join(", "));
@@ -127,20 +129,23 @@ const ProjectCreateForm = () => {
         });
         id = String(created.data.id);
         setDraftId(id);
+        setSlug(
+          String(
+            created.data.slug ??
+              slugifyVietnamese(name.trim() || parsed.name || "du-an-moi"),
+          ),
+        );
       }
-      // The brief's highlight facts ride the card itself: PATCHed right after
-      // the draft exists and before the category writes, because the
-      // activation projection PRESERVES `highlights` (it only seeds them), so
-      // landing them first is safe and no later projection clobbers them. A
-      // brief with no highlights sends nothing — the card keeps its derived
-      // empty list.
-      if (parsed.highlights.length > 0) {
+      setIngestedRoles(parsed.roles.join(", "));
+      const landed = await ingest(id, planBriefKnowledge(parsed).writes, file);
+      // Only confirmed source content can become recruiting claims. A failed
+      // upload must not leave highlights that a later retry could publish.
+      if (landed && parsed.highlights.length > 0) {
         await updateProjectDiscoveryCard(id, {
           discovery_card: { highlights: parsed.highlights },
         });
       }
-      setIngestedRoles(parsed.roles.join(", "));
-      await ingest(id, planBriefKnowledge(parsed).writes, file);
+      setSourceReady(landed);
     } catch (error) {
       notify((error as Error).message, { type: "error" });
     } finally {
@@ -159,7 +164,7 @@ const ProjectCreateForm = () => {
    * and this button.
    */
   const onSubmit = async () => {
-    if (!draftId) return;
+    if (!draftId || !name.trim() || !sourceReady) return;
     const roleList = parseCommaList(roles);
     setSubmitting(true);
     try {
@@ -167,13 +172,14 @@ const ProjectCreateForm = () => {
       // before the project is allowed to go live — otherwise the live project
       // would answer with roles the recruiter just removed.
       if (rolesDirty) {
-        await ingest(draftId, [
+        const landed = await ingest(draftId, [
           {
             key: "jobs",
             filename: "jobs.md",
-            content: buildJobsMarkdown(roleList),
+            content: buildJobsMarkdown(roleList, brief?.location),
           },
         ]);
+        if (!landed) return;
         setIngestedRoles(roles.trim());
       }
       await dataProvider.update("projects", {
@@ -198,14 +204,13 @@ const ProjectCreateForm = () => {
 
   const ingesting = state.phase === "running";
   const canSave =
-    draftId !== null && !ingesting && !creatingDraft && !submitting;
+    draftId !== null &&
+    Boolean(name.trim()) &&
+    sourceReady &&
+    !ingesting &&
+    !creatingDraft &&
+    !submitting;
   const ingestBlocked = state.phase === "failed";
-  // The brief-document upload is best-effort: its error is shown alongside the
-  // outcome, never as a reason to block the category writes or the activation.
-  const uploadError =
-    state.phase === "done" || state.phase === "failed"
-      ? state.uploadError
-      : undefined;
 
   return (
     <Form onSubmit={onSubmit}>
@@ -224,8 +229,10 @@ const ProjectCreateForm = () => {
           id="project-slug"
           className="uu-scope"
           label="Mã dự án"
+          hint={draftId ? "Mã cố định từ khi bản nháp được tạo." : undefined}
           validationBehavior="aria"
           value={slug}
+          isReadOnly
           placeholder="lg-display-hai-phong"
           onChange={setSlug}
         />
@@ -248,9 +255,8 @@ const ProjectCreateForm = () => {
           onChange={setRoles}
         />
         <p className="text-helper text-muted-foreground">
-          Mỗi vị trí là một dòng trong danh mục «Vị trí tuyển dụng». Có vị trí
-          tuyển dụng thì Agent mới tư vấn được. Số lượng tuyển không giới hạn
-          nên không cần khai báo.
+          Vị trí tuyển dụng giúp Agent tư vấn cụ thể hơn cho từng công việc. Bạn
+          có thể bổ sung sau; dự án vẫn là đơn vị ứng tuyển.
         </p>
 
         <hr className="border-border" />
@@ -283,28 +289,41 @@ const ProjectCreateForm = () => {
         ) : null}
         {ingestBlocked ? (
           <p role="alert" className="text-helper text-destructive">
-            Nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}» không thành
-            công
+            Chưa xác nhận hoàn tất «
+            {PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}»
             {state.message ? `: ${state.message}` : "."} Dự án vẫn là bản nháp
-            và chưa hiển thị với ứng viên. Sửa nội dung rồi tải lại tệp.
+            và chưa hiển thị với ứng viên. Kiểm tra trạng thái trong bản nháp;
+            nếu hệ thống báo lỗi nội dung, chỉnh sửa rồi nạp lại.
           </p>
         ) : null}
-        {uploadError ? (
-          <p role="alert" className="text-helper text-destructive">
-            Tệp phiếu chưa được lưu vào tài liệu dự án: {uploadError}. Nội dung
-            danh mục vẫn đã được nạp.
-          </p>
+        {ingestBlocked && draftId ? (
+          <Button
+            color="secondary"
+            className="uu-scope w-fit"
+            onClick={() => redirect("edit", "projects", draftId)}
+          >
+            Kiểm tra bản nháp
+          </Button>
         ) : null}
         {rolesDirty && draftId ? (
           <p className="text-helper text-muted-foreground">
             Danh sách vị trí đã sửa — sẽ được nạp lại khi bạn bấm «Tạo dự án».
+            {sourceReady && ingestBlocked
+              ? " Bạn có thể bấm lại để thử nạp các vị trí đã sửa."
+              : ""}
           </p>
         ) : null}
 
         <p className="text-helper text-muted-foreground">
           Dự án chỉ hiển thị với ứng viên sau khi bạn bấm «Tạo dự án».
         </p>
-        <Button type="submit" className="uu-scope" isDisabled={!canSave}>
+        <Button
+          type="submit"
+          className="uu-scope"
+          isDisabled={!canSave}
+          isLoading={submitting}
+          showTextWhileLoading
+        >
           {submitting ? "Đang tạo…" : "Tạo dự án"}
         </Button>
       </div>

@@ -34,6 +34,25 @@ export type ProjectDocumentUpload = Readonly<{
   bytes: ArrayBuffer;
 }>;
 
+export type ProjectTrainingWrite = Readonly<{
+  key: ProjectKnowledgeCategory;
+  filename: string;
+  content: string;
+}>;
+
+export type ProjectTrainingDocument = Readonly<{
+  id: string;
+  status: "UPLOADED" | "PROCESSING" | "PUBLISHED" | "FAILED" | "ARCHIVED";
+  stage: string;
+  error: string | null;
+  project_training: Readonly<{
+    status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+    current: ProjectKnowledgeCategory | null;
+    completed: readonly ProjectKnowledgeCategory[];
+    error: string | null;
+  }> | null;
+}>;
+
 /**
  * A partial write to the recruiter-authored half of a project record: the
  * discovery card the agent matches candidates against, plus the aliases used to
@@ -88,7 +107,9 @@ export type ProjectKnowledgePort = Readonly<{
   uploadDocument: (
     projectId: string,
     file: ProjectDocumentUpload,
-  ) => Promise<void>;
+    writes?: readonly ProjectTrainingWrite[],
+  ) => Promise<ProjectTrainingDocument>;
+  getTrainingDocument: (documentId: string) => Promise<ProjectTrainingDocument>;
   getSinglePage: (projectId: string) => Promise<SinglePageKnowledge>;
   replaceSinglePage: (
     projectId: string,

@@ -15,6 +15,7 @@ from app.recruitment.domain.candidate_extraction import (
     has_explicit_human_review_evidence,
     normalize_contact_intent,
 )
+from app.recruitment.domain.intake import candidate_contact_mobile, candidate_wish
 
 
 ExtractorPort = Callable[[str, str], Awaitable[str]]
@@ -132,9 +133,21 @@ class CandidateExtractionUseCases:
             ),
         )
         parsed = _parse_candidate_json(raw)
+        explicit_name = self._normalizer.extract_self_reported_name(user_text)
+        explicit_phone = candidate_contact_mobile(user_text)
+        explicit_wish = candidate_wish(user_text)
         lead_patch = self._normalizer.normalize_lead_patch(parsed.get("lead_patch"), chat_id)
-        if lead_patch and not lead_patch.get("name"):
-            lead_patch["name"] = self._normalizer.extract_self_reported_name(user_text)
+        if lead_patch is None and any((explicit_name, explicit_phone, explicit_wish)):
+            lead_patch = self._normalizer.normalize_lead_patch(
+                {"name": explicit_name, "phone": explicit_phone, "desired_job": explicit_wish},
+                chat_id,
+            )
+        if lead_patch:
+            lead_patch["name"] = explicit_name
+            if explicit_phone or "phone" in lead_patch:
+                lead_patch["phone"] = explicit_phone
+            if not lead_patch.get("desired_job"):
+                lead_patch["desired_job"] = explicit_wish
         memory_facts = self._parse_memory_facts(parsed.get("memory_facts"))
         contact_intent, intent_confidence = normalize_contact_intent(
             parsed.get("contact_intent"),

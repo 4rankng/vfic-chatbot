@@ -161,9 +161,22 @@ describe("ProjectAccordionList", () => {
     );
 
     expect(stateBadgeLabels(screen.container)).toEqual([
-      "Sẵn sàng",
+      "Đang tuyển dụng",
       "Bản nháp",
     ]);
+  });
+
+  it("does not claim trained knowledge for an active project with no documents", async () => {
+    const screen = await render(
+      <ProjectAccordionList
+        projects={[{ ...projects[0], knowledge_document_count: 0 }]}
+        isAdmin={false}
+        canEdit={false}
+        onEdit={vi.fn()}
+        onDeleted={vi.fn()}
+      />,
+    );
+    expect(stateBadgeLabels(screen.container)).toEqual(["Đang tuyển dụng"]);
   });
 
   it("shows one-page readiness without applying the RAG feature score", async () => {
@@ -295,6 +308,33 @@ describe("ProjectAccordionList", () => {
       )
       .toBeVisible();
   });
+
+  it.each(["ingesting", "error"] as const)(
+    "keeps a draft inactive while its knowledge is %s",
+    async (ingest_state) => {
+      const screen = await render(
+        <ProjectAccordionList
+          projects={[{ ...projects[0], is_active: false, ingest_state }]}
+          isAdmin={false}
+          canEdit
+          onEdit={vi.fn()}
+          onDeleted={vi.fn()}
+          onToggleActive={vi.fn()}
+        />,
+      );
+      await screen
+        .getByRole("button", {
+          name: "Mở hoặc đóng kiến thức dự án LG Display",
+        })
+        .click();
+      await expect
+        .element(screen.getByRole("button", { name: "Bật dự án LG Display" }))
+        .toBeDisabled();
+      await expect
+        .element(screen.getByText(/Hoàn tất nạp và xử lý lỗi kiến thức/))
+        .toBeVisible();
+    },
+  );
 
   it("hides the toggle when no handler is supplied", async () => {
     const screen = await render(

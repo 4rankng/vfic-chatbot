@@ -15,6 +15,16 @@
   cursor: default;
 }
 
+/* The shared frame enters document flow below 1024px. On tablets the inbox
+   still has bounded, independently scrolling panes, so percentage heights
+   would collapse to the list's content height. Reserve the space beneath
+   the 56px global header explicitly. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .workspace-frame-content > .inbox-bg-container.conversation-workspace {
+    height: calc(100dvh - 56px);
+  }
+}
+
 @media (max-width: 1180px) {
   .inbox-bg-container .app {
     grid-template-columns: 56px 300px minmax(0, 1fr);

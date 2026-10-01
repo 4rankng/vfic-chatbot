@@ -6,13 +6,69 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import ValidationError
 
-from app.models.knowledge import KnowledgeBaseMode
+from app.models.knowledge import KnowledgeBaseMode, KnowledgeStatus
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.schemas.projects import ProjectCreate, ProjectListResponse, ProjectOut, ProjectUpdate
 from app.services.project import service as project_service
 from app.services.project.repository import ProjectRepository
 from app.services.project import ProjectService
 from app.shared.domain.errors import ConflictError
+
+
+@pytest.mark.parametrize(
+    ("document_status", "training_status"),
+    [
+        (KnowledgeStatus.UPLOADED, "QUEUED"),
+        (KnowledgeStatus.PROCESSING, "PROCESSING"),
+        (KnowledgeStatus.FAILED, "FAILED"),
+        (KnowledgeStatus.PUBLISHED, "PROCESSING"),
+        (KnowledgeStatus.PROCESSING, "COMPLETED"),
+    ],
+)
+async def test_inactive_project_rejects_unfinished_latest_training_source(
+    document_status, training_status
+):
+    project = SimpleNamespace(id=uuid.uuid4(), knowledge_base_id=uuid.uuid4(), is_active=False)
+    source = SimpleNamespace(
+        status=document_status, digest_meta={"project_training": {"status": training_status}}
+    )
+    db = AsyncMock()
+    db.scalar.side_effect = [False, source]
+    service = ProjectService(db)
+    service._knowledge_modes = AsyncMock(return_value={project.knowledge_base_id: KnowledgeBaseMode.RAG})
+
+    with pytest.raises(ConflictError, match="chưa được xử lý xong"):
+        await service._require_activation_ready(project)
+
+    assert project.is_active is False
+    service._knowledge_modes.assert_not_awaited()
+
+
+@pytest.mark.parametrize("has_training_source", [True, False])
+async def test_inactive_project_allows_completed_training_or_legacy_without_source(has_training_source):
+    project = SimpleNamespace(id=uuid.uuid4(), knowledge_base_id=uuid.uuid4(), is_active=False)
+    source = SimpleNamespace(
+        status=KnowledgeStatus.PUBLISHED,
+        digest_meta={"project_training": {"status": "COMPLETED"}},
+    ) if has_training_source else None
+    db = AsyncMock()
+    db.scalar.side_effect = [False, source]
+    service = ProjectService(db)
+    service._knowledge_modes = AsyncMock(return_value={project.knowledge_base_id: KnowledgeBaseMode.RAG})
+
+    await service._require_activation_ready(project)
+
+
+async def test_already_active_project_does_not_gate_edits_on_replacement_training():
+    project = SimpleNamespace(id=uuid.uuid4(), knowledge_base_id=uuid.uuid4(), is_active=True)
+    db = AsyncMock()
+    db.scalar.return_value = True
+    service = ProjectService(db)
+    service._knowledge_modes = AsyncMock(return_value={project.knowledge_base_id: KnowledgeBaseMode.RAG})
+
+    await service._require_activation_ready(project)
+
+    db.scalar.assert_awaited_once()  # Source readiness does not disable live recruitment.
 
 
 class _FakeResult:
@@ -245,9 +301,13 @@ def _at(day: int) -> datetime:
         ([], [("PUBLISHED", 2)], "ready"),
         ([], [("FAILED", 2)], "error"),
         ([("CLEARED", 1)], [("PUBLISHED", 2)], "ready"),
-        # The LG case: a failure superseded by later successes is history.
+        # Historical document failures can be superseded by a fresh document.
         ([], [("FAILED", 1), ("PUBLISHED", 2)], "ready"),
-        ([("FAILED", 1)], [("PUBLISHED", 2)], "ready"),
+        # Latest revisions are per category: newer siblings/documents cannot
+        # repair a category's unresolved failure.
+        ([("FAILED", 1)], [("PUBLISHED", 2)], "error"),
+        ([("FAILED", 1), ("ACTIVE", 2)], [], "error"),
+        ([("FAILED", 1), ("ACTIVE", 2)], [("PUBLISHED", 3)], "error"),
         # Newest artifact FAILED with nothing newer → error, from either source.
         ([("ACTIVE", 1)], [("FAILED", 2)], "error"),
         ([("FAILED", 2)], [("PUBLISHED", 1)], "error"),

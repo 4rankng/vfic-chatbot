@@ -268,8 +268,9 @@ async def test_current_system_prompt_uses_database_persona_but_appends_recruitme
     assert prompt.startswith("Neutral configured persona")
     assert "đang tuyển" in prompt
     assert "search_knowledge" in prompt
-    assert "danh mục Job có cấu trúc đang trống" in prompt
-    assert "không được suy ra tình trạng tuyển dụng từ danh mục dự án" in prompt.lower()
+    assert "list_active_projects là nguồn kiểm tra" in prompt
+    assert "Không bắt phải có vị trí Job riêng" in prompt
+    assert "không được suy ra tình trạng tuyển dụng từ danh mục tên" in prompt.lower()
     assert "NGỮ CẢNH RIÊNG TƯ" in prompt
     assert cache_hit is False
 

@@ -582,15 +582,19 @@ load_conversation_state -> typing -> direct_context?
 - **Project matching authority:** generic requests such as “đang tuyển gì?” bypass
   FAQ and focused direct-context resolution, so work-seeking turns go straight to
   required `list_active_projects` with the criteria the candidate stated
-  (`job_scope`/`location`/`salary_min_vnd`/`company`/`sort_by`; the model composes
+  (`job_scope`/`location`/`salary_min_vnd`/`company`/`sort_by`/`strict_criteria`; the model composes
   the arguments — nothing forces `top_k` or caps the list). The tool returns EVERY
   active project, ranked by fit against the stated preferences and annotated with
   per-dimension fit notes; salary, location, and job scope are project features
   the candidate must be happy with, never the answer unit. Its presentation
   contract owns the probe-then-introduce behavior: when preferences are missing
   and the candidate did not ask to see everything, the agent asks one compact
-  question first; once preferences are stated (or “xem tất cả”), it introduces the
-  ranked projects. The discovery card projection intentionally leaves salary,
+  question first; once any preference is stated (or “xem tất cả”), it introduces
+  the ranked projects. Preferences are optional: candidates do not have to
+  supply role, location, and salary together. The default ranks the complete
+  active catalog; explicit hard limits use `strict_criteria` to exclude projects
+  whose supplied facts cannot confirm those limits. Matching recognizes project
+  names, aliases, and slugs. The discovery card projection intentionally leaves salary,
   shifts, benefits, and follow-up details to the full project page. Specific
   company, location, or role questions use the published recruitment KB as the
   answer source. In direct-context mode, the system first tries to return a

@@ -964,6 +964,10 @@ async def test_build_deps_resolves_settings_without_concurrent_session_access(mo
     monkeypatch.setattr("app.graph.factories.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
 
+    # The regression concerns sequential DB-backed resolution, not provider
+    # authentication. A fresh clone must not need a local MiniMax credential.
+    monkeypatch.setattr("app.graph.client_cache._chat_for_role", lambda *args, **kwargs: object())
+
     reset_client_cache()
     await build_deps(object())
 

@@ -384,8 +384,14 @@ const CandidateContextBody = ({
             />
           </div>
           <p>
-            Đã thu thập {completionPercent}% thông tin cần cho tư vấn tuyển
-            dụng.
+            Đã ghi nhận {completionPercent}% thông tin hồ sơ.{" "}
+            {lead?.phone?.trim()
+              ? "Đã có số điện thoại để liên hệ."
+              : "Cần bổ sung số điện thoại để liên hệ."}
+          </p>
+          <p>
+            Họ tên được khuyến khích; nguyện vọng và năm sinh có thể bổ sung
+            sau.
           </p>
         </section>
         <section className="context-card tt-card tt-card-sm">
@@ -432,6 +438,7 @@ const CandidateContextBody = ({
                     <TextField
                       key={field.key}
                       id={inputId}
+                      name={field.key}
                       className="min-w-0"
                       value={editSession.draft[field.key]}
                       isDisabled={isSaving}
@@ -449,7 +456,20 @@ const CandidateContextBody = ({
                       <Label>{translate(field.labelKey)}</Label>
                       <InputBase
                         inputMode={field.inputMode}
-                        type={field.inputMode === "numeric" ? "number" : "text"}
+                        type={
+                          field.inputMode === "numeric"
+                            ? "number"
+                            : field.inputMode === "tel"
+                              ? "tel"
+                              : "text"
+                        }
+                        autoComplete={
+                          field.key === "name"
+                            ? "name"
+                            : field.key === "phone"
+                              ? "tel"
+                              : "off"
+                        }
                         min={field.min}
                         max={field.max}
                       />

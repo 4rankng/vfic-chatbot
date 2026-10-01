@@ -31,7 +31,11 @@ from app.services.personas import PersonaService, persona_out_from_model
 # behavior the agent must follow — losing any of these changes the bot's
 # product behavior in a way the dashboard/conversion metrics depend on.
 CRITICAL_RULES = [
-    "Thu thập SỐ ĐIỆN THOẠI và NĂM SINH",  # §5 — lead-capture mission
+    "Thu thập SỐ ĐIỆN THOẠI DI ĐỘNG",  # §5 — contact-capture mission
+    "Số di động là thông tin liên hệ bắt buộc duy nhất",
+    "HỌ TÊN ĐẦY ĐỦ rất nên có",
+    "NGUYỆN VỌNG hữu ích",
+    "NĂM SINH tùy chọn",
     "Mỗi tin nhắn chỉ hỏi một lần ở câu chốt cuối cùng",  # §5 — one ask per message
     "TUYỆT ĐỐI KHÔNG BỊA ĐẶT",  # §4 — anti-fabrication
     "MỌI dự án đang hoạt động đều có thể xuất hiện — không bỏ sót, không xếp việc lẻ",  # §3 — introduce by project, never a job dump
@@ -336,6 +340,9 @@ async def test_build_system_prompt_cache_key_carries_the_prompt_text_revision(mo
     assert cache_hit is False
     assert captured["suffix"] == f"zalo_oa:r{context._PROMPT_TEXT_REVISION}"
     assert "persona body" in prompt
+    assert "SỐ ĐIỆN THOẠI DI ĐỘNG hợp lệ là thông tin liên hệ bắt buộc duy nhất" in prompt
+    assert "ưu tiên hơn mục tiêu cũ trong persona" in prompt
+    assert "không bắt phải có vị trí job riêng" in prompt.casefold()
 
     await context.build_system_prompt(_Repo())
     assert captured["suffix"] == f"default:r{context._PROMPT_TEXT_REVISION}"

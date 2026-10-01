@@ -38,6 +38,47 @@ afterEach(async () => {
   await page.viewport(wide, 900);
 });
 
+describe("tablet conversation viewport", () => {
+  it.each([768, 820, 1023])(
+    "keeps the transcript tall and the composer visible at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const screen = await render(
+        <div className="workspace-frame">
+          <header style={{ height: 56, flexShrink: 0 }}>Console</header>
+          <div style={{ display: "flex", flex: "1 1 auto", minHeight: 0 }}>
+            <main className="workspace-frame-content">
+              <div className="inbox-bg-container conversation-workspace">
+                <div className="app has-selected-conversation">
+                  <section className="left-panel">Danh sách hội thoại</section>
+                  <section className="center-panel">
+                    <header className="chat-header">Ứng viên</header>
+                    <div className="chat-scroll-shell">
+                      <div className="chat-scroller">Nội dung hội thoại</div>
+                    </div>
+                    <footer className="composer-wrap">Trả lời ứng viên</footer>
+                  </section>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>,
+      );
+      const inbox = screen.container.querySelector<HTMLElement>(
+        ".conversation-workspace",
+      )!;
+      const transcript =
+        screen.container.querySelector<HTMLElement>(".chat-scroll-shell")!;
+      const composer =
+        screen.container.querySelector<HTMLElement>(".composer-wrap")!;
+      expect(inbox.getBoundingClientRect().height).toBe(844);
+      expect(transcript.getBoundingClientRect().height).toBeGreaterThan(500);
+      expect(composer.getBoundingClientRect().bottom).toBeLessThanOrEqual(900);
+      expect(inbox.scrollWidth).toBeLessThanOrEqual(width);
+    },
+  );
+});
+
 describe("knowledge workspace title", () => {
   it("keeps the knowledge title on the shared page-title scale", async () => {
     // `.knowledge-command-header h1 { font-size: var(--fs-page-title) }`. The

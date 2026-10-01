@@ -21,6 +21,7 @@ from app.recruitment.application.candidate_extraction import (
     candidate_turn as _candidate_turn,
 )
 from app.recruitment.domain.candidate_extraction import CandidateExtraction, ContactIntent
+from app.recruitment.domain.intake import candidate_contact_mobile, candidate_wish
 from app.recruitment.domain.provider import lead_key_for_chat, lead_key_for_conversation
 from app.services.lead.events import LeadEventBus
 from app.services.lead.normalizers import extract_self_reported_name, normalize_lead
@@ -136,15 +137,32 @@ class CandidateExtractionService:
         existing_notes: str | None = None,
         oa_profile_display_name: str | None = None,
     ) -> CandidateExtraction:
-        result = await _candidate_extraction_use_cases().extract(
-            extractor,
-            system_prompt=CANDIDATE_EXTRACT_SYSTEM_PROMPT,
-            user_text=user_text,
-            bot_output=bot_output,
-            chat_id=chat_id,
-            existing_notes=existing_notes,
-            oa_profile_display_name=oa_profile_display_name,
-        )
+        try:
+            result = await _candidate_extraction_use_cases().extract(
+                extractor,
+                system_prompt=CANDIDATE_EXTRACT_SYSTEM_PROMPT,
+                user_text=user_text,
+                bot_output=bot_output,
+                chat_id=chat_id,
+                existing_notes=existing_notes,
+                oa_profile_display_name=oa_profile_display_name,
+            )
+        except Exception as exc:
+            explicit = {
+                "name": extract_self_reported_name(user_text),
+                "phone": candidate_contact_mobile(user_text),
+                "desired_job": candidate_wish(user_text),
+            }
+            if not any(explicit.values()):
+                raise
+            logger.warning(
+                "candidate extractor unavailable; preserving explicit contact evidence error_type=%s",
+                type(exc).__name__,
+            )
+            result = CandidateExtraction(
+                lead_patch=normalize_lead(explicit, chat_id),
+                memory_facts=[],
+            )
         logger.debug(
             "candidate extract: lead=%s memory_facts=%d intent=%s confidence=%.2f "
             "from user text (%d chars)",

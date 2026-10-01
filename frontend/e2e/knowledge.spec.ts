@@ -1,44 +1,68 @@
 import { expect, test } from "./fixtures";
 
-test.describe("knowledge ingestion journey", () => {
-  test("uploads a document through the console into the real backend", async ({
+const BRIEF = `Tên dự án: E2E Text Import
+Vị trí tuyển dụng: Công nhân sản xuất
+
+## Lương và thu nhập
+Lương cơ bản: 6.200.000 đồng/tháng.
+`;
+
+test.describe("project training source upload", () => {
+  test("retains one text file and a durable category plan before leaving the page", async ({
     loginAsAdmin,
     page,
   }) => {
     await loginAsAdmin();
-    await page.goto("/#/knowledge_sources");
-
+    await page.goto("/#/projects/create");
     await expect(
-      page.getByRole("heading", { name: "Quản lý kiến thức" }),
-    ).toBeVisible({ timeout: 15_000 });
-
-    // Step 1 of the inline uploader: pick the seeded project. Two "Chọn dự án"
-    // comboboxes render (toolbar filter first, uploader second), and neither
-    // exposes an accessible name, so target the uploader's by position.
-    await page.getByRole("combobox").last().click();
-    await page.getByRole("option", { name: "E2E Project" }).click();
-
-    // Step 2: attach a .txt source through the dropzone's file input; the
-    // selected-file chip proves the dropzone registered it.
-    await page.locator('input[type="file"]').setInputFiles([
-      {
-        name: "e2e-knowledge.txt",
-        mimeType: "text/plain",
-        buffer: Buffer.from(
-          "LG Display tuyển operator lương 15 triệu. Có xe đưa đón Hải Phòng.",
-        ),
-      },
-    ]);
-    await expect(
-      page.getByRole("button", { name: "Xóa tệp đã chọn" }),
+      page.getByRole("heading", { name: "Tạo dự án", exact: true }),
     ).toBeVisible();
 
-    // The uploader enables its button once project + file are present; exact
-    // name so the dropzone's "…để tải lên" label doesn't also match.
-    await page.getByRole("button", { name: "Tải lên", exact: true }).click();
-
+    const uploaded = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/knowledge/documents/upload-file") &&
+        response.request().method() === "POST",
+    );
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "e2e-project-brief.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from(BRIEF),
+    });
+    const response = await uploaded;
+    expect(response.status()).toBe(201);
+    const receipt = await response.json();
+    expect(receipt.file_name).toBe("e2e-project-brief.txt");
+    expect(receipt.project_id).toBeTruthy();
+    expect(receipt.project_training).toMatchObject({
+      status: "QUEUED",
+      completed: [],
+    });
     await expect(
-      page.getByText("Đã tạo phiên bản KB", { exact: false }),
-    ).toBeVisible({ timeout: 15_000 });
+      page.getByRole("button", { name: "Tạo dự án", exact: true }),
+    ).toBeDisabled();
+
+    // The test harness has no provider-backed worker. It proves persistence
+    // and queue acceptance; worker integration tests prove training completion.
+    await page
+      .getByRole("button", { name: "Đóng và quay lại danh sách dự án" })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Dự án tuyển dụng" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "E2E Text Import", exact: true }),
+    ).toBeVisible();
+    const token = await page.evaluate(() =>
+      localStorage.getItem("RaStore.auth.access_token"),
+    );
+    const document = await page.request.get(
+      response.url().replace("/upload-file", `/${receipt.id}`),
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(document.status()).toBe(200);
+    const retained = await document.json();
+    expect(retained.project_id).toBe(receipt.project_id);
+    expect(retained.project_training.status).toBe("QUEUED");
+    expect(retained.project_training).not.toHaveProperty("writes");
   });
 });

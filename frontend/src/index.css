@@ -1262,6 +1262,17 @@ input[type="time"] {
   font-size: var(--text-helper) !important;
 }
 
+/* A 16px text input prevents Safari from zooming the workspace on focus. */
+@media (max-width: 767px) {
+  :is(input, select, textarea):not(
+    [type="checkbox"],
+    [type="radio"],
+    [type="range"]
+  ) {
+    font-size: 16px !important;
+  }
+}
+
 /* 3 — control height ceiling. */
 :is(
   button,

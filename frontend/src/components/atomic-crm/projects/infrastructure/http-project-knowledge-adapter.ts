@@ -59,10 +59,12 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       body: { confirmation: "CUTOVER" },
     }),
 
-  uploadDocument: async (projectId, file) => {
+  uploadDocument: async (projectId, file, writes) => {
     const form = new FormData();
     form.append("file", new Blob([file.bytes], { type: file.type }), file.name);
     form.append("project_id", projectId);
+    if (writes?.length)
+      form.append("category_plan", JSON.stringify({ writes }));
     const response = await apiRequest(DOCUMENT_UPLOAD_PATH, {
       method: "POST",
       body: form,
@@ -73,7 +75,11 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
         "Không lưu được tệp vào tài liệu dự án.",
       );
     }
+    return response.json();
   },
+
+  getTrainingDocument: (documentId) =>
+    apiJson(`/api/v1/knowledge/documents/${encodeURIComponent(documentId)}`),
 
   getSinglePage: (projectId) =>
     apiJson(`${projectPath(projectId)}/single-page`),

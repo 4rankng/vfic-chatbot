@@ -4,11 +4,42 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from app.project_knowledge.domain.statuses import KBVersionStatus, KnowledgeStatus
+from app.schemas.knowledge_categories import KnowledgeCategoryKey
+
+
+class ProjectTrainingWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    key: KnowledgeCategoryKey
+    filename: str = Field(min_length=1, max_length=255)
+    content: str = Field(min_length=1, max_length=1_000_000)
+
+
+class ProjectTrainingPlan(BaseModel):
+    """Reviewed source-derived category proposals persisted with one upload."""
+
+    model_config = ConfigDict(extra="forbid")
+    writes: list[ProjectTrainingWrite] = Field(min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def unique_categories(self) -> ProjectTrainingPlan:
+        if len({write.key for write in self.writes}) != len(self.writes):
+            raise ValueError("A project training plan cannot repeat a category")
+        if sum(len(write.content) for write in self.writes) > 2_000_000:
+            raise ValueError("Project training category content is too large")
+        return self
+
+
+class ProjectTrainingProgress(BaseModel):
+    status: Literal["QUEUED", "PROCESSING", "COMPLETED", "FAILED"]
+    current: KnowledgeCategoryKey | None = None
+    completed: list[KnowledgeCategoryKey] = Field(default_factory=list)
+    error: str | None = None
 
 
 class ExternalSourceCreate(BaseModel):
@@ -63,6 +94,12 @@ class KnowledgeDocumentOut(BaseModel):
     digest_meta: dict[str, Any] = {}
     is_canonical: bool = False
     error: str | None = None
+
+    @computed_field
+    @property
+    def project_training(self) -> ProjectTrainingProgress | None:
+        progress = self.digest_meta.get("project_training")
+        return ProjectTrainingProgress.model_validate(progress) if progress else None
 
 
 class KnowledgeChunkOut(BaseModel):

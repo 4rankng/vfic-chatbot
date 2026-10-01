@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-policy";
 import {
   getProjectKnowledgeCategories,
+  getProjectTrainingDocument,
   replaceProjectKnowledgeCategory,
   uploadProjectDocument,
 } from "../project-knowledge-service";
@@ -64,14 +65,10 @@ export type IngestState =
       /** The backend's own words; an empty string when it gave none. */
       message: string;
       activated: readonly ProjectKnowledgeCategory[];
-      /** Non-fatal companion error: the brief-document upload failed. */
-      uploadError?: string;
     }>
   | Readonly<{
       phase: "done";
       activated: readonly ProjectKnowledgeCategory[];
-      /** Non-fatal companion error: the brief-document upload failed. */
-      uploadError?: string;
     }>;
 
 export type ProjectIngest = Readonly<{
@@ -88,19 +85,16 @@ export type ProjectIngest = Readonly<{
    * continues past the chain must check this before treating the knowledge as
    * landed.
    *
-   * `sourceFile` — the original brief file — is uploaded alongside the writes
-   * as a project knowledge document, so the brief stays on record (counted in
-   * the project's documents and searchable) instead of only surviving as
-   * derived YAML. Best-effort: its failure never blocks the writes and rides on
-   * the terminal state's `uploadError`. Callers without a file omit it and the
-   * chain behaves exactly as before.
+   * With `sourceFile`, upload the file and plan once and observe the worker's
+   * durable progress. Upload failure blocks the run. Without a source file,
+   * replace categories directly and await exact active revision IDs.
    */
   ingest: (
     projectId: string,
     writes: readonly IngestWrite[],
     sourceFile?: File,
   ) => Promise<boolean>;
-  /** Stop the chain; a write in flight still resolves but nothing follows it. */
+  /** Stop observing; a durable source upload continues on the worker. */
   cancel: () => void;
 }>;
 
@@ -109,8 +103,9 @@ type WaitOutcome =
   | Readonly<{ ok: false; message: string }>;
 
 /**
- * Runs a brief's knowledge ingest — the create form's first upload and every
- * later re-ingest from the project page share this one chain.
+ * Uploads a brief and its grounded category plan once. The worker owns the
+ * durable chain; this hook only observes progress, so leaving the page cannot
+ * strand half a project. Manual category edits await exact revision activation.
  *
  * The project page's `useProjectKnowledgeCatalog` is the right owner for edits,
  * but it fires each write and forgets it — which is fine there, because the
@@ -128,6 +123,7 @@ export const useProjectIngest = (): ProjectIngest => {
   const [state, setState] = useState<IngestState>({ phase: "idle" });
   const epochRef = useRef(0);
   const timerRef = useRef<number | null>(null);
+  const pendingWaitRef = useRef<((outcome: WaitOutcome) => void) | null>(null);
 
   const cancel = useCallback(() => {
     epochRef.current += 1;
@@ -135,6 +131,8 @@ export const useProjectIngest = (): ProjectIngest => {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+    pendingWaitRef.current?.({ ok: false, message: "" });
+    pendingWaitRef.current = null;
   }, []);
 
   useEffect(() => cancel, [cancel]);
@@ -142,16 +140,22 @@ export const useProjectIngest = (): ProjectIngest => {
   const waitForActive = useCallback(
     (
       projectId: string,
+      category: ProjectKnowledgeCategory,
       revisionId: string,
       epoch: number,
       onStatus: (status: "queued" | "processing", slow: boolean) => void,
     ) =>
       new Promise<WaitOutcome>((resolve) => {
+        const finish = (outcome: WaitOutcome) => {
+          if (pendingWaitRef.current === finish) pendingWaitRef.current = null;
+          resolve(outcome);
+        };
+        pendingWaitRef.current = finish;
         const attempt = (tries: number) => {
           timerRef.current = window.setTimeout(() => {
             timerRef.current = null;
             if (epoch !== epochRef.current) {
-              resolve({ ok: false, message: "" });
+              finish({ ok: false, message: "" });
               return;
             }
             // A hidden tab must not keep hitting the backend; park the hop
@@ -163,62 +167,58 @@ export const useProjectIngest = (): ProjectIngest => {
             void getProjectKnowledgeCategories(projectId)
               .then((catalog) => {
                 if (epoch !== epochRef.current) {
-                  resolve({ ok: false, message: "" });
+                  finish({ ok: false, message: "" });
                   return;
                 }
                 const row = catalog.data.find(
-                  (item) => item.active_revision_id === revisionId,
+                  (item) =>
+                    item.key === category &&
+                    item.active_revision_id === revisionId,
                 );
                 if (row) {
-                  resolve({ ok: true });
+                  finish({ ok: true });
                   return;
                 }
                 const failed = catalog.data.find(
                   (item) =>
+                    item.key === category &&
                     item.latest_revision_id === revisionId &&
                     item.status === "FAILED",
                 );
                 if (failed) {
-                  resolve({ ok: false, message: failed.error_message ?? "" });
+                  finish({ ok: false, message: failed.error_message ?? "" });
                   return;
                 }
-                // The replace response already accepted the content; waiting
-                // longer is only meaningful while the catalog still tracks the
-                // revision as in review. A category row that does not carry the
-                // revision at all contradicts nothing, so acceptance stands.
-                const reviewing = catalog.data.some(
+                // Acceptance queues a revision; only an exact active revision
+                // confirms it is searchable. A stale or missing catalog row
+                // remains pending through the same bounded polling budget.
+                const latest = catalog.data.find(
                   (item) =>
-                    item.latest_revision_id === revisionId &&
-                    (item.status === "STAGED" || item.status === "PROCESSING"),
+                    item.key === category &&
+                    item.latest_revision_id === revisionId,
                 );
-                if (reviewing) {
-                  const latest = catalog.data.find(
-                    (item) => item.latest_revision_id === revisionId,
-                  );
-                  const status =
-                    latest?.status === "PROCESSING" ? "processing" : "queued";
-                  // Past the soft budget the run is slow but alive; keep
-                  // polling. The board shows the category as still processing
-                  // instead of declaring a false failure.
-                  onStatus(status, tries >= SOFT_POLL_ATTEMPTS);
-                  if (tries < HARD_POLL_ATTEMPTS) {
-                    attempt(tries + 1);
-                    return;
-                  }
-                  resolve({
-                    ok: false,
-                    message:
-                      "Hệ thống xử lý chậm bất thường. Kiến thức vẫn đang được xử lý; thử nhập lại tệp sau ít phút.",
-                  });
+                const status =
+                  latest?.status === "PROCESSING" ? "processing" : "queued";
+                // Past the soft budget the run is slow but alive; keep
+                // polling. The board shows the category as still processing
+                // instead of declaring a false failure.
+                onStatus(status, tries >= SOFT_POLL_ATTEMPTS);
+                if (tries < HARD_POLL_ATTEMPTS) {
+                  attempt(tries + 1);
                   return;
                 }
-                resolve({ ok: true });
+                finish({
+                  ok: false,
+                  message:
+                    "Hệ thống xử lý chậm bất thường. Kiến thức vẫn đang được xử lý; thử nhập lại tệp sau ít phút.",
+                });
+                return;
               })
               .catch((error: unknown) => {
                 if (epoch === epochRef.current) {
-                  resolve({ ok: false, message: (error as Error).message });
+                  finish({ ok: false, message: (error as Error).message });
                 } else {
-                  resolve({ ok: false, message: "" });
+                  finish({ ok: false, message: "" });
                 }
               });
           }, POLL_INTERVAL_MS);
@@ -237,20 +237,166 @@ export const useProjectIngest = (): ProjectIngest => {
       cancel();
       const epoch = epochRef.current;
       const activated: ProjectKnowledgeCategory[] = [];
-      // The original brief is uploaded best-effort, alongside the writes: it
-      // must land on record as a project knowledge document, but its failure
-      // never blocks the category chain. Started first and awaited only at the
-      // terminal states, so it rides along the poll waits instead of
-      // serializing behind them, and its error is reported without stopping.
-      let uploadError: string | undefined;
-      const uploadSettled = sourceFile
-        ? uploadProjectDocument(projectId, sourceFile).catch(
-            (error: unknown) => {
-              uploadError = (error as Error).message;
-            },
-          )
-        : Promise.resolve();
-
+      if (writes.length === 0) {
+        setState({
+          phase: "failed",
+          failed: "jobs",
+          message:
+            "Tệp chưa có nội dung kiến thức có thể nạp. Bổ sung thông tin tuyển dụng rồi tải lại tệp.",
+          activated: [],
+        });
+        return false;
+      }
+      if (sourceFile) {
+        const first = writes[0].key;
+        setState({
+          phase: "running",
+          current: first,
+          activated: [],
+          total: writes.length,
+          items: writes.map((write) => ({ key: write.key, status: "pending" })),
+        });
+        try {
+          const receipt = await uploadProjectDocument(
+            projectId,
+            sourceFile,
+            writes,
+          );
+          if (epoch !== epochRef.current) return false;
+          const outcome = await new Promise<WaitOutcome>((resolve) => {
+            const finish = (value: WaitOutcome) => {
+              if (pendingWaitRef.current === finish)
+                pendingWaitRef.current = null;
+              resolve(value);
+            };
+            pendingWaitRef.current = finish;
+            const poll = (tries: number, errors = 0) => {
+              timerRef.current = window.setTimeout(() => {
+                timerRef.current = null;
+                if (epoch !== epochRef.current) {
+                  finish({ ok: false, message: "" });
+                  return;
+                }
+                if (document.visibilityState === "hidden") {
+                  poll(tries, errors);
+                  return;
+                }
+                void getProjectTrainingDocument(receipt.id)
+                  .then((document) => {
+                    if (epoch !== epochRef.current) {
+                      finish({ ok: false, message: "" });
+                      return;
+                    }
+                    const training = document.project_training;
+                    const completed = training?.completed ?? [];
+                    const current =
+                      training?.current ??
+                      writes.find((write) => !completed.includes(write.key))
+                        ?.key ??
+                      first;
+                    activated.splice(
+                      0,
+                      activated.length,
+                      ...writes
+                        .filter((write) => completed.includes(write.key))
+                        .map((write) => write.key),
+                    );
+                    if (
+                      document.status === "FAILED" ||
+                      document.status === "ARCHIVED" ||
+                      training?.status === "FAILED"
+                    ) {
+                      setState({
+                        phase: "failed",
+                        failed: current,
+                        message:
+                          training?.error ||
+                          document.error ||
+                          "Không thể nạp tệp. Hãy kiểm tra nội dung rồi tải lại.",
+                        activated: [...activated],
+                      });
+                      finish({ ok: false, message: "" });
+                      return;
+                    }
+                    if (training?.status === "COMPLETED") {
+                      if (activated.length !== writes.length) {
+                        finish({
+                          ok: false,
+                          message:
+                            "Hệ thống chưa xác nhận đầy đủ các danh mục. Hãy tải lại tệp.",
+                        });
+                        return;
+                      }
+                      finish({ ok: true });
+                      return;
+                    }
+                    setState({
+                      phase: "running",
+                      current,
+                      activated: [...activated],
+                      total: writes.length,
+                      slow: tries >= SOFT_POLL_ATTEMPTS,
+                      items: writes.map((write) => ({
+                        key: write.key,
+                        status: completed.includes(write.key)
+                          ? "active"
+                          : training?.current === write.key
+                            ? "processing"
+                            : "queued",
+                      })),
+                    });
+                    if (tries < HARD_POLL_ATTEMPTS) {
+                      poll(tries + 1);
+                      return;
+                    }
+                    finish({
+                      ok: false,
+                      message:
+                        "Chưa nhận được kết quả xử lý. Tệp đã được lưu và hệ thống tiếp tục nạp; kiểm tra lại dự án sau ít phút.",
+                    });
+                  })
+                  .catch((error: unknown) => {
+                    if (epoch !== epochRef.current) {
+                      finish({ ok: false, message: "" });
+                      return;
+                    }
+                    if (errors < 2 && tries < HARD_POLL_ATTEMPTS) {
+                      poll(tries + 1, errors + 1);
+                      return;
+                    }
+                    finish({ ok: false, message: (error as Error).message });
+                  });
+              }, POLL_INTERVAL_MS);
+            };
+            poll(0);
+          });
+          if (epoch !== epochRef.current) return false;
+          if (!outcome.ok) {
+            // The worker failure above already preserves its exact category.
+            if (outcome.message)
+              setState({
+                phase: "failed",
+                failed:
+                  writes.find((write) => !activated.includes(write.key))?.key ??
+                  first,
+                message: outcome.message,
+                activated: [...activated],
+              });
+            return false;
+          }
+          setState({ phase: "done", activated: [...activated] });
+          return true;
+        } catch (error) {
+          if (epoch !== epochRef.current) return false;
+          setState({
+            phase: "failed",
+            failed: first,
+            message: (error as Error).message,
+            activated: [],
+          });
+          return false;
+        }
+      }
       const itemStates = writes.map(
         (write): IngestItemState => ({ key: write.key, status: "pending" }),
       );
@@ -279,14 +425,14 @@ export const useProjectIngest = (): ProjectIngest => {
           );
           revisionId = result.revision.id;
         } catch (error) {
+          if (epoch !== epochRef.current) return false;
           setItem(index, "failed");
-          await uploadSettled;
+          if (epoch !== epochRef.current) return false;
           setState({
             phase: "failed",
             failed: write.key,
             message: (error as Error).message,
             activated: [...activated],
-            uploadError,
           });
           return false;
         }
@@ -294,6 +440,7 @@ export const useProjectIngest = (): ProjectIngest => {
         if (epoch !== epochRef.current) return false;
         const outcome = await waitForActive(
           projectId,
+          write.key,
           revisionId,
           epoch,
           (status, slow) => {
@@ -308,15 +455,15 @@ export const useProjectIngest = (): ProjectIngest => {
             });
           },
         );
+        if (epoch !== epochRef.current) return false;
         if (!outcome.ok) {
           setItem(index, "failed");
-          await uploadSettled;
+          if (epoch !== epochRef.current) return false;
           setState({
             phase: "failed",
             failed: write.key,
             message: outcome.message,
             activated: [...activated],
-            uploadError,
           });
           return false;
         }
@@ -325,8 +472,8 @@ export const useProjectIngest = (): ProjectIngest => {
       }
 
       if (epoch !== epochRef.current) return false;
-      await uploadSettled;
-      setState({ phase: "done", activated: [...activated], uploadError });
+      if (epoch !== epochRef.current) return false;
+      setState({ phase: "done", activated: [...activated] });
       return true;
     },
     [cancel, waitForActive],

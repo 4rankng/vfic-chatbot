@@ -94,6 +94,7 @@ class KnowledgePipeline:
     async def run(self, doc) -> None:
         """Full pipeline for ``doc`` (KnowledgeDocument). Mutates + commits."""
         raw = doc.raw_text or ""
+        is_project_training = bool((doc.metadata_ or {}).get("project_training"))
         canonical_doc = None
         digest_sections: DigestSections | None = None
         is_canonical = (doc.metadata_ or {}).get("schema_version") in CANONICAL_SCHEMA_VERSIONS
@@ -133,6 +134,7 @@ class KnowledgePipeline:
             i for i, u in enumerate(all_units) if u["confidence"] == "low" or u["is_inference"]
         ]
         doc.digest_meta = {
+            **(doc.digest_meta or {}),
             "section_count": len(sections),
             "unit_count": len(all_units),
             "flagged_unit_indexes": flagged,
@@ -172,28 +174,32 @@ class KnowledgePipeline:
         category_authoritative = bool(
             project is not None and project.category_authority_started
         )
-        projections_own_cards = is_direct_context or category_authoritative
+        projections_own_cards = is_direct_context or category_authoritative or is_project_training
 
         if is_direct_context:
             # Only the core digest → embed → store path is meaningful here. The
             # PUBLISHED stage is set by the outer ``run`` below; nothing else to do.
             pass
+        elif is_project_training:
+            # Training completion includes the structured features. Provider or
+            # format errors remain retryable failures, never a false ready state.
+            await self.extract_product_features(doc, all_units)
         elif category_authoritative:
             # Features stay LLM-extracted from the uploaded brief; card and Job
             # rebuilds remain projection-owned (gated further below).
             try:
                 await self.extract_product_features(doc, all_units)
             except Exception as exc:  # noqa: BLE001 — extraction is best-effort
-                logger.warning("product feature extraction failed for doc %s: %s", doc.id, exc)
+                logger.warning("product feature extraction failed doc_id=%s cause=%s", doc.id, type(exc).__name__)
         elif doc.project_id is not None and canonical_doc is not None:
             await self.sync_canonical_product_features(doc, canonical_doc)
         elif doc.project_id is not None:
             try:
                 await self.extract_product_features(doc, all_units)
             except Exception as exc:  # noqa: BLE001 — extraction is best-effort
-                logger.warning("product feature extraction failed for doc %s: %s", doc.id, exc)
+                logger.warning("product feature extraction failed doc_id=%s cause=%s", doc.id, type(exc).__name__)
 
-        await self._set_stage(doc, "INDEXING", status="PUBLISHED")
+        await self._set_stage(doc, "INDEXING", status="PROCESSING" if is_project_training else "PUBLISHED")
         if canonical_doc is not None and canonical_doc.bus_timetable.routes:
             await self._persist_canonical_bus_timetable(doc, canonical_doc)
         if projections_own_cards:
@@ -215,7 +221,8 @@ class KnowledgePipeline:
                 source_document_id=doc.id,
             )
 
-        await self._set_stage(doc, "PUBLISHED", status="PUBLISHED")
+        await self._set_stage(doc, "TRAINING_CATEGORIES" if is_project_training else "PUBLISHED",
+                              status="PROCESSING" if is_project_training else "PUBLISHED")
         if canonical_doc is None:
             # Legacy LGDisplay parser fallback.
             try:
@@ -265,6 +272,7 @@ class KnowledgePipeline:
 
     async def _store_units(self, doc, units: list[dict]) -> None:
         if not units:
+            await self._guard_training(doc)
             await self.chunks.replace_for_doc(doc, [])  # clear the document's chunks
             return
         # Batch-embed one combined string per unit (content + summary + questions).
@@ -276,6 +284,7 @@ class KnowledgePipeline:
             pieces.extend(u["questions"])
             embed_inputs.append("\n".join(pieces))
         vectors = await self._embed_batch(embed_inputs)
+        await self._guard_training(doc)
         await self.chunks.replace_for_doc(doc, list(zip(units, vectors)))
 
     async def _persist_canonical_bus_timetable(self, doc, canonical_doc) -> None:
@@ -342,7 +351,8 @@ class KnowledgePipeline:
         )
         payload = _parse_json_lenient(raw)
         feats = payload.get("features") if isinstance(payload, dict) else None
-        feats = feats if isinstance(feats, list) else []
+        if not isinstance(feats, list):
+            raise ValueError("Product feature extraction returned no feature list")
         # Parse the LLM list into a by-key map, then coerce one row per catalog feature
         # (missing features fall back to the is_missing marker) in catalog display order.
         by_key: dict[str, dict] = {}
@@ -351,9 +361,12 @@ class KnowledgePipeline:
                 key = str(f.get("feature_key") or f.get("key") or "").strip()
                 if key:
                     by_key[key] = f
-        rows = [(c, _coerce_feature(by_key.get(c.feature_key), c)) for c in catalog]
+        rows = [(c, _coerce_feature(by_key.get(c.feature_key), c, source_text=corpus)) for c in catalog]
+        await self._guard_training(doc)
         await self.features.merge_for_project(doc.project_id, doc.id, rows)
         await self.index.sync_highlights(doc.project_id)
+        doc.digest_meta = {**(doc.digest_meta or {}), "features": {"status": "COMPLETED"}}
+        await self.db.commit()
 
     async def sync_canonical_product_features(
         self, doc, canonical_doc: ParsedKnowledgeDocument
@@ -430,6 +443,7 @@ class KnowledgePipeline:
     async def _set_stage(
         self, doc, stage: str, *, status: str | None = None, error: str | None = None
     ) -> None:
+        await self._guard_training(doc)
         doc.stage = stage
         doc.updated_at = datetime.now(UTC)
         if status is not None:
@@ -439,6 +453,14 @@ class KnowledgePipeline:
             doc.status = KnowledgeStatus(status)
         doc.error = error
         await self.db.commit()
+
+    async def _guard_training(self, doc) -> None:
+        training = (doc.metadata_ or {}).get("project_training")
+        if training is None:
+            return
+        from app.services.knowledge.training_guard import ensure_training_owner
+
+        await ensure_training_owner(self.db, doc.id, doc.project_id, uuid.UUID(training["processing_token"]))
 
 
 async def sync_project_highlights(db: AsyncSession, project_id: uuid.UUID) -> None:

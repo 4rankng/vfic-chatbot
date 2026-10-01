@@ -9,6 +9,7 @@ import json
 import re
 from datetime import datetime
 
+from app.recruitment.domain.intake import candidate_mobile, has_full_name, phone_values
 from app.shared.domain.text import normalize_vietnamese_text
 
 
@@ -73,11 +74,10 @@ def normalize_phone(value) -> str | None:
     text = _pick(value)
     if not text:
         return None
-    phone = re.sub(r"[^\d+]", "", text)
-    if phone.startswith("+84"):
-        phone = "0" + phone[3:]
-    if phone.startswith("84") and len(phone) >= 11:
-        phone = "0" + phone[2:]
+    values = phone_values(text)
+    if len(values) != 1:
+        return None
+    phone = values[0]
     return phone if re.fullmatch(r"0\d{8,10}", phone) else None
 
 
@@ -116,7 +116,8 @@ _NAME_STOP_RE = re.compile(
 # against the de-accented, lowercased message so diacritic variants still hit.
 _NAME_REQUEST_RE = re.compile(
     r"ten\s*(?:gi|la\s*gi|gi\s*vay|nao|cua\s*ban|de\s*(?:tien|minh|toi))|"
-    r"cho\s+(?:minh|toi|em|anh|chi)\s+xin\s+(?:ten|cach\s*xung\s*ho|xung\s*ho)|"
+    r"cho\s+(?:minh|toi|em|anh|chi)\s+xin\s+(?:ho\s+(?:va\s+)?ten|ten|cach\s*xung\s*ho|xung\s*ho)|"
+    r"ho\s+(?:va\s+)?ten\s+(?:day\s+du|cua\s+(?:anh|chi))|"
     r"xung\s+ho|(?:minh|toi)\s+(?:goi|xung)|ban\s+ten|xung\s*nhau"
 )
 
@@ -205,7 +206,7 @@ def _bare_name_when_asked(text: str) -> str | None:
     over-long replies so "hi" / "không" / "0987..." are never stored as names.
     """
     candidate = _pick(text)
-    if not candidate or len(candidate) > 30:
+    if not candidate or len(candidate) > 100:
         return None
     if re.search(r"\d", candidate) or "?" in candidate:
         return None
@@ -213,7 +214,7 @@ def _bare_name_when_asked(text: str) -> str | None:
     if not candidate:
         return None
     words = candidate.split()
-    if not (1 <= len(words) <= 4):
+    if not (1 <= len(words) <= 6):
         return None
     if not all(re.search(r"[A-Za-zÀ-ỹĐđ]", w) for w in words):
         return None
@@ -245,7 +246,7 @@ def extract_self_reported_name(
 
     patterns = [
         r"(?:^|\b)(?:tôi|toi|mình|minh|em|e|anh|chị|chi)\s+"
-        r"(?:tên|ten)(?:\s+(?:là|la))?\s+(.+)$",
+        r"(?:(?:họ|ho)\s+(?:(?:và|va)\s+)?)?(?:tên|ten)(?:\s+(?:là|la))?\s+(.+)$",
         r"(?:^|\b)(?:tên|ten)\s+(?:tôi|toi|mình|minh|em|e|anh|chị|chi)"
         r"(?:\s+(?:là|la))?\s+(.+)$",
     ]
@@ -259,7 +260,11 @@ def extract_self_reported_name(
         if not candidate:
             continue
         words = candidate.split()
-        if 1 <= len(words) <= 5 and all(re.search(r"[A-Za-zÀ-ỹĐđ]", w) for w in words):
+        candidate = _TRAILING_PARTICLE_RE.sub("", candidate).strip()
+        words = candidate.split()
+        if 1 <= len(words) <= 6 and all(
+            all(char.isalpha() or char in "-'’" for char in word) for word in words
+        ):
             return candidate
 
     identity_match = re.search(
@@ -273,6 +278,13 @@ def extract_self_reported_name(
         candidate = re.sub(r"\s+", " ", candidate).strip(" -–—\"'“”‘’")
         if high_confidence_profile_name(candidate):
             return candidate
+
+    # A complete name at the start of a compact contact reply is itself
+    # candidate-provided evidence (also covers channels without inbound-name
+    # capture). A family-name check keeps locations and ordinary prose out.
+    direct_name = re.split(r"[,;:\n\r]", body, maxsplit=1)[0].strip()
+    if candidate_mobile(body) and high_confidence_profile_name(direct_name):
+        return direct_name
 
     if prev_bot_message and _NAME_REQUEST_RE.search(
         normalize_vietnamese_text(prev_bot_message)
@@ -391,7 +403,9 @@ def lead_profile_text(
             [
                 "",
                 "CÁ NHÂN HÓA:",
-                "- Đã biết tên ứng viên: không hỏi lại tên.",
+                "- Đã biết tên ứng viên: không hỏi lại tên."
+                if has_full_name(confirmed_name)
+                else "- Đã biết tên gọi; họ tên đầy đủ rất nên có nhưng không bắt buộc và không được hỏi dồn.",
                 "- Có thể gọi tên tự nhiên khi phù hợp để cuộc trò chuyện thân thiện hơn, "
                 "nhưng không lặp tên máy móc trong mọi câu.",
             ]

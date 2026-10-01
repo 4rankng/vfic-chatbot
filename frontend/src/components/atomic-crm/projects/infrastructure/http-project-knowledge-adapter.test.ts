@@ -26,6 +26,45 @@ beforeEach(() => {
 });
 
 describe("HTTP project-knowledge adapter", () => {
+  it("uploads the retained file and all category proposals in one durable request", async () => {
+    const receipt = {
+      id: "document-1",
+      project_training: { status: "QUEUED" },
+    };
+    mocks.apiRequest.mockResolvedValue({ ok: true, json: async () => receipt });
+    const writes = [
+      {
+        key: "jobs" as const,
+        filename: "jobs.md",
+        content: "source-derived category",
+      },
+    ];
+
+    const result = await httpProjectKnowledgeAdapter.uploadDocument(
+      "project-1",
+      {
+        name: "brief.txt",
+        type: "text/plain",
+        bytes: new TextEncoder().encode("brief").buffer,
+      },
+      writes,
+    );
+
+    expect(result).toEqual(receipt);
+    const [path, options] = mocks.apiRequest.mock.calls[0];
+    expect(path).toBe("/api/v1/knowledge/documents/upload-file");
+    expect(options.body.get("project_id")).toBe("project-1");
+    expect(JSON.parse(options.body.get("category_plan"))).toEqual({ writes });
+    expect(options.body.get("file").name).toBe("brief.txt");
+  });
+
+  it("reads actual training checkpoints from the retained document receipt", async () => {
+    await httpProjectKnowledgeAdapter.getTrainingDocument("document / 1");
+    expect(mocks.apiJson).toHaveBeenCalledWith(
+      "/api/v1/knowledge/documents/document%20%2F%201",
+    );
+  });
+
   it("preserves category, feature, FAQ and bus endpoint contracts", async () => {
     mocks.apiJson.mockResolvedValue({});
 

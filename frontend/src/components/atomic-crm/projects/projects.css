@@ -788,15 +788,22 @@
   }
 
   .project-rollup-strip {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     max-width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-    white-space: nowrap;
+    overflow-x: visible;
+    white-space: normal;
   }
 
-  .project-rollup-strip::-webkit-scrollbar {
-    display: none;
+  .project-rollup-strip span {
+    flex: 1 1 45%;
+    display: flex;
+    align-items: center;
+    padding: 8px;
+  }
+
+  .project-rollup-strip span:nth-child(odd) {
+    border-left: 0;
+    padding-left: 4px;
   }
 
   .project-detail-stack {
@@ -1220,5 +1227,114 @@
 
   .project-category-grid {
     margin-top: 2px;
+  }
+}
+
+/* Recruitment directory and training feedback share the workspace's tokens. */
+.inbox-bg-container.project-workspace .project-directory-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px) auto;
+  align-items: end;
+  gap: 12px;
+  padding-block: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.inbox-bg-container.project-workspace .project-directory-filters > *,
+.inbox-bg-container.project-workspace .project-brief-import,
+.inbox-bg-container.project-workspace .project-brief-import-summary,
+.inbox-bg-container.project-workspace .project-brief-summary-copy {
+  min-width: 0;
+}
+
+.inbox-bg-container.project-workspace .project-directory-filters input {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Untitled UI uses shadows for field edges. The console's flat surface
+   contract suppresses them, so keep a real border, like settings inputs. */
+.inbox-bg-container.project-workspace [class~="group/input"],
+.inbox-bg-container.project-workspace button[aria-haspopup="listbox"] {
+  border: 1px solid var(--border);
+}
+
+.inbox-bg-container.project-workspace [class~="group/input"]:focus-within {
+  border-color: var(--brand);
+}
+
+.inbox-bg-container.project-workspace [class~="group/input"][data-invalid] {
+  border-color: var(--destructive);
+}
+
+.inbox-bg-container.project-workspace .project-brief-import {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.inbox-bg-container.project-workspace .project-brief-summary-copy,
+.inbox-bg-container.project-workspace .project-brief-carried,
+.inbox-bg-container.project-workspace .project-accordion-slug,
+.inbox-bg-container.project-workspace .project-accordion-heading h2,
+.inbox-bg-container.project-workspace .project-brief-import-summary pre {
+  overflow-wrap: anywhere;
+}
+
+.inbox-bg-container.project-workspace .project-ingest-progress-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 0.7fr);
+  align-items: start;
+  padding-block: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.inbox-bg-container.project-workspace .project-ingest-progress-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inbox-bg-container.project-workspace .project-directory-error {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding-block: 24px;
+}
+
+@media (max-width: 767px) {
+  .inbox-bg-container.project-workspace .project-directory-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inbox-bg-container.project-workspace .project-directory-filters input {
+    font-size: 16px;
+  }
+
+  .inbox-bg-container.project-workspace .project-directory-filters button,
+  .inbox-bg-container.project-workspace .project-brief-import button {
+    min-height: 44px;
+    height: 44px;
+    max-height: none;
+  }
+
+  .inbox-bg-container.project-workspace .project-brief-import {
+    padding: 12px;
+  }
+}
+
+.inbox-bg-container.project-workspace .project-editor-header h1,
+.inbox-bg-container.project-workspace .project-show-fact {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@media (min-width: 768px) and (max-width: 900px) {
+  .inbox-bg-container.project-workspace .project-edit-settings {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .inbox-bg-container.project-workspace .project-edit-name {
+    grid-column: 1 / -1;
   }
 }

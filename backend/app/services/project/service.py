@@ -29,6 +29,8 @@ from app.models.knowledge import (
     KnowledgeBaseDirectFile,
     KnowledgeBaseMode,
     KnowledgeCategory,
+    KnowledgeDocument,
+    KnowledgeStatus,
 )
 from app.models.user import User
 from app.schemas.projects import (
@@ -108,10 +110,12 @@ async def _ingest_states_by_project(
     Sources: each knowledge category's latest revision (``MAX(revision_no)`` per
     category) and the project's knowledge documents. Unmapped statuses never
     count. The badge describes ingest state now, not history: any in-flight
-    artifact is ``ingesting``; otherwise the freshest artifact (``freshest_at``,
-    the newest of the row's timestamps) decides — ``error`` only when that
-    newest artifact FAILED, so a failure superseded by later successes is
-    history; equal-freshness newest rows count any failure as ``error``. Any
+    artifact is ``ingesting``; otherwise a failed latest category revision is
+    ``error`` until that category is repaired or cleared. A newer successful
+    sibling or source document cannot repair it. For documents, the freshest
+    artifact (``freshest_at``, the newest of the row's timestamps) decides, so a
+    document failure superseded by later successes is history. Equal-freshness
+    newest rows count any failure as ``error``. Any
     remaining artifact is ``ready``. Projects with no counting rows are absent
     from the result (caller reads missing as None).
     """
@@ -149,6 +153,9 @@ async def _ingest_states_by_project(
             {"ids": ids},
         )
     ).all()
+    failed_category_projects = {
+        row.project_id for row in revision_rows if row.status == "FAILED"
+    }
     artifacts: dict[uuid.UUID, list[tuple[IngestState, datetime | None]]] = {}
     for rows, mapping in (
         (revision_rows, _REVISION_INGEST_STATE),
@@ -163,6 +170,9 @@ async def _ingest_states_by_project(
     for project_id, rows in artifacts.items():
         if any(state == "ingesting" for state, _ts in rows):
             states[project_id] = "ingesting"
+            continue
+        if project_id in failed_category_projects:
+            states[project_id] = "error"
             continue
         newest = max(_freshness_key(ts) for _state, ts in rows)
         if any(state == "error" and _freshness_key(ts) == newest for state, ts in rows):
@@ -349,11 +359,11 @@ class ProjectService:
 
     async def update(self, project_id: uuid.UUID, body: ProjectUpdate, actor: User) -> Project:
         proj = await self._require_project(project_id)
+        if body.is_active:
+            await self._require_activation_ready(proj)
         if body.name is not None:
             proj.name = body.name.strip()
         if body.is_active is not None:
-            if body.is_active:
-                await self._require_activation_ready(proj)
             proj.is_active = body.is_active
         if body.aliases is not None:
             proj.aliases = [value.strip() for value in body.aliases if value.strip()]
@@ -553,6 +563,35 @@ class ProjectService:
         return knowledge_base
 
     async def _require_activation_ready(self, project: Project) -> None:
+        # Training uploads and publication share this lock. The newest source
+        # cannot change between this readiness check and the update's commit.
+        # Read the database flag rather than a possibly stale ORM identity.
+        already_active = await self.db.scalar(
+            select(Project.is_active).where(Project.id == project.id).with_for_update()
+        )
+        if already_active is None:
+            raise NotFoundError("project not found")
+        if not already_active:
+            source = await self.db.scalar(
+                select(KnowledgeDocument)
+                .where(
+                    KnowledgeDocument.project_id == project.id,
+                    KnowledgeDocument.status != KnowledgeStatus.ARCHIVED,
+                    KnowledgeDocument.metadata_["project_training"].as_string().is_not(None),
+                )
+                .order_by(KnowledgeDocument.created_at.desc(), KnowledgeDocument.id.desc())
+                .limit(1)
+                .execution_options(populate_existing=True)
+            )
+            if source is not None and (
+                source.status != KnowledgeStatus.PUBLISHED
+                or (source.digest_meta or {}).get("project_training", {}).get("status")
+                != "COMPLETED"
+            ):
+                raise ConflictError(
+                    "Tệp thông tin dự án chưa được xử lý xong. "
+                    "Vui lòng kiểm tra hoặc thử xử lý lại trước khi bật tuyển dụng."
+                )
         modes = await self._knowledge_modes([project.knowledge_base_id])
         mode = _mode_of(modes, project.knowledge_base_id)
         if mode is KnowledgeBaseMode.DIRECT_CONTEXT:

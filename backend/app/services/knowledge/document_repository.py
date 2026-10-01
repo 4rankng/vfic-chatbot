@@ -25,33 +25,43 @@ class KnowledgeDocumentRepo:
         return res.rowcount or 0
 
 
-def mark_document_failed_sync(database_url: str, doc_id: str, error: str) -> None:
-    """Sync fallback to mark a knowledge document as FAILED.
+def mark_document_failed_sync(database_url: str, doc_id: str, error: str, *, processing_token=None) -> None:
+    """Record outer worker crashes only for the exact training claimant."""
+    import uuid
+    from datetime import UTC, datetime
 
-    Used by the ingest worker's crash handler (``run_ingest_job``) when RQ's
-    death penalty raises an exception *outside* the asyncio.run() frame, making
-    the async session unavailable. Creates a short-lived sync engine; callers
-    must ensure ``database_url`` is the synchronous (psycopg) URL.
-    """
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
 
+    from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
+
+    engine = create_engine(database_url, future=True)
     try:
-        engine = create_engine(database_url, future=True)
-        try:
-            with engine.begin() as conn:
-                conn.execute(
-                    text(
-                        "UPDATE knowledge_documents "
-                        "SET status = 'FAILED', stage = 'FAILED', "
-                        "error = :error, updated_at = now() "
-                        "WHERE id = CAST(:id AS uuid)"
-                    ),
-                    {"id": doc_id, "error": error[:1000]},
-                )
-        finally:
-            engine.dispose()
-    except Exception:  # noqa: BLE001 — do not mask the original RQ failure
-        raise
+        with Session(engine) as session, session.begin():
+            doc = session.scalar(select(KnowledgeDocument).where(
+                KnowledgeDocument.id == uuid.UUID(doc_id)
+            ).with_for_update())
+            if doc is None:
+                return
+            if doc.status == KnowledgeStatus.ARCHIVED:
+                return
+            training = (doc.metadata_ or {}).get("project_training")
+            if training is not None:
+                if training.get("processing_token") != str(processing_token):
+                    return
+                doc.metadata_ = {**(doc.metadata_ or {}), "project_training": {
+                    **training, "processing_token": None, "lease_expires_at": None,
+                }}
+                progress = (doc.digest_meta or {}).get("project_training", {})
+                doc.digest_meta = {**(doc.digest_meta or {}), "project_training": {
+                    **progress, "status": "FAILED", "error": error[:1000],
+                }}
+            doc.status = KnowledgeStatus.FAILED
+            doc.stage = "FAILED"
+            doc.error = error[:1000]
+            doc.updated_at = datetime.now(UTC)
+    finally:
+        engine.dispose()
 
 
 def mark_version_failed_sync(database_url: str, version_id: str, error: str) -> None:

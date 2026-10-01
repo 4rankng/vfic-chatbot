@@ -22,9 +22,9 @@ const ProjectShowContent = () => {
     <ProjectWorkspaceShell>
       <div className="project-workspace-content">
         <div className="project-editor-header">
-          <h2 className="mt-1 text-content-title font-semibold">
+          <h1 className="mt-1 text-content-title font-semibold">
             {project.name}
-          </h2>
+          </h1>
           <p className="mt-1 text-body text-muted-foreground">
             Xem danh mục kiến thức, đặc điểm sản phẩm và FAQ mà Agent dùng trong
             hội thoại tuyển dụng.
@@ -83,7 +83,7 @@ const ProjectShowContent = () => {
                   <Button
                     color="secondary"
                     size="sm"
-                    className="w-fit"
+                    className="uu-scope w-fit"
                     iconLeading={Pencil}
                     onClick={() => redirect("edit", "projects", project.id)}
                   >

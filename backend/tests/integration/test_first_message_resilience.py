@@ -23,6 +23,8 @@ from app.models.conversation import Message
 from app.services.conversation.repository import ConversationRepository
 from app.services.conversation.state import ConversationState
 
+pytestmark = pytest.mark.integration
+
 PROVIDER = "zalo_oa"
 ACCOUNT = "tingting"
 

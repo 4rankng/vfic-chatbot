@@ -198,6 +198,41 @@ def test_rank_projects_company_filter_matching_nothing_is_empty_match():
     assert lookup.total == 0
 
 
+def test_company_filter_accepts_recruiter_alias_and_project_slug():
+    project = ProjectFeatures(
+        project_id="p", slug="lg-display", name="LG Display", aliases=("LGD", "LG D"),
+    )
+    for query in ("LGD", "LG D", "lg-display"):
+        lookup = rank_projects([project], company=query)
+        assert lookup.total == 1
+
+
+def test_explicit_strict_criteria_filters_source_backed_matches_only():
+    unknown = _project("unknown", "Dự án chưa rõ")
+    lookup = rank_projects(
+        [*_catalog(12), unknown], job_scope="lắp ráp", location="Hải Phòng",
+        salary_min_vnd=8_000_000, strict_criteria=True,
+    )
+    assert [fit.project.project_id for fit in lookup.fits] == ["rorze"]
+    assert lookup.total == 1
+
+
+def test_strict_location_does_not_accept_one_common_word_as_full_match():
+    lookup = rank_projects(
+        [_RORZE_LIKE], location="Hải Dương", strict_criteria=True,
+    )
+    assert lookup.total == 0
+    relaxed = rank_projects([_RORZE_LIKE], location="Hải Dương")
+    assert relaxed.total == 1
+    assert relaxed.fits[0].dimensions[0].score == 0.5
+
+
+def test_strict_scope_does_not_match_only_generic_worker_words():
+    kho = _project("kho", "Kho", scope=(ProjectScopeItem("Công nhân kho"),))
+    lookup = rank_projects([kho], job_scope="Công nhân lắp ráp", strict_criteria=True)
+    assert lookup.total == 0
+
+
 def test_rank_projects_sort_by_salary():
     projects = _catalog(12)
     desc = rank_projects(projects, sort_by="salary_desc")

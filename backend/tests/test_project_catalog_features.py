@@ -233,6 +233,18 @@ async def test_card_only_project_falls_back_to_card_salary_fields():
 
 
 @pytest.mark.asyncio
+async def test_catalog_keeps_recruiter_aliases_for_named_project_matching():
+    project = _project_row("LG Display", card={"roles": ["Lắp ráp"]})
+    project.aliases = ["LGD", "LG D"]
+    db = _db_with(_result([project]), _result([]), _result([]))
+
+    row = (await _features(db))[0]
+
+    assert row.aliases == ("LGD", "LG D")
+    assert "projects.aliases" in _sql(db.execute.await_args_list[0].args[0])
+
+
+@pytest.mark.asyncio
 async def test_card_only_project_coerces_string_salaries_from_llm():
     project = _project_row(
         "String Salary Co",

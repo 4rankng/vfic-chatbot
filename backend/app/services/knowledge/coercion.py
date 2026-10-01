@@ -101,7 +101,7 @@ def _clamp_strength(value: Any) -> float:
     return round(max(0.0, min(1.0, s)), 2)
 
 
-def _coerce_feature(raw: Any, catalog_row: Any) -> dict:
+def _coerce_feature(raw: Any, catalog_row: Any, *, source_text: str | None = None) -> dict:
     """Coerce one LLM feature object into the job_feature_values column shape."""
     if not isinstance(raw, dict):
         return {
@@ -120,15 +120,25 @@ def _coerce_feature(raw: Any, catalog_row: Any) -> dict:
     value_json = raw.get("value_json")
     if not isinstance(value_json, dict):
         value_json = {}
+    evidence = str(raw.get("evidence_text") or raw.get("evidence") or "").strip() or None
+    # Extraction is grounded in a quote, not merely the model's assertion that
+    # a benefit exists. Whitespace folding accepts source formatting changes.
+    if source_text is not None and not is_missing:
+        folded_source = re.sub(r"\s+", " ", source_text).strip()
+        folded_quote = re.sub(r"\s+", " ", evidence or "").strip()
+        if not folded_quote or folded_quote not in folded_source:
+            return {
+                "value_text": _missing_feature_text(catalog_row), "value_json": {},
+                "is_highlight": False, "is_missing": True, "needs_clarification": True,
+                "evidence_text": None, "strength_score": 0.0,
+            }
     return {
         "value_text": value_text,
         "value_json": value_json,
         "is_highlight": bool(raw.get("is_highlight", False)) and not is_missing,
         "is_missing": is_missing,
         "needs_clarification": bool(raw.get("needs_clarification", False)),
-        "evidence_text": (
-            str(raw.get("evidence_text") or raw.get("evidence") or "").strip() or None
-        ),
+        "evidence_text": evidence,
         "strength_score": _clamp_strength(raw.get("strength_score")),
     }
 

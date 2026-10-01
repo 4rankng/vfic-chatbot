@@ -22,6 +22,7 @@ export type ProjectKnowledgeCatalog = Readonly<{
   categories: KnowledgeCategoryStatus[] | null;
   /** The category whose latest revision is still being reviewed, if any. */
   processingKey: ProjectKnowledgeCategory | null;
+  reload: () => Promise<KnowledgeCategoryStatus[]>;
   replaceCategory: (
     key: ProjectKnowledgeCategory,
     filename: string,
@@ -178,7 +179,7 @@ export const useProjectKnowledgeCatalog = (
   );
 
   return useMemo(
-    () => ({ categories, processingKey, replaceCategory }),
-    [categories, processingKey, replaceCategory],
+    () => ({ categories, processingKey, replaceCategory, reload: loadCatalog }),
+    [categories, processingKey, replaceCategory, loadCatalog],
   );
 };

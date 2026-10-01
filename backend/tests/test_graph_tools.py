@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -612,6 +613,31 @@ async def test_list_active_projects_ignores_malformed_sort_and_salary_arguments(
 
 
 @pytest.mark.asyncio
+async def test_list_active_projects_filters_only_when_strictly_requested(no_cache_io):
+    repo = _make_repo(list_active_projects=lambda self: _const(_catalog()))
+    relaxed = await list_active_projects(retrieval=repo, location="Hải Phòng")
+    strict = await list_active_projects(
+        retrieval=repo, location="Hải Phòng", strict_criteria=True,
+    )
+    relaxed_payload = json.loads(relaxed.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    strict_payload = json.loads(strict.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert relaxed_payload["total"] == 12
+    assert 0 < strict_payload["total"] < 12
+    assert all(row["province"] == "Hải Phòng" for row in strict_payload["projects"])
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_does_not_coerce_string_true_into_strict_filter(no_cache_io):
+    repo = _make_repo(list_active_projects=lambda self: _const(_catalog()))
+    out = await list_active_projects(
+        retrieval=repo, location="Hải Phòng", strict_criteria="false", salary_min_vnd=-1,
+    )
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert payload["total"] == 12
+    assert all("lương" not in note for row in payload["projects"] for note in row["fit_notes"])
+
+
+@pytest.mark.asyncio
 async def test_list_active_projects_retrieval_failure_is_status_labelled_unavailable(
     no_cache_io,
 ):
@@ -667,6 +693,25 @@ async def test_get_product_features_unknown_slug(no_cache_io):
     repo = _make_repo(project_id_by_slug=lambda self, slug, **k: _none())
     out = await get_product_features(retrieval=repo, project_slug="x")
     assert "Không tìm thấy dự án/sản phẩm với slug 'x'" in out
+
+
+@pytest.mark.asyncio
+async def test_inactive_project_features_are_not_served_from_a_warm_cache(monkeypatch):
+    calls = []
+
+    async def resolve(_repo, slug, **kwargs):
+        calls.append((slug, kwargs))
+        return None
+
+    cached = AsyncMock(return_value="cached facts about inactive project")
+    monkeypatch.setattr("app.graph.tools.catalog.cache_get_json", cached)
+    repo = _make_repo(project_id_by_slug=resolve)
+
+    out = await get_product_features(retrieval=repo, project_slug="inactive")
+
+    assert calls == [("inactive", {"active_only": True})]
+    assert "Không tìm thấy" in out
+    cached.assert_not_awaited()
 
 
 @pytest.mark.asyncio

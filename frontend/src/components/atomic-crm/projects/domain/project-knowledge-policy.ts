@@ -98,8 +98,9 @@ export const projectReadinessLabel = (
       : "Chưa có trang";
   }
   const ready = project.feature_readiness?.ready;
-  return typeof ready === "number"
-    ? `${ready}/${project.feature_readiness?.total ?? 16}`
+  const total = project.feature_readiness?.total;
+  return typeof ready === "number" && typeof total === "number" && total > 0
+    ? `${ready}/${total}`
     : "Chưa đo";
 };
 

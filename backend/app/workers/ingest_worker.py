@@ -17,16 +17,19 @@ logger = logging.getLogger(__name__)
 
 
 def enqueue_ingest(doc_id) -> None:
-    """Enqueue a training-pipeline job for one document (best-effort, non-fatal)."""
+    """Require a confirmed queue receipt for a retained source document."""
     from app.core.config import INGEST_JOB_TIMEOUT_SECONDS
     from app.workers.utils import enqueue_job
 
-    enqueue_job(
+    job_id = enqueue_job(
         "ingest",
         run_ingest_job,
         str(doc_id),
         job_timeout=INGEST_JOB_TIMEOUT_SECONDS,
+        return_job_id=True,
     )
+    if job_id is None:
+        raise RuntimeError("knowledge document enqueue failed")
 
 
 def enqueue_ingest_version(version_id) -> str:
@@ -62,21 +65,22 @@ def run_ingest_version_job(version_id: str) -> None:
 
 def run_ingest_job(doc_id: str) -> None:
     """RQ job entrypoint (sync). Runs the async pipeline."""
+    processing_token = uuid.uuid4()
     try:
         from app.workers.async_runner import run_async
 
-        run_async(_run_job_async(doc_id))
+        run_async(_run_job_async(doc_id, _claim_token=processing_token))
     except Exception as exc:
         # RQ-level failures (notably JobTimeoutException from its death penalty)
         # can be raised outside the coroutine frame, bypassing _run_job_async's
         # document error handler. Record a terminal state with a sync DB write so
         # the admin UI does not sit forever at DIGESTING/PROCESSING.
         logger.exception("ingest job crashed for document %s", doc_id)
-        _mark_doc_failed_sync(doc_id, exc)
+        _mark_doc_failed_sync(doc_id, exc, processing_token=processing_token)
         raise
 
 
-async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
+async def _run_job_async(doc_id: str, *, _embed=None, _llm=None, _claim_token=None) -> None:
     # Imported lazily so importing this module (e.g. in tests) does NOT pull in the
     # heavy LLM/Google deps — those are only needed for a real run. ``_embed``/``_llm``
     # are injectable so the cross-loop regression test can run the pipeline with fakes.
@@ -88,6 +92,7 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
             uuid.UUID(doc_id),
             embedder=_embed,
             json_extractor=_llm,
+            processing_token=_claim_token,
         )
         try:
             await _extract_features_best_effort(db, doc_id, _embed=_embed, _llm=_llm)
@@ -118,6 +123,10 @@ async def _extract_features_best_effort(
     doc = await db.get(KnowledgeDocument, uuid.UUID(doc_id))
     if doc is None or doc.project_id is None:
         return
+    if (getattr(doc, "digest_meta", None) or {}).get("features", {}).get("status") == "COMPLETED":
+        return  # The document pipeline already refreshed these values.
+    if (getattr(doc, "metadata_", None) or {}).get("project_training"):
+        return  # Training owns feature failures and must report them accurately.
     latest = await ProjectRepository(db).get_latest_document_with_text(doc.project_id)
     if latest is None or latest.id != doc.id:
         # Only the latest posting drives the feature profile — older re-ingests
@@ -163,7 +172,7 @@ async def _run_version_job_async(version_id: str, *, _embed=None, _llm=None) -> 
         )
 
 
-def _mark_doc_failed_sync(doc_id: str, exc: Exception) -> None:
+def _mark_doc_failed_sync(doc_id: str, exc: Exception, *, processing_token=None) -> None:
     """Persist FAILED for crashes raised outside the async job coroutine.
 
     Delegates to the repository layer so the SQL lives in one place.
@@ -175,7 +184,8 @@ def _mark_doc_failed_sync(doc_id: str, exc: Exception) -> None:
         mark_document_failed_sync(
             get_settings().database_url_sync,
             doc_id,
-            f"{type(exc).__name__}: {exc}",
+            "Tiến trình xử lý bị gián đoạn. Vui lòng thử xử lý lại tệp đã lưu.",
+            processing_token=processing_token,
         )
     except Exception:  # noqa: BLE001 — do not mask the original RQ failure
         logger.exception("failed to mark ingest document %s as FAILED", doc_id)

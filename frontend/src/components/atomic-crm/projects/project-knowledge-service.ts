@@ -1,5 +1,9 @@
 import { createProjectKnowledgeOperations } from "./application/project-knowledge-operations";
-import type { CancellationSignal } from "./application/project-knowledge-port";
+import type {
+  CancellationSignal,
+  ProjectTrainingWrite,
+} from "./application/project-knowledge-port";
+export type { ProjectTrainingDocument } from "./application/project-knowledge-port";
 import { singlePageSyncErrorMessage } from "./application/sync-error-message";
 import type {
   ExternalSourceCreatePayload,
@@ -57,12 +61,21 @@ export const cutoverProjectKnowledgeCategories = operations.cutoverCategories;
  * the chain parsed stays on record (retrievable, searchable) instead of only
  * surviving as derived category YAML.
  */
-export const uploadProjectDocument = async (projectId: string, file: File) =>
-  operations.uploadDocument(projectId, {
-    name: file.name,
-    type: file.type,
-    bytes: await file.arrayBuffer(),
-  });
+export const uploadProjectDocument = async (
+  projectId: string,
+  file: File,
+  writes?: readonly ProjectTrainingWrite[],
+) =>
+  operations.uploadDocument(
+    projectId,
+    {
+      name: file.name,
+      type: file.type,
+      bytes: await file.arrayBuffer(),
+    },
+    writes,
+  );
+export const getProjectTrainingDocument = operations.getTrainingDocument;
 export const getProjectSinglePage = operations.getSinglePage;
 export const replaceProjectSinglePage = operations.replaceSinglePage;
 export const updateProjectDiscoveryCard = operations.updateProjectDiscoveryCard;
