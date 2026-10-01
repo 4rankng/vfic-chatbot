@@ -141,6 +141,48 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "load_project_knowledge",
+            "description": (
+                "Nạp TOÀN BỘ nội dung một mục kiến thức (hoặc tất cả các mục) của dự án vào ngữ cảnh. "
+                "Dùng khi cần dữ liệu đầy đủ của một mục thay vì tìm kiếm từng đoạn: ví dụ cần mọi "
+                "số điện thoại/liên hệ, mọi vị trí tuyển dụng, hoặc cần cái nhìn tổng thể về dự án. "
+                "Bỏ project_slug để nạp mọi dự án đang hoạt động; category 'all' để nạp đủ 12 mục. "
+                "Ưu tiên search_knowledge cho một câu hỏi hẹp; dùng tool này khi thiếu dữ liệu toàn bộ."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_slug": {
+                        "type": "string",
+                        "description": "slug dự án (từ danh mục); bỏ trống để nạp mọi dự án đang hoạt động",
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "all",
+                            "jobs",
+                            "compensation",
+                            "requirements",
+                            "work_schedules",
+                            "benefits",
+                            "accommodation",
+                            "meals",
+                            "transportation",
+                            "insurance",
+                            "application",
+                            "contacts",
+                            "faq",
+                        ],
+                        "description": "một mục kiến thức, hoặc 'all' để nạp đủ 12 mục (mặc định 'all')",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_bus_timetable",
             "description": (
                 "Tra cứu lịch xe đưa đón công nhân theo công ty. Dùng trước tiên cho mọi câu hỏi về tuyến xe, "

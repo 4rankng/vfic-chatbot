@@ -152,6 +152,7 @@ def test_tools_registry_exposes_expected_tools():
         "compare_income",
         "search_user_memory",
         "search_knowledge",
+        "load_project_knowledge",
         "list_active_projects",
         "search_bus_timetable",
         "get_product_features",

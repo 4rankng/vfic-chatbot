@@ -120,6 +120,9 @@ class RetrievalRepository:
     async def project_id_by_slug(self, slug: str, *, active_only: bool = False):
         return await self._catalog.project_id_by_slug(slug, active_only=active_only)
 
+    async def load_category_knowledge(self, project_ids: list[str], category_key: str) -> list:
+        return await self._catalog.load_category_knowledge(project_ids, category_key)
+
     async def list_active_projects(self) -> list:
         return await self._catalog.list_active_projects()
 

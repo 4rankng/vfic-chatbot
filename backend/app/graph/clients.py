@@ -443,12 +443,15 @@ class MiniMaxAgent:
         embedder = turn.embedder
         trace_sink = turn.trace_sink
 
-        knowledge_lookup_route = allowed_tools == ("search_knowledge",)
+        knowledge_lookup_route = allowed_tools in (
+            ("search_knowledge",),
+            ("search_knowledge", "load_project_knowledge"),
+        )
         timetable_route = allowed_tools == ("search_bus_timetable",)
         income_compare_route = allowed_tools == ("compare_income",)
-        faq_detail_route = allowed_tools == (
-            "get_product_features",
-            "search_knowledge",
+        faq_detail_route = allowed_tools in (
+            ("get_product_features", "search_knowledge"),
+            ("get_product_features", "search_knowledge", "load_project_knowledge"),
         )
         if (
             _should_prefetch_knowledge(effective_query)

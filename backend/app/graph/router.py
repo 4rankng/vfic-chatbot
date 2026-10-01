@@ -147,15 +147,15 @@ _INTENT_ROUTES: dict[
 ] = {
     "recommend": (
         "recommendation",
-        ("list_active_projects", "get_product_features"),
+        ("list_active_projects", "get_product_features", "load_project_knowledge"),
         "recommendation_terms",
     ),
     "profile_update": ("profile", (), "profile_terms"),
     "timetable": ("structured_lookup", ("search_bus_timetable",), "timetable_terms"),
-    "contact": ("knowledge_lookup", ("search_knowledge",), "contact_terms"),
+    "contact": ("knowledge_lookup", ("search_knowledge", "load_project_knowledge"), "contact_terms"),
     "faq_detail": (
         "knowledge_lookup",
-        ("get_product_features", "search_knowledge"),
+        ("get_product_features", "search_knowledge", "load_project_knowledge"),
         "job_detail_terms",
     ),
     # Employees locked out of the TingTing app (forgot/reset password, no OTP)

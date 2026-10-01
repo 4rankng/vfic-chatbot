@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select, text
@@ -21,6 +22,8 @@ from app.models.job import Job, JobStatus
 from app.models.knowledge import KnowledgeCategory
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
 from app.recruitment.domain.recommendation import ProjectFeatures, ProjectScopeItem
+from app.services.knowledge.category_contracts import validate_category_payload
+from app.services.knowledge.category_projections import render_category_units
 from app.services.knowledge.derived_jobs import salary_from_feature
 from app.services.recommendation import RecommendationRepository
 
@@ -135,6 +138,52 @@ class CatalogRepository:
         if self.page_project_ids is not None and str(pid) not in self.page_project_ids:
             return None
         return pid
+
+    async def load_category_knowledge(
+        self, project_ids: list[str], category_key: str
+    ) -> list[Any]:
+        """Rendered whole-category text for the agent's deep-load tool.
+
+        One row per (project, category) that has an ACTIVE revision in scope:
+        ``(slug, category_key, text)`` where ``text`` is every record of the
+        revision rendered through the same category projections the retrieval
+        chunks and the activation selftest judge — the agent reads exactly the
+        content the knowledge pipeline publishes, not a re-summary.
+        ``category_key="all"`` returns every category carrying data.
+        """
+        sql = text(
+            "SELECT p.slug AS slug, kc.category_key AS category_key, "
+            "kcr.normalized_payload AS payload "
+            "FROM knowledge_categories kc "
+            "JOIN projects p ON p.id = kc.project_id AND p.is_active IS TRUE "
+            "JOIN knowledge_category_revisions kcr ON kcr.id = kc.active_revision_id "
+            "WHERE kc.project_id = ANY(:ids) "
+            "AND (:category = 'all' OR kc.category_key = :category) "
+            "ORDER BY p.name, kc.category_key"
+        )
+        rows = (
+            await self.db.execute(sql, {"ids": project_ids, "category": category_key})
+        ).all()
+        rendered: list[Any] = []
+        for row in rows:
+            try:
+                document = validate_category_payload(row.category_key, row.payload)
+                units = render_category_units(document)
+            except Exception:  # noqa: BLE001 - one bad revision must not kill the load
+                logger.warning(
+                    "category knowledge render failed project=%s category=%s",
+                    row.slug,
+                    row.category_key,
+                    exc_info=True,
+                )
+                continue
+            body = "\n\n".join(
+                unit["content"] for unit in units if unit.get("content")
+            )
+            rendered.append(
+                SimpleNamespace(slug=row.slug, category_key=row.category_key, text=body)
+            )
+        return rendered
 
     async def list_active_projects(self) -> list[ProjectFeatures]:
         """Every active KB-backed project as rich fit features — never capped.

@@ -228,6 +228,13 @@ class GraphRetrievalPort(
 
     async def match_memories(self, emb: str, top_k: int, filter_json: str) -> list[Any]: ...
 
+    # Whole-category deep loads for the agent's ``load_project_knowledge``
+    # tool: rendered record text for every ACTIVE revision in scope — one row
+    # per (project, category) as ``(slug, category_key, text)``-shaped objects.
+    async def load_category_knowledge(
+        self, project_ids: list[str], category_key: str
+    ) -> list[Any]: ...
+
     # Recruitment-domain reads the job-feature and income-comparison tools
     # need. They are declared here on the composite port because neither
     # bounded-context read port owns them (job features and income summaries

@@ -34,7 +34,11 @@ from app.graph.tools.tingting_api import (
 )
 from app.graph.tools.tingting_identity import verify_tingting_identity
 from app.graph.tools.income import compare_income
-from app.graph.tools.knowledge import _format_knowledge_row, search_knowledge
+from app.graph.tools.knowledge import (
+    _format_knowledge_row,
+    load_project_knowledge,
+    search_knowledge,
+)
 from app.graph.tools.memory import search_user_memory
 
 # The tool contract the router/dispatcher may call by name. No tool may
@@ -43,6 +47,7 @@ TOOLS_REGISTRY = {
     "compare_income": compare_income,
     "search_user_memory": search_user_memory,
     "search_knowledge": search_knowledge,
+    "load_project_knowledge": load_project_knowledge,
     "list_active_projects": list_active_projects,
     "search_bus_timetable": search_bus_timetable,
     "get_product_features": get_product_features,
@@ -60,6 +65,7 @@ __all__ = [
     "list_active_projects",
     "search_bus_timetable",
     "search_knowledge",
+    "load_project_knowledge",
     "search_user_memory",
     "verify_tingting_identity",
     "send_tingting_otp",

@@ -2300,6 +2300,7 @@ async def test_rag_vacancy_salary_followup_scopes_knowledge_query_to_vacancy_thr
     assert captured["allowed_tools"] == (
         "get_product_features",
         "search_knowledge",
+        "load_project_knowledge",
     )
     assert "lG tràng duệ" in str(captured["lookup_query"])
     assert query in str(captured["lookup_query"])

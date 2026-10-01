@@ -421,3 +421,68 @@ async def _search_knowledge_compute(
             raw_emb, result, scope=sem_scope, namespace_version=semantic_generation
         )
     return result
+
+
+# --- Whole-category deep load -------------------------------------------------
+#
+# The agent decides, mid-conversation, when a topic needs the COMPLETE
+# published category (every record) instead of top-k chunk rows — "cho tôi số
+# điện thoại" is the motivating case: one contacts record carries the digits a
+# top-k miss can drop. A brief-sized category renders to a few KB, so the
+# budgets below guard pathological revisions, not the normal case. Scope can
+# widen to every active project × every category when the conversation spans
+# the whole catalog.
+_LOAD_CATEGORY_ALL = "all"
+_MAX_LOAD_CATEGORY_CHARS = 12000
+_MAX_LOAD_TOTAL_CHARS = 60000
+
+
+async def load_project_knowledge(
+    retrieval: GraphRetrievalPort,
+    project_slug: str | None,
+    category: str = _LOAD_CATEGORY_ALL,
+    *,
+    metrics: dict | None = None,
+) -> str:
+    """Load whole published categories into the turn (the ``load_project_knowledge`` tool).
+
+    Scope: one project by slug, or every active project when omitted; one
+    category key, or all twelve with ``"all"``. Each ACTIVE revision renders
+    through the same projections retrieval chunks come from, so the agent reads
+    exactly the published records. Output is capped; a truncated load says so
+    so the agent narrows the scope instead of trusting a partial list.
+    """
+    category = (category or _LOAD_CATEGORY_ALL).strip() or _LOAD_CATEGORY_ALL
+    if project_slug:
+        pid = await retrieval.project_id_by_slug(project_slug, active_only=True)
+        if pid is None:
+            return f"Không tìm thấy dự án '{project_slug}' trong danh mục đang hoạt động."
+        project_ids = [str(pid)]
+    else:
+        active_project_ids = getattr(retrieval, "active_project_ids", None)
+        project_ids = sorted(await active_project_ids()) if active_project_ids else []
+        if not project_ids:
+            return "Chưa có dự án nào đang hoạt động trong cơ sở dữ liệu."
+    rows = await retrieval.load_category_knowledge(project_ids, category)
+    if not rows:
+        return "Không có kiến thức đang hoạt động cho phạm vi này."
+    sections: list[str] = []
+    total = 0
+    truncated = False
+    for row in rows:
+        body = getattr(row, "text", "") or ""
+        if len(body) > _MAX_LOAD_CATEGORY_CHARS:
+            body = body[:_MAX_LOAD_CATEGORY_CHARS] + "…"
+        section = f"## Dự án: {getattr(row, 'slug', '?')} — mục: {getattr(row, 'category_key', '?')}\n{body}"
+        if total + len(section) > _MAX_LOAD_TOTAL_CHARS:
+            truncated = True
+            break
+        sections.append(section)
+        total += len(section)
+    result = "\n\n".join(sections)
+    if truncated:
+        result += (
+            "\n\n(Lưu ý: dữ liệu đã bị cắt do quá dài — hãy gọi lại với "
+            "project_slug hoặc một mục cụ thể hơn.)"
+        )
+    return result
