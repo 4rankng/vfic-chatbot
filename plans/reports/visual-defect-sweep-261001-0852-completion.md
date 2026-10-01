@@ -56,15 +56,57 @@ gate.
 | Final `git diff --check` passes | PASS | Clean (no whitespace errors). |
 | Final `git status --short` reviewed | PASS | Only the files listed under "Files changed", plus the two new test files. |
 
+## Deployment
+
+- `make release-check`: PASSED (clean worktree, one Alembic head matching
+  `docs/ops/deployment-guide.md`, uv lock, pyright `app/graph`, npm audit,
+  backend pytest with coverage, migration roundtrip walk, frontend
+  lint/typecheck/registry/coverage/build/smoke, golden retrieval benchmark
+  `golden_pass_rate_pct=100.0%`). No failure banner; data lane reported
+  `release gate passed`.
+- `make deploy`: the first attempt aborted and auto-rolled back (`bg_rollback`
+  restored the previous colour, prod stayed healthy on the previous tag). Cause
+  was a race, not the change: a concurrent session in this checkout was running
+  its own `make deploy` at the same time (two `make deploy` processes, one
+  `bg_deploy.sh` at a time on the host), and the shipped tree's `HEAD` moved
+  from my commit to that session's `892a9636` between the two attempts.
+- `make deploy` (retry): PASSED. `bg_deploy: active=green next=blue
+  tag=892a9636`; smoke gate 5/5 on the new colour (`single-message`,
+  `progressive-send`, `progressive-send-failure`, `support-oa-hotline`,
+  `support-oa-clarify`); Caddy flipped to `web-blue`;
+  `verify_post_flip_readiness` reported `active web-blue
+  image=ghcr.io/4rankng/tinghire-be:892a9636` and `PIPELINE OK`; frontend
+  container recreated.
+- Production evidence after cutover: `ACTIVE_COLOR=blue`,
+  `vfic-web-blue-1 = tinghire-be:892a9636 (healthy)`,
+  `vfic-frontend-1 = tinghire-fe:892a9636 (healthy)`, `/health` → `status: ok`,
+  and the live login page reports `body` font-family `"Be Vietnam Pro",
+  ui-sans-serif, system-ui, sans-serif` with an empty console.
+- Built-artifact check (same source the image is built from): the workspace
+  button reset sits inside `@layer base`, `dist/index.html`'s loader block is
+  `body{margin:0;padding:0}` with no `font-family`, all four `.uu-scope`
+  additions are in the emitted chunks, and `text-warning-foreground` has zero
+  occurrences.
+
 ## Result
 
-- Overall status: PASS (pending the `make release-check` lanes and the deploy,
-  both recorded separately).
+- Overall status: PASS — deployed to production (`tag=892a9636`, which has
+  `a672626d` as an ancestor).
 - Remaining risks or follow-ups:
   - Three tint-pair contrast items are accepted, not fixed: `Sẵn sàng` badge
     4.41:1, `Xóa dự án` outline 4.33:1, category-date metadata 4.49:1. Rationale
     in `docs/design/design-qa.md`; fixing them means restyling every error and
     success surface in the console.
+  - **Concurrency hazard (needs the owner's attention).** A second session was
+    deploying this repository at the same time. Two consequences: (a) the first
+    cutover attempt failed for that reason and needed a retry; (b) the working
+    tree carried that session's *uncommitted* edits
+    (`backend/app/graph/dispatch.py`, `backend/app/graph/think_strip.py`) while
+    `make push` built the image, so the registry tag `892a9636` was built from a
+    tree that is not exactly commit `892a9636`. That session's own deploy will
+    re-push the same tag from its committed tree; the owner should confirm which
+    content is intended to serve before the next release, since the tag is
+    mutable.
   - The Playwright `e2e/**/__screenshots__` visual baselines were already stale
     before this pass and are not regenerated here; they are not part of
     `make release-check`.
