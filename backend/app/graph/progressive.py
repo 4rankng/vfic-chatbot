@@ -52,10 +52,14 @@ PROGRESSIVE_BUBBLE_MIN_CHARS = 250
 PROGRESSIVE_SUBSTANCE_MIN_CHARS = 80
 PROGRESSIVE_MAX_WAIT_CHARS = 700
 _BUBBLE_BOUNDARY_CHARS = frozenset(".!?\n…")
+_MARKER_TAIL_RE = re.compile(r"(?:^|\n)\s*(?:\d{1,3}[.)]|[-•*])\s*$")
 # Zalo collapses long chat messages behind a "See more" link; a recruiting
 # answer the candidate has to expand does not get read. Soft budget for a
 # generated reply — the compaction cuts at a sentence boundary, never mid-word.
 ZALO_MESSAGE_SOFT_BUDGET_CHARS = 450
+# Appended when compaction dropped content, so the candidate knows the list
+# was shortened and can ask for the rest.
+_TRUNCATED_NOTE = "\n\n(Còn nhiều dự án và vị trí khác đang tuyển — hỏi em để biết thêm từng dự án nhé ạ.)"
 # "Dạ em chào anh/chị ạ." style openers, peeled from the head of a candidate
 # bubble before the substance length test. The lookahead keeps a token from
 # matching inside a longer word ("anh văn" peels "anh", "anhx" does not).
@@ -598,9 +602,17 @@ def compact_for_zalo(text: str, *, budget: int = ZALO_MESSAGE_SOFT_BUDGET_CHARS)
     Over-budget replies collapse behind "See more" and candidates do not
     expand them. Cut at the last sentence boundary that fits the budget (same
     paren/digit-dot boundary rules as the bubble scan), so the message always
-    ends on a complete sentence. A reply with no boundary inside the budget is
-    cut at the first boundary anyway — one long paragraph beats a mid-word
-    cut. Already-short replies pass through untouched.
+    ends on a complete sentence. Two refinements keep the cut readable:
+
+    - never end on a bare list marker ("4." with the item's content in the
+      next bubble — the observed production cut) — step back to the previous
+      complete line instead;
+    - when content was dropped, append the truncated-note so the candidate
+      knows more projects exist and can ask for them.
+
+    A reply with no boundary inside the budget is cut at the first boundary
+    anyway — one long paragraph beats a mid-word cut. Already-short replies
+    pass through untouched.
     """
     if len(text) <= budget:
         return text
@@ -625,6 +637,21 @@ def compact_for_zalo(text: str, *, budget: int = ZALO_MESSAGE_SOFT_BUDGET_CHARS)
             continue
         boundaries.append(index + 1)
 
-    fitting = [offset for offset in boundaries if offset <= budget]
-    cut = fitting[-1] if fitting else (boundaries[0] if boundaries else len(text))
-    return text[:cut].rstrip()
+    if not boundaries:
+        return text
+
+    reserve = len(_TRUNCATED_NOTE)
+    fitting = [offset for offset in boundaries if offset <= budget - reserve]
+    if not fitting:
+        fitting = [boundaries[0]]
+    cut = fitting[-1]
+    compact = text[:cut].rstrip()
+    # A cut right after a bare list marker ("4.") reads as a dangling item —
+    # step back until the last line carries content.
+    while _MARKER_TAIL_RE.search(compact) and len(fitting) > 1:
+        fitting.pop()
+        cut = fitting[-1]
+        compact = text[:cut].rstrip()
+    if len(text.rstrip()) > len(compact):
+        compact += _TRUNCATED_NOTE
+    return compact

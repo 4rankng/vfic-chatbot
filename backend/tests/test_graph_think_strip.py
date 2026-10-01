@@ -197,7 +197,7 @@ def test_compact_for_zalo_keeps_short_replies_untouched():
 
 
 def test_compact_for_zalo_cuts_long_replies_at_a_sentence_boundary():
-    from app.graph.progressive import compact_for_zalo
+    from app.graph.progressive import compact_for_zalo, _TRUNCATED_NOTE
 
     long = (
         "Dạ Amtran đang tuyển các vị trí tại KCN Vsip Thủy Nguyên:\n\n"
@@ -216,8 +216,9 @@ def test_compact_for_zalo_cuts_long_replies_at_a_sentence_boundary():
     compact = compact_for_zalo(long)
 
     assert len(compact) <= 450
-    # The cut is a source prefix: a complete line, never a mid-word fragment.
-    assert long.startswith(compact.rstrip())
+    # The cut is a trimmed excerpt of the source: complete lines only, never a
+    # mid-word fragment, and it carries the truncated-note for the candidate.
+    assert compact.removesuffix(_TRUNCATED_NOTE).strip() in long
     assert compact.count("(") == compact.count(")")
     # Never cuts inside the parenthetical or a multi-million amount.
     assert compact.count("(") == compact.count(")")

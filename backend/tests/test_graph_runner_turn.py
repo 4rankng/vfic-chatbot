@@ -41,6 +41,7 @@ from app.graph.direct_context import DirectContext, ProjectTurnContext
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.ports import TurnDecisions
 from app.graph.runner import run_turn
+from app.graph.progressive import _TRUNCATED_NOTE
 from app.graph.types import BotRunState, GraphDeps
 from app.graph.tingting_guide import tingting_hotline_reply
 
@@ -1448,6 +1449,7 @@ async def test_overlong_clean_reply_ships_as_generated(monkeypatch):
     converged boundary no longer truncates: the answer is sent exactly as
     generated, with only provider thinking stripped.
     """
+    from app.graph.progressive import _TRUNCATED_NOTE
     long_reply = "Tên công việc: Operator LG Display\n" + (
         "Quyền lợi: bảo hiểm, phụ cấp, KTX. " * 100
     )
@@ -1463,11 +1465,13 @@ async def test_overlong_clean_reply_ships_as_generated(monkeypatch):
         _deps(zalo, conversation=svc))
 
     assert res["outcome"] == "sent"
-    # The reply is compacted into Zalo's no-"See more" window: a prefix of the
-    # generated answer, cut at a sentence boundary — never the fallback.
+    # Compacted into Zalo's no-"See more" window: a boundary-cut prefix of
+    # the generated answer with the truncated-note — never the fallback.
     assert len(res["reply"]) <= 450
-    assert long_reply.startswith(res["reply"].rstrip())
-    assert res["reply"].rstrip().endswith((".", "!", "?"))
+    assert long_reply.startswith(res["reply"].removesuffix(_TRUNCATED_NOTE).rstrip())
+    # The terminator contract applies to the answer prose; the truncated-note
+    # (a parenthetical) legitimately follows it.
+    assert res["reply"].removesuffix(_TRUNCATED_NOTE).rstrip().endswith((".", "!", "?"))
     assert "Mình không trả lời được" not in res["reply"]
 
 
@@ -3862,12 +3866,12 @@ async def test_progressive_short_greeting_answer_never_sends_early(monkeypatch):
 
     assert res["outcome"] == "sent"
     assert len(svc.dispatched) == 1
-    # Past the wait cap the whole answer ships as one message — compacted into
-    # the no-"See more" window: a boundary-cut prefix of the generated text.
     shipped = svc.dispatched[0]["text"]
     assert len(shipped) <= 450
-    assert raw.startswith(shipped.rstrip())
-    assert shipped.rstrip().endswith((".", "!", "?"))
+    assert raw.startswith(shipped.removesuffix(_TRUNCATED_NOTE).rstrip())
+    # The terminator contract applies to the answer prose; the truncated-note
+    # (a parenthetical) legitimately follows it.
+    assert shipped.removesuffix(_TRUNCATED_NOTE).rstrip().endswith((".", "!", "?"))
     stage = recorded[0]["stage_timings"]
     assert "progressive_send" not in stage
     assert "progressive_first_bubble_skipped" not in stage
@@ -3879,6 +3883,7 @@ async def test_progressive_pleasantry_only_answer_never_sends_early(monkeypatch)
     skip reason is stamped for the dashboard."""
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, durable=True)
+    from app.graph.progressive import _TRUNCATED_NOTE
     parts = [_PLEASANTRY] * 24  # 528 chars of filler, boundaries but no substance
     _stub_streaming_agent(monkeypatch, parts, svc=svc)
     raw = "".join(parts)
@@ -3889,11 +3894,9 @@ async def test_progressive_pleasantry_only_answer_never_sends_early(monkeypatch)
 
     assert res["outcome"] == "sent"
     assert len(svc.dispatched) == 1
-    # No early bubble, and the shipped single message is compacted into the
-    # no-"See more" window: a prefix of the generated filler, boundary-cut.
     shipped = svc.dispatched[0]["text"]
     assert len(shipped) <= 450
-    assert raw.startswith(shipped.rstrip())
+    assert raw.startswith(shipped.removesuffix(_TRUNCATED_NOTE).rstrip())
     stage = recorded[0]["stage_timings"]
     assert stage["progressive_first_bubble_skipped"] == "no_substance"
     assert "progressive_send" not in stage
@@ -3905,6 +3908,7 @@ async def test_progressive_wait_cap_falls_back_to_the_whole_reply(monkeypatch):
     a single message."""
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, durable=True)
+    from app.graph.progressive import _TRUNCATED_NOTE
     parts = ["x" * 300 + ". " + "y" * 500 + ". ", "z" * 120 + ". "]
     _stub_streaming_agent(monkeypatch, parts, svc=svc)
     raw = "".join(parts)
@@ -3915,11 +3919,14 @@ async def test_progressive_wait_cap_falls_back_to_the_whole_reply(monkeypatch):
     assert res["outcome"] == "sent"
     assert len(svc.dispatched) == 1
     # Past the wait cap the whole answer ships as one message — compacted into
-    # the no-"See more" window: a boundary-cut prefix of the generated text.
+    # the no-"See more" window: a boundary-cut prefix of the generated text
+    # with the truncated-note, never the raw 900-char dump.
     shipped = svc.dispatched[0]["text"]
     assert len(shipped) <= 450
-    assert raw.startswith(shipped.rstrip())
-    assert shipped.rstrip().endswith((".", "!", "?"))
+    assert raw.startswith(shipped.removesuffix(_TRUNCATED_NOTE).rstrip())
+    # The terminator contract applies to the answer prose; the truncated-note
+    # (a parenthetical) legitimately follows it.
+    assert shipped.removesuffix(_TRUNCATED_NOTE).rstrip().endswith((".", "!", "?"))
     stage = recorded[0]["stage_timings"]
     assert "progressive_send" not in stage
     assert "progressive_first_bubble_skipped" not in stage
