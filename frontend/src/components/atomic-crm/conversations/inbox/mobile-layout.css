@@ -99,6 +99,16 @@
     height: 100dvh;
   }
 
+  /* The global topbar (h-14 + safe-area) sits above the scrolling frame
+     content on phones too, so a full-100dvh conversation surface overflows
+     the frame by exactly the topbar height and pushes the composer below
+     the fold. Reserve it — mirrors the 768-1023px band's calc(100dvh - 56px). */
+  .workspace-frame-content > .inbox-bg-container.conversation-workspace {
+    height: calc(100vh - 3.5rem - env(safe-area-inset-top, 0px));
+    height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px));
+    min-height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px));
+  }
+
   /* Non-conversation workspace shells (projects, knowledge, settings, profile,
      personas) are NOT chat surfaces — their content is a stack of sections
      that the user reads top-to-bottom. Locking them to 100dvh clips anything
