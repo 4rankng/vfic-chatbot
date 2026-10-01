@@ -61,11 +61,11 @@ EXPECTED_ROUTE_COUNTS = {
     # +4 single-page external-source-sync endpoints
     # +2 project external-API endpoints (get / put)
     # +1 project external-API admin test-call endpoint (post)
-    "projects": 27,  # -1: the per-category YAML file upload route left (briefs ingest as text via the create/panel parsers)
+    "projects": 28,  # +1: GET /{id}/knowledge-template — the combined all-categories KB template (leading questions per category)
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "1058d665628c3b4ff1f1f2f82f847571f04f74c661cb9b7272a4b9abaae70637"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "0dec2b2d11c385c6ac40063b77ac4f35d79e57d1c59eec01dedc8132dc73951c"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

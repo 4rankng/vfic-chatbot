@@ -614,7 +614,7 @@ describe("ProjectKnowledgePanel", () => {
     ).toBeNull();
     expect(screen.container.textContent).not.toContain("TEMPLATE compensation");
     await expect
-      .element(screen.getByRole("button", { name: "Tải mẫu" }))
+      .element(screen.getByRole("button", { name: "Tải mẫu", exact: true }))
       .toBeEnabled();
     expect(
       screen.container.querySelector(
