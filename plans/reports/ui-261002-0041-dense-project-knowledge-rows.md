@@ -54,3 +54,35 @@ controls right, border as divider):
   expanded row (desktop + phone width) is the standing manual step.
 - The MCP PRO catalog search confirmed the composed-header anatomy; no new
   Untitled UI component was warranted — installed primitives only.
+
+## Deploy outcome (01:00–01:35, three `make deploy` attempts)
+
+- Attempt 1: my mid-deploy report commit raced the backend deploy's tag
+  resolution (build tagged `d8977259`, restart pulled `790f97af`). Prod
+  failed safe; nothing shipped partially. Lesson: never write to the repo
+  while `make deploy` is resolving SHAs.
+- Attempt 2: a parallel session committed three changes (inbox fixes +
+  MiniMax M3.1-Flash-Preview model switch) mid-deploy; the trailing
+  `deploy-restart-frontend` pulled the newer unknown tag and failed. The
+  blue/green flip itself had succeeded; bg_deploy later rolled the stack
+  back to `790f97af`.
+- Attempt 3 (stable tip `2601800f`): backend images pushed, flip succeeded,
+  then POST-FLIP VERIFICATION FAILED — the agent-lane smoke probe
+  (`backend/scripts/smoke_turn.py`) died after the early bubble
+  (`progressive-send-failure`) and one real conversation had no bot reply
+  within 300s. bg_deploy rolled the stack back to `790f97af`. The same
+  smoke failure appeared in attempt 2 on `790f97af` too, always inside the
+  worker-churn window, and every affected container is healthy after
+  settling — the gate appears to be measuring through rolling recreations.
+- Net: backend effectively unchanged on prod (`790f97af`), frontend still
+  `2dfda2ea` (the dense UI is NOT live), all containers healthy at last
+  check, one known-class pipeline failure observed during churn.
+
+Open items for the owner:
+1. The post-flip pipeline check vs rolling worker recreation — either the
+   gate needs a settled-window measurement or the rollout must not recreate
+   chatbot workers mid-claim (needs product intent).
+2. `deploy-restart-frontend` resolves IMAGE_TAG at restart time, not build
+   time — any commit landing during a deploy breaks the frontend restart.
+3. Whether the `progressive-send-failure` lane bug (ticketed in
+   `scripts/kanban/tickets_e.py`) fires outside deploy windows.
