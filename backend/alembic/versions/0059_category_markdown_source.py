@@ -18,6 +18,13 @@ Downgrade restores the schema and the document provenance literals only; the
 stored text is NOT reconstructed to YAML. Content rollback means restoring the
 pre-migration backup taken by the deployment workflow.
 
+Stored payloads may omit declared fields outright (the serializer skipped
+them), which carries the same information as the empty form: the pydantic
+models default those fields to None/[] and the grammar renders the empty
+form. The round-trip check therefore compares against a payload whose
+declared fields have been materialized, so absent-vs-empty key presence
+cannot mask real content loss.
+
 One content shape fails the round-trip loudly by design: a nested table cell
 (shift, stop, allowance, bonus names) containing the pipe character cannot
 survive a markdown table, so such a row needs a data fix before migrating.
@@ -349,6 +356,27 @@ def _legacy_category_matches(key, legacy_text):
         raise RuntimeError(f"{key}: legacy source category drifts from the row's category")
 
 
+def _with_declared_defaults(key, payload):
+    """Materialize declared-but-absent fields so the round-trip check compares
+    information, not key presence. The grammar renders an absent field as its
+    empty form (``null`` / ``[]``) and the parser materializes it, and the
+    pydantic models treat absent and empty as identical."""
+    filled = dict(payload)
+    filled.setdefault("schema_version", "1.0")
+    filled.setdefault("category", key)
+    list_field, fields = _FIELD_TABLES[key]
+    filled.setdefault(list_field, [])
+    records = []
+    for record in filled[list_field]:
+        record = dict(record)
+        for name, kind, _columns in fields:
+            if name != "id":
+                record.setdefault(name, None if kind == "scalar" else [])
+        records.append(record)
+    filled[list_field] = records
+    return filled
+
+
 def upgrade() -> None:
     connection = op.get_bind()
     rows = connection.execute(
@@ -374,8 +402,9 @@ def upgrade() -> None:
             raise RuntimeError(f"revision {row_id}: unknown category key {key!r}")
         if payload is None:
             raise RuntimeError(f"revision {row_id}: normalized_payload is missing")
-        markdown = _render_markdown(key, payload)
-        if _parse_markdown(key, markdown) != payload:
+        expected = _with_declared_defaults(key, payload)
+        markdown = _render_markdown(key, expected)
+        if _parse_markdown(key, markdown) != expected:
             raise RuntimeError(f"revision {row_id}: round-trip payload mismatch")
         _legacy_category_matches(key, legacy)
         updates.append({"id": str(row_id), "md": markdown})
