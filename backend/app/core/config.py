@@ -174,7 +174,7 @@ class Settings(BaseSettings):
     minimax_enable: bool = True
     minimax_api_key: str = ""
     minimax_base_url: str = "https://api.minimax.io/v1"
-    minimax_agent_model: str = "MiniMax-M2.7-highspeed"
+    minimax_agent_model: str = "MiniMax-M3.1-Flash-Preview"
     minimax_extractor_model: str = "MiniMax-M2.5-highspeed"
     minimax_request_timeout: int = 60
     # Fast-tier model for low-complexity intents (Phase 5 model tiering). Empty = disabled

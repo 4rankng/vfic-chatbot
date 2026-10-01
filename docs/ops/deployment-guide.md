@@ -393,7 +393,7 @@ Sourced from `backend/.env.example` (committed template) and
 | `MINIMAX_ENABLE` | Primary provider toggle. |
 | `MINIMAX_API_KEY` | MiniMax API key. |
 | `MINIMAX_BASE_URL` | `https://api.minimax.io/v1`. |
-| `MINIMAX_AGENT_MODEL` | `MiniMax-M2.7-highspeed`. |
+| `MINIMAX_AGENT_MODEL` | `MiniMax-M3.1-Flash-Preview`. |
 | `MINIMAX_EXTRACTOR_MODEL` | `MiniMax-M2.5-highspeed`. Model for post-reply candidate extraction. |
 | `MINIMAX_DIGEST_MODEL` | Background KB digestion model. |
 | `MINIMAX_REQUEST_TIMEOUT` | 60s. |

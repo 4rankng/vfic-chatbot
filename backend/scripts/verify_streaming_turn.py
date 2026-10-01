@@ -110,13 +110,13 @@ def _build_parser() -> argparse.ArgumentParser:
 # gpt-4o-mini). Also the token-plan primary, because the early-delivery win is a
 # property of the provider's delta cadence, not of the model's average speed.
 SWEEP = [
-    ("minimax", "MiniMax-M2.7-highspeed"),
+    ("minimax", "MiniMax-M3.1-Flash-Preview"),
     ("openrouter", "google/gemini-2.5-flash-lite"),
     ("openrouter", "qwen/qwen3-30b-a3b-instruct-2507"),
     ("openrouter", "openai/gpt-4o-mini"),
     ("openrouter", "deepseek/deepseek-v4.1-flash"),
 ]
-DEFAULT_MODEL = {"minimax": "MiniMax-M2.7-highspeed", "openrouter": "google/gemini-2.5-flash-lite"}
+DEFAULT_MODEL = {"minimax": "MiniMax-M3.1-Flash-Preview", "openrouter": "google/gemini-2.5-flash-lite"}
 
 
 def _build_llm(provider: str, model: str):
