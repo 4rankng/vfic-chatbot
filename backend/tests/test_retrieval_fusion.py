@@ -30,7 +30,9 @@ def test_chunk_visibility_requires_active_category_revision_and_gates_legacy() -
     predicate = RetrievalRepository._chunk_visibility("")
 
     assert "p.category_authority_started IS TRUE" in predicate
-    assert "kc.active_revision_id = c.category_revision_id" in predicate
+    assert "kc.project_id = p.id AND kc.active_revision_id = kr.id" in predicate
+    assert "kr.id = c.category_revision_id" in predicate
+    assert "d.category_revision_id = kr.id" in predicate
     assert "c.category_revision_id IS NULL" in predicate
     assert "c.kb_version_id = p.active_kb_version_id" in predicate
     assert "p.category_authority_started IS FALSE" in predicate
