@@ -167,6 +167,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/ProjectKnowledgeExport.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/ProjectEdit.tsx",
           "type": "registry:component"
         },

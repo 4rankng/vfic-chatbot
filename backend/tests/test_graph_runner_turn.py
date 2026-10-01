@@ -41,7 +41,6 @@ from app.graph.direct_context import DirectContext, ProjectTurnContext
 from app.graph.llm_semaphore import LLMThrottled
 from app.graph.ports import TurnDecisions
 from app.graph.runner import run_turn
-from app.graph.progressive import _TRUNCATED_NOTE
 from app.graph.types import BotRunState, GraphDeps
 from app.graph.tingting_guide import tingting_hotline_reply
 
@@ -489,6 +488,59 @@ async def test_project_detail_turn_folds_direct_context_into_the_agent():
     # is in the prompt and no tools are bound (a tool cannot add evidence).
     assert "KIẾN THỨC DỰ ÁN (toàn văn, nguồn chính thức)" in captured["system"]
     assert captured["resolved_tool_registry"] == frozenset()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rewrite_completes", [True, False])
+async def test_direct_context_uses_the_same_bounded_completion_and_delivery_guard(rewrite_completes):
+    from app.graph.clients import MiniMaxAgent
+    from langchain_core.messages import AIMessage
+
+    knowledge = "Rorze tuyển nhân viên lắp ráp tại Hải Phòng. Lương cơ bản 6 triệu đồng/tháng."
+    complete = "Dạ Rorze tuyển nhân viên lắp ráp tại Hải Phòng, lương cơ bản 6 triệu đồng/tháng ạ."
+
+    class Reader:
+        async def active_context(self):
+            return DirectContext(
+                knowledge_base_id="kb-rorze", persona_body="Bạn là tư vấn viên.",
+                knowledge_text=knowledge,
+            )
+
+    class Model:
+        def __init__(self):
+            self.calls = 0
+            self.system = ""
+
+        async def ainvoke(self, messages, **kwargs):
+            self.calls += 1
+            self.system = str(messages[0].content)
+            return AIMessage(
+                content=complete if self.calls == 4 and rewrite_completes else "Thông tin dự án chưa hoàn",
+                response_metadata={"finish_reason": "stop" if self.calls == 4 and rewrite_completes else "length"},
+            )
+
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    deps = _deps(_FakeZalo(), conversation=svc)
+    model = Model()
+    deps.agent = MiniMaxAgent(model, embedder=None, max_iters=1)
+    deps.direct_context = Reader()
+
+    result = await run_turn(BotRunState(
+        conversation_id=CONV_ID, version_at_start=1,
+        user_text="Công việc ở Rorze là gì?",
+    ), deps)
+
+    assert model.calls == 4
+    assert knowledge in model.system
+    if rewrite_completes:
+        assert result == {"outcome": "sent", "reply": complete}
+        assert svc.dispatched[0]["text"] == complete
+        assert recorded[0]["reply"] == complete
+    else:
+        assert result["outcome"] == "suppressed"
+        assert svc.dispatched == []
+        assert recorded[0]["stage_timings"]["answer_completion_failure"] == "output_cap_exhausted"
 
 
 @pytest.mark.asyncio
@@ -1449,7 +1501,6 @@ async def test_overlong_clean_reply_ships_as_generated(monkeypatch):
     converged boundary no longer truncates: the answer is sent exactly as
     generated, with only provider thinking stripped.
     """
-    from app.graph.progressive import _TRUNCATED_NOTE
     long_reply = "Tên công việc: Operator LG Display\n" + (
         "Quyền lợi: bảo hiểm, phụ cấp, KTX. " * 100
     )
@@ -1465,14 +1516,140 @@ async def test_overlong_clean_reply_ships_as_generated(monkeypatch):
         _deps(zalo, conversation=svc))
 
     assert res["outcome"] == "sent"
-    # Compacted into Zalo's no-"See more" window: a boundary-cut prefix of
-    # the generated answer with the truncated-note — never the fallback.
-    assert len(res["reply"]) <= 450
-    assert long_reply.startswith(res["reply"].removesuffix(_TRUNCATED_NOTE).rstrip())
-    # The terminator contract applies to the answer prose; the truncated-note
-    # (a parenthetical) legitimately follows it.
-    assert res["reply"].removesuffix(_TRUNCATED_NOTE).rstrip().endswith((".", "!", "?"))
-    assert "Mình không trả lời được" not in res["reply"]
+    assert res["reply"] == long_reply
+    assert zalo.sent == [("z1", long_reply)]
+
+
+@pytest.mark.parametrize("provider", ["bot", "oa", "facebook_messenger"])
+@pytest.mark.asyncio
+async def test_all_five_projects_reach_the_claim_delivery_and_receipt(monkeypatch, provider):
+    """A complete model list cannot lose projects at the shared send boundary."""
+    names = ("LG Display", "Rorze", "Amtran", "Kyocera", "Pegatron")
+    reply = "Dạ em gửi đủ 5 dự án đang tuyển để anh/chị dễ chọn ạ:\n\n" + "\n\n".join(
+        f"{index}. {name}: tại Hải Phòng. Thu nhập 8-12 triệu/tháng theo dữ liệu dự án. "
+        "Phạm vi công việc gồm sản xuất, kiểm tra chất lượng và lắp ráp sản phẩm."
+        for index, name in enumerate(names, 1)
+    ) + "\n\nAnh/chị quan tâm dự án nào để em tư vấn tiếp ạ?"
+    assert len(reply) > 450
+    identity = (
+        SimpleNamespace(provider=provider, external_id="psid-1", account_key="page-1")
+        if provider == "facebook_messenger" else None
+    )
+    conv = _FakeConv(zalo_channel=provider, channel_identity=identity)
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    _stub_agent(monkeypatch, reply)
+    state = _state()
+    state.user_text = "Cho tôi xem tất cả dự án đang tuyển"
+
+    result = await run_turn(state, _deps(_FakeZalo(), conversation=svc))
+
+    assert result == {"outcome": "sent", "reply": reply}
+    assert svc.claims[0]["reply"] == reply
+    assert svc.claims[0]["outbox_payload"]["text"] == reply
+    assert svc.dispatched[0]["text"] == reply
+    assert recorded[0]["reply"] == reply
+    for name in names:
+        assert recorded[0]["reply"].count(name) == 1
+
+
+@pytest.mark.asyncio
+async def test_progressive_large_first_bubble_and_remainder_preserve_every_project(monkeypatch):
+    """A raw prefix offset must never advance past text removed from the bubble."""
+    names = ("LG Display", "Rorze", "Amtran", "Kyocera", "Pegatron")
+    first = "LG Display: " + "Thông tin công việc và quyền lợi đã được xác minh " * 10 + ".\n"
+    assert 450 < len(first) < runner.PROGRESSIVE_MAX_WAIT_CHARS
+    parts = [first] + [f"{name}: công việc sản xuất tại Hải Phòng.\n" for name in names[1:]]
+    raw = "".join(parts)
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    _stub_streaming_agent(monkeypatch, parts, svc=svc, pause_after=0)
+    state = _state()
+    state.user_text = "Cho tôi xem tất cả dự án đang tuyển"
+
+    result = await run_turn(state, _deps(_FakeZalo(), conversation=svc, progressive_send=True))
+
+    assert result["outcome"] == "sent"
+    assert len(svc.dispatched) == 2
+    assert "".join(item["text"] for item in svc.dispatched) == raw
+    offset = runner._next_sendable_offset(raw)
+    assert svc.claims[0]["outbox_payload"]["text"] == raw[:offset]
+    assert recorded[0]["reply"] == raw[offset:]
+    assert svc.agent_returned_after_dispatches == [1]
+
+
+@pytest.mark.asyncio
+async def test_five_active_project_tool_evidence_survives_capped_generation_and_delivery(monkeypatch):
+    """Run the actual catalog tool and completion guard through durable delivery."""
+    from langchain_core.messages import AIMessage
+    from app.graph.clients import MiniMaxAgent
+    from app.recruitment.domain.recommendation import ProjectFeatures
+
+    names = ("LG Display", "Rorze", "Amtran", "Kyocera", "Pegatron")
+    complete = "Dạ đây là đủ 5 dự án đang tuyển ạ:\n\n" + "\n\n".join(
+        f"{index}. {name}: tại Hải Phòng. Phạm vi công việc: sản xuất và kiểm tra chất lượng."
+        for index, name in enumerate(names, 1)
+    ) + "\n\nAnh/chị quan tâm dự án nào ạ?"
+    cut_offset = complete.index("3. Amtran") + 4
+    assert len(complete) > 450
+
+    class Catalog:
+        async def list_active_projects(self):
+            return [
+                ProjectFeatures(project_id=str(uuid.uuid4()), slug=f"project-{index}", name=name)
+                for index, name in enumerate(names)
+            ]
+
+    class Model:
+        def __init__(self):
+            self.calls = 0
+            self.catalog_evidence = ""
+
+        def bind_tools(self, _schemas, **_kwargs):
+            return self
+
+        async def ainvoke(self, messages, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return AIMessage(content="", tool_calls=[{
+                    "name": "list_active_projects", "args": {}, "id": "catalog",
+                }])
+            self.catalog_evidence = str(next(
+                message.content for message in messages if message.type == "tool"
+            ))
+            return AIMessage(
+                content=complete[:cut_offset] if self.calls == 2 else complete[cut_offset:],
+                response_metadata={"finish_reason": "length" if self.calls == 2 else "stop"},
+            )
+
+    model = Model()
+    agent = MiniMaxAgent(model, embedder=None, max_iters=2)
+
+    async def catalog_agent(state, _deps, user_text, **kwargs):
+        return await agent.agent(
+            user_text,
+            system="Chỉ trình bày các dự án từ dữ liệu công cụ.",
+            retrieval=Catalog(),
+            embedder=None,
+            allowed_tools=("list_active_projects",),
+            required_tool="list_active_projects",
+            metrics=kwargs.get("timings"),
+        )
+
+    monkeypatch.setattr(runner, "_agent_turn", catalog_agent)
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    state = _state()
+    state.user_text = "Cho tôi xem tất cả dự án đang tuyển"
+
+    result = await run_turn(state, _deps(_FakeZalo(), conversation=svc))
+
+    assert model.calls == 3  # catalog request, capped answer, bounded completion
+    assert '"total":5' in model.catalog_evidence
+    assert all(name in model.catalog_evidence for name in names)
+    assert result == {"outcome": "sent", "reply": complete}
+    assert svc.dispatched[0]["text"] == complete
+    assert svc.claims[0]["outbox_payload"]["text"] == complete
+    assert recorded[0]["reply"] == complete
 
 
 # ---------------------------------------------------------------------------
@@ -1889,6 +2066,84 @@ async def test_cross_project_salary_target_requires_compare_income(monkeypatch):
     assert captured["required_tool"] == "compare_income"
     assert captured["required_tool_args"] == {"target_monthly_vnd": 20_000_000}
     assert "forced_project_slug" not in captured
+
+
+@pytest.mark.parametrize("mode", ["RAG", "DIRECT_CONTEXT"])
+@pytest.mark.parametrize("decisions", [
+    TurnDecisions(intent="general", intent_confidence=0.8, recent_vacancy=True),
+    TurnDecisions(intent="recommend", intent_confidence=0.95, vacancy_listing=True),
+])
+async def test_focused_context_preserves_required_catalog_authority(monkeypatch, mode, decisions):
+    """A focused KB cannot replace the catalog authority for a catalog turn."""
+    captured = {}
+
+    class Agent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "Danh mục dự án đang tuyển đã xác minh."
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", AsyncMock(
+        return_value=("recruitment prompt", False),
+    ))
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = Agent()
+    deps.lead = SimpleNamespace(
+        context=AsyncMock(return_value=("", "")), instruction=lambda _question: "",
+    )
+    context = ProjectTurnContext(
+        state="FOCUSED", project_slug="focused-project", project_name="Focused project",
+        knowledge_mode=mode,
+        direct_context=(
+            DirectContext("kb", "", "Only the focused project's details.")
+            if mode == "DIRECT_CONTEXT" else None
+        ),
+    )
+    await lanes._agent_turn(
+        _state(), deps, "còn dự án nào nữa?", provider="zalo_bot", chat_id="z1",
+        recent_messages=[], project_context=context, decisions=decisions, timings={},
+    )
+    assert captured["required_tool"] == "list_active_projects"
+    assert captured["allowed_tools"] == ("list_active_projects",)
+    assert captured.get("resolved_tool_registry") != frozenset()
+    assert "forced_project_slug" not in captured
+
+
+@pytest.mark.parametrize("mode", ["RAG", "DIRECT_CONTEXT"])
+async def test_focused_salary_target_remains_scoped_to_its_project(monkeypatch, mode):
+    """A target salary in a focused conversation does not widen project scope."""
+    captured = {}
+
+    class Agent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            return "Thu nhập của dự án đã chọn được đối chiếu với kiến thức dự án."
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", AsyncMock(
+        return_value=("recruitment prompt", False),
+    ))
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = Agent()
+    deps.lead = SimpleNamespace(
+        context=AsyncMock(return_value=("", "")), instruction=lambda _question: "",
+    )
+    context = ProjectTurnContext(
+        state="FOCUSED", project_slug="focused-project", project_name="Focused project",
+        knowledge_mode=mode,
+        direct_context=(DirectContext("kb", "", "Thu nhập đã xác minh.") if mode == "DIRECT_CONTEXT" else None),
+    )
+    await lanes._agent_turn(
+        _state(), deps, "lương 20 triệu", provider="zalo_bot", chat_id="z1",
+        recent_messages=[], project_context=context,
+        decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.9), timings={},
+    )
+    if mode == "RAG":
+        assert captured["required_tool"] == "search_knowledge"
+        assert captured["forced_project_slug"] == "focused-project"
+    else:
+        assert captured.get("required_tool") is None
+        assert captured["resolved_tool_registry"] == frozenset()
 
 
 @pytest.mark.asyncio
@@ -3417,8 +3672,104 @@ async def test_lead_row_resolved_once_and_reused_across_calls(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_agent_turn_passes_the_resolved_lead_row_to_context(monkeypatch):
+async def test_new_candidate_lead_miss_is_not_queried_again_during_the_turn(monkeypatch):
+    from app.recruitment.application.lead_lookup import UNRESOLVED_LEAD
+    from app.recruitment.infrastructure import service_adapters
+
+    resolve = AsyncMock(return_value=None)
+    captured: list[object] = []
+
+    async def agent_turn(*_args, lead_row=UNRESOLVED_LEAD, **_kwargs):
+        captured.append(lead_row)
+        return "Em có thể tư vấn công việc cho chị."
+
+    monkeypatch.setattr(service_adapters, "_resolve_lead", resolve)
+    monkeypatch.setattr(runner, "_agent_turn", agent_turn)
+    svc, _ = _stub_svc(conv=_FakeConv())
+    deps = _deps(_FakeZalo(), conversation=svc)
+    deps.lead_gender = service_adapters.ServiceLeadGenderAdapter(object())
+    deps.turn_decisions = _decisions_port(
+        TurnDecisions(gender="female", gender_confidence=0.9)
+    )
+
+    result = await run_turn(_state(), deps)
+
+    assert result["outcome"] == "sent"
+    resolve.assert_awaited_once()
+    assert captured == [None]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing_lead", [False, True])
+@pytest.mark.parametrize("refresh_failure", [False, True])
+async def test_profile_name_capture_refreshes_prefetch_before_prompt_context(
+    monkeypatch, existing_lead, refresh_failure
+):
+    from app.recruitment.application.lead_lookup import UNRESOLVED_LEAD
+    from app.recruitment.infrastructure import service_adapters
+
+    contact_id = "contact-profile"
+    name = "Nguyễn Văn Hùng"
+    saved = {"id": 9, "contact_id": contact_id, "name": None} if existing_lead else None
+    reads: list[dict | None] = []
+    profiles: list[str] = []
+    writes: list[dict] = []
+    refresh_failed = False
+
+    class Repository:
+        def __init__(self, _db):
+            pass
+
+        async def by_contact_id(self, _contact_id):
+            nonlocal refresh_failed
+            row = dict(saved) if saved is not None else None
+            reads.append(row)
+            if writes and refresh_failure and not refresh_failed:
+                refresh_failed = True
+                raise RuntimeError("refresh unavailable")
+            return row
+
+        async def upsert_by_contact(self, _contact_id, patch):
+            nonlocal saved
+            writes.append(patch)
+            saved = {"id": 9, "contact_id": contact_id, "name": patch["name"]}
+            return saved["id"]
+
+    async def agent_turn(_state, deps, user_text, *, lead_row=UNRESOLVED_LEAD, **kwargs):
+        profile, _ = await deps.lead.context(
+            kwargs["chat_id"], user_text, kwargs["recent_messages"],
+            contact_id=kwargs["contact_id"], lead=lead_row,
+        )
+        profiles.append(profile)
+        return "Em có thể hỗ trợ tìm việc cho anh."
+
+    monkeypatch.setattr("app.services.lead.repository.LeadRepository", Repository)
+    monkeypatch.setattr(runner, "_agent_turn", agent_turn)
+    conv = _FakeConv(
+        zalo_chat_id=None, zalo_channel="facebook_messenger", contact_id=contact_id,
+        channel_identity=SimpleNamespace(provider="facebook_messenger", external_id="candidate"),
+    )
+    conv.contact = SimpleNamespace(display_name=name)
+    svc, _ = _stub_svc(conv=conv, durable=True)
+    deps = _deps(_FakeZalo(), conversation=svc)
+    db = SimpleNamespace(commit=AsyncMock())
+    deps.lead_gender = service_adapters.ServiceLeadGenderAdapter(db)
+    deps.lead = service_adapters.ServiceLeadContextAdapter(db)
+    deps.turn_decisions = _decisions_port(TurnDecisions(profile_name_is_name=True))
+
+    result = await run_turn(_state(), deps)
+
+    assert result["outcome"] == "sent"
+    assert len(writes) == 1
+    assert name in profiles[0]
+    assert len(reads) == (3 if refresh_failure else 2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lead_row", [{"id": 5, "zalo_id": "z1", "gender": "female"}, None])
+async def test_agent_turn_passes_the_resolved_lead_row_to_context(monkeypatch, lead_row):
     from app.graph.runner import _agent_turn
+    from app.recruitment.application.lead_lookup import UNRESOLVED_LEAD
 
     captured: dict[str, object] = {}
 
@@ -3427,7 +3778,8 @@ async def test_agent_turn_passes_the_resolved_lead_row_to_context(monkeypatch):
 
     class _FakeLead:
         async def context(
-            self, chat_id, current_user_text, recent_messages, contact_id=None, lead=None
+            self, chat_id, current_user_text, recent_messages, contact_id=None,
+            lead=UNRESOLVED_LEAD,
         ):  # noqa: ARG001
             captured["lead"] = lead
             return "", ""
@@ -3448,7 +3800,6 @@ async def test_agent_turn_passes_the_resolved_lead_row_to_context(monkeypatch):
     deps.agent = _FakeAgent()
     deps.lead = _FakeLead()
 
-    lead_row = {"id": 5, "zalo_id": "z1", "gender": "female"}
     await _agent_turn(
         _state(),
         deps,
@@ -3867,11 +4218,7 @@ async def test_progressive_short_greeting_answer_never_sends_early(monkeypatch):
     assert res["outcome"] == "sent"
     assert len(svc.dispatched) == 1
     shipped = svc.dispatched[0]["text"]
-    assert len(shipped) <= 450
-    assert raw.startswith(shipped.removesuffix(_TRUNCATED_NOTE).rstrip())
-    # The terminator contract applies to the answer prose; the truncated-note
-    # (a parenthetical) legitimately follows it.
-    assert shipped.removesuffix(_TRUNCATED_NOTE).rstrip().endswith((".", "!", "?"))
+    assert shipped == raw
     stage = recorded[0]["stage_timings"]
     assert "progressive_send" not in stage
     assert "progressive_first_bubble_skipped" not in stage
@@ -3883,7 +4230,6 @@ async def test_progressive_pleasantry_only_answer_never_sends_early(monkeypatch)
     skip reason is stamped for the dashboard."""
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, durable=True)
-    from app.graph.progressive import _TRUNCATED_NOTE
     parts = [_PLEASANTRY] * 24  # 528 chars of filler, boundaries but no substance
     _stub_streaming_agent(monkeypatch, parts, svc=svc)
     raw = "".join(parts)
@@ -3895,8 +4241,7 @@ async def test_progressive_pleasantry_only_answer_never_sends_early(monkeypatch)
     assert res["outcome"] == "sent"
     assert len(svc.dispatched) == 1
     shipped = svc.dispatched[0]["text"]
-    assert len(shipped) <= 450
-    assert raw.startswith(shipped.removesuffix(_TRUNCATED_NOTE).rstrip())
+    assert shipped == raw
     stage = recorded[0]["stage_timings"]
     assert stage["progressive_first_bubble_skipped"] == "no_substance"
     assert "progressive_send" not in stage
@@ -3908,7 +4253,6 @@ async def test_progressive_wait_cap_falls_back_to_the_whole_reply(monkeypatch):
     a single message."""
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv, durable=True)
-    from app.graph.progressive import _TRUNCATED_NOTE
     parts = ["x" * 300 + ". " + "y" * 500 + ". ", "z" * 120 + ". "]
     _stub_streaming_agent(monkeypatch, parts, svc=svc)
     raw = "".join(parts)
@@ -3918,15 +4262,7 @@ async def test_progressive_wait_cap_falls_back_to_the_whole_reply(monkeypatch):
 
     assert res["outcome"] == "sent"
     assert len(svc.dispatched) == 1
-    # Past the wait cap the whole answer ships as one message — compacted into
-    # the no-"See more" window: a boundary-cut prefix of the generated text
-    # with the truncated-note, never the raw 900-char dump.
-    shipped = svc.dispatched[0]["text"]
-    assert len(shipped) <= 450
-    assert raw.startswith(shipped.removesuffix(_TRUNCATED_NOTE).rstrip())
-    # The terminator contract applies to the answer prose; the truncated-note
-    # (a parenthetical) legitimately follows it.
-    assert shipped.removesuffix(_TRUNCATED_NOTE).rstrip().endswith((".", "!", "?"))
+    assert svc.dispatched[0]["text"] == raw
     stage = recorded[0]["stage_timings"]
     assert "progressive_send" not in stage
     assert "progressive_first_bubble_skipped" not in stage
@@ -4134,6 +4470,71 @@ async def test_progressive_stream_mismatch_is_recorded_as_alarmable(monkeypatch)
     assert stage["progressive_stream_mismatch_chars"] == abs(
         len(_ANSWER) - len(replacement)
     )
+    assert svc.dispatched[-1]["text"] == replacement
+    assert recorded[0]["reply"] == replacement
+
+
+@pytest.mark.asyncio
+async def test_progressive_suppressed_final_answer_does_not_send_rejected_raw_tail(monkeypatch):
+    """A delivered prefix stays durable, but a rejected final tail stays private."""
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    _stub_streaming_agent(monkeypatch, _ANSWER_SENTENCES, svc=svc, full="", pause_after=2)
+
+    result = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, progressive_send=True))
+
+    assert len(svc.dispatched) == 1
+    assert recorded[0]["sent"] is True
+    assert recorded[0]["reply"] == svc.dispatched[0]["text"]
+    assert result["reply"] == svc.dispatched[0]["text"]
+    assert len(svc.claims) == 1
+
+
+@pytest.mark.asyncio
+async def test_catalog_list_waits_for_final_completion_before_any_candidate_delivery(monkeypatch):
+    """Project discovery cannot publish its first two rows before all rows finish."""
+    from app.graph.tools.catalog import _project_tool_result
+
+    names = ("LG Display", "Rorze", "Amtran", "Kyocera", "Pegatron")
+    evidence = _project_tool_result("matched", [
+        {"id": str(uuid.uuid4()), "project": name} for name in names
+    ], "Present verified projects.", total=5)
+    parts = [
+        "LG Display, Rorze: " + "Thông tin dự án đã được xác minh. " * 10,
+        "Amtran, Kyocera, Pegatron: công việc sản xuất tại Hải Phòng.",
+    ]
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    _stub_streaming_agent(monkeypatch, parts, svc=svc, evidence=[evidence], full="")
+
+    result = await run_turn(_state(), _deps(_FakeZalo(), conversation=svc, progressive_send=True))
+
+    assert result["outcome"] == "suppressed"
+    assert svc.dispatched == []
+    assert svc.agent_returned_after_dispatches == [0]
+    assert recorded[0]["stage_timings"]["progressive_first_bubble_skipped"] == "catalog_completeness"
+
+
+@pytest.mark.parametrize("decisions", [
+    TurnDecisions(intent="recommend", intent_confidence=0.95, vacancy_listing=True),
+    TurnDecisions(intent="general", intent_confidence=0.7, recent_vacancy=True),
+])
+@pytest.mark.asyncio
+async def test_catalog_route_cannot_send_preface_before_the_authority_tool(monkeypatch, decisions):
+    conv = _FakeConv()
+    svc, recorded = _stub_svc(conv=conv, durable=True)
+    # A provider may stream prose before it announces its tool request. This
+    # is not yet catalog evidence and must never become a candidate message.
+    _stub_streaming_agent(monkeypatch, _ANSWER_SENTENCES, svc=svc, full="")
+    deps = _deps(_FakeZalo(), conversation=svc, progressive_send=True)
+    deps.turn_decisions = SimpleNamespace(decide_turn=AsyncMock(return_value=decisions))
+
+    result = await run_turn(_state(), deps)
+
+    assert result["outcome"] == "suppressed"
+    assert svc.dispatched == []
+    assert svc.agent_returned_after_dispatches == [0]
+    assert recorded[0]["stage_timings"]["progressive_first_bubble_skipped"] == "catalog_completeness"
 
 
 @pytest.mark.asyncio
@@ -4207,3 +4608,323 @@ def test_runtime_rules_carry_the_project_first_sales_directive():
     assert "ĐƠN VỊ TUYỂN DỤNG" in _RUNTIME_RETRIEVAL_RULES
     assert "thuyết phục ứng viên ứng tuyển" in _RUNTIME_RETRIEVAL_RULES
     assert "tra search_knowledge theo dự án" in _RUNTIME_RETRIEVAL_RULES
+
+
+@pytest.mark.parametrize("failed_stage", ["last_messages", "record_bot_pending"])
+async def test_status_is_drained_when_preamble_fails(monkeypatch, failed_stage):
+    entered = asyncio.Event()
+    drained = asyncio.Event()
+    svc, _ = _stub_svc(conv=_FakeConv())
+
+    async def status(*args, **kwargs):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            drained.set()
+
+    async def fail(*args, **kwargs):
+        await entered.wait()
+        raise RuntimeError("preamble failed")
+
+    monkeypatch.setattr(runner, "_status_heartbeat", status)
+    monkeypatch.setattr(svc, failed_stage, fail)
+    with pytest.raises(RuntimeError, match="preamble failed"):
+        await run_turn(_state(), _deps(_FakeZalo(), conversation=svc))
+    assert drained.is_set()
+
+
+async def test_status_is_drained_when_turn_is_cancelled_during_preamble(monkeypatch):
+    entered = asyncio.Event()
+    drained = asyncio.Event()
+    svc, _ = _stub_svc(conv=_FakeConv())
+
+    async def status(*args, **kwargs):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            drained.set()
+
+    async def history(*args, **kwargs):
+        await entered.wait()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(runner, "_status_heartbeat", status)
+    monkeypatch.setattr(svc, "last_messages", history)
+    task = asyncio.create_task(run_turn(_state(), _deps(_FakeZalo(), conversation=svc)))
+    await entered.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert drained.is_set()
+
+
+@pytest.mark.parametrize("terminal", ["answer", "send_failure", "empty", "error", "takeover"])
+async def test_active_status_is_joined_before_answer_or_terminal(monkeypatch, terminal):
+    entered = asyncio.Event()
+    drained = asyncio.Event()
+    active = False
+    events = []
+
+    class NativeSender(_FakeZalo):
+        async def send_chat_action(self, chat_id, action):
+            nonlocal active
+            active = True
+            events.append("typing")
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                active = False
+                drained.set()
+
+        async def send_message(self, chat_id, text):
+            assert drained.is_set() and not active
+            events.append("answer")
+            return await super().send_message(chat_id, text)
+
+    async def agent(*args, **kwargs):
+        await entered.wait()
+        if terminal == "error":
+            raise RuntimeError("agent failed")
+        return "" if terminal == "empty" else "Dự án đang tuyển công nhân."
+
+    svc, _ = _stub_svc(conv=_FakeConv(), owned=terminal != "takeover")
+    original_record = svc.record_bot_outcome
+
+    async def record(*args, **kwargs):
+        assert drained.is_set() and not active
+        events.append("outcome")
+        return await original_record(*args, **kwargs)
+
+    monkeypatch.setattr(runner, "_agent_turn", agent)
+    monkeypatch.setattr(svc, "record_bot_outcome", record)
+    sender = NativeSender(results=[_SendResult(
+        ok=False, error="provider unavailable", error_class="provider_error",
+    )] if terminal == "send_failure" else None)
+    outcome = await run_turn(_state(), _deps(sender, conversation=svc))
+    assert drained.is_set() and not active
+    assert events[0] == "typing"
+    assert events[-1] == "outcome"
+    expected = {"answer": "sent", "send_failure": "send_failed", "error": "error"}
+    assert outcome["outcome"] == expected.get(terminal, "suppressed")
+    calls = len(events)
+    await asyncio.sleep(0.025)
+    assert len(events) == calls
+
+
+async def test_cancellation_joins_progressive_generation_and_status(monkeypatch):
+    status_started = asyncio.Event()
+    status_drained = asyncio.Event()
+    agent_started = asyncio.Event()
+    agent_drained = asyncio.Event()
+    svc, _ = _stub_svc(conv=_FakeConv(), durable=True)
+
+    async def status(*args, **kwargs):
+        status_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            status_drained.set()
+
+    async def agent(*args, **kwargs):
+        await status_started.wait()
+        agent_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            agent_drained.set()
+
+    monkeypatch.setattr(runner, "_status_heartbeat", status)
+    monkeypatch.setattr(runner, "_agent_turn", agent)
+    task = asyncio.create_task(run_turn(_state(), _deps(
+        _FakeZalo(), conversation=svc, progressive_send=True,
+    )))
+    await agent_started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert status_drained.is_set()
+    assert agent_drained.is_set()
+    assert not svc.dispatched
+    assert not any(
+        pending.get_coro().__qualname__ == "Queue.get" for pending in asyncio.all_tasks()
+    )
+
+
+async def test_status_is_drained_before_first_progressive_answer(monkeypatch):
+    status_started = asyncio.Event()
+    status_drained = asyncio.Event()
+    svc, _ = _stub_svc(conv=_FakeConv(), durable=True)
+    prefix = "Dự án đang tuyển công nhân với thu nhập 9 triệu mỗi tháng. " * 5
+    remainder = "Bạn cho mình số điện thoại để đăng ký ứng tuyển nhé."
+
+    async def status(*args, **kwargs):
+        status_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            status_drained.set()
+
+    async def agent(*args, on_delta=None, **kwargs):
+        await status_started.wait()
+        await on_delta(prefix)
+        await svc.early_dispatched.wait()
+        assert status_drained.is_set()
+        await on_delta(remainder)
+        return prefix + remainder
+
+    dispatch = svc.dispatch_outbound_message
+
+    async def observed_dispatch(*args, **kwargs):
+        assert status_drained.is_set()
+        return await dispatch(*args, **kwargs)
+
+    monkeypatch.setattr(runner, "_status_heartbeat", status)
+    monkeypatch.setattr(runner, "_agent_turn", agent)
+    monkeypatch.setattr(svc, "dispatch_outbound_message", observed_dispatch)
+    outcome = await run_turn(_state(), _deps(
+        _FakeZalo(), conversation=svc, progressive_send=True,
+    ))
+    assert outcome["outcome"] == "sent"
+    assert len(svc.dispatched) == 2
+    assert status_drained.is_set()
+
+
+@pytest.mark.parametrize("gate", ["conversation", "runtime", "ownership"])
+@pytest.mark.parametrize("exit_kind", ["return", "error", "cancel"])
+async def test_setup_status_covers_initial_gates_and_is_drained_on_every_exit(
+    monkeypatch, gate, exit_kind,
+):
+    started = asyncio.Event()
+    drained = asyncio.Event()
+    gate_entered = asyncio.Event()
+    svc, _ = _stub_svc(conv=_FakeConv())
+    state = _state()
+    deps = _deps(_FakeZalo(), conversation=svc)
+
+    async def inherited_status():
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            drained.set()
+
+    async def initial_gate(*args, **kwargs):
+        await started.wait()
+        assert not drained.is_set()
+        gate_entered.set()
+        if exit_kind == "error":
+            raise RuntimeError("initial gate failed")
+        if exit_kind == "cancel":
+            await asyncio.Event().wait()
+        return False if gate == "ownership" else None
+
+    original_record = svc.record_bot_outcome
+
+    async def record(*args, **kwargs):
+        assert drained.is_set()
+        return await original_record(*args, **kwargs)
+
+    monkeypatch.setattr(svc, "record_bot_outcome", record)
+    resolved_status = AsyncMock()
+    monkeypatch.setattr(runner, "_status_heartbeat", resolved_status)
+    if gate == "conversation":
+        monkeypatch.setattr(svc, "get", initial_gate)
+    elif gate == "runtime":
+        state.runtime_revision_id = "revision"
+        state.authority_generation = 1
+        state.runtime_fingerprint = "fingerprint"
+        deps.runtime_policy = SimpleNamespace(resolve_active_policy=initial_gate)
+    else:
+        state.lock_owner = "owner"
+        monkeypatch.setattr(svc, "recheck_ownership", initial_gate)
+
+    inherited = asyncio.create_task(inherited_status())
+    deps.preamble_status_task = inherited
+    turn = asyncio.create_task(run_turn(state, deps))
+    await asyncio.wait_for(gate_entered.wait(), timeout=2)
+    if exit_kind == "cancel":
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+    elif exit_kind == "error":
+        with pytest.raises(RuntimeError, match="initial gate failed"):
+            await turn
+    else:
+        outcome = await turn
+        assert outcome["outcome"] in {"error", "suppressed"}
+    assert inherited.done() and drained.is_set()
+    assert deps.preamble_status_task is None
+    resolved_status.assert_not_called()
+
+
+async def test_status_handoff_joins_setup_request_before_resolved_sender_starts(monkeypatch):
+    inherited_started = asyncio.Event()
+    inherited_drained = asyncio.Event()
+    resolved_started = asyncio.Event()
+    resolved_drained = asyncio.Event()
+    svc, _ = _stub_svc(conv=_FakeConv())
+    deps = _deps(_FakeZalo(), conversation=svc)
+
+    async def inherited_status():
+        inherited_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            inherited_drained.set()
+
+    original_get = svc.get
+
+    async def get(*args, **kwargs):
+        await inherited_started.wait()
+        assert not inherited_drained.is_set()
+        return await original_get(*args, **kwargs)
+
+    async def resolved_status(*args, **kwargs):
+        assert inherited_drained.is_set()
+        resolved_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            resolved_drained.set()
+
+    async def agent(*args, **kwargs):
+        await resolved_started.wait()
+        return "Dự án đang tuyển công nhân."
+
+    original_send = deps.zalo.send_message
+
+    async def send(*args, **kwargs):
+        assert inherited_drained.is_set() and resolved_drained.is_set()
+        return await original_send(*args, **kwargs)
+
+    monkeypatch.setattr(svc, "get", get)
+    monkeypatch.setattr(runner, "_status_heartbeat", resolved_status)
+    monkeypatch.setattr(runner, "_agent_turn", agent)
+    monkeypatch.setattr(deps.zalo, "send_message", send)
+    deps.preamble_status_task = asyncio.create_task(inherited_status())
+    outcome = await run_turn(_state(), deps)
+    assert outcome["outcome"] == "sent"
+    assert inherited_drained.is_set() and resolved_drained.is_set()
+
+
+@pytest.mark.parametrize("provider", ["zalo_oa", "facebook_messenger"])
+async def test_unsupported_native_status_providers_only_send_the_actual_answer(monkeypatch, provider):
+    conv = _FakeConv(
+        zalo_chat_id="oa:candidate" if provider == "zalo_oa" else None,
+        zalo_channel="oa" if provider == "zalo_oa" else "bot",
+        channel_identity=SimpleNamespace(provider=provider, external_id="candidate"),
+    )
+    svc, _ = _stub_svc(conv=conv, durable=True)
+    sender = _FakeZalo()
+    monkeypatch.setattr(runner, "_agent_turn", AsyncMock(return_value="Dự án đang tuyển công nhân."))
+    status = AsyncMock()
+    monkeypatch.setattr(runner, "_status_heartbeat", status)
+    outcome = await run_turn(_state(), _deps(sender, conversation=svc))
+    assert outcome["outcome"] == "sent"
+    status.assert_not_called()
+    assert len(svc.dispatched) == 1

@@ -52,6 +52,9 @@ export const LlmProvidersSection = ({
     providerSaving,
     providerTesting,
   } = panels;
+  const anyChainTesting = PROVIDER_GROUP_IDS.chain.some(
+    (id) => providerTesting[id],
+  );
   // Only enabled providers can serve a turn, so the visible rank counts them
   // alone — a disabled card holds its slot but carries no number.
   const servingChain = chain.filter((provider) => chainEnabled[provider]);
@@ -163,9 +166,6 @@ export const LlmProvidersSection = ({
   const verifyRowOf = (provider: LlmProvider, ready: boolean) => {
     const line = testLineOf(provider);
     const panelId = CHAIN_PANEL_ID_BY_PROVIDER[provider];
-    const anyChainTesting = PROVIDER_GROUP_IDS.chain.some(
-      (id) => providerTesting[id],
-    );
     return (
       <div className="settings-llm-verify">
         <span
@@ -195,107 +195,118 @@ export const LlmProvidersSection = ({
 
   return (
     <SettingsSectionPanel id="settings-llm-providers">
-      <p className="settings-llm-chain" data-slot="settings-llm-chain">
-        <span className="settings-llm-chain-label">Thứ tự dự phòng</span>
-        {servingChain.length === 0 ? (
-          <span className="settings-llm-chain-empty">
-            Chưa bật nhà cung cấp nào — bot không thể trả lời.
-          </span>
-        ) : (
-          servingChain.map((provider, index) => (
-            <Fragment key={provider}>
-              {index > 0 ? (
-                <span className="settings-llm-chain-arrow" aria-hidden>
-                  →
-                </span>
-              ) : null}
-              <span
-                className={`settings-llm-chain-item is-on${
-                  index === 0 ? " is-default" : ""
-                }`}
-              >
-                <em>{index + 1}</em>
-                {PROVIDER_LABELS[provider]}
-              </span>
-            </Fragment>
-          ))
-        )}
-        {disabledProviders.length > 0 ? (
-          <span className="settings-llm-chain-off">
-            Đang tắt:{" "}
-            {disabledProviders
-              .map((provider) => PROVIDER_LABELS[provider])
-              .join(", ")}
-          </span>
-        ) : null}
-      </p>
-
-      <div className="settings-grid settings-grid-models">
-        {/* Cards render in failover order, so the board itself is the
-            ranking: position, rank badge, and reorder control agree. */}
-        {chain.map((provider) => {
-          const descriptor =
-            PROVIDER_PANELS_BY_ID[CHAIN_PANEL_ID_BY_PROVIDER[provider]];
-          const ready = descriptor.readEnabled(bundle) !== null;
-          return (
-            <SettingsGroup
-              key={provider}
-              className={`settings-llm-card${
-                chainEnabled[provider] ? "" : " is-off"
-              }`}
-              title={PROVIDER_LABELS[provider]}
-              icon={rankBadgeOf(provider)}
-              meta={cardMetaOf(provider)}
-            >
-              {roleRowOf(provider, descriptor.enableKey)}
-              {descriptor.fields.map((field) => (
-                <ProviderField
-                  key={field.kind === "readonly" ? field.label : field.formKey}
-                  field={field}
-                  bundle={bundle}
-                  statusState={statusState}
-                  form={panels.providerForm}
-                  onValueChange={panels.setProviderFormValue}
-                  notify={notify}
-                />
-              ))}
-              {verifyRowOf(provider, ready)}
-            </SettingsGroup>
-          );
-        })}
-      </div>
-
-      <div
-        className={`settings-llm-footer${panels.dirty.chain ? " is-dirty" : ""}`}
+      <fieldset
+        className="contents"
+        disabled={
+          providerSaving.chain || anyChainTesting || statusState !== "ready"
+        }
+        aria-busy={providerSaving.chain || anyChainTesting}
       >
-        <Button
-          type="button"
-          color="tertiary"
-          className="tt-btn-touch"
-          onClick={() => panels.discardProviderPanels("chain")}
-          isDisabled={!panels.dirty.chain || providerSaving.chain}
+        <legend className="sr-only">Nhà cung cấp mô hình chatbot</legend>
+        <p className="settings-llm-chain" data-slot="settings-llm-chain">
+          <span className="settings-llm-chain-label">Thứ tự dự phòng</span>
+          {servingChain.length === 0 ? (
+            <span className="settings-llm-chain-empty">
+              Chưa bật nhà cung cấp nào — bot không thể trả lời.
+            </span>
+          ) : (
+            servingChain.map((provider, index) => (
+              <Fragment key={provider}>
+                {index > 0 ? (
+                  <span className="settings-llm-chain-arrow" aria-hidden>
+                    →
+                  </span>
+                ) : null}
+                <span
+                  className={`settings-llm-chain-item is-on${
+                    index === 0 ? " is-default" : ""
+                  }`}
+                >
+                  <em>{index + 1}</em>
+                  {PROVIDER_LABELS[provider]}
+                </span>
+              </Fragment>
+            ))
+          )}
+          {disabledProviders.length > 0 ? (
+            <span className="settings-llm-chain-off">
+              Đang tắt:{" "}
+              {disabledProviders
+                .map((provider) => PROVIDER_LABELS[provider])
+                .join(", ")}
+            </span>
+          ) : null}
+        </p>
+
+        <div className="settings-grid settings-grid-models">
+          {/* Cards render in failover order, so the board itself is the
+            ranking: position, rank badge, and reorder control agree. */}
+          {chain.map((provider) => {
+            const descriptor =
+              PROVIDER_PANELS_BY_ID[CHAIN_PANEL_ID_BY_PROVIDER[provider]];
+            const ready = descriptor.readEnabled(bundle) !== null;
+            return (
+              <SettingsGroup
+                key={provider}
+                className={`settings-llm-card${
+                  chainEnabled[provider] ? "" : " is-off"
+                }`}
+                title={PROVIDER_LABELS[provider]}
+                icon={rankBadgeOf(provider)}
+                meta={cardMetaOf(provider)}
+              >
+                {roleRowOf(provider, descriptor.enableKey)}
+                {descriptor.fields.map((field) => (
+                  <ProviderField
+                    key={
+                      field.kind === "readonly" ? field.label : field.formKey
+                    }
+                    field={field}
+                    bundle={bundle}
+                    statusState={statusState}
+                    form={panels.providerForm}
+                    onValueChange={panels.setProviderFormValue}
+                    notify={notify}
+                  />
+                ))}
+                {verifyRowOf(provider, ready)}
+              </SettingsGroup>
+            );
+          })}
+        </div>
+
+        <div
+          className={`settings-llm-footer${panels.dirty.chain ? " is-dirty" : ""}`}
         >
-          Huỷ
-        </Button>
-        <Button
-          type="button"
-          color="primary"
-          className="settings-primary-action tt-btn-touch"
-          onClick={() => {
-            void panels.saveProviderPanels("chain");
-          }}
-          isDisabled={!panels.dirty.chain || providerSaving.chain}
-        >
-          {providerSaving.chain
-            ? translate("crm.common.saving")
-            : translate("crm.common.save_changes")}
-        </Button>
-        <span className="settings-llm-footer-note">
-          {panels.dirty.chain
-            ? translate("crm.common.unsaved_changes")
-            : translate("crm.common.token_encrypted_hint")}
-        </span>
-      </div>
+          <Button
+            type="button"
+            color="tertiary"
+            className="tt-btn-touch"
+            onClick={() => panels.discardProviderPanels("chain")}
+            isDisabled={!panels.dirty.chain || providerSaving.chain}
+          >
+            Huỷ
+          </Button>
+          <Button
+            type="button"
+            color="primary"
+            className="settings-primary-action tt-btn-touch"
+            onClick={() => {
+              void panels.saveProviderPanels("chain");
+            }}
+            isDisabled={!panels.dirty.chain || providerSaving.chain}
+          >
+            {providerSaving.chain
+              ? translate("crm.common.saving")
+              : translate("crm.common.save_changes")}
+          </Button>
+          <span className="settings-llm-footer-note">
+            {panels.dirty.chain
+              ? translate("crm.common.unsaved_changes")
+              : translate("crm.common.token_encrypted_hint")}
+          </span>
+        </div>
+      </fieldset>
     </SettingsSectionPanel>
   );
 };

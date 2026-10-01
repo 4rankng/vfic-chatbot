@@ -1,5 +1,6 @@
 import {
   PROJECT_KNOWLEDGE_CATEGORIES,
+  PROJECT_KNOWLEDGE_CATEGORY_LABELS,
   type ProjectKnowledgeCategory,
 } from "./project-knowledge-policy";
 import type {
@@ -147,14 +148,35 @@ const isTranscriptMarker = (line: string): boolean =>
 
 /** Every "300.000 VNĐ" / "400.000d" / "8 triệu đồng" amount in a line, as
  *  integers. A multiplier ("triệu") applies to the bare number before it. */
-const AMOUNT =
-  /(\d{1,3}(?:\.\d{3})+|\d+)\s*(triệu|tr)?\s*(?:VNĐ|VND|đồng|đ)/giu;
+const MONEY_NUMBER = String.raw`\d+(?:[.,]\d+)*`;
+const MONEY_UNIT = String.raw`(?:(triệu|tr)\s*(?:VNĐ|VND|đồng|đ)?|(?:VNĐ|VND|đồng|đ))`;
+const AMOUNT = new RegExp(`(${MONEY_NUMBER})\\s*${MONEY_UNIT}`, "giu");
+const AMOUNT_RANGE = new RegExp(
+  `(${MONEY_NUMBER})\\s*(?:triệu|tr)?\\s*(?:đến|tới|–|—|-|~)\\s*(${MONEY_NUMBER})\\s*${MONEY_UNIT}`,
+  "giu",
+);
+
+const moneyNumber = (value: string, millions: boolean): number => {
+  const plain = millions
+    ? value.replace(/(\d)[.,](?=\d{3}(?:[.,]|$))/g, "$1").replace(",", ".")
+    : value.replace(/[.,]/g, "");
+  return Math.round(Number(plain) * (millions ? 1_000_000 : 1));
+};
 
 const vndValues = (line: string): number[] => {
   const values: number[] = [];
-  for (const match of line.matchAll(AMOUNT)) {
-    const base = Number(match[1].replace(/\./g, ""));
-    values.push(match[2] ? base * 1_000_000 : base);
+  const withoutRanges = line.replace(
+    AMOUNT_RANGE,
+    (_match, from: string, to: string, unit: string) => {
+      values.push(
+        moneyNumber(from, Boolean(unit)),
+        moneyNumber(to, Boolean(unit)),
+      );
+      return "";
+    },
+  );
+  for (const match of withoutRanges.matchAll(AMOUNT)) {
+    values.push(moneyNumber(match[1], Boolean(match[2])));
   }
   return values;
 };
@@ -254,8 +276,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
       scalarField("title"),
       listField("aliases"),
       scalarField("location"),
-      scalarField("vacancies"),
-      scalarField("employment_type"),
       scalarField("summary"),
       listField("keywords"),
     ],
@@ -264,7 +284,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
     listField: "compensation",
     fields: [
       scalarField("id"),
-      listField("job_ids"),
       scalarField("base_salary_vnd"),
       scalarField("estimated_income_min_vnd"),
       scalarField("estimated_income_max_vnd"),
@@ -278,7 +297,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
     listField: "requirements",
     fields: [
       scalarField("id"),
-      listField("job_ids"),
       scalarField("age_min"),
       scalarField("age_max"),
       listField("genders"),
@@ -294,7 +312,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
     listField: "work_schedules",
     fields: [
       scalarField("id"),
-      listField("job_ids"),
       listField("work_days"),
       tableField("shifts", SHIFT_COLUMNS),
       scalarField("rotation"),
@@ -307,7 +324,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
     listField: "benefits",
     fields: [
       scalarField("id"),
-      listField("job_ids"),
       scalarField("name"),
       scalarField("description"),
       scalarField("eligibility"),
@@ -317,7 +333,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
     listField: "accommodation",
     fields: [
       scalarField("id"),
-      listField("job_ids"),
       scalarField("available"),
       scalarField("type"),
       scalarField("address"),
@@ -332,7 +347,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
     listField: "meals",
     fields: [
       scalarField("id"),
-      listField("job_ids"),
       scalarField("provided"),
       scalarField("meals_per_shift"),
       scalarField("allowance_vnd"),
@@ -345,7 +359,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
     listField: "transportation",
     fields: [
       scalarField("id"),
-      listField("job_ids"),
       scalarField("name"),
       scalarField("direction"),
       listField("service_days"),
@@ -359,7 +372,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
     listField: "insurance",
     fields: [
       scalarField("id"),
-      listField("job_ids"),
       scalarField("name"),
       scalarField("provider"),
       scalarField("employee_contribution"),
@@ -374,7 +386,6 @@ export const CATEGORY_MARKDOWN_SCHEMAS: Readonly<
     listField: "application",
     fields: [
       scalarField("id"),
-      listField("job_ids"),
       listField("application_steps"),
       listField("required_documents"),
       scalarField("interview_location"),
@@ -521,16 +532,12 @@ export const buildFaqMarkdown = (
 };
 
 /** The `jobs` category document: one row per role the brief's overview listed.
- *
- *  `vacancies` is intentionally left unset (it renders `null`). The recruiter
- *  does not manage headcount for these roles, and the schema makes the field
- *  optional precisely so an unknown count stays unknown instead of becoming a
- *  confident wrong number in an answer a candidate will read.
- *  `employment_type` likewise: the enum only accepts forms the sheet would
- *  have to state in exactly those terms. */
+ *  Keep role titles and grounded project details without headcount or
+ *  employment-type metadata. */
 export const buildJobsMarkdown = (
   roles: readonly string[],
   location = "",
+  description = "",
 ): string => {
   const cleaned = roles.map((role) => role.trim()).filter(Boolean);
   const used = new Map<string, number>();
@@ -543,6 +550,9 @@ export const buildJobsMarkdown = (
       // The project address genuinely covers every role in it, so carrying it
       // across is transcription rather than invention.
       ...(location ? { location: clamp(location, 500) } : {}),
+      ...(description.trim()
+        ? { summary: clamp(description.trim(), 5000) }
+        : {}),
     })),
   });
 };
@@ -664,7 +674,7 @@ export const buildCompensationMarkdown = (body: string): string | null => {
     else payment.push(line);
   });
 
-  const record: CategoryRecord = { id: "luong-thu-nhap", job_ids: [] };
+  const record: CategoryRecord = { id: "luong-thu-nhap" };
   if (baseSalary !== null) record.base_salary_vnd = baseSalary;
   if (incomeMin !== null && incomeMax !== null) {
     record.estimated_income_min_vnd = incomeMin;
@@ -723,12 +733,12 @@ export const buildRequirementsMarkdown = (body: string): string | null => {
   for (const line of lines) {
     const folded = fold(line);
     if (!genders && /gioi tinh|tuyen (ca )?(nam|nu)/.test(folded)) {
-      if (/nam (va|,) nu|ca nam|nu (va|,) nam/.test(folded)) genders = "any";
+      if (/\bnam\b/.test(folded) && /\bnu\b/.test(folded)) genders = "any";
       else if (/\bnam\b/.test(folded)) genders = "male";
       else if (/\bnu\b/.test(folded)) genders = "female";
       continue;
     }
-    if (!education && /hoc vanh|van hoa|bang cap/.test(folded)) {
+    if (!education && /hoc van|van hoa|bang cap|trinh do/.test(folded)) {
       education = line;
       continue;
     }
@@ -761,7 +771,7 @@ export const buildRequirementsMarkdown = (body: string): string | null => {
     other.push(line);
   }
 
-  const record: CategoryRecord = { id: "yeu-cau-ung-vien", job_ids: [] };
+  const record: CategoryRecord = { id: "yeu-cau-ung-vien" };
   if (ageMin !== null) record.age_min = ageMin;
   if (ageMax !== null) record.age_max = ageMax;
   if (genders) record.genders = [genders];
@@ -885,7 +895,7 @@ export const buildWorkSchedulesMarkdown = (body: string): string | null => {
     notes.push(line);
   }
 
-  const record: CategoryRecord = { id: "lich-lam-viec", job_ids: [] };
+  const record: CategoryRecord = { id: "lich-lam-viec" };
   if (workDays.length > 0) {
     record.work_days = workDays.map((day) => clamp(day, 2000));
   }
@@ -931,7 +941,6 @@ export const buildBenefitsMarkdown = (body: string): string | null => {
     const description = label && value ? value : "";
     const record: CategoryRecord = {
       id: claimId(used, name, index),
-      job_ids: [],
       name: clamp(name, 5000),
     };
     if (description) record.description = clamp(description, 3000);
@@ -954,17 +963,15 @@ export const buildAccommodationMarkdown = (body: string): string | null => {
   if (lines.length === 0) return null;
 
   const foldedAll = fold(lines.join("\n"));
-  let available: boolean | null = null;
-  if (
-    /chua co ky tuc xa|khong (?:co|ho tro|cap) ?ky tuc xa|khong co ktx|chua co cho o|khong co cho o/.test(
-      foldedAll,
-    )
-  ) {
-    available = false;
-  } else if (/co ky tuc xa|ky tuc xa cho|o ky tuc xa/.test(foldedAll)) {
-    available = true;
-  }
-  if (available === null) return null;
+  const negative =
+    /(?:chua|khong)\s+(?:co|ho tro|cap)\s+(?:ky tuc xa|ktx|cho o)/g;
+  const denied = negative.test(foldedAll);
+  const affirmative =
+    /\bco\s+(?:ky tuc xa|ktx|cho o)|(?:ky tuc xa|ktx) cho|\bo ky tuc xa/.test(
+      foldedAll.replace(negative, ""),
+    );
+  if (denied === affirmative) return null;
+  const available = affirmative;
 
   const cost = lines
     .map((line) =>
@@ -976,7 +983,6 @@ export const buildAccommodationMarkdown = (body: string): string | null => {
 
   const record: CategoryRecord = {
     id: "cho-o",
-    job_ids: [],
     available,
   };
   if (available && /ky tuc xa|ktx/.test(foldedAll)) {
@@ -1000,15 +1006,23 @@ export const buildMealsMarkdown = (body: string): string | null => {
   if (lines.length === 0) return null;
 
   const foldedAll = fold(lines.join("\n"));
-  let provided: boolean | null = null;
-  if (/khong (?:phuc vu|cung cap|co com|bao an|co bua an)/.test(foldedAll)) {
-    provided = false;
-  } else if (
-    /mien phi|phuc vu|cung cap|duoc an|suat com|com ca|bao com/.test(foldedAll)
-  ) {
-    provided = true;
-  }
-  if (provided === null) return null;
+  const negative =
+    /khong (?:phuc vu|cung cap|co com|bao an|co bua an)[^,.;\n]*/g;
+  // Denying a free meal, a particular meal or a subset of workers does not
+  // establish that the project provides no meals at all.
+  if (
+    [...foldedAll.matchAll(negative)].some((match) =>
+      /mien phi|bua (?:sang|trua|toi)|\bcho\b/.test(match[0]),
+    )
+  )
+    return null;
+  const denied = negative.test(foldedAll);
+  const affirmative =
+    /mien phi|phuc vu|cung cap|duoc an|suat com|com ca|bao com/.test(
+      foldedAll.replace(negative, ""),
+    );
+  if (denied === affirmative) return null;
+  const provided = affirmative;
 
   let mealsPerShift: number | null = null;
   let allowance: number | null = null;
@@ -1016,7 +1030,8 @@ export const buildMealsMarkdown = (body: string): string | null => {
   const notes: string[] = [];
   for (const line of lines) {
     const folded = fold(line);
-    const perShift = /\b(\d+)\s*(?:suất|bữa)(?:\s*cơm)?\s*ca\b/iu.exec(line);
+    const perShift =
+      /\b(\d+)\s*(?:suất|bữa)(?:\s*(?:cơm|ăn))?\s*\/?\s*ca\b/iu.exec(line);
     if (mealsPerShift === null && perShift) mealsPerShift = Number(perShift[1]);
     if (
       allowance === null &&
@@ -1029,7 +1044,7 @@ export const buildMealsMarkdown = (body: string): string | null => {
     else notes.push(line);
   }
 
-  const record: CategoryRecord = { id: "bua-an", job_ids: [], provided };
+  const record: CategoryRecord = { id: "bua-an", provided };
   if (mealsPerShift !== null) record.meals_per_shift = mealsPerShift;
   if (allowance !== null) record.allowance_vnd = allowance;
   if (menu.length > 0) {
@@ -1054,6 +1069,8 @@ export const buildTransportationMarkdown = (body: string): string | null => {
   if (lines.length === 0) return null;
 
   const foldedAll = fold(lines.join("\n"));
+  if (/(?:khong|chua) (?:co|ho tro|cung cap) (?:xe )?dua don/.test(foldedAll))
+    return null;
   let direction: "to_factory" | "from_factory" | "round_trip" | null = null;
   if (/dua don|don tra|hai chieu|2 chieu/.test(foldedAll))
     direction = "round_trip";
@@ -1076,13 +1093,20 @@ export const buildTransportationMarkdown = (body: string): string | null => {
         )
         .find((amounts) => amounts.length === 1)?.[0];
 
-  const stops: { order: number; name: string }[] = [];
+  const stops: { order: number; name: string; time?: string }[] = [];
   for (const line of lines) {
     const numbered = /^điểm\s*(\d+)\s*[:.]\s*(.*)$/iu.exec(line);
     if (numbered && numbered[2]) {
+      const clock = /\s+(?:lúc\s+)?(\d{1,2})[:h](\d{2})\s*$/iu.exec(
+        numbered[2],
+      );
       stops.push({
         order: Number(numbered[1]),
-        name: clamp(numbered[2], 5000),
+        name: clamp(
+          clock ? numbered[2].slice(0, clock.index).trim() : numbered[2],
+          5000,
+        ),
+        ...(clock ? { time: toClock(clock[1], clock[2]) } : {}),
       });
       continue;
     }
@@ -1110,7 +1134,6 @@ export const buildTransportationMarkdown = (body: string): string | null => {
 
   const record: CategoryRecord = {
     id: "tuyen-xe-dua-don",
-    job_ids: [],
     name,
     direction,
   };
@@ -1119,6 +1142,7 @@ export const buildTransportationMarkdown = (body: string): string | null => {
     record.stops = stops.map((stop) => ({
       order: stop.order,
       name: stop.name,
+      ...(stop.time ? { time: stop.time } : {}),
     }));
   }
   record.notes = clamp(notes.join("\n"), 3000);
@@ -1137,9 +1161,11 @@ export const buildInsuranceMarkdown = (body: string): string | null => {
   const lines = bodyLines(body).filter((line) => !isTranscriptMarker(line));
   if (lines.length === 0) return null;
 
-  const named = lines
-    .map((line) => splitLabel(line).label)
-    .find((label) => label && /bao hiem|bhxh|bh/.test(fold(label)));
+  const named =
+    lines
+      .map((line) => splitLabel(line).label)
+      .find((label) => label && /bao hiem|bhxh|bh/.test(fold(label))) ??
+    lines.find((line) => /bao hiem|bhxh|bhyt|bhtn/.test(fold(line)));
   if (!named) return null;
 
   const foldedAll = fold(lines.join("\n"));
@@ -1165,7 +1191,6 @@ export const buildInsuranceMarkdown = (body: string): string | null => {
 
   const record: CategoryRecord = {
     id: "bao-hiem",
-    job_ids: [],
     name: clamp(named, 500),
   };
   if (coverage.length > 0) record.coverage = coverage;
@@ -1217,7 +1242,7 @@ export const buildApplicationMarkdown = (body: string): string | null => {
     }
     if (/phong van/.test(folded)) {
       interview.push(clamp(line, 3000));
-      const at = /\s(?:tai|o)\s+([^.;]+)$/iu.exec(line);
+      const at = /\s(?:tại|tai|ở|o)\s+([^.;]+)\.?$/iu.exec(line);
       if (interviewLocation === null && at) {
         interviewLocation = clamp(at[1], 1000);
       }
@@ -1248,7 +1273,7 @@ export const buildApplicationMarkdown = (body: string): string | null => {
     notes.push(line);
   }
 
-  const record: CategoryRecord = { id: "quy-trinh-ung-tuyen", job_ids: [] };
+  const record: CategoryRecord = { id: "quy-trinh-ung-tuyen" };
   if (steps.length > 0) record.application_steps = steps;
   if (documents.length > 0) record.required_documents = documents;
   if (interviewLocation) record.interview_location = interviewLocation;
@@ -1512,7 +1537,83 @@ export const rolesFromFaqEntries = (
   return roles;
 };
 
+/** Typed category documents already carry every schema field. Keep their
+ *  source intact and let the API validate it rather than parsing as prose. */
+const categoryBundlePlan = (rawText: string): BriefKnowledgePlan | null => {
+  const source = rawText
+    .replace(/\r\n?/g, "\n")
+    .replace(/<!--[\s\S]*?-->/g, "");
+  const headers = [...source.matchAll(/^---\n([\s\S]*?)\n---(?=\n|$)/gm)];
+  const writes = new Map<
+    ProjectKnowledgeCategory,
+    BriefKnowledgePlan["writes"][number]
+  >();
+  const declaredCategories = new Set<ProjectKnowledgeCategory>();
+  let hasCategoryDocument = false;
+  for (const [index, header] of headers.entries()) {
+    const declared = /^category:\s*(.+)\s*$/m.exec(header[1]);
+    if (!declared) continue;
+    hasCategoryDocument = true;
+    const key = PROJECT_KNOWLEDGE_CATEGORIES.find(
+      (category) => category === declared[1].trim().replace(/^["']|["']$/g, ""),
+    );
+    if (!key) throw new Error("Tệp có danh mục kiến thức không hợp lệ.");
+    if (declaredCategories.has(key))
+      throw new Error(
+        "Tệp có danh mục kiến thức bị lặp. Giữ một phần cho mỗi danh mục.",
+      );
+    declaredCategories.add(key);
+    const start = header.index ?? 0;
+    let categorySource = source.slice(
+      start,
+      headers[index + 1]?.index ?? source.length,
+    );
+    // Project exports add a display heading before the next category source.
+    // A category document has one list heading; a following heading belongs
+    // to the export wrapper, not to its final record.
+    const listHeadings = [...categorySource.matchAll(/^##\s+[^\n]+$/gm)];
+    if (listHeadings.length > 1) {
+      const nextDeclared = /^category:\s*(.+)\s*$/m.exec(
+        headers[index + 1]?.[1] ?? "",
+      );
+      const nextKey = PROJECT_KNOWLEDGE_CATEGORIES.find(
+        (category) =>
+          category === nextDeclared?.[1].trim().replace(/^["']|["']$/g, ""),
+      );
+      const wrapper = categorySource.slice(listHeadings[1].index).trim();
+      if (
+        listHeadings.length !== 2 ||
+        !nextKey ||
+        wrapper !== `## ${PROJECT_KNOWLEDGE_CATEGORY_LABELS[nextKey]}`
+      ) {
+        throw new Error(
+          "Cấu trúc danh mục kiến thức không hợp lệ. Mỗi danh mục chỉ có một tiêu đề danh sách.",
+        );
+      }
+      categorySource = categorySource.slice(0, listHeadings[1].index);
+    }
+    // Templates contain instructions and commented samples, not facts. A
+    // genuine empty list remains missing; never publish demonstration text.
+    const body = categorySource.slice(header[0].length).trim();
+    if (body === `## ${CATEGORY_MARKDOWN_SCHEMAS[key].listField}`) continue;
+    writes.set(key, {
+      key,
+      filename: `${key}.md`,
+      content: categorySource.trim() + "\n",
+    });
+  }
+  if (!hasCategoryDocument) return null;
+  return {
+    writes: PROJECT_KNOWLEDGE_CATEGORIES.flatMap(
+      (key) => writes.get(key) ?? [],
+    ),
+    needsHuman: PROJECT_KNOWLEDGE_CATEGORIES.filter((key) => !writes.has(key)),
+  };
+};
+
 export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
+  const bundled = categoryBundlePlan(brief.rawText);
+  if (bundled) return bundled;
   const writes: {
     key: ProjectKnowledgeCategory;
     filename: string;
@@ -1522,15 +1623,16 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
     key: ProjectKnowledgeCategory,
     content: string | null,
   ): void => {
+    // Notes are limited to 3000 characters. A long prose category needs a
+    // reviewed split into records, not a replacement that silently clips it.
+    if ((brief.categories[key]?.length ?? 0) > 3000) return;
     if (content) writes.push({ key, filename: `${key}.md`, content });
   };
 
-  // `jobs` goes FIRST and always. Every other category's rows may reference
-  // `job_ids`, and the API rejects a write whose references do not resolve
-  // against the jobs that are active at that moment — so activating jobs first
-  // is what makes the rest of the batch writable. The roles fall through three
-  // sources while none names one: the structured overview table, prose
-  // "Chức danh:" lines in the jobs body, then the FAQ's own recruiting answers
+  // Write categories in catalog order. Every fact belongs to this project,
+  // so a category can stand on its own when the brief names no role. The roles
+  // fall through three sources while none names one: the structured overview
+  // table, prose "Chức danh:" lines in the jobs body, then the FAQ's recruiting answers
   // — a FAQ-only brief (Rorze.md) still seeds its job scope.
   const proseRoles = rolesFromJobsBody(brief.categories.jobs ?? "");
   const roles =
@@ -1539,11 +1641,15 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
       : proseRoles.length > 0
         ? proseRoles
         : rolesFromFaqEntries(brief.faqEntries);
-  if (roles.length > 0) {
+  if (roles.length > 0 && (brief.categories.jobs?.length ?? 0) <= 5000) {
     writes.push({
       key: "jobs",
       filename: "jobs.md",
-      content: buildJobsMarkdown(roles, brief.location),
+      content: buildJobsMarkdown(
+        roles,
+        brief.location,
+        brief.categories.jobs ?? "",
+      ),
     });
   }
 
@@ -1585,7 +1691,11 @@ export const planBriefKnowledge = (brief: ProjectBrief): BriefKnowledgePlan => {
   // what it can answer, but stays named in `needsHuman` so the questions the
   // brief left open reach a human instead of vanishing.
   const faqEntries = brief.faqEntries.filter(
-    (entry) => entry.question.trim() && entry.answer.trim(),
+    (entry) =>
+      entry.question.trim() &&
+      entry.answer.trim() &&
+      entry.question.length <= 5000 &&
+      entry.answer.length <= 5000,
   );
   const faqIncomplete = faqEntries.length < brief.faqEntries.length;
   if (faqEntries.length > 0) {

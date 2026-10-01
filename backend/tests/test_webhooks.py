@@ -1113,21 +1113,15 @@ def test_phase1_channel_string_is_bot_or_oa_only():
     assert {bot.zalo_channel, oa.zalo_channel} == {"bot", "oa"}
 
 
-async def test_typing_indicator_fires_for_bot_channel_and_not_for_oa(monkeypatch):
-    """Bot has a typing endpoint; OA does not.
-
-    Behavioral proof instead of the former AST pin: execute ``handle`` for both
-    channels and observe the typing side effect. The typing task is
-    fire-and-forget, so one event-loop slice is pumped afterwards to let the
-    recorder run — a created task always gets its first slice on the next
-    iteration, and the recorder appends synchronously on that slice.
-    """
+async def test_ingress_delegates_status_to_the_owned_turn_without_orphan_requests(monkeypatch):
+    """Both jobs retain provider identity; only the tracked Bot bridge may pulse."""
     import uuid
 
     import app.services.webhook as webhook_module
     from app.services.webhook import ZaloWebhookService
 
     fired: list[str] = []
+    jobs: list[dict] = []
 
     async def _record_typing(chat_id, bot_token=None):  # noqa: ARG001
         fired.append(chat_id)
@@ -1161,7 +1155,6 @@ async def test_typing_indicator_fires_for_bot_channel_and_not_for_oa(monkeypatch
             return_value=uuid.UUID("00000000-0000-0000-0000-000000000002")
         )
         monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
-        jobs: list[dict] = []
 
         if channel == "bot":
             payload = {
@@ -1184,9 +1177,11 @@ async def test_typing_indicator_fires_for_bot_channel_and_not_for_oa(monkeypatch
 
     await _run_handle_for("bot")
     await _run_handle_for("oa")
-    await asyncio.sleep(0)  # one slice: the created typing task appends on its first run
+    await asyncio.sleep(0)
 
-    assert fired == ["chat-user-1"]
+    assert fired == []
+    assert [job["zalo_channel"] for job in jobs] == ["bot", "oa"]
+    assert [job["zalo_chat_id"] for job in jobs] == ["chat-user-1", "oa:chat-user-1"]
 
 
 # ─── Phase 1 characterization: send-error classification taxonomy ────────────

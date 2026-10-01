@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useId } from "react";
 import type { SinglePageDraft } from "./use-single-page-draft";
 import { ExternalSourceLinkForm } from "../ExternalSourceLinkForm";
 import { ExternalSourceList } from "../ExternalSourceList";
@@ -32,9 +33,12 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
     handleSynchronized,
     hasCurrentPage,
     loadFailed,
+    remoteChanged,
     loading,
     readFile,
     refreshing,
+    reload,
+    discardChanges,
     save,
     saving,
     setFilename,
@@ -42,6 +46,7 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
     syncRefreshKey,
     text,
   } = draft;
+  const filenameId = useId();
 
   return (
     <Card className="project-single-page-card">
@@ -51,30 +56,68 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
             <FileText className="size-5 shrink-0" aria-hidden="true" />
             <span>Trang kiến thức duy nhất</span>
           </span>
-          <Badge variant="outline">Gửi toàn bộ cho Agent</Badge>
+          <Badge variant="outline">Chatbot đọc toàn bộ trang</Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="project-single-page-content space-y-4">
         <p className="text-body text-muted-foreground">
-          Agent dùng toàn bộ trang này mỗi cuộc trò chuyện. Lưu sẽ thay thế nội
-          dung cũ.
+          Chatbot dùng toàn bộ trang này mỗi cuộc trò chuyện. Lưu sẽ thay thế
+          nội dung cũ.
         </p>
         {loading ? (
           <Skeleton className="h-72 w-full" />
         ) : (
           <>
+            {loadFailed ? (
+              <div
+                role="alert"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/25 bg-destructive/5 p-3 text-body"
+              >
+                <p>
+                  Chưa tải được nội dung hiện tại. Thử lại trước khi chỉnh sửa.
+                </p>
+                <Button variant="outline" onClick={() => void reload()}>
+                  Thử lại
+                </Button>
+              </div>
+            ) : null}
+            {remoteChanged ? (
+              <div
+                role="status"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-body"
+              >
+                <p>
+                  Nguồn đồng bộ có nội dung mới. Bản chỉnh sửa chưa lưu của bạn
+                  được giữ lại.
+                </p>
+                <Button
+                  variant="outline"
+                  disabled={saving}
+                  onClick={discardChanges}
+                >
+                  Bỏ bản sửa và xem nội dung mới
+                </Button>
+              </div>
+            ) : null}
             <div className="project-single-page-file-row">
-              <Input
-                value={filename}
-                onChange={(event) => setFilename(event.target.value)}
-                className="project-single-page-filename"
-                disabled={!editable}
-                aria-label="Tên file trang kiến thức"
-              />
+              <div className="min-w-0 space-y-1.5">
+                <label htmlFor={filenameId} className="text-label font-medium">
+                  Tên tệp kiến thức
+                </label>
+                <Input
+                  id={filenameId}
+                  value={filename}
+                  onChange={(event) => setFilename(event.target.value)}
+                  className="project-single-page-filename"
+                  disabled={!editable || saving || loadFailed}
+                  aria-label="Tên file trang kiến thức"
+                />
+              </div>
               {editable && (
                 <Button
                   variant="outline"
                   className="project-single-page-file-button"
+                  disabled={saving || loadFailed}
                   asChild
                 >
                   <label>
@@ -84,6 +127,7 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
                       type="file"
                       accept=".txt,.md,text/plain,text/markdown"
                       className="sr-only"
+                      disabled={saving || loadFailed}
                       onChange={(event) =>
                         void readFile(event.target.files?.[0])
                       }
@@ -96,7 +140,8 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
               value={text}
               onChange={(event) => setText(event.target.value)}
               rows={18}
-              readOnly={!editable}
+              readOnly={!editable || loadFailed}
+              disabled={saving}
               placeholder="Dán toàn bộ kiến thức của dự án tại đây..."
               aria-label="Nội dung trang kiến thức"
               className="project-single-page-textarea font-mono text-body"
@@ -178,6 +223,7 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
                     projectId={projectId}
                     variant="single-page"
                     onCreated={handleSourceChange}
+                    disabled={saving || loadFailed}
                   />
                   <ExternalSourceList
                     projectId={projectId}
@@ -185,6 +231,7 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
                     refreshSignal={syncRefreshKey}
                     onChange={handleSourceChange}
                     onSynchronized={handleSynchronized}
+                    disabled={saving}
                   />
                 </div>
               </section>

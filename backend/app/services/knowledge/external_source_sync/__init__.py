@@ -377,7 +377,7 @@ async def _sync_locked(
 
 def _payload_row_count(document, category_key: KnowledgeCategoryKey) -> int:
     """Number of records in a parsed category document (for last_row_count)."""
-    from app.services.knowledge.category_contracts import get_category_definition
+    from app.project_knowledge.domain.category_catalog import get_category_definition
 
     definition = get_category_definition(category_key)
     return len(getattr(document, definition.list_field))

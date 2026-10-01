@@ -722,6 +722,14 @@ input:-webkit-autofill:focus {
   overflow-y: auto;
   border-top-left-radius: 1.5rem;
   background: var(--workspace-canvas);
+  outline: none;
+}
+
+.workspace-topbar {
+  height: calc(3.5rem + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
 }
 
 /* --------------------------------------------------------------------------
@@ -1159,13 +1167,13 @@ input[type="time"] {
   }
 }
 
-/* The authenticated shell owns scrolling inside its content row. Prevent the
+/* The authenticated desktop shell owns scrolling inside its content row. Prevent the
    document itself from retaining a vertical offset that can move the shared
    topbar and sidebar out of view between routes. On mobile the shell becomes a
-   normal flowing document (see the <=767px block above), so the lock is
+   normal flowing document below the 1024px rail breakpoint, so the lock is
    desktop-only — otherwise content taller than the viewport (dashboard,
    knowledge, settings, personas, projects, profile) is permanently cropped. */
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   body:has(.workspace-frame),
   body:has(.workspace-frame) #root {
     width: 100%;
@@ -1174,11 +1182,10 @@ input[type="time"] {
   }
 }
 
-/* Mobile: let the document scroll naturally. The workspace frame is
+/* Phones and tablets: let the document scroll naturally. The workspace frame is
    `height: auto` here, so locking body/#root would clip everything below the
-   fold. The fixed bottom-nav stays put; the conversation detail shell is
-   exactly 100dvh and does not overflow, so it is unaffected. */
-@media (max-width: 767px) {
+   fold. Feature workspaces with their own bounded scroll regions keep them. */
+@media (max-width: 1023px) {
   body:has(.workspace-frame) {
     width: 100%;
     height: auto;
@@ -1186,7 +1193,7 @@ input[type="time"] {
     overflow-y: auto;
   }
 
-  /* Keep the document as the only vertical scroll owner on mobile. A second
+  /* Keep the document as the only vertical scroll owner below the rail. A second
      auto-scrolling #root traps touch gestures in Chromium mobile emulation. */
   body:has(.workspace-frame) #root {
     width: 100%;

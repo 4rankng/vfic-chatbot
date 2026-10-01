@@ -217,11 +217,15 @@ async def test_project_job_count_selects_only_current_category_authority() -> No
     result = await KnowledgeBaseService(db).list_projects(kb_id)
 
     assert result[0].active_job_count == 0
-    job_sql = str(db.executed_statements[-1]).lower()
+    job_sql = str(db.executed_statements[-1].compile(compile_kwargs={"literal_binds": True})).lower()
     assert "projects.category_authority_started is true" in job_sql
     assert "jobs.source_category_revision_id is not null" in job_sql
     assert "projects.category_authority_started is false" in job_sql
     assert "jobs.source_category_revision_id is null" in job_sql
+    assert "coalesce(jobs.vacancy_count, 1) > 0" in job_sql
+    assert "knowledge_categories.active_revision_id = jobs.source_category_revision_id" in job_sql
+    assert "knowledge_categories.category_key = 'jobs'" in job_sql
+    assert "exists" in job_sql
 
 
 @pytest.mark.asyncio

@@ -119,7 +119,10 @@ _PRESENTATION_CONTRACT = (
     "(4) phạm vi công việc nêu bằng title_plain (đã dịch thuật ngữ) — "
     "đây là thông tin thêm của dự án, không đăng tuyển từng việc; "
     "(5) kết thúc bằng một câu hỏi mở; "
-    "(6) văn bản thuần, ngắn gọn cho người đọc trên điện thoại."
+    "(6) văn bản thuần, ngắn gọn cho người đọc trên điện thoại; "
+    "(7) khi ứng viên yêu cầu TẤT CẢ/toàn bộ danh sách, phải nêu từng dự án trong projects "
+    "đúng một lần, không chỉ chọn vài dự án rồi yêu cầu hỏi thêm; giữ ngắn gọn từng khối "
+    "để hoàn thành danh sách, chỉ dùng các dự án trong phạm vi tool đã trả về."
 )
 
 _NO_CRITERIA_REPLY = (

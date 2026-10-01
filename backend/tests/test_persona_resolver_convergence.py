@@ -138,6 +138,12 @@ async def test_direct_context_lane_drops_the_same_stale_rules(monkeypatch):
         async def scalar(self, _stmt):
             return SimpleNamespace(normalized_text="Nội dung dự án.")
 
+        async def execute(self, _stmt):
+            return SimpleNamespace(all=lambda: [(
+                SimpleNamespace(id="p1", slug="lg-display", name="LG Display", aliases=[]),
+                SimpleNamespace(id=7, mode="DIRECT_CONTEXT"),
+            )])
+
     monkeypatch.setattr(adapters, "_load_direct_context_catalog", _catalog)
     monkeypatch.setattr("app.services.personas.repository.PersonaRepository", _Repo)
     monkeypatch.setattr(

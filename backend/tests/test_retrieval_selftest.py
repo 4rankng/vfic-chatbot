@@ -110,9 +110,7 @@ async def test_passes_when_each_question_retrieves_its_own_record() -> None:
         }
     )
 
-    failures = await retrieval_selftest_failures(
-        document, units, [shared], embedder
-    )
+    failures = await retrieval_selftest_failures(document, units, [shared], embedder)
 
     assert failures == []
     # Exactly the question surface was embedded, once.
@@ -125,9 +123,7 @@ async def test_fails_with_question_and_similarity_when_record_is_unreachable() -
     orthogonal = [0.0, 0.0, 1.0]
     embedder = _MappedEmbedder({"Ca làm việc mấy giờ?": orthogonal})
 
-    failures = await retrieval_selftest_failures(
-        document, units, [[1.0, 0.0, 0.0]], embedder
-    )
+    failures = await retrieval_selftest_failures(document, units, [[1.0, 0.0, 0.0]], embedder)
 
     assert len(failures) == 1
     assert "Ca làm việc mấy giờ?" in failures[0]
@@ -146,9 +142,7 @@ async def test_jobs_records_query_on_the_title_fallback() -> None:
         }
     )
 
-    failures = await retrieval_selftest_failures(
-        document, units, [shared], embedder
-    )
+    failures = await retrieval_selftest_failures(document, units, [shared], embedder)
 
     assert failures == []
     assert embedder.batched == [["Công nhân lắp ráp"]]
@@ -189,9 +183,7 @@ async def test_a_long_title_that_cannot_retrieve_its_record_still_fails() -> Non
     orthogonal = [0.0, 0.0, 1.0]
     embedder = _MappedEmbedder({"Công nhân lắp ráp": orthogonal})
 
-    failures = await retrieval_selftest_failures(
-        document, units, [[1.0, 0.0, 0.0]], embedder
-    )
+    failures = await retrieval_selftest_failures(document, units, [[1.0, 0.0, 0.0]], embedder)
 
     assert len(failures) == 1
     assert "Công nhân lắp ráp" in failures[0]
@@ -215,3 +207,26 @@ async def test_short_queries_are_skipped_while_the_long_one_still_fails() -> Non
     assert "QA" not in failures[0]
     # Only the testable title was embedded.
     assert embedder.batched == [["Kỹ sư kiểm định chất lượng"]]
+
+
+async def test_matching_a_different_record_cannot_hide_an_unreachable_own_record() -> None:
+    source = FAQ_SOURCE + (
+        "\n### record: salary\n"
+        'question: "Lương cơ bản bao nhiêu?"\n'
+        'answer: "Lương cơ bản 6 triệu đồng mỗi tháng."\n'
+    )
+    document = parse_category_markdown("faq", source)
+    units = render_category_units(document)
+    embedder = _MappedEmbedder(
+        {
+            "Ca làm việc mấy giờ?": [1.0, 0.0],
+            "Lương cơ bản bao nhiêu?": [0.0, 1.0],
+        }
+    )
+
+    failures = await retrieval_selftest_failures(
+        document, units, [[0.0, 1.0], [1.0, 0.0]], embedder
+    )
+
+    assert len(failures) == 2
+    assert all("0.00" in failure for failure in failures)

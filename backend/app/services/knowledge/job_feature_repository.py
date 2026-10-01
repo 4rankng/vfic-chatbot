@@ -31,7 +31,7 @@ class JobFeatureValueRepo:
         Drives both the extraction prompt and the one-row-per-feature write, so inactive
         criteria (migration 0009) drop out of extraction entirely.
         """
-        return (
+        return list((
             await self.db.execute(
                 text(
                     "SELECT id, feature_key, name_vi, worker_question_vi, default_importance_score "
@@ -39,7 +39,7 @@ class JobFeatureValueRepo:
                     "ORDER BY default_importance_score DESC, feature_key"
                 )
             )
-        ).all()
+        ).all())
 
     async def active_catalog_size(self) -> int:
         """Count of active catalog features — the readiness denominator.
@@ -70,16 +70,20 @@ class JobFeatureValueRepo:
                   '',
                   '{}'::jsonb,
                   wfc.default_importance_score,
-                  row_number() OVER (
-                    ORDER BY wfc.default_importance_score DESC, wfc.feature_key
-                  ) - 1,
+                  wfc.display_priority,
                   false,
                   true,
                   false,
                   'Chưa có thông tin trong nguồn đã tải lên.'
-                FROM worker_feature_catalog wfc
-                WHERE wfc.is_active = true
-                  AND NOT EXISTS (
+                FROM (
+                  SELECT id, default_importance_score,
+                    row_number() OVER (
+                      ORDER BY default_importance_score DESC, feature_key
+                    ) - 1 AS display_priority
+                  FROM worker_feature_catalog
+                  WHERE is_active = true
+                ) wfc
+                WHERE NOT EXISTS (
                     SELECT 1
                     FROM job_feature_values jfv
                     WHERE jfv.project_id = CAST(:pid AS uuid)
@@ -141,6 +145,8 @@ class JobFeatureValueRepo:
         project_id: uuid.UUID,
         doc_id: uuid.UUID,
         rows: list[tuple[Any, dict]],
+        *,
+        commit: bool = True,
     ) -> None:
         """Merge extracted feature values into a project's read model.
 
@@ -189,12 +195,13 @@ class JobFeatureValueRepo:
                 ),
                 params_list,
             )
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
 
     async def list_for_project(self, project_id: uuid.UUID) -> list:
         """A project's feature values joined to the catalog (catalog display order)."""
         await self.ensure_active_rows_for_project(project_id)
-        return (
+        return list((
             await self.db.execute(
                 text(
                     f"SELECT {_FEATURE_COLUMNS} FROM {_FEATURE_FROM} "  # noqa: S608 — static f-string
@@ -204,7 +211,7 @@ class JobFeatureValueRepo:
                 ),
                 {"pid": str(project_id)},
             )
-        ).all()
+        ).all())
 
     async def exists_for_project(self, feature_id: uuid.UUID, project_id: uuid.UUID) -> bool:
         """True if the feature value belongs to the project."""

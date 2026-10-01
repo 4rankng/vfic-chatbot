@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { Form, required, useInput, useLogin, useNotify } from "ra-core";
+import {
+  Form,
+  required,
+  useInput,
+  useLogin,
+  useNotify,
+  ValidationError,
+} from "ra-core";
 import type { FieldValues, SubmitHandler } from "react-hook-form";
 import { Link } from "react-router";
 import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
@@ -9,6 +16,7 @@ import { Button } from "@/components/base/buttons/button";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { InputBase, TextField } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
+import { HintText } from "@/components/base/input/hint-text";
 import { useInstallationContext } from "../installation/installation-context";
 import { AuthShell } from "./AuthShell";
 
@@ -61,7 +69,7 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
       <AuthShell productName={productName}>
         <section
           aria-labelledby="login-title"
-          className="tt-card tt-card-border rounded-xl border border-base-300 bg-base-100 p-6 shadow-sm sm:p-7"
+          className="uu-scope tt-card tt-card-border rounded-xl border border-base-300 bg-base-100 p-6 shadow-sm sm:p-7"
         >
           <h1
             id="login-title"
@@ -70,8 +78,8 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
             Đăng nhập
           </h1>
 
-          <Form className="grid gap-5" onSubmit={handleSubmit}>
-            <EmailField />
+          <Form className="grid gap-5" onSubmit={handleSubmit} noValidate>
+            <EmailField disabled={loading} />
             <PasswordField disabled={loading} />
             <Button
               type="submit"
@@ -100,11 +108,11 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
   );
 };
 
-const EmailField = () => {
-  const { id, field, isRequired } = useInput({
+const EmailField = ({ disabled }: { disabled?: boolean }) => {
+  const { id, field, fieldState, isRequired } = useInput({
     source: "email",
     type: "email",
-    validate: required(),
+    validate: required("Vui lòng nhập email."),
   });
   return (
     <TextField
@@ -117,6 +125,8 @@ const EmailField = () => {
       onBlur={field.onBlur}
       validationBehavior="aria"
       isRequired={isRequired}
+      isDisabled={disabled}
+      isInvalid={Boolean(fieldState.error)}
     >
       <Label>Email</Label>
       <InputBase
@@ -124,17 +134,24 @@ const EmailField = () => {
         type="email"
         icon={Mail}
         autoComplete="email"
+        isDisabled={disabled}
+        isInvalid={Boolean(fieldState.error)}
         inputClassName="min-h-12"
       />
+      {fieldState.error?.message ? (
+        <HintText isInvalid role="alert">
+          <ValidationError error={fieldState.error.message} />
+        </HintText>
+      ) : null}
     </TextField>
   );
 };
 
 const PasswordField = ({ disabled }: { disabled?: boolean }) => {
-  const { id, field, isRequired } = useInput({
+  const { id, field, fieldState, isRequired } = useInput({
     source: "password",
     type: "password",
-    validate: required(),
+    validate: required("Vui lòng nhập mật khẩu."),
   });
   const [visible, setVisible] = useState(false);
   return (
@@ -149,6 +166,7 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
       validationBehavior="aria"
       isRequired={isRequired}
       isDisabled={disabled}
+      isInvalid={Boolean(fieldState.error)}
     >
       <Label>Mật khẩu</Label>
       <div className="relative w-full">
@@ -163,6 +181,7 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
           icon={Lock}
           autoComplete="current-password"
           isDisabled={disabled}
+          isInvalid={Boolean(fieldState.error)}
           inputClassName="min-h-12"
           wrapperClassName="[&>button]:hidden"
         />
@@ -171,9 +190,15 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
           color="tertiary"
           className="absolute right-2 top-1/2 min-h-10 min-w-10 -translate-y-1/2"
           onClick={() => setVisible((current) => !current)}
+          isDisabled={disabled}
           icon={visible ? <EyeOff /> : <Eye />}
         />
       </div>
+      {fieldState.error?.message ? (
+        <HintText isInvalid role="alert">
+          <ValidationError error={fieldState.error.message} />
+        </HintText>
+      ) : null}
     </TextField>
   );
 };

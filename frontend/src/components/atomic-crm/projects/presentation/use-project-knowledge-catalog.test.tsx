@@ -60,6 +60,63 @@ describe("useProjectKnowledgeCatalog", () => {
     vi.useRealTimers();
   });
 
+  it("discards a prior project's delayed catalog even after the new catalog loads", async () => {
+    let finishOld!: (value: ReturnType<typeof catalogResponse>) => void;
+    mocks.getCategories
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(
+        catalogResponse([categoryRow({ label_vi: "NEW PROJECT" })]),
+      );
+    const hook = await renderHook(
+      (projectId = "project-1") => useProjectKnowledgeCatalog(projectId),
+      { initialProps: "project-1" },
+    );
+    await hook.rerender("project-2");
+    await hook.act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(hook.result.current.categories?.[0].label_vi).toBe("NEW PROJECT");
+    await hook.act(async () => {
+      finishOld(catalogResponse([categoryRow({ label_vi: "OLD PROJECT" })]));
+    });
+    expect(hook.result.current.categories?.[0].label_vi).toBe("NEW PROJECT");
+  });
+
+  it("does not start a prior project's review after a delayed write receipt", async () => {
+    mocks.getCategories.mockResolvedValue(catalogResponse([categoryRow()]));
+    let finishWrite!: (value: { revision: { id: string } }) => void;
+    mocks.replaceCategory.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishWrite = resolve;
+        }),
+    );
+    const hook = await renderHook(
+      (projectId = "project-1") => useProjectKnowledgeCatalog(projectId),
+      { initialProps: "project-1" },
+    );
+    let saving!: Promise<void>;
+    await hook.act(() => {
+      saving = hook.result.current.replaceCategory(
+        "faq",
+        "faq.md",
+        "OLD PROJECT EDIT",
+      );
+    });
+    await hook.rerender("project-2");
+    await hook.act(async () => {
+      finishWrite({ revision: { id: "old-revision" } });
+      await saving;
+    });
+    expect(hook.result.current.processingKey).toBeNull();
+    expect(mocks.notify).not.toHaveBeenCalled();
+  });
+
   it("polls until the tracked revision becomes active, then stops and clears processingKey", async () => {
     mocks.getCategories
       .mockResolvedValueOnce(catalogResponse([categoryRow()]))
@@ -108,7 +165,7 @@ describe("useProjectKnowledgeCatalog", () => {
     expect(mocks.getCategories).toHaveBeenCalledTimes(3);
     expect(hook.result.current.processingKey).toBeNull();
     expect(mocks.notify).toHaveBeenCalledWith(
-      "Dữ liệu mới đã sẵn sàng cho Agent.",
+      "Dữ liệu mới đã sẵn sàng cho chatbot.",
       { type: "success" },
     );
     // The chain is finished: no further hops.

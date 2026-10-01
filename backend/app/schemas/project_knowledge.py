@@ -7,6 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.project_knowledge.domain.legacy_job_references import strip_legacy_job_reference_fields
 from app.project_knowledge.domain.statuses import KnowledgeCategoryRevisionStatus
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 
@@ -78,6 +79,11 @@ class CategoryRevisionOut(BaseModel):
     created_at: datetime
     activated_at: datetime | None = None
     error_message: str | None = None
+
+    @field_validator("normalized_payload", mode="after")
+    @classmethod
+    def omit_retired_kb_fields(cls, value: dict) -> dict:
+        return strip_legacy_job_reference_fields(value)
 
 
 class CategoryReplaceOut(BaseModel):

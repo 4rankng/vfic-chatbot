@@ -1,10 +1,18 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Button as AriaButton } from "react-aria-components";
+import { Eye, EyeOff } from "@untitledui/icons";
 import {
   useInput,
   useTranslate,
   type InputProps as ReactAdminInputProps,
 } from "ra-core";
-import { Input as UntitledInput } from "@/components/base/input/input";
+import {
+  Input as UntitledInput,
+  InputBase,
+  TextField,
+} from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
+import { HintText } from "@/components/base/input/hint-text";
 import { TextArea as UntitledTextArea } from "@/components/base/textarea/textarea";
 import { Select as UntitledSelect } from "@/components/base/select/select";
 import type { SelectItemType } from "@/components/base/select/select-shared";
@@ -154,6 +162,7 @@ const FormFieldRow = ({
   htmlFor,
   hint,
   error,
+  descriptionId,
   className,
   children,
 }: {
@@ -161,6 +170,7 @@ const FormFieldRow = ({
   htmlFor?: string;
   hint?: ReactNode;
   error?: ReactNode;
+  descriptionId?: string;
   className?: string;
   children: ReactNode;
 }) => (
@@ -173,11 +183,20 @@ const FormFieldRow = ({
     </label>
     {children}
     {error ? (
-      <p role="alert" className="text-helper text-[var(--workspace-danger)]">
+      <p
+        id={descriptionId}
+        role="alert"
+        className="text-helper text-[var(--workspace-danger)]"
+      >
         {error}
       </p>
     ) : hint ? (
-      <p className="text-helper text-[var(--workspace-ink-muted)]">{hint}</p>
+      <p
+        id={descriptionId}
+        className="text-helper text-[var(--workspace-ink-muted)]"
+      >
+        {hint}
+      </p>
     ) : null}
   </div>
 );
@@ -205,12 +224,70 @@ export const FormTextInput = ({
   autoFocus?: boolean;
   inputClassName?: string;
 }) => {
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const {
     id: inputId,
     field,
     fieldState,
     isRequired: required,
   } = useInput({ source, label, validate, defaultValue, isRequired, id });
+
+  const value =
+    typeof field.value === "string" ? field.value : String(field.value ?? "");
+  const isDisabled = disabled ?? field.disabled;
+  const fieldHint = errorNode(fieldState.error) ?? hint;
+
+  if (type === "password") {
+    return (
+      <TextField
+        id={inputId}
+        className={cx("uu-scope", className)}
+        name={field.name}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(nextValue) => field.onChange(nextValue)}
+        onBlur={field.onBlur}
+        validationBehavior="aria"
+        isRequired={required}
+        isDisabled={isDisabled}
+        isReadOnly={readOnly}
+        isInvalid={Boolean(fieldState.error)}
+      >
+        <Label isRequired={required} isInvalid={Boolean(fieldState.error)}>
+          {label}
+        </Label>
+        <div className="relative w-full">
+          <InputBase
+            ref={field.ref}
+            type={passwordVisible ? "text" : "password"}
+            placeholder={placeholder}
+            wrapperClassName={cx(
+              "[&_button]:hidden [&>svg]:hidden",
+              inputClassName,
+            )}
+            inputClassName="pr-12"
+          />
+          <AriaButton
+            aria-label={passwordVisible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+            aria-pressed={passwordVisible}
+            isDisabled={isDisabled}
+            onPress={() => setPasswordVisible((visible) => !visible)}
+            className="absolute inset-y-0 right-1 my-auto flex size-8 items-center justify-center rounded-md text-fg-quaternary outline-focus-ring hover:bg-secondary hover:text-fg-quaternary_hover focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 max-md:size-10"
+          >
+            {passwordVisible ? (
+              <EyeOff className="size-4" aria-hidden="true" />
+            ) : (
+              <Eye className="size-4" aria-hidden="true" />
+            )}
+          </AriaButton>
+        </div>
+        {fieldHint ? (
+          <HintText isInvalid={Boolean(fieldState.error)}>{fieldHint}</HintText>
+        ) : null}
+      </TextField>
+    );
+  }
 
   return (
     <UntitledInput
@@ -224,19 +301,15 @@ export const FormTextInput = ({
       placeholder={placeholder}
       autoComplete={autoComplete}
       autoFocus={autoFocus}
-      value={
-        typeof field.value === "string"
-          ? field.value
-          : String(field.value ?? "")
-      }
+      value={value}
       onChange={(value: string) => field.onChange(value)}
       onBlur={field.onBlur}
       validationBehavior="aria"
       isRequired={required}
-      isDisabled={disabled ?? field.disabled}
+      isDisabled={isDisabled}
       isReadOnly={readOnly}
       isInvalid={Boolean(fieldState.error)}
-      hint={errorNode(fieldState.error) ?? hint}
+      hint={fieldHint}
     />
   );
 };
@@ -298,10 +371,11 @@ export const FormSelect = ({
   validate,
   defaultValue,
   disabled,
+  readOnly,
   className,
   id,
   choices,
-  placeholder,
+  placeholder = "Chọn giá trị",
 }: FieldProps & { choices: FormChoice[]; placeholder?: string }) => {
   const {
     id: inputId,
@@ -329,11 +403,11 @@ export const FormSelect = ({
         if (key !== null) field.onChange(String(key));
       }}
       onBlur={field.onBlur}
-      ref={field.ref}
+      ref={(element) => field.ref(element?.querySelector("button") ?? null)}
       name={field.name}
       validationBehavior="aria"
       isRequired={required}
-      isDisabled={disabled ?? field.disabled}
+      isDisabled={readOnly || (disabled ?? field.disabled)}
       isInvalid={Boolean(fieldState.error)}
       hint={errorText ?? hint}
     >
@@ -349,7 +423,9 @@ export const FormToggle = ({
   label,
   hint,
   defaultValue,
+  validate,
   disabled,
+  readOnly,
   className,
   id,
 }: FieldProps) => {
@@ -361,15 +437,19 @@ export const FormToggle = ({
     source,
     label,
     defaultValue,
+    validate,
     id,
   });
+  const error = errorNode(fieldState.error);
+  const descriptionId = hint || error ? `${inputId}-description` : undefined;
 
   return (
     <FormFieldRow
       label={label}
       htmlFor={inputId}
       hint={hint}
-      error={errorNode(fieldState.error)}
+      error={error}
+      descriptionId={descriptionId}
       className={className}
     >
       <UntitledToggle
@@ -377,8 +457,12 @@ export const FormToggle = ({
         name={field.name}
         className="uu-scope"
         aria-label={label}
+        aria-describedby={descriptionId}
+        aria-invalid={Boolean(fieldState.error)}
+        inputRef={field.ref}
         isSelected={field.value === true}
         isDisabled={disabled ?? field.disabled}
+        isReadOnly={readOnly}
         onChange={(isSelected: boolean) => field.onChange(isSelected)}
         onBlur={field.onBlur}
       />
@@ -391,7 +475,10 @@ export const FormCheckbox = ({
   label,
   hint,
   defaultValue,
+  validate,
+  isRequired,
   disabled,
+  readOnly,
   className,
   id,
 }: FieldProps) => {
@@ -399,10 +486,13 @@ export const FormCheckbox = ({
     id: inputId,
     field,
     fieldState,
+    isRequired: required,
   } = useInput({
     source,
     label,
     defaultValue,
+    validate,
+    isRequired,
     id,
   });
 
@@ -411,10 +501,12 @@ export const FormCheckbox = ({
       id={inputId}
       className={cx("uu-scope", className)}
       name={field.name}
-      ref={field.ref}
+      inputRef={field.ref}
       label={label}
       isSelected={field.value === true}
       isDisabled={disabled ?? field.disabled}
+      isReadOnly={readOnly}
+      isRequired={required}
       onChange={(isSelected: boolean) => field.onChange(isSelected)}
       onBlur={field.onBlur}
       validationBehavior="aria"

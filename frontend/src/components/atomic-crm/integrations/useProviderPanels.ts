@@ -98,6 +98,8 @@ export const useProviderPanels = (
     ...LLM_PROVIDER_ORDER,
   ]);
   const seeded = useRef(false);
+  const savingRef = useRef({ ...EMPTY_GROUP_BUSY });
+  const testingRef = useRef({ ...EMPTY_PROVIDER_BUSY });
 
   // Seed once from the first complete bundle: panels, switches and the failover
   // chain all mirror one server snapshot, and a later background refetch must
@@ -279,6 +281,7 @@ export const useProviderPanels = (
   };
 
   const saveProviderPanels = async (group: ProviderPanelGroup) => {
+    if (savingRef.current[group]) return;
     // One save action per group, sequential PUTs: only the payloads that
     // actually changed go out; the default-provider radio rides the minimax
     // PUT.
@@ -293,6 +296,7 @@ export const useProviderPanels = (
     ) {
       return;
     }
+    savingRef.current[group] = true;
     setProviderSaving((current) => ({ ...current, [group]: true }));
     try {
       let bundle = providers;
@@ -309,22 +313,28 @@ export const useProviderPanels = (
         } as ProviderSettingsBundle;
         descriptor.afterSaveSync?.(bundle, llmContext);
       }
-      const nextEnabled = { ...providerEnabled };
-      for (const descriptor of descriptors) {
-        const savedEnabled = descriptor.readEnabled(bundle);
-        if (savedEnabled !== null) nextEnabled[descriptor.id] = savedEnabled;
-      }
-      setProviderEnabled(nextEnabled);
-      setProviderForm(resetProviderForm(bundle, descriptors));
+      setProviderEnabled((current) => {
+        const next = { ...current };
+        for (const descriptor of descriptors) {
+          const savedEnabled = descriptor.readEnabled(bundle);
+          if (savedEnabled !== null) next[descriptor.id] = savedEnabled;
+        }
+        return next;
+      });
+      setProviderForm((current) =>
+        resetProviderForm(bundle, descriptors, current),
+      );
       notify("Đã lưu thay đổi", { type: "success" });
     } catch {
       notify("Không lưu được thay đổi.", { type: "error" });
     } finally {
+      savingRef.current[group] = false;
       setProviderSaving((current) => ({ ...current, [group]: false }));
     }
   };
 
   const discardProviderPanels = (group: ProviderPanelGroup) => {
+    if (savingRef.current[group]) return;
     const descriptors = PROVIDER_GROUP_IDS[group].map(
       (id) => PROVIDER_PANELS_BY_ID[id],
     );
@@ -335,10 +345,18 @@ export const useProviderPanels = (
       descriptor.discardSync?.(providers, llmContext);
     }
     setProviderEnabled(nextEnabled);
-    setProviderForm(resetProviderForm(providers, descriptors));
+    setProviderForm((current) =>
+      resetProviderForm(providers, descriptors, current),
+    );
   };
 
   const testProviderPanel = async (id: ProviderPanelId) => {
+    if (
+      testingRef.current[id] ||
+      savingRef.current[PROVIDER_PANELS_BY_ID[id].chrome]
+    )
+      return;
+    testingRef.current[id] = true;
     const descriptor = PROVIDER_PANELS_BY_ID[id];
     setProviderTesting((current) => ({ ...current, [id]: true }));
     try {
@@ -368,7 +386,20 @@ export const useProviderPanels = (
       } else {
         notify(result.error || "Không kết nối được", { type: "error" });
       }
+    } catch {
+      const error = "Không kiểm tra được kết nối. Vui lòng thử lại.";
+      setProviderLastTests((current) => ({
+        ...current,
+        [id]: {
+          ok: false,
+          latency_ms: null,
+          tested_at: Math.floor(Date.now() / 1000),
+          error,
+        },
+      }));
+      notify(error, { type: "error" });
     } finally {
+      testingRef.current[id] = false;
       setProviderTesting((current) => ({ ...current, [id]: false }));
     }
   };

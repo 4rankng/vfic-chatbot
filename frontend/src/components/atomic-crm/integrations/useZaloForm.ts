@@ -53,6 +53,7 @@ export const useZaloForm = ({
     Record<ZaloChannelScope, boolean>
   >({ bot: false, oa: false });
   const seeded = useRef(false);
+  const testingRef = useRef(false);
 
   // Seed the plain App ID once, when settings first arrive: the id is the only
   // field the server echoes back, and an in-progress edit must survive a
@@ -69,13 +70,21 @@ export const useZaloForm = ({
   const saveMutation = useMutation({
     mutationFn: (body: Partial<ZaloFormState>) =>
       zaloIntegrationGateway.saveZaloSettings(body),
-    onSuccess: (saved) => {
+    onSuccess: (saved, submitted) => {
       queryClient.setQueryData(integrationSettingsKeys.zalo, saved);
-      // Secret fields are masked and never echoed, so the form restarts empty;
-      // the plain App ID re-syncs to the value the server just acknowledged.
-      setForm({
-        ...emptyZaloForm,
-        zalo_oa_app_id: saved.zalo_oa_app_id.value ?? "",
+      // Clear only the values this scope saved. The other channel's draft,
+      // and any newer edit typed while this request ran, remain unsaved.
+      setForm((current) => {
+        const next = { ...current };
+        for (const key of Object.keys(submitted) as (keyof ZaloFormState)[]) {
+          if (current[key].trim() === submitted[key]) {
+            next[key] =
+              key === "zalo_oa_app_id"
+                ? (saved.zalo_oa_app_id.value ?? "")
+                : "";
+          }
+        }
+        return next;
       });
     },
   });
@@ -100,6 +109,8 @@ export const useZaloForm = ({
   };
 
   const testChannel = async (scope: ZaloChannelScope) => {
+    if (testingRef.current || !settings) return;
+    testingRef.current = true;
     const label = ZALO_CHANNEL_LABELS[scope];
     setChannelTesting((current) => ({ ...current, [scope]: true }));
     try {
@@ -148,7 +159,13 @@ export const useZaloForm = ({
       notify(result.errors.join("; ") || `Không kết nối được ${label}`, {
         type: "warning",
       });
+    } catch {
+      notify(
+        `Không lưu hoặc kiểm tra được kết nối ${label}. Vui lòng thử lại.`,
+        { type: "error" },
+      );
     } finally {
+      testingRef.current = false;
       setChannelTesting((current) => ({ ...current, [scope]: false }));
     }
   };

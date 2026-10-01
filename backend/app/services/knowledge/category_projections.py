@@ -26,11 +26,20 @@ from app.models.bus import BusRoute, BusStop
 from app.models.company import Company, Project
 from app.models.job import Job, JobStatus
 from app.models.knowledge import KnowledgeCategory, KnowledgeCategoryRevision
-from app.schemas.knowledge_categories import CategoryDocument, KnowledgeCategoryKey
+from app.schemas.knowledge_categories import (
+    CategoryDocument,
+    JobsDocument,
+    KnowledgeCategoryKey,
+    StrictModel,
+    TransportationDocument,
+)
 from app.shared.domain.errors import NotFoundError
-from app.services.knowledge.category_contracts import (
+from app.project_knowledge.domain.category import shared_project_category_value
+from app.project_knowledge.domain.category_catalog import (
     CATEGORY_DEFINITIONS,
     get_category_definition,
+)
+from app.services.knowledge.category_contracts import (
     validate_category_payload,
 )
 
@@ -140,39 +149,49 @@ class SqlAlchemyCategoryProjectionWriter:
             await self._replace_transportation_routes(project_id, revision, document)
         jobs = await self._derived_jobs(project_id)
         definition = get_category_definition(key)
-        for record in getattr(document, definition.list_field):
-            job_ids = getattr(record, "job_ids", None)
-            if job_ids is None:
-                continue
-            targets = _target_jobs(jobs, job_ids)
+        records = getattr(document, definition.list_field)
+        # A project can describe multiple conditions in its KB. Only facts
+        # shared by every record are safe to copy into a role's scalar fields;
+        # the complete records remain available to retrieval for explanation.
+        for job in jobs:
             if key is KnowledgeCategoryKey.COMPENSATION:
-                for job in targets:
-                    job.salary_min = record.estimated_income_min_vnd or record.base_salary_vnd
-                    job.salary_max = record.estimated_income_max_vnd or record.base_salary_vnd
+                job.salary_min = shared_project_category_value([
+                    record.estimated_income_min_vnd
+                    if record.estimated_income_min_vnd is not None
+                    else record.base_salary_vnd
+                    for record in records
+                ])
+                job.salary_max = shared_project_category_value([
+                    record.estimated_income_max_vnd
+                    if record.estimated_income_max_vnd is not None
+                    else record.base_salary_vnd
+                    for record in records
+                ])
             elif key is KnowledgeCategoryKey.REQUIREMENTS:
-                for job in targets:
-                    job.age_min = record.age_min
-                    job.age_max = record.age_max
-                    job.gender_requirement = ", ".join(record.genders) or None
-                    job.experience_required = record.experience
-                    job.requirements = _record_text(record)
+                job.age_min = shared_project_category_value([record.age_min for record in records])
+                job.age_max = shared_project_category_value([record.age_max for record in records])
+                job.gender_requirement = shared_project_category_value([
+                    ", ".join(record.genders) or None for record in records
+                ])
+                job.experience_required = shared_project_category_value([
+                    record.experience for record in records
+                ])
+                job.requirements = "\n".join(_record_text(record) for record in records) or None
             elif key is KnowledgeCategoryKey.WORK_SCHEDULES:
-                for job in targets:
-                    job.shift = _record_text(record)
+                job.shift = "\n".join(_record_text(record) for record in records) or None
             elif key is KnowledgeCategoryKey.BENEFITS:
-                for job in targets:
-                    job.benefits = "\n".join(
-                        value for value in (job.benefits, record.name, record.description) if value
-                    )
+                job.benefits = "\n".join(
+                    value for record in records
+                    for value in (record.name, record.description) if value
+                ) or None
             elif key is KnowledgeCategoryKey.ACCOMMODATION:
-                for job in targets:
-                    job.accommodation_support = record.available
+                job.accommodation_support = shared_project_category_value([
+                    record.available for record in records
+                ])
             elif key is KnowledgeCategoryKey.MEALS:
-                for job in targets:
-                    job.meal_support = record.provided
+                job.meal_support = shared_project_category_value([record.provided for record in records])
             elif key is KnowledgeCategoryKey.TRANSPORTATION:
-                for job in targets:
-                    job.transport_support = True
+                job.transport_support = bool(records) or None
 
     async def _reapply_active_sibling_projections(self, project_id: uuid.UUID) -> None:
         """Rebuild derived Job fields after Jobs rows are recreated.
@@ -203,7 +222,10 @@ class SqlAlchemyCategoryProjectionWriter:
                 ).all()
             }
         for sibling in siblings:
-            sibling_revision = revisions_by_id.get(sibling.active_revision_id)
+            revision_id = sibling.active_revision_id
+            if revision_id is None:
+                continue
+            sibling_revision = revisions_by_id.get(revision_id)
             if sibling_revision is None:
                 continue
             sibling_document = validate_category_payload(
@@ -222,6 +244,8 @@ class SqlAlchemyCategoryProjectionWriter:
         revision: KnowledgeCategoryRevision,
         document: CategoryDocument,
     ) -> None:
+        if not isinstance(document, TransportationDocument):
+            raise ValueError("Transportation projection requires its category document")
         await self.db.execute(
             delete(BusRoute).where(
                 BusRoute.project_id == project_id,
@@ -284,7 +308,11 @@ class SqlAlchemyCategoryProjectionWriter:
         revision: KnowledgeCategoryRevision,
         document: CategoryDocument,
     ) -> None:
+        if not isinstance(document, JobsDocument):
+            raise ValueError("Jobs projection requires its category document")
         project = await self.db.get(Project, project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
         companies = list(
             (
                 await self.db.scalars(
@@ -320,6 +348,7 @@ class SqlAlchemyCategoryProjectionWriter:
                         )
                     )
                 ).all()
+                if j.stable_key is not None
             }
 
         # Terminal statuses that must be preserved across re-learns.
@@ -342,7 +371,7 @@ class SqlAlchemyCategoryProjectionWriter:
                 existing.factory_name = company.name
                 existing.province = item.location
                 existing.address = item.location
-                existing.vacancy_count = item.vacancies or 1
+                # Vacancy counts belong to Job management, not project KB.
                 existing.description = item.summary
                 existing.source_category_revision_id = revision.id
                 # Only set ACTIVE if the job isn't in a terminal state.
@@ -358,7 +387,6 @@ class SqlAlchemyCategoryProjectionWriter:
                         factory_name=company.name,
                         province=item.location,
                         address=item.location,
-                        vacancy_count=item.vacancies or 1,
                         status=JobStatus.ACTIVE,
                         description=item.summary,
                     )
@@ -512,14 +540,9 @@ class SqlAlchemyCategoryProjectionWriter:
         )
 
 
-def _target_jobs(jobs: list[Job], job_ids: list[str]) -> list[Job]:
-    if not job_ids:
-        return jobs
-    allowed = set(job_ids)
-    return [job for job in jobs if job.stable_key in allowed]
 
 
-def _record_text(record: object) -> str:
+def _record_text(record: StrictModel) -> str:
     payload = record.model_dump(mode="json", exclude_none=True)
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 

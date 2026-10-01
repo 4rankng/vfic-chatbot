@@ -191,6 +191,35 @@ application tree and hashes the reviewed HTTP, queue, outbox, and provider
 boundaries. Public routes, schemas, queues, realtime events, worker callable
 paths, bot policy, and user experience remain compatible.
 
+### 1.3.1 Maintaining the existing boundaries
+
+- HTTP and Socket.IO authenticate through the same identity authenticator.
+  Realtime code cannot import API transport dependencies; its event adapter
+  retains the existing public event names and checks entity ID types before
+  calling viewer-scope queries.
+- Project KB category identity lives in
+  `app/project_knowledge/domain/category.py`; ordered authoring metadata and
+  lookup live in `domain/category_catalog.py`. Schema, ingest, export,
+  projection and retrieval consumers share that registry. To add a category,
+  add its identity, definition, typed document model and Markdown template;
+  registry regressions require exact schema coverage and ordering. Field and
+  template names derive from the category ID.
+- Importing a leaf knowledge helper does not load the full ingestion and
+  persistence graph. The package retains its established public exports and
+  loads each export's owner when requested.
+- Recruitment ports distinguish an unresolved lead lookup from a completed
+  lookup with no record. Bot stages reuse completed reads, including misses;
+  independent adapter callers retain their repository fallback. A successful
+  name write refreshes that context; a failed refresh marks it unresolved so
+  the next consumer can retry and observe the committed write.
+- Graph import guards scan nested tools as well as stage modules. Shared
+  TingTing verification policy belongs in `app/integrations/tingting/domain.py`,
+  so a tool does not import a concrete HTTP/persistence service for a constant.
+- Frontend dependency checks enforce `atomic-crm → admin → ui` for production
+  modules. Category and discovery-card mutations use synchronous exclusion
+  while a request is in flight, with context-aware release and retry behavior.
+  React state remains the display of that operation rather than its lock.
+
 ---
 
 ## 2. Request lifecycle — Zalo webhook to sent reply
@@ -327,7 +356,6 @@ sequenceDiagram
     H->>DB: acquire_lock(conv.id)<br/>atomic bot_locked_until UPDATE<br/>return "locked" if held
     end
 
-    H->>Z: fire typing indicator (bot channel only,<br/>fire-and-forget asyncio.create_task)
     H->>RQ: enqueue_chat_run(job)
     Note over H,RQ: backpressure: max_depth check,<br/>503 + lock release on enqueue fail
     W-->>E: 200 ACK {status: "processing"} (< 1s)
@@ -337,6 +365,7 @@ sequenceDiagram
     Note over WK: ══ bot turn (run_turn, line 259) ══
 
     RQ->>WK: job
+    WK->>Z: tracked typing bridge during dependency setup (bot channel)
     WK->>DB: get conv + refresh
     rect rgb(245, 235, 235)
     Note over WK,DB: ── mode policy guard layer 3/4 ──
@@ -345,7 +374,7 @@ sequenceDiagram
 
     WK->>DB: record_bot_pending → Message BOT PENDING<br/>"Đang soạn trả lời..."
     WK-->>RT: message.created + conversation.updated
-    WK->>Z: typing heartbeat (every 4s, bot channel)
+    WK->>Z: native typing heartbeat (immediate, then every 3s, bot channel)
 
     rect rgb(235, 242, 255)
     Note over WK,DB: ── project matching authority ──
@@ -385,7 +414,7 @@ sequenceDiagram
     end
 
     Note over WK: ── reply boundary ──
-    WK->>WK: agent.agent() answer-completion guard<br/>(continue a provider-cut answer, drop a dangling tail)
+    WK->>WK: agent.agent() answer-completion guard<br/>(up to two tool-free continuations, then one concise complete rewrite;<br/>suppress if still capped or empty)
     WK->>WK: _finalize_user_visible_reply<br/>strip_provider_artifacts only — the answer<br/>ships as generated (no rewrite, no truncation)
 
     rect rgb(245, 235, 235)
@@ -399,7 +428,7 @@ sequenceDiagram
         alt OA token-invalid response
             ZS->>ZS: refresh_oa_access_token<br/>(Redis SET NX lock, single-use refresh_token)<br/>retry once
         end
-        ZS->>Z: Bot: bot-api.zaloplatforms.com/bot{token}/sendMessage<br/>OA: openapi.zalo.me/v3.0/oa/message/cs<br/>(text chunked at 420 chars)
+        ZS->>Z: Bot: bot-api.zaloplatforms.com/bot{token}/sendMessage<br/>OA: openapi.zalo.me/v3.0/oa/message/cs<br/>(lossless bounded text chunks)
         Z-->>ZS: send result
         ZS-->>WK: SendResult(ok)
         WK->>DB: record_bot_outcome → Message SENT/FAILED<br/>+ BotRun row (stage_timings JSONB)<br/>clear per-chat lock
@@ -427,6 +456,23 @@ sequenceDiagram
     WK->>RQ: re-enqueue fresh turn (full re-run, not just HTTP POST)
     end
 ```
+
+The final reply preserves the complete sanitized model answer; it has no
+450-character presentation cutoff. Provider output-cap recovery has a separate
+bounded, tool-free allowance even when the normal tool loop used its last round.
+If two continuations cannot finish, one final rewrite must produce a complete,
+concise answer over the same verified evidence. A capped or empty rewrite is
+suppressed and recorded as an answer-completion failure, rather than treated as
+a complete project list. An explicit request for all projects instructs the
+model to include every project in the current authorized catalog.
+
+Progressive delivery waits for the completed answer on catalog turns. This costs
+the early first bubble but prevents a partial list from reaching the candidate
+before recovery can finish. Other progressive turns retain their early bubble;
+the remainder follows the finalized grounded answer, never a discarded raw
+stream tail. Transport splits long text without dropping content, checks channel
+authority before each chunk, and treats a failure after an accepted prefix as
+an unknown send outcome so recovery cannot replay that prefix automatically.
 
 ### 2.2 Private conversation context
 
@@ -657,8 +703,23 @@ load_conversation_state -> typing -> direct_context?
   can validate `lg-display` but related projects cannot satisfy one another's
   claims.
 - **Tool-loop ceiling:** `max_llm_calls_per_turn` (default 6).
-- **Typing heartbeat:** `_typing_heartbeat` sends `typing` to Zalo every 4s
-  while a turn is processing (keeps the candidate's typing indicator alive).
+- **Typing heartbeat:** the tracked worker bridge and graph heartbeat send
+  native Zalo Bot `typing` immediately and every three seconds during processing.
+  Absolute deadlines prevent provider latency from shifting the cadence; each
+  request has at most a one-second budget and requests do not overlap. Legacy
+  heartbeat settings above three seconds remain accepted but use the
+  three-second cap. Transient failures retry on later pulses. Handoff, answer
+  delivery, suppression, terminal errors, and cancellation drain the task
+  before continuing. Zalo OA has no typing operation in its current adapter.
+  The [Zalo Bot API](https://bot.zapps.me/docs/apis/sendChatAction/) defines
+  this temporary chat status; it creates no candidate message or lead content.
+- **Retrieval scope and provenance:** explicit empty project scopes return no
+  evidence. Channel-assigned projects are rechecked against the live active
+  catalog; detached KBs, superseded categories, inactive projects, and mismatched
+  revision/document ownership cannot satisfy a query. Rendered citations carry
+  project and category identity. Oversized evidence rows cannot consume the
+  complete budget ahead of later ranked hits. Degraded retrieval is not cached
+  as confirmed missing knowledge.
 
 ---
 
@@ -876,9 +937,11 @@ Per-chat bot locks are durable conversation-row fields:
 
 ### MiniMax digest pipeline
 - `MINIMAX_DIGEST_MODEL` (background-only, generous timeout) digests raw KB
-  files into RAG units + builds per-project catalog cards. On timeout the
-  pipeline falls back to source-grounded units instead of failing the
-  document (see `KnowledgePipeline`).
+  files into RAG units + builds per-project catalog cards. Legacy compatibility
+  ingestion can fall back to source-grounded units on digest timeout. One-file
+  project training records extraction failures and keeps prepared feature
+  values private until the complete category batch publishes (see
+  `KnowledgePipeline` and `TrainingCategoryBatch`).
 
 ---
 
@@ -899,12 +962,31 @@ be shared by another Project.
   and preserve the prior page. The daily tick is cron-pinned via `KB_SYNC_CRON`
   (default `0 20 * * *` UTC = 03:00 ICT).
 - `RAG` owns twelve `knowledge_categories`. Immutable
-  `knowledge_category_revisions` preserve raw YAML, normalized payloads, a
+  `knowledge_category_revisions` preserve raw category Markdown, normalized payloads, a
   deterministic checksum, and recovery metadata (`processing_token`,
   `lease_expires_at`, `attempt_count`, `quality_result`). Revisions are staged
   and embedded before a transaction stores indexed evidence and advances only that
   category's active pointer. Revision claims are atomic and each revision can
   own only one evidence document.
+- A one-file training source prepares all its proposed categories and features
+  durably without publishing them. Categories are Project-scoped and independently
+  valid, without Job reference fields or a Jobs-first authoring requirement.
+  The final transaction validates each category's contract, switches all proposed
+  pointers and evidence, rebuilds applicable projections, publishes features and
+  discovery highlights, and marks the source completed together. An intervening
+  manual category change or newer source invalidates the batch snapshot. Provider
+  I/O never holds the publication locks; failed preparation leaves existing
+  published knowledge available. Identical reupload after a manual change creates
+  a new intent, while an unchanged provider-failure retry reuses prepared work.
+  Legacy-authority Projects retain their live features and highlights during
+  shadow training; `requires_cutover` distinguishes prepared completion from
+  live publication. Explicit cutover adopts only a matching current source's
+  deferred features without overwriting newer independent edits. The rollback
+  snapshot also retains exact feature rows when cutover changes them. Feature
+  intent comparison excludes untouched empty rows generated by feature-list
+  reads. Successful cutover closes obsolete completed deferred feature intents;
+  an identical reupload after real feature edits or supersession creates a new
+  source intent.
 - Category activation is shadow-only until `project.category_authority_started`
   flips during an explicit cutover. Before that flip, retrieval continues to
   read legacy chunks, Jobs, and routes; live category projections are built only at cutover.
@@ -914,6 +996,9 @@ be shared by another Project.
 - `conversations.project_context_state` and `focused_project_id` select
   `EXPLORE` or one `FOCUSED` Project. Focused tool arguments are server-forced to
   that Project slug; model-supplied cross-Project arguments are ignored.
+  Messenger Page assignments also constrain focused direct-context resolution.
+  Cached routing entries cannot authorize access: active state, current KB,
+  name/aliases, and knowledge mode are refreshed for named or focused targets.
 - The cached agent preamble always carries a compact index of every active Project
   (name, slug, aliases, discovery summary, roles, location, and highlights). Current-hiring
   questions never rely on that index or semantic search as matching authority:
@@ -921,9 +1006,17 @@ be shared by another Project.
   active vacancy thread all require the complete `list_active_projects`
   catalog for that turn. Full Project knowledge is loaded only for follow-up details.
 - Legacy and category-derived Jobs/routes coexist physically and every candidate/recruiter
-  consumer gates them with `category_authority_started`. Category-derived Jobs use presence as availability. Manual status is not an
+  consumer gates them with `category_authority_started`. Category-derived Jobs use presence in the current active Jobs revision as availability. Manual status is not an
   authority. A Jobs replacement replays active sibling projections; Transportation
   also replaces Project-scoped `bus_routes` and `bus_stops`.
+- Project-wide category scalar facts enter derived role filters only when all
+  category records agree; missing or conflicting values become unknown. Full
+  source facts remain available to retrieval. Structural `job_ids`, `jobs_ids`,
+  `vacancies` and `employment_type` fields from old content are removed at parse, write, read, export and chatbot
+  evidence boundaries, including cached evidence. Immutable historical source,
+  checksums and recovery checkpoints are preserved rather than rewritten.
+  KB roles preserve existing capacity counts; new derived roles have unknown
+  capacity rather than an invented vacancy count.
 - Legacy Project document/version ingestion, reindex, and extraction mutations
   are closed after Project-owned knowledge is established. Migration
   `0050_data_ingestion_recovery` adds the lease and cutover snapshot columns that
@@ -936,13 +1029,24 @@ be shared by another Project.
 - **Scope:** project-scoped — retrieval is filtered to the candidate's
   project context.
 - **Caching:** `rag_cache_enabled` (TTL 300s) + embedding cache (TTL 86400s).
+  Semantic entries have independent expiry and access-based LRU ordering. Cache
+  generations use random signed-64-bit-safe seeds when a counter is missing;
+  concurrent initializers adopt the winner. Retrieval captures its generation
+  before computation so an old result cannot populate a newly invalidated scope.
+  Eligible generated-answer scopes hash private intake context and messaging
+  provider; turns with earlier conversation history bypass shared answer reuse.
+  Publication repairs knowledge, semantic, Jobs, and preamble namespaces after commit.
+- **Pre-publication check:** a bounded sample of declared questions/titles is
+  compared with each record's own embedding. Another record's high similarity
+  cannot satisfy the check. This is a retrieval sanity check, not proof of factual
+  entailment or a guarantee of rank under whole-KB competition.
 - **Proactive prefetch:** `_should_prefetch_knowledge` (`clients.py:78`) runs
   KB retrieval before the agent call when the turn looks knowledge-bound.
   Focused FAQ-detail turns may also prefetch `get_product_features` alongside
   `search_knowledge` when an isolated retrieval session factory is available;
   EXPLORE turns remain RAG-only.
 - **Tools exposed to agent:** `list_active_projects`, `search_knowledge`,
-  `search_user_memory`, `search_bus_timetable`, `call_project_api` (see §14).
+  `get_product_features`, `search_user_memory`, `search_bus_timetable`.
 - **Benchmarks:** `scripts/benchmark_rag.py` (golden-case scoring) and
   `scripts/capture_bus_timetable_golden.py`.
 

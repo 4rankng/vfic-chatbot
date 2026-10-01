@@ -38,6 +38,7 @@ from app.services.conversation.unreachable import (
     apply_user_unreachable_side_effects,
 )
 from app.services.tingting_api import TingtingVerifyAttemptsStore
+from app.shared.application.outbound import PARTIAL_DELIVERY_ERROR_PREFIX
 
 
 
@@ -282,22 +283,18 @@ class RecruiterReceiptsMixin:
         ``unread_count`` touch (see :meth:`apply_delivery_receipt`). Returns the
         number of rows that moved.
 
-        SEND_UNKNOWN fallback: a message stamped SEND_UNKNOWN (transport timeout,
-        stale SENDING, interrupted dispatch) carries NO ``zalo_message_id`` — the
-        send failed before Zalo returned one. It therefore can never be matched by
-        the ``zalo_message_id IN (ids)`` query above, so a later ``user_seen``
-        receipt proving the user actually saw it leaves the row stuck at
-        SEND_UNKNOWN forever (recruiter console shows "Chưa xác nhận gửi" despite
-        confirmed delivery). A Zalo receipt only fires for a message that exists
-        on Zalo's side, so its arrival is ground-truth proof the SEND_UNKNOWN row
-        reached Zalo. Advance any id-less SEND_UNKNOWN outbound row in this
-        conversation to the target status. Strictly scoped to SEND_UNKNOWN so a
-        PENDING placeholder, a known FAILED, or a SUPPRESSED row is never revived.
+        Receipts prove delivery only for their exact stored provider message
+        ids. An id-less SEND_UNKNOWN row cannot be correlated, so it stays
+        uncertain for review. A receipt for another message in the conversation
+        must not fabricate confirmation for that row.
 
         Each moved message emits ``message_created`` (in addition to the single
         ``conversation_updated``) so the recruiter console's per-message delivery
         badge refreshes in realtime — the frontend message store updates
         ``delivery_status`` only via ``message.created`` events.
+
+        Partial logical answers retain SEND_UNKNOWN even when an accepted
+        prefix has a receipt: that receipt says nothing about the unsent tail.
         """
         ids = [mid for mid in zalo_message_ids if mid]
         if not ids:
@@ -317,22 +314,9 @@ class RecruiterReceiptsMixin:
         )
         moved: list[Message] = []
         for msg in result.all():
+            if (msg.external_error or "").startswith(PARTIAL_DELIVERY_ERROR_PREFIX):
+                continue
             if receipt_advances(msg.delivery_status, target):
-                msg.delivery_status = target
-                moved.append(msg)
-        if receipt_advances(DeliveryStatus.SEND_UNKNOWN, target):
-            # Id-less SEND_UNKNOWN rows can never match the query above. They are
-            # disjoint from the id-matched set (a row cannot have both a non-null
-            # id-in-ids and a NULL id), so no message is double-counted here.
-            unresolved = await self.db.scalars(
-                select(Message).where(
-                    Message.conversation_id == conv.id,
-                    Message.zalo_message_id.is_(None),
-                    Message.delivery_status == DeliveryStatus.SEND_UNKNOWN,
-                    Message.sender.in_([MessageSender.BOT, MessageSender.RECRUITER]),
-                )
-            )
-            for msg in unresolved.all():
                 msg.delivery_status = target
                 moved.append(msg)
         if moved:

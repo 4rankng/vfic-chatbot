@@ -11,8 +11,6 @@ category: work_schedules
 Ví dụ khối một lịch làm việc:
 
 ### record: lich-lam-chung
-job_ids:
-- "[Áp dụng cho việc nào? Điền id việc; bỏ trống nếu áp dụng cho mọi việc.]"
 work_days:
 - "[Làm ngày nào? Ví dụ: Thứ 2. Mỗi dòng một ngày.]"
 shifts:

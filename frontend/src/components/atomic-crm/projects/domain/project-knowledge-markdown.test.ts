@@ -6,6 +6,7 @@ import {
   buildFaqMarkdown,
   buildJobsMarkdown,
   buildMealsMarkdown,
+  buildTransportationMarkdown,
   buildWorkSchedulesMarkdown,
   CATEGORY_MARKDOWN_SCHEMAS,
   planBriefKnowledge,
@@ -21,6 +22,7 @@ import {
 } from "./project-brief-ingest";
 import {
   PROJECT_KNOWLEDGE_CATEGORIES,
+  PROJECT_KNOWLEDGE_CATEGORY_LABELS,
   type ProjectKnowledgeCategory,
 } from "./project-knowledge-policy";
 // The real recruiter briefs, copied verbatim — the same ingestion contract
@@ -30,6 +32,7 @@ import amtranMd from "./fixtures/amtran-vsip-hai-phong.md?raw";
 import fourPElectronicsMd from "./fixtures/four-p-electronics.md?raw";
 import samsungSdsMd from "./fixtures/samsung-sds-kho.md?raw";
 import samsungSdsV2Md from "./fixtures/samsung-sds-dinh-vu-v2.md?raw";
+import allCategoriesText from "./fixtures/project-all-categories.txt?raw";
 
 const ENTRY = {
   question: "Bên công ty đang tuyển công việc gì?",
@@ -110,14 +113,9 @@ describe("buildJobsMarkdown", () => {
     expect(markdown).toContain('title: "Công nhân sản xuất"');
   });
 
-  it("never states a vacancy count — the recruiter does not manage headcount", () => {
-    // The schema makes `vacancies` optional for exactly this reason: an unknown
-    // count must stay unknown (`null`) rather than become a confident wrong
-    // number in an answer a candidate will read.
+  it("omits headcount and employment-type fields", () => {
     const markdown = buildJobsMarkdown(["Công nhân sản xuất", "Kỹ thuật viên"]);
-    expect(markdown).toContain("vacancies: null");
-    expect(markdown).toContain("employment_type: null");
-    expect(markdown).not.toMatch(/vacancies: \d/);
+    expect(markdown).not.toMatch(/^\s*(?:vacancies|employment_type)\s*:/m);
   });
 
   it("carries the project location only when the brief stated one", () => {
@@ -175,13 +173,24 @@ describe("rolesFromFaqEntries", () => {
 });
 
 describe("planBriefKnowledge", () => {
-  it("plans jobs before faq so every later write can resolve its job ids", () => {
+  it("plans roles and FAQ in catalog order", () => {
     const plan = planBriefKnowledge(
       briefWith({ roles: ["Công nhân sản xuất"], faqEntries: [ENTRY] }),
     );
     expect(plan.writes.map((write) => write.key)).toEqual(["jobs", "faq"]);
     expect(plan.writes[0].filename).toBe("jobs.md");
     expect(plan.writes[1].filename).toBe("faq.md");
+  });
+
+  it("plans project compensation without requiring a jobs category", () => {
+    const plan = planBriefKnowledge(
+      briefWith({
+        categories: { compensation: "Lương cơ bản: 6.200.000 VNĐ/tháng" },
+      }),
+    );
+    expect(plan.writes.map((write) => write.key)).toEqual(["compensation"]);
+    expect(plan.writes[0].content).toContain("base_salary_vnd: 6200000");
+    expect(plan.writes[0].content).not.toMatch(/^\s*jobs?_ids\s*:/m);
   });
 
   it("plans nothing to write when the brief states neither a role nor a Q&A", () => {
@@ -250,23 +259,13 @@ const CATEGORY_SCHEMA: Record<
   jobs: {
     list: "jobs",
     required: ["id", "title"],
-    fields: [
-      "id",
-      "title",
-      "aliases",
-      "location",
-      "vacancies",
-      "employment_type",
-      "summary",
-      "keywords",
-    ],
+    fields: ["id", "title", "aliases", "location", "summary", "keywords"],
   },
   compensation: {
     list: "compensation",
     required: ["id"],
     fields: [
       "id",
-      "job_ids",
       "base_salary_vnd",
       "estimated_income_min_vnd",
       "estimated_income_max_vnd",
@@ -281,7 +280,6 @@ const CATEGORY_SCHEMA: Record<
     required: ["id"],
     fields: [
       "id",
-      "job_ids",
       "age_min",
       "age_max",
       "genders",
@@ -298,7 +296,6 @@ const CATEGORY_SCHEMA: Record<
     required: ["id"],
     fields: [
       "id",
-      "job_ids",
       "work_days",
       "shifts",
       "rotation",
@@ -310,14 +307,13 @@ const CATEGORY_SCHEMA: Record<
   benefits: {
     list: "benefits",
     required: ["id", "name"],
-    fields: ["id", "job_ids", "name", "description", "eligibility"],
+    fields: ["id", "name", "description", "eligibility"],
   },
   accommodation: {
     list: "accommodation",
     required: ["id", "available"],
     fields: [
       "id",
-      "job_ids",
       "available",
       "type",
       "address",
@@ -333,7 +329,6 @@ const CATEGORY_SCHEMA: Record<
     required: ["id", "provided"],
     fields: [
       "id",
-      "job_ids",
       "provided",
       "meals_per_shift",
       "allowance_vnd",
@@ -347,7 +342,6 @@ const CATEGORY_SCHEMA: Record<
     required: ["id", "name", "direction"],
     fields: [
       "id",
-      "job_ids",
       "name",
       "direction",
       "service_days",
@@ -362,7 +356,6 @@ const CATEGORY_SCHEMA: Record<
     required: ["id", "name"],
     fields: [
       "id",
-      "job_ids",
       "name",
       "provider",
       "employee_contribution",
@@ -378,7 +371,6 @@ const CATEGORY_SCHEMA: Record<
     required: ["id"],
     fields: [
       "id",
-      "job_ids",
       "application_steps",
       "required_documents",
       "interview_location",
@@ -724,14 +716,11 @@ const FULL_RECORDS: Record<ProjectKnowledgeCategory, CategoryRecord> = {
     title: "Công nhân sản xuất",
     aliases: ["Công nhân kiểm tra màn hình", "CN đóng gói"],
     location: "KCN VSIP, Thủy Nguyên, Hải Phòng",
-    vacancies: 100,
-    employment_type: "temporary",
     summary: 'Dây chuyền điện tử, dấu nháy "và" xuống dòng\nthứ hai',
     keywords: ["điện tử", "kiểm tra"],
   },
   compensation: {
     id: "thu-nhap-chung",
-    job_ids: ["vi-cong-nhan"],
     base_salary_vnd: 6300000,
     estimated_income_min_vnd: 9000000,
     estimated_income_max_vnd: 12000000,
@@ -762,7 +751,6 @@ const FULL_RECORDS: Record<ProjectKnowledgeCategory, CategoryRecord> = {
   },
   requirements: {
     id: "yeu-cau-chung",
-    job_ids: ["vi-cong-nhan"],
     age_min: 18,
     age_max: 37,
     genders: ["any"],
@@ -775,7 +763,6 @@ const FULL_RECORDS: Record<ProjectKnowledgeCategory, CategoryRecord> = {
   },
   work_schedules: {
     id: "lich-lam-chung",
-    job_ids: ["vi-cong-nhan"],
     work_days: ["Thứ 2", "Thứ 7"],
     shifts: [
       {
@@ -798,14 +785,12 @@ const FULL_RECORDS: Record<ProjectKnowledgeCategory, CategoryRecord> = {
   },
   benefits: {
     id: "chuyen-can",
-    job_ids: [],
     name: "Phụ cấp chuyên cần",
     description: "Cộng vào lương tháng",
     eligibility: "Đủ công trong tháng",
   },
   accommodation: {
     id: "ky-tuc-xa",
-    job_ids: [],
     available: true,
     type: "Ký túc xá",
     address: "Trong khuôn viên KCN",
@@ -817,7 +802,6 @@ const FULL_RECORDS: Record<ProjectKnowledgeCategory, CategoryRecord> = {
   },
   meals: {
     id: "bua-an-ca",
-    job_ids: [],
     provided: true,
     meals_per_shift: 1,
     allowance_vnd: 0,
@@ -827,7 +811,6 @@ const FULL_RECORDS: Record<ProjectKnowledgeCategory, CategoryRecord> = {
   },
   transportation: {
     id: "tuyen-xe-1",
-    job_ids: [],
     name: "Tuyến số 1",
     direction: "round_trip",
     service_days: ["Thứ 2"],
@@ -841,7 +824,6 @@ const FULL_RECORDS: Record<ProjectKnowledgeCategory, CategoryRecord> = {
   },
   insurance: {
     id: "bhxh",
-    job_ids: [],
     name: "BHXH bắt buộc",
     provider: "Bảo hiểm xã hội",
     employee_contribution: "10,5%",
@@ -853,7 +835,6 @@ const FULL_RECORDS: Record<ProjectKnowledgeCategory, CategoryRecord> = {
   },
   application: {
     id: "ung-tuyen-nhan-viec",
-    job_ids: [],
     application_steps: ["Đăng ký", "Phỏng vấn", "Khám sức khỏe"],
     required_documents: ["CCCD photo công chứng"],
     interview_location: "Văn phòng tại KCN",
@@ -923,13 +904,28 @@ describe("serializeCategoryMarkdown — byte rules and the backend fixtures", ()
     expect(markdown.endsWith("\n\n")).toBe(false);
   });
 
+  for (const legacy of [
+    { vacancies: null, employment_type: null },
+    { vacancies: 100, employment_type: "temporary" },
+  ]) {
+    it(`omits retired role metadata even when legacy values are ${legacy.vacancies === null ? "null" : "populated"}`, () => {
+      const payload = payloadOf("jobs");
+      const markdown = serializeCategoryMarkdown("jobs", {
+        ...payload,
+        records: payload.records.map((record) => ({ ...record, ...legacy })),
+      });
+      expect(markdown).not.toMatch(/^\s*(?:vacancies|employment_type)\s*:/m);
+      expect(parseMarkdownDocument(markdown, "jobs").jobs).toEqual(
+        payload.records,
+      );
+    });
+  }
+
   it("quotes every string and escapes only the five escapable characters", () => {
     const markdown = serializeCategoryMarkdown("jobs", payloadOf("jobs"));
     expect(markdown).toContain(
       'summary: "Dây chuyền điện tử, dấu nháy \\"và\\" xuống dòng\\nthứ hai"',
     );
-    expect(markdown).toContain("vacancies: 100");
-    expect(markdown).toContain('employment_type: "temporary"');
   });
 
   it("renders a table field with the header, separator and encoded cells", () => {
@@ -963,6 +959,23 @@ describe("serializeCategoryMarkdown — byte rules and the backend fixtures", ()
   });
 
   for (const key of PROJECT_KNOWLEDGE_CATEGORIES) {
+    it(`omits retired job references from the ${key} document`, () => {
+      const payload = payloadOf(key);
+      const markdown = serializeCategoryMarkdown(key, {
+        ...payload,
+        records: payload.records.map((record) => ({
+          ...record,
+          job_ids: ["retired-role"],
+          jobs_ids: ["misspelled-retired-role"],
+        })),
+      });
+      expect(markdown).not.toMatch(/^\s*jobs?_ids\s*:/m);
+      expect(markdown).not.toContain("retired-role");
+      expect(
+        parseMarkdownDocument(markdown, CATEGORY_SCHEMA[key].list)[key],
+      ).toEqual(payload.records);
+    });
+
     it(`re-parses the ${key} fixture to the identical payload`, () => {
       const payload = payloadOf(key);
       const markdown = serializeCategoryMarkdown(key, payload);
@@ -975,6 +988,14 @@ describe("serializeCategoryMarkdown — byte rules and the backend fixtures", ()
       expect(document[key]).toEqual(payload.records);
     });
   }
+
+  it("preserves ordinary prose mentioning the retired field names", () => {
+    const answer =
+      "Tệp cũ dùng job_ids, jobs_ids, vacancies và employment_type; dự án không cần chúng.";
+    expect(
+      buildFaqMarkdown([{ question: "Đổi tệp cũ thế nào?", answer }]),
+    ).toContain(`answer: "${answer}"`);
+  });
 });
 
 describe("planBriefKnowledge — the real recruiter briefs (golden)", () => {
@@ -989,15 +1010,30 @@ describe("planBriefKnowledge — the real recruiter briefs (golden)", () => {
     describe(name, () => {
       const plan = planBriefKnowledge(parseProjectBrief(markdown));
 
-      it("writes all twelve categories — the sheet genuinely carries them", () => {
-        expect(plan.writes.map((write) => write.key)).toEqual([
-          ...PROJECT_KNOWLEDGE_CATEGORIES,
-        ]);
-        expect(plan.needsHuman).toEqual([]);
+      it("writes every category with sufficient source facts", () => {
+        const expected =
+          name === "4P Electronics" || name === "Amtran"
+            ? PROJECT_KNOWLEDGE_CATEGORIES.filter(
+                (key) => key !== "transportation",
+              )
+            : PROJECT_KNOWLEDGE_CATEGORIES;
+        expect(plan.writes.map((write) => write.key)).toEqual([...expected]);
+        // These sources explicitly have no shuttle. A route direction cannot be extracted
+        // from a service that does not exist; keep the existing category.
+        expect(plan.needsHuman).toEqual(
+          name === "4P Electronics" || name === "Amtran"
+            ? ["transportation"]
+            : [],
+        );
       });
 
       it("emits schema-shaped markdown the backend contract accepts", () => {
-        for (const write of plan.writes) expectContractShape(write);
+        for (const write of plan.writes) {
+          expectContractShape(write);
+          expect(write.content).not.toMatch(
+            /^\s*(?:jobs?_ids|vacancies|employment_type)\s*:/m,
+          );
+        }
       });
     });
   }
@@ -1106,8 +1142,14 @@ describe("planBriefKnowledge — the real recruiter briefs (golden)", () => {
     );
     expect(byKey.get("accommodation")).toContain("available: false");
     expect(byKey.get("accommodation")).toContain("chưa có ký túc xá");
-    expect(byKey.get("transportation")).toContain("không có tuyến xe đưa đón");
-    expect(byKey.get("transportation")).toContain("500.000");
+    expect(byKey.has("transportation")).toBe(false);
+    expect(plan.needsHuman).toContain("transportation");
+    expect(parseProjectBrief(amtranMd).categories.transportation).toContain(
+      "không có tuyến xe đưa đón",
+    );
+    expect(parseProjectBrief(amtranMd).categories.transportation).toContain(
+      "500.000",
+    );
     // The stated monthly allowance lands as its own row in the money table.
     const document = parseMarkdownDocument(
       byKey.get("compensation") ?? "",
@@ -1143,6 +1185,172 @@ describe("planBriefKnowledge — the real recruiter briefs (golden)", () => {
 });
 
 describe("content-driven builders — derivation and honesty", () => {
+  it("retains every typed field when importing a full category Markdown bundle", () => {
+    const documents = PROJECT_KNOWLEDGE_CATEGORIES.map((key) => ({
+      key,
+      filename: `${key}.md`,
+      content: serializeCategoryMarkdown(key, {
+        schema_version: "1.0",
+        category: key,
+        records: [FULL_RECORDS[key]],
+      }),
+    }));
+    const bundled =
+      "# Kiến thức dự án\n\n" +
+      documents
+        .map((write) => `<!-- ${write.key} -->\n${write.content}`)
+        .join("\n");
+    const plan = planBriefKnowledge(parseProjectBrief(bundled));
+    expect(plan.writes).toEqual(documents);
+    expect(plan.needsHuman).toEqual([]);
+  });
+
+  it("imports project export display headings without dropping record content", () => {
+    const documents = PROJECT_KNOWLEDGE_CATEGORIES.map((key) => ({
+      key,
+      filename: `${key}.md`,
+      content: serializeCategoryMarkdown(key, payloadOf(key)),
+    }));
+    const exported =
+      "# Kiến thức dự án: Minh Hải\n\n" +
+      documents
+        .map(
+          (write) =>
+            `## ${PROJECT_KNOWLEDGE_CATEGORY_LABELS[write.key]}\n\n${write.content}`,
+        )
+        .join("\n");
+    expect(planBriefKnowledge(parseProjectBrief(exported)).writes).toEqual(
+      documents,
+    );
+  });
+
+  it("rejects a repeated typed section instead of silently truncating it", () => {
+    const first = serializeCategoryMarkdown("jobs", payloadOf("jobs"));
+    const malformed =
+      first + '\n## jobs\n\n### record: second\ntitle: "Kỹ thuật viên"\n';
+    expect(() => planBriefKnowledge(parseProjectBrief(malformed))).toThrow(
+      /không hợp lệ/,
+    );
+  });
+
+  it("rejects duplicate or unknown declared categories without treating them as prose", () => {
+    const document = serializeCategoryMarkdown("jobs", payloadOf("jobs"));
+    expect(() =>
+      planBriefKnowledge(parseProjectBrief(document + "\n" + document)),
+    ).toThrow(/bị lặp/);
+    expect(() =>
+      planBriefKnowledge(
+        parseProjectBrief(
+          document.replace("category: jobs", "category: invalid"),
+        ),
+      ),
+    ).toThrow(/không hợp lệ/);
+  });
+
+  it("keeps a genuine blank template as missing instead of publishing commented examples", () => {
+    const template = `---\nschema_version: "1.0"\ncategory: jobs\n---\n\n## jobs\n\n<!--\n### record: example\ntitle: "[Tên vị trí?]"\n-->\n`;
+    const plan = planBriefKnowledge(parseProjectBrief(template));
+    expect(plan.writes).toEqual([]);
+    expect(plan.needsHuman).toEqual(PROJECT_KNOWLEDGE_CATEGORIES);
+    expect(() =>
+      planBriefKnowledge(
+        parseProjectBrief(
+          template +
+            "\n" +
+            serializeCategoryMarkdown("jobs", payloadOf("jobs")),
+        ),
+      ),
+    ).toThrow(/bị lặp/);
+  });
+
+  it("leaves absent categories untouched when a typed bundle supplies only FAQ", () => {
+    const content = serializeCategoryMarkdown("faq", payloadOf("faq"));
+    const plan = planBriefKnowledge(parseProjectBrief(content));
+    expect(plan.writes).toEqual([{ key: "faq", filename: "faq.md", content }]);
+    expect(plan.needsHuman).toEqual(
+      PROJECT_KNOWLEDGE_CATEGORIES.filter((key) => key !== "faq"),
+    );
+  });
+
+  it("does not fabricate a route when the source explicitly denies a shuttle", () => {
+    expect(
+      buildTransportationMarkdown(
+        "Không có xe đưa đón; hỗ trợ đi lại 300.000 đồng/tháng.",
+      ),
+    ).toBeNull();
+  });
+
+  it("preserves unanswered inline questions for review without borrowing another answer", () => {
+    const brief = parseProjectBrief(
+      "## FAQ\nHỏi: Lương thế nào?\nHỏi: Có KTX không?\nTrả lời: Không có KTX.",
+    );
+    const plan = planBriefKnowledge(brief);
+    expect(
+      plan.writes.find((write) => write.key === "faq")?.content,
+    ).not.toContain("Lương thế nào?");
+    expect(plan.writes.find((write) => write.key === "faq")?.content).toContain(
+      "Không có KTX.",
+    );
+    expect(plan.needsHuman).toContain("faq");
+  });
+
+  it("marks long category content for review instead of claiming complete extraction", () => {
+    const brief = parseProjectBrief(
+      "## Phúc lợi\n" + "Quyền lợi: " + "a".repeat(4000),
+    );
+    expect(planBriefKnowledge(brief).needsHuman).toContain("benefits");
+  });
+  it("extracts all twelve categories from an ordinary text brief", () => {
+    const plan = planBriefKnowledge(parseProjectBrief(allCategoriesText));
+    expect(plan.writes.map((write) => write.key)).toEqual([
+      ...PROJECT_KNOWLEDGE_CATEGORIES,
+    ]);
+    expect(plan.needsHuman).toEqual([]);
+    for (const write of plan.writes) expectContractShape(write);
+    const byKey = new Map(
+      plan.writes.map((write) => [write.key, write.content]),
+    );
+    expect(byKey.get("compensation")).toContain(
+      "estimated_income_min_vnd: 8500000",
+    );
+    expect(byKey.get("compensation")).toContain(
+      "estimated_income_max_vnd: 10500000",
+    );
+    expect(byKey.get("requirements")).toContain('genders:\n- "any"');
+    expect(byKey.get("requirements")).toContain(
+      'education: "Học vấn: Tốt nghiệp THCS"',
+    );
+    expect(byKey.get("accommodation")).toContain("available: true");
+    expect(byKey.get("meals")).toContain("meals_per_shift: 1");
+    expect(byKey.get("contacts")).toContain('working_hours: "08:00 – 17:00"');
+    expect(byKey.get("transportation")).toContain('"06:20"');
+    expect(byKey.get("transportation")).toContain('"07:10"');
+  });
+
+  it("leaves contradictory housing and meal availability for review", () => {
+    expect(buildAccommodationMarkdown("Có KTX.\nKhông có KTX.")).toBeNull();
+    expect(
+      buildMealsMarkdown("Cung cấp bữa ăn ca.\nKhông cung cấp bữa ăn ca."),
+    ).toBeNull();
+  });
+
+  it("does not turn qualified meal exclusions into blanket no-meal claims", () => {
+    expect(
+      buildMealsMarkdown("Không phục vụ bữa sáng, cung cấp cơm ca trưa."),
+    ).toBeNull();
+    expect(buildMealsMarkdown("Công ty không có bữa ăn miễn phí.")).toBeNull();
+  });
+
+  it("preserves jobs prose beyond the role names", () => {
+    const brief = parseProjectBrief(
+      "Tên dự án: Minh Hải\nVị trí tuyển dụng: Công nhân\n## Mô tả công việc\nKiểm tra linh kiện dưới kính lúp; làm việc trong phòng sạch.",
+    );
+    const jobs = planBriefKnowledge(brief).writes.find(
+      (write) => write.key === "jobs",
+    )?.content;
+    expect(jobs).toContain("Kiểm tra linh kiện dưới kính lúp");
+    expect(jobs).toContain("phòng sạch");
+  });
   it("never invents a base wage from a range", () => {
     const markdown = buildCompensationMarkdown(
       "Mức lương cơ bản: Từ 6.200.000 đến 6.300.000 VNĐ / tháng.",

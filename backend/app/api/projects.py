@@ -12,11 +12,12 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth_dependencies import require_admin, require_recruiter
 from app.project_knowledge.infrastructure.api_dependencies import get_project_knowledge_db
+from app.project_knowledge.domain.legacy_job_references import strip_legacy_job_reference_source
 from app.schemas.projects import (
     BusTimetableResponse,
     FeatureListResponse,
@@ -151,7 +152,7 @@ async def get_project_single_page(
     direct_file = await ProjectService(db).get_single_page(project_id)
     return DirectContextFileDetailOut(
         **DirectContextFileOut.model_validate(direct_file).model_dump(),
-        text=direct_file.raw_text,
+        text=strip_legacy_job_reference_source(direct_file.raw_text),
     )
 
 
@@ -260,7 +261,7 @@ async def get_project_category_template(
     )
 
 
-@router.get("/{project_id}/knowledge-template")
+@router.get("/{project_id}/knowledge-template", response_class=PlainTextResponse)
 async def get_project_knowledge_template(
     project_id: uuid.UUID,
     _user: Any = Depends(require_recruiter),
@@ -277,6 +278,27 @@ async def get_project_knowledge_template(
         build_project_knowledge_template(),
         headers={
             "Content-Disposition": 'attachment; filename="mau-kb-du-an.md"'
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/knowledge-export",
+    response_class=Response,
+    responses={200: {"content": {"text/markdown": {"schema": {"type": "string"}}}}},
+)
+async def export_project_knowledge(
+    project_id: uuid.UUID,
+    _admin: Any = Depends(require_admin),
+    db: AsyncSession = Depends(get_project_knowledge_db),
+) -> PlainTextResponse:
+    exported = await ProjectService(db).export_knowledge(project_id)
+    return PlainTextResponse(
+        exported.content,
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f'attachment; filename="{exported.filename}"',
+            "Cache-Control": "no-store",
         },
     )
 

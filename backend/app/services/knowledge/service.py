@@ -14,6 +14,7 @@ sources by archiving/replacing them rather than approving a review queue.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -89,6 +90,8 @@ class KnowledgeService:
         if (doc.metadata_ or {}).get("project_training"):
             from app.services.knowledge.category_authority import require_category_project
 
+            if doc.project_id is None:
+                raise ConflictError("Nguồn đào tạo chưa thuộc dự án. Vui lòng chọn dự án rồi nạp lại tệp.")
             await require_category_project(self.db, doc.project_id)
         else:
             await self.assert_mutable(doc.project_id, allow_authoritative=True)
@@ -296,8 +299,9 @@ class KnowledgeService:
         version.error_message = None
         await self.db.commit()
         chunks = KnowledgeChunkRepo(self.db)
-        await chunks.clear_version(version.id)
+        version_id = version.id
         try:
+            await chunks.clear_version(version_id)
             from app.services.knowledge import KnowledgePipeline
 
             for text_file in files:
@@ -327,10 +331,25 @@ class KnowledgeService:
             version.error_message = None
             version.status = KBVersionStatus.READY
             await self.db.commit()
-        except Exception as exc:
-            version.status = KBVersionStatus.FAILED
-            version.error_message = f"{type(exc).__name__}: {exc}"[:1000]
-            await self.db.commit()
+        except Exception:
+            # A rejected chunk write leaves PostgreSQL's transaction aborted.
+            # Roll back before recording a retryable receipt and reload fields
+            # explicitly: rollback expires ORM instances even with async I/O.
+            await self.db.rollback()
+            failed = await self.db.scalar(
+                select(KBVersion)
+                .where(KBVersion.id == version_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if failed is not None and failed.status not in {
+                KBVersionStatus.ACTIVE, KBVersionStatus.ARCHIVED,
+            }:
+                failed.status = KBVersionStatus.FAILED
+                failed.error_message = "Chưa hoàn tất xử lý kiến thức. Vui lòng thử xử lý lại tệp đã lưu."
+                await self.db.commit()
+            else:
+                await self.db.rollback()
             raise
         await self.db.refresh(version)
         return version
@@ -461,7 +480,9 @@ class KnowledgeService:
                 validate_training_plan(training_plan)
             except ValueError as exc:
                 raise KnowledgeFileExtractionError("Nội dung danh mục chưa hợp lệ. Vui lòng kiểm tra tệp rồi thử lại.") from exc
-        extracted_text, source_metadata = self._extract_upload_text(file_name, content_type, data)
+        extracted_text, source_metadata = await asyncio.to_thread(
+            self._extract_upload_text, file_name, content_type, data
+        )
         # Canonical-if-declared, the same contract as ``upload_text_file``: a
         # freeform document (a project brief, say) ingests as-is, while text that
         # declares the canonical schema is repaired, validated and carries
@@ -478,6 +499,8 @@ class KnowledgeService:
         else:
             from app.services.knowledge.category_authority import require_category_project
 
+            if project_id is None or actor is None:
+                raise KnowledgeFileExtractionError("Chọn dự án và dùng tài khoản quản trị để nạp kiến thức.")
             await require_category_project(self.db, project_id)
         if training_plan is not None:
             # Serialize source retention against a worker's final category
@@ -488,6 +511,8 @@ class KnowledgeService:
         )
         metadata["source_file"] = source_metadata
         if training_plan is not None:
+            if actor is None:
+                raise KnowledgeFileExtractionError("Dùng tài khoản quản trị để nạp kiến thức.")
             if not raw_text.strip():
                 raise KnowledgeFileExtractionError("Tệp kiến thức không có nội dung. Vui lòng chọn tệp khác.")
             metadata["project_training"] = {
@@ -510,7 +535,10 @@ class KnowledgeService:
                 and (existing.metadata_ or {}).get("project_training", {}).get("plan_sha256")
                 == metadata["project_training"]["plan_sha256"]
             ):
-                return existing
+                from app.services.knowledge.category_batch import training_source_reusable
+
+                if await training_source_reusable(self.db, existing):
+                    return existing
             # now() is a transaction-start timestamp in PostgreSQL. Stamp
             # after the project lock instead, preserving actual source order
             # even when requests began their transactions in reverse order.
@@ -518,7 +546,7 @@ class KnowledgeService:
                 datetime.now(UTC),
                 existing.created_at + timedelta(microseconds=1) if existing is not None else datetime.min.replace(tzinfo=UTC),
             )
-        storage_path = persist_original_upload(file_name, data)
+        storage_path = await asyncio.to_thread(persist_original_upload, file_name, data)
         doc = KnowledgeDocument(
             file_name=file_name,
             source="upload",

@@ -38,7 +38,7 @@ export function PageHeading({
   children,
 }: PageHeadingProps) {
   return (
-    <div className={cx("w-full", className)}>
+    <div className={cx("w-full min-w-0", className)}>
       {breadcrumbs ? <div className="pb-3">{breadcrumbs}</div> : null}
       <div
         className={cx(
@@ -46,7 +46,7 @@ export function PageHeading({
           bordered && "border-b border-secondary pb-4 sm:mb-5",
         )}
       >
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           {eyebrow ? (
             <p className="text-caption font-semibold text-quaternary uppercase">
               {eyebrow}
@@ -55,13 +55,17 @@ export function PageHeading({
           {/* `text-foreground` (console ink) not `text-primary`: inside an
               ancestor `.uu-scope` the latter resolves to the library's blue
               primary, so the same heading rendered two colours. */}
-          <h1 className="text-page-title font-bold text-foreground">{title}</h1>
+          <h1 className="text-page-title font-bold text-foreground [overflow-wrap:anywhere]">
+            {title}
+          </h1>
           {subtitle ? (
-            <p className="mt-1 text-body text-tertiary">{subtitle}</p>
+            <p className="mt-1 max-w-[65ch] text-body text-tertiary [overflow-wrap:anywhere]">
+              {subtitle}
+            </p>
           ) : null}
         </div>
         {actions ? (
-          <div className="flex flex-wrap items-center justify-start gap-2 [&_a]:min-h-10 [&_button]:min-h-10 sm:justify-end md:[&_a]:min-h-9 md:[&_button]:min-h-9">
+          <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 [&_a]:min-h-10 [&_button]:min-h-10 sm:shrink-0 sm:justify-end md:[&_a]:min-h-9 md:[&_button]:min-h-9">
             {actions}
           </div>
         ) : null}

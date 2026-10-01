@@ -10,7 +10,12 @@ import { Pagination } from "@/components/application/pagination/pagination-base"
 import { Button } from "@/components/base/buttons/button";
 import { Select as UntitledSelect } from "@/components/base/select/select";
 import type { SelectItemType } from "@/components/base/select/select-shared";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  TriangleAlert,
+} from "lucide-react";
 import { cx } from "@/utils/cx";
 import { EmptyState } from "./page-shell";
 
@@ -95,7 +100,7 @@ export const ListTable = <RecordType extends { id: string | number }>({
   skeletonRows = 4,
   pagination,
 }: ListTableProps<RecordType>) => {
-  const { data, isPending } = useListContext<RecordType>();
+  const { data, isPending, error, refetch } = useListContext<RecordType>();
   const records = data ?? [];
   const actionsCellClassName = classNames?.actionsCell;
   // A stable identity matters: React Aria rebuilds its column collection when
@@ -151,6 +156,27 @@ export const ListTable = <RecordType extends { id: string | number }>({
   }
 
   if (records.length === 0) {
+    if (error) {
+      return (
+        <EmptyState
+          role="alert"
+          icon={<TriangleAlert aria-hidden="true" />}
+          title="Chưa tải được danh sách"
+          description="Hãy kiểm tra kết nối và thử lại."
+          action={
+            <Button
+              color="secondary"
+              size="md"
+              iconLeading={RefreshCw}
+              onClick={() => void refetch()}
+            >
+              Thử lại
+            </Button>
+          }
+          className={className}
+        />
+      );
+    }
     return (
       <EmptyState
         icon={empty.icon}
@@ -246,6 +272,7 @@ export const ListPagination = ({
   className?: string;
 }) => {
   const translate = useTranslate();
+  const { data } = useListContext();
   const {
     hasNextPage,
     hasPreviousPage,
@@ -256,14 +283,15 @@ export const ListPagination = ({
     total,
   } = useListPaginationContext();
 
-  const knownTotal = total ?? 0;
+  const knownTotal = total ?? -1;
   const resolvedTotal = knownTotal === -1 ? page * perPage : knownTotal;
-  const hasResults = resolvedTotal > 0;
+  const hasResults =
+    knownTotal === -1 ? Boolean(data?.length) : resolvedTotal > 0;
   const pageStart = hasResults ? (page - 1) * perPage + 1 : 0;
   const pageEnd = hasResults
-    ? knownTotal === -1 || hasNextPage
-      ? page * perPage
-      : resolvedTotal
+    ? knownTotal === -1
+      ? (page - 1) * perPage + (data?.length ?? perPage)
+      : Math.min(page * perPage, resolvedTotal)
     : 0;
   const pageCount =
     knownTotal === -1
@@ -283,7 +311,7 @@ export const ListPagination = ({
   return (
     <div
       className={cx(
-        "uu-scope flex flex-wrap items-center justify-end gap-3 border-t border-secondary px-3 py-2.5",
+        "uu-scope flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-secondary px-3 py-2.5 sm:justify-end",
         className,
       )}
     >
@@ -311,7 +339,9 @@ export const ListPagination = ({
 
       <span className="text-[length:var(--fs-helper)] tabular-nums text-tertiary">
         {hasResults
-          ? `${pageStart}-${pageEnd} / ${resolvedTotal}`
+          ? knownTotal === -1
+            ? `${pageStart}-${pageEnd}`
+            : `${pageStart}-${pageEnd} / ${resolvedTotal}`
           : translate("ra.navigation.page_range_empty", {
               _: "Không có kết quả",
             })}
@@ -321,7 +351,7 @@ export const ListPagination = ({
         page={page}
         total={pageCount}
         onPageChange={setPage}
-        className="flex items-center gap-0.5"
+        className="flex min-w-0 flex-wrap items-center gap-0.5"
       >
         <Pagination.PrevTrigger ariaLabel={previousLabel} asChild>
           <Button
@@ -332,9 +362,16 @@ export const ListPagination = ({
           />
         </Pagination.PrevTrigger>
 
+        <span
+          className="px-2 text-helper tabular-nums text-tertiary sm:hidden"
+          aria-live="polite"
+        >
+          {knownTotal === -1 ? `Trang ${page}` : `Trang ${page} / ${pageCount}`}
+        </span>
+
         <Pagination.Context>
           {({ pages }) => (
-            <>
+            <div className="hidden items-center gap-0.5 sm:flex">
               {pages.map((item) =>
                 item.type === "page" ? (
                   <Pagination.Item
@@ -366,7 +403,7 @@ export const ListPagination = ({
                   />
                 ),
               )}
-            </>
+            </div>
           )}
         </Pagination.Context>
 

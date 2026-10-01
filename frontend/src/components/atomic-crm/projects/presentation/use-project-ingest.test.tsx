@@ -14,7 +14,11 @@ vi.mock("../project-knowledge-service", () => ({
   getProjectKnowledgeCategories: mocks.catalog,
 }));
 
-import { useProjectIngest, type IngestWrite } from "./use-project-ingest";
+import {
+  useProjectIngest,
+  type IngestWrite,
+  type IngestResult,
+} from "./use-project-ingest";
 const writes: IngestWrite[] = [
   { key: "jobs", filename: "jobs.md", content: "grounded jobs" },
   {
@@ -62,7 +66,7 @@ describe("useProjectIngest durable source upload", () => {
       .mockResolvedValueOnce(training("PROCESSING", ["jobs"], "compensation"))
       .mockResolvedValueOnce(training("COMPLETED", ["jobs", "compensation"]));
     const hook = await renderHook(() => useProjectIngest());
-    let outcome!: Promise<boolean>;
+    let outcome!: Promise<IngestResult>;
     await hook.act(async () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
@@ -79,7 +83,7 @@ describe("useProjectIngest durable source upload", () => {
       ],
     });
     await tick(hook);
-    expect(await outcome).toBe(true);
+    expect(await outcome).toEqual({ ok: true, requiresCutover: false });
     expect(hook.result.current.state).toEqual({
       phase: "done",
       activated: ["jobs", "compensation"],
@@ -90,29 +94,66 @@ describe("useProjectIngest durable source upload", () => {
   it("does not claim completion when a worker receipt omits a planned category", async () => {
     mocks.document.mockResolvedValue(training("COMPLETED", ["jobs"]));
     const hook = await renderHook(() => useProjectIngest());
-    let outcome!: Promise<boolean>;
+    let outcome!: Promise<IngestResult>;
     await hook.act(async () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
     await tick(hook);
-    expect(await outcome).toBe(false);
+    expect(await outcome).toEqual({ ok: false });
     expect(hook.result.current.state).toMatchObject({
       phase: "failed",
       failed: "compensation",
     });
   });
 
+  it("keeps completed shadow preparation distinct from live knowledge", async () => {
+    const prepared = training("COMPLETED", ["jobs", "compensation"]);
+    mocks.document.mockResolvedValue({
+      ...prepared,
+      project_training: {
+        ...prepared.project_training,
+        requires_cutover: true,
+      },
+    });
+    const hook = await renderHook(() => useProjectIngest());
+    let outcome!: Promise<IngestResult>;
+    await hook.act(async () => {
+      outcome = hook.result.current.ingest("project-1", writes, source);
+    });
+    await tick(hook);
+    expect(await outcome).toEqual({ ok: true, requiresCutover: true });
+    expect(hook.result.current.state).toEqual({
+      phase: "done",
+      activated: ["jobs", "compensation"],
+      requiresCutover: true,
+    });
+    expect(mocks.replace).not.toHaveBeenCalled();
+
+    // Older receipts omit the additive flag. A later live completion must not
+    // inherit the earlier source's pending authority transition.
+    mocks.document.mockResolvedValue(prepared);
+    await hook.act(async () => {
+      outcome = hook.result.current.ingest("project-1", writes, source);
+    });
+    await tick(hook);
+    expect(await outcome).toEqual({ ok: true, requiresCutover: false });
+    expect(hook.result.current.state).toEqual({
+      phase: "done",
+      activated: ["jobs", "compensation"],
+    });
+  });
+
   it("settles canceled polling without discarding the durable upload", async () => {
     mocks.document.mockResolvedValue(training("PROCESSING"));
     const hook = await renderHook(() => useProjectIngest());
-    let outcome!: Promise<boolean>;
+    let outcome!: Promise<IngestResult>;
     await hook.act(async () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
     await hook.act(async () => {
       hook.result.current.cancel();
     });
-    expect(await outcome).toBe(false);
+    expect(await outcome).toEqual({ ok: false });
     await tick(hook, 6000);
     expect(mocks.upload).toHaveBeenCalledTimes(1);
     expect(mocks.document).not.toHaveBeenCalled();
@@ -123,12 +164,12 @@ describe("useProjectIngest durable source upload", () => {
       .mockRejectedValueOnce(new Error("connection interrupted"))
       .mockResolvedValueOnce(training("COMPLETED", ["jobs", "compensation"]));
     const hook = await renderHook(() => useProjectIngest());
-    let outcome!: Promise<boolean>;
+    let outcome!: Promise<IngestResult>;
     await hook.act(async () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
     await tick(hook, 4000);
-    expect(await outcome).toBe(true);
+    expect(await outcome).toEqual({ ok: true, requiresCutover: false });
     expect(mocks.upload).toHaveBeenCalledTimes(1);
   });
 
@@ -143,12 +184,12 @@ describe("useProjectIngest durable source upload", () => {
       },
     });
     const hook = await renderHook(() => useProjectIngest());
-    let outcome!: Promise<boolean>;
+    let outcome!: Promise<IngestResult>;
     await hook.act(async () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
     await tick(hook);
-    expect(await outcome).toBe(false);
+    expect(await outcome).toEqual({ ok: false });
     expect(hook.result.current.state).toMatchObject({
       phase: "failed",
       failed: "compensation",
@@ -160,12 +201,12 @@ describe("useProjectIngest durable source upload", () => {
   it("keeps the durable source after the observation budget expires", async () => {
     mocks.document.mockResolvedValue(training("PROCESSING"));
     const hook = await renderHook(() => useProjectIngest());
-    let outcome!: Promise<boolean>;
+    let outcome!: Promise<IngestResult>;
     await hook.act(async () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
     await tick(hook, 602000);
-    expect(await outcome).toBe(false);
+    expect(await outcome).toEqual({ ok: false });
     expect(mocks.upload).toHaveBeenCalledTimes(1);
     expect(hook.result.current.state).toMatchObject({
       phase: "failed",
@@ -175,11 +216,11 @@ describe("useProjectIngest durable source upload", () => {
 
   it("rejects an empty knowledge plan before upload", async () => {
     const hook = await renderHook(() => useProjectIngest());
-    let outcome = true;
+    let outcome: IngestResult = { ok: true, requiresCutover: false };
     await hook.act(async () => {
       outcome = await hook.result.current.ingest("project-1", [], source);
     });
-    expect(outcome).toBe(false);
+    expect(outcome).toEqual({ ok: false });
     expect(mocks.upload).not.toHaveBeenCalled();
     expect(hook.result.current.state).toMatchObject({ phase: "failed" });
   });
@@ -200,28 +241,28 @@ describe("useProjectIngest manual revision confirmation", () => {
         ],
       });
     const hook = await renderHook(() => useProjectIngest());
-    let outcome!: Promise<boolean>;
+    let outcome!: Promise<IngestResult>;
     await hook.act(async () => {
       outcome = hook.result.current.ingest("project-1", writes.slice(0, 1));
     });
     await tick(hook, 4000);
     expect(hook.result.current.state.phase).toBe("running");
     await tick(hook);
-    expect(await outcome).toBe(true);
+    expect(await outcome).toEqual({ ok: true, requiresCutover: false });
     expect(mocks.upload).not.toHaveBeenCalled();
   });
 
   it("resolves cancellation of a manual poll without a later state update", async () => {
     mocks.catalog.mockResolvedValue({ data: [] });
     const hook = await renderHook(() => useProjectIngest());
-    let outcome!: Promise<boolean>;
+    let outcome!: Promise<IngestResult>;
     await hook.act(async () => {
       outcome = hook.result.current.ingest("project-1", writes.slice(0, 1));
     });
     await hook.act(async () => {
       hook.result.current.cancel();
     });
-    expect(await outcome).toBe(false);
+    expect(await outcome).toEqual({ ok: false });
     await tick(hook, 6000);
     expect(mocks.catalog).not.toHaveBeenCalled();
   });

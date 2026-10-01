@@ -31,7 +31,7 @@ describe("ExternalSourceLinkForm", () => {
     const screen = await render(
       <ExternalSourceLinkForm projectId="project-1" />,
     );
-    await screen.getByRole("button", { name: "Gsheet Link" }).click();
+    await screen.getByRole("button", { name: "Liên kết Google Sheet" }).click();
     const urlInput = screen.getByLabelText("Link Google Sheet");
     await urlInput.fill("https://evil.example/sheet.csv");
 
@@ -40,11 +40,47 @@ describe("ExternalSourceLinkForm", () => {
       .toBeVisible();
   });
 
+  it("drops a completed source creation after the editor switches projects", async () => {
+    let finish!: (value: { id: string }) => void;
+    mocks.createSinglePageExternalSource.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const onCreated = vi.fn();
+    const screen = await render(
+      <ExternalSourceLinkForm
+        projectId="project-1"
+        variant="single-page"
+        onCreated={onCreated}
+      />,
+    );
+    await screen.getByRole("button", { name: "Liên kết Google Sheet" }).click();
+    await screen
+      .getByLabelText("Link Google Sheet")
+      .fill("https://docs.google.com/spreadsheets/d/demo/edit#gid=0");
+    await screen.getByRole("button", { name: "Nhập một lần" }).click();
+    await screen.rerender(
+      <ExternalSourceLinkForm
+        projectId="project-2"
+        variant="single-page"
+        onCreated={onCreated}
+      />,
+    );
+    finish({ id: "old-source" });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await expect
+      .element(screen.getByRole("button", { name: "Liên kết Google Sheet" }))
+      .toBeEnabled();
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(mocks.notify).not.toHaveBeenCalled();
+  });
+
   it("submits a valid URL with the selected category", async () => {
     const screen = await render(
       <ExternalSourceLinkForm projectId="project-1" defaultCategory="faq" />,
     );
-    await screen.getByRole("button", { name: "Gsheet Link" }).click();
+    await screen.getByRole("button", { name: "Liên kết Google Sheet" }).click();
     await screen
       .getByLabelText("Link Google Sheet")
       .fill(
@@ -72,7 +108,7 @@ describe("ExternalSourceLinkForm", () => {
     const screen = await render(
       <ExternalSourceLinkForm projectId="project-1" defaultCategory="faq" />,
     );
-    await screen.getByRole("button", { name: "Gsheet Link" }).click();
+    await screen.getByRole("button", { name: "Liên kết Google Sheet" }).click();
     await screen
       .getByLabelText("Link Google Sheet")
       .fill("https://docs.google.com/spreadsheets/d/demo/edit");

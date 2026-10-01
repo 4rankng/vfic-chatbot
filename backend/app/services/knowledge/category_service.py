@@ -25,6 +25,7 @@ from app.schemas.project_knowledge import CategoryCatalogItemOut, CategorySource
 from app.services.audit_service import record_audit
 from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
 from app.services.knowledge.category_authority import (
+    category_projection_allowed,
     cutover_category_authority,
     locked_category,
     locked_project,
@@ -32,13 +33,17 @@ from app.services.knowledge.category_authority import (
     require_rag_project,
     rollback_category_authority,
 )
-from app.services.knowledge.category_contracts import (
+from app.project_knowledge.domain.category_catalog import (
     CATEGORY_DEFINITIONS,
+    get_category_definition,
+)
+from app.services.knowledge.category_contracts import (
     canonical_category_json,
     category_checksum,
-    get_category_definition,
-    validate_active_job_references,
     validate_category_payload,
+)
+from app.project_knowledge.domain.legacy_job_references import (
+    strip_legacy_job_reference_source,
 )
 from app.services.knowledge.category_markdown import (
     build_source_markdown,
@@ -227,12 +232,13 @@ class KnowledgeCategoryService:
         schedule: bool = True,
     ) -> tuple[KnowledgeCategoryRevision, str]:
         await require_category_project(self.db, project_id)
+        await locked_project(self.db, project_id)
         # A project being migrated has no category rows yet; seeding them here
         # keeps the stage itself and the later cutover readiness check working.
         await _ensure_category_rows(self.db, project_id)
         try:
             document = parse_category_markdown(category_key, source_markdown)
-            await validate_active_job_references(self.db, project_id, document)
+            source_markdown = strip_legacy_job_reference_source(source_markdown)
         except ValueError as exc:
             raise ConflictError("Category content failed validation") from exc
         category = await locked_category(self.db, project_id, category_key)
@@ -241,21 +247,20 @@ class KnowledgeCategoryService:
             select(KnowledgeCategoryRevision)
             .where(
                 KnowledgeCategoryRevision.category_id == category.id,
-                KnowledgeCategoryRevision.source_filename == filename,
-                KnowledgeCategoryRevision.source_markdown == source_markdown,
-                KnowledgeCategoryRevision.status.in_(
-                    (
-                        KnowledgeCategoryRevisionStatus.STAGED,
-                        KnowledgeCategoryRevisionStatus.PROCESSING,
-                        KnowledgeCategoryRevisionStatus.ACTIVE,
-                        KnowledgeCategoryRevisionStatus.FAILED,
-                    )
-                ),
             )
             .order_by(KnowledgeCategoryRevision.revision_no.desc())
             .limit(1)
         )
-        if existing is not None:
+        if existing is not None and (
+            existing.source_filename == filename
+            and existing.source_markdown == source_markdown
+            and existing.status in {
+                KnowledgeCategoryRevisionStatus.STAGED,
+                KnowledgeCategoryRevisionStatus.PROCESSING,
+                KnowledgeCategoryRevisionStatus.ACTIVE,
+                KnowledgeCategoryRevisionStatus.FAILED,
+            }
+        ):
             revision = existing
             await self.db.commit()
         else:
@@ -289,6 +294,12 @@ class KnowledgeCategoryService:
 
         if revision.status is KnowledgeCategoryRevisionStatus.ACTIVE:
             return revision, f"category-revision-{revision.id}"
+        if (revision.quality_result or {}).get("project_training_document_id"):
+            # A source-owned revision must publish with its whole batch.
+            raise ConflictError(
+                "Danh mục này thuộc tệp thông tin dự án đang xử lý. "
+                "Vui lòng thử xử lý lại tệp đã lưu hoặc tải nội dung danh mục mới."
+            )
         if (
             revision.status is KnowledgeCategoryRevisionStatus.FAILED
             and revision.attempt_count >= MAX_CATEGORY_PROCESSING_ATTEMPTS
@@ -353,7 +364,7 @@ class KnowledgeCategoryService:
             revision_id=revision.id,
             revision_no=revision.revision_no,
             filename=revision.source_filename,
-            content=revision.source_markdown,
+            content=strip_legacy_job_reference_source(revision.source_markdown),
             checksum=revision.content_sha256,
             updated_at=revision.activated_at or revision.created_at,
         )
@@ -376,6 +387,8 @@ class KnowledgeCategoryService:
         if revision.status is KnowledgeCategoryRevisionStatus.ACTIVE:
             await self._repair_caches()
             return
+        if (revision.quality_result or {}).get("project_training_document_id"):
+            raise ConflictError("Danh mục này chỉ được công bố cùng tệp thông tin dự án đã lưu.")
         category = await self.db.get(KnowledgeCategory, revision.category_id)
         if category is None:
             raise NotFoundError("Category not found")
@@ -419,7 +432,11 @@ class KnowledgeCategoryService:
             if revision.attempt_count >= MAX_CATEGORY_PROCESSING_ATTEMPTS and revision.status in {
                 KnowledgeCategoryRevisionStatus.PROCESSING,
                 KnowledgeCategoryRevisionStatus.FAILED,
-            }:
+            } and not (
+                revision.status is KnowledgeCategoryRevisionStatus.PROCESSING
+                and revision.lease_expires_at is not None
+                and revision.lease_expires_at > datetime.now(UTC)
+            ):
                 revision.status = KnowledgeCategoryRevisionStatus.FAILED
                 revision.failure_code = CATEGORY_RETRY_EXHAUSTED
                 revision.error_message = "Category processing retry limit reached"
@@ -464,7 +481,6 @@ class KnowledgeCategoryService:
                 category.project_id,
                 KnowledgeCategoryKey(category.category_key),
             )
-            await validate_active_job_references(self.db, category.project_id, document)
             revision = await self.db.get(KnowledgeCategoryRevision, revision_id)
             if revision is None:
                 raise NotFoundError("Category revision not found")
@@ -518,13 +534,10 @@ class KnowledgeCategoryService:
             )
             if inserted_count != len(units):
                 raise RuntimeError("category chunk insertion count mismatch")
-            # Legacy projects with pre-built cards stay deferred until
-            # cutover_category_authority replaces the card wholesale; a project
-            # with no card (every brief-created project) has nothing to protect,
-            # so its card is category-owned and safe to project immediately.
-            projection_applied = project.category_authority_started or not (
-                project.index_card or {}
-            )
+            # New projects declare category authority at creation. Legacy
+            # projects and published direct pages remain unchanged until
+            # explicit cutover, including when their discovery card is empty.
+            projection_applied = await category_projection_allowed(self.db, project)
             if projection_applied:
                 await self._projection_writer.apply_for_revision(
                     category.project_id, revision, document
@@ -548,7 +561,7 @@ class KnowledgeCategoryService:
                 "projection": (
                     "complete" if projection_applied else "deferred_until_cutover"
                 ),
-                "reference_check": "passed",
+                "schema_check": "passed",
                 "normalization_changed": (
                     canonical_category_json(document) != revision.source_markdown
                 ),
@@ -640,7 +653,7 @@ class KnowledgeCategoryService:
         )
         if old_revision is not None:
             old_revision.status = KnowledgeCategoryRevisionStatus.ARCHIVED
-        if project.category_authority_started:
+        if await category_projection_allowed(self.db, project):
             await self._projection_writer.clear(project_id, category_key)
         category.active_revision_id = None
         category.updated_at = func.now()

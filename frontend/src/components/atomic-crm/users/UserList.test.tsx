@@ -93,6 +93,15 @@ afterEach(async () => {
 });
 
 describe("UserList", () => {
+  it("reports the total directory count beyond the visible page", async () => {
+    listState.total = 57;
+    const screen = await render(mountList());
+    await expect
+      .element(screen.getByText("57 tài khoản", { exact: true }))
+      .toBeVisible();
+    expect(screen.container.querySelectorAll("tbody tr")).toHaveLength(1);
+  });
+
   it("renders the directory as one labelled table with a count line", async () => {
     listState.data = [...accounts, secondAccount];
     listState.total = 2;

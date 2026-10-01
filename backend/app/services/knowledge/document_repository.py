@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import text
+from typing import cast
+
+from sqlalchemy import CursorResult, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -22,7 +24,7 @@ class KnowledgeDocumentRepo:
             {"ids": current_drive_ids},
         )
         await self.db.commit()
-        return res.rowcount or 0
+        return cast(CursorResult, res).rowcount or 0
 
 
 def mark_document_failed_sync(database_url: str, doc_id: str, error: str, *, processing_token=None) -> None:

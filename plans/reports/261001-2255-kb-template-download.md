@@ -1,0 +1,13 @@
+# KB template download and label
+
+The original main client called apiJson for a route returning Markdown as PlainTextResponse, so response.json() failed. The cumulative patch already contains the authenticated raw-text reader, text-content checks, attachment filename handling and request cancellation. This request verifies that repair, renames the button exactly Tải mẫu KB, and corrects the endpoint OpenAPI declaration to text/plain instead of JSON. Backend template bytes and auth requirements are unchanged.
+
+Added route regressions for OpenAPI and actual admin/recruiter HTTP attachment responses. Expanded browser regression to download the file at 390/900/1440px through mouse, Enter and mobile touch, checking the HTTP text response, filename, successful file bytes, all 12 categories, absence of retired structural fields and completion state. Separate empty-KB export and saved-source export checks remain covered.
+
+Final evidence: 60 focused frontend tests, 896 full frontend tests (118 files), 39 backend template/export/architecture checks, and 6 real desktop/mobile E2E cases passed. Frontend app+Node TypeScript, affected backend Pyright (0 errors, 0 warnings), scoped ESLint and Ruff, production build, built-browser smoke, doc routing and whitespace checks passed. Independent read-only review found no outstanding issue. Logs: /tmp/vfic-kb-template-download-{tests,frontend-all,backend-tests,e2e,types,node-types,backend-types,lint,backend-lint,build,smoke}.log.
+
+Production/browser state was not assumed: no project tab was available in the connected browser, and no production URL was supplied. Local E2E uses a real FastAPI server, owned loopback PostgreSQL/Redis, actual authentication and file downloads. Only the task-owned containers were removed; existing containers were preserved. WebKit/Firefox and live production were not verified.
+
+Artifacts: plans/exports/2026-10-01-kb-template-download.patch is cumulative against original main 35d970689cbb092e4f9100f1e60305c9bd7505ed; the incremental patch applies after 2026-10-01-remove-category-template.patch (SHA256 a79cc7cfe44e1630c9230340301020557910da9228208397006b511091b6e9f0). Both paths are applied in fresh trees, compared byte-for-byte and by executable mode, and reverse-checked; manifests and README carry final checksums/results. Previous artifact bytes, HEAD, real Git index and worktree status remain unchanged.
+
+Scope: frontend label/test/E2E, backend route metadata/test, API/workflow docs and these task records. Previous authorized UI/recruitment/KB work remains present. No branch, commit, push, PR, merge, deployment, migration or dependency change.

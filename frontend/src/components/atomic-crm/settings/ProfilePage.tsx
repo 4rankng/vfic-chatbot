@@ -27,12 +27,15 @@ import { useFormContext, useFormState } from "react-hook-form";
 import { Button } from "@/components/base/buttons/button";
 import { InputBase, TextField } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
+import { HintText } from "@/components/base/input/hint-text";
 import { Select } from "@/components/base/select/select";
 import type { SelectItemType } from "@/components/base/select/select-shared";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { InboxIcons } from "../conversations/InboxIcons";
 import { apiJson, ApiError } from "@/lib/apiClient";
 import type { Profile } from "../types";
+import { EmptyState } from "../kit";
+import { LoadingState } from "../misc/LoadingState";
 import "../conversations/inbox.css";
 
 type ProfileFieldSource = "full_name" | "email";
@@ -45,9 +48,18 @@ export const ProfilePage = () => {
   const [isEditMode, setEditMode] = useState(false);
   const { identity, refetch: refetchIdentity } = useGetIdentity();
   const profileId = identity?.id != null ? String(identity.id) : undefined;
-  const { data, refetch: refetchUser } = useGetOne<Profile>("users", {
-    id: profileId,
-  });
+  const {
+    data,
+    refetch: refetchUser,
+    isPending: profilePending,
+    isError: profileError,
+  } = useGetOne<Profile>(
+    "users",
+    { id: profileId },
+    {
+      enabled: Boolean(profileId),
+    },
+  );
   const translate = useTranslate();
   const notify = useNotify();
   const isMobile = useIsMobile();
@@ -75,7 +87,7 @@ export const ProfilePage = () => {
     },
   });
 
-  if (!identity) return null;
+  if (!identity) return <LoadingState label="Đang tải hồ sơ cá nhân…" />;
 
   const handleOnSubmit = async (values: {
     full_name?: string;
@@ -103,13 +115,28 @@ export const ProfilePage = () => {
           </div>
         </header>
 
-        <Form onSubmit={handleOnSubmit} record={data}>
-          <ProfileForm
-            isEditMode={isEditMode}
-            isSaving={isPending}
-            setEditMode={setEditMode}
+        {profilePending ? (
+          <LoadingState label="Đang tải hồ sơ cá nhân…" />
+        ) : profileError || !data ? (
+          <EmptyState
+            icon={<CircleX className="size-6" aria-hidden="true" />}
+            title="Chưa tải được hồ sơ cá nhân."
+            description="Vui lòng thử lại để xem và chỉnh sửa thông tin tài khoản."
+            action={
+              <Button color="secondary" onClick={() => void refetchUser()}>
+                Thử lại
+              </Button>
+            }
           />
-        </Form>
+        ) : (
+          <Form onSubmit={handleOnSubmit} record={data} noValidate>
+            <ProfileForm
+              isEditMode={isEditMode}
+              isSaving={isPending}
+              setEditMode={setEditMode}
+            />
+          </Form>
+        )}
       </div>
     </div>
   );
@@ -171,6 +198,7 @@ const ProfileForm = ({
                   color="tertiary"
                   className="uu-scope profile-action-button"
                   iconLeading={<CircleX />}
+                  isDisabled={isSaving}
                   onClick={() => {
                     reset();
                     setEditMode(false);
@@ -207,8 +235,16 @@ const ProfileForm = ({
         </header>
 
         <div className="profile-field-grid">
-          <TextRender source="full_name" isEditMode={isEditMode} />
-          <TextRender source="email" isEditMode={isEditMode} />
+          <TextRender
+            source="full_name"
+            isEditMode={isEditMode}
+            disabled={isSaving}
+          />
+          <TextRender
+            source="email"
+            isEditMode={isEditMode}
+            disabled={isSaving}
+          />
           <LanguageSelector />
         </div>
       </section>
@@ -275,16 +311,24 @@ const TextRender = ({
   source,
   isEditMode,
   className,
+  disabled,
 }: {
   source: ProfileFieldSource;
   isEditMode: boolean;
   className?: string;
+  disabled?: boolean;
 }) => {
   const translate = useTranslate();
   const record = useRecordContext<Profile>();
   const label = `resources.users.fields.${source}`;
   if (isEditMode) {
-    return <ProfileTextField source={source} className={className} />;
+    return (
+      <ProfileTextField
+        source={source}
+        className={className}
+        disabled={disabled}
+      />
+    );
   }
   return (
     <div className={`profile-field ${className ?? ""}`}>
@@ -316,9 +360,11 @@ const TextRender = ({
 const ProfileTextField = ({
   source,
   className,
+  disabled,
 }: {
   source: ProfileFieldSource;
   className?: string;
+  disabled?: boolean;
 }) => {
   const translate = useTranslate();
   const label = `resources.users.fields.${source}`;
@@ -340,6 +386,7 @@ const ProfileTextField = ({
       validationBehavior="aria"
       isRequired={isRequired}
       isInvalid={Boolean(fieldState.error)}
+      isDisabled={disabled}
     >
       <Label className="profile-field-label">
         {translate(label, { _: source })}
@@ -349,12 +396,13 @@ const ProfileTextField = ({
         type={type}
         autoComplete={source === "email" ? "email" : "name"}
         isInvalid={Boolean(fieldState.error)}
+        isDisabled={disabled}
         wrapperClassName="profile-input"
       />
       {fieldState.error?.message ? (
-        <p role="alert" className="text-helper text-[var(--workspace-danger)]">
+        <HintText isInvalid role="alert">
           <ValidationError error={fieldState.error.message} />
-        </p>
+        </HintText>
       ) : null}
     </TextField>
   );

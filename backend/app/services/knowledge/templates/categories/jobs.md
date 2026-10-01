@@ -18,8 +18,6 @@ title: "[Tên công việc? Ví dụ: Công nhân sản xuất]"
 aliases:
 - "[Tên gọi khác của công việc? Mỗi dòng một tên.]"
 location: "[Nơi làm việc? Ví dụ: KCN VSIP, Thủy Nguyên, TP. Hải Phòng]"
-vacancies: [Cần tuyển bao nhiêu người?]
-employment_type: "[Loại hình? permanent | temporary | contract | internship]"
 summary: "[Mô tả ngắn: làm gì, môi trường thế nào, có đào tạo không?]"
 keywords:
 - "[Từ khóa ứng viên hay tìm? Ví dụ: điện tử. Mỗi dòng một từ khóa.]"

@@ -184,8 +184,12 @@ class PasswordResetService:
             await self.db.commit()
             raise PasswordResetError("Mã OTP không hợp lệ hoặc đã hết hạn")
 
-        user = await self.db.get(User, reset.user_id, with_for_update=True)
-        if user is None or user.disabled:
+        user = await self.db.get(
+            User, reset.user_id, populate_existing=True, with_for_update=True,
+        )
+        # The mailbox that received the challenge must still own this account;
+        # an email change retires even a correctly supplied old-mailbox OTP.
+        if user is None or user.disabled or _normalize_email(user.email) != normalized:
             reset.consumed_at = now
             await self.db.commit()
             raise PasswordResetError("Mã OTP không hợp lệ hoặc đã hết hạn")

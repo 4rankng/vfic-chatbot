@@ -208,6 +208,13 @@ def employee_support_route(*, reason: DecisionTraceSummaryCode, confidence: floa
 
 # Vietnamese prompt hint per intent for the tool-calling agent (consumed by
 # runner.build_agent_user_text via routing_instruction).
+def requires_project_catalog(route: TurnRoute, decisions: TurnDecisions) -> bool:
+    """Whether recruitment routing requires a complete catalog lookup."""
+    return route.reason == "vacancy_listing" or (
+        route.intent == "general" and decisions.recent_vacancy
+    )
+
+
 def routing_instruction(route: TurnRoute) -> str:
     if route.intent == "small_talk":
         return "Ý định: trò chuyện xã giao. Trả lời ngắn gọn, thân thiện; không cần tra cứu nếu không có câu hỏi tuyển dụng."
@@ -217,14 +224,18 @@ def routing_instruction(route: TurnRoute) -> str:
                 "Ý định: ứng viên hỏi về việc làm. Bắt buộc gọi list_active_projects "
                 "(truyền các tiêu chí ứng viên nêu: job_scope/location/salary_min_vnd/company/"
                 "sort_by; chưa nêu thì gọi không bộ lọc). Trả lời theo hợp đồng trong safe_reply: "
-                "nếu thiếu mong muốn (phạm vi công việc/khu vực/mức lương) và không phải yêu cầu "
-                "xem tất cả → chỉ hỏi tiêu chí, chưa giới thiệu; khi đã có đủ hoặc xem tất cả → "
-                "giới thiệu các dự án phù hợp theo fit_score, mỗi dự án một khối."
+                "nếu chưa rõ mong muốn và chưa yêu cầu xem lựa chọn → hỏi một câu ngắn; "
+                "không bắt phải khai đủ công việc/khu vực/mức lương mới tư vấn. Khi đã có "
+                "bất kỳ tiêu chí hoặc muốn xem lựa chọn → giới thiệu dự án theo fit_score, "
+                "mỗi dự án một khối. Với yêu cầu tất cả/toàn bộ, phải nêu đủ mọi dự án "
+                "trong projects của kết quả tool, không tự giới hạn số dự án."
             )
         return (
             "Ý định: gợi ý việc phù hợp. Ưu tiên gọi list_active_projects với các tiêu chí "
-            "ứng viên nêu (job_scope/location/salary_min_vnd/company/sort_by); chưa nêu đủ "
-            "mong muốn (phạm vi công việc/khu vực/mức lương) thì hỏi ngắn gọn trước. Sau đó "
+            "ứng viên nêu (job_scope/location/salary_min_vnd/company/sort_by); nếu chưa rõ "
+            "mong muốn và chưa muốn xem lựa chọn thì hỏi một câu ngắn trước. Không bắt "
+            "khai đủ các tiêu chí mới giới thiệu. Với yêu cầu tất cả/toàn bộ, nêu đủ từng "
+            "dự án trong kết quả tool của phạm vi hiện tại. Sau đó "
             "gọi get_product_features cho slug dự án đã chọn để nêu lý do cụ thể. "
             "Chỉ gợi ý dự án có trong dữ liệu."
         )

@@ -60,7 +60,7 @@ vi.mock("virtua", () => ({
       style={{ height: "100%", overflowY: "auto", ...style }}
       onScroll={(e) => onScroll?.((e.currentTarget as HTMLElement).scrollTop)}
     >
-      {children}
+      <div>{children}</div>
     </div>
   ),
 }));
@@ -305,6 +305,88 @@ describe("ChatThread — transcript scroll ownership", () => {
       const scroller = screen.container.querySelector(".chat-scroller");
       expect(scroller).not.toBeNull();
     });
+  });
+
+  it("follows committed transcript height changes for an at-bottom reader", async () => {
+    messageStoreState.messages = [msg(1), msg(2)];
+    const screen = await mountThread();
+    const scroller =
+      screen.container.querySelector<HTMLElement>(".chat-scroller")!;
+    const content = scroller.firstElementChild as HTMLElement;
+    content.style.height = "1000px";
+    await vi.waitFor(() => {
+      expect(
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+      ).toBeLessThanOrEqual(1);
+    });
+    content.style.height = "1400px";
+    await vi.waitFor(() => {
+      expect(
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+      ).toBeLessThanOrEqual(1);
+    });
+  });
+
+  it("preserves a history reader's position when the transcript height changes", async () => {
+    messageStoreState.messages = [msg(1), msg(2)];
+    const screen = await mountThread();
+    const scroller =
+      screen.container.querySelector<HTMLElement>(".chat-scroller")!;
+    const content = scroller.firstElementChild as HTMLElement;
+    content.style.height = "1000px";
+    await vi.waitFor(() => {
+      expect(
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+      ).toBeLessThanOrEqual(1);
+    });
+    scroller.scrollTop = 100;
+    scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await expect
+      .element(
+        screen.getByRole("button", { name: "Cuộn đến tin nhắn mới nhất" }),
+      )
+      .toBeVisible();
+    content.style.height = "1400px";
+    for (let frame = 0; frame < 4; frame++) {
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => resolve()),
+      );
+    }
+    expect(scroller.scrollTop).toBe(100);
+  });
+
+  it("coalesces layout writes and cancels the queued scroll on leaving the thread", async () => {
+    const screen = await mountThread();
+    const scroller =
+      screen.container.querySelector<HTMLElement>(".chat-scroller")!;
+    const content = scroller.firstElementChild as HTMLElement;
+    const queuedFrames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 0;
+    const requestFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        const id = ++nextFrame;
+        queuedFrames.set(id, callback);
+        return id;
+      });
+    const cancelFrame = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation((id) => {
+        queuedFrames.delete(id);
+      });
+    try {
+      content.style.height = "1000px";
+      await vi.waitFor(() => expect(queuedFrames.size).toBe(1));
+      content.style.height = "1400px";
+      await Promise.resolve();
+      expect(requestFrame).toHaveBeenCalledTimes(1);
+      await screen.unmount();
+      expect(cancelFrame).toHaveBeenCalledWith(1);
+      expect(queuedFrames.size).toBe(0);
+    } finally {
+      requestFrame.mockRestore();
+      cancelFrame.mockRestore();
+    }
   });
 });
 

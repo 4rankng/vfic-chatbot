@@ -49,7 +49,7 @@ describe("DecisionTraceAction", () => {
       return (
         <>
           <button ref={triggerRef} type="button" onClick={() => setOpen(true)}>
-            Mở Agent Thinking
+            Mở Suy luận chatbot
           </button>
           <DecisionTracePanel
             conversationId="conversation-1"
@@ -67,7 +67,7 @@ describe("DecisionTraceAction", () => {
         <ControlledPanel />
       </QueryClientProvider>,
     );
-    const trigger = screen.getByRole("button", { name: "Mở Agent Thinking" });
+    const trigger = screen.getByRole("button", { name: "Mở Suy luận chatbot" });
 
     expect(mocks.getConversationBotRuns).not.toHaveBeenCalled();
     await trigger.click();
@@ -98,7 +98,7 @@ describe("DecisionTraceAction", () => {
     );
 
     const trigger = screen.getByRole("button", {
-      name: "Agent Thinking",
+      name: "Suy luận chatbot",
     });
     await expect.element(trigger).toBeVisible();
     expect(mocks.getConversationBotRuns).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe("DecisionTraceAction", () => {
       </QueryClientProvider>,
     );
     expect(
-      screen.container.querySelector('[aria-label="Agent Thinking"]'),
+      screen.container.querySelector('[aria-label="Suy luận chatbot"]'),
     ).toBeNull();
   });
 
@@ -188,7 +188,7 @@ describe("DecisionTraceAction", () => {
       </QueryClientProvider>,
     );
 
-    await screen.getByRole("button", { name: "Agent Thinking" }).click();
+    await screen.getByRole("button", { name: "Suy luận chatbot" }).click();
     await expect.element(screen.getByText("Lần chạy #70")).toBeVisible();
     expect(mocks.getBotRunTrace).not.toHaveBeenCalled();
 
@@ -300,7 +300,7 @@ describe("DecisionTraceRenderer", () => {
       )
       .click();
     await expect
-      .element(screen.getByText("Thinking · đã rút gọn"))
+      .element(screen.getByText("Suy luận · đã rút gọn"))
       .toBeVisible();
     expect(
       screen.container.querySelectorAll(".decision-trace-reasoning"),

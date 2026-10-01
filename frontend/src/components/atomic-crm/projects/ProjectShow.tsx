@@ -26,8 +26,8 @@ const ProjectShowContent = () => {
             {project.name}
           </h1>
           <p className="mt-1 text-body text-muted-foreground">
-            Xem danh mục kiến thức, đặc điểm sản phẩm và FAQ mà Agent dùng trong
-            hội thoại tuyển dụng.
+            Xem danh mục kiến thức, đặc điểm sản phẩm và FAQ mà chatbot dùng
+            trong hội thoại tuyển dụng.
           </p>
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">

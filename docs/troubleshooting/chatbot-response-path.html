@@ -130,7 +130,7 @@ flowchart TD
       B4["4  record_inbound&lt;br/&gt;persist msg, bump version, unread++"]:::wh
       B5{"5  run_start_guard&lt;br/&gt;BOT ok / SEMI_AUTO 5min / HUMAN starve"}:::dec
       B6["6  acquire_lock&lt;br/&gt;per-chat mutex, TTL 180s"]:::wh
-      B7["7  typing + enqueue&lt;br/&gt;queue webhook_high, depth under 40"]:::wh
+      B7["7  enqueue&lt;br/&gt;queue webhook_high, depth under 40"]:::wh
       B1 --> B2 --> B3 --> B4 --> B5
       B5 -- ok --> B6
       B6 -- won lock --> B7
@@ -144,8 +144,8 @@ flowchart TD
 
     subgraph RQ["RQ BOUNDARY  -  separate process, one event loop"]
       direction LR
-      Q1["8  run_chat_turn_job&lt;br/&gt;deadline = recv_epoch + sla 10s  ADVISORY&lt;br/&gt;job_timeout 60s, lock_ttl 180s"]:::rq
-      Q2["9  load conv + last 16 msgs&lt;br/&gt;record_bot_pending  Dang soan tra loi...&lt;br/&gt;start typing heartbeat"]:::rq
+      Q1["8  run_chat_turn_job&lt;br/&gt;tracked native status bridge&lt;br/&gt;deadline = recv_epoch + sla 10s  ADVISORY&lt;br/&gt;job_timeout 60s, lock_ttl 180s"]:::rq
+      Q2["9  load conv + last 16 msgs&lt;br/&gt;record_bot_pending  Dang soan tra loi...&lt;br/&gt;native typing heartbeat every 3s"]:::rq
       Q1 --> Q2
     end
 
@@ -248,9 +248,9 @@ flowchart TD
         <tr><td class="stage">4</td><td class="stage">record_inbound</td><td>Persist WORKER message, bump <span class="mono">version</span>, <span class="mono">unread++</span>, opt-out scan, realtime event.</td><td>Receipts must NOT bump version (would suppress in-flight reply).</td><td><span class="mono">messages</span> row with role WORKER + bumped <span class="mono">conversations.version</span></td></tr>
         <tr><td class="stage">5</td><td class="stage">run_start_guard</td><td>BOT → ok; SEMI_AUTO → ok after 5min human idle; HUMAN/CLOSED → starve.</td><td class="bad">Bot silent but msg recorded = starved. Check <span class="mono">conversations.bot_mode</span>.</td><td>No job enqueued; conv mode in DB</td></tr>
         <tr><td class="stage">6</td><td class="stage">acquire_lock</td><td>Conditional <span class="mono">UPDATE bot_locked_until WHERE free</span>. rowcount=1 wins.</td><td class="bad">Already locked → <span class="mono">status: locked</span>. Stale lock after crash blocks new turns until TTL.</td><td><span class="grep">status: locked</span> / <span class="mono">bot_locked_until</span> column</td></tr>
-        <tr><td class="stage">7</td><td class="stage">typing + enqueue</td><td>Fire-and-forget typing (Bot only); enqueue to <span class="mono">webhook_high</span>.</td><td class="bad">Enqueue fail or depth &gt; 40 → release lock + <b>HTTP 503</b> (Zalo retries).</td><td><span class="grep">503</span> / queue depth metric</td></tr>
+        <tr><td class="stage">7</td><td class="stage">enqueue</td><td>Enqueue to <span class="mono">webhook_high</span>. The worker owns a tracked native typing bridge during dependency setup (Bot only).</td><td class="bad">Enqueue fail or depth &gt; 40 → release lock + <b>HTTP 503</b> (Zalo retries).</td><td><span class="grep">503</span> / queue depth metric</td></tr>
         <tr><td class="stage">8</td><td class="stage">run_chat_turn_job</td><td>RQ entry. deadline = <span class="mono">received_at_epoch + sla_seconds</span> (epoch = wall-clock, crosses process boundary). job_timeout 60s.</td><td>Async runner can shield job from RQ timeout — a stuck agent can run past 60s.</td><td><span class="grep">run_chat_turn_job</span> in worker logs</td></tr>
-        <tr><td class="stage">9</td><td class="stage">record_bot_pending</td><td>Load conv + last 16 msgs; write PENDING bot row "Đang soạn trả lời…"; start typing heartbeat (no version bump).</td><td>Status heartbeat must be cancelled before every real send or ack lands after answer.</td><td><span class="mono">messages</span> PENDING row · <span class="grep">chat_turn_start</span> (observability — was broken in prod)</td></tr>
+        <tr><td class="stage">9</td><td class="stage">record_bot_pending</td><td>Load conv + last 16 msgs; write PENDING bot row "Đang soạn trả lời…"; native status pulses immediately and every 3 seconds, with bounded requests (no version bump).</td><td>Status task is cancelled and joined before every real send, suppression, error, or cancellation.</td><td><span class="mono">messages</span> PENDING row · <span class="grep">chat_turn_start</span> (observability — was broken in prod)</td></tr>
         <tr><td class="stage">10</td><td class="stage">Fast lane</td><td>Greeting/thanks/goodbye/help → Vietnamese templates. Zero LLM.</td><td>Returns inside slow_ack window so no ack fires.</td><td>Reply with no LLM call in logs</td></tr>
         <tr><td class="stage">11</td><td class="stage">FAQ bypass</td><td>Deterministic KB lookup, 2s budget. High-conf → canonical answer.</td><td>Miss/ambiguity/timeout → abstain → fall through to agent.</td><td><span class="grep">FaqBypassPort</span> / abstain log</td></tr>
         <tr><td class="stage">12</td><td class="stage">Agent turn</td><td>Persona + product index system prompt, lead context, RAG tools, MiniMax→OpenRouter. <b>No hard cap</b> (8.5s advisory only).</td><td class="bad">LLMThrottled → degradation reply + clear lock. Latency = usual slow-reply culprit.</td><td><span class="grep">LLMThrottled</span> · LLM client timing</td></tr>

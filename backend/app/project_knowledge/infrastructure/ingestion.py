@@ -113,7 +113,7 @@ class SqlAlchemyKnowledgeIngestionAdapter:
             if failed is not None and failed.status == KnowledgeStatus.ARCHIVED:
                 await self._db.rollback()
                 return  # An administrator deliberately withdrew the source.
-            if is_training and failed is not None and (
+            if training is not None and failed is not None and (
                 (failed.metadata_ or {}).get("project_training", {}).get("processing_token")
                 != str(training.processing_token)
             ):
@@ -141,37 +141,52 @@ class SqlAlchemyKnowledgeIngestionAdapter:
         embedder: Callable[[str], Awaitable[list[float]]] | None = None,
         json_extractor: Callable[[str, str], Awaitable[str]] | None = None,
     ) -> None:
-        integration = IntegrationSettingsService(self._db)
-        embedding_config = await integration.resolve_embedding()
-        resolved_embedder = (
-            embedder
-            if embedder is not None
-            else self._providers.embedder(embedding=embedding_config)
-        )
         version = await self._db.get(KBVersion, version_id)
         if version is None:
             logger.warning("ingest job: KB version %s not found", version_id)
             return
-        if json_extractor is not None:
-            resolved_json_extractor = json_extractor
-        else:
-            minimax = await integration.resolve_minimax()
-            openrouter = await integration.resolve_openrouter()
-            resolved_json_extractor = self._providers.json_extractor(
-                minimax_api_key=minimax.api_key,
-                openrouter_api_key=openrouter.api_key,
-            )
         try:
+            integration = IntegrationSettingsService(self._db)
+            embedding_config = await integration.resolve_embedding()
+            resolved_embedder = (
+                embedder
+                if embedder is not None
+                else self._providers.embedder(embedding=embedding_config)
+            )
+            if json_extractor is not None:
+                resolved_json_extractor = json_extractor
+            else:
+                minimax = await integration.resolve_minimax()
+                openrouter = await integration.resolve_openrouter()
+                resolved_json_extractor = self._providers.json_extractor(
+                    minimax_api_key=minimax.api_key,
+                    openrouter_api_key=openrouter.api_key,
+                )
             await KnowledgeService(self._db).ingest_version(
                 resolved_embedder,
                 version,
                 llm_json=resolved_json_extractor,
             )
         except Exception as exc:  # noqa: BLE001 - preserve recorded failure behavior
-            logger.exception("ingest pipeline failed for KB version %s", version_id)
-            version.status = KBVersionStatus.FAILED
-            version.error_message = f"{type(exc).__name__}: {exc}"[:1000]
-            await self._db.commit()
+            await self._db.rollback()
+            failed = await self._db.scalar(
+                select(KBVersion)
+                .where(KBVersion.id == version_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if failed is not None and failed.status not in {
+                KBVersionStatus.ACTIVE, KBVersionStatus.ARCHIVED,
+            }:
+                failed.status = KBVersionStatus.FAILED
+                failed.error_message = "Chưa hoàn tất xử lý kiến thức. Vui lòng thử xử lý lại tệp đã lưu."
+                await self._db.commit()
+            else:
+                await self._db.rollback()
+            logger.error(
+                "knowledge version ingestion failed version_id=%s cause=%s",
+                version_id, type(exc).__name__,
+            )
 
 
 __all__ = ["SqlAlchemyKnowledgeIngestionAdapter"]

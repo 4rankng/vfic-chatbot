@@ -52,93 +52,106 @@ export const JevSection = ({
 
   return (
     <SettingsSectionPanel id="settings-jev">
-      <div className="settings-grid settings-grid-models">
-        <SettingsGroup
-          className="settings-llm-card"
-          title={descriptor.title}
-          description={descriptor.description}
-          icon={JevIcon ? <JevIcon className="size-4" /> : null}
-          meta={
-            jevStatus ? (
-              <SettingsGroupStatus
-                configured={jevStatus.configured}
-                total={jevStatus.total}
-                disabled={jevStatus.disabled}
-                state={statusState}
-              />
-            ) : null
-          }
-        >
-          <ProviderSwitchField
-            id={descriptor.enableKey}
-            label="Kích hoạt"
-            checked={panels.providerEnabled.jev}
-            onCheckedChange={(checked) =>
-              panels.setPanelEnabled("jev", checked)
-            }
-          />
-          {descriptor.fields.map((field) => (
-            <ProviderField
-              key={field.kind === "readonly" ? field.label : field.formKey}
-              field={field}
-              bundle={bundle}
-              statusState={statusState}
-              form={panels.providerForm}
-              onValueChange={panels.setProviderFormValue}
-              notify={notify}
-            />
-          ))}
-          <div className="settings-llm-verify">
-            <span
-              className={`settings-llm-testline${testLine.ok ? "" : " is-error"}`}
-              title={testLine.title}
-            >
-              {testLine.text}
-            </span>
-            <Button
-              type="button"
-              color="secondary"
-              className="tt-btn-touch"
-              onClick={() => {
-                void panels.testProviderPanel("jev");
-              }}
-              isDisabled={panels.providerTesting.jev || !ready}
-              aria-busy={panels.providerTesting.jev}
-            >
-              {panels.providerTesting.jev
-                ? translate("crm.common.testing")
-                : translate("crm.common.test")}
-            </Button>
-          </div>
-        </SettingsGroup>
-      </div>
-
-      <div
-        className={`settings-llm-footer${
-          panels.dirty.standalone ? " is-dirty" : ""
-        }`}
+      <fieldset
+        className="contents"
+        disabled={
+          panels.providerSaving.standalone ||
+          panels.providerTesting.jev ||
+          !ready
+        }
+        aria-busy={
+          panels.providerSaving.standalone || panels.providerTesting.jev
+        }
       >
-        <Button
-          type="button"
-          color="primary"
-          className="settings-primary-action tt-btn-touch"
-          onClick={() => {
-            void panels.saveProviderPanels("standalone");
-          }}
-          isDisabled={
-            !panels.dirty.standalone || panels.providerSaving.standalone
-          }
+        <legend className="sr-only">Thông tin kết nối Jev</legend>
+        <div className="settings-grid settings-grid-models">
+          <SettingsGroup
+            className="settings-llm-card"
+            title={descriptor.title}
+            description={descriptor.description}
+            icon={JevIcon ? <JevIcon className="size-4" /> : null}
+            meta={
+              jevStatus ? (
+                <SettingsGroupStatus
+                  configured={jevStatus.configured}
+                  total={jevStatus.total}
+                  disabled={jevStatus.disabled}
+                  state={statusState}
+                />
+              ) : null
+            }
+          >
+            <ProviderSwitchField
+              id={descriptor.enableKey}
+              label="Kích hoạt"
+              checked={panels.providerEnabled.jev}
+              onCheckedChange={(checked) =>
+                panels.setPanelEnabled("jev", checked)
+              }
+            />
+            {descriptor.fields.map((field) => (
+              <ProviderField
+                key={field.kind === "readonly" ? field.label : field.formKey}
+                field={field}
+                bundle={bundle}
+                statusState={statusState}
+                form={panels.providerForm}
+                onValueChange={panels.setProviderFormValue}
+                notify={notify}
+              />
+            ))}
+            <div className="settings-llm-verify">
+              <span
+                className={`settings-llm-testline${testLine.ok ? "" : " is-error"}`}
+                title={testLine.title}
+              >
+                {testLine.text}
+              </span>
+              <Button
+                type="button"
+                color="secondary"
+                className="tt-btn-touch"
+                onClick={() => {
+                  void panels.testProviderPanel("jev");
+                }}
+                isDisabled={panels.providerTesting.jev || !ready}
+                aria-busy={panels.providerTesting.jev}
+              >
+                {panels.providerTesting.jev
+                  ? translate("crm.common.testing")
+                  : translate("crm.common.test")}
+              </Button>
+            </div>
+          </SettingsGroup>
+        </div>
+
+        <div
+          className={`settings-llm-footer${
+            panels.dirty.standalone ? " is-dirty" : ""
+          }`}
         >
-          {panels.providerSaving.standalone
-            ? translate("crm.common.saving")
-            : translate("crm.common.save_changes")}
-        </Button>
-        <span className="settings-llm-footer-note">
-          {panels.dirty.standalone
-            ? translate("crm.common.unsaved_changes")
-            : translate("crm.common.token_encrypted_hint")}
-        </span>
-      </div>
+          <Button
+            type="button"
+            color="primary"
+            className="settings-primary-action tt-btn-touch"
+            onClick={() => {
+              void panels.saveProviderPanels("standalone");
+            }}
+            isDisabled={
+              !panels.dirty.standalone || panels.providerSaving.standalone
+            }
+          >
+            {panels.providerSaving.standalone
+              ? translate("crm.common.saving")
+              : translate("crm.common.save_changes")}
+          </Button>
+          <span className="settings-llm-footer-note">
+            {panels.dirty.standalone
+              ? translate("crm.common.unsaved_changes")
+              : translate("crm.common.token_encrypted_hint")}
+          </span>
+        </div>
+      </fieldset>
     </SettingsSectionPanel>
   );
 };

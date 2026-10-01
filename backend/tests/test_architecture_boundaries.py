@@ -205,17 +205,16 @@ def _backend_rule(rel: str, target: str) -> str | None:
     if rel.startswith("backend/app/schemas/") and module.startswith(("app.models", "app.core")):
         return "schema_infra"
     # Transport and read-side trees may not reach into the turn runtime or the
-    # HTTP layer. app.realtime's set deliberately omits "app.api" until its one
-    # remaining edge (socketio auth importing app.api.auth_dependencies) is
-    # retargeted at the identity context; app.channels may not import app.api
-    # either. Known edges still OUTSIDE every rule, each awaiting its owning
+    # HTTP layer. Socket authentication consumes the identity context directly;
+    # neither realtime nor channels may depend on API transport. Known edges
+    # still OUTSIDE every rule, each awaiting its owning
     # change: channels/providers/facebook_account.py → app.models (persistence
     # behind the resolver port), services/presence.py → app.realtime.emitter
     # (should publish through conversation_messaging.application.ports), the
     # API layer importing app.channels providers (api/integrations.py,
     # api/webhooks.py), and models importing bounded-context enums.
     if rel.startswith("backend/app/realtime/") and module.startswith(
-        ("app.graph", "app.workers")
+        ("app.api", "app.graph", "app.workers")
     ):
         return "realtime_outward"
     if rel.startswith("backend/app/channels/") and module.startswith(
@@ -428,6 +427,20 @@ def _feature_layer_rule(rel: str, target: str) -> str | None:
 
 
 def _frontend_rule(rel: str, target: str) -> str | None:
+    product = "frontend/src/components/atomic-crm"
+    admin = "frontend/src/components/admin"
+    ui = "frontend/src/components/ui"
+    production_component = ".test." not in Path(rel).name
+    if production_component and _has_module_prefix(rel, ui) and any(
+        _has_module_prefix(target, outer) for outer in (admin, product)
+    ):
+        return "ui_outward"
+    if (
+        production_component
+        and _has_module_prefix(rel, admin)
+        and _has_module_prefix(target, product)
+    ):
+        return "admin_product"
     if rule := _conversation_layer_rule(rel, target):
         return rule
     if _is_conversation_layer_module(rel):
@@ -523,13 +536,8 @@ def test_python_scanner_normalizes_relative_imports_and_symbols() -> None:
 
 
 def test_transport_and_read_side_trees_reject_runtime_and_api_imports() -> None:
-    """realtime/, channels/, and reporting/ are covered sources, not gaps.
-
-    realtime/ covers graph/workers; its app.api ban is pending the socketio
-    auth retarget (one known edge, tracked in the rule's comment), so the
-    assertion set mirrors what is enforceable today.
-    """
-    for target in ("app.graph", "app.workers"):
+    """Realtime, channels and reporting cannot depend on other transports/runtime."""
+    for target in ("app.api", "app.graph", "app.workers"):
         assert _backend_rule("backend/app/realtime/socketio.py", target) == "realtime_outward"
     for target in ("app.api", "app.graph", "app.workers"):
         assert (
@@ -542,6 +550,56 @@ def test_transport_and_read_side_trees_reject_runtime_and_api_imports() -> None:
     # Importing services/models stays the documented direction for these trees.
     assert _backend_rule("backend/app/channels/providers/example.py", "app.services") is None
     assert _backend_rule("backend/app/reporting/infrastructure/example.py", "app.services") is None
+
+
+def test_realtime_authentication_cannot_depend_on_http_transport() -> None:
+    assert _backend_rule(
+        "backend/app/realtime/socketio.py",
+        "app.api.auth_dependencies:get_user_from_token",
+    ) == "realtime_outward"
+    assert _backend_rule(
+        "backend/app/realtime/socketio.py",
+        "app.identity.infrastructure.authentication:build_access_token_authenticator",
+    ) is None
+
+
+def test_frontend_component_dependencies_flow_toward_primitives() -> None:
+    product = "frontend/src/components/atomic-crm/projects/ProjectShow.tsx"
+    admin = "frontend/src/components/admin/list.tsx"
+    primitive = "frontend/src/components/ui/button.tsx"
+
+    assert _frontend_rule(product, "frontend/src/components/admin/list") is None
+    assert _frontend_rule(product, "frontend/src/components/ui/button") is None
+    assert _frontend_rule(admin, "frontend/src/components/ui/button") is None
+    assert _frontend_rule(admin, "frontend/src/components/admin/button") is None
+    assert _frontend_rule(primitive, "frontend/src/components/ui/utils") is None
+    assert _frontend_rule(admin, product.removesuffix(".tsx")) == "admin_product"
+    assert _frontend_rule(primitive, product.removesuffix(".tsx")) == "ui_outward"
+    assert _frontend_rule(primitive, admin.removesuffix(".tsx")) == "ui_outward"
+    # Component tests may use the product's locale/fixture providers, just as
+    # the existing feature and conversation layer tests may cross boundaries.
+    assert _frontend_rule(
+        "frontend/src/components/admin/confirm.test.tsx",
+        "frontend/src/components/atomic-crm/providers/commons/TestMessages",
+    ) is None
+
+
+def test_frontend_component_boundary_checks_normalized_imports() -> None:
+    path = REPO_ROOT / "frontend/src/components/ui/example.tsx"
+    targets = _typescript_import_targets(
+        path,
+        "import '../admin/list';\n"
+        "export { ProjectShow } from '@/components/atomic-crm/projects/ProjectShow';\n"
+        "const view = import('../atomic-crm/projects/ProjectShow');\n",
+    )
+    assert targets == {
+        "frontend/src/components/admin/list",
+        "frontend/src/components/atomic-crm/projects/ProjectShow",
+    }
+    assert all(
+        _frontend_rule(path.relative_to(REPO_ROOT).as_posix(), target) == "ui_outward"
+        for target in targets
+    )
 
 
 def test_shared_kernel_rejects_framework_and_infrastructure_imports() -> None:

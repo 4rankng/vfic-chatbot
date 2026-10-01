@@ -85,6 +85,9 @@ export const ConversationContextPanel = ({
 }) => {
   const isMobile = useIsMobile();
   const translate = useTranslate();
+  const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
+  const leadId = String(lead?.id ?? "empty");
+  const isSaving = savingLeadId === leadId;
   const candidateInfoItems = useMemo<CandidateInfoItem[]>(() => {
     const noData = translate("crm.common.no_data");
     const notes = lead?.notes;
@@ -227,8 +230,20 @@ export const ConversationContextPanel = ({
       completedInfoCount={completedInfoCount}
       completionPercent={completionPercent}
       canEdit={canEdit}
+      isSaving={isSaving}
+      onSavingChange={(saving) =>
+        setSavingLeadId((current) =>
+          saving ? leadId : current === leadId ? null : current,
+        )
+      }
       onSave={onSave}
-      closeButtonPress={isMobile ? undefined : onClose}
+      closeButtonPress={
+        isMobile
+          ? undefined
+          : () => {
+              if (!isSaving) onClose();
+            }
+      }
       showClose={!persistent}
     />
   );
@@ -238,14 +253,15 @@ export const ConversationContextPanel = ({
       <ModalOverlay
         isOpen={open}
         onOpenChange={(nextOpen) => {
-          if (nextOpen) return;
+          if (nextOpen || isSaving) return;
           // Preserve the caller's focus contract: the console wants focus back
           // on the trigger that opened the panel, which the dialog cannot know.
           onCloseAutoFocus?.(new Event("modal-close-autofocus"));
           onClose();
         }}
-        isDismissable
-        className="z-50"
+        isDismissable={!isSaving}
+        isKeyboardDismissDisabled={isSaving}
+        className="uu-scope z-50"
       >
         <Modal>
           <Dialog
@@ -280,6 +296,8 @@ const CandidateContextBody = ({
   completedInfoCount,
   completionPercent,
   canEdit,
+  isSaving,
+  onSavingChange,
   onSave,
   closeButtonPress,
   showClose,
@@ -289,6 +307,8 @@ const CandidateContextBody = ({
   completedInfoCount: number;
   completionPercent: number;
   canEdit: boolean;
+  isSaving: boolean;
+  onSavingChange: (saving: boolean) => void;
   onSave?: (
     changes: Partial<CandidateProfileUpdate>,
     version: number,
@@ -307,12 +327,13 @@ const CandidateContextBody = ({
     draft: CandidateProfileDraft;
     version: number;
   } | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
   const translate = useTranslate();
 
   const cancelEditing = () => {
     if (isSaving) return;
     setEditSession(null);
+    setSaveError(undefined);
   };
 
   const saveProfile = async () => {
@@ -325,14 +346,21 @@ const CandidateContextBody = ({
       setEditSession(null);
       return;
     }
-    setIsSaving(true);
+    setSaveError(undefined);
+    onSavingChange(true);
     try {
       await onSave(changes, editSession.version);
       setEditSession(null);
-    } catch {
-      // The capability adapter owns the user-facing notification and refetch.
+    } catch (error) {
+      // The capability adapter also reports the write globally. Keep a local
+      // explanation beside the unsaved draft after its toast disappears.
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Không thể lưu hồ sơ. Vui lòng thử lại.",
+      );
     } finally {
-      setIsSaving(false);
+      onSavingChange(false);
     }
   };
 
@@ -352,6 +380,7 @@ const CandidateContextBody = ({
               size="sm"
               className="uu-scope context-close"
               label="Đóng thông tin ứng viên"
+              isDisabled={isSaving}
               onPress={closeButtonPress}
             />
           </div>
@@ -412,6 +441,7 @@ const CandidateContextBody = ({
                 onPress={() => {
                   if (lead.version == null) return;
                   const initial = candidateProfileDraft(lead);
+                  setSaveError(undefined);
                   setEditSession({
                     initial,
                     draft: { ...initial },
@@ -425,7 +455,8 @@ const CandidateContextBody = ({
           </div>
           {editSession ? (
             <form
-              className="grid gap-4"
+              className="uu-scope grid gap-4"
+              aria-busy={isSaving}
               onSubmit={(event) => {
                 event.preventDefault();
                 void saveProfile();
@@ -491,6 +522,11 @@ const CandidateContextBody = ({
                   )
                 }
               />
+              {saveError ? (
+                <p role="alert" className="text-helper text-error-primary">
+                  {saveError}
+                </p>
+              ) : null}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"

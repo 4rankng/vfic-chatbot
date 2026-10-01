@@ -96,11 +96,12 @@ export const FacebookMessengerIntegrationPage = () => {
   }, []);
 
   // Status: active + archived Page accounts.
-  const { data: status } = useQuery<FacebookIntegrationStatus>({
+  const statusQuery = useQuery<FacebookIntegrationStatus>({
     queryKey: ["facebook-integration-status"],
     queryFn: () => facebookIntegrationGateway.loadStatus(),
     staleTime: 30_000,
   });
+  const { data: status } = statusQuery;
 
   // Active Projects: options for the per-Page assignment editor (D3).
   const { data: projects = [] } = useGetList<Project>("projects", {
@@ -114,15 +115,16 @@ export const FacebookMessengerIntegrationPage = () => {
   );
 
   // App-level Meta credentials (DB-first, env fallback on the backend).
-  const {
-    data: credentials,
-    isPending: credentialsPending,
-    isError: credentialsError,
-  } = useQuery<FacebookCredentials>({
+  const credentialsQuery = useQuery<FacebookCredentials>({
     queryKey: ["facebook-credentials"],
     queryFn: () => facebookIntegrationGateway.loadCredentials(),
     staleTime: 30_000,
   });
+  const {
+    data: credentials,
+    isPending: credentialsPending,
+    isError: credentialsError,
+  } = credentialsQuery;
 
   const saveCredentials = useMutation<
     FacebookCredentials,
@@ -173,6 +175,8 @@ export const FacebookMessengerIntegrationPage = () => {
 
   const submitCredentials = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saveCredentials.isPending || credentialsPending || credentialsError)
+      return;
     // Only send non-empty fields ("leave blank to keep" semantics).
     const payload: FacebookCredentialsUpdate = {};
     const trimmed: CredentialsFormState = {
@@ -269,8 +273,6 @@ export const FacebookMessengerIntegrationPage = () => {
       setPickerProjectIds([]);
       // Surface the backend's reason (e.g. D1: activation requires ≥1 assigned
       // Project) when it provides a friendly detail; fall back to generic copy.
-      // Surface the backend's reason (e.g. D1: activation requires ≥1 assigned
-      // Project) when it provides a friendly detail; fall back to generic copy.
       setError(
         err instanceof ApiError
           ? err.message
@@ -358,7 +360,33 @@ export const FacebookMessengerIntegrationPage = () => {
           />
         </div>
         <div className="settings-group-content settings-messenger-group-content">
-          <div className="settings-messenger-credentials-grid">
+          {credentialsError ? (
+            <div role="alert" className="mb-3 text-body-sm">
+              <p>Chưa tải được thông tin ứng dụng Meta.</p>
+              <Button
+                type="button"
+                color="secondary"
+                size="sm"
+                className="mt-2"
+                isDisabled={credentialsQuery.isFetching}
+                onClick={() => void credentialsQuery.refetch()}
+              >
+                {credentialsQuery.isFetching
+                  ? "Đang tải…"
+                  : "Thử lại thông tin ứng dụng"}
+              </Button>
+            </div>
+          ) : null}
+          <fieldset
+            className="settings-messenger-credentials-grid min-w-0 border-0 p-0"
+            disabled={
+              saveCredentials.isPending ||
+              credentialsPending ||
+              credentialsError
+            }
+            aria-busy={saveCredentials.isPending}
+          >
+            <legend className="sr-only">Thông tin ứng dụng Meta</legend>
             <PlainField
               id="facebook_app_id"
               label="App ID"
@@ -412,13 +440,17 @@ export const FacebookMessengerIntegrationPage = () => {
               }
               reveal={revealVerifyToken}
             />
-          </div>
+          </fieldset>
           <div className="settings-oa-actions settings-messenger-actions">
             <Button
               type="submit"
               color="primary"
               className="settings-test-button settings-messenger-solid-action tt-btn-touch"
-              isDisabled={saveCredentials.isPending}
+              isDisabled={
+                saveCredentials.isPending ||
+                credentialsPending ||
+                credentialsError
+              }
               aria-busy={saveCredentials.isPending}
             >
               {saveCredentials.isPending
@@ -432,7 +464,37 @@ export const FacebookMessengerIntegrationPage = () => {
       {/* Connected Pages (multi-Page). One card per ACTIVE Page: status,
           per-Page Project assignment editor (D3), per-Page disconnect.
           Channel test stays group-level — webhook subscription is app-level. */}
-      {activeAccounts.length > 0 ? (
+      {statusQuery.isError ? (
+        <div className="settings-group settings-messenger-group">
+          <div
+            className="settings-group-content settings-messenger-group-content"
+            role="alert"
+          >
+            <p className="text-body-sm">
+              Chưa tải được trạng thái kết nối Messenger.
+            </p>
+            <Button
+              type="button"
+              color="secondary"
+              size="sm"
+              isDisabled={statusQuery.isFetching}
+              onClick={() => void statusQuery.refetch()}
+            >
+              {statusQuery.isFetching ? "Đang tải…" : "Thử lại trạng thái"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {!status && statusQuery.isPending ? (
+        <div className="settings-group settings-messenger-group">
+          <div
+            className="settings-group-content settings-messenger-group-content"
+            role="status"
+          >
+            Đang tải trạng thái kết nối…
+          </div>
+        </div>
+      ) : activeAccounts.length > 0 ? (
         <div className="settings-group settings-messenger-group">
           <div className="settings-messenger-group-heading">
             <div>
@@ -500,7 +562,7 @@ export const FacebookMessengerIntegrationPage = () => {
             ) : null}
           </div>
         </div>
-      ) : (
+      ) : status ? (
         <div className="settings-group settings-messenger-group">
           <div className="settings-group-content settings-messenger-group-content settings-messenger-empty">
             <div className="settings-messenger-empty-copy">
@@ -531,7 +593,7 @@ export const FacebookMessengerIntegrationPage = () => {
             </span>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Page selection after OAuth callback */}
       {pendingFlowId && pageList?.pages && pageList.pages.length > 0 ? (

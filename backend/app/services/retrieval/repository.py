@@ -1,8 +1,8 @@
 """Retrieval facade for the agent layer: one port, four focused repositories.
 
 This is the class the graph injects as its read-only retrieval port
-(:class:`app.graph.ports.GraphRetrievalPort`). It adds no behavior of its own —
-it binds one db session (plus the optional multi-Page Facebook project scope)
+(:class:`app.graph.ports.GraphRetrievalPort`). It binds one db session and
+enforces the optional multi-Page Facebook project scope before delegating
 to the four repositories that own the actual queries:
 
 - :mod:`.document_repository` — memory match + hybrid document retrieval.
@@ -71,6 +71,15 @@ class RetrievalRepository:
         """Degradation reason from the most recent ``match_documents`` call."""
         return self._documents.last_match_degraded
 
+    def _knowledge_project_scope(self, requested: list[str] | None) -> list[str] | None:
+        """Intersect caller scope with the channel assignment; [] always denies reads."""
+        if self.page_project_ids is None:
+            return requested
+        assigned = set(self.page_project_ids)
+        if requested is None:
+            return sorted(assigned)
+        return sorted(assigned.intersection(requested))
+
     async def match_memories(self, emb: str, top_k: int, filter_json: str) -> list:
         return await self._documents.match_memories(emb, top_k, filter_json)
 
@@ -87,7 +96,7 @@ class RetrievalRepository:
             emb,
             top_k,
             filter_json,
-            project_ids=project_ids,
+            project_ids=self._knowledge_project_scope(project_ids),
             query_text=query_text,
         )
 
@@ -104,7 +113,7 @@ class RetrievalRepository:
             emb,
             top_k,
             filter_json=filter_json,
-            project_ids=project_ids,
+            project_ids=self._knowledge_project_scope(project_ids),
             floor=floor,
         )
 

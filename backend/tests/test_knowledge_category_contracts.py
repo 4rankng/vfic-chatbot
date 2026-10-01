@@ -3,17 +3,16 @@ from copy import deepcopy
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.knowledge_categories import KnowledgeCategoryKey
+from app.schemas.knowledge_categories import JobItem, KnowledgeCategoryKey
 from app.models.knowledge import KnowledgeBaseMode
 from app.schemas.projects import ProjectCreate
 from app.services.knowledge.category_contracts import (
     CATEGORY_DEFINITIONS,
     EmptyCategoryError,
-    UnknownJobReferenceError,
     category_checksum,
+    build_project_knowledge_template,
     load_category_template,
     validate_category_payload,
-    validate_job_references,
 )
 from app.services.knowledge.category_markdown import (
     CategoryMarkdownError,
@@ -139,11 +138,13 @@ def test_jobs_reject_manual_status_field():
         validate_category_payload("jobs", payload)
 
 
-def test_category_must_match_selected_upload_slot():
-    payload = {"category": "benefits", "benefits": []}
+@pytest.mark.parametrize("definition", CATEGORY_DEFINITIONS, ids=lambda value: value.key.value)
+def test_category_must_match_selected_upload_slot(definition):
+    other_category = next(item.key for item in CATEGORY_DEFINITIONS if item.key != definition.key)
+    payload = {"category": other_category.value, definition.list_field: []}
 
-    with pytest.raises(ValidationError):
-        validate_category_payload("jobs", payload, allow_empty=True)
+    with pytest.raises(ValidationError, match="Input should be"):
+        validate_category_payload(definition.key, payload, allow_empty=True)
 
 
 def test_unknown_top_level_field_is_rejected():
@@ -173,25 +174,23 @@ def test_empty_replacement_requires_explicit_clear_action():
         validate_category_payload("jobs", payload)
 
 
-def test_job_reference_must_exist_in_same_projects_jobs_category():
-    payload = {
-        "category": "requirements",
-        "requirements": [{"id": "req-1", "job_ids": ["missing-job"]}],
-    }
-    document = validate_category_payload("requirements", payload)
+def test_category_records_have_no_job_associations():
+    from app.schemas.knowledge_categories import CATEGORY_DOCUMENT_MODELS
 
-    with pytest.raises(UnknownJobReferenceError, match="missing-job"):
-        validate_job_references(document, {"job-1"})
+    for definition in CATEGORY_DEFINITIONS:
+        document_model = CATEGORY_DOCUMENT_MODELS[definition.key]
+        list_annotation = document_model.model_fields[definition.list_field].annotation
+        record_model = list_annotation.__args__[0]
+        assert "job_ids" not in record_model.model_fields
+        assert "jobs_ids" not in record_model.model_fields
 
 
-def test_empty_job_references_mean_category_applies_project_wide():
-    payload = {
+def test_project_wide_category_does_not_require_a_jobs_document():
+    document = validate_category_payload("benefits", {
         "category": "benefits",
-        "benefits": [{"id": "benefit-1", "job_ids": [], "name": "Khám sức khỏe"}],
-    }
-    document = validate_category_payload("benefits", payload)
-
-    validate_job_references(document, set())
+        "benefits": [{"id": "benefit-1", "name": "Khám sức khỏe"}],
+    })
+    assert document.benefits[0].name == "Khám sức khỏe"
 
 
 def test_checksum_is_deterministic_for_equivalent_key_order():
@@ -299,3 +298,45 @@ def test_category_rejects_more_than_one_thousand_records():
 def test_markdown_parser_rejects_duplicate_fields_and_record_ids(record_block, message):
     with pytest.raises(CategoryMarkdownError, match=message):
         parse_category_markdown("jobs", _jobs_doc(record_block))
+
+
+
+def test_jobs_authoring_contract_and_templates_omit_retired_metadata():
+    for field in ("vacancies", "employment_type"):
+        assert field not in JobItem.model_fields
+        assert field not in JobItem.model_json_schema()["properties"]
+        assert field not in load_category_template("jobs")
+        assert field not in build_project_knowledge_template()
+
+
+@pytest.mark.parametrize(
+    ("vacancies", "employment_type"), [(None, None), (100, "temporary")],
+)
+def test_old_job_metadata_is_accepted_but_not_retained_in_category_payload(vacancies, employment_type):
+    payload = {
+        "category": "jobs",
+        "jobs": [{"id": "assembly", "title": "Lắp ráp", "vacancies": vacancies, "employment_type": employment_type}],
+    }
+    document = validate_category_payload("jobs", payload)
+    record = document.jobs[0].model_dump(mode="json")
+    assert record["title"] == "Lắp ráp"
+    assert "vacancies" not in record
+    assert "employment_type" not in record
+    # Boundary compatibility does not mutate retained historical payloads.
+    assert payload["jobs"][0]["vacancies"] == vacancies
+    assert payload["jobs"][0]["employment_type"] == employment_type
+
+
+@pytest.mark.parametrize(
+    "old_fields", ["vacancies: null\nemployment_type: null\n", "vacancies: 100\nemployment_type: temporary\n"],
+)
+def test_old_job_markdown_roundtrips_without_retired_metadata(old_fields):
+    from app.services.knowledge.category_markdown import build_source_markdown
+
+    document = parse_category_markdown("jobs", _jobs_doc(
+        '### record: assembly\ntitle: "Lắp ráp"\n' + old_fields
+    ))
+    source = build_source_markdown(document.model_dump(mode="json"))
+    assert "vacancies" not in source
+    assert "employment_type" not in source
+    assert parse_category_markdown("jobs", source).jobs[0].title == "Lắp ráp"

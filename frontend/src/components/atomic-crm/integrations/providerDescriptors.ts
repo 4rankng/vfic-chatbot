@@ -471,8 +471,9 @@ export const CHAIN_PANEL_ID_BY_PROVIDER: Record<LlmProvider, ProviderPanelId> =
 export const resetProviderForm = (
   bundle: ProviderSettingsBundle,
   panels: readonly ProviderPanelDescriptor[] = PROVIDER_PANELS,
+  current: ProviderFormState = emptyProviderForm(),
 ): ProviderFormState => {
-  const form = emptyProviderForm();
+  const form = { ...current };
   for (const descriptor of panels) {
     for (const field of descriptor.fields) {
       if (field.kind === "readonly") continue;

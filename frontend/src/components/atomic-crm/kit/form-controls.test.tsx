@@ -3,6 +3,7 @@ import { DataProviderContext, Form, TestMemoryRouter, required } from "ra-core";
 import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
 import "@/index.css";
 import { TestMessages } from "../providers/commons/TestMessages";
@@ -76,12 +77,124 @@ const mount = (onSubmit: (values: Record<string, unknown>) => void) =>
     </TestMemoryRouter>,
   );
 
+const mountField = (field: ReactNode, onSubmit = vi.fn()) =>
+  render(
+    <TestMemoryRouter>
+      <QueryClientProvider client={new QueryClient()}>
+        <DataProviderContext.Provider value={noopDataProvider as never}>
+          <TestMessages>
+            <Form resource="users" onSubmit={onSubmit}>
+              {field}
+              <button type="submit">Lưu</button>
+            </Form>
+          </TestMessages>
+        </DataProviderContext.Provider>
+      </QueryClientProvider>
+    </TestMemoryRouter>,
+  );
+
 afterEach(async () => {
   await cleanup();
   await page.viewport(1280, 900);
 });
 
 describe("kit form controls", () => {
+  it("reveals and masks a password through a Vietnamese action without submitting the form", async () => {
+    const onSubmit = vi.fn();
+    const screen = await mountField(
+      <FormTextInput
+        source="password"
+        label="Mật khẩu"
+        type="password"
+        isRequired
+        validate={required(EMPTY)}
+      />,
+      onSubmit,
+    );
+    const password = screen.getByLabelText(/Mật khẩu/);
+    await screen.getByRole("button", { name: "Lưu" }).click();
+    await expect.element(screen.getByText(EMPTY)).toBeVisible();
+    expect(password.element().hasAttribute("required")).toBe(false);
+    await expect.element(password).toHaveFocus();
+    await password.fill("mat-khau-kiem-thu");
+    expect(password.element().getAttribute("type")).toBe("password");
+
+    await screen.getByRole("button", { name: "Hiện mật khẩu" }).click();
+
+    expect(password.element().getAttribute("type")).toBe("text");
+    expect(onSubmit).not.toHaveBeenCalled();
+    await screen.getByRole("button", { name: "Ẩn mật khẩu" }).click();
+    expect(password.element().getAttribute("type")).toBe("password");
+    await screen.getByRole("button", { name: "Lưu" }).click();
+    await expect.poll(() => onSubmit.mock.calls.length).toBe(1);
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      password: "mat-khau-kiem-thu",
+    });
+  });
+
+  it("focuses a required select's trigger when validation fails", async () => {
+    const screen = await mountField(
+      <FormSelect
+        source="role"
+        label="Vai trò"
+        choices={choices}
+        validate={required(EMPTY)}
+      />,
+    );
+
+    await screen.getByRole("button", { name: "Lưu" }).click();
+
+    await expect.element(screen.getByText(EMPTY)).toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: /Vai trò/ }))
+      .toHaveFocus();
+  });
+
+  it("validates a checkbox and focuses its input without native validation", async () => {
+    const onSubmit = vi.fn();
+    const message = "Hãy xác nhận lựa chọn.";
+    const screen = await mountField(
+      <FormCheckbox
+        source="confirmed"
+        label="Xác nhận"
+        isRequired
+        validate={(value) => (value === true ? undefined : message)}
+      />,
+      onSubmit,
+    );
+
+    await screen.getByRole("button", { name: "Lưu" }).click();
+
+    await expect.element(screen.getByText(message)).toBeVisible();
+    const checkbox = screen.getByRole("checkbox", { name: "Xác nhận" });
+    await expect.element(checkbox).toHaveFocus();
+    expect(checkbox.element().hasAttribute("required")).toBe(false);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("validates a switch and connects its recovery text to the focused input", async () => {
+    const onSubmit = vi.fn();
+    const message = "Hãy bật thông báo trước khi lưu.";
+    const screen = await mountField(
+      <FormToggle
+        source="notify"
+        label="Nhận thông báo"
+        validate={(value) => (value === true ? undefined : message)}
+      />,
+      onSubmit,
+    );
+
+    await screen.getByRole("button", { name: "Lưu" }).click();
+
+    await expect.element(screen.getByRole("alert")).toHaveTextContent(message);
+    const toggle = screen.getByRole("switch", { name: "Nhận thông báo" });
+    await expect.element(toggle).toHaveFocus();
+    expect(toggle.element().getAttribute("aria-describedby")).toBe(
+      screen.getByRole("alert").element().id,
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("labels every control and keeps react-admin's validation in charge", async () => {
     const screen = await mount(vi.fn());
 

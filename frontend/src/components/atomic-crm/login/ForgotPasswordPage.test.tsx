@@ -66,6 +66,21 @@ afterEach(async () => {
 });
 
 describe("ForgotPasswordPage", () => {
+  it("explains an empty email inline before requesting a recovery code", async () => {
+    const screen = await renderRecovery();
+
+    await screen.getByRole("button", { name: "Gửi mã OTP" }).click();
+
+    await expect
+      .element(screen.getByText("Vui lòng nhập email."))
+      .toBeVisible();
+    const email = screen.getByRole("textbox", { name: /Email/ });
+    await expect.element(email).toHaveAttribute("aria-invalid", "true");
+    await expect.element(email).toHaveFocus();
+    expect(email.element().getAttribute("aria-describedby")).toBeTruthy();
+    expect(mocks.requestPasswordResetOtp).not.toHaveBeenCalled();
+  });
+
   it("asks for the account email first", async () => {
     const screen = await renderRecovery();
 

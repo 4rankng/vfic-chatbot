@@ -8,6 +8,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from app.project_knowledge.domain.legacy_job_references import (
+    strip_legacy_job_reference_fields,
+    strip_legacy_job_reference_source,
+)
 from app.project_knowledge.domain.statuses import KBVersionStatus, KnowledgeStatus
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 
@@ -40,6 +44,10 @@ class ProjectTrainingProgress(BaseModel):
     current: KnowledgeCategoryKey | None = None
     completed: list[KnowledgeCategoryKey] = Field(default_factory=list)
     error: str | None = None
+    requires_cutover: bool = Field(
+        default=False,
+        description="Preparation is completed but legacy knowledge still requires explicit category cutover.",
+    )
 
 
 class ExternalSourceCreate(BaseModel):
@@ -95,6 +103,16 @@ class KnowledgeDocumentOut(BaseModel):
     is_canonical: bool = False
     error: str | None = None
 
+    @field_validator("digest_summary", mode="after")
+    @classmethod
+    def _without_legacy_summary_fields(cls, value: str | None) -> str | None:
+        return strip_legacy_job_reference_source(value) if value is not None else None
+
+    @field_validator("digest_meta", mode="after")
+    @classmethod
+    def _without_legacy_metadata_fields(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return strip_legacy_job_reference_fields(value)
+
     @computed_field
     @property
     def project_training(self) -> ProjectTrainingProgress | None:
@@ -126,6 +144,21 @@ class KnowledgeChunkOut(BaseModel):
     effective_from: str | None = None
     effective_to: str | None = None
     created_at: datetime
+
+    @field_validator("content", "source_quote", "summary", mode="after")
+    @classmethod
+    def _without_legacy_text_fields(cls, value: str | None) -> str | None:
+        return strip_legacy_job_reference_source(value) if value is not None else None
+
+    @field_validator("questions", mode="after")
+    @classmethod
+    def _without_legacy_question_fields(cls, value: list[str]) -> list[str]:
+        return [strip_legacy_job_reference_source(question) for question in value]
+
+    @field_validator("entities", mode="after")
+    @classmethod
+    def _without_legacy_entity_fields(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return strip_legacy_job_reference_fields(value)
 
 
 class KnowledgeChunkListResponse(BaseModel):
@@ -230,3 +263,8 @@ class SearchTestRequest(BaseModel):
 class SearchTestResult(BaseModel):
     content: str
     similarity: float
+
+    @field_validator("content", mode="after")
+    @classmethod
+    def _without_legacy_text_fields(cls, value: str) -> str:
+        return strip_legacy_job_reference_source(value)

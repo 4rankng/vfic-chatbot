@@ -117,40 +117,31 @@ async def renew_direct_lock(job: dict) -> None:
 
 
 async def bridge_typing(chat_id: str, bot_token: str | None = None) -> None:
-    """Pulse the Zalo typing indicator until run_turn's heartbeat takes over.
+    """Track native status throughout dependency setup, until the owner drains it.
 
-    The webhook fires a one-shot typing ping that expires after ~3-5s, and the
-    sustained ``_status_heartbeat`` only starts inside ``run_turn`` — after
-    ``build_deps``. This bridge closes that gap so the indicator never vanishes
-    during the preamble. It self-limits to a few pulses: once ``run_turn``'s
-    heartbeat is running it is redundant, and the caller cancels it before send.
-    All failures are swallowed (typing is best-effort) — the bridge stops
-    pulsing if either DB resolution or the typing POST raises; it does NOT
-    fall back to the stale env ZALO_BOT_TOKEN (which 401s in prod).
-
-    ``bot_token`` is accepted for backwards compatibility with legacy queued
-    jobs that still carry it. When it is None (the v2 payload), the live token
-    is resolved fresh from the DB so no secret rides the queue payload.
+    Each pulse resolves live credentials when no legacy token was supplied.
+    Transient resolution/provider failures retry on the same bounded cadence;
+    neither a fixed pulse limit nor a stale environment token ends the bridge.
     """
     from app.core.config import get_settings
+    from app.graph.chat_status import native_status_heartbeat
 
-    interval = get_settings().typing_heartbeat_seconds
-    for _ in range(4):  # ~14s max — enough to cover any realistic preamble
-        try:
-            token = bot_token
-            if token is None:
-                # Resolve the live DB token. If resolution raises (DB blip,
-                # cipher issue, empty config), the outer except stops the
-                # bridge — typing simply vanishes, which is safe.
-                from app.core.db import async_session
-                from app.services.integration_settings import IntegrationSettingsService
+    async def emit_typing() -> None:
+        token = bot_token
+        if token is None:
+            from app.core.db import async_session
+            from app.services.integration_settings import IntegrationSettingsService
 
-                async with async_session() as db:
-                    cfg = await IntegrationSettingsService(db).resolve_zalo()
-                    token = cfg.bot_token
-            from app.services.webhook import _fire_typing
-
-            await _fire_typing(chat_id, token)
-        except Exception:  # noqa: BLE001
+            async with async_session() as db:
+                cfg = await IntegrationSettingsService(db).resolve_zalo()
+                token = cfg.bot_token
+        if not token:
             return
-        await asyncio.sleep(interval)
+        from app.services.webhook import _fire_typing
+
+        await _fire_typing(chat_id, token)
+
+    await native_status_heartbeat(
+        emit_typing,
+        interval_seconds=get_settings().typing_heartbeat_seconds,
+    )

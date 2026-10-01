@@ -96,6 +96,49 @@ async def test_authorization_uses_authenticated_viewer_and_fails_closed(monkeypa
     assert await socketio_module._authorize_entity("sid-1", "conv", conversation_id) is None
 
 
+@pytest.mark.parametrize(
+    ("entity_type", "entity_id"),
+    [("conv", 1), ("lead", uuid4()), ("lead", True), ("lead", 0), ("user", uuid4())],
+)
+async def test_authorization_rejects_mismatched_entity_contracts(
+    monkeypatch,
+    entity_type: str,
+    entity_id: UUID | int,
+) -> None:
+    _access()
+
+    @asynccontextmanager
+    async def fake_async_session() -> AsyncIterator[object]:
+        yield SimpleNamespace()
+
+    import app.core.db as db_module
+
+    conversation_check = AsyncMock(return_value=True)
+    lead_check = AsyncMock(return_value=True)
+    monkeypatch.setattr(db_module, "async_session", fake_async_session)
+    monkeypatch.setattr(socketio_module, "viewer_can_access_conversation", conversation_check)
+    monkeypatch.setattr(socketio_module, "viewer_can_access_lead", lead_check)
+
+    assert await socketio_module._authorize_entity("sid-1", entity_type, entity_id) is None
+    conversation_check.assert_not_awaited()
+    lead_check.assert_not_awaited()
+
+
+def test_socket_event_adapter_preserves_public_handler_registration() -> None:
+    expected_handlers = {
+        "join conversation": socketio_module._join_conversation,
+        "leave conversation": socketio_module._leave_conversation,
+        "join lead": socketio_module._join_lead,
+        "leave lead": socketio_module._leave_lead,
+        "presence join": socketio_module._presence_join,
+        "presence leave": socketio_module._presence_leave,
+        "presence heartbeat": socketio_module._presence_heartbeat,
+        "presence typing": socketio_module._presence_typing,
+        "presence stop typing": socketio_module._presence_stop_typing,
+    }
+    assert expected_handlers.items() <= socketio_module.sio.handlers["/"].items()
+
+
 @pytest.mark.asyncio
 async def test_conversation_join_enters_room_only_after_authorization(monkeypatch) -> None:
     access = _access()

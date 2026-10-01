@@ -43,6 +43,7 @@ const UserEditContent = () => {
   if (!user) return null;
 
   const onSubmit = async (data: Record<string, unknown>) => {
+    if (submitting) return;
     setSubmitting(true);
     try {
       await dataProvider.update("users", {
@@ -90,7 +91,7 @@ const UserEditContent = () => {
           </span>
         </span>
       </header>
-      <Form record={user} onSubmit={onSubmit}>
+      <Form record={user} onSubmit={onSubmit} noValidate>
         <div className="user-account-form-body">
           <div className="user-account-field-grid">
             <FormTextInput
@@ -100,6 +101,7 @@ const UserEditContent = () => {
               autoComplete="email"
               isRequired
               validate={[REQUIRED_FIELD, VALID_EMAIL]}
+              disabled={submitting}
               className="user-account-field user-account-field-wide"
             />
             <FormTextInput
@@ -108,6 +110,7 @@ const UserEditContent = () => {
               autoComplete="name"
               isRequired
               validate={REQUIRED_FIELD}
+              disabled={submitting}
               className="user-account-field"
             />
             <FormSelect
@@ -117,10 +120,15 @@ const UserEditContent = () => {
               placeholder="Chọn vai trò"
               isRequired
               validate={REQUIRED_FIELD}
+              disabled={submitting}
               className="user-account-field"
             />
             <div className="user-account-toggle-row user-account-field-wide">
-              <FormToggle source="disabled" label="Vô hiệu hóa tài khoản" />
+              <FormToggle
+                source="disabled"
+                label="Vô hiệu hóa tài khoản"
+                disabled={submitting}
+              />
             </div>
           </div>
           <footer className="user-account-form-actions">

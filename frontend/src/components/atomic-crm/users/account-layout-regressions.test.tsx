@@ -129,6 +129,24 @@ describe("account form controls", () => {
 });
 
 describe("account form validation", () => {
+  it("explains a short password at its field before sending it to the server", async () => {
+    create.mockClear();
+    const screen = await renderedForm();
+    await screen
+      .getByRole("textbox", { name: "Email" })
+      .fill("recruiter@vfic.dev");
+    await screen
+      .getByRole("textbox", { name: "Họ và tên" })
+      .fill("Nguyễn Minh Anh");
+    await screen.getByLabelText(/^Mật khẩu/).fill("1234567");
+    await screen.getByLabelText(/Xác nhận mật khẩu/).fill("1234567");
+    await screen.getByRole("button", { name: "Tạo tài khoản" }).click();
+    await expect
+      .element(screen.getByText("Mật khẩu phải có ít nhất 8 ký tự."))
+      .toBeVisible();
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("blocks the create call and names every empty required field", async () => {
     create.mockClear();
     await page.viewport(desktop, 720);
@@ -199,6 +217,12 @@ describe("account form validation", () => {
 
     const pending = screen.getByRole("button", { name: "Đang tạo" });
     await expect.element(pending).toBeVisible();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Email" }))
+      .toBeDisabled();
+    await expect
+      .element(screen.getByRole("link", { name: "Hủy" }))
+      .toHaveAttribute("aria-disabled", "true");
 
     resolveCreate({ data: { id: 7 } });
     await expect.poll(() => create.mock.calls.length).toBe(1);

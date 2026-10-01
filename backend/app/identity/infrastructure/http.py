@@ -85,7 +85,9 @@ class SqlAlchemyAuthHttpService:
         except ValueError as exc:
             raise InvalidRefreshTokenError from exc
 
-        user = await self._db.get(User, user_id)
+        # Token revocation/disable may have committed after this request first
+        # loaded the account; an identity-map hit is not current authority.
+        user = await self._db.get(User, user_id, populate_existing=True)
         if user is None or user.disabled:
             raise InvalidRefreshTokenError
         # A refresh token minted before a logout (or any other security-state
@@ -102,6 +104,10 @@ class SqlAlchemyAuthHttpService:
         ``user.token_version``, so one bump kills the access token in flight and
         the 14-day refresh token with it — logout is no longer cosmetic.
         """
+        # Refresh under the same row lock used by password/account security
+        # writes. Two overlapping requests must each revoke the latest issued
+        # generation rather than both write the same cached increment.
+        await self._db.refresh(current, with_for_update=True)
         current.token_version += 1
         await record_audit(
             self._db,
@@ -121,6 +127,10 @@ class SqlAlchemyAuthHttpService:
         current: AuthenticatedUser,
         body: ChangePasswordRequest,
     ) -> None:
+        # A reset can replace the password between authentication and this
+        # handler. Verify the locked current hash and hold the lock through the
+        # security write, including the offloaded crypto awaits.
+        await self._db.refresh(current, with_for_update=True)
         if not await verify_password(body.current_password, current.password_hash):
             raise InvalidCurrentPasswordError
         current.password_hash = await hash_password(body.new_password)

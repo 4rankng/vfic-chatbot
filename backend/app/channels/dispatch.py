@@ -20,10 +20,17 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from app.channels import types as ct
 from app.channels.registry import ChannelAdapterRegistry
+from app.shared.application.outbound import (
+    PARTIAL_DELIVERY_ERROR_PREFIX,
+    OutboundTelemetry,
+    combine_outbound_telemetry,
+)
+from app.shared.domain.text_bubbles import TEXT_BUBBLE_CHARS, split_text_bubbles
 
 if TYPE_CHECKING:
     from app.channels.ports import ChannelAccountResolver
@@ -57,9 +64,9 @@ class ChannelDispatchService:
         """Route ``command`` to its provider adapter.
 
         Authority fence: if ``account_resolver`` is wired and the command's
-        ``channel_account_generation`` is older than the active account's
-        generation, the send is suppressed (the account was replaced/
-        disconnected after the command was queued). Suppression is not a
+        ``channel_account_generation`` differs from the active account's
+        generation, the send is suppressed. Both stale and unknown future
+        generations lack current send authority. Suppression is not a
         transport error and not retriable.
         """
         if self._resolver is not None:
@@ -83,7 +90,76 @@ class ChannelDispatchService:
             blocked = before_provider_io()
             if blocked is not None:
                 return blocked
-        return await adapter.send_text(command)
+        if len(command.text) <= TEXT_BUBBLE_CHARS:
+            return await adapter.send_text(command)
+        parts = split_text_bubbles(command.text)
+        if not parts:
+            return ct.ChannelSendResult(
+                ok=False, error="outbound text is empty", error_class="provider_error",
+            )
+        return await self._send_parts(adapter, command, parts, before_provider_io)
+
+    async def _send_parts(
+        self, adapter, command: ct.OutboundTextCommand, parts: list[str],
+        before_provider_io: Callable[[], ct.ChannelSendResult | None] | None,
+    ) -> ct.ChannelSendResult:
+        """Send bounded text without replaying a prefix if a later part fails."""
+        accepted = 0
+        first_id: str | None = None
+        timings: list[OutboundTelemetry] = []
+        base = OutboundTelemetry(adapter=command.provider)
+
+        def outcome(result: ct.ChannelSendResult) -> ct.ChannelSendResult:
+            telemetry = combine_outbound_telemetry(
+                base, timings, result="sent" if result.ok else "provider_error",
+            )
+            if not result.ok and accepted:
+                # Earlier parts are already with the candidate. The entire
+                # durable command cannot be retried, even if this later part
+                # was definitely rejected or a policy fence now suppresses it.
+                return ct.ChannelSendResult(
+                    ok=False, provider_message_id=first_id,
+                    error=f"{PARTIAL_DELIVERY_ERROR_PREFIX}remaining outbound parts stopped",
+                    error_class="unknown", telemetry=telemetry,
+                )
+            return replace(result, provider_message_id=first_id or result.provider_message_id, telemetry=telemetry)
+
+        for index, part in enumerate(parts):
+            provider_attempt_started = False
+            try:
+                if index:
+                    if self._resolver is not None:
+                        blocked = await self._suppress_if_stale(command)
+                        if blocked is not None:
+                            return outcome(blocked)
+                    if before_provider_io is not None:
+                        blocked = before_provider_io()
+                        if blocked is not None:
+                            return outcome(blocked)
+                provider_attempt_started = True
+                result = await adapter.send_text(replace(command, text=part))
+            except Exception:
+                if not accepted:
+                    raise  # preserve the existing first-request transport path
+                if provider_attempt_started:
+                    timings.append(OutboundTelemetry(
+                        adapter=command.provider, provider_attempts=1,
+                        chunk_count=1, result="transport_error",
+                    ))
+                # A provider/resolver exception after acceptance has the same
+                # no-replay contract as a failed envelope; never log payloads.
+                return outcome(ct.ChannelSendResult(
+                    ok=False, error="later outbound part failed", error_class="unknown",
+                ))
+            timings.append(result.telemetry or OutboundTelemetry(
+                adapter=command.provider, provider_attempts=1, chunk_count=1,
+                result="sent" if result.ok else "provider_error",
+            ))
+            if not result.ok:
+                return outcome(result)
+            accepted += 1
+            first_id = first_id or result.provider_message_id
+        return outcome(ct.ChannelSendResult(ok=True, provider_message_id=first_id))
 
     async def _suppress_if_stale(
         self, command: ct.OutboundTextCommand
@@ -105,12 +181,12 @@ class ChannelDispatchService:
                 error_class="provider_error",
                 suppressed=True,
             )
-        if account.generation > command.channel_account_generation:
-            # The account was reconnected/replaced after this command was
-            # queued. Suppress rather than send under a superseded authority.
+        if account.generation != command.channel_account_generation:
+            # Only the exact current epoch grants authority; a future stamped
+            # epoch is no more trustworthy than one superseded by reconnect.
             return ct.ChannelSendResult(
                 ok=False,
-                error="channel account generation advanced before dispatch",
+                error="channel account generation does not match before dispatch",
                 error_class="provider_error",
                 suppressed=True,
             )

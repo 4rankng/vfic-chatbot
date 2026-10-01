@@ -1,5 +1,7 @@
-import { ListBase, useListContext, useRedirect } from "ra-core";
-import { ChevronRight, Inbox } from "lucide-react";
+import { useState } from "react";
+import { ListBase, useListContext, useNotify, useRedirect } from "ra-core";
+import { ChevronRight, Inbox, RefreshCw, TriangleAlert } from "lucide-react";
+import { Button } from "@/components/base/buttons/button";
 import { cn, getRelativeTimeString } from "@/lib/utils";
 import { EmptyState, ListPagination, PageHeading, PageShell } from "../kit";
 import type { BotRun } from "../types";
@@ -123,7 +125,40 @@ const SkeletonRows = () => (
 );
 
 export const BotRunListContent = () => {
-  const { data, isPending } = useListContext<BotRun>();
+  const { data, isPending, isFetching, error, refetch } =
+    useListContext<BotRun>();
+  const notify = useNotify();
+  const [retrying, setRetrying] = useState(false);
+  const records = data ?? [];
+  const busy = Boolean(isPending || isFetching || retrying);
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      const result = await refetch();
+      if (result && "error" in result && result.error) {
+        notify("Vẫn chưa tải được nhật ký. Vui lòng thử lại.", {
+          type: "error",
+        });
+      }
+    } catch {
+      notify("Vẫn chưa tải được nhật ký. Vui lòng thử lại.", { type: "error" });
+    } finally {
+      setRetrying(false);
+    }
+  };
+  const retryAction = (
+    <Button
+      type="button"
+      className="uu-scope"
+      color="secondary"
+      size="md"
+      iconLeading={RefreshCw}
+      isLoading={Boolean(isFetching || retrying)}
+      onClick={() => void retry()}
+    >
+      Thử lại
+    </Button>
+  );
 
   return (
     <PageShell>
@@ -131,10 +166,20 @@ export const BotRunListContent = () => {
       <section
         className="mt-4 border-y border-[var(--workspace-border)] bg-[var(--workspace-surface)]"
         aria-label="Nhật ký xử lý"
+        aria-busy={busy}
       >
-        {isPending ? (
+        {isPending && records.length === 0 ? (
           <SkeletonRows />
-        ) : !data || data.length === 0 ? (
+        ) : records.length === 0 && error ? (
+          <EmptyState
+            role="alert"
+            className="max-w-none"
+            icon={<TriangleAlert aria-hidden="true" />}
+            title="Chưa tải được nhật ký"
+            description="Hãy kiểm tra kết nối và thử lại."
+            action={retryAction}
+          />
+        ) : records.length === 0 ? (
           <EmptyState
             className="max-w-none"
             icon={<Inbox className="size-6" aria-hidden="true" />}
@@ -142,22 +187,35 @@ export const BotRunListContent = () => {
             description="Nhật ký sẽ xuất hiện sau lần xử lý đầu tiên."
           />
         ) : (
-          <div role="list">
-            {data.map((run, index) => (
+          <>
+            {error && (
               <div
-                role="listitem"
-                key={run.id}
-                className="flex border-b border-[var(--workspace-border)] last:border-b-0 hover:bg-muted/50 focus-within:bg-muted"
+                role="alert"
+                className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--workspace-border)] px-4 py-3 text-body"
               >
-                <BotRunTimelineRail
-                  outcome={run.outcome}
-                  isFirst={index === 0}
-                  isLast={index === data.length - 1}
-                />
-                <BotRunRow run={run} />
+                <span>
+                  Chưa cập nhật được nhật ký. Dữ liệu đã tải vẫn được giữ lại.
+                </span>
+                {retryAction}
               </div>
-            ))}
-          </div>
+            )}
+            <div role="list">
+              {records.map((run, index) => (
+                <div
+                  role="listitem"
+                  key={run.id}
+                  className="flex border-b border-[var(--workspace-border)] last:border-b-0 hover:bg-muted/50 focus-within:bg-muted"
+                >
+                  <BotRunTimelineRail
+                    outcome={run.outcome}
+                    isFirst={index === 0}
+                    isLast={index === records.length - 1}
+                  />
+                  <BotRunRow run={run} />
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </section>
       <ListPagination

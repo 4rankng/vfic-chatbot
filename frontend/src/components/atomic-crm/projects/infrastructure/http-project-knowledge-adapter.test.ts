@@ -26,6 +26,177 @@ beforeEach(() => {
 });
 
 describe("HTTP project-knowledge adapter", () => {
+  it("downloads the full template as text rather than parsing its Markdown as JSON", async () => {
+    const content = "# Mẫu KB\n## salary_income\n## recruitment_contact";
+    mocks.apiRequest.mockResolvedValue(
+      new Response(content, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="mau-kb-du-an.md"',
+        },
+      }),
+    );
+    await expect(
+      httpProjectKnowledgeAdapter.getFullTemplate("project / 1"),
+    ).resolves.toEqual({ filename: "mau-kb-du-an.md", content });
+    expect(mocks.apiRequest).toHaveBeenCalledWith(
+      "/api/v1/knowledge/projects/project%20%2F%201/knowledge-template",
+      { headers: { Accept: "text/plain" }, signal: undefined },
+    );
+    expect(mocks.apiJson).not.toHaveBeenCalled();
+  });
+
+  it("preserves the template filename when its attachment header is unavailable", async () => {
+    mocks.apiRequest.mockResolvedValue(
+      new Response("Template content", {
+        headers: { "Content-Type": "text/plain" },
+      }),
+    );
+    await expect(
+      httpProjectKnowledgeAdapter.getFullTemplate("project-1"),
+    ).resolves.toEqual({
+      filename: "mau-kb-du-an.md",
+      content: "Template content",
+    });
+  });
+
+  it("rejects a failed, empty or non-text template response", async () => {
+    mocks.apiRequest.mockResolvedValueOnce(
+      new Response("Server details", { status: 500 }),
+    );
+    await expect(
+      httpProjectKnowledgeAdapter.getFullTemplate("project-1"),
+    ).rejects.toMatchObject({
+      message: "Chưa tải được mẫu KB. Vui lòng thử lại.",
+    });
+    mocks.apiRequest.mockResolvedValueOnce(
+      new Response(" \n", { headers: { "Content-Type": "text/plain" } }),
+    );
+    await expect(
+      httpProjectKnowledgeAdapter.getFullTemplate("project-1"),
+    ).rejects.toMatchObject({
+      message: "Mẫu KB chưa có nội dung. Vui lòng thử lại.",
+    });
+    mocks.apiRequest.mockResolvedValueOnce(
+      new Response("<html>Error</html>", {
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+    await expect(
+      httpProjectKnowledgeAdapter.getFullTemplate("project-1"),
+    ).rejects.toMatchObject({
+      message: "Mẫu KB không đúng định dạng. Vui lòng thử lại.",
+    });
+  });
+
+  it("exports the UTF-8 Markdown attachment through the authenticated client", async () => {
+    mocks.apiRequest.mockResolvedValue(
+      new Response("# Dự án\nKiến thức đã lưu", {
+        headers: {
+          "Content-Type": "text/markdown; charset=utf-8",
+          "Content-Disposition":
+            "attachment; filename*=UTF-8''kb-d%E1%BB%B1-%C3%A1n.md",
+        },
+      }),
+    );
+    await expect(
+      httpProjectKnowledgeAdapter.getKnowledgeExport("project / 1"),
+    ).resolves.toEqual({
+      filename: "kb-dự-án.md",
+      content: "# Dự án\nKiến thức đã lưu",
+    });
+    expect(mocks.apiRequest).toHaveBeenCalledWith(
+      "/api/v1/knowledge/projects/project%20%2F%201/knowledge-export",
+      { headers: { Accept: "text/markdown" }, signal: undefined },
+    );
+    expect(mocks.apiJson).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['attachment; filename="kb-project.md"', "kb-project.md"],
+    [
+      "attachment; filename*=UTF-8''%ZZ; filename=kb-project.md",
+      "kb-project.md",
+    ],
+    ['attachment; filename="../../unsafe.md"', "project-knowledge.md"],
+    ['attachment; filename="unsafe.html"', "project-knowledge.md"],
+    [null, "project-knowledge.md"],
+  ])(
+    "keeps an attachment filename safe when its header is %s",
+    async (header, filename) => {
+      const headers: Record<string, string> = {
+        "Content-Type": "text/markdown",
+      };
+      if (header) headers["Content-Disposition"] = header;
+      mocks.apiRequest.mockResolvedValue(
+        new Response("Saved knowledge", { headers }),
+      );
+      await expect(
+        httpProjectKnowledgeAdapter.getKnowledgeExport("project-1"),
+      ).resolves.toEqual({ filename, content: "Saved knowledge" });
+    },
+  );
+
+  it("rejects an empty or non-Markdown success without returning a fake export", async () => {
+    mocks.apiRequest.mockResolvedValueOnce(
+      new Response(" \n", { headers: { "Content-Type": "text/markdown" } }),
+    );
+    await expect(
+      httpProjectKnowledgeAdapter.getKnowledgeExport("project-1"),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "Dự án chưa có kiến thức đã lưu để xuất.",
+    });
+    mocks.apiRequest.mockResolvedValueOnce(
+      new Response("<html>Error</html>", {
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+    await expect(
+      httpProjectKnowledgeAdapter.getKnowledgeExport("project-1"),
+    ).rejects.toMatchObject({
+      status: 502,
+      message: "Tệp KB không đúng định dạng. Vui lòng thử lại.",
+    });
+  });
+
+  it.each([
+    [401, "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại."],
+    [403, "Bạn không có quyền xuất KB của dự án này."],
+    [404, "Không tìm thấy dự án. Vui lòng làm mới danh sách."],
+    [409, "Dự án chưa có kiến thức đã lưu để xuất."],
+    [500, "Chưa xuất được KB. Vui lòng thử lại."],
+  ])(
+    "reports export HTTP %i without exposing the response body",
+    async (status, message) => {
+      mocks.apiRequest.mockResolvedValue(
+        new Response("Internal server details", { status: status as number }),
+      );
+      await expect(
+        httpProjectKnowledgeAdapter.getKnowledgeExport("project-1"),
+      ).rejects.toMatchObject({ status, message });
+    },
+  );
+
+  it("forwards cancellation to export and disposes its subscription", async () => {
+    const listeners = new Set<() => void>();
+    mocks.apiRequest.mockImplementation(async (_path, options) => {
+      listeners.forEach((abort) => abort());
+      expect(options.signal.aborted).toBe(true);
+      return new Response("Saved knowledge", {
+        headers: { "Content-Type": "text/markdown" },
+      });
+    });
+    await httpProjectKnowledgeAdapter.getKnowledgeExport("project-1", {
+      aborted: false,
+      onAbort: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    });
+    expect(listeners.size).toBe(0);
+  });
+
   it("uploads the retained file and all category proposals in one durable request", async () => {
     const receipt = {
       id: "document-1",

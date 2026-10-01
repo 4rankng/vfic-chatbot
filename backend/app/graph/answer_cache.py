@@ -5,7 +5,8 @@ the *whole agent loop*, including the model call that authors the prose. A hit i
 one Redis read plus (paraphrase tier only) one cached embedding.
 
 Two tiers, both keyed by a ``scope`` token that folds the project scope, the
-address bucket and the ``knowledge``/``preamble``/``jobs`` version counters:
+address bucket, private intake context and the ``knowledge``/``preamble``/``jobs``
+version counters:
 
   * **exact** (``answer_cache_enabled``, default ON) — same normalized question
     (``normalize_query``: NFC + lowercase + collapsed whitespace), same scope.
@@ -110,13 +111,6 @@ _PROJECT_DATA_TOOLS = frozenset(
     }
 )
 
-# The subset whose arguments the model composes from the conversation rather than
-# from the current question (filters, location, sort order). Cached only on a
-# turn with no earlier messages, so a preference stated several turns ago cannot
-# be folded into a reply that is then served to another candidate.
-_CONTEXT_COMPOSED_TOOLS = frozenset({"list_active_projects", "list_active_jobs"})
-
-
 @dataclass(frozen=True)
 class AnswerCacheHit:
     """One cached answer. ``similarity`` is 1.0 on the exact tier."""
@@ -158,12 +152,9 @@ def is_answer_cacheable(
     account flow never does, and neither does a low-confidence route
     (``allowed_tools is None``) that could call any tool at all.
 
-    ``has_conversation_history`` narrows the catalog tools whose arguments the
-    model composes itself (filters, location, sort order): with earlier messages
-    in view it can fold in a preference stated several turns ago, which would
-    make the reply candidate-specific even though the question reads standalone.
-    The knowledge tools take their query from the current turn, so they are
-    unaffected.
+    Earlier messages influence the answer prose as well as tool arguments.
+    A history-bearing turn therefore cannot share a previously generated answer,
+    even when its retrieval query happens to be unchanged.
 
     A profile-collection ask is deliberately NOT a disqualifier: the ask is a
     generic instruction ("cho em xin tên để tiện hỗ trợ nhé"), identical for
@@ -178,7 +169,7 @@ def is_answer_cacheable(
         return False
     if any(name not in _PROJECT_DATA_TOOLS for name in tools):
         return False
-    if has_conversation_history and any(name in _CONTEXT_COMPOSED_TOOLS for name in tools):
+    if has_conversation_history:
         return False
     return is_standalone_kb_question(user_text)
 
@@ -244,13 +235,17 @@ async def answer_scope(
     address: str,
     tenant_id: str = "default",
     language: str = "vi",
+    intake_context: str = "",
+    provider: str = "default",
 ) -> str:
     """The 32-hex scope token every answer-cache entry is keyed by.
 
     Folds everything that determines the answer apart from the question itself:
     the tenant, the reply language, the three version counters every KB/chunk,
     category/project-metadata and job-derived write already bumps, the project
-    scope, and the address bucket (``anh``/``chị``) the prompt was written with.
+    scope, private candidate profile/intake instruction and the address bucket
+    (``anh``/``chị``) the prompt was written with. Private context only contributes
+    to the digest; it is never placed in a Redis key as plaintext.
     A reply written with "anh" is therefore never served in the "chị" bucket.
     """
     parts = [
@@ -262,6 +257,8 @@ async def answer_scope(
         await cache_version("jobs"),
         project_scope,
         address,
+        intake_context,
+        provider,
     ]
     return sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:32]
 

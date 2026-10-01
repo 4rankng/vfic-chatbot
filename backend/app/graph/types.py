@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import AsyncContextManager
 from dataclasses import dataclass
@@ -162,6 +163,10 @@ class GraphDeps:
     # never imports the settings service. False keeps the pre-existing
     # single-message delivery exactly as it was.
     progressive_send: bool = False
+    # Owned native status from worker setup. The runner drains this task at the
+    # resolved-sender handoff and on every early exit, before terminal writes.
+    # A task handle keeps the graph independent of the worker/provider adapter.
+    preamble_status_task: asyncio.Task[None] | None = None
 
 
 def _now() -> datetime:

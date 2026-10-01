@@ -125,6 +125,7 @@ async def test_pipeline_run_marks_flagged_low_confidence(integration_session):
 
     async def llm_json(system, user):
         payload = _units_payload("thông tin suy luận")
+        payload["units"][0]["source_quote"] = user
         payload["units"][0]["confidence"] = "low"
         payload["units"][0]["is_inference"] = True
         return json.dumps(payload)
@@ -142,7 +143,9 @@ async def test_pipeline_retries_on_malformed_then_succeeds(integration_session):
         calls["n"] += 1
         if calls["n"] == 1:
             return "<<<not json>>>"
-        return json.dumps(_units_payload("đơn vị hợp lệ sau retry"))
+        payload = _units_payload("đơn vị hợp lệ sau retry")
+        payload["units"][0]["source_quote"] = user
+        return json.dumps(payload)
 
     await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).run(doc)
     assert calls["n"] == 2  # one malformed, one good
@@ -660,7 +663,9 @@ async def test_document_ingest_never_overwrites_projection_owned_cards(
             {"did": str(doc.id)},
         )
     ).scalar()
-    assert stored == 1
+    # The digest covers only one of the posting's facts; its untouched source
+    # block is retained as a second searchable unit rather than discarded.
+    assert stored == 2
 
     # The projection-built card and Job catalog survive verbatim; the feature
     # values are extracted from the brief. Highlights are the one card slot

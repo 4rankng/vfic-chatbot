@@ -586,6 +586,23 @@
   --border-color-primary: var(--color-border-primary);
 }
 
+/* InputBase draws its frame with a Tailwind ring, which flat-surfaces.css
+   deliberately suppresses with the other box shadows. Paint that same state
+   colour as an inset physical outline instead. The existing slate input ink
+   stays independent of the workspace's faint separator alias for --input;
+   focus and error colours still come from the primitive's ring state. An
+   outline preserves the control's size and the console's flat treatment. */
+.uu-scope [class~="group/input"] {
+  --ring-color-primary: #8a9298;
+  outline: 1px solid var(--tw-ring-color, var(--ring-color-primary));
+  outline-offset: -1px;
+}
+
+.uu-scope [class~="group/input"]:focus-within {
+  outline-width: 2px;
+  outline-offset: -2px;
+}
+
 /* Operator rule (2026-10-01): console buttons cap at 40px tall and their
    labels render at 12px — no oversized call-to-action rows. The
    .console-button marker comes from the vendored Button root so every size

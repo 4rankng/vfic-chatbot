@@ -12,8 +12,6 @@ category: requirements
 Ví dụ khối một nhóm yêu cầu:
 
 ### record: yeu-cau-chung
-job_ids:
-- "[Áp dụng cho việc nào? Điền id việc; bỏ trống nếu áp dụng cho mọi việc.]"
 age_min: [Tuổi tối thiểu?]
 age_max: [Tuổi tối đa?]
 genders:

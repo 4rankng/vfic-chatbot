@@ -4,25 +4,45 @@ test.describe("current recruitment workspace baseline", () => {
   test("keeps workspace pages inside phone, tablet, and desktop viewports", async ({
     loginAsAdmin,
     page,
-  }) => {
-    test.setTimeout(120_000);
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
     await loginAsAdmin();
     const routes = [
-      "/",
-      "/projects",
-      "/users",
-      "/bot-runs",
-      "/settings",
-      "/conversations",
+      ["/", "Tổng quan"],
+      ["/projects", "Dự án tuyển dụng"],
+      ["/projects/create", "Tạo dự án"],
+      ["/users", "Tài khoản"],
+      ["/users/create", "Tạo tài khoản"],
+      ["/bot_runs", "Lần chạy bot"],
+      ["/settings", "Zalo"],
+      ["/profile", "Hồ sơ cá nhân"],
+      ["/hieu-suat", "Hiệu suất chatbot"],
+      ["/conversations", "Hộp thư"],
     ];
-    for (const width of [360, 390, 768, 1440]) {
+    for (const width of [360, 390, 768, 900, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const route of routes) {
+      for (const [route, heading] of routes) {
         await page.goto(`/#${route}`);
-        await expect(page.locator("main h1, main h2").first()).toBeVisible({
-          timeout: 15_000,
-        });
+        // An arbitrary heading also matches a 404 page. Assert the actual
+        // screen so a typo or removed route cannot count as layout coverage.
+        await expect(
+          page.getByRole("heading", { name: heading, exact: true }).first(),
+        ).toBeVisible({ timeout: 15_000 });
         await page.evaluate(() => document.fonts.ready);
+        await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
+        await expect(page.locator('main [data-slot="skeleton"]')).toHaveCount(
+          0,
+        );
+        await expect(
+          page.getByRole("status", { name: /^Đang tải/ }),
+        ).toHaveCount(0);
+        if (route === "/bot_runs") {
+          await expect(
+            page.getByRole("button", { name: /^Xem lần chạy #/ }).first(),
+          ).toBeVisible();
+        }
         await expect
           .poll(
             () =>
@@ -34,8 +54,18 @@ test.describe("current recruitment workspace baseline", () => {
             { message: `${route} must fit a ${width}px viewport` },
           )
           .toBeLessThanOrEqual(1);
+        if (width === 360 || width === 1440) {
+          await page.screenshot({
+            path: testInfo.outputPath(
+              `workspace-${route.replaceAll("/", "-") || "overview"}-${width}.png`,
+            ),
+            fullPage: true,
+            animations: "disabled",
+          });
+        }
       }
     }
+    expect(pageErrors).toEqual([]);
   });
 
   test("authenticates through FastAPI and renders the recruitment dashboard", async ({

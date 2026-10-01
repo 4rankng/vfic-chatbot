@@ -316,7 +316,7 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     expect(payload).not.toHaveProperty("discovery_card");
   });
 
-  it("writes jobs first and never states a vacancy count", async () => {
+  it("writes roles in catalog order without retired metadata", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen);
 
@@ -335,8 +335,9 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     expect(jobsWrite.filename).toBe("jobs.md");
     expect(jobsWrite.content).toContain("category: jobs");
     expect(mocks.replaceCategory).not.toHaveBeenCalled();
-    // The recruiter does not manage headcount, so the count renders as an explicit null.
-    expect(jobsWrite.content).toContain("vacancies: null");
+    expect(jobsWrite.content).not.toMatch(
+      /^\s*(?:jobs?_ids|vacancies|employment_type)\s*:/m,
+    );
   }, 20000);
 
   it("fills the fields from the brief and leaves the typed name alone", async () => {
@@ -640,6 +641,35 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     );
     expect(mocks.uploadDoc).not.toHaveBeenCalled();
   }, 25000);
+
+  it("keeps preparation requiring authority cutover from enabling draft publication", async () => {
+    mocks.trainingDoc.mockImplementation(async () => ({
+      id: "training-document",
+      status: "PUBLISHED",
+      error: null,
+      project_training: {
+        status: "COMPLETED",
+        current: null,
+        completed: plannedWrites().map((write) => write.key),
+        error: null,
+        requires_cutover: true,
+      },
+    }));
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+    await expect
+      .element(screen.getByText(/Đã chuẩn bị và kiểm tra 3 phần kiến thức/))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: /Tạo dự án/ }))
+      .toBeDisabled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.notify).not.toHaveBeenCalledWith(
+      "Đã tạo dự án. Kiến thức đã sẵn sàng cho chatbot.",
+      { type: "success" },
+    );
+    expect(mocks.updateCard).not.toHaveBeenCalled();
+  });
 
   it("does not activate when the edited roles fail their revision review", async () => {
     const screen = await render(<ProjectCreate />);

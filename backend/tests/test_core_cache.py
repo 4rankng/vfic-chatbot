@@ -199,3 +199,41 @@ async def test_first_bump_after_counter_loss_never_restarts_small(monkeypatch):
     await cache_mod.bump_cache_version("fresh")
     assert int(redis._store["cachever:fresh"]) == int(seeded) + 1
     assert await cache_mod.cache_version("fresh") == str(int(seeded) + 1)
+
+
+async def test_counter_loss_within_one_second_does_not_resurrect_entries(monkeypatch):
+    redis = _FakeRedis()
+    monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
+    monkeypatch.setattr("time.time", lambda: 1_800_000_000)
+
+    first = await cache_mod.cache_version("knowledge")
+    redis._store.pop("cachever:knowledge")
+    second = await cache_mod.cache_version("knowledge")
+
+    assert first != second
+
+
+async def test_counter_seed_loser_adopts_the_winning_generation(monkeypatch):
+    class RacingRedis(_FakeRedis):
+        async def set(self, key, value, *, nx=False):
+            if nx:
+                self._store[key] = "777"
+                return False
+            return await super().set(key, value, nx=nx)
+
+    redis = RacingRedis()
+    monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
+
+    assert await cache_mod.cache_version("knowledge") == "777"
+
+
+async def test_lost_counter_bump_cannot_reuse_the_previous_generation(monkeypatch):
+    redis = _FakeRedis()
+    monkeypatch.setattr(cache_mod, "get_redis", lambda: redis)
+    monkeypatch.setattr("time.time", lambda: 1_800_000_000)
+
+    first = await cache_mod.cache_version("knowledge")
+    redis._store.pop("cachever:knowledge")
+    assert await cache_mod.bump_cache_version("knowledge") is True
+
+    assert await cache_mod.cache_version("knowledge") != first

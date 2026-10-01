@@ -190,11 +190,18 @@ export const WorkspaceShell = ({
       <a
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-[var(--workspace-paper)] focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-[var(--workspace-shell)]"
         href="#main-content"
+        onClick={(event) => {
+          // This application uses hash routes. Letting the fragment navigate
+          // would open a missing route instead of moving keyboard focus.
+          event.preventDefault();
+          contentRef.current?.focus({ preventScroll: true });
+          contentRef.current?.scrollIntoView({ block: "start" });
+        }}
       >
         Bỏ qua điều hướng
       </a>
 
-      <header className="uu-scope workspace-chrome flex h-14 shrink-0 items-center gap-2 bg-primary px-3 lg:px-4">
+      <header className="uu-scope workspace-chrome workspace-topbar flex h-14 shrink-0 items-center gap-2 bg-primary px-3 lg:px-4">
         <SlideoutMenu.Trigger
           isOpen={isDrawerOpen}
           onOpenChange={setIsDrawerOpen}
@@ -269,6 +276,7 @@ export const WorkspaceShell = ({
         <main
           ref={contentRef}
           id="main-content"
+          tabIndex={-1}
           className={cx("workspace-frame-content", contentClassName)}
         >
           {children}

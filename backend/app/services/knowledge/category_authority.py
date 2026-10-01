@@ -30,20 +30,45 @@ from app.models.company import Project
 from app.models.knowledge import (
     KnowledgeBase,
     KnowledgeBaseMode,
+    KnowledgeBaseDirectFile,
     KnowledgeCategory,
     KnowledgeCategoryRevision,
     KnowledgeCategoryRevisionStatus,
+    KnowledgeDocument,
+    KnowledgeStatus,
 )
 from app.models.user import User
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.core.cache import bump_cache_version
 from app.core.preamble_cache import NS_PREAMBLE
 from app.services.audit_service import record_audit
-from app.services.knowledge.category_contracts import CATEGORY_DEFINITIONS
+from app.project_knowledge.domain.category_catalog import CATEGORY_DEFINITIONS
 from app.services.knowledge.category_projections import CategoryProjectionWriter
+from app.services.knowledge.training_features import (
+    deferred_source_for_cutover,
+    feature_publication_state,
+    publish_training_features,
+    restore_feature_values,
+    same_feature_intent,
+    snapshot_feature_values,
+    supersede_unadopted_deferred_features,
+)
 from app.shared.domain.errors import ConflictError, NotFoundError
 
 RepairCaches = Callable[[], Awaitable[None]]
+
+
+async def category_projection_allowed(db: AsyncSession, project: Project) -> bool:
+    """Only established category authority may change candidate-facing projections."""
+    if not project.category_authority_started:
+        return False
+    base = await db.get(KnowledgeBase, project.knowledge_base_id) if project.knowledge_base_id else None
+    if base is not None and base.mode is KnowledgeBaseMode.DIRECT_CONTEXT:
+        published_page = await db.scalar(select(KnowledgeBaseDirectFile.id).where(
+            KnowledgeBaseDirectFile.knowledge_base_id == base.id
+        ))
+        return published_page is None
+    return base is None or base.mode is KnowledgeBaseMode.RAG
 
 
 async def require_rag_project(db: AsyncSession, project_id: uuid.UUID) -> Project:
@@ -136,6 +161,13 @@ async def _categories_missing_an_active_revision(
     missing: list[str] = []
     for category in categories:
         if category.active_revision_id is not None:
+            revision = await db.get(KnowledgeCategoryRevision, category.active_revision_id)
+            if (
+                revision is None
+                or revision.category_id != category.id
+                or revision.status is not KnowledgeCategoryRevisionStatus.ACTIVE
+            ):
+                missing.append(category.category_key)
             continue
         latest = await db.scalar(
             select(KnowledgeCategoryRevision)
@@ -169,6 +201,8 @@ async def cutover_category_authority(
         if project.knowledge_base_id
         else None
     )
+    if knowledge_base is None or knowledge_base.project_id not in (None, project_id):
+        raise ConflictError("Dự án cần KB thuộc chính dự án trước khi chuyển sang 12 danh mục.")
     categories = list(
         (
             await db.scalars(
@@ -185,16 +219,39 @@ async def cutover_category_authority(
             "Category cutover is not ready; prepare or explicitly clear: "
             + ", ".join(sorted(set(missing)))
         )
-    project.category_cutover_snapshot = build_cutover_snapshot(
+    cutover_snapshot = build_cutover_snapshot(
         project,
         categories,
         knowledge_base_mode=(
             knowledge_base.mode.value if knowledge_base is not None else None
         ),
     )
+    project.category_cutover_snapshot = cutover_snapshot
+    feature_source = await deferred_source_for_cutover(db, project_id, categories)
+    feature_values = (
+        await snapshot_feature_values(db, project_id) if feature_source is not None else None
+    )
     await projection_writer.rebuild(project_id, categories)
+    if feature_source is not None:
+        snapshot = dict(cutover_snapshot)
+        if await same_feature_intent(
+            db, feature_source.metadata_["project_training"]["feature_baseline"], feature_values
+        ):
+            snapshot["deferred_feature_document_id"] = str(feature_source.id)
+            snapshot["feature_values"] = feature_values
+            await publish_training_features(db, feature_source)
+        else:
+            # Independent feature edits after preparation are newer live intent.
+            feature_publication_state(feature_source, requires_cutover=False, status="SUPERSEDED")
+        cutover_snapshot = snapshot
+        project.category_cutover_snapshot = cutover_snapshot
     project.category_authority_started = True
     project.category_cutover_at = datetime.now(UTC)
+    await supersede_unadopted_deferred_features(
+        db,
+        project_id,
+        adopted_document_id=cutover_snapshot.get("deferred_feature_document_id"),
+    )
     # The migration's last step: the catalog now holds the project's knowledge,
     # so the knowledge base stops reading as DIRECT_CONTEXT. The mode is what
     # the console panel and the conversation routing both key on — the panel
@@ -269,6 +326,22 @@ async def rollback_category_authority(
     project.index_card = project_projection.get("index_card") or {}
     project.is_active = bool(project_projection.get("is_active"))
     project.discovery_revision = int(project_projection.get("discovery_revision") or 0)
+    if "feature_values" in snapshot:
+        await restore_feature_values(db, project_id, snapshot["feature_values"])
+    if snapshot.get("deferred_feature_document_id"):
+        source = await db.get(
+            KnowledgeDocument, uuid.UUID(snapshot["deferred_feature_document_id"])
+        )
+        if (
+            source is not None
+            and source.project_id == project_id
+            and source.status != KnowledgeStatus.ARCHIVED
+        ):
+            feature_publication_state(
+                source,
+                requires_cutover=True,
+                status="DEFERRED_UNTIL_CUTOVER",
+            )
     project.category_cutover_at = None
     project.category_cutover_snapshot = None
     await _restore_knowledge_base_mode(db, project, snapshot)

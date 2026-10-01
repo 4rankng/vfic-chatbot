@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 
 from app.graph.clients import MiniMaxAgent, OpenRouterEmbedder
 from app.graph.adapters import (
@@ -82,6 +83,9 @@ class _FakeResult:
     def all(self):
         return self._rows
 
+    def first(self):
+        return self._rows[0] if self._rows else None
+
 
 class _FakeDB:
     """Doubles the two reads the direct-context lane makes per turn.
@@ -95,8 +99,12 @@ class _FakeDB:
         self._scalar_value = scalar_value
         self.scalar_calls = 0
 
-    async def execute(self, _stmt):
-        return _FakeResult(self._rows)
+    async def execute(self, stmt):
+        project_id = next((value for value in stmt.compile().params.values() if isinstance(value, list)), None)
+        rows = self._rows
+        if project_id is not None:
+            rows = [row for row in rows if row[0].id in project_id]
+        return _FakeResult(rows)
 
     async def scalar(self, _stmt):
         self.scalar_calls += 1
@@ -155,9 +163,10 @@ async def test_single_active_project_still_uses_focused_fallback():
 
 
 @pytest.mark.asyncio
-async def test_direct_context_catalog_cache_hit_skips_database(monkeypatch):
-    """A warm preamble cache serves the routing catalog; no DB query runs."""
+async def test_direct_context_catalog_cache_hit_validates_selected_scope(monkeypatch):
+    """Warm routing avoids a full catalog read, but checks its selected KB."""
     import app.core.cache as cache_mod
+    import uuid
     from app.models.conversation import ConversationProjectState
 
     async def fake_cache_version(_namespace):
@@ -175,12 +184,16 @@ async def test_direct_context_catalog_cache_hit_skips_database(monkeypatch):
             }
         ]
 
-    async def fail_execute(_stmt):
-        raise AssertionError("catalog query must not run on a cache hit")
-
-    class _RefusingDB:
-        async def execute(self, _stmt):
-            await fail_execute(_stmt)
+    class _ScopedDB:
+        async def execute(self, stmt):
+            assert [uuid.UUID("11111111-1111-1111-1111-111111111111")] in stmt.compile().params.values()
+            return _FakeResult([(
+                SimpleNamespace(
+                    id=uuid.UUID("11111111-1111-1111-1111-111111111111"),
+                    slug="lg-display", name="LG Display", aliases=["LG"],
+                ),
+                SimpleNamespace(id="current-kb", mode=SimpleNamespace(value="RAG")),
+            )])
 
         async def commit(self):
             return None
@@ -188,7 +201,7 @@ async def test_direct_context_catalog_cache_hit_skips_database(monkeypatch):
     monkeypatch.setattr(cache_mod, "cache_version", fake_cache_version)
     monkeypatch.setattr(cache_mod, "cache_get_json", fake_cache_get)
     monkeypatch.setattr(cache_mod, "cache_set_json", fake_cache_version)
-    adapter = _DirectContextAdapter(_RefusingDB())
+    adapter = _DirectContextAdapter(_ScopedDB())
     conversation = SimpleNamespace(
         focused_project_id=None,
         project_context_state=ConversationProjectState.EXPLORE,
@@ -198,6 +211,92 @@ async def test_direct_context_catalog_cache_hit_skips_database(monkeypatch):
     assert ctx.project_slug == "lg-display"
     assert ctx.project_id == "11111111-1111-1111-1111-111111111111"
     assert ctx.direct_context is None  # RAG mode: no direct text is fetched
+
+
+@pytest.mark.parametrize("page_project_ids", [(), ("allowed-project",)])
+async def test_direct_context_router_refuses_other_page_project(monkeypatch, page_project_ids):
+    from app.graph import adapters
+
+    cached = adapters._DirectContextCatalogEntry(
+        project_id="other-project", slug="private", name="Private", aliases=(),
+        kb_id="private-kb", mode="DIRECT_CONTEXT",
+    )
+    monkeypatch.setattr(adapters, "_load_direct_context_catalog", AsyncMock(return_value=[cached]))
+    db = MagicMock()
+    db.commit = AsyncMock()
+    db.scalar = AsyncMock(side_effect=AssertionError("unassigned KB must never be loaded"))
+    conversation = SimpleNamespace(focused_project_id="other-project", project_context_state="FOCUSED")
+
+    context = await _DirectContextAdapter(db, page_project_ids=page_project_ids).resolve(
+        conversation, "Private lương bao nhiêu?",
+    )
+
+    assert context.state == "EXPLORE"
+    assert context.direct_context is None
+    assert conversation.focused_project_id is None
+    db.scalar.assert_not_called()
+
+
+async def test_cached_project_cannot_keep_inactive_focus(monkeypatch):
+    from app.graph import adapters
+
+    cached = adapters._DirectContextCatalogEntry(
+        project_id="inactive-project", slug="old", name="Old", aliases=(),
+        kb_id="old-kb", mode="RAG",
+    )
+    monkeypatch.setattr(adapters, "_load_direct_context_catalog", AsyncMock(return_value=[cached]))
+    db = _FakeDB([])
+    conversation = SimpleNamespace(focused_project_id="inactive-project", project_context_state="FOCUSED")
+
+    context = await _DirectContextAdapter(db).resolve(conversation, "Old lương bao nhiêu?")
+
+    assert context.state == "EXPLORE"
+    assert conversation.focused_project_id is None
+
+
+async def test_cached_direct_mode_uses_current_kb_assignment(monkeypatch):
+    from app.graph import adapters
+    from app.services.personas.repository import PersonaRepository
+
+    cached = adapters._DirectContextCatalogEntry(
+        project_id="p1", slug="project", name="Project", aliases=(),
+        kb_id="superseded-direct-kb", mode="DIRECT_CONTEXT",
+    )
+    current_project = SimpleNamespace(id="p1", slug="project", name="Project", aliases=[])
+    current_kb = SimpleNamespace(id="current-rag-kb", mode=SimpleNamespace(value="RAG"))
+    db = _FakeDB([(current_project, current_kb)])
+    db.scalar = AsyncMock(side_effect=AssertionError("old direct file must never be loaded"))
+    monkeypatch.setattr(adapters, "_load_direct_context_catalog", AsyncMock(return_value=[cached]))
+    monkeypatch.setattr(PersonaRepository, "active_persona_body", AsyncMock(return_value="persona"))
+    conversation = SimpleNamespace(focused_project_id=None, project_context_state="EXPLORE")
+
+    context = await _DirectContextAdapter(db).resolve(conversation, "Project lương bao nhiêu?")
+
+    assert context.state == "FOCUSED"
+    assert context.knowledge_mode == "RAG"
+    assert context.direct_context is None
+    db.scalar.assert_not_called()
+
+
+async def test_retired_cached_alias_cannot_route_to_a_different_current_identity(monkeypatch):
+    from app.graph import adapters
+
+    cached = adapters._DirectContextCatalogEntry(
+        project_id="p1", slug="old", name="Old Name", aliases=("OLD",),
+        kb_id="kb", mode="RAG",
+    )
+    project = SimpleNamespace(id="p1", slug="new", name="New Name", aliases=[])
+    kb = SimpleNamespace(id="kb", mode="RAG")
+    monkeypatch.setattr(adapters, "_load_direct_context_catalog", AsyncMock(return_value=[cached]))
+    conversation = SimpleNamespace(focused_project_id="p1", project_context_state="FOCUSED")
+
+    context = await _DirectContextAdapter(_FakeDB([(project, kb)])).resolve(
+        conversation, "OLD lương bao nhiêu?",
+    )
+
+    assert context.state == "EXPLORE"
+    assert context.project_id is None
+    assert conversation.focused_project_id is None
 
 
 @pytest.mark.asyncio
@@ -247,7 +346,11 @@ async def test_direct_context_catalog_cold_path_writes_cache(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_focused_direct_context_turn_fetches_only_the_selected_file(monkeypatch):
+@pytest.mark.parametrize(
+    "knowledge_text",
+    ["KB TEXT", 'job_ids: ["old"]\njobs_ids: []\nKB TEXT', "vacancies: null\nemployment_type: null\nKB TEXT"],
+)
+async def test_focused_direct_context_turn_fetches_only_the_selected_file(monkeypatch, knowledge_text):
     """Only the selected project's direct text is fetched, once, and the
     capacity guard runs on that pre-fetched file (no re-SELECT)."""
     import app.core.cache as cache_mod
@@ -268,7 +371,7 @@ async def test_focused_direct_context_turn_fetches_only_the_selected_file(monkey
     kb = SimpleNamespace(id="kb1", mode=SimpleNamespace(value="DIRECT_CONTEXT"))
     db = _FakeDB(
         [(proj, kb)],
-        scalar_value=SimpleNamespace(normalized_text="KB TEXT"),
+        scalar_value=SimpleNamespace(normalized_text=knowledge_text),
     )
     monkeypatch.setattr(cache_mod, "cache_version", fake_cache_version)
     monkeypatch.setattr(cache_mod, "cache_get_json", fake_cache_get)
@@ -347,7 +450,8 @@ class _SettingsWithBothProviders(_Settings):
 
 
 @pytest.mark.asyncio
-async def test_build_deps_wires_graphdeps(monkeypatch):
+@pytest.mark.parametrize("page_project_ids", [None, (), ("page-project",)])
+async def test_build_deps_wires_graphdeps(monkeypatch, page_project_ids):
     class _FakeLLM:
         pass
 
@@ -360,7 +464,7 @@ async def test_build_deps_wires_graphdeps(monkeypatch):
     monkeypatch.setattr("app.graph.client_cache.get_settings", lambda: _Settings())
     monkeypatch.setattr("app.graph.clients.get_settings", lambda: _Settings())
 
-    deps = await build_deps(object())
+    deps = await build_deps(object(), page_project_ids=page_project_ids)
     assert isinstance(deps, GraphDeps)
     assert isinstance(deps.agent, MiniMaxAgent)
     # The LLM-judge seam is gone entirely (client + port + GraphDeps field), so
@@ -370,6 +474,9 @@ async def test_build_deps_wires_graphdeps(monkeypatch):
     # Progressive send ships ON by default (first useful bubble is sent while the
     # rest of the answer is still generating); the admin panel can switch it off.
     assert deps.progressive_send is True
+    assert deps.direct_context._page_project_ids == (
+        frozenset(page_project_ids) if page_project_ids is not None else None
+    )
 
     reset_client_cache()
 

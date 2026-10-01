@@ -1,0 +1,1 @@
+"""TingTing integration policy contracts."""

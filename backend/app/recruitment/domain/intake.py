@@ -19,7 +19,8 @@ _NEGATED_INTENT = re.compile(r"\b(?:khong|chua|ko|k)\s+(?:con\s+)?muon\b")
 _EMPTY_INTENTS = frozenset({"gi", "gi a", "gi vay", "khong", "chua", "chua biet"})
 _THIRD_PARTY_CONTACT = re.compile(
     r"\b(?:hotline|tong dai|so (?:dien thoai )?(?:cua )?"
-    r"(?:cong ty|nha may|tu van vien|tuyen dung|bo|me|vo|chong|ban em|ban toi))\b"
+    r"(?:cong ty|nha may|tu van vien|tuyen dung|bo|me|vo|chong|ban em|ban toi)|"
+    r"(?:bo|me|vo|chong|ban) (?:cua )?(?:em|toi|minh))\b"
 )
 _CONTACT_CLAUSE_BOUNDARY = re.compile(r"[,;!?\n\r]|(?<![0-9])\.(?![0-9])")
 _SELF_CONTACT_PREFIX = re.compile(
@@ -29,6 +30,19 @@ _SELF_CONTACT_PREFIX = re.compile(
 _SELF_CONTACT_SUFFIX = re.compile(
     r"^[ :–—-]*(?:la )?(?:sdt|so(?: dien thoai| di dong| lien he)?|dien thoai) "
     r"(?:cua )?(?:em|toi|minh|anh|chi)\b"
+)
+_SELF_CONTACT_OWNER = re.compile(
+    r"\b(?:sdt|so(?: dien thoai| di dong| lien he)?|dien thoai) "
+    r"(?:cua )?(?:em|toi|minh|anh|chi)\b"
+)
+_REJECTED_CONTACT_PREFIX = re.compile(
+    r"\b(?:khong|ko|k|chua) (?:phai|(?:con )?(?:dung|su dung))\b|"
+    r"\b(?:so(?: dien thoai| di dong)?|sdt|dien thoai) cu\b"
+)
+_REJECTED_CONTACT_SUFFIX = re.compile(
+    r"^(?:(?:la )?so(?: dien thoai| di dong)? cu\b|"
+    r"(?:(?:em|toi|minh|anh|chi) )?(?:khong|ko|k|chua) "
+    r"(?:phai|(?:con )?(?:dung|su dung))\b)"
 )
 
 
@@ -57,13 +71,56 @@ def candidate_mobile(text: str | None) -> str | None:
 def candidate_contact_mobile(text: str | None) -> str | None:
     """Do not make an employer/other person's quoted contact the lead's phone."""
     source = text or ""
-    phone = candidate_mobile(source)
-    if phone is None:
-        return None
     has_third_party_context = bool(
         _THIRD_PARTY_CONTACT.search(normalize_vietnamese_text(source))
     )
+    contexts = _phone_contexts(source)
+    values = phone_values(source)
+    if len(values) > 1:
+        # A correction may contain both an old/quoted number and the new one.
+        # Accept only one explicitly owned mobile, with every other token
+        # explained by a denial or third-party ownership; never choose among
+        # two usable candidate numbers or silently ignore an unlabelled one.
+        owned = {
+            value for value, before, after in contexts
+            if _MOBILE.fullmatch(value)
+            and (_SELF_CONTACT_PREFIX.search(before) or _SELF_CONTACT_SUFFIX.search(after))
+            and not _contact_is_rejected(before, after)
+            and not _contact_is_third_party(before, after)
+        }
+        if len(owned) != 1:
+            return None
+        phone = next(iter(owned))
+        for value, before, after in contexts:
+            excluded = (
+                _contact_is_rejected(before, after) or _contact_is_third_party(before, after)
+            )
+            if (value == phone and excluded) or (value != phone and not excluded):
+                return None
+        return phone
+    phone = candidate_mobile(source)
+    if phone is None:
+        return None
+    for _, before, after in contexts:
+        own_prefix = bool(_SELF_CONTACT_PREFIX.search(before))
+        own_suffix = bool(_SELF_CONTACT_SUFFIX.search(after))
+        if _contact_is_rejected(before, after):
+            return None
+        # An unrelated hotline in another clause does not own this number.
+        # Within a clause, only an explicit adjacent "số của em là ..." can
+        # establish candidate ownership after earlier third-party context.
+        if (
+            _contact_is_third_party(before, after)
+            or (has_third_party_context and not (own_prefix or own_suffix))
+        ):
+            return None
+    return phone
+
+
+def _phone_contexts(source: str) -> list[tuple[str, str, str]]:
+    """Keep ownership/denial attached to each complete number's own clause."""
     boundaries = list(_CONTACT_CLAUSE_BOUNDARY.finditer(source))
+    contexts = []
     for number in _PHONE_CANDIDATE.finditer(source):
         start = max(
             (boundary.end() for boundary in boundaries if boundary.end() <= number.start()),
@@ -75,18 +132,45 @@ def candidate_contact_mobile(text: str | None) -> str | None:
         )
         before = normalize_vietnamese_text(source[start:number.start()])
         after = normalize_vietnamese_text(source[number.end():end])
-        own_prefix = bool(_SELF_CONTACT_PREFIX.search(before))
-        own_suffix = bool(_SELF_CONTACT_SUFFIX.search(after))
-        # An unrelated hotline in another clause does not own this number.
-        # Within a clause, only an explicit adjacent "số của em là ..." can
-        # establish candidate ownership after earlier third-party context.
-        if (
+        contexts.append((phone_values(number.group())[0], before, after))
+    return contexts
+
+
+def _contact_is_third_party(before: str, after: str) -> bool:
+    return bool(
+        _THIRD_PARTY_CONTACT.search(after)
+        or (_THIRD_PARTY_CONTACT.search(before) and not _SELF_CONTACT_PREFIX.search(before))
+    )
+
+
+def _contact_is_rejected(before: str, after: str) -> bool:
+    rejected_before = _REJECTED_CONTACT_PREFIX.search(before)
+    own_match = _SELF_CONTACT_PREFIX.search(before)
+    return bool(
+        _REJECTED_CONTACT_SUFFIX.search(after)
+        or (
+            rejected_before
+            and (
+                own_match is None
+                or rejected_before.start() >= own_match.start()
+                or not before[rejected_before.end():own_match.start()].strip()
+            )
+        )
+    )
+
+
+def candidate_rejected_mobile(text: str | None) -> str | None:
+    """A denied/retired number cannot establish current contact readiness."""
+    rejected = {
+        value for value, before, after in _phone_contexts(text or "")
+        if _MOBILE.fullmatch(value)
+        and not (
             _THIRD_PARTY_CONTACT.search(after)
-            or (_THIRD_PARTY_CONTACT.search(before) and not own_prefix)
-            or (has_third_party_context and not (own_prefix or own_suffix))
-        ):
-            return None
-    return phone
+            or (_THIRD_PARTY_CONTACT.search(before) and not _SELF_CONTACT_OWNER.search(before))
+        )
+        and _contact_is_rejected(before, after)
+    }
+    return next(iter(rejected)) if len(rejected) == 1 else None
 
 
 def has_full_name(value: object) -> bool:

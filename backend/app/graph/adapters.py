@@ -18,6 +18,7 @@ from app.recruitment.domain.recommendation import (
     is_salary_profile_statement,
     parse_salary_band,
 )
+from app.project_knowledge.domain.legacy_job_references import strip_legacy_job_reference_source
 
 
 def _asks_to_explore(normalized_message: str) -> bool:
@@ -183,6 +184,45 @@ async def _load_direct_context_catalog(db):
     return entries
 
 
+async def _current_project_context_entries(db, entries):
+    """Treat cached routing identities as hints, never KB availability authority."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import load_only
+
+    from app.models.company import Project
+    from app.models.knowledge import KnowledgeBase
+
+    if not entries:
+        return []
+    rows = (
+        await db.execute(
+            select(Project, KnowledgeBase)
+            .options(
+                load_only(Project.id, Project.slug, Project.name, Project.aliases),
+                load_only(KnowledgeBase.id, KnowledgeBase.mode),
+            )
+            .join(KnowledgeBase, Project.knowledge_base_id == KnowledgeBase.id)
+            .where(
+                Project.id.in_([entry.project_id for entry in entries]),
+                Project.is_active.is_(True),
+            )
+            .execution_options(populate_existing=True)
+        )
+    ).all()
+    current = {
+        project.id: _DirectContextCatalogEntry(
+            project_id=project.id,
+            slug=project.slug,
+            name=project.name,
+            aliases=tuple(project.aliases or ()),
+            kb_id=knowledge_base.id,
+            mode=getattr(knowledge_base.mode, "value", knowledge_base.mode),
+        )
+        for project, knowledge_base in rows
+    }
+    return [current[entry.project_id] for entry in entries if entry.project_id in current]
+
+
 class _PersonaRepositoryRetrieval:
     """``GraphRetrievalPort``'s persona read, backed by the persona repository.
 
@@ -211,8 +251,13 @@ class _DirectContextAdapter:
     columns of every active project and never re-SELECTs the file row.
     """
 
-    def __init__(self, db) -> None:
+    def __init__(self, db, *, page_project_ids: tuple[str, ...] | None = None) -> None:
         self._db = db
+        self._page_project_ids = (
+            frozenset(str(project_id) for project_id in page_project_ids)
+            if page_project_ids is not None
+            else None
+        )
 
     async def resolve(self, conversation, user_text: str):
         import re
@@ -229,18 +274,26 @@ class _DirectContextAdapter:
 
         normalized_message = normalize_vietnamese_text(user_text)
         entries = await _load_direct_context_catalog(self._db)
-        matches = []
-        for entry in entries:
+        if self._page_project_ids is not None:
+            entries = [entry for entry in entries if str(entry.project_id) in self._page_project_ids]
+
+        def named_in_message(entry):
             names = [entry.slug, entry.name, *(entry.aliases or ())]
-            if any(
+            return any(
                 re.search(
                     rf"(?<!\w){re.escape(normalize_vietnamese_text(name))}(?!\w)",
                     normalized_message,
                 )
                 for name in names
                 if len(normalize_vietnamese_text(name)) >= 2
-            ):
-                matches.append(entry)
+            )
+
+        matches = [entry for entry in entries if named_in_message(entry)]
+        named_match = bool(matches)
+        matches = [
+            entry for entry in await _current_project_context_entries(self._db, matches)
+            if named_in_message(entry)
+        ]
         if len(matches) > 1:
             names = ", ".join(entry.name for entry in matches)
             return ProjectTurnContext(
@@ -258,6 +311,7 @@ class _DirectContextAdapter:
             return ProjectTurnContext(state="EXPLORE")
         if (
             selected is None
+            and not named_match
             and _is_general_or_comparative(normalized_message)
             and len(entries) >= 2
         ):
@@ -270,10 +324,14 @@ class _DirectContextAdapter:
             # but do not pin this turn, so the agent can answer across active
             # projects and ask which one the candidate means.
             return ProjectTurnContext(state="EXPLORE")
-        if selected is None and focused_id is not None:
+        if selected is None and focused_id is not None and not named_match:
             selected = next(
                 (entry for entry in entries if entry.project_id == focused_id), None
             )
+            current = await _current_project_context_entries(
+                self._db, [selected] if selected is not None else []
+            )
+            selected = current[0] if current else None
         if selected is None:
             if focused_id is not None or getattr(
                 conversation, "project_context_state", "EXPLORE"
@@ -319,7 +377,7 @@ class _DirectContextAdapter:
                 direct_context = DirectContext(
                     knowledge_base_id=str(selected.kb_id),
                     persona_body=persona_body,
-                    knowledge_text=direct_file.normalized_text,
+                    knowledge_text=strip_legacy_job_reference_source(direct_file.normalized_text),
                 )
         return ProjectTurnContext(
             state="FOCUSED",

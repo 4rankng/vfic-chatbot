@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-import time
+import secrets
 from typing import Any
 
 from app.core.redis import get_redis
@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 def _fresh_generation_value() -> str:
     """Seed for a lost/never-created version counter.
 
-    Epoch seconds are far larger than any INCR counter a namespace carries, so
-    a seeded generation can never equal a version that existing cache entries
-    were written under — the whole namespace is invalidated at once.
+    Randomness separates recreations even within the same clock tick or after
+    clock rollback. The high bit keeps generations separate from legacy small
+    counters, while leaving headroom inside Redis's signed 64-bit INCR range.
     """
-    return str(int(time.time()))
+    return str((1 << 62) + secrets.randbits(61))
 
 
 async def cache_get_json(key: str) -> Any | None:
@@ -58,10 +58,12 @@ async def cache_version(namespace: str) -> str:
         # FULL FLUSH of the namespace. Seed a fresh generation instead of
         # returning a small default like "1" — that can match still-live v{n}
         # entries written before the loss and resurrect stale data. SET NX so a
-        # racing process that seeded first keeps ownership; the value it stored
-        # is adopted on the next read.
-        await redis.set(key, generation, nx=True)
-        return generation
+        # racing process that seeded first keeps ownership; adopt its value
+        # now so callers use the same namespace even on the first cache read.
+        if await redis.set(key, generation, nx=True):
+            return generation
+        value = await redis.get(key)
+        return str(value) if value is not None else generation
     except Exception:  # noqa: BLE001
         logger.debug("cache version read failed for namespace %s", namespace, exc_info=True)
         # Redis is unreachable, so the cache reads/writes that would use this

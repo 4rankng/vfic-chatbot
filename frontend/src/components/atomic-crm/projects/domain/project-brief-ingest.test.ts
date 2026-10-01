@@ -166,7 +166,8 @@ describe("parseProjectBrief — knowledge categories", () => {
     const { faqEntries } = parsed();
     expect(faqEntries[0]).toEqual({
       question: "Bên công ty đang tuyển công việc gì?",
-      answer: "Vị trí tuyển: Công nhân sản xuất (SMT, PCBA, KHO, QA, LQC...).",
+      answer:
+        "Vị trí tuyển: Công nhân sản xuất (SMT, PCBA, KHO, QA, LQC...).\nMô tả công việc hàng ngày: Thao tác lắp ráp, vận hành máy và kiểm tra sản xuất linh kiện bảng mạch điện tử cho xe ô tô.",
     });
   });
 

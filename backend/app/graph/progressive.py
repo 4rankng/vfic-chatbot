@@ -42,7 +42,7 @@ from app.graph.dispatch import (
 from app.graph.grounding import _UngroundedContact, ground_reply
 from app.graph.ports import DirectMessageSenderPort
 from app.graph.telemetry import _stamp_db, _stamp_outbound_telemetry
-from app.graph.think_strip import visible_offset
+from app.graph.think_strip import strip_provider_artifacts, visible_offset
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
 
 logger = logging.getLogger(__name__)
@@ -52,14 +52,6 @@ PROGRESSIVE_BUBBLE_MIN_CHARS = 250
 PROGRESSIVE_SUBSTANCE_MIN_CHARS = 80
 PROGRESSIVE_MAX_WAIT_CHARS = 700
 _BUBBLE_BOUNDARY_CHARS = frozenset(".!?\n…")
-_MARKER_TAIL_RE = re.compile(r"(?:^|\n)\s*(?:\d{1,3}[.)]|[-•*])\s*$")
-# Zalo collapses long chat messages behind a "See more" link; a recruiting
-# answer the candidate has to expand does not get read. Soft budget for a
-# generated reply — the compaction cuts at a sentence boundary, never mid-word.
-ZALO_MESSAGE_SOFT_BUDGET_CHARS = 450
-# Appended when compaction dropped content, so the candidate knows the list
-# was shortened and can ask for the rest.
-_TRUNCATED_NOTE = "\n\n(Còn nhiều dự án và vị trí khác đang tuyển — hỏi em để biết thêm từng dự án nhé ạ.)"
 # "Dạ em chào anh/chị ạ." style openers, peeled from the head of a candidate
 # bubble before the substance length test. The lookahead keeps a token from
 # matching inside a longer word ("anh văn" peels "anh", "anhx" does not).
@@ -161,6 +153,7 @@ class _ProgressiveStream:
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self.raw = ""
         self.evidence: list[str] = []
+        self.defer_catalog = False
 
     async def push_delta(self, text: str) -> None:
         self.raw += text
@@ -337,16 +330,29 @@ async def _await_first_bubble(
 
     while True:
         waiter = asyncio.ensure_future(stream.queue.get())
-        await asyncio.wait({waiter, lane_task}, return_when=asyncio.FIRST_COMPLETED)
-        if not waiter.done():
+        try:
+            await asyncio.wait({waiter, lane_task}, return_when=asyncio.FIRST_COMPLETED)
+            has_delta = waiter.done()
+        finally:
+            if not waiter.done():
+                waiter.cancel()
+                with suppress(asyncio.CancelledError):
+                    await waiter
+        if not has_delta:
             # The lane finished (short answer, non-agent lane, or a failure): the
             # existing path owns delivery now, whole and unchanged.
-            waiter.cancel()
-            with suppress(asyncio.CancelledError):
-                await waiter
             _give_up()
             return None
         waiter.result()  # consume the delta; the accumulator already has it
+        if stream.defer_catalog or any(
+            str(result).partition("\n")[0].startswith("ACTIVE_PROJECT_LOOKUP_JSON=")
+            for result in stream.evidence
+        ):
+            # A catalog answer must finish before any rows are delivered. A
+            # provider cap or complete rewrite can otherwise strand the first
+            # two projects with the candidate and make completeness impossible.
+            timings["progressive_first_bubble_skipped"] = "catalog_completeness"
+            return None
         visible_start = visible_offset(stream.raw)
         if visible_start is None:
             # The provider's think block is still open: nothing is candidate-visible
@@ -496,8 +502,8 @@ async def _complete_progressive_prefix(
     ever sent twice.
     """
     raw_stream = stream.raw
-    remainder_raw = raw_stream[early.offset:]
-    if early.raw + remainder_raw != raw_stream:
+    streamed_remainder = raw_stream[early.offset:]
+    if early.raw + streamed_remainder != raw_stream:
         # Unreachable by construction (offset arithmetic). Logged, never raised:
         # a wrong split would be a data bug, not a reason to drop the turn.
         logger.error(
@@ -505,10 +511,16 @@ async def _complete_progressive_prefix(
             state.conversation_id,
             state.trace_id or "-",
         )
-    if full_text != raw_stream:
+    visible_stream = strip_provider_artifacts(raw_stream)
+    visible_prefix = strip_provider_artifacts(early.raw)
+    remainder_raw = streamed_remainder
+    if full_text not in (raw_stream, visible_stream):
         # The model retried or failed over mid-stream, so the streamed text is no
-        # longer the text the agent returned. The offset split remains the honest
-        # record of what the candidate saw. This is alarmable, not informational:
+        # longer the text the agent returned. Never send its rejected tail:
+        # preserve a verified prefix only if the final answer still starts with
+        # it, otherwise deliver the complete corrected answer independently.
+        # An empty final answer terminalizes only the already-delivered bubble.
+        # This is alarmable, not informational:
         # it is the only place a turn records that progressive delivery and the
         # returned answer disagreed, and its frequency is the health signal for
         # mid-stream provider replacement.
@@ -524,6 +536,11 @@ async def _complete_progressive_prefix(
             state.trace_id or "-",
             len(raw_stream),
             len(full_text),
+        )
+        remainder_raw = (
+            full_text[len(visible_prefix):]
+            if visible_prefix and full_text.startswith(visible_prefix)
+            else full_text
         )
     if not remainder_raw.strip() or early.outbox_id is None:
         if early.outbox_id is None:
@@ -594,64 +611,3 @@ async def _complete_progressive_prefix(
         # forward an invented contact to the candidate.
         return "", None
     return grounded_remainder, None
-
-
-def compact_for_zalo(text: str, *, budget: int = ZALO_MESSAGE_SOFT_BUDGET_CHARS) -> str:
-    """Keep a generated reply inside Zalo's no-"See more" window.
-
-    Over-budget replies collapse behind "See more" and candidates do not
-    expand them. Cut at the last sentence boundary that fits the budget (same
-    paren/digit-dot boundary rules as the bubble scan), so the message always
-    ends on a complete sentence. Two refinements keep the cut readable:
-
-    - never end on a bare list marker ("4." with the item's content in the
-      next bubble — the observed production cut) — step back to the previous
-      complete line instead;
-    - when content was dropped, append the truncated-note so the candidate
-      knows more projects exist and can ask for them.
-
-    A reply with no boundary inside the budget is cut at the first boundary
-    anyway — one long paragraph beats a mid-word cut. Already-short replies
-    pass through untouched.
-    """
-    if len(text) <= budget:
-        return text
-
-    depth = 0
-    boundaries: list[int] = []
-    for index, char in enumerate(text):
-        if char == "(":
-            depth += 1
-        elif char == ")" and depth > 0:
-            depth -= 1
-        if char not in _BUBBLE_BOUNDARY_CHARS:
-            continue
-        if (
-            char == "."
-            and 0 < index < len(text) - 1
-            and text[index - 1].isdigit()
-            and text[index + 1].isdigit()
-        ):
-            continue
-        if depth > 0:
-            continue
-        boundaries.append(index + 1)
-
-    if not boundaries:
-        return text
-
-    reserve = len(_TRUNCATED_NOTE)
-    fitting = [offset for offset in boundaries if offset <= budget - reserve]
-    if not fitting:
-        fitting = [boundaries[0]]
-    cut = fitting[-1]
-    compact = text[:cut].rstrip()
-    # A cut right after a bare list marker ("4.") reads as a dangling item —
-    # step back until the last line carries content.
-    while _MARKER_TAIL_RE.search(compact) and len(fitting) > 1:
-        fitting.pop()
-        cut = fitting[-1]
-        compact = text[:cut].rstrip()
-    if len(text.rstrip()) > len(compact):
-        compact += _TRUNCATED_NOTE
-    return compact

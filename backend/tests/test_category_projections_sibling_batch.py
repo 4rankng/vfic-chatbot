@@ -26,8 +26,6 @@ _BENEFITS_MARKDOWN = (
     "## benefits\n"
     "\n"
     "### record: health-check\n"
-    "job_ids:\n"
-    "- assembler\n"
     'name: "Khám sức khỏe định kỳ"\n'
 )
 _MEALS_MARKDOWN = (
@@ -39,8 +37,6 @@ _MEALS_MARKDOWN = (
     "## meals\n"
     "\n"
     "### record: lunch\n"
-    "job_ids:\n"
-    "- assembler\n"
     "provided: true\n"
 )
 

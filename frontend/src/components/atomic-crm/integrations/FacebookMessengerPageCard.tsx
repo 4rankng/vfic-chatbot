@@ -32,12 +32,14 @@ type FacebookProjectCheckboxListProps = {
   projects: Project[];
   selected: string[];
   onToggle: (id: string, checked: boolean) => void;
+  disabled?: boolean;
 };
 
 const FacebookProjectCheckboxList = ({
   projects,
   selected,
   onToggle,
+  disabled = false,
 }: FacebookProjectCheckboxListProps) => (
   <ul className="settings-facebook-project-list">
     {projects.map((project) => (
@@ -53,6 +55,7 @@ const FacebookProjectCheckboxList = ({
           className="uu-scope"
           label={project.name}
           isSelected={selected.includes(project.id)}
+          isDisabled={disabled}
           onChange={(isSelected) => onToggle(project.id, isSelected)}
           validationBehavior="aria"
         />
@@ -125,6 +128,7 @@ const FacebookPageProjectsEditor = ({
         projects={projects}
         selected={draft}
         onToggle={toggle}
+        disabled={saving}
       />
       {draft.length === 0 ? (
         <span className="settings-field-hint">
@@ -148,11 +152,12 @@ const FacebookPageCard = ({ account, projects }: FacebookPageCardProps) => {
   const notify = useNotify();
 
   // This Page's Project assignments (per-Page GET from the contract).
-  const { data: pageProjects } = useQuery({
+  const assignmentsQuery = useQuery({
     queryKey: ["facebook-page-projects", account.page_id],
     queryFn: () => facebookIntegrationGateway.loadPageProjects(account.page_id),
     staleTime: 30_000,
   });
+  const pageProjects = assignmentsQuery.data;
   const assignedProjectIds = useMemo(
     () =>
       (pageProjects?.assignments ?? []).map(
@@ -208,12 +213,35 @@ const FacebookPageCard = ({ account, projects }: FacebookPageCardProps) => {
             {PAGE_STATUS_LABELS[account.status]}
           </Badge>
         </div>
-        <FacebookPageProjectsEditor
-          assignedProjectIds={assignedProjectIds}
-          projects={projects}
-          saving={saveAssignments.isPending}
-          onCommit={(ids) => saveAssignments.mutate(ids)}
-        />
+        {assignmentsQuery.isPending ? (
+          <p role="status" className="settings-field-hint">
+            Đang tải dự án đã gán…
+          </p>
+        ) : assignmentsQuery.isError || !pageProjects ? (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3"
+          >
+            <p className="settings-field-hint">
+              Chưa tải được dự án đã gán cho Trang.
+            </p>
+            <Button
+              className="uu-scope"
+              color="secondary"
+              size="sm"
+              onClick={() => void assignmentsQuery.refetch()}
+            >
+              Thử lại
+            </Button>
+          </div>
+        ) : (
+          <FacebookPageProjectsEditor
+            assignedProjectIds={assignedProjectIds}
+            projects={projects}
+            saving={saveAssignments.isPending}
+            onCommit={(ids) => saveAssignments.mutate(ids)}
+          />
+        )}
         <div className="settings-facebook-page-actions">
           <Button
             type="button"

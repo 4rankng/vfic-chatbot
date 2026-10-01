@@ -3,7 +3,6 @@ import {
   AlertCircle,
   ChevronRight,
   Database,
-  Download,
   Link2,
   Upload,
 } from "lucide-react";
@@ -30,6 +29,10 @@ import { useProjectIngest } from "./presentation/use-project-ingest";
 import { IngestProgressBoard } from "./presentation/IngestProgressBoard";
 import { useSinglePageDraft } from "./presentation/use-single-page-draft";
 import { ExternalSourceList } from "./ExternalSourceList";
+import {
+  ProjectKnowledgeExport,
+  ProjectKnowledgeTemplate,
+} from "./ProjectKnowledgeExport";
 import { CategoryEditor } from "./presentation/CategoryEditor";
 import { DiscoveryCardEditor } from "./presentation/DiscoveryCardEditor";
 import { FaqAutoSyncSection } from "./presentation/FaqAutoSyncSection";
@@ -38,7 +41,7 @@ import { BusTimetableSection } from "./ProjectBusTimetable";
 import {
   clearProjectKnowledgeCategory,
   cutoverProjectKnowledgeCategories,
-  getProjectKnowledgeFullTemplate,
+  getProjectKnowledgeCategories,
   updateProjectDiscoveryCard,
   type KnowledgeCategoryKey,
 } from "./project-knowledge-service";
@@ -60,15 +63,24 @@ export const ProjectKnowledgePanel = ({
   editable = false,
   canManageSources = editable,
 }: Props) => {
-  if (project.knowledge_mode === "DIRECT_CONTEXT") {
-    return <SinglePagePanel project={project} editable={canManageSources} />;
-  }
   return (
-    <RagCategoriesPanel
-      project={project}
-      editable={editable}
-      canManageSources={canManageSources}
-    />
+    <div className="space-y-3">
+      {canManageSources && (
+        <ProjectKnowledgeExport
+          key={String(project.id)}
+          projectId={String(project.id)}
+        />
+      )}
+      {project.knowledge_mode === "DIRECT_CONTEXT" ? (
+        <SinglePagePanel project={project} editable={canManageSources} />
+      ) : (
+        <RagCategoriesPanel
+          project={project}
+          editable={editable}
+          canManageSources={canManageSources}
+        />
+      )}
+    </div>
   );
 };
 
@@ -131,17 +143,19 @@ const BriefIngestSection = ({
   disabled,
   buttonLabel = "Nhập từ tệp văn bản (.md khuyến nghị)",
   onIngested,
+  onCutover,
 }: {
   projectId: string;
   disabled: boolean;
   /** The upload button's label; the migration affordance renames it. */
   buttonLabel?: string;
   /**
-   * Runs after the chain lands and the brief's highlights are patched onto the
-   * discovery card. A throw surfaces through this section's error state — the
-   * single page and the written categories are untouched either way.
+   * Refreshes the catalog after review. This does not authorize publishing a
+   * shadow source's highlights or hand knowledge authority to its categories.
    */
   onIngested?: (plan: BriefKnowledgePlan) => Promise<void>;
+  /** Resolves only after the explicit category-authority cutover succeeds. */
+  onCutover?: (plan: BriefKnowledgePlan) => Promise<void>;
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const { state, ingest } = useProjectIngest();
@@ -176,19 +190,30 @@ const BriefIngestSection = ({
       setNeedsHuman(
         plan.needsHuman.map((key) => PROJECT_KNOWLEDGE_CATEGORY_LABELS[key]),
       );
-      // The source and its plan are queued together; the worker confirms
-      // category activation before discovery claims can be updated.
-      const landed = await ingest(projectId, plan.writes, file);
-      // Every re-ingest re-lands the brief's highlight facts on the discovery
-      // card: the activation projection preserves `highlights` (it only seeds
-      // them), so the facts survive every later projection run. A brief with
-      // no highlights sends nothing — the card keeps its derived empty list.
-      if (landed && brief.highlights.length > 0) {
+      // Review can finish as a shadow batch while the single-page source is
+      // still live. Complete the explicit migration before publishing claims.
+      const result = await ingest(projectId, plan.writes, file);
+      if (!result.ok) return;
+      if (result.requiresCutover && !onCutover) {
+        // Another admin may have rolled back while this RAG panel was open.
+        // A catalog reload cannot make the prepared source authoritative.
+        await onIngested?.(plan);
+        return;
+      }
+      // The migration's explicit intent also applies to older receipts that
+      // omit requires_cutover. Never infer successful cutover from a reload.
+      await onCutover?.(plan);
+      // Non-shadow updates retain the existing recruiter-highlight behavior.
+      // A brief with no highlights sends no discovery-card patch.
+      // Shadow-source facts are adopted atomically by the backend cutover,
+      // which can preserve newer independent edits. Do not replay older file
+      // highlights after that transaction has decided their ownership.
+      if (!result.requiresCutover && brief.highlights.length > 0) {
         await updateProjectDiscoveryCard(projectId, {
           discovery_card: { highlights: brief.highlights },
         });
       }
-      if (landed) await onIngested?.(plan);
+      await onIngested?.(plan);
     } catch (readError) {
       setError((readError as Error).message);
     } finally {
@@ -245,7 +270,9 @@ const BriefIngestSection = ({
       ) : null}
       {state.phase === "done" ? (
         <p role="status" className="text-helper text-foreground">
-          Đã nạp xong {state.activated.length} phần kiến thức từ phiếu.
+          {state.requiresCutover
+            ? `Đã chuẩn bị và kiểm tra ${state.activated.length} phần kiến thức từ phiếu. Cần hoàn tất bước chuyển sang 12 danh mục trước khi Chatbot sử dụng dữ liệu mới. Nguồn kiến thức hiện tại vẫn được dùng.`
+            : `Đã nạp xong ${state.activated.length} phần kiến thức từ phiếu.`}
           {needsHuman && needsHuman.length > 0
             ? ` Cần nhập tay: ${needsHuman.join(", ")}.`
             : ""}
@@ -286,10 +313,26 @@ const MigrationSection = ({ projectId }: { projectId: string }) => {
   const migrate = async (plan: BriefKnowledgePlan) => {
     setMigrating(true);
     try {
-      // Cutover rejects a project whose categories are neither active nor
-      // explicitly cleared, so every category the brief does not carry is
-      // cleared first — an explicit empty state, not a gap.
+      // A partial brief must preserve existing revisions, including categories
+      // that still need review. Only a genuinely empty, unwritten category
+      // needs an explicit empty state before cutover.
+      const catalog = await getProjectKnowledgeCategories(projectId);
+      const writtenKeys = new Set(plan.writes.map((write) => write.key));
       for (const key of plan.needsHuman) {
+        const category = catalog.data.find((item) => item.key === key);
+        if (
+          writtenKeys.has(key) ||
+          category?.active_revision_id ||
+          category?.status === "CLEARED"
+        ) {
+          continue;
+        }
+        if (
+          category?.status === "STAGED" ||
+          category?.status === "PROCESSING"
+        ) {
+          throw new Error("Một danh mục vẫn đang được xử lý. Hãy thử lại sau.");
+        }
         await clearProjectKnowledgeCategory(projectId, key);
       }
       await cutoverProjectKnowledgeCategories(projectId);
@@ -323,20 +366,18 @@ const MigrationSection = ({ projectId }: { projectId: string }) => {
           Chuyển sang kiến thức 12 danh mục
         </h3>
         <p className="text-helper text-muted-foreground">
-          Dự án này đang dùng kiến thức một trang. Hãy tải lên phiếu thông tin
-          dạng văn bản: hệ thống nạp các danh mục theo tệp, mục nào phiếu không
-          nêu sẽ được đánh dấu trống, rồi dự án chuyển hẳn sang quản lý theo 12
-          danh mục. Trang một trang hiện tại được giữ lại và có thể khôi phục.
-          Giữ trang này mở để hoàn tất bước chuyển. Nếu rời trang, hãy quay lại
-          và chọn cùng tệp để tiếp tục; kiến thức một trang vẫn được dùng cho
-          đến khi chuyển xong.
+          Tải lên tệp thông tin dự án để chuyển sang 12 danh mục. Danh mục đã có
+          dữ liệu được giữ lại nếu tệp không nêu; mục chưa có dữ liệu được đánh
+          dấu trống. Kiến thức hiện tại vẫn được dùng đến khi chuyển xong và
+          được lưu để khôi phục. Giữ trang mở để hoàn tất; nếu rời trang, hãy
+          chọn lại cùng tệp để tiếp tục.
         </p>
       </div>
       <BriefIngestSection
         projectId={projectId}
         disabled={migrating}
         buttonLabel="Chuyển sang 12 danh mục — nhập từ tệp .md"
-        onIngested={migrate}
+        onCutover={migrate}
       />
     </section>
   );
@@ -426,27 +467,7 @@ const RagCategoriesPanel = ({
           Việc làm có trong file = đang tuyển.
         </p>
         <div className="project-knowledge-full-template">
-          <Button
-            type="button"
-            color="secondary"
-            size="sm"
-            className="uu-scope"
-            iconLeading={Download}
-            onClick={async () => {
-              const { filename, content } =
-                await getProjectKnowledgeFullTemplate(projectId);
-              const url = URL.createObjectURL(
-                new Blob([content], { type: "text/markdown;charset=utf-8" }),
-              );
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = filename;
-              link.click();
-              URL.revokeObjectURL(url);
-            }}
-          >
-            Tải mẫu KB đầy đủ
-          </Button>
+          <ProjectKnowledgeTemplate projectId={projectId} />
         </div>
         {categories && (
           <div className="project-knowledge-progress" aria-live="polite">
@@ -455,15 +476,19 @@ const RagCategoriesPanel = ({
             </strong>
           </div>
         )}
-        {canManageSources && editable && (
-          <BriefIngestSection
-            projectId={projectId}
-            disabled={false}
-            onIngested={async () => {
-              await catalog.reload();
-            }}
-          />
-        )}
+        {canManageSources &&
+          editable &&
+          (project.category_authority_started === false ? (
+            <MigrationSection projectId={projectId} />
+          ) : (
+            <BriefIngestSection
+              projectId={projectId}
+              disabled={false}
+              onIngested={async () => {
+                await catalog.reload();
+              }}
+            />
+          ))}
         <div className="project-category-workspace">
           <nav
             className="project-category-navigation"
@@ -623,7 +648,7 @@ const RagCategoriesPanel = ({
         {selected === "transportation" && (
           <section className="project-transport-panel">
             <p className="project-transport-description">
-              Lịch xe Agent tra cứu khi ứng viên hỏi tuyến, điểm đón, giờ đón.
+              Lịch xe chatbot tra cứu khi ứng viên hỏi tuyến, điểm đón, giờ đón.
             </p>
             <BusTimetableSection projectId={projectId} />
           </section>

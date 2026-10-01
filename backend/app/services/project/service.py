@@ -55,6 +55,7 @@ from app.services.knowledge.job_feature_repository import JobFeatureValueRepo
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.project.faq import ProjectFaqService
 from app.services.project.features import ProjectFeatureService
+from app.services.project.knowledge_export import ProjectKnowledgeExport, export_project_knowledge
 from app.services.project.single_page_external_sources import SinglePageExternalSourceService
 from app.services.project.repository import ProjectRepository, require_project
 from app.services.knowledge.base_service import KnowledgeBaseService
@@ -137,7 +138,8 @@ async def _ingest_states_by_project(
                 "JOIN knowledge_category_revisions kcr "
                 "  ON kcr.category_id = latest.category_id "
                 " AND kcr.revision_no = latest.revision_no "
-                "JOIN knowledge_categories kc ON kc.id = kcr.category_id"
+                "JOIN knowledge_categories kc ON kc.id = kcr.category_id "
+                "WHERE kcr.quality_result->>'project_training_document_id' IS NULL"
             ),
             {"ids": ids},
         )
@@ -148,7 +150,8 @@ async def _ingest_states_by_project(
                 "SELECT kd.project_id AS project_id, kd.status::text AS status, "
                 "GREATEST(kd.created_at, kd.updated_at) AS freshest_at "
                 "FROM knowledge_documents kd "
-                "WHERE kd.project_id = ANY(:ids)"
+                "WHERE kd.project_id = ANY(:ids) "
+                "AND kd.metadata->>'project_training_document_id' IS NULL"
             ),
             {"ids": ids},
         )
@@ -205,6 +208,9 @@ class ProjectService:
         self.faqs = ProjectFaqService(self.db)
         self.features = ProjectFeatureService(self.db)
         self.single_page_external_sources = SinglePageExternalSourceService(self.db)
+
+    async def export_knowledge(self, project_id: uuid.UUID) -> ProjectKnowledgeExport:
+        return await export_project_knowledge(self.db, project_id)
 
     async def list(
         self,

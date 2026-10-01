@@ -192,6 +192,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # Host allowlist (SEC-06): a request whose Host header is not one of the

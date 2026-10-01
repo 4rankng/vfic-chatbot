@@ -80,6 +80,11 @@ def test_builds_supported_categories_from_existing_structured_facts() -> None:
 
     documents = build_legacy_category_documents(snapshot)
 
+    for document in documents.values():
+        assert "job_ids" not in document.model_dump_json()
+        assert "jobs_ids" not in document.model_dump_json()
+        assert "vacancies" not in document.model_dump_json()
+        assert "employment_type" not in document.model_dump_json()
     assert KnowledgeCategoryKey.MEALS not in documents
     assert documents[KnowledgeCategoryKey.JOBS].jobs[0].title == "Công nhân thời vụ"
     assert documents[KnowledgeCategoryKey.JOBS].jobs[0].location == (

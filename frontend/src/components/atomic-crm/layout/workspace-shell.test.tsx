@@ -219,6 +219,67 @@ describe("WorkspaceShell phone drawer", () => {
 });
 
 describe("WorkspaceShell topbar", () => {
+  it("opens the command palette without the browser shortcut and renders hash destinations", async () => {
+    const screen = await renderWorkspaceShell("/conversations");
+    const shortcut = new KeyboardEvent("keydown", {
+      key: "k",
+      code: "KeyK",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.body.dispatchEvent(shortcut);
+
+    const dialog = screen.getByRole("dialog");
+    await expect.element(dialog).toBeVisible();
+    expect(shortcut.defaultPrevented).toBe(true);
+    const project = dialog.getByRole("option", { name: "Dự án", exact: true });
+    expect(project.element().getAttribute("href")).toBe("#/projects");
+    await project.click();
+    await expect.poll(() => window.location.hash).toBe("#/projects");
+    await expect.element(dialog).not.toBeInTheDocument();
+
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "k",
+        code: "KeyK",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    const reopened = screen.getByRole("dialog");
+    await expect.element(reopened).toBeVisible();
+    await reopened.getByRole("option", { name: "Dự án", exact: true }).click();
+    await expect.element(reopened).not.toBeInTheDocument();
+  });
+
+  it("moves skip-navigation focus to the workspace without replacing the hash route", async () => {
+    const screen = await renderWorkspaceShell("/projects");
+    const before = window.location.hash;
+
+    await screen.getByRole("link", { name: "Bỏ qua điều hướng" }).click();
+
+    expect(window.location.hash).toBe(before);
+    expect(document.activeElement).toBe(
+      screen.container.querySelector("#main-content"),
+    );
+  });
+
+  it("keeps long tablet pages reachable through the document scroll owner", async () => {
+    await page.viewport(900, 650);
+    const screen = await renderWorkspaceShell("/users");
+    const main = screen.container.querySelector<HTMLElement>("#main-content")!;
+    main.firstElementChild!.setAttribute("style", "height: 1400px");
+
+    expect(getComputedStyle(document.body).overflowY).not.toBe("hidden");
+    expect(
+      getComputedStyle(document.getElementById("root") ?? document.body)
+        .overflowY,
+    ).not.toBe("hidden");
+    expect(getComputedStyle(main).overflowY).toBe("visible");
+  });
+
   it("names the notifications control after the attention count", async () => {
     await page.viewport(1440, 900);
     attention.count = 3;

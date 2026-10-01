@@ -30,6 +30,18 @@ Authorization: Bearer <access_token>
 - **Refresh token:** 14 days (default). `POST /api/v1/auth/refresh` with refresh token → new access token.
 - **Token versioning:** `user.token_version` — bumping invalidates all existing tokens for that user.
 
+Account lifecycle changes refresh and lock the current account before applying
+the last-active-admin policy. Security writes serialize the session-generation
+bump against the current row, and password changes verify the current locked
+password hash. For user PATCH requests, explicit `null` for `email`, `role`, or
+`disabled` is treated as omission; `full_name: null` clears the optional name.
+OTP password reset refreshes the locked account and consumes/rejects a challenge
+if the account's current email no longer owns that challenge. It increments the
+current session generation, including security changes committed after the
+request first loaded the account.
+An email uniqueness conflict remains a conflict response after transaction
+rollback, rather than attempting an implicit async reload of expired attributes.
+
 ## Routes (15 route groups)
 
 The application registers the API routers in `backend/app/main.py` under
@@ -103,6 +115,14 @@ conflict detail so the client can refetch. Successful updates emit
 `lead.updated` to the lead realtime room. Internal callers may omit `version`,
 but interactive clients must include it to avoid lost updates. Stage workflow
 actions remain separate from the candidate profile form.
+
+Candidate-authored phone evidence is recorded before generation. Explicit
+rejection of the matching current mobile clears `phone` and increments the
+lead version; its old value remains in the audit event. Explicit correction or
+reconfirmation restores the canonical field. Delayed candidate extraction
+cannot undo newer phone evidence. Ordinary absent/null extractor values retain
+the existing merge behavior; recruiter profile edits keep the version contract
+above.
 
 ## Agent Thinking trace
 
@@ -331,6 +351,13 @@ deep links.
   linked-conversation inbound/outbound).
 - Latest failed/ambiguous (`SEND_UNKNOWN`) delivery is review-only; no one-click resend.
 
+Delivery and read receipts advance only messages with an exactly matching
+provider message ID. An uncorrelated receipt cannot establish delivery for an
+id-less `SEND_UNKNOWN` send. When only a prefix of a split answer was accepted,
+the logical message remains `SEND_UNKNOWN` even if the accepted prefix later
+receives an acknowledgment. These uncertain sends require review and are not
+automatically replayed.
+
 **Join & dedup contract:** `leads` and `conversations` have no foreign key (only a
 nullable `zalo_id == zalo_chat_id` soft match) and independent `assigned_recruiter_id`
 columns. Viewer scope is applied to **both** the anchor and enrichment tables per reason.
@@ -420,6 +447,27 @@ Template previews are validation/extraction simulations. They do not activate a 
 release or expose candidate-facing answers. Validation failures return `422`; stale
 draft or assignment revisions and invalid lifecycle transitions return `409`.
 
+## Project knowledge export
+
+`GET /api/v1/knowledge/projects/{project_id}/knowledge-export` is admin-only.
+Project list and detail responses include the server-owned boolean
+`category_authority_started`, which enables the migration action while a
+legacy RAG project still uses its previous published knowledge.
+It returns a UTF-8 Markdown attachment named `kb-<safe-project-slug>.md`, with
+`Cache-Control: no-store`. `Content-Disposition` is exposed through CORS so
+the authenticated console can retain the download filename.
+
+The export reads one database snapshot of the currently authoritative sources:
+the saved direct-context page, active category sources in catalog order after
+category cutover, or published text files in the active legacy KB version before
+cutover. Pending, failed, archived, cleared, unrelated, and shadow sources are
+excluded. Unsaved browser drafts are never sent to this endpoint. This is a
+content export, not a database backup of revision history, embeddings, or
+runtime configuration.
+
+Missing projects return `404`; projects without exportable saved knowledge
+return `409`. Non-admin accounts cannot export (`403`).
+
 ## Direct-context single-page sync
 
 The admin-only Project API exposes the single-page knowledge file plus the
@@ -462,7 +510,7 @@ The admin-only Project API exposes explicit authority transitions for RAG catego
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/v1/knowledge/projects/{project_id}/categories/cutover` | With JSON body `{ "confirmation": "CUTOVER" }`, require every category to be active or explicitly cleared, snapshot the prior authority, and switch retrieval to category revisions. |
-| `POST /api/v1/knowledge/projects/{project_id}/categories/rollback` | With JSON body `{ "confirmation": "ROLLBACK" }`, restore the saved legacy authority if category pointers have not changed since cutover. |
+| `POST /api/v1/knowledge/projects/{project_id}/categories/rollback` | With JSON body `{ "confirmation": "ROLLBACK" }`, restore the saved legacy authority and category pointers, including after subsequent category updates. |
 
 Category content is authored in Category Markdown v1: the `PUT
 /api/v1/knowledge/projects/{project_id}/categories/{category_key}` body is
@@ -473,6 +521,22 @@ document (`---` front-matter plus one `## <list_field>` section of
 the fill-in questionnaire template as `text/markdown`). Document uploads accept
 `.txt`, `.md`, `.markdown`, `.docx` and `.xlsx` and are normalized to plain
 text before ingest; YAML and PDF are not accepted.
+
+`GET /api/v1/knowledge/projects/{project_id}/knowledge-template` downloads
+`mau-kb-du-an.md` as a `text/plain; charset=utf-8` attachment for recruiters and
+admins. The console button is **Tải mẫu KB**. Its client reads the response as
+text, rather than JSON; OpenAPI declares the text response as well.
+
+Category records are Project-scoped. Templates and typed payloads have no
+`job_ids` or `jobs_ids` association fields. Jobs records also omit `vacancies`
+and `employment_type`, including null placeholders. No category requires an active
+Jobs category to validate. Legacy structural fields are ignored during parsing
+and omitted from new stored category/direct-page sources, editor reads and KB
+exports, document chunk/digest/search responses and source downloads. Historical revision identities remain unchanged. Derived role filters
+use a scalar only when all records in the category agree; conflicting or absent
+values remain unknown while the source facts remain retrievable.
+KB publication preserves existing recruitment capacity counts; a newly derived
+role has unknown capacity rather than an invented vacancy count.
 
 `POST /api/v1/knowledge/documents/upload-file` accepts an optional multipart
 `category_plan` JSON field alongside `file` and `project_id`:
@@ -493,6 +557,25 @@ is queue acceptance rather than proof that training has completed. Activating
 an inactive project returns `409` while its latest non-archived training source
 is unfinished or failed; it must be `PUBLISHED` with a `COMPLETED` receipt.
 Existing active projects can still be edited during replacement processing.
+Prepared category evidence and extracted feature values remain private until
+the entire source publishes in one transaction. In category authority,
+`COMPLETED` confirms all proposed categories, features, and applicable derived projections together;
+a failed source does not partially replace published data. Categories omitted
+from a plan retain their existing active content. If a manual category edit
+invalidates a retained source snapshot, uploading that same brief creates a
+fresh source. Independently retrying an unfinished source-owned category returns
+`409` with guidance to retry the source batch.
+For a Project using legacy authority, the completed receipt instead includes
+the additive `requires_cutover: true` flag. Categories and source-owned feature
+values remain prepared until explicit category cutover; the existing candidate
+knowledge and discovery card stay live. The flag defaults to `false` for older
+receipts and category-authoritative publication. Rollback restores adopted
+feature rows and marks the source as awaiting cutover again.
+Successful cutover marks unadopted completed source-owned feature intents
+`SUPERSEDED` and clears their `requires_cutover` flag. Actual independent feature
+edits or feature supersession make identical reupload a fresh intent; passive
+feature-list reads do not. Pending and failed training receipts retain their
+existing state.
 
 Staging, activation, and clear operations do not implicitly change Project-wide retrieval
 authority. Failed or stale workers preserve the prior active pointers and expose stable,

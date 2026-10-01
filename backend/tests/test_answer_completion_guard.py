@@ -8,13 +8,15 @@ removed on purpose, so the cut shipped verbatim (observed: a bus-route list
 ending mid-word). These tests pin the replacement behaviour:
 
 * a cut answer is continued from the exact cut and delivered complete;
-* a provider that keeps stopping at the cap has its dangling tail dropped, so
-  no mid-word fragment is ever sent;
+* a provider that keeps stopping at the cap gets one complete rewrite over the
+  same evidence, then suppression if it still cannot finish;
 * a repeated seam is not duplicated;
 * a normal ``finish_reason=stop`` answer is untouched and costs one call.
 """
 
 from __future__ import annotations
+
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -96,8 +98,8 @@ async def test_cut_answer_is_continued_and_delivered_complete():
     assert "".join(deltas) == cut + rest
 
 
-async def test_answer_that_stays_cut_never_ships_a_mid_word_tail():
-    """Exhausting the continuation budget drops the dangling tail instead."""
+async def test_answer_that_stays_cut_never_ships_an_incomplete_answer():
+    """Exhausted continuations and an empty rewrite suppress the partial prose."""
     cut = (
         "Dạ bên em có các tuyến:\n"
         "- Tuyến Lạch Tray: Cầu vượt Lạch Tray (06:55) → Siêu thị Hà Cường (07:00)\n"
@@ -107,12 +109,9 @@ async def test_answer_that_stays_cut_never_ships_a_mid_word_tail():
     metrics: dict = {}
     reply = await _run_agent(llm, metrics)
 
-    assert reply == (
-        "Dạ bên em có các tuyến:\n"
-        "- Tuyến Lạch Tray: Cầu vượt Lạch Tray (06:55) → Siêu thị Hà Cường (07:00)"
-    )
+    assert reply == ""
     assert "Phươ" not in reply
-    assert llm.calls == 3
+    assert llm.calls == 4
     assert metrics["answer_continuations"] == 2
 
 
@@ -143,3 +142,133 @@ async def test_normal_stop_answer_is_unchanged_and_costs_one_call():
     assert reply == "Câu trả lời trọn vẹn cho người lao động."
     assert llm.calls == 1
     assert "answer_continuations" not in metrics
+
+
+async def test_last_normal_round_still_completes_the_capped_answer():
+    """The tool-loop ceiling must not schedule a continuation that never runs."""
+    from app.graph.clients import MiniMaxAgent
+
+    cut = "Dạ có 5 dự án: LG Display, Rorze, Amtran, Kyocera và Pega"
+    rest = "tron. Anh/chị muốn tìm hiểu dự án nào ạ?"
+    llm = _CappedLLM([(cut, "length"), (rest, "stop")])
+    metrics: dict = {}
+
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=1).agent(
+        "cho tôi xem tất cả dự án",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=(),
+        metrics=metrics,
+    )
+
+    assert reply == cut + rest
+    assert llm.calls == 2
+    assert metrics["answer_continuations"] == 1
+
+
+async def test_completion_recovery_remains_bounded_after_the_last_normal_round():
+    from app.graph.clients import MiniMaxAgent
+
+    llm = _CappedLLM([
+        ("Thông tin đã xác minh. Phần tiếp", "length"),
+        (" theo vẫn", "length"),
+        (" chưa hoàn", "length"),
+        ("Thông tin vẫn chưa hoàn", "length"),
+        (" tất", "stop"),
+    ])
+    metrics: dict = {}
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=1).agent(
+        "tư vấn giúp tôi",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=(),
+        metrics=metrics,
+    )
+
+    assert llm.calls == 4
+    assert metrics["answer_continuations"] == 2
+    assert reply == ""
+    assert metrics["answer_completion_failure"] == "output_cap_exhausted"
+
+
+async def test_exhausted_continuations_rewrite_the_complete_answer_from_evidence():
+    from app.graph.clients import MiniMaxAgent
+
+    llm = _CappedLLM([
+        ("Dạ có 5 dự án: LG Display và Rorze. Am", "length"),
+        ("tran đang", "length"),
+        (" tuyển tại", "length"),
+        ("Dạ có LG Display, Rorze, Amtran, Kyocera và Pegatron ạ.", "stop"),
+    ])
+    metrics: dict = {}
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=1).agent(
+        "cho tôi xem tất cả dự án",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=(),
+        metrics=metrics,
+    )
+
+    assert reply == "Dạ có LG Display, Rorze, Amtran, Kyocera và Pegatron ạ."
+    assert llm.calls == 4
+    assert metrics["answer_completion_rewrites"] == 1
+
+
+async def test_rewrite_that_is_still_cut_suppresses_the_incomplete_list():
+    from app.graph.clients import MiniMaxAgent
+
+    llm = _CappedLLM([
+        ("Dạ có 5 dự án: LG Display và Rorze. Am", "length"),
+        ("tran đang", "length"),
+        (" tuyển tại", "length"),
+        ("Dạ có 5 dự án: LG Display, Rorze. Các dự", "length"),
+        (" án khác", "stop"),
+    ])
+    metrics: dict = {}
+    reply = await MiniMaxAgent(llm, embedder=None, max_iters=1).agent(
+        "cho tôi xem tất cả dự án",
+        system="sys",
+        retrieval=object(),
+        embedder=None,
+        allowed_tools=(),
+        metrics=metrics,
+    )
+
+    assert reply == ""
+    assert llm.calls == 4
+    assert metrics["answer_completion_failure"] == "output_cap_exhausted"
+
+
+@pytest.mark.parametrize("wire_shape", ["structured", "text"])
+async def test_completion_round_never_reenters_tool_dispatch(monkeypatch, wire_shape):
+    from app.graph.clients import MiniMaxAgent
+    from langchain_core.messages import AIMessage
+
+    class ToolOnContinuation(_CappedLLM):
+        async def ainvoke(self, messages, **kwargs):
+            if not self.calls:
+                return await super().ainvoke(messages, **kwargs)
+            self.calls += 1
+            if wire_shape == "structured":
+                return AIMessage(content="", tool_calls=[{
+                    "name": "list_active_projects", "args": {}, "id": "unexpected",
+                }])
+            return AIMessage(content='<invoke name="list_active_projects"></invoke>')
+
+    dispatcher = AsyncMock(return_value="not-authorized")
+    monkeypatch.setattr("app.graph.clients._dispatch_tool", dispatcher)
+    model = ToolOnContinuation([("Thông tin đã xác minh. Câu chưa hoàn", "length")])
+    metrics: dict = {}
+
+    reply = await MiniMaxAgent(model, embedder=None, max_iters=2).agent(
+        "cho tôi xem dự án", system="sys", retrieval=object(), embedder=None,
+        allowed_tools=("list_active_projects",), metrics=metrics,
+    )
+
+    assert reply == ""
+    assert dispatcher.await_count == 0
+    assert model.calls == 2
+    assert metrics["answer_completion_failure"] == "unexpected_tool_call"

@@ -12,8 +12,6 @@ category: compensation
 Ví dụ khối một nhóm thu nhập:
 
 ### record: thu-nhap-chung
-job_ids:
-- "[Áp dụng cho việc nào? Điền id việc, mỗi dòng một id; bỏ trống mục này nếu áp dụng cho mọi việc.]"
 base_salary_vnd: [Lương cơ bản bao nhiêu VNĐ?]
 estimated_income_min_vnd: [Thu nhập thực nhận thấp nhất ước tính?]
 estimated_income_max_vnd: [Thu nhập thực nhận cao nhất ước tính?]

@@ -8,12 +8,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, cast
+import uuid
 
 from sqlalchemy import delete, desc, func, or_, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lead import FollowUpTask, Lead, LeadEvent, LeadTag
+from app.recruitment.domain.intake import candidate_mobile
 from app.services.viewer_scope import Viewer, viewer_lead_filter
 
 # ── Raw SQL constants ──────────────────────────────────────────────
@@ -171,6 +173,7 @@ class LeadRepository:
 
     async def upsert(self, lead: dict) -> int | None:
         """Insert or merge a normalised lead by ``zalo_id``; return the lead id."""
+        lead = await self._candidate_phone_patch(lead)
         row = await self.db.execute(_UPSQL, lead)
         await self.db.flush()
         return row.scalar()
@@ -187,6 +190,7 @@ class LeadRepository:
             text("SELECT pg_advisory_xact_lock(hashtextextended(:contact_id, 0))"),
             {"contact_id": str(contact_id)},
         )
+        lead = await self._candidate_phone_patch(lead, contact_id=contact_id)
         params = {**lead, "contact_id": str(contact_id)}
         lead_id = (await self.db.execute(_UPDATE_BY_CONTACT_SQL, params)).scalar()
         if lead_id is None:
@@ -194,11 +198,85 @@ class LeadRepository:
         await self.db.flush()
         return lead_id
 
+    async def _candidate_phone_patch(self, lead: dict, *, contact_id: str | None = None) -> dict:
+        """An old deferred extraction cannot undo newer explicit phone evidence."""
+        incoming_phone = candidate_mobile(lead.get("phone"))
+        if incoming_phone is None:
+            return lead  # Normal null/absent fields retain the established merge contract.
+        target = select(Lead.id)
+        if contact_id:
+            target = target.where(Lead.contact_id == uuid.UUID(str(contact_id)))
+        else:
+            target = target.where(Lead.zalo_id == lead.get("zalo_id"))
+        lead_id = await self.db.scalar(
+            target.order_by(Lead.updated_at.desc(), Lead.id.desc()).limit(1).with_for_update()
+        )
+        if lead_id is None:
+            return lead
+        latest = await self.candidate_phone_evidence(lead_id)
+        if latest is not None and (
+            latest.payload.get("disavowed") is True
+            or latest.payload.get("phone") != incoming_phone
+        ):
+            return {**lead, "phone": None}
+        return lead
+
     async def by_zalo_id(self, zalo_id: str) -> dict | None:
         """Fetch an existing lead by ``zalo_id``; return all columns as a dict, or None."""
         row = await self.db.execute(_FETCH_SQL, {"zalo_id": zalo_id})
         result = row.mappings().first()
         return dict(result) if result else None
+
+    async def candidate_phone_evidence(
+        self, lead_id: int, phone: str | None = None,
+    ) -> LeadEvent | None:
+        """Latest typed contact evidence, bounded by the existing lead/time index."""
+        stmt = select(LeadEvent).where(
+            LeadEvent.lead_id == lead_id,
+            LeadEvent.event_type == "candidate_phone_evidence",
+        )
+        if phone is not None:
+            stmt = stmt.where(LeadEvent.payload["phone"].astext == phone)
+        return await self.db.scalar(
+            stmt.order_by(LeadEvent.created_at.desc(), LeadEvent.id.desc()).limit(1)
+        )
+
+    async def record_candidate_phone_evidence(
+        self, *, lead_id: int, phone: str, disavowed: bool,
+        message_id: int, occurred_at: datetime,
+    ) -> str | None:
+        """Serialize candidate evidence and invalidate a matching denied CRM phone.
+
+        Evidence time is the durable inbound time, not processing time. A retry
+        or delayed old turn cannot reverse a newer confirmation/correction.
+        """
+        current = await self.db.scalar(
+            select(Lead).where(Lead.id == lead_id).with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if current is None:
+            return None
+        latest = await self.candidate_phone_evidence(lead_id)
+        if latest is not None:
+            latest_order = (latest.created_at, int(latest.payload.get("message_id", 0)))
+            if latest_order >= (occurred_at, message_id):
+                return current.phone
+        self.db.add(LeadEvent(
+            lead_id=lead_id, event_type="candidate_phone_evidence",
+            payload={
+                "phone": phone, "disavowed": disavowed, "message_id": message_id,
+            },
+            created_at=occurred_at,
+        ))
+        next_phone = current.phone if disavowed else phone
+        if disavowed and candidate_mobile(current.phone) == phone:
+            next_phone = None
+        if current.phone != next_phone:
+            current.phone = next_phone
+            current.version += 1
+            current.updated_at = func.now()
+        await self.db.flush()
+        return current.phone
 
     async def get_visible(self, lead_id: int, *, viewer: Viewer) -> Lead | None:
         """Fetch one lead the ``viewer`` is allowed to see; None when out of scope.

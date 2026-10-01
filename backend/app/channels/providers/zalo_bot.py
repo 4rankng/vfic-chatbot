@@ -67,6 +67,7 @@ def _to_channel_result(result, provider: str) -> ct.ChannelSendResult:
     error_class = result.error_class or "provider_error"
     return ct.ChannelSendResult(
         ok=False,
+        provider_message_id=result.msg_id,
         error=result.error,
         error_class=error_class,  # type: ignore[arg-type]
         telemetry=result.telemetry,

@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from "react";
-import { Form, required, useInput, useNotify } from "ra-core";
+import { Form, required, useInput, useNotify, ValidationError } from "ra-core";
 import type { SubmitHandler, FieldValues } from "react-hook-form";
 import { Link, useNavigate } from "react-router";
 import {
@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/base/buttons/button";
 import { InputBase, TextField } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
+import { HintText } from "@/components/base/input/hint-text";
 import { Notification } from "@/components/admin/notification";
 import {
   requestPasswordResetOtp,
@@ -123,9 +124,9 @@ export const ForgotPasswordPage = () => {
             </div>
           </div>
 
-          <div className="tt-card rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6">
+          <div className="uu-scope tt-card rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6">
             {step === "email" ? (
-              <Form className="space-y-4" onSubmit={submitEmail}>
+              <Form className="space-y-4" onSubmit={submitEmail} noValidate>
                 <RecoveryField
                   label="Email"
                   source="email"
@@ -133,6 +134,8 @@ export const ForgotPasswordPage = () => {
                   autoComplete="email"
                   placeholder="you@example.com"
                   icon={Mail}
+                  disabled={loading}
+                  validateRequired
                 />
                 <Button
                   type="submit"
@@ -147,7 +150,7 @@ export const ForgotPasswordPage = () => {
                 </Button>
               </Form>
             ) : (
-              <Form className="space-y-4" onSubmit={submitOtp}>
+              <Form className="space-y-4" onSubmit={submitOtp} noValidate>
                 <RecoveryField
                   label="Email"
                   source="email"
@@ -163,6 +166,8 @@ export const ForgotPasswordPage = () => {
                   autoComplete="one-time-code"
                   placeholder="000000"
                   icon={KeyRound}
+                  disabled={loading}
+                  validateRequired
                 />
                 <RecoveryField
                   label="Mật khẩu mới"
@@ -170,6 +175,8 @@ export const ForgotPasswordPage = () => {
                   type="password"
                   autoComplete="new-password"
                   icon={Lock}
+                  disabled={loading}
+                  validateRequired
                 />
                 <RecoveryField
                   label="Xác nhận mật khẩu"
@@ -177,6 +184,8 @@ export const ForgotPasswordPage = () => {
                   type="password"
                   autoComplete="new-password"
                   icon={Lock}
+                  disabled={loading}
+                  validateRequired
                 />
                 <Button
                   type="submit"
@@ -237,6 +246,7 @@ type RecoveryFieldProps = {
   inputMode?: "numeric" | "text";
   defaultValue?: string;
   disabled?: boolean;
+  validateRequired?: boolean;
   icon: ComponentType<{ className?: string }>;
 };
 
@@ -249,12 +259,15 @@ const RecoveryField = ({
   inputMode,
   defaultValue,
   disabled,
+  validateRequired = false,
   icon: Icon,
 }: RecoveryFieldProps) => {
-  const { id, field, isRequired } = useInput({
+  const { id, field, fieldState, isRequired } = useInput({
     source,
     type,
-    validate: disabled ? undefined : required(),
+    validate: validateRequired
+      ? required(`Vui lòng nhập ${label.toLocaleLowerCase("vi-VN")}.`)
+      : undefined,
     defaultValue,
   });
 
@@ -270,6 +283,7 @@ const RecoveryField = ({
       validationBehavior="aria"
       isRequired={isRequired}
       isDisabled={disabled}
+      isInvalid={Boolean(fieldState.error)}
     >
       <Label>{label}</Label>
       {/*
@@ -285,9 +299,15 @@ const RecoveryField = ({
         autoComplete={autoComplete}
         inputMode={inputMode}
         isDisabled={disabled}
+        isInvalid={Boolean(fieldState.error)}
         inputClassName="min-h-12"
         wrapperClassName={type === "password" ? "[&>button]:hidden" : undefined}
       />
+      {fieldState.error?.message ? (
+        <HintText isInvalid role="alert">
+          <ValidationError error={fieldState.error.message} />
+        </HintText>
+      ) : null}
     </TextField>
   );
 };

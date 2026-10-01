@@ -24,6 +24,11 @@ AMBIGUOUS_SEND_CLASSES: frozenset[OutboundErrorClass] = frozenset(
     {"read_timeout", "remote_protocol_error", "read_error", "unknown"}
 )
 
+# Persisted in existing message.external_error / outbox.last_error fields. A
+# receipt for an accepted prefix cannot prove delivery of the logical answer's
+# unsent tail. Keep this machine marker provider-neutral and payload-free.
+PARTIAL_DELIVERY_ERROR_PREFIX = "partial_delivery: "
+
 
 class OutboundPolicySuppressedError(RuntimeError):
     """Abort provider retry because an application authority fence changed."""

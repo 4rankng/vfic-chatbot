@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.http import get_http_client
 from app.core.redis import get_redis
+from app.integrations.tingting.domain import TINGTING_VERIFY_MAX_ATTEMPTS
 from app.models.integration import IntegrationSetting
 from app.services.audit_service import record_audit
 from app.services.external_api_core import (
@@ -152,7 +153,6 @@ class TingtingFlowStore:
 # failed-attempt counter therefore lives under its own key and its own TTL, long
 # enough to survive a multi-turn struggle but bounded so an abandoned count
 # cannot outlive the conversation that earned it.
-TINGTING_VERIFY_MAX_ATTEMPTS = 3
 TINGTING_VERIFY_ATTEMPTS_TTL_SECONDS = 86400
 TINGTING_VERIFY_KEY_PREFIX = "tingting:verify_attempts"
 

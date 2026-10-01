@@ -100,8 +100,25 @@ export const Confirm = (props: ConfirmProps) => {
   }, []);
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => onClose()}>
-      <DialogContent className={className} onClick={handleClick} {...rest}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !loading) onClose();
+      }}
+    >
+      <DialogContent
+        className={className}
+        onClick={handleClick}
+        aria-busy={Boolean(loading)}
+        showCloseButton={!loading}
+        onEscapeKeyDown={(event) => {
+          if (loading) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (loading) event.preventDefault();
+        }}
+        {...rest}
+      >
         <DialogHeader>
           <DialogTitle>
             {typeof title === "string"
@@ -123,6 +140,7 @@ export const Confirm = (props: ConfirmProps) => {
           <Button
             variant="ghost"
             disabled={loading}
+            aria-busy={Boolean(loading)}
             onClick={onClose}
             className="gap-1"
           >
@@ -131,11 +149,19 @@ export const Confirm = (props: ConfirmProps) => {
           </Button>
           <Button
             disabled={loading}
+            aria-busy={Boolean(loading)}
             onClick={handleConfirm}
             className="gap-1"
             variant={confirmColor === "warning" ? "destructive" : "default"}
           >
-            <ConfirmIcon className="h-5 w-5" />
+            {loading ? (
+              <span
+                className="tt-loading tt-loading-spinner tt-loading-sm"
+                aria-hidden="true"
+              />
+            ) : (
+              <ConfirmIcon className="h-5 w-5" />
+            )}
             {translate(confirm, { _: confirm })}
           </Button>
         </DialogFooter>

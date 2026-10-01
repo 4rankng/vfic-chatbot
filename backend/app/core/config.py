@@ -350,9 +350,9 @@ class Settings(BaseSettings):
     # Per-SLO deploy-blocking thresholds (matched against /admin/performance/slos).
     release_gate_full_answer_p95_ms: int = 4000
     release_gate_error_rate_pct: float = 1.0
-    # Active-status signal (Priority #1 — the psychological bridge). typing_heartbeat_seconds
-    # pulses send_chat_action("typing") (real on the Bot channel; a logged no-op on OA).
-    typing_heartbeat_seconds: float = 3.5
+    # Native Zalo Bot status. Older interval overrides remain accepted, but
+    # runtime caps the cadence at three seconds; OA has no typing capability.
+    typing_heartbeat_seconds: float = 3.0
 
     # Phase 2 scaling knobs (env-tunable). 0 = disabled (pass-through).
     # LLM/embed semaphores are ENABLED by default (see graph/llm_semaphore.py):

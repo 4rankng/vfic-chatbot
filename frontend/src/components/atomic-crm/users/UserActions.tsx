@@ -6,7 +6,7 @@ import {
   useRefresh,
 } from "ra-core";
 import { useHref } from "react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Key } from "react-aria-components";
 import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { Button } from "@/components/base/buttons/button";
@@ -46,6 +46,14 @@ export const UserActions = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetPending, setResetPending] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [togglePending, setTogglePending] = useState(false);
+  const mutationPending = useRef(false);
+  const [passwordError, setPasswordError] = useState<string>();
+  const [confirmationError, setConfirmationError] = useState<string>();
+  const [resetError, setResetError] = useState<string>();
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmationRef = useRef<HTMLInputElement>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const editPath = createPath({
@@ -59,6 +67,9 @@ export const UserActions = () => {
   const actionLabel = `Mở thao tác cho ${record.full_name || record.email}`;
 
   const toggleDisabled = async () => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
+    setTogglePending(true);
     try {
       if (record.disabled) {
         await dataProvider.enableUser(record.id);
@@ -70,10 +81,16 @@ export const UserActions = () => {
       refresh();
     } catch (e) {
       notify((e as Error).message, { type: "error" });
+    } finally {
+      mutationPending.current = false;
+      setTogglePending(false);
     }
   };
 
   const hardDelete = async () => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
+    setDeletePending(true);
     try {
       await dataProvider.delete("users", {
         id: record.id,
@@ -84,6 +101,9 @@ export const UserActions = () => {
       refresh();
     } catch (e) {
       notify((e as Error).message, { type: "error" });
+    } finally {
+      mutationPending.current = false;
+      setDeletePending(false);
     }
   };
 
@@ -91,18 +111,25 @@ export const UserActions = () => {
     setResetOpen(false);
     setPassword("");
     setConfirmPassword("");
+    setPasswordError(undefined);
+    setConfirmationError(undefined);
+    setResetError(undefined);
   };
 
   const resetPassword = async () => {
-    if (record.disabled || resetPending) return;
+    if (record.disabled || mutationPending.current) return;
     if (password.length < 8) {
-      notify("Mật khẩu phải có ít nhất 8 ký tự.", { type: "error" });
+      setPasswordError("Mật khẩu phải có ít nhất 8 ký tự.");
+      passwordRef.current?.focus();
       return;
     }
     if (password !== confirmPassword) {
-      notify("Mật khẩu xác nhận không khớp.", { type: "error" });
+      setConfirmationError("Mật khẩu xác nhận không khớp.");
+      confirmationRef.current?.focus();
       return;
     }
+    mutationPending.current = true;
+    setResetError(undefined);
     setResetPending(true);
     try {
       await dataProvider.resetUserPassword(record.id, { password });
@@ -110,13 +137,18 @@ export const UserActions = () => {
       closeResetDialog();
       refresh();
     } catch (e) {
+      setResetError(
+        (e as Error).message || "Không thể đặt lại mật khẩu. Vui lòng thử lại.",
+      );
       notify((e as Error).message, { type: "error" });
     } finally {
+      mutationPending.current = false;
       setResetPending(false);
     }
   };
 
   const handleAction = (key: Key) => {
+    if (mutationPending.current) return;
     if (key === "toggle") void toggleDisabled();
     if (key === "reset") setResetOpen(true);
     if (key === "delete") setDeleteOpen(true);
@@ -132,6 +164,7 @@ export const UserActions = () => {
             className="size-10"
             iconLeading={MoreHorizontal}
             aria-label={actionLabel}
+            isDisabled={resetPending || deletePending || togglePending}
           />
         </span>
         <Dropdown.Popover className="uu-scope w-64">
@@ -191,22 +224,44 @@ export const UserActions = () => {
               }}
             >
               <Input
+                ref={passwordRef}
                 className="uu-scope"
+                wrapperClassName="[&>button]:hidden"
                 label="Mật khẩu mới"
                 type="password"
                 autoComplete="new-password"
                 autoFocus
                 value={password}
-                onChange={setPassword}
+                onChange={(value) => {
+                  setPassword(value);
+                  setPasswordError(undefined);
+                  setConfirmationError(undefined);
+                }}
+                isDisabled={resetPending}
+                isInvalid={Boolean(passwordError)}
+                hint={passwordError ?? "Ít nhất 8 ký tự."}
               />
               <Input
+                ref={confirmationRef}
                 className="uu-scope"
+                wrapperClassName="[&>button]:hidden"
                 label="Xác nhận mật khẩu"
                 type="password"
                 autoComplete="new-password"
                 value={confirmPassword}
-                onChange={setConfirmPassword}
+                onChange={(value) => {
+                  setConfirmPassword(value);
+                  setConfirmationError(undefined);
+                }}
+                isDisabled={resetPending}
+                isInvalid={Boolean(confirmationError)}
+                hint={confirmationError}
               />
+              {resetError ? (
+                <p role="alert" className="text-helper text-error-primary">
+                  {resetError}
+                </p>
+              ) : null}
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
@@ -217,7 +272,13 @@ export const UserActions = () => {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" size="md" isLoading={resetPending}>
+                <Button
+                  type="submit"
+                  size="md"
+                  isDisabled={resetPending}
+                  isLoading={resetPending}
+                  showTextWhileLoading
+                >
                   {resetPending ? "Đang đặt lại…" : "Đặt mật khẩu"}
                 </Button>
               </div>
@@ -228,7 +289,11 @@ export const UserActions = () => {
 
       <ModalOverlay
         isOpen={deleteOpen}
-        onOpenChange={setDeleteOpen}
+        onOpenChange={(open) => {
+          if (!deletePending) setDeleteOpen(open);
+        }}
+        isDismissable={!deletePending}
+        isKeyboardDismissDisabled={deletePending}
         className="uu-scope"
       >
         <Modal className="w-full outline-hidden sm:max-w-md">
@@ -250,6 +315,7 @@ export const UserActions = () => {
                 color="secondary"
                 size="md"
                 onClick={() => setDeleteOpen(false)}
+                isDisabled={deletePending}
               >
                 Hủy
               </Button>
@@ -258,8 +324,11 @@ export const UserActions = () => {
                 color="primary-destructive"
                 size="md"
                 onClick={() => void hardDelete()}
+                isDisabled={deletePending}
+                isLoading={deletePending}
+                showTextWhileLoading
               >
-                Xóa vĩnh viễn
+                {deletePending ? "Đang xóa…" : "Xóa vĩnh viễn"}
               </Button>
             </div>
           </Dialog>

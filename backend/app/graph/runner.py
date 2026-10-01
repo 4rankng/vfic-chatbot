@@ -103,6 +103,7 @@ from app.graph.telemetry import (
     _stamp_outbound_telemetry,
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome, _now
+from app.recruitment.application.lead_lookup import LeadLookup, UNRESOLVED_LEAD
 from app.recruitment.domain.provider import provider_from_conversation
 
 logger = logging.getLogger(__name__)
@@ -196,6 +197,21 @@ def _contact_display_name(conv) -> str:
 
 
 async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
+    """Own setup status across the initial gates and the complete graph turn."""
+    preamble_status_task = deps.preamble_status_task
+    deps.preamble_status_task = None
+    try:
+        return await _run_turn(state, deps, preamble_status_task=preamble_status_task)
+    finally:
+        await _cancel_status_task(preamble_status_task)
+
+
+async def _run_turn(
+    state: BotRunState,
+    deps: GraphDeps,
+    *,
+    preamble_status_task: asyncio.Task[None] | None,
+) -> TurnOutcome:
     """Execute one bot turn end-to-end and persist the SENT/SUPPRESSED outcome.
 
     Reads top-to-bottom as gate → lane → finalize → dispatch: authority/lock
@@ -230,6 +246,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 svc=svc,
                 reason="stale_runtime_authority",
                 lock_owner=lock_owner,
+                status_task=preamble_status_task,
             )
     elif has_runtime_stamp:
         # One resolution serves the whole turn. The fingerprint checksum
@@ -249,6 +266,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                 svc=svc,
                 reason="stale_runtime_authority",
                 lock_owner=lock_owner,
+                status_task=preamble_status_task,
             )
     elif await deps.runtime_policy.resolve_active_policy() is not None:
         # A clean cutover never lets pre-authority jobs inherit today's
@@ -261,6 +279,7 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             svc=svc,
             reason="missing_runtime_authority",
             lock_owner=lock_owner,
+            status_task=preamble_status_task,
         )
     if lock_owner:
         db_t0 = time.monotonic()
@@ -325,6 +344,9 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
                     )
         timings["oa_profile_ms"] = int(round((time.monotonic() - profile_t0) * 1000))
     zalo = _zalo_for_conversation(deps, conv)
+    # Setup pulses cover conversation/runtime/ownership resolution. Drain that
+    # request before the account-bound sender takes over, so loops never overlap.
+    await _cancel_status_task(preamble_status_task)
 
     # Active-status heartbeat: native typing pulses while the turn processes.
     # Started right after the sender is resolved (before last_messages / pending)
@@ -333,217 +355,235 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
     recipient_id = _recipient_for_conversation(conv)
     status_task = (
         asyncio.create_task(_status_heartbeat(zalo, recipient_id, settings=settings))
-        if _channel_for_conversation(conv) in {"zalo_bot", "zalo_oa"} and recipient_id
+        if _channel_for_conversation(conv) == "zalo_bot" and recipient_id
         else None
     )
-    db_t0 = time.monotonic()
-    recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
-    _stamp_db(timings, "last_messages", db_t0)
-    contact_evidence = _contact_evidence_text(recent_messages, state.user_text)
-    started = _now()
+    jev_task: asyncio.Task[TurnDecisions] | None = None
+    lane_task: asyncio.Task | None = None
+    try:
+        db_t0 = time.monotonic()
+        recent_messages = await svc.last_messages(conv, limit=RECENT_HISTORY_LIMIT)
+        _stamp_db(timings, "last_messages", db_t0)
+        contact_evidence = _contact_evidence_text(recent_messages, state.user_text)
+        started = _now()
 
-    # Per-stage timing accumulator. The enqueue/preamble slice is derived from
-    # the worker's epoch stamps (state.preamble_start_epoch / received_at_epoch);
-    # intra-turn stages use time.monotonic() deltas against t0. Threaded into
-    # record_bot_outcome -> BotRun.stage_timings for the performance dashboard.
-    # ``timings`` was initialized before the first DB call (db_ms accumulates
-    # across the whole turn, including the pre-t0 conversation fetch).
-    turn_start_epoch = time.time()
-    if state.queue_depth is not None:
-        timings["queue_depth"] = state.queue_depth
-    if state.received_at_epoch > 0 and state.preamble_start_epoch > 0:
-        timings["webhook_to_pickup_ms"] = max(
-            0, int(round((state.preamble_start_epoch - state.received_at_epoch) * 1000))
-        )
-    if state.preamble_start_epoch > 0:
-        timings["preamble_ms"] = max(
-            0, int(round((turn_start_epoch - state.preamble_start_epoch) * 1000))
-        )
-    t0 = time.monotonic()
-    trace_sink = DecisionTraceBuilder()
-
-    # Terminal-recipient short-circuit: a recipient the provider permanently
-    # rejects ("user_id is invalid" on the Bot channel, "-201 user_id is not
-    # valid" on OA) can never receive the answer, so generating one costs a full
-    # ~9 s turn for nothing — measured at 21 of 284 turns in 24 h (7%, against a
-    # 1% error SLO). The dispatcher records the mark on the first such failure;
-    # here the turn stands down before Jev, the pending write and the model call.
-    # Fail-open: any Redis problem reports "reachable" and the turn proceeds.
-    if recipient_id and deps.recipient_unreachable is not None:
-        if await deps.recipient_unreachable(
-            _channel_for_conversation(conv), recipient_id
-        ):
-            trace_sink.record_decision("degradation_reason", "recipient_unreachable")
-            timings["lane"] = "recipient_unreachable"
-            logger.info(
-                "turn skipped: recipient permanently unreachable conversation=%s",
-                state.conversation_id,
+        # Per-stage timing accumulator. The enqueue/preamble slice is derived from
+        # the worker's epoch stamps (state.preamble_start_epoch / received_at_epoch);
+        # intra-turn stages use time.monotonic() deltas against t0. Threaded into
+        # record_bot_outcome -> BotRun.stage_timings for the performance dashboard.
+        # ``timings`` was initialized before the first DB call (db_ms accumulates
+        # across the whole turn, including the pre-t0 conversation fetch).
+        turn_start_epoch = time.time()
+        if state.queue_depth is not None:
+            timings["queue_depth"] = state.queue_depth
+        if state.received_at_epoch > 0 and state.preamble_start_epoch > 0:
+            timings["webhook_to_pickup_ms"] = max(
+                0, int(round((state.preamble_start_epoch - state.received_at_epoch) * 1000))
             )
-            # Single stand-down exit: records the audit row, releases the
-            # per-chat lock and stops the typing heartbeat.
-            return await _authority_gate(
-                state=state,
-                deps=deps,
-                conv=conv,
-                svc=svc,
-                reason="suppressed",
-                lock_owner=lock_owner,
-                started=started,
-                timings=timings,
-                trace_sink=trace_sink,
-                status_task=status_task,
+        if state.preamble_start_epoch > 0:
+            timings["preamble_ms"] = max(
+                0, int(round((turn_start_epoch - state.preamble_start_epoch) * 1000))
             )
+        t0 = time.monotonic()
+        trace_sink = DecisionTraceBuilder()
 
-    # The account label Jev judges the name against: the channel payload name
-    # (Zalo bot / OA sender), else the stored provider profile label (Messenger,
-    # filled in out of band by profile enrichment).
-    profile_name = state.user_name.strip() or _contact_display_name(conv)
-    # Messenger leads are contact-keyed (NULL zalo_id), so the recipient id alone
-    # would miss them; the contact id is the fallback key.
-    contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
-
-    # Jev fan-out: one decision call per turn. Absent port (tests / disabled) or
-    # any failure inside the client degrades to the neutral general/agent route —
-    # the bot keeps working without Jev. The call is HTTP-only on its own httpx
-    # client and touches no DB, so it is fired before the preamble's remaining
-    # DB work (lead lookup, pending write) and awaited after it: its latency
-    # overlaps that work instead of serialising behind it, while the shared
-    # AsyncSession keeps a single in-flight coroutine at any moment.
-
-    turn_decisions = deps.turn_decisions
-    if turn_decisions is not None:
-
-        async def _timed_decide_turn() -> TurnDecisions:
-            decisions_t0 = time.monotonic()
-            try:
-                return await turn_decisions.decide_turn(
-                    user_text=state.user_text,
-                    recent_messages=recent_messages,
-                    profile_name=profile_name,
+        # Terminal-recipient short-circuit: a recipient the provider permanently
+        # rejects ("user_id is invalid" on the Bot channel, "-201 user_id is not
+        # valid" on OA) can never receive the answer, so generating one costs a full
+        # ~9 s turn for nothing — measured at 21 of 284 turns in 24 h (7%, against a
+        # 1% error SLO). The dispatcher records the mark on the first such failure;
+        # here the turn stands down before Jev, the pending write and the model call.
+        # Fail-open: any Redis problem reports "reachable" and the turn proceeds.
+        if recipient_id and deps.recipient_unreachable is not None:
+            if await deps.recipient_unreachable(
+                _channel_for_conversation(conv), recipient_id
+            ):
+                trace_sink.record_decision("degradation_reason", "recipient_unreachable")
+                timings["lane"] = "recipient_unreachable"
+                logger.info(
+                    "turn skipped: recipient permanently unreachable conversation=%s",
+                    state.conversation_id,
                 )
-            finally:
-                timings["jev_ms"] = int(round((time.monotonic() - decisions_t0) * 1000))
+                # Single stand-down exit: records the audit row, releases the
+                # per-chat lock and stops the typing heartbeat.
+                return await _authority_gate(
+                    state=state,
+                    deps=deps,
+                    conv=conv,
+                    svc=svc,
+                    reason="suppressed",
+                    lock_owner=lock_owner,
+                    started=started,
+                    timings=timings,
+                    trace_sink=trace_sink,
+                    status_task=status_task,
+                )
 
-        jev_task: asyncio.Task[TurnDecisions] | None = asyncio.create_task(
-            _timed_decide_turn()
-        )
-    else:
-        jev_task = None
+        # The account label Jev judges the name against: the channel payload name
+        # (Zalo bot / OA sender), else the stored provider profile label (Messenger,
+        # filled in out of band by profile enrichment).
+        profile_name = state.user_name.strip() or _contact_display_name(conv)
+        # Messenger leads are contact-keyed (NULL zalo_id), so the recipient id alone
+        # would miss them; the contact id is the fallback key.
+        contact_id = str(conv.contact_id) if getattr(conv, "contact_id", None) else None
 
-    # Resolve the candidate's lead row once and hand it to every adapter call
-    # below (stored gender, inference write, prompt context); the adapters keep
-    # their own by-zalo/by-contact lookup as the fallback for ports without
-    # this seam (tests inject those).
-    lead_row: dict | None = None
-    lead_prefetch: dict[str, object] = {}
-    if deps.lead_gender is not None and (recipient_id or contact_id):
-        resolver = getattr(deps.lead_gender, "resolve_lead", None)
-        if resolver is not None:
+        # Jev fan-out: one decision call per turn. Absent port (tests / disabled) or
+        # any failure inside the client degrades to the neutral general/agent route —
+        # the bot keeps working without Jev. The call is HTTP-only on its own httpx
+        # client and touches no DB, so it is fired before the preamble's remaining
+        # DB work (lead lookup, pending write) and awaited after it: its latency
+        # overlaps that work instead of serialising behind it, while the shared
+        # AsyncSession keeps a single in-flight coroutine at any moment.
+
+        turn_decisions = deps.turn_decisions
+        if turn_decisions is not None:
+
+            async def _timed_decide_turn() -> TurnDecisions:
+                decisions_t0 = time.monotonic()
+                try:
+                    return await turn_decisions.decide_turn(
+                        user_text=state.user_text,
+                        recent_messages=recent_messages,
+                        profile_name=profile_name,
+                    )
+                finally:
+                    timings["jev_ms"] = int(round((time.monotonic() - decisions_t0) * 1000))
+
+            jev_task = asyncio.create_task(
+                _timed_decide_turn()
+            )
+        else:
+            jev_task = None
+
+        # Resolve the candidate's lead row once and hand it to every adapter call
+        # below (stored gender, inference write, prompt context); the adapters keep
+        # their own by-zalo/by-contact lookup as the fallback for ports without
+        # this seam (tests inject those).
+        lead_row: LeadLookup = UNRESOLVED_LEAD
+        lead_prefetch: dict[str, LeadLookup] = {}
+        lead_resolver = None
+        if deps.lead_gender is not None and (recipient_id or contact_id):
+            lead_resolver = getattr(deps.lead_gender, "resolve_lead", None)
+            if lead_resolver is not None:
+                gender_t0 = time.monotonic()
+                try:
+                    lead_row = await lead_resolver(recipient_id or "", contact_id)
+                    lead_prefetch = {"lead": lead_row}
+                except Exception:  # noqa: BLE001 — an addressing hint must never break a turn
+                    logger.warning("lead resolution failed for %s", recipient_id, exc_info=True)
+                _stamp_db(timings, "lead_gender", gender_t0)
+
+        # Read the stored value so the write stays blank-only, and so a stated
+        # self-reference in this message can be told apart from an earlier inference.
+        stored_gender = ""
+        if deps.lead_gender is not None and (recipient_id or contact_id):
             gender_t0 = time.monotonic()
             try:
-                lead_row = await resolver(recipient_id or "", contact_id)
-                lead_prefetch = {"lead": lead_row}
+                stored_gender = await deps.lead_gender.stored_gender(
+                    recipient_id or "", contact_id, **lead_prefetch
+                )
             except Exception:  # noqa: BLE001 — an addressing hint must never break a turn
-                logger.warning("lead resolution failed for %s", recipient_id, exc_info=True)
+                logger.warning("lead gender lookup failed for %s", recipient_id, exc_info=True)
             _stamp_db(timings, "lead_gender", gender_t0)
 
-    # Read the stored value so the write stays blank-only, and so a stated
-    # self-reference in this message can be told apart from an earlier inference.
-    stored_gender = ""
-    if deps.lead_gender is not None and (recipient_id or contact_id):
-        gender_t0 = time.monotonic()
-        try:
-            stored_gender = await deps.lead_gender.stored_gender(
-                recipient_id or "", contact_id, **lead_prefetch
-            )
-        except Exception:  # noqa: BLE001 — an addressing hint must never break a turn
-            logger.warning("lead gender lookup failed for %s", recipient_id, exc_info=True)
-        _stamp_db(timings, "lead_gender", gender_t0)
+        db_t0 = time.monotonic()
+        pending_kwargs: dict[str, object] = {}
+        if (
+            state.runtime_revision_id
+            and state.authority_generation is not None
+            and state.runtime_fingerprint
+        ):
+            pending_kwargs = {
+                "runtime_revision_id": uuid.UUID(state.runtime_revision_id),
+                "authority_generation": state.authority_generation,
+                "runtime_fingerprint": state.runtime_fingerprint,
+            }
+        pending_msg = await svc.record_bot_pending(conv, **pending_kwargs)
+        _stamp_db(timings, "record_bot_pending", db_t0)
+        state.pending_message_id = pending_msg.id
 
-    db_t0 = time.monotonic()
-    pending_kwargs: dict[str, object] = {}
-    if (
-        state.runtime_revision_id
-        and state.authority_generation is not None
-        and state.runtime_fingerprint
-    ):
-        pending_kwargs = {
-            "runtime_revision_id": uuid.UUID(state.runtime_revision_id),
-            "authority_generation": state.authority_generation,
-            "runtime_fingerprint": state.runtime_fingerprint,
-        }
-    pending_msg = await svc.record_bot_pending(conv, **pending_kwargs)
-    _stamp_db(timings, "record_bot_pending", db_t0)
-    state.pending_message_id = pending_msg.id
-
-    decisions = await jev_task if jev_task is not None else TurnDecisions(degraded=True)
-    if jev_task is None:
-        timings["jev_ms"] = 0
-    if decisions.degraded:
-        timings["jev_degraded"] = True
-    else:
-        timings["jev_model"] = decisions.model
-    # A confident judgment fills a blank; a candidate who explicitly self-refers
-    # in this message overrides an earlier inference — the candidate's own word
-    # outranks it. Provider/CRM values are preserved unless the candidate states.
-    if (
-        deps.lead_gender is not None
-        and (recipient_id or contact_id)
-        and not decisions.degraded
-        and decisions.gender in _INFERRED_GENDERS
-        and decisions.gender_confidence >= GENDER_INFERENCE_MIN_CONFIDENCE
-    ):
-        try:
-            if await deps.lead_gender.record_inferred_gender(
-                recipient_id or "",
-                decisions.gender,
-                contact_id=contact_id,
-                override=decisions.gender_stated,
-                **lead_prefetch,
-            ):
-                # The value itself is candidate data and is deliberately not logged.
-                logger.info("candidate gender inferred conversation=%s", state.conversation_id)
-                stored_gender = decisions.gender
-        except Exception:  # noqa: BLE001 — addressing is best-effort
-            logger.warning(
-                "candidate gender write failed conversation=%s",
-                state.conversation_id,
-                exc_info=True,
-            )
-    # Jev judged the provider display label a plausible real human name: fill a
-    # blank lead name so the profile panel shows it and the bot stops re-asking.
-    # Blank-only by contract (the upsert merge keeps any existing name), so a
-    # later candidate-stated name still wins.
-    if (
-        deps.lead_gender is not None
-        and (recipient_id or contact_id)
-        and not decisions.degraded
-        and decisions.profile_name_is_name
-        and profile_name.strip()
-    ):
-        try:
-            name_recorder = getattr(deps.lead_gender, "record_profile_name", None)
-            if name_recorder is not None:
-                if await name_recorder(
+        decisions = await jev_task if jev_task is not None else TurnDecisions(degraded=True)
+        if jev_task is None:
+            timings["jev_ms"] = 0
+        if decisions.degraded:
+            timings["jev_degraded"] = True
+        else:
+            timings["jev_model"] = decisions.model
+        # A confident judgment fills a blank; a candidate who explicitly self-refers
+        # in this message overrides an earlier inference — the candidate's own word
+        # outranks it. Provider/CRM values are preserved unless the candidate states.
+        if (
+            deps.lead_gender is not None
+            and (recipient_id or contact_id)
+            and not decisions.degraded
+            and decisions.gender in _INFERRED_GENDERS
+            and decisions.gender_confidence >= GENDER_INFERENCE_MIN_CONFIDENCE
+        ):
+            try:
+                if await deps.lead_gender.record_inferred_gender(
                     recipient_id or "",
-                    profile_name.strip(),
+                    decisions.gender,
                     contact_id=contact_id,
+                    override=decisions.gender_stated,
                     **lead_prefetch,
                 ):
-                    logger.info(
-                        "candidate profile name captured conversation=%s",
-                        state.conversation_id,
-                    )
-        except Exception:  # noqa: BLE001 — name capture is best-effort
-            logger.warning(
-                "candidate profile name write failed conversation=%s",
-                state.conversation_id,
-                exc_info=True,
-            )
-    turn_route = route_from_decisions(state.user_text, decisions)
-    trace_sink.record_decision("route_selected", turn_route.reason)
+                    # The value itself is candidate data and is deliberately not logged.
+                    logger.info("candidate gender inferred conversation=%s", state.conversation_id)
+                    stored_gender = decisions.gender
+            except Exception:  # noqa: BLE001 — addressing is best-effort
+                logger.warning(
+                    "candidate gender write failed conversation=%s",
+                    state.conversation_id,
+                    exc_info=True,
+                )
+        # Jev judged the provider display label a plausible real human name: fill a
+        # blank lead name so the profile panel shows it and the bot stops re-asking.
+        # Blank-only by contract (the upsert merge keeps any existing name), so a
+        # later candidate-stated name still wins.
+        if (
+            deps.lead_gender is not None
+            and (recipient_id or contact_id)
+            and not decisions.degraded
+            and decisions.profile_name_is_name
+            and profile_name.strip()
+        ):
+            try:
+                name_recorder = getattr(deps.lead_gender, "record_profile_name", None)
+                if name_recorder is not None:
+                    if await name_recorder(
+                        recipient_id or "",
+                        profile_name.strip(),
+                        contact_id=contact_id,
+                        **lead_prefetch,
+                    ):
+                        logger.info(
+                            "candidate profile name captured conversation=%s",
+                            state.conversation_id,
+                        )
+                        # The write may insert a lead after a prefetched miss, or
+                        # fill a blank name on an existing row. Observe the committed
+                        # result (including a concurrent name the merge preserved)
+                        # before building the candidate's prompt.
+                        lead_row = UNRESOLVED_LEAD
+                        if lead_resolver is not None:
+                            refresh_t0 = time.monotonic()
+                            try:
+                                lead_row = await lead_resolver(recipient_id or "", contact_id)
+                            except Exception as exc:  # noqa: BLE001 — context may retry the read
+                                logger.warning(
+                                    "lead refresh after profile capture failed error_type=%s",
+                                    type(exc).__name__,
+                                )
+                            _stamp_db(timings, "lead_gender", refresh_t0)
+            except Exception:  # noqa: BLE001 — name capture is best-effort
+                logger.warning(
+                    "candidate profile name write failed conversation=%s",
+                    state.conversation_id,
+                    exc_info=True,
+                )
+        turn_route = route_from_decisions(state.user_text, decisions)
+        trace_sink.record_decision("route_selected", turn_route.reason)
 
-    try:
         provider = provider_from_conversation(conv)
 
         project_context = None
@@ -785,6 +825,13 @@ async def run_turn(state: BotRunState, deps: GraphDeps) -> TurnOutcome:
             started=started,
             timings=timings,
             trace_sink=trace_sink,
+            status_task=status_task,
         )
     finally:
         await _cancel_status_task(status_task)
+        children = [task for task in (jev_task, lane_task) if task is not None]
+        for task in children:
+            if not task.done():
+                task.cancel()
+        if children:
+            await asyncio.gather(*children, return_exceptions=True)

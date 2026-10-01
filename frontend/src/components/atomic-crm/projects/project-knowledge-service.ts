@@ -45,7 +45,22 @@ const cancellationSignal = (signal: AbortSignal): CancellationSignal => ({
 export const getProjectKnowledgeCategories = operations.getCategories;
 export const getProjectKnowledgeCategoryTemplate =
   operations.getCategoryTemplate;
-export const getProjectKnowledgeFullTemplate = operations.getFullTemplate;
+export const getProjectKnowledgeFullTemplate = (
+  projectId: string,
+  signal?: AbortSignal,
+) =>
+  operations.getFullTemplate(
+    projectId,
+    signal ? cancellationSignal(signal) : undefined,
+  );
+export const getProjectKnowledgeExport = (
+  projectId: string,
+  signal?: AbortSignal,
+) =>
+  operations.getKnowledgeExport(
+    projectId,
+    signal ? cancellationSignal(signal) : undefined,
+  );
 export const getProjectKnowledgeCategorySource = operations.getCategorySource;
 export const replaceProjectKnowledgeCategory = operations.replaceCategory;
 /**

@@ -63,6 +63,24 @@ afterEach(async () => {
 });
 
 describe("LoginPage", () => {
+  it("explains blank credentials inline and focuses the first invalid field", async () => {
+    const screen = await renderLogin();
+
+    await screen.getByRole("button", { name: "Đăng nhập" }).click();
+
+    await expect
+      .element(screen.getByText("Vui lòng nhập email."))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Vui lòng nhập mật khẩu."))
+      .toBeVisible();
+    const email = screen.getByRole("textbox", { name: /Email/ });
+    await expect.element(email).toHaveAttribute("aria-invalid", "true");
+    await expect.element(email).toHaveFocus();
+    expect(email.element().getAttribute("aria-describedby")).toBeTruthy();
+    expect(mocks.login).not.toHaveBeenCalled();
+  });
+
   it("exposes both credentials under their Vietnamese names", async () => {
     const screen = await renderLogin();
 

@@ -21,7 +21,6 @@ from app.project_knowledge.domain.category import (
     category_payload_checksum,
     category_record_limit_exceeded,
     category_replacement_is_empty,
-    unknown_job_references,
 )
 from app.project_knowledge.domain.ingestion import (
     IllegalIngestionTransition,
@@ -115,18 +114,6 @@ def test_category_empty_replacement_rule(record_count: int, expected: bool) -> N
     assert category_replacement_is_empty(record_count) is expected
 
 
-def test_unknown_job_references_collect_only_unknown_unique_ids() -> None:
-    references = [
-        ["known-job", "missing-a"],
-        [],
-        ["missing-b", "missing-a", "known-job"],
-    ]
-
-    assert unknown_job_references(references, {"known-job"}) == {
-        "missing-a",
-        "missing-b",
-    }
-
 
 @pytest.mark.parametrize(
     ("facts", "expected"),
@@ -158,7 +145,7 @@ def test_project_activation_policy_is_framework_free_and_preserves_errors(
     assert project_activation_error(facts) == expected
 
 
-async def test_cache_repair_preserves_knowledge_then_jobs_order(
+async def test_cache_repair_invalidates_retrieval_jobs_and_project_preamble(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str] = []
@@ -180,7 +167,7 @@ async def test_cache_repair_preserves_knowledge_then_jobs_order(
 
     await RedisProjectKnowledgeCacheRepair().repair_knowledge_and_jobs()
 
-    assert calls == ["knowledge", "jobs"]
+    assert calls == ["knowledge", "jobs", "preamble"]
 
 
 class _RecordingJobPort:

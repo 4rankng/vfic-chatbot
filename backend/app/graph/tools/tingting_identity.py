@@ -39,7 +39,7 @@ from typing import Any
 from app.graph.ports import GraphRetrievalPort
 from app.graph.tools.tingting_api import LOOKUP_PATH, tingting_state_text
 from app.graph.tingting_guide import tingting_verify_exhausted_reply
-from app.services.tingting_api import TINGTING_VERIFY_MAX_ATTEMPTS
+from app.integrations.tingting.domain import TINGTING_VERIFY_MAX_ATTEMPTS
 from app.shared.domain.vietnamese_gender import infer_gender_from_name
 
 _MISSING_PHONE = (

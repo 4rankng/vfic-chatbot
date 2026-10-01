@@ -69,18 +69,25 @@ export type IngestState =
   | Readonly<{
       phase: "done";
       activated: readonly ProjectKnowledgeCategory[];
+      /** Preparation is complete, but the current knowledge source is live. */
+      requiresCutover?: boolean;
     }>;
+
+export type IngestResult =
+  | Readonly<{ ok: true; requiresCutover: boolean }>
+  | Readonly<{ ok: false }>;
 
 export type ProjectIngest = Readonly<{
   state: IngestState;
   /**
    * Write every category in order, awaiting each one becoming active before
-   * starting the next. Order is not cosmetic: a category that references
-   * `job_ids` is rejected unless those jobs are already active, so `jobs` must
-   * lead the batch.
+   * starting the next. Each category is scoped to the project and can be
+   * published independently; awaiting activation keeps progress accurate.
    *
-   * Resolves true only when the chain reached its done state — every write
-   * active. A failure, the hard poll budget or a cancel resolves false: the
+   * Resolves with `ok` only when every write has completed review. The result's
+   * `requiresCutover` comes from the exact completed source receipt so callers
+   * can gate claims without reading stale React state. Failures, timeouts and
+   * cancellation resolve with `ok: false`: the
    * reason is reported through `state`, never a throw, so a caller that
    * continues past the chain must check this before treating the knowledge as
    * landed.
@@ -93,13 +100,13 @@ export type ProjectIngest = Readonly<{
     projectId: string,
     writes: readonly IngestWrite[],
     sourceFile?: File,
-  ) => Promise<boolean>;
+  ) => Promise<IngestResult>;
   /** Stop observing; a durable source upload continues on the worker. */
   cancel: () => void;
 }>;
 
 type WaitOutcome =
-  | Readonly<{ ok: true }>
+  | Readonly<{ ok: true; requiresCutover?: boolean }>
   | Readonly<{ ok: false; message: string }>;
 
 /**
@@ -110,9 +117,8 @@ type WaitOutcome =
  * The project page's `useProjectKnowledgeCatalog` is the right owner for edits,
  * but it fires each write and forgets it — which is fine there, because the
  * recruiter is already looking at the project. Creation is different: the next
- * category depends on the previous one having landed, and the admin's next
- * button (`Tạo dự án`) must not be offered before the data is real. So the
- * chain here AWAITS each activation instead of polling in the background.
+ * admin's next button (`Tạo dự án`) must not be offered before the whole
+ * category batch has completed review. The chain awaits each activation.
  *
  * Status is reported only from what the backend confirms. The replace response
  * is the backend accepting a category's content; the catalog poll then holds
@@ -233,7 +239,7 @@ export const useProjectIngest = (): ProjectIngest => {
       projectId: string,
       writes: readonly IngestWrite[],
       sourceFile?: File,
-    ): Promise<boolean> => {
+    ): Promise<IngestResult> => {
       cancel();
       const epoch = epochRef.current;
       const activated: ProjectKnowledgeCategory[] = [];
@@ -245,7 +251,7 @@ export const useProjectIngest = (): ProjectIngest => {
             "Tệp chưa có nội dung kiến thức có thể nạp. Bổ sung thông tin tuyển dụng rồi tải lại tệp.",
           activated: [],
         });
-        return false;
+        return { ok: false };
       }
       if (sourceFile) {
         const first = writes[0].key;
@@ -262,7 +268,7 @@ export const useProjectIngest = (): ProjectIngest => {
             sourceFile,
             writes,
           );
-          if (epoch !== epochRef.current) return false;
+          if (epoch !== epochRef.current) return { ok: false };
           const outcome = await new Promise<WaitOutcome>((resolve) => {
             const finish = (value: WaitOutcome) => {
               if (pendingWaitRef.current === finish)
@@ -327,7 +333,10 @@ export const useProjectIngest = (): ProjectIngest => {
                         });
                         return;
                       }
-                      finish({ ok: true });
+                      finish({
+                        ok: true,
+                        requiresCutover: training.requires_cutover === true,
+                      });
                       return;
                     }
                     setState({
@@ -370,7 +379,7 @@ export const useProjectIngest = (): ProjectIngest => {
             };
             poll(0);
           });
-          if (epoch !== epochRef.current) return false;
+          if (epoch !== epochRef.current) return { ok: false };
           if (!outcome.ok) {
             // The worker failure above already preserves its exact category.
             if (outcome.message)
@@ -382,19 +391,26 @@ export const useProjectIngest = (): ProjectIngest => {
                 message: outcome.message,
                 activated: [...activated],
               });
-            return false;
+            return { ok: false };
           }
-          setState({ phase: "done", activated: [...activated] });
-          return true;
+          setState({
+            phase: "done",
+            activated: [...activated],
+            ...(outcome.requiresCutover ? { requiresCutover: true } : {}),
+          });
+          return {
+            ok: true,
+            requiresCutover: outcome.requiresCutover === true,
+          };
         } catch (error) {
-          if (epoch !== epochRef.current) return false;
+          if (epoch !== epochRef.current) return { ok: false };
           setState({
             phase: "failed",
             failed: first,
             message: (error as Error).message,
             activated: [],
           });
-          return false;
+          return { ok: false };
         }
       }
       const itemStates = writes.map(
@@ -405,7 +421,7 @@ export const useProjectIngest = (): ProjectIngest => {
       };
 
       for (const [index, write] of writes.entries()) {
-        if (epoch !== epochRef.current) return false;
+        if (epoch !== epochRef.current) return { ok: false };
         setItem(index, "writing");
         setState({
           phase: "running",
@@ -425,19 +441,19 @@ export const useProjectIngest = (): ProjectIngest => {
           );
           revisionId = result.revision.id;
         } catch (error) {
-          if (epoch !== epochRef.current) return false;
+          if (epoch !== epochRef.current) return { ok: false };
           setItem(index, "failed");
-          if (epoch !== epochRef.current) return false;
+          if (epoch !== epochRef.current) return { ok: false };
           setState({
             phase: "failed",
             failed: write.key,
             message: (error as Error).message,
             activated: [...activated],
           });
-          return false;
+          return { ok: false };
         }
 
-        if (epoch !== epochRef.current) return false;
+        if (epoch !== epochRef.current) return { ok: false };
         const outcome = await waitForActive(
           projectId,
           write.key,
@@ -455,26 +471,26 @@ export const useProjectIngest = (): ProjectIngest => {
             });
           },
         );
-        if (epoch !== epochRef.current) return false;
+        if (epoch !== epochRef.current) return { ok: false };
         if (!outcome.ok) {
           setItem(index, "failed");
-          if (epoch !== epochRef.current) return false;
+          if (epoch !== epochRef.current) return { ok: false };
           setState({
             phase: "failed",
             failed: write.key,
             message: outcome.message,
             activated: [...activated],
           });
-          return false;
+          return { ok: false };
         }
         setItem(index, "active");
         activated.push(write.key);
       }
 
-      if (epoch !== epochRef.current) return false;
-      if (epoch !== epochRef.current) return false;
+      if (epoch !== epochRef.current) return { ok: false };
+      if (epoch !== epochRef.current) return { ok: false };
       setState({ phase: "done", activated: [...activated] });
-      return true;
+      return { ok: true, requiresCutover: false };
     },
     [cancel, waitForActive],
   );

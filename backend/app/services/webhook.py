@@ -2,12 +2,11 @@
 
 Flow:
   normalize -> dedup -> ensure conversation -> record inbound
-  -> run_start_guard -> acquire_lock -> typing -> enqueue RQ job
+  -> run_start_guard -> acquire_lock -> enqueue turn
 
-A Zalo typing indicator is fired from the webhook handler (fire-and-forget) so
-the user sees immediate feedback. The turn's _status_heartbeat keeps pulsing it
-during LLM generation. (The OA channel has no typing endpoint, so on OA the
-indicator is a logged no-op — the answer itself landing is the only signal.)
+The tracked worker bridge owns native Zalo Bot status from dependency setup,
+then hands it to the turn's heartbeat. Ingress never leaves an unowned provider
+request that could outlive the answer. OA has no native typing capability.
 """
 
 from __future__ import annotations
@@ -254,14 +253,6 @@ class ZaloWebhookService:
         if lock_owner is None:  # another run holds the per-chat mutex
             return {"status": "locked", "conversation_id": str(conv.id)}
 
-        # Fire-and-forget typing indicator so the user sees immediate feedback
-        # while the RQ worker picks up the job. The turn's _status_heartbeat
-        # keeps pulsing the indicator during LLM generation (a logged no-op on
-        # the OA channel, which has no typing endpoint). The token is the
-        # DB-resolved live value (env ZALO_BOT_TOKEN is stale).
-        if norm.zalo_channel == "bot":
-            asyncio.create_task(_fire_typing(norm.zalo_chat_id, bot_token))
-
         job = {
             # v2 payload (Phase 3): no provider tokens cross the process
             # boundary. The worker resolves the Zalo Bot token fresh from DB
@@ -434,7 +425,7 @@ def _event_button_title(raw: dict) -> str:
 
 
 async def _fire_typing(chat_id: str, bot_token: str | None = None) -> None:
-    """Fire-and-forget Zalo typing indicator from the webhook process.
+    """Send one native Zalo status pulse for the tracked turn bridge.
 
     Uses the process-scoped ``zalo_bot_typing`` httpx client (Tech-Lead Directive
     §4) — a short-timeout connection reused across all typing pulses — rather
@@ -465,8 +456,8 @@ async def _fire_typing(chat_id: str, bot_token: str | None = None) -> None:
             f"{base}/bot{token}/sendChatAction",
             json={"chat_id": chat_id, "action": "typing"},
         )
-    except Exception:  # noqa: BLE001 — typing is best-effort
-        logger.debug("failed to send typing indicator for %s", chat_id, exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — typing is best-effort
+        logger.debug("native typing request failed error_type=%s", type(exc).__name__)
 
 
 def _oa_sender_name(payload: dict) -> str:

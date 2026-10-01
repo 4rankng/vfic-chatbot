@@ -30,13 +30,14 @@ from typing import Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.embedding import embed_with_fallback
+from app.core.embedding import BatchEmbeddingProvider, embed_with_fallback
 from app.models.company import Project
 from app.services.knowledge.coercion import (
     DigestError,
     _coerce_feature,
     _parse_json_lenient,
     _product_feature_prompt,
+    normalized_source_text,
     validate_digest,
 )
 from app.services.knowledge.canonical import (
@@ -111,13 +112,6 @@ class KnowledgePipeline:
         else:
             digest_sections = split_for_digest(raw)
             sections = digest_sections.sections
-            if digest_sections.truncated:
-                logger.warning(
-                    "digest truncated for doc %s: %d of %d source chars not covered",
-                    doc.id,
-                    digest_sections.dropped_chars,
-                    digest_sections.total_chars,
-                )
             all_units = []
             summary_parts = []
             for section in sections:
@@ -125,6 +119,12 @@ class KnowledgePipeline:
                 all_units.extend(units)
                 if summary:
                     summary_parts.append(summary)
+            if digest_sections.truncated:
+                # Limit expensive model calls, not searchable source coverage.
+                # Retain the uncovered suffix as bounded, verbatim units.
+                tail = raw.strip()[digest_sections.total_chars - digest_sections.dropped_chars:]
+                _summary, tail_units = self._fallback_digest_section(tail)
+                all_units.extend(tail_units)
 
         await self._set_stage(doc, "EMBEDDING")
         await self._store_units(doc, all_units)
@@ -138,8 +138,9 @@ class KnowledgePipeline:
             "section_count": len(sections),
             "unit_count": len(all_units),
             "flagged_unit_indexes": flagged,
-            "truncated": bool(digest_sections and digest_sections.truncated),
-            "dropped_chars": digest_sections.dropped_chars if digest_sections else 0,
+            "truncated": False,
+            "dropped_chars": 0,
+            "source_fallback_chars": digest_sections.dropped_chars if digest_sections else 0,
             "source_chars": digest_sections.total_chars if digest_sections else len(raw),
         }
 
@@ -246,7 +247,15 @@ class KnowledgePipeline:
                     DIGEST_SYSTEM_PROMPT, section, purpose="digest"
                 )
                 payload = _parse_json_lenient(raw)
-                return validate_digest(payload)
+                summary, units = validate_digest(payload, source_text=section)
+                # A valid response can still omit supplied facts. Preserve any
+                # source block that its quotes do not cover; the provider is a
+                # retrieval enrichment step, never the sole copy of the source.
+                quotes = normalized_source_text("\n".join(u["source_quote"] for u in units))
+                for block in _fallback_blocks(section):
+                    if normalized_source_text(block) not in quotes:
+                        units.append(_fallback_unit(block, len(units)))
+                return summary, units
             except DigestError as exc:
                 last_err = str(exc)
                 logger.warning("digest attempt %d failed: %s", attempt + 1, last_err)
@@ -308,10 +317,10 @@ class KnowledgePipeline:
 
     async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed many texts; prefer a batch call when the embedder supports it."""
-        batch = getattr(self.embedder, "batch", None)
-        if not callable(batch):
-            return [await self.embedder(t) for t in texts]
-        return await embed_with_fallback(batch, texts, label="embedder batch")
+        single_embedder = self.embedder
+        if not isinstance(self.embedder, BatchEmbeddingProvider) or not callable(self.embedder.batch):
+            return [await single_embedder(t) for t in texts]
+        return await embed_with_fallback(self.embedder.batch, texts, label="embedder batch")
 
     async def build_project_index(self, project_id: uuid.UUID) -> None:
         """Regenerate the project's catalog card from usable units (master index)."""
@@ -363,6 +372,17 @@ class KnowledgePipeline:
                     by_key[key] = f
         rows = [(c, _coerce_feature(by_key.get(c.feature_key), c, source_text=corpus)) for c in catalog]
         await self._guard_training(doc)
+        if (doc.metadata_ or {}).get("project_training") is not None:
+            # Keep candidates on the previous published profile until every
+            # category in this source is ready for the same atomic cutover.
+            training = dict(doc.metadata_["project_training"])
+            training["feature_values"] = [
+                {"feature_id": str(c.id), "value": value} for c, value in rows
+            ]
+            doc.metadata_ = {**doc.metadata_, "project_training": training}
+            doc.digest_meta = {**(doc.digest_meta or {}), "features": {"status": "PREPARED"}}
+            await self.db.commit()
+            return
         await self.features.merge_for_project(doc.project_id, doc.id, rows)
         await self.index.sync_highlights(doc.project_id)
         doc.digest_meta = {**(doc.digest_meta or {}), "features": {"status": "COMPLETED"}}
@@ -490,7 +510,12 @@ def _fallback_blocks(section: str) -> list[str]:
                 current = candidate
         if current:
             blocks.append(current)
-    return [b for b in blocks if b]
+    # Long unpunctuated prose/tables must not exceed the embedding input bound.
+    return [
+        block[start:start + 1200]
+        for block in blocks if block
+        for start in range(0, len(block), 1200)
+    ]
 
 
 def _canonical_feature_answers(canonical_doc: ParsedKnowledgeDocument) -> dict[str, str]:
@@ -575,7 +600,7 @@ def _fallback_unit(block: str, index: int) -> dict:
         entities["location"] = location
     return {
         "content": block,
-        "source_quote": block[:1000],
+        "source_quote": block,
         "summary": block[:160],
         "questions": [_fallback_question(category)],
         "category": category,

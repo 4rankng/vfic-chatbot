@@ -27,6 +27,37 @@ const deleteRequest = async (path: string, message: string): Promise<void> => {
   if (!response.ok) throw new ApiError(response.status, message);
 };
 
+const exportFilename = (
+  disposition: string | null,
+  fallback = "project-knowledge.md",
+): string => {
+  const encoded = /(?:^|;)\s*filename\*\s*=\s*UTF-8'[^']*'([^;]+)/i.exec(
+    disposition ?? "",
+  )?.[1];
+  const plain = /(?:^|;)\s*filename\s*=\s*(?:"([^"]+)"|([^;]+))/i.exec(
+    disposition ?? "",
+  );
+  let decoded: string | undefined;
+  try {
+    if (encoded) decoded = decodeURIComponent(encoded.trim());
+  } catch {
+    // A malformed extended filename can still have a valid ASCII fallback.
+  }
+  for (const candidate of [decoded, plain?.[1], plain?.[2]]) {
+    const filename = candidate?.trim();
+    if (
+      filename &&
+      !filename.startsWith(".") &&
+      filename.length <= 180 &&
+      !/[<>:"/\\|?*]/.test(filename) &&
+      ![...filename].some((character) => character.charCodeAt(0) < 32) &&
+      /\.md$/i.test(filename)
+    )
+      return filename;
+  }
+  return fallback;
+};
+
 export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
   getCategories: (projectId) => apiJson(`${projectPath(projectId)}/categories`),
 
@@ -35,8 +66,81 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       `${projectPath(projectId)}/categories/${encodeURIComponent(key)}/template`,
     ),
 
-  getFullTemplate: (projectId) =>
-    apiJson(`${projectPath(projectId)}/knowledge-template`),
+  getFullTemplate: async (projectId, signal) => {
+    const native = nativeSignal(signal);
+    try {
+      const response = await apiRequest(
+        `${projectPath(projectId)}/knowledge-template`,
+        { headers: { Accept: "text/plain" }, signal: native.signal },
+      );
+      if (!response.ok)
+        throw new ApiError(
+          response.status,
+          "Chưa tải được mẫu KB. Vui lòng thử lại.",
+        );
+      if (
+        !/^text\/(?:plain|markdown)(?:\s*;|$)/i.test(
+          response.headers.get("Content-Type") ?? "",
+        )
+      )
+        throw new ApiError(
+          502,
+          "Mẫu KB không đúng định dạng. Vui lòng thử lại.",
+        );
+      const content = await response.text();
+      if (!content.trim())
+        throw new ApiError(502, "Mẫu KB chưa có nội dung. Vui lòng thử lại.");
+      return {
+        filename: exportFilename(
+          response.headers.get("Content-Disposition"),
+          "mau-kb-du-an.md",
+        ),
+        content,
+      };
+    } finally {
+      native.dispose();
+    }
+  },
+
+  getKnowledgeExport: async (projectId, signal) => {
+    const native = nativeSignal(signal);
+    try {
+      const response = await apiRequest(
+        `${projectPath(projectId)}/knowledge-export`,
+        { headers: { Accept: "text/markdown" }, signal: native.signal },
+      );
+      if (!response.ok) {
+        const messages: Record<number, string> = {
+          401: "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.",
+          403: "Bạn không có quyền xuất KB của dự án này.",
+          404: "Không tìm thấy dự án. Vui lòng làm mới danh sách.",
+          409: "Dự án chưa có kiến thức đã lưu để xuất.",
+        };
+        throw new ApiError(
+          response.status,
+          messages[response.status] ?? "Chưa xuất được KB. Vui lòng thử lại.",
+        );
+      }
+      if (
+        !/^text\/markdown(?:\s*;|$)/i.test(
+          response.headers.get("Content-Type") ?? "",
+        )
+      )
+        throw new ApiError(
+          502,
+          "Tệp KB không đúng định dạng. Vui lòng thử lại.",
+        );
+      const content = await response.text();
+      if (!content.trim())
+        throw new ApiError(409, "Dự án chưa có kiến thức đã lưu để xuất.");
+      return {
+        filename: exportFilename(response.headers.get("Content-Disposition")),
+        content,
+      };
+    } finally {
+      native.dispose();
+    }
+  },
 
   getCategorySource: (projectId, key) =>
     apiJson(`${projectPath(projectId)}/categories/${encodeURIComponent(key)}`),

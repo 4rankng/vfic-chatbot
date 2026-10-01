@@ -28,7 +28,7 @@ export function PageShell({
   return (
     <div
       className={cx(
-        "mx-auto flex w-full flex-col gap-5 px-4 py-5 md:px-6 md:py-6 lg:px-8",
+        "mx-auto flex w-full min-w-0 flex-col gap-5 px-4 py-5 md:px-6 md:py-6 lg:px-8",
         PAGE_WIDTHS[size],
         className,
       )}
@@ -44,6 +44,7 @@ type EmptyStateProps = {
   description: ReactNode;
   action?: ReactNode;
   className?: string;
+  role?: "status" | "alert";
 };
 
 /**
@@ -62,13 +63,14 @@ export function EmptyState({
   description,
   action,
   className,
+  role = "status",
 }: EmptyStateProps) {
   return (
     <UntitledEmptyState
       size="md"
-      role="status"
+      role={role}
       className={cx(
-        "uu-scope min-h-56 gap-4 rounded-panel border border-secondary bg-primary px-6 py-10",
+        "uu-scope min-h-56 min-w-0 gap-4 rounded-panel border border-secondary bg-primary px-4 py-8 sm:px-6 sm:py-10",
         className,
       )}
     >
@@ -85,15 +87,15 @@ export function EmptyState({
             so it would drop it). The span sidesteps both, so no `!important`
             escalation is needed. `text-foreground` keeps the title console ink
             even though this subtree is `.uu-scope` — see page-heading.tsx. */}
-        <UntitledEmptyState.Title className="text-foreground">
+        <UntitledEmptyState.Title className="text-foreground [overflow-wrap:anywhere]">
           <span className="text-section-title font-semibold">{title}</span>
         </UntitledEmptyState.Title>
-        <UntitledEmptyState.Description className="max-w-sm text-body-sm text-tertiary">
+        <UntitledEmptyState.Description className="max-w-sm text-body-sm text-tertiary [overflow-wrap:anywhere]">
           {description}
         </UntitledEmptyState.Description>
       </UntitledEmptyState.Content>
       {action ? (
-        <UntitledEmptyState.Footer className="mt-1 flex items-center justify-center gap-3">
+        <UntitledEmptyState.Footer className="mt-1 flex flex-wrap items-center justify-center gap-3">
           {action}
         </UntitledEmptyState.Footer>
       ) : null}

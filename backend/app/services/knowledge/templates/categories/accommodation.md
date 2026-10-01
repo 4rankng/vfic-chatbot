@@ -11,8 +11,6 @@ category: accommodation
 Ví dụ khối một thông tin chỗ ở:
 
 ### record: cho-o-chung
-job_ids:
-- "[Áp dụng cho việc nào? Điền id việc; bỏ trống nếu áp dụng cho mọi việc.]"
 available: [Có chỗ ở không? true nếu có, false nếu không.]
 type: "[Loại chỗ ở? Ví dụ: Ký túc xá, nhà trọ hỗ trợ.]"
 address: "[Địa chỉ chỗ ở?]"

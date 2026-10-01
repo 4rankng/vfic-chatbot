@@ -40,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass
 from hashlib import sha256
@@ -72,7 +73,7 @@ def scope_key(project_ids: list[str] | None, top_k: int | None = None) -> str:
     answer is built from, so it changes the answer.
     """
     if project_ids is None:
-        return _SCOPE_GLOBAL
+        return _SCOPE_GLOBAL if top_k is None else f"{_SCOPE_GLOBAL}:{int(top_k)}"
     digest = sha256("\x1f".join(sorted(str(pid) for pid in project_ids)).encode("utf-8"))
     if top_k is not None:
         digest.update(f"\x1f{int(top_k)}".encode("utf-8"))
@@ -108,15 +109,37 @@ def _settings():
     return get_settings()
 
 
-async def _keys(scope: str) -> tuple[str, str, str]:
+async def _keys(scope: str, namespace_version: str | None = None) -> tuple[str, str, str]:
     from app.core.cache import cache_version
 
-    ver = await cache_version("semantic_cache")
+    ver = namespace_version if namespace_version is not None else await cache_version("semantic_cache")
     return (
         _VEC_KEY.format(ver=ver, scope=scope),
         _RESULT_KEY.format(ver=ver, scope=scope),
         _TS_KEY.format(ver=ver, scope=scope),
     )
+
+
+def _cached_result(payload: str | None) -> str | None:
+    """Reject expired or legacy entries even if new writes keep the HASH alive."""
+    if not payload:
+        return None
+    try:
+        value = json.loads(payload)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    expires_at = value.get("expires_at")
+    if isinstance(expires_at, bool) or not isinstance(expires_at, (int, float)):
+        return None
+    try:
+        if not math.isfinite(expires_at) or expires_at <= time.time():
+            return None
+    except OverflowError:
+        return None
+    result = value.get("result")
+    return result if isinstance(result, str) and result else None
 
 
 def _scan_candidates(
@@ -147,10 +170,13 @@ async def semantic_cache_get(
     scope: str,
     threshold: float | None = None,
     enabled: bool | None = None,
+    namespace_version: str | None = None,
 ) -> SemanticCacheHit | None:
     """Return a cached result if a similar query exceeds the similarity threshold.
 
-    Linear scan over the stored query vectors of ``scope``. Returns ``None`` on
+    Linear scan over the stored query vectors of ``scope``. Entries carry an
+    independent expiry; access updates LRU order without extending that expiry.
+    Returns ``None`` on
     miss, disabled, or any Redis error (best-effort, non-fatal).
 
     ``threshold``/``enabled`` default to ``semantic_cache_threshold`` and
@@ -165,7 +191,7 @@ async def semantic_cache_get(
         return None
     thr = threshold if threshold is not None else getattr(s, "semantic_cache_threshold", 0.95)
     try:
-        vkey, rkey, _tkey = await _keys(scope)
+        vkey, rkey, tkey = await _keys(scope, namespace_version)
         r = await get_redis()
         all_vecs = await async_value(r.hgetall(vkey))
         if not all_vecs:
@@ -174,8 +200,11 @@ async def semantic_cache_get(
         # Best-first: the first candidate that still has its result text wins, so
         # a stale/missing higher-similarity entry can't mask a valid lower one.
         for qhash, sim in candidates:
-            result = await async_value(r.hget(rkey, qhash))
+            result = _cached_result(await async_value(r.hget(rkey, qhash)))
             if result:
+                pipe = r.pipeline()
+                pipe.zadd(tkey, {qhash: time.time()})
+                await pipe.execute()
                 return SemanticCacheHit(result=result, similarity=sim, cached_query=qhash)
         return None
     except Exception:  # noqa: BLE001
@@ -191,10 +220,13 @@ async def semantic_cache_put(
     enabled: bool | None = None,
     capacity: int | None = None,
     ttl_seconds: int | None = None,
+    namespace_version: str | None = None,
 ) -> None:
     """Store a query vector + result under ``scope`` for future similarity matches.
 
-    Enforces LRU eviction at the effective capacity. Best-effort, non-fatal.
+    Enforces LRU eviction and an independent lifetime for each result. A
+    captured ``namespace_version`` keeps an in-flight computation isolated
+    from KB invalidation that happens before it completes. Best-effort, non-fatal.
 
     ``capacity``/``ttl_seconds``/``enabled`` default to
     ``semantic_cache_capacity`` / ``semantic_cache_ttl_seconds`` /
@@ -212,16 +244,20 @@ async def semantic_cache_put(
         if ttl_seconds is not None
         else getattr(s, "semantic_cache_ttl_seconds", 1800)
     )
+    if cap <= 0 or ttl <= 0:
+        return
     try:
         # The hash is over the vector to dedupe near-identical queries that would
         # otherwise bloat the ring; the similarity scan still uses the raw vector.
         qhash = sha256(json.dumps([round(v, 6) for v in query_vec]).encode()).hexdigest()[:32]
         payload = pack_vector(query_vec)
         r = await get_redis()
-        vkey, rkey, tkey = await _keys(scope)
+        vkey, rkey, tkey = await _keys(scope, namespace_version)
         pipe = r.pipeline()
         pipe.hset(vkey, qhash, payload)
-        pipe.hset(rkey, qhash, result)
+        pipe.hset(rkey, qhash, json.dumps({
+            "result": result, "expires_at": time.time() + ttl,
+        }, ensure_ascii=False))
         pipe.zadd(tkey, {qhash: time.time()})
         pipe.expire(vkey, ttl)
         pipe.expire(rkey, ttl)

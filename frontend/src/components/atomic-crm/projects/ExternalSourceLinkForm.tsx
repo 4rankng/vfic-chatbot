@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNotify } from "ra-core";
 import { AlertCircle, FileText, Link2, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -61,6 +61,19 @@ export const ExternalSourceLinkForm = ({
   const [autoSync, setAutoSync] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isSinglePage = variant === "single-page";
+  const contextRef = useRef(0);
+  const submittingRef = useRef(false);
+
+  useEffect(() => {
+    setOpen(false);
+    setSheetUrl("");
+    setAutoSync(false);
+    setSubmitting(false);
+    submittingRef.current = false;
+    return () => {
+      contextRef.current += 1;
+    };
+  }, [projectId, variant]);
 
   const urlValid = sheetUrl.trim() === "" || isValidGoogleSheetUrl(sheetUrl);
   const gidResolution = sheetUrl.trim()
@@ -80,6 +93,7 @@ export const ExternalSourceLinkForm = ({
   };
 
   const submit = async () => {
+    if (disabled || submittingRef.current) return;
     if (!sheetUrl.trim()) {
       notify("Vui lòng dán link Google Sheet.", { type: "warning" });
       return;
@@ -101,6 +115,8 @@ export const ExternalSourceLinkForm = ({
       );
       return;
     }
+    const context = contextRef.current;
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       if (isSinglePage) {
@@ -116,6 +132,7 @@ export const ExternalSourceLinkForm = ({
           auto_sync_enabled: autoSync,
         });
       }
+      if (context !== contextRef.current) return;
       notify(
         autoSync
           ? "Đã thêm nguồn và bật đồng bộ tự động. Đang nhập nội dung lần đầu."
@@ -126,6 +143,7 @@ export const ExternalSourceLinkForm = ({
       setOpen(false);
       onCreated?.();
     } catch (error) {
+      if (context !== contextRef.current) return;
       notify(
         isSinglePage
           ? singlePageSyncErrorMessage(error)
@@ -133,7 +151,10 @@ export const ExternalSourceLinkForm = ({
         { type: "error" },
       );
     } finally {
-      setSubmitting(false);
+      if (context === contextRef.current) {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     }
   };
 
@@ -147,7 +168,7 @@ export const ExternalSourceLinkForm = ({
         disabled={disabled}
       >
         <Link2 className="size-4" />
-        {isSinglePage ? "Liên kết Google Sheet" : "Gsheet Link"}
+        {isSinglePage ? "Liên kết Google Sheet" : "Liên kết Google Sheet"}
       </Button>
     );
   }
@@ -158,7 +179,7 @@ export const ExternalSourceLinkForm = ({
       <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
         <FileText className="size-4 text-primary" aria-hidden="true" />
         <h4 className="text-body font-semibold">
-          {isSinglePage ? "Google Sheet 1 trang" : "Gsheet Link"}
+          {isSinglePage ? "Google Sheet 1 trang" : "Liên kết Google Sheet"}
         </h4>
       </div>
 
@@ -186,7 +207,7 @@ export const ExternalSourceLinkForm = ({
                     ? "ext-src-gid-preview"
                     : undefined
             }
-            disabled={submitting}
+            disabled={submitting || disabled}
           />
           {!urlValid && (
             <p id="ext-src-url-error" className="text-body-sm text-destructive">
@@ -218,7 +239,7 @@ export const ExternalSourceLinkForm = ({
               onValueChange={(value) =>
                 setCategoryKey(value as KnowledgeCategoryKey)
               }
-              disabled={submitting}
+              disabled={submitting || disabled}
             >
               <SelectTrigger id="ext-src-category" className="h-9">
                 <SelectValue />
@@ -252,7 +273,7 @@ export const ExternalSourceLinkForm = ({
             id="ext-src-autosync"
             checked={autoSync}
             onCheckedChange={setAutoSync}
-            disabled={submitting}
+            disabled={submitting || disabled}
             aria-label="Bật đồng bộ tự động hàng ngày"
           />
         </label>
@@ -275,7 +296,7 @@ export const ExternalSourceLinkForm = ({
           variant="outline"
           size="sm"
           onClick={() => setOpen(false)}
-          disabled={submitting}
+          disabled={submitting || disabled}
         >
           Hủy
         </Button>
@@ -283,7 +304,7 @@ export const ExternalSourceLinkForm = ({
           type="button"
           size="sm"
           onClick={() => void submit()}
-          disabled={submitting || !urlValid || !gidValid}
+          disabled={submitting || disabled || !urlValid || !gidValid}
         >
           {submitting ? (
             <Loader2 className="size-4 animate-spin" />

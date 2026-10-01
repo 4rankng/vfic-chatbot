@@ -20,6 +20,7 @@ import {
   PageShell,
   type ListTableColumn,
 } from "../kit";
+import { LoadingState } from "../misc/LoadingState";
 
 type UserListProps = {
   embedded?: boolean;
@@ -52,7 +53,7 @@ export const UserList = ({ embedded = false }: UserListProps) => {
   const translate = useTranslate();
   const { permissions, isPending } = usePermissions();
 
-  if (isPending) return null;
+  if (isPending) return <LoadingState label="Đang kiểm tra quyền truy cập…" />;
   if (permissions !== "admin") return <AccessDenied />;
 
   return (
@@ -120,11 +121,13 @@ const CreateUserButton = () => {
 
 /** The muted count line that opens the table surface. */
 const UserAccountCount = () => {
-  const { data } = useListContext<UserAccount>();
+  const { total, isPending } = useListContext<UserAccount>();
   return (
     <header className="user-directory-header flex items-center justify-between gap-3 border-b border-secondary px-3 py-2.5">
       <p className="text-body-sm font-medium tabular-nums text-tertiary">
-        {numberFormatter.format(data?.length ?? 0)} tài khoản
+        {isPending
+          ? "Đang tải tài khoản…"
+          : `${numberFormatter.format(total ?? 0)} tài khoản`}
       </p>
     </header>
   );

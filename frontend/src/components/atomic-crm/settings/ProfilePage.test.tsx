@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   refetchIdentity: vi.fn(),
   refetchUser: vi.fn(),
   logout: vi.fn(),
+  profilePending: false,
+  profileError: false,
 }));
 
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
@@ -41,12 +43,17 @@ vi.mock("ra-core", async (importOriginal) => {
       refetch: mocks.refetchIdentity,
     }),
     useGetOne: () => ({
-      data: {
-        id: 1,
-        full_name: "Nguyễn Văn A",
-        email: "a@vfic.com.vn",
-      },
+      data:
+        mocks.profilePending || mocks.profileError
+          ? undefined
+          : {
+              id: 1,
+              full_name: "Nguyễn Văn A",
+              email: "a@vfic.com.vn",
+            },
       refetch: mocks.refetchUser,
+      isPending: mocks.profilePending,
+      isError: mocks.profileError,
     }),
     useNotify: () => mocks.notify,
     useLogout: () => mocks.logout,
@@ -79,6 +86,8 @@ beforeEach(() => {
   mocks.refetchIdentity.mockReset();
   mocks.refetchUser.mockReset();
   mocks.logout.mockReset();
+  mocks.profilePending = false;
+  mocks.profileError = false;
 });
 
 afterEach(async () => {
@@ -86,6 +95,49 @@ afterEach(async () => {
 });
 
 describe("ProfilePage", () => {
+  it("announces a pending profile without presenting blank editable data", async () => {
+    mocks.profilePending = true;
+    const screen = await renderProfile();
+    await expect.element(screen.getByRole("status")).toBeVisible();
+    expect(screen.container.querySelectorAll("input")).toHaveLength(0);
+    expect(screen.container.textContent).not.toContain("Chưa cập nhật");
+  });
+
+  it("offers a retry when the profile cannot be loaded", async () => {
+    mocks.profileError = true;
+    const screen = await renderProfile();
+    await expect
+      .element(screen.getByText("Chưa tải được hồ sơ cá nhân."))
+      .toBeVisible();
+    await screen.getByRole("button", { name: "Thử lại" }).click();
+    expect(mocks.refetchUser).toHaveBeenCalledTimes(1);
+    expect(mocks.apiJson).not.toHaveBeenCalled();
+  });
+
+  it("keeps the submitted edit locked until the profile write finishes", async () => {
+    let finish!: (value: object) => void;
+    mocks.apiJson.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const screen = await renderProfile();
+    await screen.getByRole("button", { name: "Sửa" }).click();
+    await screen.getByRole("textbox", { name: /Họ tên/ }).fill("Tên đang lưu");
+    await screen.getByRole("button", { name: "Lưu" }).click();
+    await expect.poll(() => mocks.apiJson.mock.calls.length).toBe(1);
+    await expect
+      .element(screen.getByRole("button", { name: "Hủy" }))
+      .toBeDisabled();
+    await expect
+      .element(screen.getByRole("textbox", { name: /Họ tên/ }))
+      .toBeDisabled();
+    finish({});
+    await expect
+      .element(screen.getByRole("button", { name: "Sửa" }))
+      .toBeVisible();
+  });
+
   it("shows the signed-in account read-only until editing starts", async () => {
     const screen = await renderProfile();
 

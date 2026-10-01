@@ -31,8 +31,6 @@ JOBS_RECORD = {
     "title": "Công nhân sản xuất",
     "aliases": ["Công nhân kiểm tra màn hình", "CN đóng gói"],
     "location": "KCN VSIP, Thủy Nguyên, Hải Phòng",
-    "vacancies": 100,
-    "employment_type": "temporary",
     "summary": 'Dây chuyền điện tử, dấu nháy "và" xuống dòng\nthứ hai',
     "keywords": ["điện tử", "kiểm tra"],
 }
@@ -40,7 +38,6 @@ FULL_RECORDS: dict[str, dict] = {
     "jobs": JOBS_RECORD,
     "compensation": {
         "id": "thu-nhap-chung",
-        "job_ids": ["vi-cong-nhan"],
         "base_salary_vnd": 6300000,
         "estimated_income_min_vnd": 9000000,
         "estimated_income_max_vnd": 12000000,
@@ -56,7 +53,6 @@ FULL_RECORDS: dict[str, dict] = {
     },
     "requirements": {
         "id": "yeu-cau-chung",
-        "job_ids": ["vi-cong-nhan"],
         "age_min": 18,
         "age_max": 37,
         "genders": ["any"],
@@ -69,7 +65,6 @@ FULL_RECORDS: dict[str, dict] = {
     },
     "work_schedules": {
         "id": "lich-lam-chung",
-        "job_ids": ["vi-cong-nhan"],
         "work_days": ["Thứ 2", "Thứ 7"],
         "shifts": [
             {"name": "Ca ngày", "start_time": "07:30", "end_time": "16:30", "crosses_midnight": False},
@@ -82,14 +77,12 @@ FULL_RECORDS: dict[str, dict] = {
     },
     "benefits": {
         "id": "chuyen-can",
-        "job_ids": [],
         "name": "Phụ cấp chuyên cần",
         "description": "Cộng vào lương tháng",
         "eligibility": "Đủ công trong tháng",
     },
     "accommodation": {
         "id": "ky-tuc-xa",
-        "job_ids": [],
         "available": True,
         "type": "Ký túc xá",
         "address": "Trong khuôn viên KCN",
@@ -101,7 +94,6 @@ FULL_RECORDS: dict[str, dict] = {
     },
     "meals": {
         "id": "bua-an-ca",
-        "job_ids": [],
         "provided": True,
         "meals_per_shift": 1,
         "allowance_vnd": 0,
@@ -111,7 +103,6 @@ FULL_RECORDS: dict[str, dict] = {
     },
     "transportation": {
         "id": "tuyen-xe-1",
-        "job_ids": [],
         "name": "Tuyến số 1",
         "direction": "round_trip",
         "service_days": ["Thứ 2"],
@@ -125,7 +116,6 @@ FULL_RECORDS: dict[str, dict] = {
     },
     "insurance": {
         "id": "bhxh",
-        "job_ids": [],
         "name": "BHXH bắt buộc",
         "provider": "Bảo hiểm xã hội",
         "employee_contribution": "10,5%",
@@ -137,7 +127,6 @@ FULL_RECORDS: dict[str, dict] = {
     },
     "application": {
         "id": "ung-tuyen-nhan-viec",
-        "job_ids": [],
         "application_steps": ["Đăng ký", "Phỏng vấn", "Khám sức khỏe"],
         "required_documents": ["CCCD photo công chứng"],
         "interview_location": "Văn phòng tại KCN",

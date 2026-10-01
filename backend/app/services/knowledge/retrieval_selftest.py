@@ -1,18 +1,15 @@
 """Pre-activation retrieval self-test for category revisions.
 
 Before a staged category revision becomes the project's active knowledge, this
-module answers one question with the revision's own content: **can each record
-be retrieved by the query its own fields declare?** Every record is reduced to
-its most query-like field (``question`` → ``title`` → ``name``), embedded, and
-cosine-compared against ALL of the revision's unit vectors — the same ranking
-job the production vector search will do against these chunks, minus noise from
-other projects (a pass here is necessary, not sufficient; whole-KB noise only
-lowers similarity further).
+module checks a bounded sample of records against their own declared query.
+Each sampled record's most query-like field (``question`` → ``title`` →
+``name``) is embedded and cosine-compared against that record's aligned unit
+vector. A different record's high similarity cannot hide an unreachable answer.
+This is a necessary sanity check, not proof of production ranking or factual
+correctness; cross-project noise and retrieval policies still matter.
 
-A failure means the content cannot serve candidates as written: the question a
-recruiter typed would not surface this record. That is the same class of
-blocking defect as an invalid payload, so activation fails with a dedicated
-code and the offending queries in ``error_message``.
+A failure indicates that a sampled query and its own answer are poorly aligned.
+Activation fails with a dedicated code and offending queries in ``error_message``.
 
 A query must be long enough to BE a retrieval signal. The exact rule: a query
 with fewer than five letters (unicode alphabetic characters — punctuation does
@@ -33,6 +30,8 @@ from __future__ import annotations
 
 import math
 from typing import Any, Protocol
+
+from app.project_knowledge.domain.category_catalog import get_category_definition
 
 # A record's query-vs-own-content similarity below this means the question and
 # the answer content disagree semantically (the embedding model sees them as
@@ -130,22 +129,24 @@ async def retrieval_selftest_failures(
         return []
     records = getattr(document, definition_field)[:RETRIEVAL_SELFTEST_MAX_QUERIES]
     queries: list[str] = []
-    for record in records:
+    record_vectors: list[list[float]] = []
+    for index, record in enumerate(records):
         payload = record.model_dump(mode="json", exclude_none=True)
         query = _selftest_query(payload)
         if query is not None and _query_is_testable(query):
             queries.append(query)
+            record_vectors.append(vectors[index])
     if not queries:
         return []
     query_vectors = await embedder.batch(queries)
     failures: list[str] = []
     floor_text = f"{RETRIEVAL_SELFTEST_FLOOR:.2f}"
-    for query, query_vector in zip(queries, query_vectors, strict=True):
-        best = max(_cosine(query_vector, vector) for vector in vectors)
-        if best < RETRIEVAL_SELFTEST_FLOOR:
+    for query, query_vector, record_vector in zip(queries, query_vectors, record_vectors, strict=True):
+        similarity = _cosine(query_vector, record_vector)
+        if not math.isfinite(similarity) or similarity < RETRIEVAL_SELFTEST_FLOOR:
             failures.append(
                 f'"{query}" would not retrieve its own record '
-                f"(best similarity {best:.2f} < {floor_text})"
+                f"(own-record similarity {similarity:.2f} < {floor_text})"
             )
     return failures
 
@@ -155,8 +156,6 @@ def _record_list_field(document: Any) -> str | None:
     definition = getattr(document, "category", None)
     if definition is None:
         return None
-    from app.services.knowledge.category_projections import get_category_definition
-
     try:
         return get_category_definition(definition).list_field
     except (KeyError, ValueError):

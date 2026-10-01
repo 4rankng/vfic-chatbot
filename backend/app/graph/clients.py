@@ -34,7 +34,6 @@ from app.graph.answer_repair import (
     _CUT_ANSWER_CONTINUE_INSTRUCTION,
     _MAX_ANSWER_CONTINUATIONS,
     _answer_was_cut,
-    _drop_dangling_tail,
     _join_answer_parts,
     _record_answer_continuation,
     _should_continue_cut_answer,
@@ -172,6 +171,7 @@ class _AgentTurn:
         "continuing_answer",
         "last_round_cut",
         "contact_repair_depth",
+        "answer_completion_rewrites",
     )
 
     def __init__(
@@ -247,6 +247,7 @@ class _AgentTurn:
         # Bounds the contact-veto repair to exactly one rewrite round; a second
         # violation suppresses the turn instead of looping.
         self.contact_repair_depth = 0
+        self.answer_completion_rewrites = 0
 
     def scoped_args(self, name: str, args: dict) -> dict:
         """Force the turn's project focus onto a model-supplied tool call."""
@@ -843,6 +844,12 @@ class MiniMaxAgent:
                     reasoning=_extract_returned_reasoning(ai),
                     tool_names=[call["name"] if "name" in call else "" for call in calls or []],
                 )
+            if tool_free_round and calls:
+                # A completion round has no authority to re-enter tool work,
+                # even if the provider emits a call despite the tool-free bind.
+                if metrics is not None:
+                    metrics["answer_completion_failure"] = "unexpected_tool_call"
+                return ""
             if was_empty_retry:
                 # Never dispatch tools on a recovery round; the reply policy that
                 # used to gate this is gone, so the recovery simply ships the
@@ -852,19 +859,23 @@ class MiniMaxAgent:
                 if _should_continue_cut_answer(ai, visible_round, turn.answer_continuations):
                     turn.answer_continuations += 1
                     turn.continuing_answer = True
+                    # Output repair has its own bounded allowance. A cap on
+                    # the final tool-loop round must still invoke the repair
+                    # rather than record a continuation that never runs.
+                    turn.iterations_remaining = max(turn.iterations_remaining, 1)
                     messages.append(SystemMessage(content=_CUT_ANSWER_CONTINUE_INSTRUCTION))
                     _record_answer_continuation(metrics, turn.answer_continuations)
                     continue
                 answer = _join_answer_parts(turn.answer_parts)
-                if _answer_was_cut(ai):
-                    # Still cut after the continuation budget: drop the dangling
-                    # fragment instead of a mid-word tail.
-                    answer = _drop_dangling_tail(answer)
                 return await self._ground_or_repair(turn, answer)
             if not calls:
                 raw_content = str(ai.content or "")
                 text_calls = extract_text_tool_calls(raw_content)
                 if text_calls:
+                    if tool_free_round:
+                        if metrics is not None:
+                            metrics["answer_completion_failure"] = "unexpected_tool_call"
+                        return ""
                     # The provider wrote its call as content markup instead of a
                     # tool_calls block (production delivered the whole
                     # <invoke name="search_knowledge"> block to a candidate). Run
@@ -931,6 +942,7 @@ class MiniMaxAgent:
                 if _should_continue_cut_answer(ai, visible_round, turn.answer_continuations):
                     turn.answer_continuations += 1
                     turn.continuing_answer = True
+                    turn.iterations_remaining = max(turn.iterations_remaining, 1)
                     messages.append(SystemMessage(content=_CUT_ANSWER_CONTINUE_INSTRUCTION))
                     _record_answer_continuation(metrics, turn.answer_continuations)
                     logger.warning(
@@ -943,10 +955,6 @@ class MiniMaxAgent:
                 # deterministic replacement of a composed answer). Job turns
                 # keep the sanitize-only ID/entity grounding path below.
                 final_reply = _join_answer_parts(turn.answer_parts)
-                if _answer_was_cut(ai):
-                    # The provider stopped at the cap again: drop the dangling
-                    # fragment so the candidate never reads a mid-word tail.
-                    final_reply = _drop_dangling_tail(final_reply)
                 return await self._ground_or_repair(turn, final_reply)
             if metrics is not None:
                 metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
@@ -1152,8 +1160,6 @@ class MiniMaxAgent:
             # A continued answer outranks the last message: exhaustion after a
             # cut-answer continuation must never ship the instruction text.
             final = _join_answer_parts(turn.answer_parts)
-            if turn.last_round_cut:
-                final = _drop_dangling_tail(final)
             return await self._ground_or_repair(turn, final)
         # The loop spent every round on tool calls and never produced a text
         # answer. ``messages[-1].content`` is the raw ToolMessage payload here
@@ -1186,6 +1192,15 @@ class MiniMaxAgent:
         from langchain_core.messages import SystemMessage
 
         trace_sink = turn.trace_sink
+        if turn.last_round_cut:
+            # A trimmed tail is still an incomplete answer (for example two
+            # rows of a requested five-project list). Give the model one final
+            # concise rewrite over the same evidence, then fail closed.
+            if turn.answer_completion_rewrites >= 1:
+                if turn.metrics is not None:
+                    turn.metrics["answer_completion_failure"] = "output_cap_exhausted"
+                return ""
+            return await self._rewrite_cut_answer(turn)
         grounded = _ground_reply(
             reply,
             turn.tool_results,
@@ -1226,6 +1241,37 @@ class MiniMaxAgent:
         if trace_sink is not None:
             trace_sink.record_decision("grounding_verdict", "repaired")
         return repaired
+
+    async def _rewrite_cut_answer(self, turn: _AgentTurn) -> str:
+        """One complete, tool-free rewrite when continuations could not finish."""
+        from langchain_core.messages import SystemMessage
+
+        turn.answer_completion_rewrites += 1
+        if turn.metrics is not None:
+            turn.metrics["answer_completion_rewrites"] = turn.answer_completion_rewrites
+        turn.messages.append(SystemMessage(content=(
+            "Câu trả lời vẫn bị cắt sau các lần viết tiếp. Viết lại MỘT câu trả lời HOÀN CHỈNH "
+            "và ngắn gọn cho tin nhắn hiện tại, chỉ dùng kết quả công cụ đã xác minh hoặc "
+            "KIẾN THỨC DỰ ÁN (toàn văn, nguồn chính thức) đã có trong lượt này. "
+            "Không nối tiếp bản nháp, không chép bản nháp, không gọi thêm công cụ. "
+            "Nếu ứng viên yêu cầu tất cả dự án, phải nêu đủ từng dự án trong projects, "
+            "mỗi dự án chỉ cần tên và thông tin ngắn đã có trong dữ liệu; không bỏ dự án "
+            "để lấy chỗ cho lời chào hoặc câu hỏi. Không nói đã trình bày đầy đủ khi chưa đủ."
+        )))
+        turn.schemas = []
+        turn.iterations_remaining = 1
+        turn.answer_parts = []
+        # This last rewrite cannot reopen either recovery allowance.
+        turn.answer_continuations = _MAX_ANSWER_CONTINUATIONS
+        turn.continuing_answer = True
+        turn.retrying_empty_generation = False
+        turn.empty_retry_available = False
+        rewritten = await self._run_generation_round(turn)
+        if isinstance(rewritten, _ContinueTurn) or not rewritten:
+            if turn.metrics is not None:
+                turn.metrics.setdefault("answer_completion_failure", "empty_rewrite")
+            return ""
+        return rewritten
 
     async def _compose_with_instruction(self, turn: _AgentTurn, instruction: str) -> str:
         """One final tool-free composition round; ``""`` means suppress the turn.

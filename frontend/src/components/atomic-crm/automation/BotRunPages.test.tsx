@@ -6,9 +6,13 @@ import type { BotRun, BotRunTraceDetail } from "../types";
 
 const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
+  notify: vi.fn(),
   list: {
     data: [] as BotRun[],
     isPending: false,
+    isFetching: false,
+    error: null as Error | null,
+    refetch: vi.fn(),
     total: 0,
     page: 1,
     perPage: 25,
@@ -35,6 +39,7 @@ vi.mock("ra-core", () => ({
   useListContext: () => mocks.list,
   useListPaginationContext: () => mocks.list,
   useRedirect: () => mocks.redirect,
+  useNotify: () => mocks.notify,
   useTranslate: () => testI18nProvider.translate,
 }));
 
@@ -57,10 +62,124 @@ const run: BotRun = {
 describe("Bot run pages", () => {
   beforeEach(() => {
     mocks.redirect.mockReset();
+    mocks.notify.mockReset();
     mocks.list.data = [run];
     mocks.list.isPending = false;
+    mocks.list.isFetching = false;
+    mocks.list.error = null;
+    mocks.list.refetch.mockReset();
+    mocks.list.refetch.mockResolvedValue({ error: null });
     mocks.list.total = 1;
   });
+
+  it("distinguishes a failed initial request from an empty audit trail", async () => {
+    mocks.list.data = [];
+    mocks.list.error = new Error("request failed");
+    const screen = await render(<BotRunListContent />);
+
+    await expect.element(screen.getByRole("alert")).toBeVisible();
+    await expect
+      .element(screen.getByText("Chưa tải được nhật ký"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Chưa có lần chạy bot nào"))
+      .not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Thử lại" }).click();
+    expect(mocks.list.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a successful empty response distinct from failure", async () => {
+    mocks.list.data = [];
+    const screen = await render(<BotRunListContent />);
+
+    await expect
+      .element(screen.getByText("Chưa có lần chạy bot nào"))
+      .toBeVisible();
+    await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("button", { name: "Thử lại" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("marks the audit region busy during the first request", async () => {
+    mocks.list.data = [];
+    mocks.list.isPending = true;
+    mocks.list.isFetching = true;
+    const screen = await render(<BotRunListContent />);
+
+    await expect
+      .element(screen.getByRole("status", { name: "Đang tải" }))
+      .toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("region", { name: "Nhật ký xử lý" }))
+      .toHaveAttribute("aria-busy", "true");
+    await expect
+      .element(screen.getByText("Chưa có lần chạy bot nào"))
+      .not.toBeInTheDocument();
+  });
+
+  it("preserves known runs while a background request fails or retries", async () => {
+    mocks.list.error = new Error("background request failed");
+    let finishRetry!: (result: { error: null }) => void;
+    mocks.list.refetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishRetry = resolve;
+      }),
+    );
+    const screen = await render(<BotRunListContent />);
+    const section = screen.getByRole("region", { name: "Nhật ký xử lý" });
+    const row = screen.getByRole("button", { name: /Xem lần chạy #42:/ });
+    const retry = screen.getByRole("button", { name: "Thử lại" });
+
+    await expect.element(row).toBeVisible();
+    await expect.element(screen.getByRole("alert")).toBeVisible();
+    await expect
+      .element(
+        screen.getByText(
+          "Chưa cập nhật được nhật ký. Dữ liệu đã tải vẫn được giữ lại.",
+        ),
+      )
+      .toBeVisible();
+    await retry.click();
+    await expect.element(section).toHaveAttribute("aria-busy", "true");
+    await expect.element(retry).toBeDisabled();
+    await expect.element(row).toBeVisible();
+    finishRetry({ error: null });
+    await expect.element(section).toHaveAttribute("aria-busy", "false");
+    await expect.element(retry).toBeEnabled();
+  });
+
+  it.each(["query result", "rejected promise"])(
+    "announces a retry failure from %s",
+    async (failure) => {
+      mocks.list.data = [];
+      mocks.list.error = new Error("request failed");
+      if (failure === "query result") {
+        mocks.list.refetch.mockResolvedValueOnce({
+          error: new Error("private provider error"),
+        });
+      } else {
+        mocks.list.refetch.mockRejectedValueOnce(
+          new Error("private provider error"),
+        );
+      }
+      const screen = await render(<BotRunListContent />);
+
+      await screen.getByRole("button", { name: "Thử lại" }).click();
+      await expect
+        .poll(() => mocks.notify.mock.calls)
+        .toEqual([
+          ["Vẫn chưa tải được nhật ký. Vui lòng thử lại.", { type: "error" }],
+        ]);
+      await expect.element(screen.getByRole("alert")).toBeVisible();
+      await expect
+        .element(screen.getByRole("region", { name: "Nhật ký xử lý" }))
+        .toHaveAttribute("aria-busy", "false");
+      expect(screen.container.textContent).not.toContain(
+        "private provider error",
+      );
+    },
+  );
 
   it("keeps the list flat, concise and inside the shared scroll owner", async () => {
     const screen = await render(<BotRunListContent />);

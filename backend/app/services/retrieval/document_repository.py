@@ -76,13 +76,19 @@ class DocumentRepository:
         The FAQ repository reuses it for the same reason.
         """
         return (
-            "d.status NOT IN ('ARCHIVED', 'FAILED') "
+            "p.is_active IS TRUE "
+            "AND p.knowledge_base_id IS NOT NULL "
+            "AND d.status NOT IN ('ARCHIVED', 'FAILED') "
             "AND c.embedding IS NOT NULL "
+            "AND (c.project_id IS NULL OR c.project_id = p.id) "
             "AND ("
             "  (p.category_authority_started IS TRUE "
             "   AND c.category_revision_id IS NOT NULL AND EXISTS ("
             "    SELECT 1 FROM knowledge_categories kc "
-            "    WHERE kc.project_id = p.id AND kc.active_revision_id = c.category_revision_id"
+            "    JOIN knowledge_category_revisions kr ON kr.category_id = kc.id "
+            "    WHERE kc.project_id = p.id AND kc.active_revision_id = kr.id "
+            "      AND kr.id = c.category_revision_id "
+            "      AND d.category_revision_id = kr.id"
             "  )) "
             "  OR (c.category_revision_id IS NULL AND c.kb_version_id = p.active_kb_version_id "
             "      AND p.category_authority_started IS FALSE) "
@@ -188,7 +194,8 @@ class DocumentRepository:
             # boundary rather than assuming it carries over.
             vector_sql = (
                 "WITH ann_candidates AS ("
-                "  SELECT c.id "
+                "  SELECT c.id, p.name AS project_name, p.slug AS project_slug, "
+                "         d.file_name AS document_file "
                 "  FROM knowledge_chunks c "
                 "  JOIN knowledge_documents d ON d.id = c.document_id "
                 "  JOIN projects p ON p.id = d.project_id "
@@ -198,11 +205,13 @@ class DocumentRepository:
                 ") "
                 "SELECT id, content, source_quote, summary, metadata, "
                 "       line_start, line_end, section_path, source_file, "
+                "       project_name, project_slug, category, "
                 "       1 - dist AS similarity "
                 "FROM ("
                 "  SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
                 "         c.line_start, c.line_end, c.section_path, "
-                "         ktf.filename AS source_file, "
+                "         COALESCE(ktf.filename, ac.document_file) AS source_file, "
+                "         ac.project_name, ac.project_slug, c.category, "
                 "         (c.embedding <=> CAST(:emb AS vector)) AS dist "
                 "  FROM ann_candidates ac "
                 "  JOIN knowledge_chunks c ON c.id = ac.id "
@@ -220,7 +229,9 @@ class DocumentRepository:
         else:
             vector_sql = (
                 "SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
-                "       c.line_start, c.line_end, c.section_path, ktf.filename AS source_file, "
+                "       c.line_start, c.line_end, c.section_path, "
+                "       COALESCE(ktf.filename, d.file_name) AS source_file, "
+                "       p.name AS project_name, p.slug AS project_slug, c.category, "
                 "       1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
                 "FROM knowledge_chunks c "
                 "JOIN knowledge_documents d ON d.id = c.document_id "
@@ -259,6 +270,11 @@ class DocumentRepository:
         Degradation is observable: the caller can read ``self.last_match_degraded``
         after this returns to stamp the reason into ``stage_timings`` (see runner.py).
         """
+        # None is an internal unrestricted read; an explicitly empty channel
+        # or project scope must never turn into a deployment-wide query.
+        self.last_match_degraded = None
+        if project_ids == []:
+            return []
         project_clause = ""
         if project_ids:
             project_clause = "AND d.project_id = ANY(CAST(:pids AS uuid[]))"

@@ -71,15 +71,12 @@ export const TingtingSection = () => {
   // field is untouched or cleared — the backend never loses the seed by accident.
   const [hotlineDraft, setHotlineDraft] = useState("");
 
-  const {
-    data: settings,
-    isPending,
-    isError,
-  } = useQuery<TingtingSettings>({
+  const settingsQuery = useQuery<TingtingSettings>({
     queryKey: tingtingSettingsKey,
     queryFn: () => zaloIntegrationGateway.loadTingtingSettings(),
     staleTime: 30_000,
   });
+  const { data: settings, isPending, isError } = settingsQuery;
 
   const statusState: SettingsStatusState = isPending
     ? "loading"
@@ -175,6 +172,14 @@ export const TingtingSection = () => {
   ].filter(Boolean).length;
 
   const submit = () => {
+    if (
+      !settings ||
+      isError ||
+      saveSettings.isPending ||
+      checkOa.isPending ||
+      !dirty
+    )
+      return;
     saveSettings.mutate({
       ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
       ...(hotlineChanged ? { hotline: trimmedHotline } : {}),
@@ -184,145 +189,169 @@ export const TingtingSection = () => {
 
   return (
     <SettingsSectionPanel id="settings-tingting">
-      {/* One integration, so one full-width card: the page header already
+      {isError ? (
+        <div role="alert" className="mb-3 text-body-sm">
+          <p>Chưa tải được cấu hình TingTing.</p>
+          <Button
+            type="button"
+            color="secondary"
+            size="sm"
+            className="mt-2"
+            isDisabled={settingsQuery.isFetching}
+            onClick={() => void settingsQuery.refetch()}
+          >
+            {settingsQuery.isFetching ? "Đang tải…" : "Thử lại cấu hình"}
+          </Button>
+        </div>
+      ) : null}
+      <fieldset
+        className="contents"
+        disabled={
+          !settings || isError || saveSettings.isPending || checkOa.isPending
+        }
+        aria-busy={saveSettings.isPending || checkOa.isPending}
+      >
+        <legend className="sr-only">Thông tin kết nối TingTing</legend>
+        {/* One integration, so one full-width card: the page header already
           carries the title and the purpose. The card names the integration,
           reports how much of it is configured, and lays the credentials out in
           pairs instead of a single tall column. */}
-      <SettingsGroup
-        className="settings-tingting-card"
-        title="TingTing"
-        icon={
-          <img
-            src="/brand/tingting-oa.png"
-            alt=""
-            className="size-5 rounded-[6px] object-contain"
+        <SettingsGroup
+          className="settings-tingting-card"
+          title="TingTing"
+          icon={
+            <img
+              src="/brand/tingting-oa.png"
+              alt=""
+              className="size-5 rounded-[6px] object-contain"
+            />
+          }
+          meta={
+            <SettingsGroupStatus
+              configured={configuredFields}
+              total={TINGTING_FIELD_COUNT}
+              state={statusState}
+            />
+          }
+          defaultOpen
+        >
+          <SecretField
+            id="tingting_api_key"
+            label="API key TingTing"
+            placeholder="Nhập API key"
+            configured={settings?.api_key?.configured ?? false}
+            statusState={statusState}
+            preview={settings?.api_key?.preview ?? null}
+            value={apiKey}
+            onChange={setApiKey}
+            notify={notify}
+            hint="Quy trình gửi OTP đã tích hợp sẵn. Để trống để giữ API key đã lưu."
           />
-        }
-        meta={
-          <SettingsGroupStatus
-            configured={configuredFields}
-            total={TINGTING_FIELD_COUNT}
-            state={statusState}
-          />
-        }
-        defaultOpen
-      >
-        <SecretField
-          id="tingting_api_key"
-          label="API key TingTing"
-          placeholder="Nhập API key"
-          configured={settings?.api_key?.configured ?? false}
-          statusState={statusState}
-          preview={settings?.api_key?.preview ?? null}
-          value={apiKey}
-          onChange={setApiKey}
-          notify={notify}
-          hint="Quy trình gửi OTP đã tích hợp sẵn. Để trống để giữ API key đã lưu."
-        />
 
-        <PlainField
-          id="tingting_hotline"
-          label="Hotline hỗ trợ"
-          value={hotlineDraft || storedHotline}
-          onChange={setHotlineDraft}
-          configured={Boolean(storedHotline)}
-          statusState={statusState}
-          showMissingStatus={false}
-          hint="Số bot đưa khi không hỗ trợ được qua tin nhắn. Đã đặt sẵn — sửa khi cần đổi số."
-        />
-
-        <div className="settings-tingting-subhead">
-          <h3>Zalo OA</h3>
-          <p>Lấy trong Zalo OA Console (Cài đặt → API).</p>
-        </div>
-
-        <div className="settings-tingting-grid">
           <PlainField
-            id="tingting_oa_app_id"
-            label="Zalo App ID"
-            value={oaForm.app_id || settings?.oa_app_id || ""}
-            onChange={(value) => setOaField("app_id", value)}
-            configured={Boolean(settings?.oa_app_id)}
+            id="tingting_hotline"
+            label="Hotline hỗ trợ"
+            value={hotlineDraft || storedHotline}
+            onChange={setHotlineDraft}
+            configured={Boolean(storedHotline)}
             statusState={statusState}
             showMissingStatus={false}
+            hint="Số bot đưa khi không hỗ trợ được qua tin nhắn. Đã đặt sẵn — sửa khi cần đổi số."
           />
-          <SecretField
-            id="tingting_oa_secret_key"
-            label="OA Secret Key"
-            placeholder="Nhập Secret Key"
-            configured={settings?.oa_secret_key?.configured ?? false}
-            statusState={statusState}
-            preview={settings?.oa_secret_key?.preview ?? null}
-            value={oaForm.secret_key}
-            onChange={(value) => setOaField("secret_key", value)}
-            notify={notify}
-            hint="Tự gia hạn Access Token (Zalo cấp cùng App ID)."
-          />
-          <SecretField
-            id="tingting_oa_access_token"
-            label="OA Access Token"
-            placeholder="Nhập Access Token"
-            configured={settings?.oa_access_token?.configured ?? false}
-            statusState={statusState}
-            preview={settings?.oa_access_token?.preview ?? null}
-            value={oaForm.access_token}
-            onChange={(value) => setOaField("access_token", value)}
-            notify={notify}
-            hint="Bắt buộc — hệ thống kiểm tra với Zalo và tự nhận diện OA khi lưu."
-          />
-          <SecretField
-            id="tingting_oa_refresh_token"
-            label="OA Refresh Token"
-            placeholder="Nhập Refresh Token"
-            configured={settings?.oa_refresh_token?.configured ?? false}
-            statusState={statusState}
-            preview={settings?.oa_refresh_token?.preview ?? null}
-            value={oaForm.refresh_token}
-            onChange={(value) => setOaField("refresh_token", value)}
-            notify={notify}
-            hint="Nên có — Access Token hết hạn sau ~25 giờ."
-          />
-        </div>
 
-        <div className="settings-tingting-link">
-          <span className="settings-tingting-link-copy" role="status">
-            {describeOaLink(settings)}
+          <div className="settings-tingting-subhead">
+            <h3>Zalo OA</h3>
+            <p>Lấy trong Zalo OA Console (Cài đặt → API).</p>
+          </div>
+
+          <div className="settings-tingting-grid">
+            <PlainField
+              id="tingting_oa_app_id"
+              label="Zalo App ID"
+              value={oaForm.app_id || settings?.oa_app_id || ""}
+              onChange={(value) => setOaField("app_id", value)}
+              configured={Boolean(settings?.oa_app_id)}
+              statusState={statusState}
+              showMissingStatus={false}
+            />
+            <SecretField
+              id="tingting_oa_secret_key"
+              label="OA Secret Key"
+              placeholder="Nhập Secret Key"
+              configured={settings?.oa_secret_key?.configured ?? false}
+              statusState={statusState}
+              preview={settings?.oa_secret_key?.preview ?? null}
+              value={oaForm.secret_key}
+              onChange={(value) => setOaField("secret_key", value)}
+              notify={notify}
+              hint="Tự gia hạn Access Token (Zalo cấp cùng App ID)."
+            />
+            <SecretField
+              id="tingting_oa_access_token"
+              label="OA Access Token"
+              placeholder="Nhập Access Token"
+              configured={settings?.oa_access_token?.configured ?? false}
+              statusState={statusState}
+              preview={settings?.oa_access_token?.preview ?? null}
+              value={oaForm.access_token}
+              onChange={(value) => setOaField("access_token", value)}
+              notify={notify}
+              hint="Bắt buộc — hệ thống kiểm tra với Zalo và tự nhận diện OA khi lưu."
+            />
+            <SecretField
+              id="tingting_oa_refresh_token"
+              label="OA Refresh Token"
+              placeholder="Nhập Refresh Token"
+              configured={settings?.oa_refresh_token?.configured ?? false}
+              statusState={statusState}
+              preview={settings?.oa_refresh_token?.preview ?? null}
+              value={oaForm.refresh_token}
+              onChange={(value) => setOaField("refresh_token", value)}
+              notify={notify}
+              hint="Nên có — Access Token hết hạn sau ~25 giờ."
+            />
+          </div>
+
+          <div className="settings-tingting-link">
+            <span className="settings-tingting-link-copy" role="status">
+              {describeOaLink(settings)}
+            </span>
+            {oaConfigured ? (
+              <Button
+                type="button"
+                color="secondary"
+                className="settings-test-button tt-btn-touch"
+                onClick={() => checkOa.mutate()}
+                isDisabled={checkOa.isPending}
+                aria-busy={checkOa.isPending}
+              >
+                {checkOa.isPending ? "Đang kiểm tra…" : "Kiểm tra lại OA"}
+              </Button>
+            ) : null}
+          </div>
+        </SettingsGroup>
+
+        <div className={`settings-llm-footer${dirty ? " is-dirty" : ""}`}>
+          <Button
+            type="button"
+            color="primary"
+            className="settings-primary-action tt-btn-touch"
+            onClick={submit}
+            isDisabled={!dirty || saveSettings.isPending}
+          >
+            {saveSettings.isPending
+              ? translate("crm.common.saving")
+              : translate("crm.common.save_and_test")}
+          </Button>
+          <span className="settings-llm-footer-note">
+            {dirty
+              ? translate("crm.common.unsaved_changes")
+              : oaConfigured
+                ? "Đặt lại mật khẩu chỉ chạy trên Zalo OA đã liên kết."
+                : "Chưa liên kết Zalo OA nên chức năng đặt lại mật khẩu đang tắt."}
           </span>
-          {oaConfigured ? (
-            <Button
-              type="button"
-              color="secondary"
-              className="settings-test-button tt-btn-touch"
-              onClick={() => checkOa.mutate()}
-              isDisabled={checkOa.isPending}
-              aria-busy={checkOa.isPending}
-            >
-              {checkOa.isPending ? "Đang kiểm tra…" : "Kiểm tra lại OA"}
-            </Button>
-          ) : null}
         </div>
-      </SettingsGroup>
-
-      <div className={`settings-llm-footer${dirty ? " is-dirty" : ""}`}>
-        <Button
-          type="button"
-          color="primary"
-          className="settings-primary-action tt-btn-touch"
-          onClick={submit}
-          isDisabled={!dirty || saveSettings.isPending}
-        >
-          {saveSettings.isPending
-            ? translate("crm.common.saving")
-            : translate("crm.common.save_and_test")}
-        </Button>
-        <span className="settings-llm-footer-note">
-          {dirty
-            ? translate("crm.common.unsaved_changes")
-            : oaConfigured
-              ? "Đặt lại mật khẩu chỉ chạy trên Zalo OA đã liên kết."
-              : "Chưa liên kết Zalo OA nên chức năng đặt lại mật khẩu đang tắt."}
-        </span>
-      </div>
+      </fieldset>
     </SettingsSectionPanel>
   );
 };

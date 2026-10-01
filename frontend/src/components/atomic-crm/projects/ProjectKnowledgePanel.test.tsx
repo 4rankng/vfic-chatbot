@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   getProjectKnowledgeCategories: vi.fn(),
   getProjectKnowledgeCategorySource: vi.fn(),
   getProjectKnowledgeCategoryTemplate: vi.fn(),
+  getProjectKnowledgeExport: vi.fn(),
   getProjectSinglePage: vi.fn(),
   listSinglePageExternalSources: vi.fn(),
   createSinglePageExternalSource: vi.fn(),
@@ -60,6 +61,7 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
   getProjectKnowledgeCategorySource: mocks.getProjectKnowledgeCategorySource,
   getProjectKnowledgeCategoryTemplate:
     mocks.getProjectKnowledgeCategoryTemplate,
+  getProjectKnowledgeExport: mocks.getProjectKnowledgeExport,
   getProjectSinglePage: mocks.getProjectSinglePage,
   listSinglePageExternalSources: mocks.listSinglePageExternalSources,
   createSinglePageExternalSource: mocks.createSinglePageExternalSource,
@@ -128,10 +130,12 @@ const categories: KnowledgeCategoryStatus[] = [
 
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 };
 
 /** The recruiter brief shape — an overview table plus Q&A sections — that
@@ -166,6 +170,39 @@ const NO_HIGHLIGHTS_BRIEF = REUPLOAD_BRIEF.replace(
 );
 
 describe("ProjectKnowledgePanel", () => {
+  it.each([project, singlePageProject])(
+    "offers saved knowledge export to an administrator in $knowledge_mode",
+    async (record) => {
+      const screen = await renderPanel(
+        <ProjectKnowledgePanel project={record} editable canManageSources />,
+      );
+      await expect
+        .element(screen.getByRole("button", { name: "Xuất KB" }))
+        .toBeVisible();
+      await expect
+        .element(screen.getByText("KB đang sử dụng · Markdown (.md)"))
+        .toBeVisible();
+      expect(mocks.getProjectKnowledgeExport).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([project, singlePageProject])(
+    "keeps export unavailable to a recruiter in $knowledge_mode",
+    async (record) => {
+      const screen = await renderPanel(
+        <ProjectKnowledgePanel
+          project={record}
+          editable
+          canManageSources={false}
+        />,
+      );
+      await expect
+        .element(screen.getByRole("button", { name: "Xuất KB" }))
+        .not.toBeInTheDocument();
+      expect(mocks.getProjectKnowledgeExport).not.toHaveBeenCalled();
+    },
+  );
+
   afterEach(async () => {
     vi.restoreAllMocks();
     await page.viewport(1280, 720);
@@ -317,7 +354,7 @@ describe("ProjectKnowledgePanel", () => {
       .click();
 
     expect(confirm).toHaveBeenCalledWith(
-      "Nội dung mới sẽ thay thế toàn bộ trang hiện tại và bật dự án để Agent sử dụng. Tiếp tục?",
+      "Nội dung mới sẽ thay thế toàn bộ trang hiện tại và bật dự án để chatbot sử dụng. Tiếp tục?",
     );
     expect(mocks.replaceProjectSinglePage).not.toHaveBeenCalled();
     confirm.mockRestore();
@@ -577,7 +614,7 @@ describe("ProjectKnowledgePanel", () => {
     );
   });
 
-  it("shows current category data and keeps the template behind the download action", async () => {
+  it("shows current category data without the category template download action", async () => {
     mocks.getProjectKnowledgeCategorySource.mockImplementation(
       (_projectId: string, key: string) => {
         if (key === "jobs") {
@@ -607,6 +644,11 @@ describe("ProjectKnowledgePanel", () => {
     await expect.element(jobsEditor).toHaveValue("CURRENT JOBS");
     await expect.element(jobsEditor).toHaveAttribute("readonly");
     await expect.element(jobsEditor).toBeVisible();
+    expect(
+      Array.from(screen.container.querySelectorAll("button")).some(
+        (button) => button.textContent?.trim() === "Tải mẫu",
+      ),
+    ).toBe(false);
     await expect
       .element(screen.getByRole("button", { name: "Sửa nội dung" }))
       .toBeVisible();
@@ -620,7 +662,7 @@ describe("ProjectKnowledgePanel", () => {
     await expect
       .element(
         screen.getByText(
-          "Dữ liệu hiện tại Agent đang sử dụng · jobs-current.yaml",
+          "Dữ liệu hiện tại chatbot đang sử dụng · jobs-current.yaml",
         ),
       )
       .toBeVisible();
@@ -633,14 +675,29 @@ describe("ProjectKnowledgePanel", () => {
       ),
     ).toBeNull();
     expect(screen.container.textContent).not.toContain("TEMPLATE compensation");
+    expect(
+      Array.from(screen.container.querySelectorAll("button")).some(
+        (button) => button.textContent?.trim() === "Tải mẫu",
+      ),
+    ).toBe(false);
     await expect
-      .element(screen.getByRole("button", { name: "Tải mẫu", exact: true }))
-      .toBeEnabled();
+      .element(
+        screen.getByText(
+          "Danh mục này chưa có dữ liệu đang dùng. Nhập tệp văn bản của dự án để hệ thống phân loại nội dung.",
+        ),
+      )
+      .toBeVisible();
     expect(
       screen.container.querySelector(
         '.project-category-editor-heading [data-slot="badge"]',
       )?.textContent,
     ).toBe("Chưa có dữ liệu");
+    await screen.getByRole("button", { name: "Sửa nội dung" }).click();
+    await expect
+      .element(
+        screen.getByLabelText("Dữ liệu hiện tại của danh mục Lương & thu nhập"),
+      )
+      .toHaveValue("TEMPLATE compensation");
   });
 
   it("lets an authorized editor save YAML manually through the review pipeline", async () => {
@@ -693,12 +750,58 @@ describe("ProjectKnowledgePanel", () => {
       "Nội dung đã sửa sẽ tạo phiên bản mới và thay thế dữ liệu đang dùng sau khi kiểm tra. Tiếp tục?",
     );
     await expect.element(editor).toHaveAttribute("readonly");
+    // Upload acceptance is not publication: keep showing the currently active
+    // source while the proposed replacement is being reviewed.
+    await expect.element(editor).toHaveValue("jobs:\n  - id: old");
     await expect
       .element(screen.getByRole("button", { name: "Sửa nội dung" }))
       .toBeVisible();
     expect(screen.container.textContent).not.toContain("Tải file YAML");
     expect(screen.container.textContent).not.toContain("Sync From Link");
     expect(mocks.listExternalSources).not.toHaveBeenCalled();
+  });
+
+  it("offers source-read recovery without enabling a blank replacement", async () => {
+    mocks.getProjectKnowledgeCategorySource.mockRejectedValue(
+      new ApiError(503, "Chưa đọc được nguồn hiện tại"),
+    );
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel
+        project={project}
+        editable
+        canManageSources={false}
+      />,
+    );
+    await expect.element(screen.getByRole("alert")).toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Sửa nội dung" }))
+      .toBeDisabled();
+    expect(
+      screen.container.querySelector(".project-category-editor-heading")
+        ?.textContent,
+    ).not.toContain("Chưa có dữ liệu");
+    mocks.getProjectKnowledgeCategorySource.mockResolvedValue({
+      key: "jobs",
+      label_vi: "Vị trí tuyển dụng",
+      revision_id: "revision-jobs",
+      revision_no: 2,
+      filename: "jobs-current.yaml",
+      content: "CURRENT JOBS",
+      checksum: "checksum",
+      updated_at: "2026-10-01T00:00:00Z",
+    });
+    await screen.getByRole("button", { name: "Thử lại", exact: true }).click();
+    await expect
+      .element(
+        screen.getByLabelText(
+          "Dữ liệu hiện tại của danh mục Vị trí tuyển dụng",
+        ),
+      )
+      .toHaveValue("CURRENT JOBS");
+    await expect
+      .element(screen.getByRole("button", { name: "Sửa nội dung" }))
+      .toBeEnabled();
+    expect(mocks.replaceProjectKnowledgeCategory).not.toHaveBeenCalled();
   });
 
   it("restores the current YAML when manual editing is cancelled", async () => {
@@ -906,18 +1009,18 @@ describe("ProjectKnowledgePanel", () => {
       expect(mocks.uploadProjectDocument).toHaveBeenCalled(),
     );
 
-    // The chain awaits each activation (2 s poll cadence), so twelve writes
-    // take about half a minute before the done report appears.
+    // The source explicitly has no shuttle service. It must not create a
+    // fictional route just to complete the category count.
     await vi.waitFor(
       () =>
         expect
-          .element(screen.getByText(/Đã nạp xong 12 phần kiến thức/))
+          .element(screen.getByText(/Đã nạp xong 11 phần kiến thức/))
           .toBeVisible(),
       { timeout: 60000 },
     );
 
     const keys = plannedWrites().map((write) => write.key);
-    // jobs leads the batch — every other write may reference its rows.
+    // Categories are written in catalog order and scoped to the project.
     expect(keys[0]).toBe("jobs");
     // The content-driven rule: every category this sheet genuinely carries is
     // written, jobs first and the rest in catalog order.
@@ -929,7 +1032,6 @@ describe("ProjectKnowledgePanel", () => {
       "benefits",
       "accommodation",
       "meals",
-      "transportation",
       "insurance",
       "application",
       "contacts",
@@ -937,11 +1039,13 @@ describe("ProjectKnowledgePanel", () => {
     ]);
     const jobsMarkdown = plannedWrites()[0].content;
     expect(jobsMarkdown).toContain("Nhân viên lắp ráp linh kiện điện tử");
-    // Headcount is unknown from the sheet, so the field renders as an explicit null.
-    expect(jobsMarkdown).toContain("vacancies: null");
+    expect(jobsMarkdown).not.toMatch(
+      /^\s*(?:jobs?_ids|vacancies|employment_type)\s*:/m,
+    );
 
-    // Nothing is left for a human: this sheet carries every category.
-    expect(screen.container.textContent).not.toContain("Cần nhập tay");
+    expect(screen.container.textContent).toContain(
+      "Cần nhập tay: Đưa đón & lịch xe",
+    );
     // Replacements are revisioned (the superseded revision stays archived),
     // so the writes proceed without asking anyone first.
     expect(confirm).not.toHaveBeenCalled();
@@ -1285,7 +1389,7 @@ describe("ProjectKnowledgePanel", () => {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   };
 
-  it("offers the single-page migration and keeps it off catalog projects", async () => {
+  it("offers migration for single-page and legacy RAG projects, but not active catalogs", async () => {
     mocks.getProjectSinglePage.mockRejectedValue(
       new ApiError(404, "Chưa có dữ liệu"),
     );
@@ -1313,7 +1417,72 @@ describe("ProjectKnowledgePanel", () => {
     expect(ragScreen.container.textContent).not.toContain(
       "Chuyển sang 12 danh mục",
     );
+
+    const legacyScreen = await renderPanel(
+      <ProjectKnowledgePanel
+        project={{ ...project, category_authority_started: false }}
+        editable
+      />,
+    );
+    await expect
+      .element(
+        legacyScreen.container.querySelector<HTMLElement>(
+          ".project-migration-section",
+        ),
+      )
+      .toBeVisible();
   });
+
+  it("migrates legacy RAG without clearing retained active or explicitly empty categories", async () => {
+    mocks.getProjectKnowledgeCategories.mockResolvedValue({
+      data: [
+        ...categories,
+        {
+          key: "requirements",
+          label_vi: "Yêu cầu",
+          active_revision_id: "retained-requirements",
+          status: "ACTIVE",
+        },
+        { key: "benefits", label_vi: "Phúc lợi", status: "CLEARED" },
+      ],
+      total: 4,
+    });
+    mocks.getProjectTrainingDocument.mockImplementation(async () => ({
+      id: "training-document",
+      status: "PUBLISHED",
+      stage: "COMPLETED",
+      error: null,
+      project_training: {
+        status: "COMPLETED",
+        current: null,
+        completed: plannedWrites().map((write) => write.key),
+        error: null,
+        requires_cutover: true,
+      },
+    }));
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel
+        project={{ ...project, category_authority_started: false }}
+        editable
+      />,
+    );
+    dropBrief(migrationInput(screen), REUPLOAD_BRIEF, "legacy-project.md");
+    await vi.waitFor(
+      () =>
+        expect(mocks.cutoverProjectKnowledgeCategories).toHaveBeenCalledTimes(
+          1,
+        ),
+      { timeout: 30000 },
+    );
+    const cleared = mocks.clearProjectKnowledgeCategory.mock.calls.map(
+      (call) => call[1],
+    );
+    expect(cleared).not.toContain("requirements");
+    expect(cleared).not.toContain("benefits");
+    expect(cleared).not.toContain("faq");
+    expect(cleared).toContain("contacts");
+    expect(mocks.refresh).toHaveBeenCalled();
+  }, 30000);
 
   it("cuts a migrated single-page project over exactly once after the chain lands", async () => {
     mocks.getProjectSinglePage.mockRejectedValue(
@@ -1371,21 +1540,11 @@ describe("ProjectKnowledgePanel", () => {
     expect(mocks.cutoverProjectKnowledgeCategories).toHaveBeenCalledWith(
       "project-rorze",
     );
-    // The brief carries jobs, compensation and faq; every other category is
-    // explicitly cleared first — an empty state, not a gap — in catalog order.
+    // The catalog already has all categories active. Missing brief sections
+    // retain those revisions rather than clearing existing knowledge.
     expect(
       mocks.clearProjectKnowledgeCategory.mock.calls.map((call) => call[1]),
-    ).toEqual([
-      "requirements",
-      "work_schedules",
-      "benefits",
-      "accommodation",
-      "meals",
-      "transportation",
-      "insurance",
-      "application",
-      "contacts",
-    ]);
+    ).toEqual([]);
     // Every clear precedes the one and only cutover call.
     const cutoverOrder =
       mocks.cutoverProjectKnowledgeCategories.mock.invocationCallOrder[0];
@@ -1423,6 +1582,129 @@ describe("ProjectKnowledgePanel", () => {
     // No clears, no cutover: nothing moved while the chain never landed.
     expect(mocks.clearProjectKnowledgeCategory).not.toHaveBeenCalled();
     expect(mocks.cutoverProjectKnowledgeCategories).not.toHaveBeenCalled();
+    expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("reports shadow preparation and keeps source claims private when explicit cutover fails", async () => {
+    mocks.getProjectSinglePage.mockRejectedValue(
+      new ApiError(404, "Chưa có dữ liệu"),
+    );
+    mocks.getProjectTrainingDocument.mockImplementation(async () => ({
+      id: "document-1",
+      status: "PUBLISHED",
+      stage: "COMPLETED",
+      error: null,
+      project_training: {
+        status: "COMPLETED",
+        current: null,
+        completed: plannedWrites().map((write) => write.key),
+        error: null,
+        requires_cutover: true,
+      },
+    }));
+    const cutover = deferred<never>();
+    mocks.cutoverProjectKnowledgeCategories.mockReturnValue(cutover.promise);
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    dropBrief(migrationInput(screen), REUPLOAD_BRIEF, "phieu-chua-chuyen.md");
+    await vi.waitFor(
+      () =>
+        expect(mocks.cutoverProjectKnowledgeCategories).toHaveBeenCalledTimes(
+          1,
+        ),
+      { timeout: 30000 },
+    );
+    await expect
+      .element(screen.getByText(/Đã chuẩn bị và kiểm tra 3 phần kiến thức/))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText(/Nguồn kiến thức hiện tại vẫn được dùng/))
+      .toBeVisible();
+    expect(screen.container.textContent).not.toContain("Đã nạp xong");
+    expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
+    cutover.reject(new Error("Cần xác nhận danh mục"));
+    await expect
+      .element(screen.getByText(/chưa chuyển được sang 12 danh mục/))
+      .toBeVisible();
+    expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.notify).not.toHaveBeenCalledWith(
+      "Dự án đã chuyển sang kiến thức 12 danh mục.",
+      { type: "success" },
+    );
+  }, 30000);
+
+  it("does not publish a shadow receipt's highlights from a stale RAG panel's catalog reload", async () => {
+    mocks.getProjectTrainingDocument.mockImplementation(async () => ({
+      id: "document-1",
+      status: "PUBLISHED",
+      stage: "COMPLETED",
+      error: null,
+      project_training: {
+        status: "COMPLETED",
+        current: null,
+        completed: plannedWrites().map((write) => write.key),
+        error: null,
+        requires_cutover: true,
+      },
+    }));
+    // The operator's loaded project is RAG, but the exact source receipt is
+    // authoritative after another administrator has rolled its authority back.
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    dropBrief(input, REUPLOAD_BRIEF, "phieu-rag-cu.md");
+    await expect
+      .element(screen.getByText(/Đã chuẩn bị và kiểm tra 3 phần kiến thức/))
+      .toBeVisible();
+    await vi.waitFor(() =>
+      expect(
+        mocks.getProjectKnowledgeCategories.mock.calls.length,
+      ).toBeGreaterThan(1),
+    );
+    expect(mocks.cutoverProjectKnowledgeCategories).not.toHaveBeenCalled();
+    expect(mocks.clearProjectKnowledgeCategory).not.toHaveBeenCalled();
+    expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
+    expect(screen.container.textContent).not.toContain("Đã nạp xong");
+  });
+
+  it("does not replay shadow-source highlights after successful explicit cutover", async () => {
+    mocks.getProjectSinglePage.mockRejectedValue(
+      new ApiError(404, "Chưa có dữ liệu"),
+    );
+    mocks.getProjectTrainingDocument.mockImplementation(async () => ({
+      id: "document-1",
+      status: "PUBLISHED",
+      stage: "COMPLETED",
+      error: null,
+      project_training: {
+        status: "COMPLETED",
+        current: null,
+        completed: plannedWrites().map((write) => write.key),
+        error: null,
+        requires_cutover: true,
+      },
+    }));
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    const input = migrationInput(screen);
+    dropBrief(input, REUPLOAD_BRIEF, "phieu-cu-da-chuyen.md");
+    // The input reset is the final step of this upload handler. Wait for it
+    // rather than checking before a post-cutover claim write could execute.
+    expect(input.value).not.toBe("");
+    await vi.waitFor(() => expect(input.value).toBe(""), { timeout: 30000 });
+    expect(mocks.cutoverProjectKnowledgeCategories).toHaveBeenCalledTimes(1);
+    expect(mocks.notify).toHaveBeenCalledWith(
+      "Dự án đã chuyển sang kiến thức 12 danh mục.",
+      { type: "success" },
+    );
+    expect(mocks.refresh).toHaveBeenCalled();
+    // The backend may adopt these claims or keep independent newer features.
+    // Frontend replay would undo that atomic ownership decision in either case.
     expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
   }, 30000);
 });

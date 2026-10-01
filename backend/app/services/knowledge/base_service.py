@@ -39,6 +39,7 @@ from app.services.knowledge.text_ingestion import canonical_kb_text_stats
 from app.services.knowledge_base_capacity import direct_context_capacity
 from app.services.knowledge_base_capacity import require_direct_context_ready
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
+from app.project_knowledge.domain.legacy_job_references import strip_legacy_job_reference_source
 
 
 class KnowledgeBaseService:
@@ -252,11 +253,16 @@ class KnowledgeBaseService:
                 .where(
                     Company.project_id.in_(project_ids),
                     Job.status == JobStatus.ACTIVE,
-                    func.coalesce(Job.vacancy_count, 0) > 0,
+                    func.coalesce(Job.vacancy_count, 1) > 0,
                     or_(
                         and_(
                             Project.category_authority_started.is_(True),
                             Job.source_category_revision_id.is_not(None),
+                            select(KnowledgeCategory.id).where(
+                                KnowledgeCategory.project_id == Project.id,
+                                KnowledgeCategory.category_key == KnowledgeCategoryKey.JOBS.value,
+                                KnowledgeCategory.active_revision_id == Job.source_category_revision_id,
+                            ).exists(),
                         ),
                         and_(
                             Project.category_authority_started.is_(False),
@@ -293,7 +299,7 @@ class KnowledgeBaseService:
             raise ConflictError("A direct-context knowledge base needs one text file before use")
         return DirectContextFileDetailOut(
             **DirectContextFileOut.model_validate(direct_file).model_dump(),
-            text=direct_file.raw_text,
+            text=strip_legacy_job_reference_source(direct_file.raw_text),
         )
 
     async def get_direct_context_capacity_out(
@@ -329,7 +335,8 @@ class KnowledgeBaseService:
         knowledge_base = await self.get(knowledge_base_id)
         if knowledge_base.mode is not KnowledgeBaseMode.DIRECT_CONTEXT:
             raise ConflictError("Only direct-context knowledge bases accept a direct text file")
-        stats = self.canonical_direct_file_stats(body.text)
+        text = strip_legacy_job_reference_source(body.text)
+        stats = self.canonical_direct_file_stats(text)
         if not stats.normalized_text:
             raise ConflictError("Direct-context knowledge text cannot be empty")
         direct_file = await self.db.scalar(
@@ -341,7 +348,7 @@ class KnowledgeBaseService:
             direct_file = KnowledgeBaseDirectFile(
                 knowledge_base_id=knowledge_base.id,
                 filename=body.filename,
-                raw_text=body.text,
+                raw_text=text,
                 normalized_text=stats.normalized_text,
                 content_sha256=stats.content_sha256,
                 char_count=stats.char_count,
@@ -352,7 +359,7 @@ class KnowledgeBaseService:
             action = "create_knowledge_base_direct_file"
         else:
             direct_file.filename = body.filename
-            direct_file.raw_text = body.text
+            direct_file.raw_text = text
             direct_file.normalized_text = stats.normalized_text
             direct_file.content_sha256 = stats.content_sha256
             direct_file.char_count = stats.char_count

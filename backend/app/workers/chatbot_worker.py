@@ -429,57 +429,8 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
     # measured inside this worker process, so time.time() (epoch) is fine.
     job_start_epoch = time.time()
 
-    # RQ jobs retain a queue-depth snapshot. Direct turns do not touch
-    # the queue, so a missing value is meaningful telemetry. The read is
-    # sync-only (RQ needs the blocking client) → worker thread, so this
-    # telemetry never blocks the turn's event loop (REL-02).
-    queue_depth: int | None = None
-    if source != "direct":
-        try:
-            from rq import Queue
-
-            from app.core.redis import get_redis_sync
-
-            queue_depth = await asyncio.to_thread(
-                lambda: Queue("webhook_high", connection=get_redis_sync()).count
-            )
-        except Exception:  # noqa: BLE001
-            pass
-
-    from app.core.config import get_settings
-
-    received_at_epoch = float(job.get("received_at_epoch") or 0.0)
-    sla = get_settings().sla_seconds
-    # End-to-end trace id carried from the webhook through the RQ job dict.
-    # Contextvars do not cross processes, so re-stash it here so every structured
-    # log line inside the turn carries the originating request's id.
-    trace_id = str(job.get("trace_id") or "")
-    state = BotRunState(
-        conversation_id=job["conversation_id"],
-        version_at_start=int(job["version_at_start"]),
-        user_text=job["user_text"],
-        user_name=job.get("user_name", ""),
-        reply_to_message_id=job.get("reply_to_message_id", ""),
-        lock_owner=str(job.get("lock_owner") or ""),
-        received_at_epoch=received_at_epoch,
-        deadline_at_epoch=(received_at_epoch + sla) if received_at_epoch else 0.0,
-        preamble_start_epoch=job_start_epoch,
-        queue_depth=queue_depth,
-        execution_source=source,
-        trace_id=trace_id,
-        runtime_revision_id=str(job.get("runtime_revision_id") or ""),
-        authority_generation=(
-            int(job["authority_generation"])
-            if job.get("authority_generation") is not None
-            else None
-        ),
-        runtime_fingerprint=str(job.get("runtime_fingerprint") or ""),
-    )
-    heartbeat_task = asyncio.create_task(_renew_direct_lock(job)) if source == "direct" else None
-    # Bridge the Bot typing indicator across the preamble. The webhook's one-shot
-    # typing expires after ~3-5s; without this, the indicator vanishes during
-    # build_deps and the user perceives a long "no status" gap. The bridge pulses
-    # until run_turn's own _status_heartbeat takes over, then is cancelled. No-op
+    # The tracked bridge emits native Bot status throughout setup and the initial graph gates.
+    # The graph joins it at sender handoff; this scope retains a cleanup backstop. No-op
     # for OA (no typing API) and for jobs that predate zalo_chat_id.
     zalo_channel = str(job.get("zalo_channel") or "")
     bridge_task: asyncio.Task[None] | None = None
@@ -487,8 +438,56 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
         bridge_task = asyncio.create_task(
             _bridge_typing(job["zalo_chat_id"], job.get("zalo_bot_token"))
         )
+    heartbeat_task: asyncio.Task[None] | None = None
     _trace_token = None
     try:
+        # RQ jobs retain a queue-depth snapshot. Direct turns do not touch
+        # the queue, so a missing value is meaningful telemetry. The read is
+        # sync-only (RQ needs the blocking client) → worker thread, so this
+        # telemetry never blocks the turn's event loop (REL-02).
+        queue_depth: int | None = None
+        if source != "direct":
+            try:
+                from rq import Queue
+
+                from app.core.redis import get_redis_sync
+
+                queue_depth = await asyncio.to_thread(
+                    lambda: Queue("webhook_high", connection=get_redis_sync()).count
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        from app.core.config import get_settings
+
+        received_at_epoch = float(job.get("received_at_epoch") or 0.0)
+        sla = get_settings().sla_seconds
+        # End-to-end trace id carried from the webhook through the RQ job dict.
+        # Contextvars do not cross processes, so re-stash it here so every structured
+        # log line inside the turn carries the originating request's id.
+        trace_id = str(job.get("trace_id") or "")
+        state = BotRunState(
+            conversation_id=job["conversation_id"],
+            version_at_start=int(job["version_at_start"]),
+            user_text=job["user_text"],
+            user_name=job.get("user_name", ""),
+            reply_to_message_id=job.get("reply_to_message_id", ""),
+            lock_owner=str(job.get("lock_owner") or ""),
+            received_at_epoch=received_at_epoch,
+            deadline_at_epoch=(received_at_epoch + sla) if received_at_epoch else 0.0,
+            preamble_start_epoch=job_start_epoch,
+            queue_depth=queue_depth,
+            execution_source=source,
+            trace_id=trace_id,
+            runtime_revision_id=str(job.get("runtime_revision_id") or ""),
+            authority_generation=(
+                int(job["authority_generation"])
+                if job.get("authority_generation") is not None
+                else None
+            ),
+            runtime_fingerprint=str(job.get("runtime_fingerprint") or ""),
+        )
+        heartbeat_task = asyncio.create_task(_renew_direct_lock(job)) if source == "direct" else None
         # Set the trace contextvar inside the try so the finally always resets
         # it — if set before the try and BotRunState/bridge setup raised, the
         # token would leak into the next job on this worker process.
@@ -503,9 +502,10 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                 conversation_id=state.conversation_id,
             )
             deps.persist = _enqueue_persist  # wire candidate extraction on SENT
-            # build_deps is done — run_turn's heartbeat will take over now.
-            if bridge_task is not None:
-                bridge_task.cancel()
+            # Transfer setup status to the runner so conversation/runtime
+            # gates retain pulses until the resolved sender is ready. The worker
+            # finally remains a backstop if invocation fails before graph entry.
+            deps.preamble_status_task = bridge_task
             started_at = _now()
             try:
                 await run_turn(state, deps)
@@ -592,6 +592,10 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
             # handled the newest inbound).
             await _handoff_to_newer_inbound(state)
     finally:
+        if bridge_task is not None:
+            bridge_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await bridge_task
         if heartbeat_task is not None:
             heartbeat_task.cancel()
             try:
@@ -600,9 +604,5 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                 pass
             except Exception:  # noqa: BLE001
                 logger.warning("direct chat turn lease heartbeat failed", exc_info=True)
-        if bridge_task is not None:
-            bridge_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await bridge_task
         if _trace_token is not None:
             trace_id_ctx.reset(_trace_token)

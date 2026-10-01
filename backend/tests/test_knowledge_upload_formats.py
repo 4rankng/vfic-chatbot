@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import io
 from xml.sax.saxutils import escape
-from zipfile import ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
@@ -37,6 +37,101 @@ from app.services.knowledge.service import KnowledgeService
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _SSML = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+
+
+@pytest.mark.parametrize(
+    "filename, member",
+    [
+        ("compressed.docx", "word/document.xml"),
+        ("compressed.xlsx", "xl/worksheets/sheet1.xml"),
+    ],
+)
+def test_ooxml_rejects_a_highly_compressed_oversized_part_before_reading(
+    filename, member, monkeypatch
+) -> None:
+    import app.services.knowledge.file_extraction as extraction
+
+    monkeypatch.setattr(extraction, "MAX_OOXML_PART_BYTES", 1024, raising=False)
+    buffer = io.BytesIO()
+    with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(member, " " * 4096)
+    # The ingress byte limit alone cannot protect this expansion.
+    assert len(buffer.getvalue()) < 1024
+    with pytest.raises(KnowledgeFileExtractionError, match="giới hạn"):
+        extract_text(filename, "application/octet-stream", buffer.getvalue())
+
+
+def test_ooxml_rejects_too_many_members_before_parsing(monkeypatch) -> None:
+    import app.services.knowledge.file_extraction as extraction
+
+    monkeypatch.setattr(extraction, "MAX_OOXML_MEMBERS", 2, raising=False)
+    buffer = io.BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", "<document/>")
+        archive.writestr("a", "")
+        archive.writestr("b", "")
+    with pytest.raises(KnowledgeFileExtractionError, match="giới hạn"):
+        extract_text("too-many.docx", DOCX_MIME, buffer.getvalue())
+
+
+def test_ooxml_rejects_total_expansion_across_small_members(monkeypatch) -> None:
+    import app.services.knowledge.file_extraction as extraction
+
+    monkeypatch.setattr(extraction, "MAX_OOXML_EXPANDED_BYTES", 100, raising=False)
+    buffer = io.BytesIO()
+    with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("word/document.xml", "<document/>")
+        archive.writestr("media/a", " " * 60)
+        archive.writestr("media/b", " " * 60)
+    with pytest.raises(KnowledgeFileExtractionError, match="giới hạn"):
+        extract_text("too-large.docx", DOCX_MIME, buffer.getvalue())
+
+
+def test_xlsx_refuses_out_of_range_columns_without_allocating_gaps() -> None:
+    buffer = io.BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "xl/worksheets/sheet1.xml",
+            (
+                '<worksheet><sheetData><row><c r="XFE1" t="inlineStr">'
+                "<is><t>invalid column</t></is></c></row></sheetData></worksheet>"
+            ),
+        )
+    with pytest.raises(KnowledgeFileExtractionError, match="cột"):
+        extract_text("columns.xlsx", XLSX_MIME, buffer.getvalue())
+
+
+def test_xlsx_bounds_repeated_shared_string_output_before_join(monkeypatch) -> None:
+    monkeypatch.setattr("app.services.knowledge.file_extraction.MAX_OOXML_TEXT_CHARS", 50)
+    data = _xlsx_bytes([[("s", "a" * 40), ("s", "a" * 40)]])
+    with pytest.raises(KnowledgeFileExtractionError, match="giới hạn"):
+        extract_text("expanded.xlsx", XLSX_MIME, data)
+
+
+def test_xlsx_refuses_repeated_sheet_references() -> None:
+    original = _xlsx_bytes([[("s", "same sheet")]])
+    buffer = io.BytesIO()
+    with ZipFile(io.BytesIO(original)) as source, ZipFile(buffer, "w") as archive:
+        for member in source.namelist():
+            data = source.read(member)
+            if member == "xl/workbook.xml":
+                data = data.replace(
+                    b"</sheets>", b'<sheet name="Duplicate" sheetId="2" r:id="rId1"/></sheets>'
+                )
+            archive.writestr(member, data)
+    with pytest.raises(KnowledgeFileExtractionError, match="trùng"):
+        extract_text("duplicate.xlsx", XLSX_MIME, buffer.getvalue())
+
+
+def test_encrypted_office_member_is_rejected_as_a_format_error() -> None:
+    data = bytearray(_docx_bytes("protected"))
+    # DOCX uses a ZIP envelope. Set its encryption flag in both directory
+    # records so rejection happens before attempting a password-gated read.
+    data[6] |= 1
+    central = data.index(b"PK\x01\x02")
+    data[central + 8] |= 1
+    with pytest.raises(KnowledgeFileExtractionError, match="mật khẩu"):
+        extract_text("protected.docx", DOCX_MIME, bytes(data))
 
 
 def _xlsx_bytes(rows: list[list[tuple[str, str] | None]], *, date_style_index: int = 1) -> bytes:

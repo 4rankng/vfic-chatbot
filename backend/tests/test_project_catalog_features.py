@@ -145,6 +145,9 @@ async def test_structured_scope_rows_carry_the_open_vacancy_predicate():
     assert "coalesce(jobs.vacancy_count" in job_sql.lower()
     assert "jobs.source_category_revision_id" in job_sql
     assert "projects.category_authority_started" in job_sql
+    assert "knowledge_categories.active_revision_id = jobs.source_category_revision_id" in job_sql
+    assert "knowledge_categories.category_key = 'jobs'" in job_sql
+    assert "EXISTS" in job_sql
     assert "LIMIT" not in job_sql
 
 

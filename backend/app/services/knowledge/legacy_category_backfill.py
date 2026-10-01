@@ -95,7 +95,6 @@ def build_legacy_category_documents(
                 "title": title,
                 "aliases": list(dict.fromkeys(snapshot.job_titles[1:])),
                 "location": job_location,
-                "employment_type": "temporary" if "thời vụ" in title.casefold() else None,
                 "summary": job_summary or None,
                 "keywords": [],
             }
@@ -143,7 +142,6 @@ def build_legacy_category_documents(
             [
                 {
                     "id": "legacy-compensation",
-                    "job_ids": [job_id],
                     "base_salary_vnd": _coerce_salary_value(salary_json.get("base_salary")),
                     "estimated_income_min_vnd": _coerce_salary_value(total.get("min")),
                     "estimated_income_max_vnd": _coerce_salary_value(total.get("max")),
@@ -167,7 +165,6 @@ def build_legacy_category_documents(
             [
                 {
                     "id": "legacy-requirements",
-                    "job_ids": [job_id],
                     "age_min": age_min,
                     "age_max": age_max,
                     "genders": ["any"] if _faq_mentions_both_genders(snapshot.faqs) else [],
@@ -215,7 +212,6 @@ def build_legacy_category_documents(
             [
                 {
                     "id": "legacy-work-schedule",
-                    "job_ids": [job_id],
                     "work_days": [],
                     "shifts": shifts,
                     "rotation": schedule.value_text,
@@ -236,7 +232,6 @@ def build_legacy_category_documents(
             benefit_rows.append(
                 {
                     "id": row_id,
-                    "job_ids": [job_id],
                     "name": name,
                     "description": row.value_text,
                     "eligibility": row.evidence_text,
@@ -255,7 +250,6 @@ def build_legacy_category_documents(
             [
                 {
                     "id": "legacy-accommodation",
-                    "job_ids": [job_id],
                     "available": True,
                     "type": "Ký túc xá",
                     "address": None,
@@ -276,7 +270,6 @@ def build_legacy_category_documents(
             [
                 {
                     "id": "legacy-meals",
-                    "job_ids": [job_id],
                     "provided": True,
                     "meals_per_shift": None,
                     "allowance_vnd": None,
@@ -296,7 +289,6 @@ def build_legacy_category_documents(
             route_rows.append(
                 {
                     "id": route_id,
-                    "job_ids": [job_id],
                     "name": route.name,
                     "direction": "to_factory" if route.direction == "outbound" else "from_factory",
                     "service_days": list(route.service_days),
@@ -338,7 +330,6 @@ def build_legacy_category_documents(
             [
                 {
                     "id": "legacy-insurance",
-                    "job_ids": [job_id],
                     "name": "Bảo hiểm theo nguồn hiện tại",
                     "provider": None,
                     "employee_contribution": None,
@@ -359,7 +350,6 @@ def build_legacy_category_documents(
             [
                 {
                     "id": "legacy-application",
-                    "job_ids": [job_id],
                     "application_steps": [],
                     "required_documents": _as_text_list(
                         application_json.get("required_documents")

@@ -110,6 +110,16 @@ _NAME_STOP_RE = re.compile(
     r"có|co|làm|lam|kinh nghiệm|kinh nghiem)\b",
     flags=re.IGNORECASE,
 )
+_DENIED_NAME_RE = re.compile(
+    r"^(?:không|khong|ko|k)\s+(?:phải|phai|là|la)\b|^(?:chưa|chua)\b",
+    flags=re.IGNORECASE,
+)
+_NAME_QUESTION_VALUES = frozenset({"gi", "gi vay", "gi a", "nao", "ai"})
+_NAME_REFUSAL_RE = re.compile(
+    r"^(?:(?:em|tôi|toi|mình|minh|anh|chị|chi)\s+)?"
+    r"(?:không|khong|ko|k|chưa|chua)(?:\s|$)",
+    flags=re.IGNORECASE,
+)
 
 # Matches a bot turn that asked for the candidate's name ("Bạn tên gì?",
 # "Cho mình xin tên để tiện hỗ trợ nhé", "Mình xưng hô với nhau nhé?"). Matched
@@ -213,6 +223,8 @@ def _bare_name_when_asked(text: str) -> str | None:
     candidate = _TRAILING_PARTICLE_RE.sub("", candidate).strip(' .,!?:;~*-"\'')
     if not candidate:
         return None
+    if _NAME_REFUSAL_RE.search(candidate):
+        return None
     words = candidate.split()
     if not (1 <= len(words) <= 6):
         return None
@@ -254,13 +266,19 @@ def extract_self_reported_name(
         match = re.search(pattern, body, flags=re.IGNORECASE)
         if not match:
             continue
+        if _DENIED_NAME_RE.search(match.group(1).strip()):
+            return None
         candidate = _NAME_STOP_RE.split(match.group(1), maxsplit=1)[0]
         candidate = re.split(r"[,.;:!?()\[\]\n\r]", candidate, maxsplit=1)[0]
         candidate = re.sub(r"\s+", " ", candidate).strip(" -–—\"'“”‘’")
         if not candidate:
             continue
-        words = candidate.split()
         candidate = _TRAILING_PARTICLE_RE.sub("", candidate).strip()
+        if (
+            _DENIED_NAME_RE.search(candidate)
+            or normalize_vietnamese_text(candidate) in _NAME_QUESTION_VALUES
+        ):
+            return None  # A denied/questioned identity is not an introduction.
         words = candidate.split()
         if 1 <= len(words) <= 6 and all(
             all(char.isalpha() or char in "-'’" for char in word) for word in words

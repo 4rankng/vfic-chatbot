@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNotify } from "ra-core";
 
 import { ApiError } from "@/lib/apiClient";
@@ -13,25 +13,24 @@ export type CategoryDraft = Readonly<{
   /** What the textarea shows; equal to `savedContent` unless it is being edited. */
   content: string;
   filename: string;
-  /** The blank category template used to seed a category that has no data yet. */
-  template: string;
-  templateFilename: string;
   hasCurrentSource: boolean;
   hasUnsavedChanges: boolean;
   isEditing: boolean;
   loading: boolean;
+  /** A source read failed; its absence has not been confirmed. */
+  loadFailed: boolean;
   saving: boolean;
+  reload: () => Promise<void>;
   setContent: (value: string) => void;
   startEditing: () => void;
   /** Leaves edit mode and restores the revision currently in use. */
   cancelEditing: () => void;
   save: () => Promise<void>;
-  downloadTemplate: () => void;
 }>;
 
 /**
  * Draft state of one category: the category source currently in use, the copy
- * being edited, and the template behind the download action. Writes are
+ * being edited, and a blank source used to seed the inline editor. Writes are
  * delegated to the catalog so a single layer owns the review pipeline.
  */
 export const useCategoryDraft = (
@@ -44,17 +43,30 @@ export const useCategoryDraft = (
   const [savedContent, setSavedContent] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [template, setTemplate] = useState("");
-  const [templateFilename, setTemplateFilename] = useState(`${key}.md`);
   const [filename, setFilename] = useState(`${key}.md`);
   const [hasCurrentSource, setHasCurrentSource] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const contextRef = useRef(0);
+  const readRequestRef = useRef(0);
+  const editingRef = useRef(false);
+  const loadedRevisionRef = useRef<string | null | undefined>(undefined);
 
   const { replaceCategory } = catalog;
+  const activeRevisionId =
+    catalog.categories?.find((row) => row.key === key)?.active_revision_id ??
+    null;
 
   useEffect(() => {
-    let active = true;
+    contextRef.current += 1;
+    loadedRevisionRef.current = undefined;
+    editingRef.current = false;
     setLoading(true);
+    setLoadFailed(false);
+    setSaving(false);
+    savingRef.current = false;
     setContent("");
     setSavedContent("");
     setIsEditing(false);
@@ -62,55 +74,81 @@ export const useCategoryDraft = (
     setFilename(`${key}.md`);
     setHasCurrentSource(false);
 
-    void Promise.allSettled([
+    return () => {
+      contextRef.current += 1;
+      readRequestRef.current += 1;
+    };
+  }, [key, projectId]);
+
+  const reload = useCallback(async () => {
+    const request = ++readRequestRef.current;
+    setLoading(true);
+    const [sourceResult, templateResult] = await Promise.allSettled([
       getProjectKnowledgeCategorySource(projectId, key),
       getProjectKnowledgeCategoryTemplate(projectId, key),
-    ]).then(([sourceResult, templateResult]) => {
-      if (!active) return;
+    ]);
+    if (request !== readRequestRef.current) return;
 
-      if (sourceResult.status === "fulfilled") {
-        setContent(sourceResult.value.content);
-        setSavedContent(sourceResult.value.content);
-        setFilename(sourceResult.value.filename);
-        setHasCurrentSource(true);
-      } else if (
-        !(sourceResult.reason instanceof ApiError) ||
-        sourceResult.reason.status !== 404
+    if (sourceResult.status === "fulfilled") {
+      loadedRevisionRef.current = sourceResult.value.revision_id;
+      if (!editingRef.current) setContent(sourceResult.value.content);
+      setSavedContent(sourceResult.value.content);
+      setFilename(sourceResult.value.filename);
+      setHasCurrentSource(true);
+      setLoadFailed(false);
+    } else if (
+      sourceResult.reason instanceof ApiError &&
+      sourceResult.reason.status === 404
+    ) {
+      loadedRevisionRef.current = null;
+      if (!editingRef.current) setContent("");
+      setSavedContent("");
+      setHasCurrentSource(false);
+      setLoadFailed(false);
+    } else {
+      setLoadFailed(true);
+      notify((sourceResult.reason as Error).message, { type: "error" });
+    }
+
+    if (templateResult.status === "fulfilled") {
+      setTemplate(templateResult.value.content);
+      if (
+        sourceResult.status === "rejected" &&
+        sourceResult.reason instanceof ApiError &&
+        sourceResult.reason.status === 404
       ) {
-        notify((sourceResult.reason as Error).message, { type: "error" });
+        setFilename(templateResult.value.filename);
       }
+    } else {
+      notify((templateResult.reason as Error).message, { type: "error" });
+    }
 
-      if (templateResult.status === "fulfilled") {
-        setTemplate(templateResult.value.content);
-        setTemplateFilename(templateResult.value.filename);
-        if (sourceResult.status !== "fulfilled") {
-          setFilename(templateResult.value.filename);
-        }
-      } else {
-        notify((templateResult.reason as Error).message, { type: "error" });
-      }
-
-      setLoading(false);
-    });
-
-    return () => {
-      active = false;
-    };
+    setLoading(false);
   }, [key, notify, projectId]);
 
+  useEffect(() => {
+    // Catalog publication changes the source. Keep an open edit buffer, but
+    // update the published baseline so cancel always restores the live text.
+    if (loadedRevisionRef.current !== activeRevisionId) void reload();
+  }, [activeRevisionId, reload]);
+
   const startEditing = useCallback(() => {
+    if (loading || loadFailed || saving) return;
     if (!hasCurrentSource && !content.trim() && template) {
       setContent(template);
     }
+    editingRef.current = true;
     setIsEditing(true);
-  }, [content, hasCurrentSource, template]);
+  }, [content, hasCurrentSource, loadFailed, loading, saving, template]);
 
   const cancelEditing = useCallback(() => {
     setContent(savedContent);
+    editingRef.current = false;
     setIsEditing(false);
   }, [savedContent]);
 
   const save = useCallback(async () => {
+    if (loading || savingRef.current || loadFailed || !isEditing) return;
     if (!content.trim()) {
       notify("Vui lòng nhập nội dung.", { type: "warning" });
       return;
@@ -124,43 +162,50 @@ export const useCategoryDraft = (
       return;
     }
 
+    savingRef.current = true;
     setSaving(true);
+    const context = contextRef.current;
     try {
       await replaceCategory(key, filename, content);
-      setSavedContent(content);
+      if (context !== contextRef.current) return;
+      // Acceptance starts review; only a subsequent source read can confirm
+      // that this edit is the content currently used by the Agent.
+      editingRef.current = false;
       setIsEditing(false);
     } catch (error) {
-      notify((error as Error).message, { type: "error" });
+      if (context === contextRef.current)
+        notify((error as Error).message, { type: "error" });
     } finally {
-      setSaving(false);
+      if (context === contextRef.current) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
-  }, [content, filename, hasCurrentSource, key, notify, replaceCategory]);
-
-  const downloadTemplate = useCallback(() => {
-    const url = URL.createObjectURL(
-      new Blob([template], { type: "text/markdown;charset=utf-8" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = templateFilename;
-    link.click();
-    URL.revokeObjectURL(url);
-  }, [template, templateFilename]);
-
-  return {
+  }, [
     content,
     filename,
-    template,
-    templateFilename,
+    hasCurrentSource,
+    isEditing,
+    key,
+    loadFailed,
+    loading,
+    notify,
+    replaceCategory,
+  ]);
+
+  return {
+    content: isEditing ? content : savedContent,
+    filename,
     hasCurrentSource,
     hasUnsavedChanges: content !== savedContent,
     isEditing,
     loading,
+    loadFailed,
     saving,
+    reload,
     setContent,
     startEditing,
     cancelEditing,
     save,
-    downloadTemplate,
   };
 };

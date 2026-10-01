@@ -33,6 +33,7 @@ from app.graph.direct_context import (
     build_direct_system,
 )
 from app.graph.llm_semaphore import LLMThrottled
+from app.graph.message_values import sender_is
 from app.graph.ports import TurnDecisions
 from app.shared.domain.vietnamese_gender import infer_gender_from_name
 from app.graph.progressive import _ProgressiveStream
@@ -41,6 +42,7 @@ from app.graph.router import (
     TurnRoute,
     _SUPPORT_CLARIFY_INTENTS,
     employee_support_route,
+    requires_project_catalog,
     route_from_decisions,
     routing_instruction,
     should_use_fast_model,
@@ -53,6 +55,11 @@ from app.graph.tingting_guide import (
     tingting_support_system_prompt,
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
+from app.recruitment.application.lead_lookup import (
+    LeadLookup,
+    UNRESOLVED_LEAD,
+    UnresolvedLead,
+)
 from app.recruitment.domain.recommendation import (
     is_salary_profile_statement,
     parse_salary_band,
@@ -362,13 +369,17 @@ async def _agent_turn(
     manifest_policy=None,
     project_context=None,
     decisions: TurnDecisions | None = None,
-    lead_row: dict | None = None,
+    lead_row: LeadLookup = UNRESOLVED_LEAD,
     tingting_reset_allowed: bool = False,
     tingting_support_account: bool = False,
     mandatory_instruction: str = "",
     on_delta=None,
     on_evidence=None,
 ) -> str:
+    # Keep a completed miss distinct from an omitted prefetch. The prompt adapter
+    # must reuse the runner's lookup even before a candidate has a lead row.
+    lead_ctx_kwargs = {} if isinstance(lead_row, UnresolvedLead) else {"lead": lead_row}
+    lead_row = None if isinstance(lead_row, UnresolvedLead) else lead_row
     # Normalize once: every downstream consumer (vacancy args, evidence query,
     # forced-tool args) assumes a TurnDecisions; a None fan-out (degraded runs)
     # previously crashed on ``decisions.recent_vacancy`` instead of degrading.
@@ -412,9 +423,7 @@ async def _agent_turn(
         recent_messages,
         focused_project=focused_project,
     )
-    vacancy_catalog_required = route.reason == "vacancy_listing" or (
-        route.intent == "general" and decisions.recent_vacancy
-    )
+    vacancy_catalog_required = requires_project_catalog(route, decisions)
     compare_income_required_args = _compare_income_required_args(
         user_text,
         route_intent=route.intent,
@@ -541,7 +550,10 @@ async def _agent_turn(
             system += (
                 "\n\n=== CHẾ ĐỘ KHÁM PHÁ ===\n"
                 "Ứng viên chưa chọn dự án. Chỉ dùng danh mục dự án và việc làm đang hoạt động "
-                "để gợi ý một nhóm nhỏ phù hợp; không tải kiến thức chi tiết của mọi dự án."
+                "để giới thiệu lựa chọn phù hợp; không tải kiến thức chi tiết của mọi dự án. "
+                "Khi ứng viên yêu cầu tất cả/toàn bộ danh sách, phải nêu đủ từng dự án trong "
+                "kết quả list_active_projects của phạm vi hiện tại, mỗi dự án đúng một lần; "
+                "không rút thành một nhóm nhỏ rồi yêu cầu hỏi thêm."
             )
 
     # The retired direct-context lane is folded into this agent lane: when the
@@ -555,7 +567,7 @@ async def _agent_turn(
     )
     direct_context_turn = (
         direct_context is not None
-        and route.reason != "vacancy_listing"
+        and required_authority_tool is None
         and route.intent != "employee_support"
         and route.intent != "out_of_scope"
         and not tingting_reset_allowed
@@ -658,7 +670,7 @@ async def _agent_turn(
         authority_tool = (
             None
             if employee_support
-            else "list_active_projects" if vacancy_catalog_required else "search_knowledge"
+            else required_authority_tool or "search_knowledge"
         )
         if (
             authority_tool is not None
@@ -710,9 +722,6 @@ async def _agent_turn(
     lead_port = deps.lead
     if allow_lead_context and lead_port is not None:
         try:
-            # The runner's once-per-turn lead row (None for ports without the
-            # resolve seam — those keep their own lookup inside context()).
-            lead_ctx_kwargs = {"lead": lead_row} if lead_row is not None else {}
             lead_profile, lead_collection_question = await lead_port.context(
                 chat_id, user_text, recent_messages, contact_id=contact_id, **lead_ctx_kwargs
             )
@@ -735,11 +744,18 @@ async def _agent_turn(
     # below uses, so a turn that may be read is exactly a turn that may be
     # written.
     answer_scope_token = ""
+    prior_messages = recent_messages
+    if (
+        prior_messages
+        and sender_is(prior_messages[-1], "WORKER")
+        and (getattr(prior_messages[-1], "body", "") or "").strip() == user_text.strip()
+    ):
+        prior_messages = prior_messages[:-1]
     if is_answer_cacheable(
         allowed_tools=allowed_tools,
         tingting_reset_allowed=tingting_reset_allowed,
         tingting_support_account=tingting_support_account,
-        has_conversation_history=bool(recent_messages),
+        has_conversation_history=bool(prior_messages),
         user_text=user_text,
     ):
         project_scope = await answer_project_scope(
@@ -749,6 +765,8 @@ async def _agent_turn(
             answer_scope_token = await answer_scope(
                 project_scope=project_scope,
                 address=address_form((lead_row or {}).get("gender")),
+                intake_context=f"{lead_profile}\n{lead_collection_instruction}",
+                provider=provider,
             )
             cache_t0 = time.monotonic()
             cached = await answer_cache_get(
@@ -891,7 +909,7 @@ async def _resolve_lane(
     lock_owner: str | None,
     status_task,
     t0: float,
-    lead_row: dict | None = None,
+    lead_row: LeadLookup = UNRESOLVED_LEAD,
     tingting_reset_allowed: bool = False,
     stream: _ProgressiveStream | None = None,
     agent_turn=None,
@@ -971,7 +989,7 @@ async def _resolve_lane(
             agent_kwargs["project_context"] = project_context
         if manifest_policy is not None:
             agent_kwargs["manifest_policy"] = manifest_policy
-        if lead_row is not None:
+        if not isinstance(lead_row, UnresolvedLead):
             agent_kwargs["lead_row"] = lead_row
         agent_kwargs.update(
             _optional_policy_kwargs(
@@ -984,6 +1002,9 @@ async def _resolve_lane(
             )
         )
         if stream is not None:
+            stream.defer_catalog = not tingting_reset_allowed and requires_project_catalog(
+                turn_route, decisions
+            )
             # Only the agent lane streams: the hooks are attached here so a
             # clarification/direct lane never opens a stream at all.
             agent_kwargs["on_delta"] = stream.push_delta

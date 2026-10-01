@@ -53,15 +53,21 @@ export const useProjectKnowledgeCatalog = (
   const pollEpochRef = useRef(0);
   /** A hop that woke while the tab was hidden parks here until visible. */
   const resumePollRef = useRef<(() => void) | null>(null);
+  const readRequestRef = useRef(0);
+  const writeRequestRef = useRef(0);
 
   const loadCatalog = useCallback(async () => {
+    const request = ++readRequestRef.current;
     const catalog = await getProjectKnowledgeCategories(projectId);
-    setCategories(catalog.data);
+    if (request === readRequestRef.current) setCategories(catalog.data);
     return catalog.data;
   }, [projectId]);
 
   const cancelPoll = useCallback(() => {
     pollEpochRef.current += 1;
+    // An old poll's read must not paint the catalog before its caller checks
+    // the chain epoch, including when the project has changed.
+    readRequestRef.current += 1;
     if (pollRef.current !== null) {
       window.clearTimeout(pollRef.current);
       pollRef.current = null;
@@ -92,7 +98,7 @@ export const useProjectKnowledgeCatalog = (
               if (epoch !== pollEpochRef.current) return;
               if (rows.some((row) => row.active_revision_id === revisionId)) {
                 setProcessingKey(null);
-                notify("Dữ liệu mới đã sẵn sàng cho Agent.", {
+                notify("Dữ liệu mới đã sẵn sàng cho chatbot.", {
                   type: "success",
                 });
               } else if (
@@ -129,11 +135,13 @@ export const useProjectKnowledgeCatalog = (
   );
 
   useEffect(() => {
+    let active = true;
     // The indicator belongs to the previous project once the catalog reloads.
     setProcessingKey(null);
-    void loadCatalog().catch((error) =>
-      notify((error as Error).message, { type: "error" }),
-    );
+    setCategories(null);
+    void loadCatalog().catch((error) => {
+      if (active) notify((error as Error).message, { type: "error" });
+    });
     const handleVisibilityChange = () => {
       const resume = resumePollRef.current;
       if (resume && document.visibilityState !== "hidden") {
@@ -143,6 +151,8 @@ export const useProjectKnowledgeCatalog = (
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
+      active = false;
+      writeRequestRef.current += 1;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       // Bumping the epoch here also discards an in-flight hop's response, so
       // no category write or toast lands after leaving the page.
@@ -164,14 +174,16 @@ export const useProjectKnowledgeCatalog = (
       filename: string,
       content: string,
     ) => {
+      const request = ++writeRequestRef.current;
       const result = await replaceProjectKnowledgeCategory(
         projectId,
         key,
         filename,
         content,
       );
+      if (request !== writeRequestRef.current) return;
       trackRevision(key, result.revision.id);
-      notify("Đã lưu thay đổi. Hệ thống đang kiểm tra cho Agent.", {
+      notify("Đã lưu thay đổi. Hệ thống đang kiểm tra cho chatbot.", {
         type: "info",
       });
     },

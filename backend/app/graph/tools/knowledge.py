@@ -12,6 +12,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable, Iterable
+from itertools import islice
 from typing import Any
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
@@ -21,6 +22,7 @@ from app.graph.embed_cache import cached_embed
 from app.graph.llm import Embedder
 from app.graph.ports import GraphRetrievalPort
 from app.graph.tools._shared import _cache_digest
+from app.project_knowledge.domain.legacy_job_references import strip_legacy_job_reference_source
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,8 @@ logger = logging.getLogger(__name__)
 # evidence that recall survives.
 _MAX_EVIDENCE_ROWS = 20
 _MAX_EVIDENCE_CHARS = 20000
+_MAX_EVIDENCE_ROW_CHARS = 4000
+_EVIDENCE_CACHE_FORMAT = "project-evidence-v2"
 
 
 def _format_knowledge_row(r) -> str:
@@ -65,6 +69,15 @@ def _format_knowledge_row(r) -> str:
         )
     route = chunk_meta.get("route_id")
     suffix = f" Nguồn: {source}"
+    project_name = getattr(r, "project_name", None)
+    project_slug = getattr(r, "project_slug", None)
+    category = getattr(r, "category", None) or metadata.get("category")
+    if project_name or project_slug:
+        suffix += f"; dự án: {project_name or project_slug}"
+        if project_name and project_slug:
+            suffix += f" ({project_slug})"
+    if category:
+        suffix += f"; mục: {category}"
     if source_file:
         suffix += f"; file: {source_file}"
     if line_start:
@@ -81,12 +94,14 @@ def _format_knowledge_row(r) -> str:
     # append summary as supplementary context when available.
     quote = getattr(r, "source_quote", None)
     summary = getattr(r, "summary", None)
-    parts: list[str] = []
-    if quote:
-        parts.append(str(quote))
+    clean_quote = strip_legacy_job_reference_source(str(quote)) if quote else ""
+    primary = clean_quote if clean_quote.strip() else strip_legacy_job_reference_source(str(r.content))
+    parts: list[str] = [primary] if primary.strip() else []
     if summary:
-        parts.append(f"Tóm tắt: {summary}")
-    content = "\n".join(parts) if parts else str(r.content)
+        clean_summary = strip_legacy_job_reference_source(str(summary))
+        if clean_summary.strip():
+            parts.append(f"Tóm tắt: {clean_summary}")
+    content = "\n".join(parts)
     return f"- {content}\n  {suffix}"
 
 
@@ -111,18 +126,20 @@ def _render_capped_evidence(rows: Iterable[Any]) -> list[str]:
 
     The caller passes already-ranked rows (FAQ prepass, then similarity order);
     this drops the tail once either the per-round row cap or the total character
-    cap is reached. The first row is always kept — truncated if it alone exceeds
-    the budget — so a single large hit still produces an answer. The
+    cap is reached. With multiple hits, oversized individual rows are clipped
+    before they can consume the entire budget; ordinary rows keep their full
+    text. A sole hit can use the complete budget. The
     citation/source suffix format from ``_format_knowledge_row`` is preserved;
     only how many rows are rendered (and, for an oversized sole row, how much
     content survives) changes.
     """
     lines: list[str] = []
     total = 0
-    for row in rows:
-        if len(lines) >= _MAX_EVIDENCE_ROWS:
-            break
+    selected = list(islice(rows, _MAX_EVIDENCE_ROWS))
+    row_budget = _MAX_EVIDENCE_CHARS if len(selected) == 1 else _MAX_EVIDENCE_ROW_CHARS
+    for row in selected:
         rendered = _format_knowledge_row(row)
+        rendered = _truncate_evidence_line(rendered, row_budget)
         remaining = _MAX_EVIDENCE_CHARS - total
         if len(rendered) > remaining:
             if not lines:
@@ -183,7 +200,8 @@ async def search_knowledge(
     s = get_settings()
     knowledge_version = await cache_version("knowledge") if s.rag_cache_enabled else "0"
     cache_key = (
-        f"rag:knowledge:{_cache_digest(query, project_slug, top_k, project_ids, knowledge_version)}"
+        "rag:knowledge:"
+        f"{_cache_digest(query, project_slug, top_k, project_ids, knowledge_version, _EVIDENCE_CACHE_FORMAT)}"
     )
 
     # --- Cache-read window: wrap exact + semantic lookup together so the
@@ -212,7 +230,7 @@ async def search_knowledge(
         cached = await cache_get_json(cache_key)
         if isinstance(cached, str):
             _record_cache(exact_hit=True, semantic_hit=False)
-            return cached
+            return strip_legacy_job_reference_source(cached)
         _record_cache(exact_hit=False)
     else:
         _record_cache(exact_hit=False)
@@ -241,7 +259,7 @@ async def search_knowledge(
             ),
         )
         if result is not None:
-            return result
+            return strip_legacy_job_reference_source(result)
         # Single-flight unavailable (Redis down) → fall through to direct compute.
 
     result = await _search_knowledge_compute(
@@ -256,7 +274,7 @@ async def search_knowledge(
         metrics=metrics,
         _record_cache=_record_cache,
     )
-    return result
+    return strip_legacy_job_reference_source(result)
 
 
 async def _search_knowledge_coalesced(
@@ -317,6 +335,13 @@ async def _search_knowledge_compute(
     Extracted so it can be wrapped by single-flight coalescing. The leader runs
     this directly; followers await its result via pub/sub.
     """
+    # Capture the namespace before provider/retrieval work. If a KB update
+    # invalidates it while this read finishes, old evidence stays in the old
+    # namespace rather than poisoning the generation of the updated KB.
+    sem_enabled = getattr(s, "semantic_cache_enabled", False)
+    semantic_generation = (
+        await cache_version("semantic_cache") if sem_enabled and not project_slug else None
+    )
     raw_emb = await cached_embed(embedder, query)
     emb = vec_literal(raw_emb)
 
@@ -327,17 +352,18 @@ async def _search_knowledge_compute(
     # ``project_slug=None`` but a non-empty ``project_ids``, so "no slug" alone
     # must never be treated as the deployment-wide catalog (REL-07). Conservative
     # threshold.
-    sem_enabled = getattr(s, "semantic_cache_enabled", False)
     sem_scope: str | None = None
     if sem_enabled and not project_slug:
         from app.graph.semantic_cache import scope_key
 
-        sem_scope = scope_key(project_ids, top_k)
+        sem_scope = f"{_EVIDENCE_CACHE_FORMAT}:{scope_key(project_ids, top_k)}"
 
     if sem_scope is not None:
         from app.graph.semantic_cache import semantic_cache_get
 
-        sem_hit = await semantic_cache_get(raw_emb, scope=sem_scope)
+        sem_hit = await semantic_cache_get(
+            raw_emb, scope=sem_scope, namespace_version=semantic_generation
+        )
         if sem_hit is not None:
             logger.debug("search_knowledge semantic cache hit (sim=%.3f)", sem_hit.similarity)
             _record_cache(semantic_hit=True, semantic_sim=sem_hit.similarity)
@@ -353,9 +379,13 @@ async def _search_knowledge_compute(
     faq_ids: set[str] = {str(getattr(r, "id", "")) for r in faq_rows}
 
     rows = await repo.match_documents(emb, top_k, "{}", project_ids=project_ids, query_text=query)
+    # A transient vector failure is not a confirmed absence of project facts.
+    # Keep partial FAQ evidence usable, but let the next turn retry retrieval.
+    retrieval_complete = getattr(repo, "last_match_degraded", None) is None
     if not rows and not faq_rows:
         result = "Không tìm thấy thông tin phù hợp trong cơ sở dữ liệu."
-        await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
+        if s.rag_cache_enabled and retrieval_complete:
+            await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
         return result
     # Ranked order: FAQ prepass first, then similarity order. Dedupe FAQ chunks
     # out of ``rows`` BEFORE capping so the budget is spent on distinct hits.
@@ -380,12 +410,14 @@ async def _search_knowledge_compute(
         lines.extend(rendered[:kept_faq])
     lines.extend(rendered[kept_faq:])
     result = "\n".join(lines)
-    if s.rag_cache_enabled:
+    if s.rag_cache_enabled and retrieval_complete:
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)
     # Store in the semantic cache for future paraphrased hits (unscoped lookups
     # only), under the same scope namespace the read above used.
-    if sem_scope is not None:
+    if sem_scope is not None and retrieval_complete:
         from app.graph.semantic_cache import semantic_cache_put
 
-        await semantic_cache_put(raw_emb, result, scope=sem_scope)
+        await semantic_cache_put(
+            raw_emb, result, scope=sem_scope, namespace_version=semantic_generation
+        )
     return result

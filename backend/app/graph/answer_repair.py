@@ -8,10 +8,11 @@ answer with ``finish_reason=length``; the reply boundary that used to repair a
 cut answer was removed, so a cut would ship verbatim (observed: a route list
 ending mid-word). The lanes therefore COMPLETE a cut answer before it is
 delivered: the model is asked to continue from the exact cut, bounded by
-``_MAX_ANSWER_CONTINUATIONS`` and by the turn's remaining model-call budget. If
-the provider still stops at the cap, the dangling tail is dropped (bounded to
-the last complete sentence or line), so a candidate never receives a mid-word
-fragment.
+``_MAX_ANSWER_CONTINUATIONS``. This recovery allowance remains available when
+the normal tool-loop budget is exhausted; it cannot dispatch more tools. If
+the provider still stops at the cap, one complete concise rewrite is attempted
+over the same evidence. A capped or empty rewrite is suppressed, so a partial
+list is never presented as a completed answer.
 
 Pure text surgery plus a finish-reason read — no settings, no I/O — so both the
 generation loop and the direct-context lane share one copy of the rules.
@@ -33,11 +34,7 @@ _CUT_ANSWER_CONTINUE_INSTRUCTION = (
 # legitimate repetition inside an answer is never deleted.
 _CONTINUATION_OVERLAP_MIN_CHARS = 24
 _CONTINUATION_OVERLAP_MAX_CHARS = 400
-_ANSWER_SENTENCE_END_CHARS = frozenset(".!?…")
 _SEAM_BOUNDARY_CHARS = frozenset(",.;:!?…-")
-# How far back a dangling (still-cut) tail may be trimmed, so a long complete
-# answer is never gutted by a single missing full stop.
-_MAX_DANGLING_TAIL_CHARS = 200
 
 
 def _answer_was_cut(message) -> bool:
@@ -83,23 +80,3 @@ def _seam_remainder(joined: str, part: str) -> str:
             continue
         return part[size:]
     return part
-
-
-def _drop_dangling_tail(text: str) -> str:
-    """Drop a still-truncated answer's dangling tail.
-
-    Bounded to the last ``_MAX_DANGLING_TAIL_CHARS`` so a complete answer is
-    never gutted: cut at the last sentence/line boundary in that window, else at
-    the last whitespace, so the delivered text never ends mid-word.
-    """
-    stripped = text.rstrip()
-    if not stripped:
-        return text
-    start = max(0, len(stripped) - _MAX_DANGLING_TAIL_CHARS)
-    for index in range(len(stripped) - 1, start - 1, -1):
-        if stripped[index] in _ANSWER_SENTENCE_END_CHARS or stripped[index] == "\n":
-            return stripped[: index + 1].rstrip() or text
-    for index in range(len(stripped) - 1, start - 1, -1):
-        if stripped[index].isspace():
-            return stripped[:index].rstrip() or text
-    return text

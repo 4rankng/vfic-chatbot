@@ -21,7 +21,7 @@ class ProjectIndexRepo:
 
     async def fetch_usable_corpus(self, project_id: uuid.UUID) -> list:
         """Usable-unit content+category, newest-first, capped at 200 (master-index input)."""
-        return (
+        return list((
             await self.db.execute(
                 text(
                     "SELECT kc.content, kc.category FROM knowledge_chunks kc "
@@ -34,7 +34,7 @@ class ProjectIndexRepo:
                 ),
                 {"pid": str(project_id)},
             )
-        ).all()
+        ).all())
 
     async def update_card(self, project_id: uuid.UUID, summary: str | None, card: dict) -> None:
         """Overwrite the project's summary + LLM-generated catalog card (JSONB)."""
@@ -52,7 +52,7 @@ class ProjectIndexRepo:
         await self.db.commit()
         await bump_cache_version(NS_PREAMBLE)
 
-    async def sync_highlights(self, project_id: uuid.UUID) -> None:
+    async def sync_highlights(self, project_id: uuid.UUID, *, commit: bool = True) -> None:
         """Mirror the project's is_highlight feature values into ``index_card.highlights``.
 
         Feature-derived highlights are authoritative when present (override the LLM card).
@@ -81,8 +81,9 @@ class ProjectIndexRepo:
                 "pid": str(project_id),
             },
         )
-        await self.db.commit()
-        await bump_cache_version(NS_PREAMBLE)
+        if commit:
+            await self.db.commit()
+            await bump_cache_version(NS_PREAMBLE)
 
 
 async def rebuild_bus_timetable(db: AsyncSession) -> tuple[int, int]:

@@ -3,6 +3,7 @@ import {
   CreateBase,
   email,
   Form,
+  minLength,
   required,
   useDataProvider,
   useNotify,
@@ -22,6 +23,11 @@ const ROLE_CHOICES = [
 
 const REQUIRED_FIELD = required("Vui lòng nhập thông tin.");
 const VALID_EMAIL = email("Email chưa đúng định dạng.");
+const PASSWORD_LENGTH = minLength(8, "Mật khẩu phải có ít nhất 8 ký tự.");
+const PASSWORD_CONFIRMATION = (
+  value: string,
+  values: Record<string, unknown>,
+) => (value === values.password ? undefined : "Mật khẩu xác nhận không khớp.");
 
 export const UserCreate = () => {
   const notify = useNotify();
@@ -31,6 +37,7 @@ export const UserCreate = () => {
   const listHref = useHref("/users");
 
   const onSubmit = async (data: Record<string, unknown>) => {
+    if (isSubmitting) return;
     if (data.password !== data.confirm_password) {
       notify("Mật khẩu xác nhận không khớp.", { type: "error" });
       return;
@@ -71,7 +78,7 @@ export const UserCreate = () => {
               </div>
             </div>
           </header>
-          <Form onSubmit={onSubmit}>
+          <Form onSubmit={onSubmit} noValidate>
             <div className="user-account-form-body">
               <div className="user-account-field-grid">
                 <FormTextInput
@@ -81,6 +88,7 @@ export const UserCreate = () => {
                   autoComplete="email"
                   isRequired
                   validate={[REQUIRED_FIELD, VALID_EMAIL]}
+                  disabled={isSubmitting}
                   className="user-account-field user-account-field-wide"
                 />
                 <FormTextInput
@@ -89,6 +97,7 @@ export const UserCreate = () => {
                   autoComplete="name"
                   isRequired
                   validate={REQUIRED_FIELD}
+                  disabled={isSubmitting}
                   className="user-account-field"
                 />
                 <FormSelect
@@ -99,6 +108,7 @@ export const UserCreate = () => {
                   defaultValue="recruiter"
                   isRequired
                   validate={REQUIRED_FIELD}
+                  disabled={isSubmitting}
                   className="user-account-field"
                 />
                 <FormTextInput
@@ -107,7 +117,9 @@ export const UserCreate = () => {
                   type="password"
                   autoComplete="new-password"
                   isRequired
-                  validate={REQUIRED_FIELD}
+                  validate={[REQUIRED_FIELD, PASSWORD_LENGTH]}
+                  hint="Ít nhất 8 ký tự."
+                  disabled={isSubmitting}
                   className="user-account-field"
                 />
                 <FormTextInput
@@ -116,7 +128,8 @@ export const UserCreate = () => {
                   type="password"
                   autoComplete="new-password"
                   isRequired
-                  validate={REQUIRED_FIELD}
+                  validate={[REQUIRED_FIELD, PASSWORD_CONFIRMATION]}
+                  disabled={isSubmitting}
                   className="user-account-field"
                 />
               </div>
@@ -126,6 +139,7 @@ export const UserCreate = () => {
                   color="secondary"
                   size="md"
                   className="uu-scope user-account-secondary-action min-h-11 max-[760px]:w-full"
+                  isDisabled={isSubmitting}
                 >
                   Hủy
                 </Button>

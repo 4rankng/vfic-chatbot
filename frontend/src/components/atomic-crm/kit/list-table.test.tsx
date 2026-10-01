@@ -93,7 +93,11 @@ const mount = ({
   render(
     <TestMemoryRouter>
       <TestMessages>
-        <QueryClientProvider client={new QueryClient()}>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
           <DataProviderContext.Provider value={dataProvider as never}>
             <NotificationContextProvider>
               <ListBase resource="users" perPage={2}>
@@ -273,5 +277,37 @@ describe("kit list table", () => {
     expect(status.element()).toBeInstanceOf(HTMLElement);
     expect(status.element().children).toHaveLength(4);
     expect(screen.container.querySelector("table")).toBeNull();
+  });
+
+  it("offers a retry for a failed request instead of claiming the directory is empty", async () => {
+    getList.mockRejectedValueOnce(new Error("offline"));
+    const screen = await mount();
+
+    await expect.element(screen.getByRole("alert")).toBeVisible();
+    await expect
+      .element(screen.getByText("Chưa có tài khoản nào"))
+      .not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Thử lại" }).click();
+
+    await expect
+      .element(screen.getByRole("grid", { name: "Danh sách tài khoản" }))
+      .toBeVisible();
+    await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not invent an exact total for a directory with an unknown total", async () => {
+    getList.mockResolvedValue({
+      data: accounts.slice(0, 2),
+      pageInfo: { hasNextPage: true, hasPreviousPage: false },
+    });
+    const screen = await mount();
+
+    await expect
+      .element(screen.getByRole("grid", { name: "Danh sách tài khoản" }))
+      .toBeVisible();
+    expect(screen.container.textContent).toContain("1-2");
+    expect(screen.container.textContent).not.toContain("1-2 / 2");
+    await screen.getByRole("button", { name: "Trang tiếp" }).click();
+    await expect.poll(() => getList.mock.lastCall?.[1].pagination.page).toBe(2);
   });
 });

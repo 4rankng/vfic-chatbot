@@ -52,8 +52,16 @@ class FakeHashRedis:
                         z = self._zsets.setdefault(key, {})
                         for member, score in mapping.items():
                             z[member] = float(score)
-                    # hdel/zrem/expire are no-ops in the fake (not needed for
-                    # false-positive tests; LRU eviction has its own path).
+                    elif op[0] == "hdel":
+                        _, key, fields = op
+                        for field in fields:
+                            self._hashes.get(key, {}).pop(field, None)
+                    elif op[0] == "zrem":
+                        _, key, members = op
+                        for member in members:
+                            self._zsets.get(key, {}).pop(member, None)
+                    # Key expiration is not simulated; tests can keep a ring
+                    # alive and verify each entry's independent lifetime.
 
         return _Pipe()
 

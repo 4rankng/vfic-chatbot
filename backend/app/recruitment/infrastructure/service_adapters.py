@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import logging
 
+from app.recruitment.application.lead_lookup import (
+    LeadLookup,
+    UNRESOLVED_LEAD,
+    UnresolvedLead,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -90,23 +96,35 @@ class ServiceLeadContextAdapter:
 
     async def profile_text(self, chat_id: str, contact_id: str | None = None) -> str:
         from app.services.lead import lead_profile_text
+        from app.services.lead.contact_evidence import contact_evidence_context
 
         lead = await _resolve_lead(self._db, chat_id, contact_id)
+        lead = await contact_evidence_context(self._db, lead)
         return lead_profile_text(lead)
 
     async def context(
-        self, chat_id, current_user_text, recent_messages, contact_id=None, lead=None
+        self,
+        chat_id,
+        current_user_text,
+        recent_messages,
+        contact_id=None,
+        *,
+        lead: LeadLookup = UNRESOLVED_LEAD,
     ):
         from app.services.conversation import ConversationService
         from app.services.lead import high_confidence_profile_name, lead_profile_text
+        from app.services.lead.contact_evidence import contact_evidence_context
         from app.services.lead.probing import (
             lead_collection_question,
             oa_profile_name_guidance,
         )
 
-        # ``lead`` is the runner's once-per-turn row; None keeps the adapter's
-        # own lookup (ports without the resolve seam, e.g. test doubles).
-        lead = lead if lead is not None else await _resolve_lead(self._db, chat_id, contact_id)
+        # A prefetched None is a completed lookup, not permission to read again.
+        if isinstance(lead, UnresolvedLead):
+            lead = await _resolve_lead(self._db, chat_id, contact_id)
+        lead = await contact_evidence_context(
+            self._db, lead, current_user_text=current_user_text, recent_messages=recent_messages,
+        )
         oa_profile_display_name = None
         if chat_id.startswith("oa:"):
             conversation = await ConversationService(self._db).get_by_zalo(chat_id)
@@ -182,12 +200,11 @@ class ServiceLeadGenderAdapter:
         self._db = db
 
     async def resolve_lead(self, chat_id: str, contact_id: str | None = None) -> dict | None:
-        """Resolve the turn's lead row once for the runner to hand back in.
+        """Resolve the initial lead context for the runner to pass to consumers.
 
-        The runner calls this a single time per turn and passes the returned
-        row into ``stored_gender`` / ``record_inferred_gender`` (and the
-        lead-context adapter), so the by-zalo/by-contact lookup fires once
-        instead of once per call site.
+        Gender and prompt adapters reuse the returned row, including a missing
+        row, instead of querying per call site. The runner refreshes this context
+        after a successful profile-name write so later consumers see that write.
         """
         return await _resolve_lead(self._db, chat_id, contact_id)
 
@@ -196,9 +213,10 @@ class ServiceLeadGenderAdapter:
         chat_id: str,
         contact_id: str | None = None,
         *,
-        lead: dict | None = None,
+        lead: LeadLookup = UNRESOLVED_LEAD,
     ) -> str:
-        lead = lead if lead is not None else await _resolve_lead(self._db, chat_id, contact_id)
+        if isinstance(lead, UnresolvedLead):
+            lead = await _resolve_lead(self._db, chat_id, contact_id)
         return str((lead or {}).get("gender") or "").strip().lower()
 
     async def record_inferred_gender(
@@ -208,11 +226,12 @@ class ServiceLeadGenderAdapter:
         *,
         contact_id: str | None = None,
         override: bool = False,
-        lead: dict | None = None,
+        lead: LeadLookup = UNRESOLVED_LEAD,
     ) -> bool:
         if gender not in _ADDRESSABLE_GENDERS:
             return False
-        lead = lead if lead is not None else await _resolve_lead(self._db, chat_id, contact_id)
+        if isinstance(lead, UnresolvedLead):
+            lead = await _resolve_lead(self._db, chat_id, contact_id)
         if lead is None or lead.get("id") is None:
             return False
         from app.services.lead.repository import LeadRepository
@@ -230,7 +249,7 @@ class ServiceLeadGenderAdapter:
         name: str,
         *,
         contact_id: str | None = None,
-        lead: dict | None = None,
+        lead: LeadLookup = UNRESOLVED_LEAD,
     ) -> bool:
         """Persist a Jev-validated profile display name into a blank lead name.
 
@@ -241,7 +260,11 @@ class ServiceLeadGenderAdapter:
         """
         if not str(name or "").strip():
             return False
-        resolved = lead if lead is not None else await _resolve_lead(self._db, chat_id, contact_id)
+        resolved = (
+            await _resolve_lead(self._db, chat_id, contact_id)
+            if isinstance(lead, UnresolvedLead)
+            else lead
+        )
         if resolved is not None and str(resolved.get("name") or "").strip():
             return False
         return await _persist_profile_name_if_absent(

@@ -24,6 +24,7 @@ class FeatureReadiness(BaseModel):
 
 
 class ProjectOut(BaseModel):
+    category_authority_started: bool = False
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     slug: str
@@ -191,4 +192,3 @@ class ProjectFaqUpdate(BaseModel):
     question_variants: list[str] | None = Field(default=None, max_length=50)
     required_terms: list[str] | None = Field(default=None, max_length=50)
     forbidden_terms: list[str] | None = Field(default=None, max_length=50)
-

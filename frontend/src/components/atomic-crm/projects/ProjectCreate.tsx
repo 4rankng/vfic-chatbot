@@ -137,15 +137,19 @@ const ProjectCreateForm = () => {
         );
       }
       setIngestedRoles(parsed.roles.join(", "));
-      const landed = await ingest(id, planBriefKnowledge(parsed).writes, file);
+      const result = await ingest(id, planBriefKnowledge(parsed).writes, file);
       // Only confirmed source content can become recruiting claims. A failed
       // upload must not leave highlights that a later retry could publish.
-      if (landed && parsed.highlights.length > 0) {
+      if (
+        result.ok &&
+        !result.requiresCutover &&
+        parsed.highlights.length > 0
+      ) {
         await updateProjectDiscoveryCard(id, {
           discovery_card: { highlights: parsed.highlights },
         });
       }
-      setSourceReady(landed);
+      setSourceReady(result.ok && !result.requiresCutover);
     } catch (error) {
       notify((error as Error).message, { type: "error" });
     } finally {
@@ -165,6 +169,7 @@ const ProjectCreateForm = () => {
    */
   const onSubmit = async () => {
     if (!draftId || !name.trim() || !sourceReady) return;
+    if (state.phase === "done" && state.requiresCutover) return;
     const roleList = parseCommaList(roles);
     setSubmitting(true);
     try {
@@ -172,14 +177,14 @@ const ProjectCreateForm = () => {
       // before the project is allowed to go live — otherwise the live project
       // would answer with roles the recruiter just removed.
       if (rolesDirty) {
-        const landed = await ingest(draftId, [
+        const result = await ingest(draftId, [
           {
             key: "jobs",
             filename: "jobs.md",
             content: buildJobsMarkdown(roleList, brief?.location),
           },
         ]);
-        if (!landed) return;
+        if (!result.ok || result.requiresCutover) return;
         setIngestedRoles(roles.trim());
       }
       await dataProvider.update("projects", {
@@ -191,7 +196,7 @@ const ProjectCreateForm = () => {
         },
         previousData: { id: draftId },
       });
-      notify("Đã tạo dự án. Kiến thức đã sẵn sàng cho Agent.", {
+      notify("Đã tạo dự án. Kiến thức đã sẵn sàng cho chatbot.", {
         type: "success",
       });
       redirect("show", "projects", draftId);
@@ -207,6 +212,7 @@ const ProjectCreateForm = () => {
     draftId !== null &&
     Boolean(name.trim()) &&
     sourceReady &&
+    !(state.phase === "done" && state.requiresCutover) &&
     !ingesting &&
     !creatingDraft &&
     !submitting;
@@ -255,8 +261,8 @@ const ProjectCreateForm = () => {
           onChange={setRoles}
         />
         <p className="text-helper text-muted-foreground">
-          Vị trí tuyển dụng giúp Agent tư vấn cụ thể hơn cho từng công việc. Bạn
-          có thể bổ sung sau; dự án vẫn là đơn vị ứng tuyển.
+          Vị trí tuyển dụng giúp chatbot tư vấn cụ thể hơn cho từng công việc.
+          Bạn có thể bổ sung sau; dự án vẫn là đơn vị ứng tuyển.
         </p>
 
         <hr className="border-border" />
@@ -283,8 +289,9 @@ const ProjectCreateForm = () => {
         ) : null}
         {state.phase === "done" ? (
           <p role="status" className="text-helper text-foreground">
-            Đã nạp xong {state.activated.length} phần kiến thức. Bạn có thể kiểm
-            tra rồi tạo dự án.
+            {state.requiresCutover
+              ? `Đã chuẩn bị và kiểm tra ${state.activated.length} phần kiến thức. Cần hoàn tất bước chuyển sang 12 danh mục trước khi Chatbot sử dụng dữ liệu mới.`
+              : `Đã nạp xong ${state.activated.length} phần kiến thức. Bạn có thể kiểm tra rồi tạo dự án.`}
           </p>
         ) : null}
         {ingestBlocked ? (

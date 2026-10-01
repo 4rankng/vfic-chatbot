@@ -135,6 +135,7 @@ async def _turn(
     timings: dict | None = None,
     route: TurnRoute | None = None,
     recent_messages: list | None = None,
+    provider: str = "zalo_bot",
 ):
     if project_context is _DEFAULT_PROJECT:
         project_context = _project_context()
@@ -147,7 +148,7 @@ async def _turn(
             _state(),
             deps,
             QUESTION,
-            provider="zalo_bot",
+            provider=provider,
             chat_id="z1",
             recent_messages=recent_messages or [],
             timings=timings,
@@ -277,6 +278,75 @@ async def test_a_profile_ask_turn_is_cached(cache_env):
 
     assert agent.calls == 1, "the second turn must be served from the cache"
     assert timings["answer_cache"] == {"hit": True, "tier": "exact", "similarity": 1.0}
+
+
+@pytest.mark.parametrize("missing_phone_first", [False, True])
+async def test_cache_never_reuses_a_different_phone_collection_state(cache_env, missing_phone_first):
+    agent = _CountingAgent()
+    lead = _FakeLead()
+    deps = _deps(agent=agent, lead=lead, slugs={"lg-display": "id-lg"})
+    ask = "Anh/chị cho em xin số điện thoại di động nhé?"
+    lead.question = ask if missing_phone_first else ""
+    agent.reply = REPLY + (ask if missing_phone_first else "")
+    await _turn(deps, timings={"prefetch_hit": True})
+
+    lead.question = "" if missing_phone_first else ask
+    agent.reply = REPLY + ("" if missing_phone_first else ask)
+    reply, timings = await _turn(deps, timings={"prefetch_hit": True})
+
+    assert reply == agent.reply
+    assert agent.calls == 2
+    assert timings["answer_cache"]["hit"] is False
+
+
+async def test_cache_partitions_candidate_profile_context(cache_env):
+    agent = _CountingAgent(reply="Với nguyện vọng ca ngày, dự án có ca phù hợp.")
+    lead = _FakeLead(profile="Nguyện vọng: chỉ làm ca ngày")
+    deps = _deps(agent=agent, lead=lead, slugs={"lg-display": "id-lg"})
+    await _turn(deps, timings={"prefetch_hit": True})
+
+    lead.profile = "Nguyện vọng: chỉ làm ca đêm"
+    agent.reply = "Với nguyện vọng ca đêm, em sẽ đối chiếu lịch ca."
+    reply, timings = await _turn(deps, timings={"prefetch_hit": True})
+
+    assert reply == agent.reply
+    assert agent.calls == 2
+    assert timings["answer_cache"]["hit"] is False
+
+
+async def test_kb_cache_does_not_reuse_prose_with_prior_history(cache_env):
+    agent = _CountingAgent()
+    deps = _deps(agent=agent, lead=_FakeLead(), slugs={"lg-display": "id-lg"})
+    await _turn(deps, timings={"prefetch_hit": True})
+    history = [SimpleNamespace(sender="WORKER", body="Em chỉ đi làm ca ngày", delivery_status="SENT")]
+    _reply, timings = await _turn(deps, recent_messages=history, timings={"prefetch_hit": True})
+
+    assert agent.calls == 2
+    assert "answer_cache" not in timings
+
+
+async def test_current_inbound_message_is_not_prior_cache_history(cache_env):
+    agent = _CountingAgent()
+    deps = _deps(agent=agent, lead=_FakeLead(), slugs={"lg-display": "id-lg"})
+    inbound = [SimpleNamespace(sender="WORKER", body=QUESTION, delivery_status="SENT")]
+    await _turn(deps, recent_messages=inbound, timings={"prefetch_hit": True})
+    _reply, timings = await _turn(deps, recent_messages=inbound, timings={"prefetch_hit": True})
+
+    assert agent.calls == 1
+    assert timings["answer_cache"]["hit"] is True
+
+
+async def test_cache_does_not_share_prose_between_provider_personas(cache_env):
+    agent = _CountingAgent(reply="Bot VFIC trả lời theo cách xưng hô đã chọn.")
+    deps = _deps(agent=agent, lead=_FakeLead(), slugs={"lg-display": "id-lg"})
+    await _turn(deps, provider="zalo_bot", timings={"prefetch_hit": True})
+    agent.reply = "Messenger trả lời theo persona của kênh này."
+
+    reply, timings = await _turn(deps, provider="facebook_messenger", timings={"prefetch_hit": True})
+
+    assert reply == agent.reply
+    assert agent.calls == 2
+    assert timings["answer_cache"]["hit"] is False
 
 
 @pytest.mark.asyncio

@@ -310,20 +310,34 @@ export const ChatThread = ({
     return () => obs.disconnect();
   }, [showComposerForm, showTakeoverNotice, isClosedMode]);
 
-  // Re-snap to bottom on non-message size changes (composer grow, image load)
-  // only when the user is already at the bottom.
+  // virtua writes its measured content height inside its item ResizeObserver.
+  // Observing that shallower container with another ResizeObserver creates
+  // skipped notifications in the same delivery loop. Follow its committed
+  // layout changes after delivery instead, and coalesce scroll writes per frame.
   useEffect(() => {
     const el = scrollerElRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
+    if (!el || typeof MutationObserver === "undefined") return;
     const content = el.firstElementChild as HTMLElement | null;
     if (!content) return;
-    const obs = new ResizeObserver(() => {
-      if (isAtBottomRef.current && !isPrependingRef.current) {
-        scrollToNewest();
-      }
+    let pendingFrame: number | null = null;
+    const obs = new MutationObserver(() => {
+      if (pendingFrame !== null) return;
+      pendingFrame = requestAnimationFrame(() => {
+        pendingFrame = null;
+        if (isAtBottomRef.current && !isPrependingRef.current) {
+          scrollToNewest();
+        }
+      });
     });
-    obs.observe(content);
-    return () => obs.disconnect();
+    obs.observe(content, {
+      attributes: true,
+      attributeFilter: ["style"],
+      childList: true,
+    });
+    return () => {
+      obs.disconnect();
+      if (pendingFrame !== null) cancelAnimationFrame(pendingFrame);
+    };
   }, [scrollToNewest, conversationId]);
 
   // --- Load-more (scroll up for older history) ---

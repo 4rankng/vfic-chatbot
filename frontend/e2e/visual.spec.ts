@@ -10,8 +10,9 @@ import { expect, test } from "./fixtures";
  *
  * Determinism strategy:
  *  - Telemetry is short-circuited; the login page uses the real auth boundary.
- *  - Theme is driven via `page.emulateMedia({ colorScheme })` on first paint
- *    (default theme is "system") plus a forced `.dark`/`.light` class.
+ *  - System preferences are driven via `page.emulateMedia({ colorScheme })`.
+ *    The product currently pins its supported theme to light. Forcing `.dark`
+ *    bypasses that contract and creates an unsupported hybrid theme.
  *  - Service-worker registration is neutered so the PWA SW can't cache-stamp.
  *  - Fonts are awaited (`document.fonts.ready`) before any snapshot.
  *  - `animations: "disabled"` + `reducedMotion: "reduce"` kill transitions.
@@ -21,21 +22,8 @@ import { expect, test } from "./fixtures";
  *     npx playwright test visual --update-snapshots
  */
 
-type Mode = "light" | "dark";
-
 /** Pages that render without authentication (deterministic, zero-backend). */
 const UNAUTH_ROUTES = [{ name: "login", path: "/" }] as const;
-
-async function setTheme(page: Page, mode: Mode) {
-  // Drive the "system" default via prefers-color-scheme, then force the class in
-  // case a stored theme would otherwise win.
-  await page.emulateMedia({ colorScheme: mode });
-  await page.evaluate((m) => {
-    const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(m);
-  }, mode);
-}
 
 async function stabilize(page: Page) {
   await page.evaluate(() => (document.fonts ? document.fonts.ready : null));
@@ -70,7 +58,7 @@ test.beforeEach(async ({ page }) => {
 for (const mode of ["light", "dark"] as const) {
   for (const route of UNAUTH_ROUTES) {
     test(
-      `${route.name} renders (${mode})`,
+      `${route.name} renders with ${mode} system preference`,
       {
         // Zero-backend visual guard: see the resetDb fixture in fixtures.ts and
         // the VFIC_VISUAL_ONLY webServer gate in playwright.config.ts.
@@ -79,19 +67,18 @@ for (const mode of ["light", "dark"] as const) {
       async ({ page }) => {
         await page.emulateMedia({ colorScheme: mode });
         await page.goto(route.path);
-        await setTheme(page, mode);
-
         // The login form is the anchor that tells us StartPage resolved to LoginPage.
         const email = page.locator('input[type="email"]').first();
         await expect(email).toBeVisible({ timeout: 15_000 });
 
         await stabilize(page);
+        await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
 
         // Playwright appends `-<projectName>-<platform>` to the name, so desktop
         // and mobile baselines never collide.
         await expect(page).toHaveScreenshot(`${route.name}-${mode}.png`, {
           fullPage: true,
-          maxDiffPixelRatio: 0.1,
+          maxDiffPixelRatio: 0.01,
           animations: "disabled",
           caret: "hide",
         });

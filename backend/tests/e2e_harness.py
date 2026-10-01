@@ -194,6 +194,7 @@ def reset(*, email: str, password: str) -> None:
     channel_identity_id = uuid.uuid4()
     conversation_id = uuid.uuid4()
     project_id = uuid.uuid4()
+    knowledge_base_id = uuid.uuid4()
     with psycopg.connect(_plain_psycopg(sync_url)) as connection:
         _assert_database_owned(connection)
         tables = [
@@ -245,9 +246,14 @@ def reset(*, email: str, password: str) -> None:
             (conversation_id, conversation_id),
         )
         connection.execute(
-            "INSERT INTO projects (id, slug, name, is_active) "
-            "VALUES (%s, 'e2e-project', 'E2E Project', true)",
-            (project_id,),
+            "INSERT INTO knowledge_bases (id, name, slug, mode) "
+            "VALUES (%s, 'E2E Project', 'e2e-project', 'RAG')",
+            (knowledge_base_id,),
+        )
+        connection.execute(
+            "INSERT INTO projects (id, slug, name, is_active, knowledge_base_id) "
+            "VALUES (%s, 'e2e-project', 'E2E Project', true, %s)",
+            (project_id, knowledge_base_id),
         )
         # One terminal bot run with a schema-valid v2 decision trace so the
         # bot-runs list and its trace detail have a row to render.

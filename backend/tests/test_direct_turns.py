@@ -217,3 +217,214 @@ async def test_direct_lease_heartbeat_rejects_a_malformed_conversation_id(
     )
 
     renewed.assert_not_awaited()
+
+
+async def test_typing_bridge_survives_failures_and_has_no_four_pulse_limit(monkeypatch):
+    from app.services.integration_settings import IntegrationSettingsService
+    import app.services.webhook as webhook
+
+    attempts = []
+    sixth = asyncio.Event()
+    resolve = AsyncMock(side_effect=[
+        RuntimeError("temporary credential read failure"),
+        *[SimpleNamespace(bot_token="current-token") for _ in range(10)],
+    ])
+
+    async def emit(chat_id, token):
+        attempts.append((chat_id, token))
+        if len(attempts) == 1:
+            raise RuntimeError("temporary provider failure")
+        if len(attempts) >= 6:
+            sixth.set()
+
+    monkeypatch.setattr("app.core.config.get_settings", lambda: SimpleNamespace(
+        typing_heartbeat_seconds=0.02,
+    ))
+    monkeypatch.setattr(core_db, "async_session", _session_factory, raising=False)
+    monkeypatch.setattr(IntegrationSettingsService, "resolve_zalo", resolve)
+    monkeypatch.setattr(webhook, "_fire_typing", emit)
+    task = asyncio.create_task(direct_turn.bridge_typing("candidate"))
+    try:
+        await asyncio.wait_for(sixth.wait(), timeout=1)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert attempts == [("candidate", "current-token")] * 6
+    assert resolve.await_count == 7
+
+
+async def test_typing_bridge_never_falls_back_to_stale_environment_token(monkeypatch):
+    from app.services.integration_settings import IntegrationSettingsService
+    import app.services.webhook as webhook
+
+    resolve = AsyncMock(return_value=SimpleNamespace(bot_token=None))
+    emit = AsyncMock()
+    monkeypatch.setattr("app.core.config.get_settings", lambda: SimpleNamespace(
+        typing_heartbeat_seconds=0.02, zalo_bot_token="stale-environment-token",
+    ))
+    monkeypatch.setattr(core_db, "async_session", _session_factory, raising=False)
+    monkeypatch.setattr(IntegrationSettingsService, "resolve_zalo", resolve)
+    monkeypatch.setattr(webhook, "_fire_typing", emit)
+    task = asyncio.create_task(direct_turn.bridge_typing("candidate"))
+    try:
+        await asyncio.sleep(0.065)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert resolve.await_count >= 3
+    emit.assert_not_awaited()
+
+
+@pytest.mark.parametrize("setup_failure", [False, True])
+async def test_worker_transfers_live_setup_status_to_runner_and_drains_errors(
+    monkeypatch, setup_failure,
+):
+    from contextlib import asynccontextmanager
+    import app.graph.factories as factories
+    import app.graph.runner as runner
+    import app.workers._db as worker_db
+
+    started = asyncio.Event()
+    drained = asyncio.Event()
+    events = []
+
+    async def bridge(*args):
+        events.append("status-started")
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0.01)
+            events.append("status-drained")
+            drained.set()
+
+    @asynccontextmanager
+    async def session():
+        yield object()
+
+    async def build(*args, **kwargs):
+        await started.wait()
+        events.append("setup-completed")
+        if setup_failure:
+            raise RuntimeError("dependency setup failed")
+        return SimpleNamespace(persist=None)
+
+    async def run(state, deps):
+        assert not drained.is_set()
+        assert deps.preamble_status_task is not None
+        deps.preamble_status_task.cancel()
+        await asyncio.gather(deps.preamble_status_task, return_exceptions=True)
+        assert drained.is_set()
+        events.append("real-answer")
+
+    monkeypatch.setattr(chatbot_worker, "_bridge_typing", bridge)
+    monkeypatch.setattr(worker_db, "worker_session", session)
+    monkeypatch.setattr(worker_db, "worker_session_factory", lambda: None)
+    monkeypatch.setattr(factories, "build_deps", build)
+    monkeypatch.setattr(runner, "run_turn", run)
+    monkeypatch.setattr(chatbot_worker, "_handoff_to_newer_inbound", AsyncMock())
+    job = {
+        "conversation_id": str(uuid.uuid4()), "version_at_start": 1,
+        "user_text": "Tôi muốn ứng tuyển", "zalo_channel": "bot", "zalo_chat_id": "candidate",
+    }
+    if setup_failure:
+        with pytest.raises(RuntimeError, match="dependency setup failed"):
+            await chatbot_worker._run_job_async_inner(job, source="direct")
+        assert events == ["status-started", "setup-completed", "status-drained"]
+    else:
+        await chatbot_worker._run_job_async_inner(job, source="direct")
+        assert events == ["status-started", "setup-completed", "status-drained", "real-answer"]
+    assert drained.is_set()
+
+
+async def test_queued_status_starts_before_slow_queue_telemetry(monkeypatch):
+    from contextlib import asynccontextmanager
+    import app.graph.factories as factories
+    import app.graph.runner as runner
+    import app.workers._db as worker_db
+
+    started = asyncio.Event()
+    drained = asyncio.Event()
+    events = []
+
+    async def bridge(*args):
+        events.append("status-started")
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            drained.set()
+
+    async def slow_metric(*args):
+        await started.wait()
+        assert not drained.is_set()
+        events.append("queue-depth")
+        return 5
+
+    @asynccontextmanager
+    async def session():
+        yield object()
+
+    async def run(state, deps):
+        assert state.queue_depth == 5
+        assert not drained.is_set()
+        assert deps.preamble_status_task is not None
+        deps.preamble_status_task.cancel()
+        await asyncio.gather(deps.preamble_status_task, return_exceptions=True)
+        events.append("real-answer")
+
+    monkeypatch.setattr(chatbot_worker, "_bridge_typing", bridge)
+    monkeypatch.setattr(asyncio, "to_thread", slow_metric)
+    monkeypatch.setattr(worker_db, "worker_session", session)
+    monkeypatch.setattr(worker_db, "worker_session_factory", lambda: None)
+    monkeypatch.setattr(factories, "build_deps", AsyncMock(return_value=SimpleNamespace(persist=None)))
+    monkeypatch.setattr(runner, "run_turn", run)
+    monkeypatch.setattr(chatbot_worker, "_handoff_to_newer_inbound", AsyncMock())
+    await chatbot_worker._run_job_async_inner({
+        "conversation_id": str(uuid.uuid4()), "version_at_start": 1,
+        "user_text": "Tôi muốn ứng tuyển", "zalo_channel": "bot", "zalo_chat_id": "candidate",
+    }, source="queued")
+    assert events == ["status-started", "queue-depth", "real-answer"]
+    assert drained.is_set()
+
+
+async def test_typing_bridge_bounds_slow_credential_reads_and_retries(monkeypatch):
+    from app.services.integration_settings import IntegrationSettingsService
+    import app.services.webhook as webhook
+
+    third_attempt = asyncio.Event()
+    attempts = 0
+    active = 0
+    maximum_active = 0
+    cancelled = 0
+
+    async def resolve(*args, **kwargs):
+        nonlocal attempts, active, maximum_active, cancelled
+        attempts += 1
+        active += 1
+        maximum_active = max(maximum_active, active)
+        if attempts == 3:
+            third_attempt.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            active -= 1
+            cancelled += 1
+
+    emit = AsyncMock()
+    monkeypatch.setattr("app.core.config.get_settings", lambda: SimpleNamespace(
+        typing_heartbeat_seconds=0.02,
+    ))
+    monkeypatch.setattr(core_db, "async_session", _session_factory, raising=False)
+    monkeypatch.setattr(IntegrationSettingsService, "resolve_zalo", resolve)
+    monkeypatch.setattr(webhook, "_fire_typing", emit)
+    task = asyncio.create_task(direct_turn.bridge_typing("candidate"))
+    try:
+        await asyncio.wait_for(third_attempt.wait(), timeout=2)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert attempts >= 3
+    assert maximum_active == 1 and active == 0
+    assert cancelled == attempts
+    emit.assert_not_awaited()

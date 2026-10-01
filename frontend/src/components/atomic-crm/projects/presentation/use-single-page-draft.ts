@@ -17,6 +17,8 @@ export type SinglePageDraft = Readonly<{
   text: string;
   hasCurrentPage: boolean;
   loadFailed: boolean;
+  /** A source update is available while a local draft remains unsaved. */
+  remoteChanged: boolean;
   autoSyncOn: boolean;
   /** Bumped whenever the linked Google Sheet sources change. */
   syncRefreshKey: number;
@@ -26,6 +28,8 @@ export type SinglePageDraft = Readonly<{
   readFile: (file?: File) => Promise<void>;
   handleSourceChange: () => void;
   handleSynchronized: () => void;
+  reload: () => Promise<void>;
+  discardChanges: () => void;
 }>;
 
 export type SinglePageDraftOptions = Readonly<{
@@ -55,10 +59,64 @@ export const useSinglePageDraft = (
   const [refreshing, setRefreshing] = useState(false);
   const [syncRefreshKey, setSyncRefreshKey] = useState(0);
   const [autoSyncOn, setAutoSyncOn] = useState(false);
+  const [remoteChanged, setRemoteChanged] = useState(false);
   const loadRequestRef = useRef(0);
+  const contextRef = useRef(0);
+  const fileRequestRef = useRef(0);
+  const editVersionRef = useRef(0);
+  const savingRef = useRef(false);
+  const refreshAfterSaveRef = useRef(false);
+  const baselineRef = useRef({ filename: "single-page.md", text: "" });
+  const draftRef = useRef(baselineRef.current);
+  const syncRequestRef = useRef(0);
+
+  const updateFilename = useCallback((value: string) => {
+    editVersionRef.current += 1;
+    draftRef.current = { ...draftRef.current, filename: value };
+    setFilename(value);
+    if (
+      value === baselineRef.current.filename &&
+      draftRef.current.text === baselineRef.current.text
+    )
+      setRemoteChanged(false);
+  }, []);
+  const updateText = useCallback((value: string) => {
+    editVersionRef.current += 1;
+    draftRef.current = { ...draftRef.current, text: value };
+    setText(value);
+    if (
+      value === baselineRef.current.text &&
+      draftRef.current.filename === baselineRef.current.filename
+    )
+      setRemoteChanged(false);
+  }, []);
+
+  const acceptPage = useCallback((page: { filename: string; text: string }) => {
+    const baseline = baselineRef.current;
+    const draft = draftRef.current;
+    const dirty =
+      draft.filename !== baseline.filename || draft.text !== baseline.text;
+    const changed =
+      page.filename !== baseline.filename || page.text !== baseline.text;
+    const differsFromIncoming =
+      draft.filename !== page.filename || draft.text !== page.text;
+    baselineRef.current = page;
+    if (!dirty || !differsFromIncoming) {
+      draftRef.current = page;
+      setFilename(page.filename);
+      setText(page.text);
+    }
+    setRemoteChanged(
+      (previous) => dirty && differsFromIncoming && (changed || previous),
+    );
+  }, []);
 
   const loadPage = useCallback(
     async ({ background = false }: { background?: boolean } = {}) => {
+      if (background && savingRef.current) {
+        refreshAfterSaveRef.current = true;
+        return;
+      }
       const requestId = ++loadRequestRef.current;
       if (background) {
         setRefreshing(true);
@@ -68,15 +126,13 @@ export const useSinglePageDraft = (
       try {
         const page = await getProjectSinglePage(projectId);
         if (requestId !== loadRequestRef.current) return;
-        setFilename(page.filename);
-        setText(page.text);
+        acceptPage({ filename: page.filename, text: page.text });
         setHasCurrentPage(true);
         setLoadFailed(false);
       } catch (error: unknown) {
         if (requestId !== loadRequestRef.current) return;
         if (error instanceof ApiError && error.status === 404) {
-          setFilename("single-page.md");
-          setText("");
+          acceptPage({ filename: "single-page.md", text: "" });
           setHasCurrentPage(false);
           setLoadFailed(false);
           return;
@@ -85,24 +141,30 @@ export const useSinglePageDraft = (
         notify((error as Error).message, { type: "error" });
       } finally {
         if (requestId === loadRequestRef.current) {
-          if (background) {
-            setRefreshing(false);
-          } else {
-            setLoading(false);
-          }
+          // A background response can supersede a foreground retry. Both
+          // indicators belong to the newest request, so release both here.
+          setRefreshing(false);
+          setLoading(false);
         }
       }
     },
-    [notify, projectId],
+    [acceptPage, notify, projectId],
   );
 
   const loadSyncState = useCallback(async () => {
-    if (!canManageSources) return;
+    const request = ++syncRequestRef.current;
+    const context = contextRef.current;
+    if (!canManageSources) {
+      setAutoSyncOn(false);
+      return;
+    }
     try {
       const rows = await listSinglePageExternalSources(projectId);
-      setAutoSyncOn(rows.some((row) => row.auto_sync_enabled));
+      if (context === contextRef.current && request === syncRequestRef.current)
+        setAutoSyncOn(rows.some((row) => row.auto_sync_enabled));
     } catch {
-      setAutoSyncOn(false);
+      if (context === contextRef.current && request === syncRequestRef.current)
+        setAutoSyncOn(false);
     }
   }, [canManageSources, projectId]);
 
@@ -117,14 +179,41 @@ export const useSinglePageDraft = (
   }, [loadPage, loadSyncState]);
 
   useEffect(() => {
+    const empty = { filename: "single-page.md", text: "" };
+    baselineRef.current = empty;
+    draftRef.current = empty;
+    savingRef.current = false;
+    refreshAfterSaveRef.current = false;
+    setFilename(empty.filename);
+    setText(empty.text);
+    setSaving(false);
+    setRefreshing(false);
+    setRemoteChanged(false);
+    setHasCurrentPage(false);
+    setLoadFailed(false);
     void loadPage();
-    void loadSyncState();
     return () => {
+      contextRef.current += 1;
+      fileRequestRef.current += 1;
       loadRequestRef.current += 1;
     };
-  }, [loadPage, loadSyncState]);
+  }, [loadPage]);
+
+  useEffect(() => {
+    void loadSyncState();
+  }, [loadSyncState]);
+
+  const discardChanges = useCallback(() => {
+    editVersionRef.current += 1;
+    const baseline = baselineRef.current;
+    draftRef.current = baseline;
+    setFilename(baseline.filename);
+    setText(baseline.text);
+    setRemoteChanged(false);
+  }, []);
 
   const save = useCallback(async () => {
+    if (savingRef.current || loading) return;
     if (loadFailed) {
       notify(
         "Chưa tải được nội dung hiện tại. Vui lòng tải lại trang trước khi lưu.",
@@ -136,19 +225,37 @@ export const useSinglePageDraft = (
       notify("Vui lòng nhập nội dung kiến thức.", { type: "warning" });
       return;
     }
+    if (!filename.trim()) {
+      notify("Vui lòng nhập tên tệp.", { type: "warning" });
+      return;
+    }
+    if (!/\.(txt|md)$/i.test(filename.trim())) {
+      notify("Tên tệp kiến thức cần có đuôi .txt hoặc .md.", {
+        type: "warning",
+      });
+      return;
+    }
     if (
       hasCurrentPage &&
       !window.confirm(
         isActive
           ? "Nội dung mới sẽ thay thế toàn bộ trang hiện tại. Tiếp tục?"
-          : "Nội dung mới sẽ thay thế toàn bộ trang hiện tại và bật dự án để Agent sử dụng. Tiếp tục?",
+          : "Nội dung mới sẽ thay thế toàn bộ trang hiện tại và bật dự án để chatbot sử dụng. Tiếp tục?",
       )
     ) {
       return;
     }
+    const context = contextRef.current;
+    const submitted = { filename, text };
+    savingRef.current = true;
+    loadRequestRef.current += 1;
+    setRefreshing(false);
     setSaving(true);
     try {
       await replaceProjectSinglePage(projectId, filename, text);
+      if (context !== contextRef.current) return;
+      baselineRef.current = submitted;
+      setRemoteChanged(false);
       setHasCurrentPage(true);
       notify(
         isActive
@@ -161,14 +268,24 @@ export const useSinglePageDraft = (
       refresh();
       void loadSyncState();
     } catch (error) {
-      notify((error as Error).message, { type: "error" });
+      if (context === contextRef.current)
+        notify((error as Error).message, { type: "error" });
     } finally {
-      setSaving(false);
+      if (context === contextRef.current) {
+        savingRef.current = false;
+        setSaving(false);
+        if (refreshAfterSaveRef.current) {
+          refreshAfterSaveRef.current = false;
+          void loadPage({ background: true });
+        }
+      }
     }
   }, [
     filename,
     hasCurrentPage,
     isActive,
+    loading,
+    loadPage,
     loadFailed,
     loadSyncState,
     notify,
@@ -179,17 +296,43 @@ export const useSinglePageDraft = (
 
   const readFile = useCallback(
     async (file?: File) => {
-      if (!file) return;
+      if (!file || savingRef.current) return;
       if (!/\.(txt|md)$/i.test(file.name)) {
         notify("Trang kiến thức chỉ nhận file .txt hoặc .md.", {
           type: "warning",
         });
         return;
       }
-      setFilename(file.name);
-      setText(await file.text());
+      // Every legal 300,000-character UTF-8 page fits within this read budget.
+      // Reject an oversized pick before decoding it in the browser.
+      if (file.size > 2 * 1024 * 1024) {
+        notify("Tệp quá lớn. Trang kiến thức chỉ nhận tệp dưới 2 MB.", {
+          type: "warning",
+        });
+        return;
+      }
+      const context = contextRef.current;
+      const request = ++fileRequestRef.current;
+      const editVersion = editVersionRef.current;
+      try {
+        const fileText = await file.text();
+        if (
+          context !== contextRef.current ||
+          request !== fileRequestRef.current ||
+          editVersion !== editVersionRef.current
+        )
+          return;
+        updateFilename(file.name);
+        updateText(fileText);
+      } catch {
+        if (
+          context === contextRef.current &&
+          request === fileRequestRef.current
+        )
+          notify("Không đọc được tệp. Vui lòng thử lại.", { type: "error" });
+      }
     },
-    [notify],
+    [notify, updateFilename, updateText],
   );
 
   return {
@@ -200,13 +343,16 @@ export const useSinglePageDraft = (
     text,
     hasCurrentPage,
     loadFailed,
+    remoteChanged,
     autoSyncOn,
     syncRefreshKey,
-    setFilename,
-    setText,
+    setFilename: updateFilename,
+    setText: updateText,
     save,
     readFile,
     handleSourceChange,
     handleSynchronized,
+    reload: loadPage,
+    discardChanges,
   };
 };

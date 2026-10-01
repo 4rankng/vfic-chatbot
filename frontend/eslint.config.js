@@ -5,7 +5,17 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "scripts"] },
+  {
+    // Generated test directories can be replaced while Playwright is running.
+    // Prune them before glob traversal; all product and test source stays linted.
+    ignores: [
+      "dist",
+      "scripts",
+      "coverage",
+      "test-results",
+      "playwright-report",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx,mjs}"],

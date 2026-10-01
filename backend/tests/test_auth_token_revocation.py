@@ -1,10 +1,9 @@
 """SEC-03: server-side logout, stale-refresh rejection, and email-change revocation.
 
-The defect: there was no ``POST /auth/logout``, so a stolen 14-day refresh token
-outlived the victim's logout, and ``/auth/refresh`` re-issued a pair without
-invalidating the token it consumed. Both token types already carry ``ver`` and
-both verifiers compare it to ``users.token_version``, so the fix is a bump —
-these tests pin that bump (and the email-change bump) end to end.
+Both token types carry ``ver`` and both verifiers compare it to
+``users.token_version``. Logout and security changes revoke the current
+generation; refresh remains valid for that generation until it is revoked.
+These tests pin logout, password-change, and email-change revocation end to end.
 
 Pure unit tests: a recording fake session stands in for the DB, and the real
 JWT primitives + real Argon2 hashing run, so the token/session semantics under
@@ -24,12 +23,13 @@ from app.api import auth as auth_api
 from app.api.auth_dependencies import get_current_user
 from app.core.errors import register_domain_exception_handlers
 from app.core.security import hash_password
-from app.identity.application.http import InvalidRefreshTokenError
+from app.identity.application.http import InvalidCurrentPasswordError, InvalidRefreshTokenError
 from app.identity.domain.errors import AuthenticationError
 from app.identity.domain.role import Role
 from app.identity.infrastructure.authentication import build_access_token_authenticator
 from app.identity.infrastructure.http import SqlAlchemyAuthHttpService
 from app.models.user import User
+from app.schemas.auth import ChangePasswordRequest
 from app.schemas.user import UserUpdate
 from app.services.user_service import UserProvisioningService
 from app.shared.infrastructure.db import get_request_db
@@ -53,7 +53,7 @@ class _FakeSession:
         self.audit_actions: list[str] = []
         self.commits = 0
 
-    async def get(self, model, primary_key):  # noqa: ANN001
+    async def get(self, model, primary_key, **_options):  # noqa: ANN001
         if self.user is not None and self.user.id == primary_key:
             return self.user
         return None
@@ -78,7 +78,7 @@ class _FakeSession:
     async def commit(self) -> None:
         self.commits += 1
 
-    async def refresh(self, _instance) -> None:  # noqa: ANN001
+    async def refresh(self, _instance, **_options) -> None:  # noqa: ANN001
         return None
 
 
@@ -102,8 +102,7 @@ async def test_logout_revokes_both_token_types_and_a_fresh_login_still_works() -
     access_authenticator = build_access_token_authenticator(db)
 
     issued = await service.login(email=user.email, password=PASSWORD)
-    # Pre-logout both tokens work: the refresh rotates and the access token
-    # authenticates.
+    # Pre-logout refresh issues a pair and the access token authenticates.
     await service.refresh(refresh_token=issued.refresh_token)
     assert (await access_authenticator.authenticate(issued.access_token)).id == user.id
 
@@ -122,9 +121,9 @@ async def test_logout_revokes_both_token_types_and_a_fresh_login_still_works() -
 
     # A fresh login mints tokens at the new generation and works again.
     fresh = await service.login(email=user.email, password=PASSWORD)
-    rotated = await service.refresh(refresh_token=fresh.refresh_token)
-    assert rotated.access_token
-    assert (await access_authenticator.authenticate(rotated.access_token)).id == user.id
+    refreshed = await service.refresh(refresh_token=fresh.refresh_token)
+    assert refreshed.access_token
+    assert (await access_authenticator.authenticate(refreshed.access_token)).id == user.id
 
 
 @pytest.mark.asyncio
@@ -136,6 +135,39 @@ async def test_repeated_logout_keeps_revoking() -> None:
     await service.logout(current=user)
 
     assert user.token_version == 2
+
+
+async def test_password_change_revokes_old_tokens_and_preserves_audit() -> None:
+    user = await _user()
+    db = _FakeSession(user)
+    service = SqlAlchemyAuthHttpService(db)
+    issued = await service.login(email=user.email, password=PASSWORD)
+
+    await service.change_password(
+        current=user,
+        body=ChangePasswordRequest(current_password=PASSWORD, new_password="new-test-password"),
+    )
+
+    assert user.token_version == 1
+    assert db.audit_actions == ["login", "change_password"]
+    with pytest.raises(InvalidRefreshTokenError):
+        await service.refresh(refresh_token=issued.refresh_token)
+    assert await service.login(email=user.email, password="new-test-password")
+
+
+async def test_wrong_current_password_does_not_change_security_state_or_audit() -> None:
+    user = await _user()
+    db = _FakeSession(user)
+    original_hash = user.password_hash
+    with pytest.raises(InvalidCurrentPasswordError):
+        await SqlAlchemyAuthHttpService(db).change_password(
+            current=user,
+            body=ChangePasswordRequest(current_password="wrong", new_password="new-test-password"),
+        )
+    assert user.password_hash == original_hash
+    assert user.token_version == 0
+    assert db.audit_actions == []
+    assert db.commits == 0
 
 
 def _auth_app(user: User, db: _FakeSession) -> FastAPI:

@@ -23,7 +23,6 @@ are POST ``application/json``.
 from __future__ import annotations
 
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Literal
@@ -32,10 +31,12 @@ from typing import Any, Awaitable, Callable, Literal
 from app.core.config import Settings, ZALO_BOT_API_BASE, get_settings
 from app.shared.application.outbound import (
     AMBIGUOUS_SEND_CLASSES,
+    PARTIAL_DELIVERY_ERROR_PREFIX,
     OutboundTelemetry,
     combine_outbound_telemetry,
 )
 from app.shared.domain.text import plain_text
+from app.shared.domain.text_bubbles import split_text_bubbles as _split_long_plain_text
 
 logger = logging.getLogger(__name__)
 
@@ -271,6 +272,7 @@ async def _aggregate_chunked_send(
     envelopes: list[dict[str, Any]] = []
     message_ids: list[str] = []
     chunk_telemetry: list[OutboundTelemetry] = []
+    accepted_chunks = 0
     for index, chunk in enumerate(chunks, start=1):
         result = await send_chunk(chunk)
         envelopes.append(result.raw or {})
@@ -285,7 +287,7 @@ async def _aggregate_chunked_send(
             # delivery-state machine routes ambiguous classes to SEND_UNKNOWN,
             # so a definite provider rejection is promoted to one. A transport
             # failure (already ambiguous) keeps its own class.
-            partial = bool(message_ids)
+            partial = accepted_chunks > 0
             error_class = result.error_class
             if partial and error_class not in AMBIGUOUS_SEND_CLASSES:
                 error_class = "unknown"
@@ -301,12 +303,15 @@ async def _aggregate_chunked_send(
             return SendResult(
                 ok=False,
                 msg_id=message_ids[0] if message_ids else None,
-                error=f"chunk {index}/{len(chunks)} failed: {result.error}",
+                error=(
+                    f"{PARTIAL_DELIVERY_ERROR_PREFIX}" if partial else ""
+                ) + f"chunk {index}/{len(chunks)} failed: {result.error}",
                 raw={"chunks": envelopes, "message_ids": message_ids},
                 error_class=error_class,
                 telemetry=telemetry,
                 partial=partial,
             )
+        accepted_chunks += 1
     telemetry = (
         combine_outbound_telemetry(telemetry_base, chunk_telemetry, result="sent")
         if telemetry_base is not None
@@ -318,111 +323,6 @@ async def _aggregate_chunked_send(
         raw={"chunks": envelopes, "message_ids": message_ids},
         telemetry=telemetry,
     )
-
-
-def _append_split_part(parts: list[str], part: str) -> None:
-    """Record one split unit, discarding anything that trims down to nothing.
-
-    Every rung of the ladder funnels through here, so a blank separator (the
-    gap between paragraphs, a stray newline, an exhausted segment) can never
-    become a bubble of its own.
-    """
-    part = part.strip()
-    if part:
-        parts.append(part)
-
-
-def _collect_word_fallbacks(piece: str, max_chars: int, parts: list[str]) -> None:
-    """Third rung: pack a piece word by word, chopping any oversized word.
-
-    A word is never broken across bubbles unless it cannot fit in one at all —
-    then it is sliced into ``max_chars``-wide pieces so the provider cap still
-    holds. Greedy packing keeps words whole: a word that would overflow the
-    running segment closes the segment instead of being hyphenated into it.
-    """
-    segment = ""
-    for word in piece.split():
-        if len(word) > max_chars:
-            _append_split_part(parts, segment)
-            segment = ""
-            for start in range(0, len(word), max_chars):
-                _append_split_part(parts, word[start : start + max_chars])
-            continue
-        candidate = word if not segment else f"{segment} {word}"
-        if len(candidate) <= max_chars:
-            segment = candidate
-            continue
-        _append_split_part(parts, segment)
-        segment = word
-    _append_split_part(parts, segment)
-
-
-def _collect_sentence_fallbacks(paragraph: str, max_chars: int, parts: list[str]) -> None:
-    """Second rung: break an over-long paragraph on sentence or line ends."""
-    for piece in re.split(r"(?<=[.!?。！？])\s+|\n+", paragraph):
-        piece = piece.strip()
-        if len(piece) <= max_chars:
-            _append_split_part(parts, piece)
-            continue
-        _collect_word_fallbacks(piece, max_chars, parts)
-
-
-def _collect_paragraphs(text: str, max_chars: int, parts: list[str]) -> None:
-    """First rung: keep whole paragraphs; descend a rung when one is too long."""
-    for paragraph in re.split(r"\n\s*\n", text):
-        paragraph = paragraph.strip()
-        if len(paragraph) <= max_chars:
-            _append_split_part(parts, paragraph)
-            continue
-        _collect_sentence_fallbacks(paragraph, max_chars, parts)
-
-
-def _pack_parts(parts: list[str], max_chars: int) -> list[str]:
-    """Re-glue the split parts into bubbles, blank-line separated and capped.
-
-    Parts are already trimmed and non-empty (see ``_append_split_part``), so
-    this pass only decides where a bubble ends: keep appending while the
-    joined text fits, otherwise close the bubble and start the next one.
-    """
-    chunks: list[str] = []
-    current = ""
-    for part in parts:
-        if not current:
-            current = part
-            continue
-        candidate = f"{current}\n\n{part}"
-        if len(candidate) <= max_chars:
-            current = candidate
-        else:
-            chunks.append(current)
-            current = part
-    if current:
-        chunks.append(current)
-    return chunks
-
-
-def _split_long_plain_text(
-    text: str,
-    max_chars: int = ZALO_VISIBLE_BUBBLE_CHARS,
-) -> list[str]:
-    """Split plain text into short Zalo bubbles without adding semantics.
-
-    Nothing is dropped — only re-broken — so no word is lost or reordered.
-    Coarse breaks are preferred: whole paragraphs, then sentences, then words.
-    Only a word too wide for one bubble is cut at an arbitrary offset, which
-    is the one case where the whitespace between bubbles differs from the
-    input's. Adjacent parts that still fit are re-joined into one bubble, so
-    a short reply stays a single message rather than one per sentence.
-    """
-    text = text.strip()
-    if not text:
-        return []
-    if len(text) <= max_chars:
-        return [text]
-
-    parts: list[str] = []
-    _collect_paragraphs(text, max_chars, parts)
-    return _pack_parts(parts, max_chars)
 
 
 # ---------------------------------------------------------------------------

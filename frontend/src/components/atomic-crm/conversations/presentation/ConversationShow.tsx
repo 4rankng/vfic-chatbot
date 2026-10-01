@@ -398,7 +398,7 @@ export const ConversationShowContent = ({
                             id="decision-trace"
                             className="conversation-actions-item"
                             icon={History}
-                            label="Agent Thinking"
+                            label="Suy luận chatbot"
                             onPress={() => setIsDecisionTraceOpen(true)}
                           />
                         ) : null}

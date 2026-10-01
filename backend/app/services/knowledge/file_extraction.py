@@ -97,7 +97,8 @@ def _extract_docx_text(data: bytes) -> str:
     """Extract paragraph text from a Word DOCX without adding runtime dependencies."""
     try:
         with ZipFile(BytesIO(data)) as archive:
-            document_xml = archive.read("word/document.xml")
+            _validate_ooxml_archive(archive)
+            document_xml = _read_ooxml_part(archive, "word/document.xml")
     except (BadZipFile, KeyError) as exc:
         raise KnowledgeFileExtractionError("DOCX không hợp lệ hoặc thiếu nội dung Word.") from exc
 
@@ -125,6 +126,38 @@ def _extract_docx_text(data: bytes) -> str:
 
 _XLSX_OFFICE_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
+MAX_OOXML_MEMBERS = 1024
+MAX_OOXML_PART_BYTES = 16 * 1024 * 1024
+MAX_OOXML_EXPANDED_BYTES = 64 * 1024 * 1024
+MAX_OOXML_TEXT_CHARS = 16 * 1024 * 1024
+MAX_XLSX_COLUMNS = 16_384
+
+
+def _validate_ooxml_archive(archive: ZipFile) -> None:
+    members = archive.infolist()
+    if (
+        len(members) > MAX_OOXML_MEMBERS
+        or sum(member.file_size for member in members) > MAX_OOXML_EXPANDED_BYTES
+        or any(
+            member.filename.endswith(".xml") and member.file_size > MAX_OOXML_PART_BYTES
+            for member in members
+        )
+    ):
+        raise KnowledgeFileExtractionError("Tệp Office vượt quá giới hạn xử lý nội dung.")
+    if any(member.flag_bits & 1 for member in members):
+        raise KnowledgeFileExtractionError("Tệp Office có mật khẩu chưa được hỗ trợ.")
+
+
+def _read_ooxml_part(archive: ZipFile, name: str) -> bytes:
+    # Check both the directory declaration and the actual bounded expansion.
+    if archive.getinfo(name).file_size > MAX_OOXML_PART_BYTES:
+        raise KnowledgeFileExtractionError("Tệp Office vượt quá giới hạn xử lý nội dung.")
+    with archive.open(name) as part:
+        expanded = part.read(MAX_OOXML_PART_BYTES + 1)
+    if len(expanded) > MAX_OOXML_PART_BYTES:
+        raise KnowledgeFileExtractionError("Tệp Office vượt quá giới hạn xử lý nội dung.")
+    return expanded
+
 # Built-in number-format ids that render a date and/or a time. The id space
 # below 164 is reserved by the format itself; 164+ come from <numFmt> entries in
 # xl/styles.xml, which is why _xlsx_date_styles reads that table too.
@@ -139,7 +172,7 @@ def _local_name(tag: str) -> str:
 def _xlsx_shared_strings(archive: ZipFile) -> list[str]:
     """The workbook's shared-string table, in ``<si>`` index order (absent -> empty)."""
     try:
-        root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+        root = ET.fromstring(_read_ooxml_part(archive, "xl/sharedStrings.xml"))
     except (KeyError, ET.ParseError):
         return []
     return [
@@ -152,8 +185,8 @@ def _xlsx_shared_strings(archive: ZipFile) -> list[str]:
 def _xlsx_sheet_members(archive: ZipFile) -> list[str]:
     """Worksheet zip members in workbook order, resolved through the rels part."""
     try:
-        workbook = ET.fromstring(archive.read("xl/workbook.xml"))
-        rels = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+        workbook = ET.fromstring(_read_ooxml_part(archive, "xl/workbook.xml"))
+        rels = ET.fromstring(_read_ooxml_part(archive, "xl/_rels/workbook.xml.rels"))
     except (KeyError, ET.ParseError):
         return []
     targets = {
@@ -168,6 +201,10 @@ def _xlsx_sheet_members(archive: ZipFile) -> list[str]:
         if not target:
             continue
         members.append(target.lstrip("/") if target.startswith("/") else f"xl/{target}")
+        if len(members) > MAX_OOXML_MEMBERS:
+            raise KnowledgeFileExtractionError("Tệp Office vượt quá giới hạn xử lý nội dung.")
+    if len(set(members)) != len(members):
+        raise KnowledgeFileExtractionError("XLSX có tham chiếu trang tính bị trùng.")
     return members
 
 
@@ -181,7 +218,7 @@ def _is_date_format_code(code: str) -> bool:
 def _xlsx_date_styles(archive: ZipFile) -> set[int]:
     """``<xf>`` indices in ``cellXfs`` that carry a date/time number format."""
     try:
-        root = ET.fromstring(archive.read("xl/styles.xml"))
+        root = ET.fromstring(_read_ooxml_part(archive, "xl/styles.xml"))
     except (KeyError, ET.ParseError):
         return set()
     custom: dict[int, str] = {}
@@ -234,11 +271,16 @@ def _xlsx_serial_to_text(raw: str) -> str:
 
 def _xlsx_column_index(cell_ref: str) -> int:
     """Zero-based column index of a cell reference such as ``AB12``."""
+    if not cell_ref:
+        return 0
+    match = re.fullmatch(r"([A-Za-z]{1,3})[1-9][0-9]*", cell_ref)
+    if match is None:
+        raise KnowledgeFileExtractionError("Tham chiếu cột trong XLSX không hợp lệ.")
     index = 0
-    for char in cell_ref:
-        if not char.isalpha():
-            break
-        index = index * 26 + (char.upper().encode()[0] - 64)
+    for char in match.group(1).upper():
+        index = index * 26 + (ord(char) - 64)
+    if index > MAX_XLSX_COLUMNS:
+        raise KnowledgeFileExtractionError("Tham chiếu cột trong XLSX vượt quá giới hạn.")
     return max(index - 1, 0)
 
 
@@ -270,6 +312,7 @@ def _xlsx_sheet_lines(sheet_xml: bytes, shared: list[str], date_styles: set[int]
     """One tab-separated line per non-blank row, gaps preserved by cell reference."""
     root = ET.fromstring(sheet_xml)
     lines: list[str] = []
+    text_chars = 0
     for row in root.iter():
         if _local_name(row.tag) != "row":
             continue
@@ -282,6 +325,12 @@ def _xlsx_sheet_lines(sheet_xml: bytes, shared: list[str], date_styles: set[int]
             placed[column] = _xlsx_cell_text(cell, shared, date_styles)
             cursor = max(cursor, column)
         cells = [placed.get(index, "") for index in range(cursor + 1)]
+        # A shared string can be referenced thousands of times by tiny XML.
+        # Budget the projected row before join allocates its expanded text.
+        row_chars = sum(len(cell) for cell in cells) + max(len(cells) - 1, 0)
+        text_chars += row_chars + 1
+        if text_chars > MAX_OOXML_TEXT_CHARS:
+            raise KnowledgeFileExtractionError("Tệp Office vượt quá giới hạn xử lý nội dung.")
         if any(cell.strip() for cell in cells):
             lines.append("\t".join(cells))
     return lines
@@ -299,6 +348,7 @@ def _extract_xlsx_text(data: bytes) -> str:
     """
     try:
         with ZipFile(BytesIO(data)) as archive:
+            _validate_ooxml_archive(archive)
             shared = _xlsx_shared_strings(archive)
             date_styles = _xlsx_date_styles(archive)
             members = _xlsx_sheet_members(archive) or sorted(
@@ -307,12 +357,17 @@ def _extract_xlsx_text(data: bytes) -> str:
                 if name.startswith("xl/worksheets/") and name.endswith(".xml")
             )
             lines: list[str] = []
+            text_chars = 0
             for member in members:
                 try:
-                    sheet_xml = archive.read(member)
+                    sheet_xml = _read_ooxml_part(archive, member)
                 except KeyError:
                     continue
-                lines.extend(_xlsx_sheet_lines(sheet_xml, shared, date_styles))
+                sheet_lines = _xlsx_sheet_lines(sheet_xml, shared, date_styles)
+                text_chars += sum(len(line) + 1 for line in sheet_lines)
+                if text_chars > MAX_OOXML_TEXT_CHARS:
+                    raise KnowledgeFileExtractionError("Tệp Office vượt quá giới hạn xử lý nội dung.")
+                lines.extend(sheet_lines)
     except BadZipFile as exc:
         raise KnowledgeFileExtractionError("XLSX không hợp lệ hoặc không đọc được.") from exc
     except ET.ParseError as exc:

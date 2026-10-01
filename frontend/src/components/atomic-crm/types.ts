@@ -292,6 +292,7 @@ export type Project = {
   is_active: boolean;
   ingest_state?: "ingesting" | "ready" | "error" | null;
   knowledge_mode?: "RAG" | "DIRECT_CONTEXT" | null;
+  category_authority_started?: boolean;
   summary?: string | null;
   index_card?: ProjectIndexCard;
   discovery_revision?: number;

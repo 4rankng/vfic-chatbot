@@ -11,8 +11,6 @@ category: application
 Ví dụ khối một nhóm thủ tục:
 
 ### record: ung-tuyen-nhan-viec
-job_ids:
-- "[Áp dụng cho việc nào? Điền id việc; bỏ trống nếu áp dụng cho mọi việc.]"
 application_steps:
 - "[Bước ứng tuyển? Mỗi dòng một bước, theo thứ tự.]"
 required_documents:

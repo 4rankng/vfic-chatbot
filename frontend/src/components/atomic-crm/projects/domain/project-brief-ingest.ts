@@ -338,13 +338,20 @@ const PLAIN_CATEGORY_LABEL =
  *  heading's `#` count; a deeper section inherits its nearest shallower
  *  ancestor's category (a `####` sub-heading inside "Ca làm việc" is that
  *  section's content, not a new topic). */
-type BriefSection = { title: string; lines: string[]; depth: number };
+type BriefSection = {
+  title: string;
+  lines: string[];
+  depth: number;
+  markdown: boolean;
+};
 
 const splitSections = (text: string): BriefSection[] => {
   // Content before the first heading is a section too: a brief that is one
   // bare table carries no heading at all, and dropping the preamble would
   // silently lose every discovery field.
-  const sections: BriefSection[] = [{ title: "", lines: [], depth: 0 }];
+  const sections: BriefSection[] = [
+    { title: "", lines: [], depth: 0, markdown: false },
+  ];
   let current = sections[0];
   for (const line of text.split(/\r?\n/)) {
     const heading = HEADING.exec(line);
@@ -353,6 +360,7 @@ const splitSections = (text: string): BriefSection[] => {
         title: toPlainText(heading[1]),
         lines: [],
         depth: /#{1,6}/.exec(heading[0])?.[0].length ?? 1,
+        markdown: true,
       };
       sections.push(current);
       continue;
@@ -360,11 +368,19 @@ const splitSections = (text: string): BriefSection[] => {
     const labeled = /^\s*(?:\d+[.)]\s*)?([^:：]{1,60})[:：]\s*(.*)$/.exec(
       toPlainText(line),
     );
-    if (labeled && PLAIN_CATEGORY_LABEL.test(fold(labeled[1]))) {
+    // Within a named section, a one-line label is a fact belonging to that
+    // section (contact working hours, an allowance, a FAQ marker). Bare labels
+    // still delimit a plain-text brief; inline sections are read at top level.
+    if (
+      labeled &&
+      PLAIN_CATEGORY_LABEL.test(fold(labeled[1])) &&
+      (!labeled[2] || !current.markdown || !categoryForHeading(current.title))
+    ) {
       current = {
         title: labeled[1],
         lines: labeled[2] ? [labeled[2]] : [],
         depth: 2,
+        markdown: false,
       };
       sections.push(current);
       continue;
@@ -711,6 +727,8 @@ const pipeCells = (line: string): string[] | null => {
 const readSectionBody = (section: BriefSection) => {
   const questions: string[] = [];
   const answers: string[] = [];
+  const inlinePairs: { question: string; answer: string }[] = [];
+  let inlinePair: { question: string; answer: string } | null = null;
   let bucket: "question" | "answer" | null = null;
   // A markdown pipe FAQ table ("Bảng tổng hợp câu hỏi thường gặp"): its
   // header row names the question and answer COLUMNS, and each row below is
@@ -771,6 +789,10 @@ const readSectionBody = (section: BriefSection) => {
         .replace(/^[*_\s]+|[*_\s]+$/g, "")
         .trim();
       if (payload) questions.push(payload);
+      if (payload && /^\*{0,2}\s*hoi\s*:/.test(foldedContent)) {
+        inlinePair = { question: payload, answer: "" };
+        inlinePairs.push(inlinePair);
+      }
       continue;
     }
     if (ANSWER_MARKER.test(foldedContent)) {
@@ -779,14 +801,20 @@ const readSectionBody = (section: BriefSection) => {
         .replace(/^[*_\s]+|[*_\s]+$/g, "")
         .trim();
       if (payload) answers.push(payload);
+      if (payload && inlinePair)
+        inlinePair.answer += (inlinePair.answer ? "\n" : "") + payload;
       continue;
     }
     const value = toPlainText(content);
     if (!value) continue;
     if (bucket === "question") questions.push(value);
-    else if (bucket === "answer") answers.push(value);
+    else if (bucket === "answer") {
+      answers.push(value);
+      if (inlinePair)
+        inlinePair.answer += (inlinePair.answer ? "\n" : "") + value;
+    }
   }
-  return { questions, answers };
+  return { questions, answers, inlinePairs };
 };
 
 const categoryForHeading = (title: string): ProjectKnowledgeCategory | null => {
@@ -908,7 +936,7 @@ export const parseProjectBrief = (text: string): ProjectBrief => {
   ) {
     const section = sections[sectionIndex];
     const primary = primaryOf[sectionIndex];
-    const { questions, answers } = readSectionBody(section);
+    const { questions, answers, inlinePairs } = readSectionBody(section);
 
     // The Q&A transcript is the `faq` category's body whether or not the
     // section's own heading mapped anywhere.
@@ -916,20 +944,32 @@ export const parseProjectBrief = (text: string): ProjectBrief => {
       const transcript: string[] = [`## ${section.title}`];
       const paired =
         questions.length > 0 && questions.length === answers.length;
-      const rows = paired
-        ? questions.map((question, index) => ({
-            question,
-            answer: answers[index],
-          }))
-        : questions.map((question, index) => ({
-            question,
-            answer: answers[index] ?? answers.join("\n"),
-          }));
+      const rows =
+        inlinePairs.length > 0
+          ? inlinePairs
+          : questions.length === 1
+            ? [{ question: questions[0], answer: answers.join("\n") }]
+            : paired
+              ? questions.map((question, index) => ({
+                  question,
+                  answer: answers[index],
+                }))
+              : questions.map((question) => ({
+                  question,
+                  // Unequal grouped lists provide no reliable Q/A association.
+                  // Keep the transcript and request review rather than guess.
+                  answer: "",
+                }));
       for (const row of rows) {
         transcript.push(`**${row.question}**`, row.answer);
         faqEntries.push(row);
       }
-      if (answers.length > questions.length) {
+      if (!paired && inlinePairs.length === 0 && questions.length !== 1) {
+        transcript.push(...answers);
+      } else if (
+        answers.length > questions.length &&
+        inlinePairs.length === 0
+      ) {
         // Answer lines beyond the paired ones still belong somewhere.
         transcript.push(...answers.slice(rows.length));
       }

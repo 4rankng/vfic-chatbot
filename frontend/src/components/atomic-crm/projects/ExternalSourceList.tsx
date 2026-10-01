@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNotify } from "ra-core";
 import { Link2 } from "lucide-react";
 import { EmptyState } from "../kit";
+import { Button } from "@/components/ui/button";
 import {
   createSyncWatch,
   nextPollDelay,
@@ -65,6 +66,7 @@ export const ExternalSourceList = ({
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [cooldownId, setCooldownId] = useState<string | null>(null);
   const [watch, setWatch] = useState<SyncWatch | null>(null);
   const cooldownTimer = useRef<number | null>(null);
@@ -72,6 +74,8 @@ export const ExternalSourceList = ({
   const suppressNextRefreshPollRef = useRef(false);
   const previousRefreshSignalRef = useRef({ projectId, value: refreshSignal });
   const syncSignatureRef = useRef<string | null>(null);
+  const contextRef = useRef(0);
+  const mutationPendingRef = useRef(false);
   const isSinglePage = variant === "single-page";
   const queryKey = useMemo(
     () => externalSourcesQueryKey(projectId, variant),
@@ -104,9 +108,12 @@ export const ExternalSourceList = ({
     setWatch(null);
     setCooldownId(null);
     setProcessingId(null);
+    setRemovingId(null);
+    mutationPendingRef.current = false;
     syncSignatureRef.current = null;
     suppressNextRefreshPollRef.current = false;
     return () => {
+      contextRef.current += 1;
       if (cooldownTimer.current !== null) {
         window.clearTimeout(cooldownTimer.current);
         cooldownTimer.current = null;
@@ -188,6 +195,9 @@ export const ExternalSourceList = ({
   };
 
   const runNow = async (row: ExternalSourceRowState) => {
+    if (disabled || !mutable || mutationPendingRef.current) return;
+    const context = contextRef.current;
+    mutationPendingRef.current = true;
     setProcessingId(row.id);
     try {
       if (isSinglePage) {
@@ -195,6 +205,7 @@ export const ExternalSourceList = ({
       } else {
         await runExternalSourceNow(projectId, row.id);
       }
+      if (context !== contextRef.current) return;
       notify("Đang xử lý nội dung mới. Vui lòng đợi vài giây.", {
         type: "info",
       });
@@ -204,6 +215,7 @@ export const ExternalSourceList = ({
         setWatch(createSyncWatch(rows ?? [], row.id, Date.now()));
       }
     } catch (error) {
+      if (context !== contextRef.current) return;
       const status = (error as { status?: number }).status;
       if (status === 429) {
         notify("Vui lòng đợi 5 phút giữa các lần xử lý.", { type: "warning" });
@@ -217,36 +229,51 @@ export const ExternalSourceList = ({
         );
       }
     } finally {
-      setProcessingId(null);
+      if (context === contextRef.current) {
+        mutationPendingRef.current = false;
+        setProcessingId(null);
+      }
     }
   };
 
   const remove = async (row: ExternalSourceRowState) => {
+    if (disabled || !mutable || mutationPendingRef.current) return;
     if (
       !window.confirm(
-        "Xóa nguồn đồng bộ này? Nội dung đã nhập vẫn được giữ cho Agent cho đến khi thay thế.",
+        "Xóa nguồn đồng bộ này? Nội dung đã nhập vẫn được giữ cho chatbot cho đến khi thay thế.",
       )
     ) {
       return;
     }
+    const context = contextRef.current;
+    mutationPendingRef.current = true;
+    setRemovingId(row.id);
     try {
       if (isSinglePage) {
         await deleteSinglePageExternalSource(projectId, row.id);
       } else {
         await deleteExternalSource(projectId, row.id);
       }
+      if (context !== contextRef.current) return;
       notify("Đã xóa nguồn đồng bộ.", { type: "success" });
       setWatch(null);
       await refresh();
+      if (context !== contextRef.current) return;
       suppressNextRefreshPollRef.current = isSinglePage;
       onChange?.();
     } catch (error) {
+      if (context !== contextRef.current) return;
       notify(
         isSinglePage
           ? singlePageSyncErrorMessage(error)
           : (error as Error).message,
         { type: "error" },
       );
+    } finally {
+      if (context === contextRef.current) {
+        mutationPendingRef.current = false;
+        setRemovingId(null);
+      }
     }
   };
 
@@ -257,7 +284,29 @@ export const ExternalSourceList = ({
       </div>
     );
   }
+  const loadError = isError ? (
+    <div
+      role="alert"
+      className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-body-sm"
+    >
+      <p className="font-medium">Chưa tải được nguồn đồng bộ.</p>
+      <p className="mt-1 text-muted-foreground">
+        Thử lại để xem trạng thái mới nhất.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2"
+        disabled={query.isFetching}
+        onClick={() => void refresh()}
+      >
+        {query.isFetching ? "Đang tải…" : "Thử lại"}
+      </Button>
+    </div>
+  ) : null;
   if (!rows || rows.length === 0) {
+    if (loadError) return loadError;
     if (!isSinglePage) {
       return null;
     }
@@ -271,15 +320,21 @@ export const ExternalSourceList = ({
   }
 
   return (
-    <div className="space-y-2" aria-live="polite">
+    <div
+      className="space-y-2"
+      aria-live="polite"
+      aria-busy={query.isFetching || !!processingId || !!removingId}
+    >
+      {loadError}
       {rows.map((row) => (
         <ExternalSourceRow
           key={row.id}
           row={row}
           isSinglePage={isSinglePage}
           mutable={mutable}
-          disabled={disabled}
+          disabled={disabled || !!processingId || !!removingId}
           processing={processingId === row.id}
+          removing={removingId === row.id}
           coolingDown={cooldownId === row.id}
           onRunNow={(target) => void runNow(target)}
           onRemove={(target) => void remove(target)}

@@ -52,6 +52,8 @@ class FaqRepository:
         """
         if floor is None:
             floor = self.FAQ_SIMILARITY_FLOOR
+        if project_ids == []:
+            return []
         project_clause = ""
         params: dict[str, object] = {"emb": emb, "k": top_k, "filter": filter_json}
         if project_ids:
@@ -62,7 +64,9 @@ class FaqRepository:
                 text(
                     "SELECT c.id, c.content, c.source_quote, c.summary, c.metadata, "
                     "       c.questions, c.required_terms, c.forbidden_terms, "
-                    "       c.line_start, c.line_end, c.section_path, ktf.filename AS source_file, "
+                    "       c.line_start, c.line_end, c.section_path, "
+                    "       COALESCE(ktf.filename, d.file_name) AS source_file, "
+                    "       p.name AS project_name, p.slug AS project_slug, c.category, "
                     "       1 - (c.embedding <=> CAST(:emb AS vector)) AS similarity "
                     "FROM knowledge_chunks c "
                     "JOIN knowledge_documents d ON d.id = c.document_id "
@@ -83,4 +87,3 @@ class FaqRepository:
             floor,
         )
         return list(rows)
-

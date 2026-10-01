@@ -97,13 +97,17 @@ const mocks = vi.hoisted(() => ({
     }),
   ),
   isMobile: false,
+  permissionsPending: false,
 }));
 
 vi.mock("ra-core", () => ({
   // The component under test reads its labels from the Vietnamese catalog.
   useTranslate: () => testI18nProvider.translate,
   useNotify: () => mocks.notify,
-  usePermissions: () => ({ permissions: "admin", isPending: false }),
+  usePermissions: () => ({
+    permissions: "admin",
+    isPending: mocks.permissionsPending,
+  }),
   // The Facebook section of the settings page pulls the Projects list.
   useGetList: () => ({ data: [], total: 0 }),
 }));
@@ -179,10 +183,35 @@ afterEach(async () => {
   mocks.loadFacebookCredentials.mockClear();
   mocks.loadFacebookOAuthPages.mockClear();
   mocks.notify.mockClear();
+  mocks.permissionsPending = false;
   window.history.replaceState(null, "", "/#/settings");
 });
 
 describe("SettingsConsolePage navigation", () => {
+  it("announces permission loading without exposing editable settings", async () => {
+    mocks.permissionsPending = true;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <SettingsConsolePage />
+      </QueryClientProvider>,
+    );
+    await expect.element(screen.getByRole("status")).toBeVisible();
+    expect(screen.getByRole("textbox").all()).toHaveLength(0);
+    expect(mocks.loadZaloSettings).not.toHaveBeenCalled();
+    mocks.permissionsPending = false;
+    await screen.rerender(
+      <QueryClientProvider client={queryClient}>
+        <SettingsConsolePage />
+      </QueryClientProvider>,
+    );
+    await expect
+      .element(screen.getByRole("textbox", { name: "Bot Token" }))
+      .toBeVisible();
+  });
+
   it("keeps desktop reveal controls available and reports clipboard copy success", async () => {
     mocks.isMobile = false;
     const clipboardWrite = vi.fn().mockResolvedValue(undefined);

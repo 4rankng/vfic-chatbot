@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company, Project
 from app.models.job import Job, JobStatus
+from app.models.knowledge import KnowledgeCategory
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
 from app.recruitment.domain.recommendation import ProjectFeatures, ProjectScopeItem
 from app.services.knowledge.derived_jobs import salary_from_feature
@@ -90,7 +91,6 @@ async def _direct_project_salaries(
 
 
 def _resolve_direct_salary(
-    project: Project,
     card: dict[str, Any],
     salary: tuple[int | None, int | None] | None,
 ) -> tuple[int | None, int | None]:
@@ -196,7 +196,12 @@ class CatalogRepository:
                     or_(
                         and_(
                             Project.category_authority_started.is_(True),
-                            Job.source_category_revision_id.is_not(None),
+                            select(KnowledgeCategory.id).where(
+                                KnowledgeCategory.project_id == Project.id,
+                                KnowledgeCategory.category_key == "jobs",
+                                KnowledgeCategory.active_revision_id
+                                == Job.source_category_revision_id,
+                            ).exists(),
                         ),
                         and_(
                             Project.category_authority_started.is_(False),
@@ -268,7 +273,7 @@ class CatalogRepository:
             roles = _card_items(card.get("roles") or card.get("key_roles"))
             location = " / ".join(_card_items(card.get("location")))
             salary_min, salary_max = _resolve_direct_salary(
-                row, card, card_salaries.get(row.id)
+                card, card_salaries.get(row.id)
             )
             features.append(
                 ProjectFeatures(
@@ -355,16 +360,18 @@ class CatalogRepository:
     async def active_project_ids(self) -> list[str]:
         """Active KB-backed project ids: the Page's assigned set when scoped
         for multi-Page Facebook, else the deployment-wide catalog."""
-        if self.page_project_ids is not None:
-            return list(self.page_project_ids)
-        rows = await self.db.scalars(
-            text(
-                "SELECT p.id::text FROM projects p "
-                "WHERE p.is_active AND p.knowledge_base_id IS NOT NULL "
-                "ORDER BY p.id"
-            )
+        statement = select(Project.id).where(
+            Project.is_active.is_(True),
+            Project.knowledge_base_id.is_not(None),
         )
-        return list(rows)
+        if self.page_project_ids is not None:
+            if not self.page_project_ids:
+                return []
+            statement = statement.where(
+                Project.id.in_([uuid.UUID(pid) for pid in self.page_project_ids])
+            )
+        rows = await self.db.scalars(statement.order_by(Project.id))
+        return [str(pid) for pid in rows]
 
     async def project_ids_for_page(self, account_key: str) -> list[str]:
         """Assigned Project ids for one channel account (e.g. a Facebook Page).

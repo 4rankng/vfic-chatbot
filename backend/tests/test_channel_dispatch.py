@@ -10,6 +10,7 @@ Proves:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -70,6 +71,19 @@ async def test_zalo_bot_adapter_maps_ambiguous_transport_to_send_unknown():
     assert not result.ok
     assert result.is_send_unknown  # read_timeout → non-retriable
     assert result.error_class == "read_timeout"
+
+
+async def test_zalo_adapter_retains_accepted_prefix_id_on_partial_failure():
+    from app.channels.providers.zalo_bot import ZaloBotChannelAdapter
+
+    sender = SimpleNamespace(send_message=AsyncMock(return_value=SendResult(
+        ok=False, msg_id="accepted-prefix", partial=True,
+        error="partial_delivery: tail rejected", error_class="unknown",
+    )))
+    result = await ZaloBotChannelAdapter(sender).send_text(_command())
+    assert result.is_send_unknown
+    assert result.provider_message_id == "accepted-prefix"
+    assert result.error.startswith("partial_delivery: ")
 
 
 async def test_zalo_bot_adapter_maps_unclassified_failure_to_provider_error():
@@ -240,6 +254,24 @@ async def test_dispatch_proceeds_when_generation_matches():
     assert len(bot.sent) == 1
 
 
+async def test_dispatch_rejects_a_command_from_an_unrecognized_future_generation():
+    resolver = InMemoryAccountResolver()
+    resolver.upsert(ct.ChannelAccountRef(
+        id="id-1", provider=ct.PROVIDER_ZALO_BOT, account_key="default:zalo_bot",
+        label="Zalo", status="ACTIVE", generation=1,
+    ))
+    adapter = _RecordingAdapter(ct.PROVIDER_ZALO_BOT)
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+
+    result = await ChannelDispatchService(registry, account_resolver=resolver).send(
+        _command(generation=2),
+    )
+
+    assert result.suppressed
+    assert adapter.sent == []
+
+
 async def test_dispatch_without_resolver_skips_fence():
     """When no resolver is wired, the dispatch service routes unconditionally —
     backwards-compatible with the existing outbox path which has no account
@@ -251,6 +283,158 @@ async def test_dispatch_without_resolver_skips_fence():
     result = await svc.send(_command(ct.PROVIDER_ZALO_BOT, generation=1))
     assert result.ok
     assert len(bot.sent) == 1
+
+
+@pytest.mark.parametrize("provider", [ct.PROVIDER_ZALO_BOT, ct.PROVIDER_ZALO_OA, ct.PROVIDER_FACEBOOK_MESSENGER])
+async def test_dispatch_delivers_every_project_in_bounded_parts(provider):
+    adapter = _RecordingAdapter(provider)
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+    names = ("LG Display", "Rorze", "Amtran", "Kyocera", "Pegatron")
+    text = "\n\n".join(
+        (f"{index}. {name}: " + "Thông tin công việc đã xác minh. " * 15).rstrip()
+        for index, name in enumerate(names, 1)
+    )
+    command = replace(_command(provider), text=text)
+
+    result = await ChannelDispatchService(registry).send(command)
+
+    assert result.ok
+    assert len(adapter.sent) >= 2
+    assert all(len(part.text) <= 1600 for part in adapter.sent)
+    assert "\n\n".join(part.text for part in adapter.sent) == text
+    assert all(part.account_key == command.account_key for part in adapter.sent)
+    assert all(part.recipient_id == command.recipient_id for part in adapter.sent)
+    assert result.telemetry.chunk_count == len(adapter.sent)
+
+
+async def test_later_part_policy_expiry_preserves_accepted_prefix_as_send_unknown():
+    adapter = _RecordingAdapter(ct.PROVIDER_FACEBOOK_MESSENGER)
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+    command = replace(_command(ct.PROVIDER_FACEBOOK_MESSENGER), text="Dự án đã xác minh. " * 200)
+    guards = 0
+
+    def guard():
+        nonlocal guards
+        guards += 1
+        return None if guards == 1 else ct.ChannelSendResult(
+            ok=False, suppressed=True, error="window expired", error_class="policy_suppressed",
+        )
+
+    result = await ChannelDispatchService(registry).send(command, before_provider_io=guard)
+
+    assert len(adapter.sent) == 1
+    assert guards == 2
+    assert not result.ok
+    assert not result.suppressed
+    assert result.is_send_unknown
+    assert result.provider_message_id == "facebook_messenger-mid"
+
+
+async def test_later_part_account_replacement_stops_the_remaining_parts():
+    provider = ct.PROVIDER_FACEBOOK_MESSENGER
+    adapter = _RecordingAdapter(provider)
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+    command = replace(_command(provider), text="Dự án đã xác minh. " * 200)
+    account = ct.ChannelAccountRef(
+        id="page-1", provider=provider, account_key=command.account_key,
+        label="Page", status="ACTIVE", generation=1,
+    )
+    resolver = SimpleNamespace(resolve_active=AsyncMock(side_effect=[account, replace(account, generation=2)]))
+
+    result = await ChannelDispatchService(registry, account_resolver=resolver).send(command)
+
+    assert len(adapter.sent) == 1
+    assert resolver.resolve_active.await_count == 2
+    assert result.is_send_unknown
+    assert not result.suppressed
+
+
+async def test_failed_second_part_cannot_be_retried_as_a_whole_answer():
+    provider = ct.PROVIDER_FACEBOOK_MESSENGER
+    adapter = _RecordingAdapter(provider)
+    adapter.send_text = AsyncMock(side_effect=[
+        ct.ChannelSendResult(ok=True, provider_message_id="accepted-1"),
+        ct.ChannelSendResult(ok=False, error="rejected", error_class="provider_error"),
+    ])
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+    command = replace(_command(provider), text="Dự án đã xác minh. " * 200)
+
+    result = await ChannelDispatchService(registry).send(command)
+
+    assert adapter.send_text.await_count == 2
+    assert not result.ok
+    assert result.is_send_unknown
+    assert result.provider_message_id == "accepted-1"
+
+
+async def test_later_part_exception_retains_accepted_id_without_exposing_error_text():
+    provider = ct.PROVIDER_FACEBOOK_MESSENGER
+    adapter = _RecordingAdapter(provider)
+    adapter.send_text = AsyncMock(side_effect=[
+        ct.ChannelSendResult(ok=True, provider_message_id="accepted-1"),
+        RuntimeError("private provider envelope"),
+    ])
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+    command = replace(_command(provider), text="Dự án đã xác minh. " * 200)
+
+    result = await ChannelDispatchService(registry).send(command)
+
+    assert result.is_send_unknown
+    assert result.provider_message_id == "accepted-1"
+    assert "private" not in result.error
+    assert adapter.send_text.await_count == 2
+    assert result.telemetry.provider_attempts == 2
+    assert result.telemetry.chunk_count == 2
+
+
+async def test_first_part_rejection_stays_a_definite_failure():
+    provider = ct.PROVIDER_FACEBOOK_MESSENGER
+    adapter = _RecordingAdapter(provider, result=ct.ChannelSendResult(
+        ok=False, error="provider rejected", error_class="provider_error",
+    ))
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+
+    result = await ChannelDispatchService(registry).send(replace(
+        _command(provider), text="Dự án đã xác minh. " * 200,
+    ))
+
+    assert not result.is_send_unknown
+    assert result.error_class == "provider_error"
+    assert len(adapter.sent) == 1
+
+
+async def test_real_messenger_adapter_receives_every_bounded_project_part(monkeypatch):
+    from app.channels.providers.facebook_messenger import FacebookMessengerAdapter
+
+    provider = ct.PROVIDER_FACEBOOK_MESSENGER
+    cfg = SimpleNamespace(page_id="PAGE-1")
+    adapter = FacebookMessengerAdapter(cfg)
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+    names = ("LG Display", "Rorze", "Amtran", "Kyocera", "Pegatron")
+    text = "\n\n".join(
+        (f"{index}. {name}: " + "Thông tin công việc đã xác minh. " * 15).rstrip()
+        for index, name in enumerate(names, 1)
+    )
+    sender = AsyncMock(return_value={"message_id": "accepted-first"})
+    monkeypatch.setattr("app.channels.providers.facebook_messenger.graph_send_message", sender)
+    command = replace(_command(provider), account_key="PAGE-1", text=text)
+
+    result = await ChannelDispatchService(registry).send(command)
+
+    assert result.ok
+    bodies = [call.kwargs["text"] for call in sender.await_args_list]
+    assert len(bodies) >= 2
+    assert all(len(body) <= 1600 for body in bodies)
+    assert "\n\n".join(bodies) == text
+    assert result.provider_message_id == "accepted-first"
+    assert all(call.kwargs["recipient_psid"] == command.recipient_id for call in sender.await_args_list)
 
 
 # ─── OA prefix regression (Critical finding from Phase 3 review) ────────────

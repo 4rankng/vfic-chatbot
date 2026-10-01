@@ -28,6 +28,8 @@ type Props = {
   disabled?: boolean;
   /** A run-now request for this row is in flight. */
   processing?: boolean;
+  /** A delete request for this row is in flight. */
+  removing?: boolean;
   /** The 5-minute run-now cooldown for this row is active. */
   coolingDown?: boolean;
   onRunNow: (row: ExternalSourceRowState) => void;
@@ -45,6 +47,7 @@ export const ExternalSourceRow = ({
   mutable,
   disabled,
   processing,
+  removing,
   coolingDown,
   onRunNow,
   onRemove,
@@ -160,7 +163,11 @@ export const ExternalSourceRow = ({
             disabled={disabled}
             aria-label="Xóa nguồn đồng bộ"
           >
-            <Trash2 className="size-4" />
+            {removing ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Trash2 className="size-4" aria-hidden="true" />
+            )}
           </Button>
         </div>
       )}

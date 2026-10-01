@@ -1,10 +1,27 @@
-"""Pure policies for category payloads and cross-category references."""
+"""Pure policies for project-owned category payloads."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
+from enum import StrEnum
+from typing import TypeVar
+
+
+class KnowledgeCategoryKey(StrEnum):
+    JOBS = "jobs"
+    COMPENSATION = "compensation"
+    REQUIREMENTS = "requirements"
+    WORK_SCHEDULES = "work_schedules"
+    BENEFITS = "benefits"
+    ACCOMMODATION = "accommodation"
+    MEALS = "meals"
+    TRANSPORTATION = "transportation"
+    INSURANCE = "insurance"
+    APPLICATION = "application"
+    CONTACTS = "contacts"
+    FAQ = "faq"
 
 
 def category_payload_checksum(payload: Mapping[str, object]) -> str:
@@ -28,20 +45,26 @@ def category_replacement_is_empty(record_count: int) -> bool:
     return record_count == 0
 
 
-def unknown_job_references(
-    record_job_ids: Iterable[Iterable[str]],
-    known_job_ids: set[str],
-) -> set[str]:
-    """Collect job identifiers not owned by the current project's Jobs category."""
-    unknown: set[str] = set()
-    for job_ids in record_job_ids:
-        unknown.update(set(job_ids) - known_job_ids)
-    return unknown
+_CategoryValue = TypeVar("_CategoryValue")
+
+
+def shared_project_category_value(values: list[_CategoryValue]) -> _CategoryValue | None:
+    """Keep a derived role scalar unknown when project records do not agree.
+
+    Project-level knowledge may describe distinct conditions without assigning
+    them to individual roles. Publishing one conflicting record for every role
+    would create a claim that the complete knowledge does not support.
+    """
+    if not values:
+        return None
+    first = values[0]
+    return first if all(value == first for value in values[1:]) else None
 
 
 __all__ = [
+    "KnowledgeCategoryKey",
     "category_payload_checksum",
     "category_record_limit_exceeded",
     "category_replacement_is_empty",
-    "unknown_job_references",
+    "shared_project_category_value",
 ]

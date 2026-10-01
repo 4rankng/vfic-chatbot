@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 
 from app.models.conversation import Message
-from app.recruitment.domain.intake import candidate_contact_mobile, candidate_mobile
+from app.recruitment.domain.intake import (
+    candidate_contact_mobile,
+    candidate_mobile,
+    candidate_rejected_mobile,
+)
 
 
 def lead_collection_instruction(*, question: str) -> str:
@@ -60,8 +64,12 @@ def lead_collection_question(
 ) -> str:
     text = current_user_text or ""
     for field, question in ASKABLE_FIELDS:
-        if field == "phone" and candidate_mobile((lead or {}).get(field)):
-            continue
+        if field == "phone":
+            stored_phone = candidate_mobile((lead or {}).get(field))
+            if (
+                stored_phone and stored_phone != candidate_rejected_mobile(text)
+            ):
+                continue
         if field == "phone" and candidate_contact_mobile(text):
             continue
         return question

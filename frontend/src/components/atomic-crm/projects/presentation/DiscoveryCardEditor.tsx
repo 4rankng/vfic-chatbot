@@ -1,12 +1,38 @@
+import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { Project } from "../../types";
 import { useDiscoveryCardDraft } from "./use-discovery-card-draft";
 
 /** Editor for the discovery card the agent matches candidates against. */
 export const DiscoveryCardEditor = ({ project }: { project: Project }) => {
   const { saving, save, setField, values } = useDiscoveryCardDraft(project);
+  const formId = useId();
+  const fields = [
+    {
+      key: "summary",
+      label: "Tóm tắt dự án",
+      placeholder: "Điểm chính giúp ứng viên hiểu dự án",
+    },
+    {
+      key: "location",
+      label: "Địa điểm dự án",
+      placeholder: "Ví dụ: Hải Phòng",
+    },
+    {
+      key: "roles",
+      label: "Vị trí tuyển dụng",
+      placeholder: "Các vị trí, cách nhau bằng dấu phẩy",
+    },
+    {
+      key: "highlights",
+      label: "Điểm nổi bật",
+      placeholder: "Các điểm nổi bật, cách nhau bằng dấu phẩy",
+    },
+    { key: "aliases", label: "Tên gọi khác", placeholder: "Ví dụ: LG, LGD" },
+  ] as const;
 
   return (
     <Card className="project-discovery-card">
@@ -15,39 +41,25 @@ export const DiscoveryCardEditor = ({ project }: { project: Project }) => {
           Thông tin dùng khi gợi ý dự án
         </CardTitle>
       </CardHeader>
-      <CardContent className="project-discovery-content grid gap-3 sm:grid-cols-2">
-        <Input
-          value={values.summary}
-          onChange={(event) => setField("summary", event.target.value)}
-          placeholder="Tóm tắt"
-          aria-label="Tóm tắt dự án"
-        />
-        <Input
-          value={values.location}
-          onChange={(event) => setField("location", event.target.value)}
-          placeholder="Địa điểm"
-          aria-label="Địa điểm dự án"
-        />
-        <Input
-          value={values.roles}
-          onChange={(event) => setField("roles", event.target.value)}
-          placeholder="Vị trí, cách nhau bằng dấu phẩy"
-          aria-label="Vị trí tuyển dụng"
-        />
-        <Input
-          value={values.highlights}
-          onChange={(event) => setField("highlights", event.target.value)}
-          placeholder="Điểm nổi bật, cách nhau bằng dấu phẩy"
-          aria-label="Điểm nổi bật"
-        />
-        <Input
-          value={values.aliases}
-          onChange={(event) => setField("aliases", event.target.value)}
-          placeholder="Tên gọi khác: LG, LGD..."
-          aria-label="Tên gọi khác"
-        />
+      <CardContent
+        className="project-discovery-content grid gap-3 sm:grid-cols-2"
+        aria-busy={saving}
+      >
+        {fields.map((field) => (
+          <div key={field.key} className="grid min-w-0 gap-1.5">
+            <Label htmlFor={`${formId}-${field.key}`}>{field.label}</Label>
+            <Input
+              id={`${formId}-${field.key}`}
+              value={values[field.key]}
+              onChange={(event) => setField(field.key, event.target.value)}
+              placeholder={field.placeholder}
+              disabled={saving}
+            />
+          </div>
+        ))}
         <div>
           <Button
+            type="button"
             className="project-discovery-save"
             onClick={() => void save()}
             disabled={saving}

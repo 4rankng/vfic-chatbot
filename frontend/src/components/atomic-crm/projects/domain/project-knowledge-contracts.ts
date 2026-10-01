@@ -33,6 +33,12 @@ export type KnowledgeCategoryTemplate = Readonly<{
   content: string;
 }>;
 
+/** Authoritative saved project knowledge returned as a Markdown attachment. */
+export type ProjectKnowledgeExport = Readonly<{
+  filename: string;
+  content: string;
+}>;
+
 export type KnowledgeCategorySource = Readonly<{
   key: ProjectKnowledgeCategory;
   label_vi: string;

@@ -13,7 +13,7 @@ from sqlalchemy import delete, func, select, text, update
 from app.core.config import INGEST_JOB_TIMEOUT_SECONDS
 from app.models.bus import BusRoute, BusStop
 from app.models.company import Company, Project
-from app.models.job import Job
+from app.models.job import Job, JobStatus
 from app.models.knowledge import (
     KBVersion,
     KBVersionStatus,
@@ -34,6 +34,7 @@ from app.services.knowledge.category_contracts import (
     category_checksum,
 )
 from app.services.knowledge.category_markdown import parse_category_markdown
+from app.services.knowledge.base_service import KnowledgeBaseService
 from app.services.knowledge.category_service import (
     CategoryActivationError,
     KnowledgeCategoryService,
@@ -80,6 +81,16 @@ async def test_repository_visibility_uses_active_category_and_pre_cutover_legacy
     )
     integration_session.add_all([actor, project])
     await integration_session.flush()
+
+    base = KnowledgeBase(
+        name=project.name,
+        slug=f"visibility-kb-{uuid.uuid4().hex}",
+        mode=KnowledgeBaseMode.RAG,
+        project_id=project.id,
+    )
+    integration_session.add(base)
+    await integration_session.flush()
+    project.knowledge_base_id = base.id
 
     legacy_version = KBVersion(
         project_id=project.id,
@@ -291,8 +302,6 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         "## benefits\n"
         "\n"
         "### record: health-check\n"
-        "job_ids:\n"
-        "- assembler\n"
         'name: "Khám sức khỏe định kỳ"\n'
     )
     benefits_document = parse_category_markdown("benefits", benefits_source)
@@ -398,8 +407,6 @@ async def test_jobs_category_activation_replaces_only_its_active_revision(
         "## transportation\n"
         "\n"
         "### record: hp-route\n"
-        "job_ids:\n"
-        "- assembler\n"
         'name: "Tuyến Hải Phòng"\n'
         'direction: "round_trip"\n'
         'shift: "ca ngày"\n'
@@ -564,8 +571,6 @@ async def test_explicit_cutover_requires_all_categories_and_rolls_back(
         "## transportation\n"
         "\n"
         "### record: category-route\n"
-        "job_ids:\n"
-        "- cutover-job\n"
         'name: "Category route"\n'
         'direction: "to_factory"\n'
         "stops:\n"
@@ -1062,3 +1067,99 @@ async def test_activation_retrieval_selftest_passes_consistent_content(
     revision = await integration_session.get(KnowledgeCategoryRevision, revision_id)
     assert revision.status is KnowledgeCategoryRevisionStatus.ACTIVE
     assert revision.failure_code is None
+
+
+@pytest.mark.parametrize("legacy_fields", [False, True])
+async def test_project_category_can_activate_before_jobs_and_later_projects_to_every_role(
+    integration_session,
+    legacy_fields,
+) -> None:
+    db = integration_session
+    actor = User(
+        email=f"project-scope-{uuid.uuid4().hex}@example.test",
+        password_hash="not-used",
+        role=Role.admin,
+    )
+    project = Project(
+        name="Project facts",
+        slug=f"project-scope-{uuid.uuid4().hex}",
+        category_authority_started=True,
+        is_active=False,
+    )
+    db.add_all([actor, project])
+    await db.flush()
+    base = KnowledgeBase(
+        name=project.name,
+        slug=project.slug,
+        project_id=project.id,
+        mode=KnowledgeBaseMode.RAG,
+        created_by=actor.id,
+    )
+    db.add(base)
+    await db.flush()
+    project.knowledge_base_id = base.id
+    await db.commit()
+    service = KnowledgeCategoryService(db, enforce_retrieval_selftest=False)
+    from app.services.knowledge.category_markdown import build_source_markdown
+
+    async def activate(key, records):
+        source = build_source_markdown({"schema_version": "1.0", "category": key, key: records})
+        if key == "compensation" and legacy_fields:
+            source = source.replace(
+                "### record: pay\n",
+                "### record: pay\njob_ids:\n- obsolete\njobs_ids: [other-obsolete]\n",
+            )
+        revision, _receipt = await service.stage_replacement(
+            project_id=project.id,
+            category_key=KnowledgeCategoryKey(key),
+            filename=f"{key}.md",
+            actor=actor,
+            schedule=False,
+            source_markdown=source,
+        )
+        await service.activate_revision(revision.id, _Embedder())
+        return revision
+
+    compensation = await activate("compensation", [{"id": "pay", "base_salary_vnd": 6_000_000}])
+    await db.refresh(compensation)
+    assert compensation.status is KnowledgeCategoryRevisionStatus.ACTIVE
+    assert compensation.quality_result["schema_check"] == "passed"
+    assert "reference_check" not in compensation.quality_result
+    assert "job_ids" not in compensation.source_markdown
+    assert "jobs_ids" not in compensation.source_markdown
+    assert "job_ids" not in str(compensation.normalized_payload)
+    source_receipt = await service.get_active_source(project.id, KnowledgeCategoryKey.COMPENSATION)
+    assert source_receipt.content == compensation.source_markdown
+    assert source_receipt.checksum == compensation.content_sha256
+    assert (
+        await db.scalar(
+            select(func.count(Job.id)).join(Company).where(Company.project_id == project.id)
+        )
+        == 0
+    )
+
+    await activate(
+        "jobs", [{"id": "assembly", "title": "Lắp ráp"}, {"id": "packing", "title": "Đóng gói"}]
+    )
+    jobs = list(
+        (await db.scalars(select(Job).join(Company).where(Company.project_id == project.id))).all()
+    )
+    assert len(jobs) == 2
+    assert [(job.salary_min, job.salary_max) for job in jobs] == [(6_000_000, 6_000_000)] * 2
+    assert all(job.vacancy_count is None for job in jobs)
+    kb_service = KnowledgeBaseService(db)
+    assert (await kb_service.list_projects(base.id))[0].active_job_count == 2
+    assembly = next(job for job in jobs if job.stable_key == "assembly")
+    assembly.vacancy_count = 0
+    await db.commit()
+    assert (await kb_service.list_projects(base.id))[0].active_job_count == 1
+    assembly.vacancy_count = 37
+    await db.commit()
+    assert (await kb_service.list_projects(base.id))[0].active_job_count == 2
+    await activate("jobs", [{"id": "assembly", "title": "Lắp ráp"}])
+    # The old packing role remains for history, outside the current KB scope.
+    assert (await kb_service.list_projects(base.id))[0].active_job_count == 1
+    assert assembly.vacancy_count == 37
+    assembly.status = JobStatus.FULL
+    await db.commit()
+    assert (await kb_service.list_projects(base.id))[0].active_job_count == 0

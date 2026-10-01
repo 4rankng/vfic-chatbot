@@ -215,6 +215,27 @@ async def test_send_message_splits_long_plain_text_into_visible_bubbles(
     assert "\n\n".join(sent_texts) == long_reply
 
 
+async def test_complete_five_project_list_is_delivered_across_provider_bubbles(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    names = ("LG Display", "Rorze", "Amtran", "Kyocera", "Pegatron")
+    reply = "\n\n".join(
+        (f"{index}. {name}: " + "Thông tin công việc đã xác minh. " * 13).rstrip()
+        for index, name in enumerate(names, 1)
+    ).rstrip()
+    assert len(reply) > svc.ZALO_MAX_TEXT_CHARS
+    cap = _patch_post(monkeypatch, [])
+
+    result = await svc.ZaloBotSender(settings=settings).send_message("chat-1", reply)
+
+    assert result.ok is True
+    texts = [(body or {})["text"] for _, body in cap.calls]
+    assert len(texts) >= 2
+    assert all(len(text) <= svc.ZALO_VISIBLE_BUBBLE_CHARS for text in texts)
+    assert "\n\n".join(texts) == reply
+    assert all("\n\n".join(texts).count(name) == 1 for name in names)
+
+
 async def test_send_message_split_failure_reports_partial_delivery(
     monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:
@@ -679,7 +700,7 @@ async def test_aggregate_chunked_send_short_circuits_on_first_failure() -> None:
 
     result = await svc._aggregate_chunked_send(["a", "b", "c"], send_chunk)
     assert result.ok is False
-    assert result.error == "chunk 2/3 failed: upstream rejected"
+    assert result.error == "partial_delivery: chunk 2/3 failed: upstream rejected"
     assert result.msg_id == "id-a"  # collected before the failure
     assert sent == ["a", "b"]  # 'c' never sent
     assert result.raw == {
@@ -729,6 +750,23 @@ async def test_aggregate_chunked_send_keeps_a_transport_class_on_partial_deliver
 
     assert result.partial is True
     assert result.error_class == "read_timeout"
+
+
+async def test_accepted_idless_prefix_still_prevents_replay_of_partial_answer() -> None:
+    """An accepted provider response need not contain an ID to be an effect."""
+    from unittest.mock import AsyncMock
+
+    send = AsyncMock(side_effect=[
+        svc.SendResult(ok=True, msg_id=None),
+        svc.SendResult(ok=False, error="rejected", error_class="provider_error"),
+    ])
+    result = await svc._aggregate_chunked_send(["prefix", "tail", "unused"], send)
+    assert not result.ok
+    assert result.partial
+    assert result.error_class == "unknown"
+    assert result.msg_id is None
+    assert result.error.startswith("partial_delivery: ")
+    assert send.await_count == 2
 
 
 async def test_aggregate_chunked_send_all_bubbles_failed_stays_retryable() -> None:

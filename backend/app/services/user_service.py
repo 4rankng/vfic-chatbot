@@ -95,7 +95,6 @@ class UserProvisioningService:
         next_role: Role,
         next_disabled: bool,
     ) -> None:
-        await self._lock_admin_lifecycle()
         if user.id == actor_id and user.role == Role.admin:
             if next_disabled:
                 raise ValueError("Bạn không thể vô hiệu hóa chính mình")
@@ -110,12 +109,24 @@ class UserProvisioningService:
         if removes_enabled_admin and await self._other_enabled_admin_count(user.id) == 0:
             raise ValueError("Không thể xóa quản trị viên cuối cùng đang hoạt động")
 
+    async def _lifecycle_user(self, user_id: uuid.UUID) -> User | None:
+        # Serialize first, then refresh even an identity-map hit. A state read
+        # before the advisory lock can still describe a recruiter who another
+        # transaction has since promoted to the last enabled administrator.
+        await self._lock_admin_lifecycle()
+        return await self.db.get(User, user_id, populate_existing=True, with_for_update=True)
+
     async def update(self, user_id: uuid.UUID, data: UserUpdate, *, actor_id: uuid.UUID) -> User:
-        user = await self.db.get(User, user_id)
+        user = await self._lifecycle_user(user_id)
         if user is None:
             raise LookupError("user not found")
 
-        changes = data.model_dump(exclude_unset=True)
+        # Optional non-nullable account fields treat explicit null like
+        # omission, as email/role already did. full_name is actually nullable.
+        changes = {
+            key: value for key, value in data.model_dump(exclude_unset=True).items()
+            if value is not None or key == "full_name"
+        }
         next_role = changes.get("role", user.role)
         next_disabled = changes.get("disabled", user.disabled)
         await self._guard_admin_change(
@@ -140,11 +151,14 @@ class UserProvisioningService:
         if security_state_changed:
             user.token_version += 1
 
+        attempted_email = user.email
         try:
             await self.db.flush()
         except IntegrityError as exc:
             await self.db.rollback()
-            raise ValueError(f"user with email already exists: {user.email}") from exc
+            # Rollback expires ORM attributes; reading user.email here causes
+            # implicit async I/O and replaces the conflict with MissingGreenlet.
+            raise ValueError(f"user with email already exists: {attempted_email}") from exc
 
         await record_audit(
             self.db,
@@ -161,7 +175,7 @@ class UserProvisioningService:
     async def set_disabled(
         self, user_id: uuid.UUID, disabled: bool, *, actor_id: uuid.UUID
     ) -> User:
-        user = await self.db.get(User, user_id)
+        user = await self._lifecycle_user(user_id)
         if user is None:
             raise LookupError("user not found")
 
@@ -195,7 +209,7 @@ class UserProvisioningService:
         is bumped so every previously-issued JWT for this user is invalidated.
         The plaintext password is never persisted or audited.
         """
-        user = await self.db.get(User, user_id)
+        user = await self.db.get(User, user_id, populate_existing=True, with_for_update=True)
         if user is None:
             raise LookupError("user not found")
         if user.disabled:
@@ -216,7 +230,7 @@ class UserProvisioningService:
         return user
 
     async def delete(self, user_id: uuid.UUID, *, actor_id: uuid.UUID) -> None:
-        user = await self.db.get(User, user_id)
+        user = await self._lifecycle_user(user_id)
         if user is None:
             raise LookupError("user not found")
         if user.id == actor_id:

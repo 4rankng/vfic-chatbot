@@ -61,11 +61,11 @@ EXPECTED_ROUTE_COUNTS = {
     # +4 single-page external-source-sync endpoints
     # +2 project external-API endpoints (get / put)
     # +1 project external-API admin test-call endpoint (post)
-    "projects": 28,  # +1: GET /{id}/knowledge-template — the combined all-categories KB template (leading questions per category)
+    "projects": 29,  # +1 admin-only GET /{id}/knowledge-export of current saved sources
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "0dec2b2d11c385c6ac40063b77ac4f35d79e57d1c59eec01dedc8132dc73951c"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "2990c1f2297d9f7a26c6b3b97096320833beb3ed949cb3d99b063dfd8b902295"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -149,7 +149,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # stored row and replace_hotline reads-then-writes it — the same two
     # configuration `get` reads their reset_oa_id siblings already have, no
     # new egress site.
-    "provider_boundary": 90,
+    "provider_boundary": 91,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -239,7 +239,10 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # removed, or moved, so EXPECTED_BROAD_BOUNDARY_COUNTS is unchanged; the digest
 # was recomputed from the post-change scan and the prior digest reconstructs
 # exactly from that single count change, so nothing else moved.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "e4ca74f4cf59fb9c18f88ea05ad76ed1e659a1e02fe7975839dd1de5a56fa4de"
+# Bounded channel dispatch adds the reviewed `_send_parts` adapter.send_text
+# boundary. Each part reuses the same provider and authority/policy fences;
+# no provider endpoint, registry binding, or queue/outbox writer was added.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "45ad453fac9b035ebe6e617792f18c563e87e3d96c38dc576044479c7845e2fd"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

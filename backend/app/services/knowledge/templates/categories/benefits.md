@@ -12,8 +12,6 @@ category: benefits
 Ví dụ khối một phúc lợi:
 
 ### record: phuc-loi-chung
-job_ids:
-- "[Áp dụng cho việc nào? Điền id việc; bỏ trống nếu áp dụng cho mọi việc.]"
 name: "[Tên phúc lợi? Ví dụ: Phụ cấp chuyên cần]"
 description: "[Mô tả ngắn về phúc lợi?]"
 eligibility: "[Ai được hưởng? Điều kiện gì?]"

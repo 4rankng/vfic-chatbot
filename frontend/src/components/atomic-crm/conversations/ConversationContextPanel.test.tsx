@@ -29,6 +29,73 @@ const lead: Lead = {
 };
 
 describe("ConversationContextPanel notes", () => {
+  it("keeps a mobile profile save open until its write finishes", async () => {
+    mobileMock.isMobile = true;
+    const onClose = vi.fn();
+    let finish!: () => void;
+    const onSave = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const screen = await render(
+      <TestMessages>
+        <ConversationContextPanel
+          lead={lead}
+          open
+          canEdit
+          onSave={onSave}
+          onClose={onClose}
+        />
+      </TestMessages>,
+    );
+    await screen
+      .getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" })
+      .click();
+    await screen.getByLabelText("Họ tên").fill("Tên đang lưu");
+    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await expect.poll(() => onSave.mock.calls.length).toBe(1);
+    await expect
+      .element(screen.getByRole("button", { name: "Đóng thông tin ứng viên" }))
+      .toBeDisabled();
+    expect(onClose).not.toHaveBeenCalled();
+    finish();
+    await expect
+      .element(screen.getByRole("button", { name: "Đóng thông tin ứng viên" }))
+      .not.toBeDisabled();
+  });
+
+  it("keeps a failed profile edit visible with an inline retry explanation", async () => {
+    const screen = await render(
+      <TestMessages>
+        <ConversationContextPanel
+          lead={lead}
+          open
+          persistent
+          canEdit
+          onSave={vi
+            .fn()
+            .mockRejectedValue(
+              new Error("Hồ sơ vừa được cập nhật. Vui lòng tải lại."),
+            )}
+          onClose={() => undefined}
+        />
+      </TestMessages>,
+    );
+    await screen
+      .getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" })
+      .click();
+    await screen.getByLabelText("Họ tên").fill("Tên chưa lưu");
+    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("Hồ sơ vừa được cập nhật. Vui lòng tải lại.");
+    await expect
+      .element(screen.getByLabelText("Họ tên"))
+      .toHaveValue("Tên chưa lưu");
+  });
+
   it("renders stored note lines as a semantic bullet list", async () => {
     const screen = await render(
       <TestMessages>

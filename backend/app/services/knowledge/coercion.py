@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from typing import Any
 
 from app.services.knowledge.prompts import PRODUCT_FEATURE_SYSTEM_PROMPT
@@ -53,7 +54,12 @@ def _coerce_unit(raw: Any) -> dict:
     }
 
 
-def validate_digest(payload: Any) -> tuple[str, list[dict]]:
+def normalized_source_text(value: str) -> str:
+    """Formatting and Unicode equivalence without changing the source's words."""
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFC", value)).strip()
+
+
+def validate_digest(payload: Any, *, source_text: str | None = None) -> tuple[str, list[dict]]:
     """Validate/coerce the LLM digest payload -> (document_summary, units)."""
     if isinstance(payload, str):
         try:
@@ -66,6 +72,14 @@ def validate_digest(payload: Any) -> tuple[str, list[dict]]:
     if not isinstance(units_raw, list):
         raise DigestError("'units' is missing or not a list")
     units = [_coerce_unit(u) for u in units_raw]
+    if source_text is not None:
+        source = normalized_source_text(source_text)
+        if source and not units:
+            raise DigestError("nonempty source returned no knowledge units")
+        for unit in units:
+            quote = normalized_source_text(unit["source_quote"] or "")
+            if not quote or quote not in source:
+                raise DigestError("knowledge unit has no matching source quote")
     summary = str(payload.get("document_summary") or "").strip()
     return summary, units
 
@@ -124,8 +138,8 @@ def _coerce_feature(raw: Any, catalog_row: Any, *, source_text: str | None = Non
     # Extraction is grounded in a quote, not merely the model's assertion that
     # a benefit exists. Whitespace folding accepts source formatting changes.
     if source_text is not None and not is_missing:
-        folded_source = re.sub(r"\s+", " ", source_text).strip()
-        folded_quote = re.sub(r"\s+", " ", evidence or "").strip()
+        folded_source = normalized_source_text(source_text)
+        folded_quote = normalized_source_text(evidence or "")
         if not folded_quote or folded_quote not in folded_source:
             return {
                 "value_text": _missing_feature_text(catalog_row), "value_json": {},

@@ -27,7 +27,13 @@ from typing import Any
 
 from app.conversation_messaging.domain.delivery import DeliveryState
 from app.graph.decision_trace import DecisionTraceBuilder
-from app.graph.ports import DeliveryResultPort, DirectMessageSenderPort, SendOutcome
+from app.graph.chat_status import native_status_heartbeat
+from app.graph.ports import (
+    ChatStatusSenderPort,
+    DeliveryResultPort,
+    DirectMessageSenderPort,
+    SendOutcome,
+)
 from app.graph.telemetry import (
     _stamp_db,
     _stamp_end_to_end,
@@ -95,9 +101,10 @@ def _finalize_user_visible_reply(
     """
     stripped = strip_provider_artifacts(raw)
     if generated:
-        from app.graph.progressive import compact_for_zalo
-
-        return compact_for_zalo(strip_markdown_decorations(stripped))
+        # Presentation cleanup must be lossless. Channel adapters split long
+        # text to their provider limits; clipping here would discard projects
+        # before both the durable receipt and the transport ever see them.
+        return strip_markdown_decorations(stripped)
     return stripped
 
 
@@ -173,30 +180,12 @@ def _delivery_statuses(deps: GraphDeps):
     return _NeutralDeliveryStatuses()
 
 
-async def _status_heartbeat(zalo, chat_id: str, *, settings) -> None:
-    """Keep the channel visibly active while a turn is processing.
-
-    Pulses ``send_chat_action("typing")`` immediately, then every
-    ``typing_heartbeat_seconds`` — a real "typing…" indicator on the Bot channel and
-    a logged no-op on OA (``ZaloOASender.send_chat_action``). The caller cancels this
-    task before dispatching the real answer so the indicator stops on send.
-
-    All send failures are swallowed — status is best-effort and must never break a turn.
-    """
-    start = time.monotonic()
-    next_typing = 0.0
-    while True:
-        elapsed = time.monotonic() - start
-        if elapsed >= next_typing:
-            try:
-                await zalo.send_chat_action(chat_id, "typing")
-            except Exception:  # noqa: BLE001
-                # Status is best-effort: a channel that rejects the indicator
-                # must not break the turn, but the reason still belongs in the
-                # log for the next operator chasing a missing "typing…".
-                logger.debug("typing heartbeat failed", exc_info=True)
-            next_typing = elapsed + settings.typing_heartbeat_seconds
-        await asyncio.sleep(0.5)
+async def _status_heartbeat(zalo: ChatStatusSenderPort, chat_id: str, *, settings) -> None:
+    """Pulse supported native status until the turn owner drains this task."""
+    await native_status_heartbeat(
+        lambda: zalo.send_chat_action(chat_id, "typing"),
+        interval_seconds=settings.typing_heartbeat_seconds,
+    )
 
 
 async def _cancel_status_task(task) -> None:

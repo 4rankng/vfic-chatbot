@@ -174,9 +174,9 @@ def test_context_composed_catalog_tools_need_a_history_free_turn(allowed_tools):
     assert _cacheable(allowed_tools=allowed_tools, has_conversation_history=True) is False
 
 
-def test_knowledge_tools_ignore_conversation_history():
-    """Their query comes from the current turn, so history cannot change it."""
-    assert _cacheable(has_conversation_history=True) is True
+def test_knowledge_prose_with_conversation_history_is_not_shareable():
+    """History can change wording and candidate advice even with the same query."""
+    assert _cacheable(has_conversation_history=True) is False
 
 
 def test_tingting_turns_are_not_cacheable():
@@ -263,6 +263,8 @@ async def test_answer_scope_changes_with_every_version_counter(monkeypatch, name
         {"language": "en"},
         {"project_scope": "scope-b"},
         {"address": "chị"},
+        {"intake_context": "candidate contact already supplied"},
+        {"provider": "facebook_messenger"},
     ],
 )
 async def test_answer_scope_changes_with_every_non_version_dimension(monkeypatch, override):

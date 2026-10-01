@@ -35,7 +35,7 @@ class _FakeSession:
         self.committed = False
         self.refreshed = False
 
-    async def get(self, _model, _pk):
+    async def get(self, _model, _pk, **_options):
         return self._user
 
     def add(self, obj):

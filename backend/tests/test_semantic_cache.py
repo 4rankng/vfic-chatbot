@@ -231,6 +231,77 @@ async def test_semantic_cache_empty_returns_none(monkeypatch):
     assert hit is None
 
 
+async def test_new_writes_do_not_extend_an_older_entry_lifetime(monkeypatch):
+    await _enabled_settings(monkeypatch, semantic_cache_ttl_seconds=10)
+    clock = [1000.0]
+    monkeypatch.setattr(sc.time, "time", lambda: clock[0])
+    scope = _scope("proj-a")
+    await sc.semantic_cache_put([1.0, 0.0], "old salary", scope=scope)
+    clock[0] = 1009
+    await sc.semantic_cache_put([0.0, 1.0], "fresh shuttle", scope=scope)
+    clock[0] = 1010
+
+    assert await sc.semantic_cache_get([1.0, 0.0], scope=scope) is None
+    hit = await sc.semantic_cache_get([0.0, 1.0], scope=scope)
+    assert hit is not None and hit.result == "fresh shuttle"
+
+
+async def test_custom_entry_ttl_is_respected_without_changing_default(monkeypatch):
+    await _enabled_settings(monkeypatch)
+    clock = [1000.0]
+    monkeypatch.setattr(sc.time, "time", lambda: clock[0])
+    scope = _scope("proj-a")
+    await sc.semantic_cache_put([1.0, 0.0], "short lived", scope=scope, ttl_seconds=5)
+    clock[0] = 1005
+
+    assert await sc.semantic_cache_get([1.0, 0.0], scope=scope) is None
+
+
+async def test_expired_best_match_does_not_mask_a_fresh_match(monkeypatch):
+    await _enabled_settings(monkeypatch)
+    clock = [1000.0]
+    monkeypatch.setattr(sc.time, "time", lambda: clock[0])
+    scope = _scope("proj-a")
+    await sc.semantic_cache_put([1.0, 0.0], "expired", scope=scope, ttl_seconds=5)
+    clock[0] = 1004
+    await sc.semantic_cache_put([1.0, 0.01], "current", scope=scope)
+    clock[0] = 1006
+
+    hit = await sc.semantic_cache_get([1.0, 0.0], scope=scope)
+    assert hit is not None and hit.result == "current"
+
+
+async def test_reads_update_lru_without_extending_entry_expiry(monkeypatch):
+    await _enabled_settings(monkeypatch, semantic_cache_capacity=2, semantic_cache_ttl_seconds=10)
+    clock = [1000.0]
+    monkeypatch.setattr(sc.time, "time", lambda: clock[0])
+    scope = _scope("proj-a")
+    await sc.semantic_cache_put([1.0, 0.0], "A", scope=scope)
+    clock[0] = 1001
+    await sc.semantic_cache_put([0.0, 1.0], "B", scope=scope)
+    clock[0] = 1002
+    assert await sc.semantic_cache_get([1.0, 0.0], scope=scope) is not None
+    clock[0] = 1003
+    await sc.semantic_cache_put([-1.0, 0.0], "C", scope=scope)
+
+    assert await sc.semantic_cache_get([0.0, 1.0], scope=scope) is None
+    assert await sc.semantic_cache_get([1.0, 0.0], scope=scope) is not None
+    clock[0] = 1010
+    assert await sc.semantic_cache_get([1.0, 0.0], scope=scope) is None
+
+
+async def test_legacy_entry_without_a_lifetime_is_a_cache_miss(monkeypatch):
+    fake = await _enabled_settings(monkeypatch)
+    scope = _scope("proj-a")
+    vkey, rkey, _ = await sc._keys(scope)
+    pipe = fake.pipeline()
+    pipe.hset(vkey, "legacy", sc.pack_vector([1.0, 0.0]))
+    pipe.hset(rkey, "legacy", "old facts with no expiry")
+    await pipe.execute()
+
+    assert await sc.semantic_cache_get([1.0, 0.0], scope=scope) is None
+
+
 # --- scope namespacing (REL-07) ---------------------------------------------
 
 
@@ -240,6 +311,7 @@ def test_scope_key_is_stable_and_order_independent():
     assert sc.scope_key(["a"], 25) != sc.scope_key(["b"], 25)
     assert sc.scope_key(["a"], 25) != sc.scope_key(["a"], 5)  # top_k changes the answer
     assert sc.scope_key(None) == "global"  # no project scope exposed by the port
+    assert sc.scope_key(None, 25) != sc.scope_key(None, 5)
     assert sc.scope_key([]) != "global"  # an empty-but-known scope is its own namespace
 
 
@@ -408,3 +480,39 @@ async def test_search_knowledge_page_scope_never_returns_another_pages_answer(mo
     assert "Trang B" in out_b
     assert "Trang A" not in out_b, "Page B was served an answer cached for Page A"
 
+
+async def test_retrieval_finishing_after_invalidation_does_not_seed_the_new_generation(monkeypatch):
+    import app.core.cache as cache_mod
+    import app.graph.tools.knowledge as knowledge
+    from tests.test_graph_tools import _FakeEmbedder, _patch_tool_io
+
+    class Settings(_SearchSettings):
+        rag_cache_enabled = False
+
+    await _enabled_settings(monkeypatch)
+    _patch_tool_io(monkeypatch, Settings)
+    generation = ["1"]
+
+    async def current_version(_namespace):
+        return generation[0]
+
+    monkeypatch.setattr(cache_mod, "cache_version", current_version)
+    monkeypatch.setattr(knowledge, "cache_version", current_version)
+    repo = _page_repo("proj-a", "unused")
+    calls = []
+
+    async def documents(emb, top_k, flags, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            generation[0] = "2"  # A KB update commits while the old read finishes.
+            return [_knowledge_row("OLD salary")]
+        return [_knowledge_row("NEW salary")]
+
+    repo.match_documents = documents
+    embedder = _FakeEmbedder(vec=[1.0, 0.0, 0.0])
+    first = await knowledge.search_knowledge(repo, embedder, "salary before update")
+    second = await knowledge.search_knowledge(repo, embedder, "salary after update")
+
+    assert "OLD salary" in first
+    assert "NEW salary" in second and "OLD salary" not in second
+    assert len(calls) == 2

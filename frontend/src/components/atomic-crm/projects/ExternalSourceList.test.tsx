@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
+import type * as RaCoreModule from "ra-core";
 import { render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 // react-admin bound form controls; those import `useInput` from `ra-core`, so
 // the mock spreads the real module instead of narrowing it to one export.
 vi.mock("ra-core", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("ra-core")>()),
+  ...(await importOriginal<typeof RaCoreModule>()),
   useNotify: () => mocks.notify,
 }));
 
@@ -292,7 +293,7 @@ describe("ExternalSourceList", () => {
     await vi.advanceTimersByTimeAsync(16_000);
 
     expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(6);
-    expect(onSynchronized).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(onSynchronized).toHaveBeenCalledTimes(1));
   });
 
   it("stops polling a hidden tab and resumes when it is visible again", async () => {
@@ -497,5 +498,84 @@ describe("ExternalSourceList", () => {
       screen.container.querySelector(".project-external-source-actions"),
     ).toBeNull();
     expect(screen.container.textContent).not.toContain("Xóa nguồn đồng bộ");
+  });
+
+  it("offers retry instead of an empty source state when loading fails", async () => {
+    mocks.listSinglePageExternalSources.mockRejectedValueOnce(
+      new Error("Service unavailable"),
+    );
+    const screen = await renderList(
+      <ExternalSourceList projectId="project-1" variant="single-page" />,
+    );
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("Chưa tải được nguồn đồng bộ");
+    expect(screen.container.textContent).not.toContain("Chưa có nguồn đồng bộ");
+    await screen.getByRole("button", { name: "Thử lại" }).click();
+    await expect.element(screen.getByLabelText("18 hàng")).toBeVisible();
+  });
+
+  it("locks source actions during deletion and drops its result after navigation", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let finish!: () => void;
+    mocks.deleteSinglePageExternalSource.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const onChange = vi.fn();
+    const screen = await renderList(
+      <ExternalSourceList
+        projectId="project-1"
+        variant="single-page"
+        onChange={onChange}
+      />,
+    );
+    await screen.getByRole("button", { name: "Xóa nguồn đồng bộ" }).click();
+    await expect
+      .element(screen.getByRole("button", { name: "Đồng bộ ngay" }))
+      .toBeDisabled();
+    await expect
+      .element(screen.getByRole("button", { name: "Xóa nguồn đồng bộ" }))
+      .toBeDisabled();
+    await screen.rerender(
+      <ExternalSourceList
+        projectId="project-2"
+        variant="single-page"
+        onChange={onChange}
+      />,
+    );
+    await expect
+      .element(screen.getByRole("button", { name: "Đồng bộ ngay" }))
+      .toBeEnabled();
+    finish();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(mocks.notify).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not start a cooldown in another project when an old run completes", async () => {
+    let finish!: (value: { job_id: string }) => void;
+    mocks.runSinglePageExternalSourceNow.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const screen = await renderList(
+      <ExternalSourceList projectId="project-1" variant="single-page" />,
+    );
+    await screen.getByRole("button", { name: "Đồng bộ ngay" }).click();
+    await screen.rerender(
+      <ExternalSourceList projectId="project-2" variant="single-page" />,
+    );
+    await expect
+      .element(screen.getByRole("button", { name: "Đồng bộ ngay" }))
+      .toBeEnabled();
+    finish({ job_id: "old-job" });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await expect
+      .element(screen.getByRole("button", { name: "Đồng bộ ngay" }))
+      .toBeEnabled();
+    expect(mocks.notify).not.toHaveBeenCalled();
   });
 });

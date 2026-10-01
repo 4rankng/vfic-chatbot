@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePermissions, useTranslate } from "ra-core";
+import { LoadingState } from "../misc/LoadingState";
 
 import { useProviderPanels } from "./useProviderPanels";
 import { useSettingsBundle } from "./useSettingsBundle";
@@ -19,7 +20,7 @@ import {
 } from "./settingsNav";
 
 /**
- * The Settings resource: a console shell that switches between seven section
+ * The Settings resource: a console shell that switches between six section
  * views. Each view owns its own state and actions; this page only decides which
  * one is on screen and where the OAuth callback should land.
  */
@@ -34,6 +35,14 @@ export const SettingsConsolePage = () => {
   const settings = useSettingsBundle(isAdmin);
   const zaloForm = useZaloForm({ settings: settings.zalo });
   const panels = useProviderPanels(settings.providers);
+
+  if (permissionsPending) {
+    return (
+      <SettingsWorkspace>
+        <LoadingState label="Đang kiểm tra quyền truy cập…" />
+      </SettingsWorkspace>
+    );
+  }
 
   if (!permissionsPending && permissions !== "admin") {
     return (

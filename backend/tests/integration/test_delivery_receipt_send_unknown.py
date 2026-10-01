@@ -1,25 +1,9 @@
-"""Regression: a seen/delivered receipt must advance an id-less SEND_UNKNOWN row.
+"""Real PostgreSQL regressions for truthful delivery receipts.
 
-Production bug: a message stamped SEND_UNKNOWN (transport timeout, stale SENDING,
-or interrupted dispatch) carries NO ``zalo_message_id`` — the send failed before
-Zalo returned one. ``apply_delivery_receipt_batch`` matched receipts only by
-``zalo_message_id IN (ids)``, so a later ``user_seen_message`` receipt proving
-the user actually saw the message matched nothing, and the row stayed
-SEND_UNKNOWN forever — surfacing as the "Chưa xác nhận gửi" badge in the
-recruiter console despite confirmed delivery.
-
-These tests prove against a real database that:
-
-1. An id-less SEND_UNKNOWN BOT message advances to READ on a seen receipt, even
-   though the receipt's Zalo id matches no row by ``zalo_message_id`` (the
-   reported bug). A PENDING placeholder with a NULL id is NOT touched.
-2. The receipt path now emits ``message_created`` for each moved message (so the
-   frontend delivery badge refreshes in realtime — previously only
-   ``conversation_updated`` fired).
-3. A normal SENT message with a recorded ``zalo_message_id`` still advances by
-   id when the receipt carries that id (no regression on the primary match path;
-   the id-match and SEND_UNKNOWN fallback fire together in one pass).
-4. Forward-only: a DELIVERED receipt does not regress an already-READ row.
+Only exact provider message IDs can correlate a receipt with a stored send.
+Id-less uncertainty stays SEND_UNKNOWN, and a receipt for an accepted prefix
+cannot acknowledge an incomplete logical answer. Matched complete sends still
+advance, emit realtime events, and never regress an already-READ row.
 """
 
 from __future__ import annotations
@@ -35,10 +19,132 @@ from app.models.conversation import (
     MessageSender,
 )
 from app.services.conversation.state import ConversationState
+from app.channels import types as ct
+from app.channels.dispatch import ChannelDispatchService
+from app.channels.registry import ChannelAdapterRegistry
+from app.services.outbox_service import create_pending_outbox
 from tests.integration.conftest import IntegrationDatabase
 from tests.integration._conv_factory import make_zalo_conversation
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.parametrize("sender", [MessageSender.BOT, MessageSender.RECRUITER])
+@pytest.mark.parametrize("seen", [False, True])
+@pytest.mark.parametrize("matches_known_message", [False, True])
+async def test_unrelated_receipt_never_confirms_idless_unknown_sends(
+    integration_session, sender, seen, matches_known_message,
+) -> None:
+    """A real receipt for one message cannot acknowledge other uncertain sends."""
+    db = integration_session
+    conv = await make_zalo_conversation(
+        db, zalo_chat_id=f"unrelated-{sender.value}-{seen}-{matches_known_message}",
+    )
+    unknown = [Message(
+        conversation_id=conv.id, sender=sender, body=f"uncertain send {index}",
+        delivery_status=DeliveryStatus.SEND_UNKNOWN,
+    ) for index in range(2)]
+    known = Message(
+        conversation_id=conv.id, sender=sender, body="known accepted message",
+        delivery_status=DeliveryStatus.SENT, zalo_message_id="known-receipt-id",
+    )
+    db.add_all([*unknown, known])
+    await db.commit()
+    version_before = conv.version
+    unread_before = conv.unread_count
+    events = _RecordingEvents()
+    moved = await ConversationState(db, repo=None, events=events).apply_delivery_receipt_batch(
+        conv,
+        zalo_message_ids=["known-receipt-id" if matches_known_message else "unmatched-receipt-id"],
+        delivered=not seen, seen=seen,
+    )
+    for message in unknown:
+        await db.refresh(message)
+        assert message.delivery_status == DeliveryStatus.SEND_UNKNOWN
+    await db.refresh(known)
+    assert moved == int(matches_known_message)
+    assert known.delivery_status == (
+        (DeliveryStatus.READ if seen else DeliveryStatus.DELIVERED)
+        if matches_known_message else DeliveryStatus.SENT
+    )
+    assert [message.id for message in events.message_created_calls] == (
+        [known.id] if matches_known_message else []
+    )
+    assert len(events.conversation_updated_calls) == int(matches_known_message)
+    assert conv.version == version_before
+    assert conv.unread_count == unread_before
+
+
+@pytest.mark.parametrize("sender", [MessageSender.BOT, MessageSender.RECRUITER])
+@pytest.mark.parametrize("seen", [False, True])
+@pytest.mark.parametrize("accepted_id", [None, "accepted-prefix"])
+async def test_partial_answer_receipt_cannot_acknowledge_undelivered_tail(
+    integration_session, sender, seen, accepted_id,
+) -> None:
+    """Real dispatch→persist→receipt keeps a partial logical answer unknown."""
+    from unittest.mock import AsyncMock
+    from types import SimpleNamespace
+
+    db = integration_session
+    conv = await make_zalo_conversation(db, zalo_chat_id=f"partial-{sender.value}-{seen}-{accepted_id}")
+    text = "Dự án có trong danh mục đã xác minh. " * 200
+    pending = Message(
+        conversation_id=conv.id, sender=sender, body=text,
+        delivery_status=DeliveryStatus.PENDING,
+    )
+    ordinary = Message(
+        conversation_id=conv.id, sender=sender, body="single request awaiting an acknowledgment",
+        delivery_status=DeliveryStatus.SEND_UNKNOWN, zalo_message_id="single-request-id",
+    )
+    db.add_all([pending, ordinary])
+    await db.flush()
+    outbox = await create_pending_outbox(
+        db, message_id=pending.id, channel=ct.PROVIDER_ZALO_OA,
+        payload={"chat_id": "candidate", "text": text},
+    )
+    await db.commit()
+    adapter = SimpleNamespace(
+        provider=ct.PROVIDER_ZALO_OA,
+        send_text=AsyncMock(side_effect=[
+            ct.ChannelSendResult(ok=True, provider_message_id=accepted_id),
+            ct.ChannelSendResult(ok=False, error="rejected tail", error_class="provider_error"),
+        ]),
+    )
+    registry = ChannelAdapterRegistry()
+    registry.register(adapter)
+    result = await ChannelDispatchService(registry).send(ct.OutboundTextCommand(
+        provider=ct.PROVIDER_ZALO_OA, account_key="default:zalo_oa",
+        recipient_id="candidate", text=text, channel_account_generation=1,
+    ))
+    assert result.is_send_unknown
+    assert adapter.send_text.await_count == 2
+    events = _RecordingEvents()
+    state = ConversationState(db, repo=None, events=events)
+    finalize = (
+        state.finalize_outbound_dispatch
+        if sender == MessageSender.BOT
+        else state.finalize_recruiter_delivery
+    )
+    await finalize(
+        conv, message_id=pending.id, outbox_id=outbox.id, delivered=False,
+        zalo_message_id=result.provider_message_id,
+        external_error=result.error, error_class=result.error_class,
+    )
+    events.message_created_calls.clear()
+    moved = await state.apply_delivery_receipt_batch(
+        conv, zalo_message_ids=[accepted_id or "unmatched-id", "single-request-id"],
+        delivered=not seen, seen=seen,
+    )
+    await db.refresh(pending)
+    await db.refresh(outbox)
+    await db.refresh(ordinary)
+    assert pending.delivery_status == DeliveryStatus.SEND_UNKNOWN
+    assert outbox.status == "SEND_UNKNOWN"
+    assert pending.provider_message_id == accepted_id
+    assert pending.external_error == result.error
+    assert ordinary.delivery_status == (DeliveryStatus.READ if seen else DeliveryStatus.DELIVERED)
+    assert moved == 1
+    assert [msg.id for msg in events.message_created_calls] == [ordinary.id]
 
 
 class _RecordingEvents:
@@ -70,8 +176,7 @@ async def _seed(engine, *, zalo_chat_id: str) -> tuple[int, int, int, int]:
         )
         conv_id = conv.id
 
-        # The regression: transport timeout left no zalo_message_id. A later
-        # user_seen receipt must still resolve this to READ.
+        # A timeout left no provider id; unrelated receipts cannot confirm it.
         send_unknown = Message(
             conversation_id=conv_id,
             sender=MessageSender.BOT,
@@ -100,15 +205,10 @@ async def _seed(engine, *, zalo_chat_id: str) -> tuple[int, int, int, int]:
         return conv_id, send_unknown.id, sent.id, pending.id
 
 
-async def test_seen_receipt_with_unknown_id_advances_only_id_less_send_unknown(
+async def test_seen_receipt_with_unknown_id_preserves_uncorrelated_send(
     integration_database: IntegrationDatabase,
 ) -> None:
-    """The reported bug: a seen receipt resolves an id-less SEND_UNKNOWN row.
-
-    The receipt's Zalo id matches no stored row, so only the SEND_UNKNOWN
-    fallback advances a row. The PENDING placeholder (also id-less) is NOT
-    touched (a receipt must never revive a never-sent row).
-    """
+    """An unmatched receipt proves nothing about an id-less uncertain send."""
     engine = create_async_engine(integration_database.async_url, pool_pre_ping=True)
     conv_id, send_unknown_id, _sent_id, pending_id = await _seed(
         engine, zalo_chat_id="receipt-send-unknown-seen"
@@ -125,35 +225,28 @@ async def test_seen_receipt_with_unknown_id_advances_only_id_less_send_unknown(
                 seen=True,
             )
 
-        assert moved == 1  # only the id-less SEND_UNKNOWN fallback row
+        assert moved == 0
 
         async with async_sessionmaker(engine, expire_on_commit=False)() as db:
             send_unknown = await db.get(Message, send_unknown_id)
             assert send_unknown is not None
-            assert send_unknown.delivery_status == DeliveryStatus.READ
+            assert send_unknown.delivery_status == DeliveryStatus.SEND_UNKNOWN
 
             # The PENDING placeholder must NOT be revived.
             pending = await db.get(Message, pending_id)
             assert pending is not None
             assert pending.delivery_status == DeliveryStatus.PENDING
 
-        # The moved message emits message_created (realtime badge refresh), and
-        # conversation_updated fires exactly once for the pass.
-        assert {m.id for m in events.message_created_calls} == {send_unknown_id}
-        assert len(events.conversation_updated_calls) == 1
+        assert events.message_created_calls == []
+        assert events.conversation_updated_calls == []
     finally:
         await engine.dispose()
 
 
-async def test_seen_receipt_advances_both_id_matched_and_send_unknown_rows(
+async def test_seen_receipt_advances_only_the_id_matched_message(
     integration_database: IntegrationDatabase,
 ) -> None:
-    """The id-match path and the SEND_UNKNOWN fallback fire together in one pass.
-
-    The receipt carries the SENT row's Zalo id (advancing it via the primary
-    path) AND the id-less SEND_UNKNOWN row advances via the fallback. Both
-    moved rows emit message_created.
-    """
+    """A known send advances without changing another uncertain send."""
     engine = create_async_engine(integration_database.async_url, pool_pre_ping=True)
     conv_id, send_unknown_id, sent_id, _pending_id = await _seed(
         engine, zalo_chat_id="receipt-both-paths"
@@ -169,21 +262,22 @@ async def test_seen_receipt_advances_both_id_matched_and_send_unknown_rows(
                 seen=True,
             )
 
-        assert moved == 2  # id-matched SENT + fallback SEND_UNKNOWN
+        assert moved == 1
 
         async with async_sessionmaker(engine, expire_on_commit=False)() as db:
-            assert (await db.get(Message, send_unknown_id)).delivery_status == DeliveryStatus.READ
+            assert (await db.get(Message, send_unknown_id)).delivery_status == DeliveryStatus.SEND_UNKNOWN
             assert (await db.get(Message, sent_id)).delivery_status == DeliveryStatus.READ
 
-        assert {m.id for m in events.message_created_calls} == {send_unknown_id, sent_id}
+        assert {m.id for m in events.message_created_calls} == {sent_id}
+        assert len(events.conversation_updated_calls) == 1
     finally:
         await engine.dispose()
 
 
-async def test_delivered_receipt_advances_id_less_send_unknown_to_delivered(
+async def test_delivered_receipt_preserves_idless_uncertainty(
     integration_database: IntegrationDatabase,
 ) -> None:
-    """A user_received receipt resolves an id-less SEND_UNKNOWN row to DELIVERED."""
+    """An unmatched user_received receipt does not establish delivery."""
     engine = create_async_engine(integration_database.async_url, pool_pre_ping=True)
     conv_id, send_unknown_id, _sent_id, _pending_id = await _seed(
         engine, zalo_chat_id="receipt-send-unknown-delivered"
@@ -200,12 +294,12 @@ async def test_delivered_receipt_advances_id_less_send_unknown_to_delivered(
                 delivered=True,
             )
 
-        assert moved == 1  # only the id-less SEND_UNKNOWN fallback row
+        assert moved == 0
 
         async with async_sessionmaker(engine, expire_on_commit=False)() as db:
             send_unknown = await db.get(Message, send_unknown_id)
             assert send_unknown is not None
-            assert send_unknown.delivery_status == DeliveryStatus.DELIVERED
+            assert send_unknown.delivery_status == DeliveryStatus.SEND_UNKNOWN
     finally:
         await engine.dispose()
 
@@ -220,10 +314,11 @@ async def test_delivered_receipt_does_not_regress_an_already_read_row(
     )
     try:
         async with async_sessionmaker(engine, expire_on_commit=False)() as db:
-            # Pre-advance the SEND_UNKNOWN row to READ (as a prior seen receipt would).
+            # A prior exact-id seen receipt already acknowledged this message.
             row = await db.get(Message, send_unknown_id)
             assert row is not None
             row.delivery_status = DeliveryStatus.READ
+            row.zalo_message_id = "already-read-id"
             await db.commit()
 
         async with async_sessionmaker(engine, expire_on_commit=False)() as db:
@@ -232,13 +327,11 @@ async def test_delivered_receipt_does_not_regress_an_already_read_row(
             events = _RecordingEvents()
             moved = await ConversationState(db, repo=None, events=events).apply_delivery_receipt_batch(
                 conv,
-                zalo_message_ids=["zalo-id-not-stored"],
+                zalo_message_ids=["already-read-id"],
                 delivered=True,
             )
 
-        # The ex-SEND_UNKNOWN row is already READ, so the fallback query's
-        # ``delivery_status == SEND_UNKNOWN`` filter excludes it. The id-match
-        # path matches nothing. Nothing moves.
+        # The exact matched message is already READ, so nothing regresses.
         assert moved == 0
         assert events.message_created_calls == []
 

@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from app.recruitment.application.lead_lookup import (
+    LeadLookup,
+    LeadRecord,
+    UNRESOLVED_LEAD,
+)
 from app.recruitment.domain.proactive import FollowupRulesPolicy
 
 
@@ -26,7 +31,10 @@ class PersonaBodyResolver(Protocol):
 
 
 class LeadContextQueryPort(Protocol):
-    """Candidate-profile context consumed by the agent runtime."""
+    """Candidate-profile context consumed by the agent runtime.
+
+    Omit ``lead`` to resolve it; an explicit None is a completed lookup miss.
+    """
 
     async def profile_text(self, chat_id: str, contact_id: str | None = None) -> str: ...
 
@@ -36,6 +44,8 @@ class LeadContextQueryPort(Protocol):
         current_user_text: str,
         recent_messages: list[Any],
         contact_id: str | None = None,
+        *,
+        lead: LeadLookup = UNRESOLVED_LEAD,
     ) -> tuple[str, str]: ...
 
     def instruction(self, question: str) -> str: ...
@@ -59,9 +69,23 @@ class LeadGenderPort(Protocol):
     ``contact_id`` is the fallback key for Messenger, whose leads are keyed by
     contact with a NULL ``zalo_id`` (migration 0047) and so are invisible to a
     chat-id lookup.
+
+    ``resolve_lead`` owns the turn's initial read. Its result, including None,
+    is reused through ``lead`` until a successful mutation requires a refresh;
+    omitting the keyword retains the fallback for independent callers.
     """
 
-    async def stored_gender(self, chat_id: str, contact_id: str | None = None) -> str: ...
+    async def resolve_lead(
+        self, chat_id: str, contact_id: str | None = None
+    ) -> LeadRecord | None: ...
+
+    async def stored_gender(
+        self,
+        chat_id: str,
+        contact_id: str | None = None,
+        *,
+        lead: LeadLookup = UNRESOLVED_LEAD,
+    ) -> str: ...
 
     async def record_inferred_gender(
         self,
@@ -70,6 +94,7 @@ class LeadGenderPort(Protocol):
         *,
         contact_id: str | None = None,
         override: bool = False,
+        lead: LeadLookup = UNRESOLVED_LEAD,
     ) -> bool: ...
 
     async def record_profile_name(
@@ -78,6 +103,7 @@ class LeadGenderPort(Protocol):
         name: str,
         *,
         contact_id: str | None = None,
+        lead: LeadLookup = UNRESOLVED_LEAD,
     ) -> bool: ...
 
 

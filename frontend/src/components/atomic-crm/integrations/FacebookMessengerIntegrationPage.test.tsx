@@ -188,6 +188,89 @@ afterEach(async () => {
 });
 
 describe("FacebookMessengerIntegrationPage", () => {
+  it("offers retry instead of reporting disconnected when Page status cannot load", async () => {
+    mocks.loadStatus.mockRejectedValueOnce(new Error("Unavailable"));
+    const screen = await renderPage();
+    await expect
+      .element(screen.getByText("Chưa tải được trạng thái kết nối Messenger."))
+      .toBeVisible();
+    expect(screen.container.textContent).not.toContain("Chưa kết nối");
+    await screen.getByRole("button", { name: "Thử lại trạng thái" }).click();
+    await expect
+      .element(screen.getByText("Chưa kết nối", { exact: true }))
+      .toBeVisible();
+  });
+
+  it("locks credential inputs while saving so a new edit cannot be discarded", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.saveCredentials.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const screen = await renderPage();
+    await screen.getByRole("textbox", { name: /^App ID/ }).fill("new-app-id");
+    await screen.getByRole("button", { name: "Lưu thông tin" }).click();
+    await expect
+      .element(screen.getByRole("textbox", { name: /^App ID/ }))
+      .toBeDisabled();
+    finish({
+      facebook_app_id: { configured: true, value: "new-app-id" },
+      facebook_app_secret: { configured: false, preview: null },
+      facebook_login_config_id: { configured: false, value: null },
+      facebook_webhook_verify_token: { configured: false, preview: null },
+    });
+    await expect
+      .element(screen.getByRole("textbox", { name: /^App ID/ }))
+      .toBeEnabled();
+  });
+
+  it("keeps failed Page assignments private until a successful retry", async () => {
+    mocks.accounts = [CONNECTED_ACCOUNTS[0]];
+    mocks.projects = MOCK_PROJECTS;
+    mocks.loadPageProjects.mockRejectedValueOnce(new Error("Unavailable"));
+    const screen = await renderPage();
+    await expect
+      .element(screen.getByText("Chưa tải được dự án đã gán cho Trang."))
+      .toBeVisible();
+    expect(screen.getByRole("checkbox").all()).toHaveLength(0);
+    expect(screen.container.textContent).not.toContain(
+      "Trang chưa gán dự án nào",
+    );
+    await screen.getByRole("button", { name: "Thử lại" }).click();
+    await expect
+      .element(screen.getByRole("checkbox", { name: MOCK_PROJECTS[0].name }))
+      .toBeChecked();
+    expect(mocks.setPageProjects).not.toHaveBeenCalled();
+  });
+
+  it("locks Page assignment controls while their replacement is saving", async () => {
+    mocks.accounts = [CONNECTED_ACCOUNTS[0]];
+    mocks.projects = MOCK_PROJECTS;
+    let finish!: (value: object) => void;
+    mocks.setPageProjects.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }) as never,
+    );
+    const screen = await renderPage();
+    const selected = screen.getByRole("checkbox", {
+      name: MOCK_PROJECTS[0].name,
+    });
+    await expect.element(selected).toBeChecked();
+    // React Aria's checkbox input is visually hidden; the visible label owns
+    // pointer interaction while the input retains keyboard/checked semantics.
+    await screen.getByText(MOCK_PROJECTS[0].name, { exact: true }).click();
+    await screen.getByRole("button", { name: "Lưu dự án" }).click();
+    await expect.poll(() => mocks.setPageProjects.mock.calls.length).toBe(1);
+    await expect.element(selected).toBeDisabled();
+    finish({
+      page_id: CONNECTED_ACCOUNTS[0].page_id,
+      assignments: [{ project_id: "2" }],
+    });
+    await expect.element(selected).not.toBeDisabled();
+  });
+
   it("shows compact status icons for every credential and a group summary", async () => {
     const screen = await renderPage();
     await expect

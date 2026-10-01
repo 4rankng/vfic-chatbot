@@ -19,14 +19,21 @@ from typing import Any, get_args, get_origin
 
 from pydantic import BaseModel
 
+from app.project_knowledge.domain.legacy_job_references import (
+    strip_legacy_job_reference_fields,
+    strip_legacy_job_reference_source,
+)
+
 from app.schemas.knowledge_categories import (
     CATEGORY_DOCUMENT_MODELS,
     CategoryDocument,
     KnowledgeCategoryKey,
 )
+from app.project_knowledge.domain.category_catalog import (
+    get_category_definition,
+)
 from app.services.knowledge.category_contracts import (
     CategoryMarkdownError,
-    get_category_definition,
     validate_category_payload,
 )
 
@@ -353,6 +360,7 @@ def parse_category_markdown(
     if meta["category"].strip('"') != category_key.value:
         raise CategoryMarkdownError(f'front-matter category must be "{category_key.value}"')
     body = _COMMENT_RE.sub("", body)
+    body = strip_legacy_job_reference_source(body)
     definition = get_category_definition(category_key)
     doc_model = CATEGORY_DOCUMENT_MODELS[category_key]
     record_model = _record_model(doc_model, definition.list_field)
@@ -368,6 +376,7 @@ def parse_category_markdown(
 
 def build_source_markdown(payload: dict[str, Any]) -> str:
     """Render a payload dict (``CategoryDocument.model_dump(mode="json")``) to markdown."""
+    payload = strip_legacy_job_reference_fields(payload)
     key = KnowledgeCategoryKey(payload["category"])
     definition = get_category_definition(key)
     record_model = _record_model(CATEGORY_DOCUMENT_MODELS[key], definition.list_field)

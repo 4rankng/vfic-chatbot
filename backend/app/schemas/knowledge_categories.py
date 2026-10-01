@@ -1,4 +1,4 @@
-"""Strict YAML contracts for the twelve project-owned RAG categories.
+"""Typed contracts for the twelve project-owned RAG categories.
 
 Project scope is supplied by the upload endpoint.  These contracts therefore
 never accept a factory or project identifier.  A category document is a full
@@ -8,10 +8,12 @@ replacement of that category, and stable IDs make its derived rows repeatable.
 from __future__ import annotations
 
 from collections import Counter
-from enum import StrEnum
-from typing import Annotated, Literal
+from collections.abc import Sequence
+from typing import Annotated, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
+
+from app.project_knowledge.domain.category import KnowledgeCategoryKey as KnowledgeCategoryKey
 
 
 StableId = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")]
@@ -19,31 +21,19 @@ NonEmptyText = Annotated[str, Field(min_length=1, max_length=5000)]
 MAX_CATEGORY_RECORDS = 1_000
 
 
-class KnowledgeCategoryKey(StrEnum):
-    JOBS = "jobs"
-    COMPENSATION = "compensation"
-    REQUIREMENTS = "requirements"
-    WORK_SCHEDULES = "work_schedules"
-    BENEFITS = "benefits"
-    ACCOMMODATION = "accommodation"
-    MEALS = "meals"
-    TRANSPORTATION = "transportation"
-    INSURANCE = "insurance"
-    APPLICATION = "application"
-    CONTACTS = "contacts"
-    FAQ = "faq"
-
-
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
-class CategoryDocument(StrictModel):
+_CategoryKey = TypeVar("_CategoryKey", bound=KnowledgeCategoryKey)
+
+
+class CategoryDocument(StrictModel, Generic[_CategoryKey]):
     schema_version: Literal["1.0"] = "1.0"
-    category: KnowledgeCategoryKey
+    category: _CategoryKey
 
 
-def _ensure_unique_ids(records: list[object]) -> None:
+def _ensure_unique_ids(records: Sequence[object]) -> None:
     identifiers = [getattr(record, "id") for record in records]
     duplicates = sorted(value for value, count in Counter(identifiers).items() if count > 1)
     if duplicates:
@@ -55,13 +45,11 @@ class JobItem(StrictModel):
     title: NonEmptyText
     aliases: list[str] = Field(default_factory=list, max_length=30)
     location: str | None = Field(default=None, max_length=500)
-    vacancies: StrictInt | None = Field(default=None, ge=1)
-    employment_type: Literal["permanent", "temporary", "contract", "internship"] | None = None
     summary: str | None = Field(default=None, max_length=5000)
     keywords: list[str] = Field(default_factory=list, max_length=50)
 
 
-class JobsDocument(CategoryDocument):
+class JobsDocument(CategoryDocument[Literal[KnowledgeCategoryKey.JOBS]]):
     category: Literal[KnowledgeCategoryKey.JOBS] = KnowledgeCategoryKey.JOBS
     jobs: list[JobItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
@@ -80,7 +68,6 @@ class MoneyItem(StrictModel):
 
 class CompensationItem(StrictModel):
     id: StableId
-    job_ids: list[StableId] = Field(default_factory=list)
     base_salary_vnd: StrictInt | None = Field(default=None, ge=0)
     estimated_income_min_vnd: StrictInt | None = Field(default=None, ge=0)
     estimated_income_max_vnd: StrictInt | None = Field(default=None, ge=0)
@@ -100,7 +87,7 @@ class CompensationItem(StrictModel):
         return self
 
 
-class CompensationDocument(CategoryDocument):
+class CompensationDocument(CategoryDocument[Literal[KnowledgeCategoryKey.COMPENSATION]]):
     category: Literal[KnowledgeCategoryKey.COMPENSATION] = KnowledgeCategoryKey.COMPENSATION
     compensation: list[CompensationItem] = Field(
         default_factory=list, max_length=MAX_CATEGORY_RECORDS
@@ -114,7 +101,6 @@ class CompensationDocument(CategoryDocument):
 
 class RequirementItem(StrictModel):
     id: StableId
-    job_ids: list[StableId] = Field(default_factory=list)
     age_min: StrictInt | None = Field(default=None, ge=15, le=80)
     age_max: StrictInt | None = Field(default=None, ge=15, le=80)
     genders: list[Literal["female", "male", "any"]] = Field(default_factory=list)
@@ -132,7 +118,7 @@ class RequirementItem(StrictModel):
         return self
 
 
-class RequirementsDocument(CategoryDocument):
+class RequirementsDocument(CategoryDocument[Literal[KnowledgeCategoryKey.REQUIREMENTS]]):
     category: Literal[KnowledgeCategoryKey.REQUIREMENTS] = KnowledgeCategoryKey.REQUIREMENTS
     requirements: list[RequirementItem] = Field(
         default_factory=list, max_length=MAX_CATEGORY_RECORDS
@@ -153,7 +139,6 @@ class ShiftItem(StrictModel):
 
 class WorkScheduleItem(StrictModel):
     id: StableId
-    job_ids: list[StableId] = Field(default_factory=list)
     work_days: list[str] = Field(default_factory=list)
     shifts: list[ShiftItem] = Field(default_factory=list)
     rotation: str | None = Field(default=None, max_length=2000)
@@ -162,7 +147,7 @@ class WorkScheduleItem(StrictModel):
     notes: str | None = Field(default=None, max_length=3000)
 
 
-class WorkSchedulesDocument(CategoryDocument):
+class WorkSchedulesDocument(CategoryDocument[Literal[KnowledgeCategoryKey.WORK_SCHEDULES]]):
     category: Literal[KnowledgeCategoryKey.WORK_SCHEDULES] = KnowledgeCategoryKey.WORK_SCHEDULES
     work_schedules: list[WorkScheduleItem] = Field(
         default_factory=list, max_length=MAX_CATEGORY_RECORDS
@@ -176,13 +161,12 @@ class WorkSchedulesDocument(CategoryDocument):
 
 class BenefitItem(StrictModel):
     id: StableId
-    job_ids: list[StableId] = Field(default_factory=list)
     name: NonEmptyText
     description: str | None = Field(default=None, max_length=3000)
     eligibility: str | None = Field(default=None, max_length=2000)
 
 
-class BenefitsDocument(CategoryDocument):
+class BenefitsDocument(CategoryDocument[Literal[KnowledgeCategoryKey.BENEFITS]]):
     category: Literal[KnowledgeCategoryKey.BENEFITS] = KnowledgeCategoryKey.BENEFITS
     benefits: list[BenefitItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
@@ -194,7 +178,6 @@ class BenefitsDocument(CategoryDocument):
 
 class AccommodationItem(StrictModel):
     id: StableId
-    job_ids: list[StableId] = Field(default_factory=list)
     available: StrictBool
     type: str | None = Field(default=None, max_length=500)
     address: str | None = Field(default=None, max_length=1000)
@@ -205,7 +188,7 @@ class AccommodationItem(StrictModel):
     notes: str | None = Field(default=None, max_length=3000)
 
 
-class AccommodationDocument(CategoryDocument):
+class AccommodationDocument(CategoryDocument[Literal[KnowledgeCategoryKey.ACCOMMODATION]]):
     category: Literal[KnowledgeCategoryKey.ACCOMMODATION] = KnowledgeCategoryKey.ACCOMMODATION
     accommodation: list[AccommodationItem] = Field(
         default_factory=list, max_length=MAX_CATEGORY_RECORDS
@@ -219,7 +202,6 @@ class AccommodationDocument(CategoryDocument):
 
 class MealItem(StrictModel):
     id: StableId
-    job_ids: list[StableId] = Field(default_factory=list)
     provided: StrictBool
     meals_per_shift: StrictInt | None = Field(default=None, ge=0, le=10)
     allowance_vnd: StrictInt | None = Field(default=None, ge=0)
@@ -228,7 +210,7 @@ class MealItem(StrictModel):
     notes: str | None = Field(default=None, max_length=3000)
 
 
-class MealsDocument(CategoryDocument):
+class MealsDocument(CategoryDocument[Literal[KnowledgeCategoryKey.MEALS]]):
     category: Literal[KnowledgeCategoryKey.MEALS] = KnowledgeCategoryKey.MEALS
     meals: list[MealItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
@@ -247,7 +229,6 @@ class BusStopItem(StrictModel):
 
 class TransportationItem(StrictModel):
     id: StableId
-    job_ids: list[StableId] = Field(default_factory=list)
     name: NonEmptyText
     direction: Literal["to_factory", "from_factory", "round_trip"]
     service_days: list[str] = Field(default_factory=list)
@@ -266,7 +247,7 @@ class TransportationItem(StrictModel):
         return self
 
 
-class TransportationDocument(CategoryDocument):
+class TransportationDocument(CategoryDocument[Literal[KnowledgeCategoryKey.TRANSPORTATION]]):
     category: Literal[KnowledgeCategoryKey.TRANSPORTATION] = KnowledgeCategoryKey.TRANSPORTATION
     transportation: list[TransportationItem] = Field(
         default_factory=list, max_length=MAX_CATEGORY_RECORDS
@@ -280,7 +261,6 @@ class TransportationDocument(CategoryDocument):
 
 class InsuranceItem(StrictModel):
     id: StableId
-    job_ids: list[StableId] = Field(default_factory=list)
     name: NonEmptyText
     provider: str | None = Field(default=None, max_length=500)
     employee_contribution: str | None = Field(default=None, max_length=1000)
@@ -291,7 +271,7 @@ class InsuranceItem(StrictModel):
     notes: str | None = Field(default=None, max_length=3000)
 
 
-class InsuranceDocument(CategoryDocument):
+class InsuranceDocument(CategoryDocument[Literal[KnowledgeCategoryKey.INSURANCE]]):
     category: Literal[KnowledgeCategoryKey.INSURANCE] = KnowledgeCategoryKey.INSURANCE
     insurance: list[InsuranceItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
@@ -303,7 +283,6 @@ class InsuranceDocument(CategoryDocument):
 
 class ApplicationItem(StrictModel):
     id: StableId
-    job_ids: list[StableId] = Field(default_factory=list)
     application_steps: list[str] = Field(default_factory=list)
     required_documents: list[str] = Field(default_factory=list)
     interview_location: str | None = Field(default=None, max_length=1000)
@@ -314,7 +293,7 @@ class ApplicationItem(StrictModel):
     notes: str | None = Field(default=None, max_length=3000)
 
 
-class ApplicationDocument(CategoryDocument):
+class ApplicationDocument(CategoryDocument[Literal[KnowledgeCategoryKey.APPLICATION]]):
     category: Literal[KnowledgeCategoryKey.APPLICATION] = KnowledgeCategoryKey.APPLICATION
     application: list[ApplicationItem] = Field(
         default_factory=list, max_length=MAX_CATEGORY_RECORDS
@@ -338,7 +317,7 @@ class ContactItem(StrictModel):
     notes: str | None = Field(default=None, max_length=3000)
 
 
-class ContactsDocument(CategoryDocument):
+class ContactsDocument(CategoryDocument[Literal[KnowledgeCategoryKey.CONTACTS]]):
     category: Literal[KnowledgeCategoryKey.CONTACTS] = KnowledgeCategoryKey.CONTACTS
     contacts: list[ContactItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 
@@ -358,7 +337,7 @@ class FaqItem(StrictModel):
     forbidden_terms: list[str] = Field(default_factory=list, max_length=50)
 
 
-class FaqDocument(CategoryDocument):
+class FaqDocument(CategoryDocument[Literal[KnowledgeCategoryKey.FAQ]]):
     category: Literal[KnowledgeCategoryKey.FAQ] = KnowledgeCategoryKey.FAQ
     faq: list[FaqItem] = Field(default_factory=list, max_length=MAX_CATEGORY_RECORDS)
 

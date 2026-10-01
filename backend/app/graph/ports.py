@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from app.conversation_messaging.application.ports import DeliveryResultPort
 from app.project_knowledge.application.retrieval import ProjectKnowledgeQueryPort
@@ -55,6 +55,14 @@ class DirectMessageSenderPort(Protocol):
         *,
         quote_message_id: str | None = None,
     ) -> DeliveryResultPort: ...
+
+
+class ChatStatusSenderPort(Protocol):
+    """Native, transient status supported by the resolved provider sender."""
+
+    async def send_chat_action(
+        self, chat_id: str, action: Literal["typing"]
+    ) -> DeliveryResultPort | None: ...
 
 
 # TypeSafe Jev decision model. The graph depends on this Protocol, never on the

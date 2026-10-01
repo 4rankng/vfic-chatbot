@@ -434,7 +434,7 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
         enrich_oa_profile=_enrich_oa_profile,
         recipient_unreachable=_recipient_unreachable,
         runtime_policy=_RuntimePolicyAdapter(db),
-        direct_context=_DirectContextAdapter(db),
+        direct_context=_DirectContextAdapter(db, page_project_ids=page_project_ids),
         proactive_state=_build_proactive_state(db),
         delivery_statuses=_build_delivery_statuses(),
         turn_decisions=turn_decisions,

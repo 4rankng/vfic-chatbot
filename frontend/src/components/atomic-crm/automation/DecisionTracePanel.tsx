@@ -100,7 +100,7 @@ const ModelTurnEventRow = ({
         ) : (
           <div className="decision-trace-reasoning border-l-2 border-primary/20 pl-3">
             <p className="mb-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
-              Thinking
+              Suy luận
               {event.reasoning_status === "truncated" ? " · đã rút gọn" : ""}
             </p>
             <p className="whitespace-pre-wrap break-words text-body leading-6 text-foreground">
@@ -324,8 +324,8 @@ export const DecisionTracePanel = ({
           <button
             type="button"
             className={cn("icon-btn ghost", className)}
-            aria-label="Agent Thinking"
-            title="Agent Thinking"
+            aria-label="Suy luận chatbot"
+            title="Suy luận chatbot"
             aria-expanded={open}
             aria-controls="decision-trace-sheet"
           >
@@ -344,7 +344,7 @@ export const DecisionTracePanel = ({
         }}
       >
         <SheetHeader className="border-b px-5 py-4 pr-14">
-          <SheetTitle>Agent Thinking</SheetTitle>
+          <SheetTitle>Suy luận chatbot</SheetTitle>
           <SheetDescription>
             10 lần chạy chatbot gần nhất của cuộc trò chuyện này.
           </SheetDescription>

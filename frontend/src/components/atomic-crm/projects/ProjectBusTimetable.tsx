@@ -1,9 +1,10 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
 import { BusFront, ChevronLeft, ChevronRight } from "lucide-react";
 import { Loading01 } from "@untitledui/icons";
 
 import { Badge } from "@/components/base/badges/badges";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { Button } from "@/components/base/buttons/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "../kit";
 import type { BusRoute, BusTimetableList } from "../types";
@@ -29,9 +30,19 @@ const directionLabel = (direction: string) =>
 const BUS_ROUTE_PAGE_SIZE = 6;
 
 export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
-  const [page, setPage] = useState(1);
-  const [timetable, setTimetable] = useState<BusTimetableList | null>(null);
+  const headingId = useId();
+  const [pagination, setPagination] = useState({ projectId, page: 1 });
+  const page = pagination.projectId === projectId ? pagination.page : 1;
+  const setPage = (nextPage: number) =>
+    setPagination({ projectId, page: nextPage });
+  const [snapshot, setSnapshot] = useState<{
+    projectId: string;
+    data: BusTimetableList;
+  } | null>(null);
+  const timetable = snapshot?.projectId === projectId ? snapshot.data : null;
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const routes = timetable?.data ?? [];
   const total = timetable?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / BUS_ROUTE_PAGE_SIZE));
@@ -39,21 +50,17 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     getProjectBusTimetable(projectId, {
       page,
       perPage: BUS_ROUTE_PAGE_SIZE,
     })
       .then((res) => {
-        if (!cancelled) setTimetable(res);
+        if (!cancelled) setSnapshot({ projectId, data: res });
       })
       .catch(() => {
         if (!cancelled) {
-          setTimetable({
-            data: [],
-            total: 0,
-            page,
-            per_page: BUS_ROUTE_PAGE_SIZE,
-          });
+          setLoadError(true);
         }
       })
       .finally(() => {
@@ -62,12 +69,15 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
     return () => {
       cancelled = true;
     };
-  }, [projectId, page]);
+  }, [projectId, page, retry]);
 
   return (
-    <section>
+    <section aria-labelledby={headingId} aria-busy={loading}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="inline-flex items-center gap-2 text-section-title font-semibold">
+        <h3
+          id={headingId}
+          className="inline-flex items-center gap-2 text-section-title font-semibold"
+        >
           <BusFront className="size-4 text-muted-foreground" />
           Lịch xe đưa đón
         </h3>
@@ -94,24 +104,40 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
             <div className="flex items-center gap-1">
               <ButtonUtility
                 tooltip="Trang trước"
+                className="uu-scope"
                 size="sm"
                 isDisabled={loading || page <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                onClick={() => setPage(Math.max(1, page - 1))}
                 icon={ChevronLeft}
               />
               <ButtonUtility
                 tooltip="Trang sau"
+                className="uu-scope"
                 size="sm"
                 isDisabled={loading || page >= pageCount}
-                onClick={() =>
-                  setPage((value) => Math.min(pageCount, value + 1))
-                }
+                onClick={() => setPage(Math.min(pageCount, page + 1))}
                 icon={ChevronRight}
               />
             </div>
           )}
         </div>
       </div>
+      {loadError ? (
+        <div
+          role="alert"
+          className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/25 bg-destructive/5 p-3 text-body"
+        >
+          <p>Chưa tải được lịch xe đưa đón.</p>
+          <Button
+            className="uu-scope"
+            color="secondary"
+            size="sm"
+            onClick={() => setRetry((value) => value + 1)}
+          >
+            Thử lại
+          </Button>
+        </div>
+      ) : null}
       {loading && !timetable ? (
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           <Skeleton className="h-20" />
@@ -123,14 +149,14 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
             <BusRouteCard key={route.id} route={route} />
           ))}
         </div>
-      ) : (
+      ) : !loadError && !loading ? (
         <EmptyState
           className="mt-3"
           icon={<BusFront className="size-6" aria-hidden="true" />}
           title="Lịch xe đưa đón"
           description="Chưa có lịch xe đưa đón được trích xuất cho dự án này."
         />
-      )}
+      ) : null}
     </section>
   );
 };

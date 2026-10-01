@@ -101,4 +101,4 @@ async def test_active_project_ids_orders_deterministically():
     db = _ScalarsDb()
     repo = repository.RetrievalRepository(db)
     assert await repo.active_project_ids() == []
-    assert "ORDER BY p.id" in db.last_statement
+    assert "ORDER BY projects.id" in db.last_statement

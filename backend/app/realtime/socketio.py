@@ -8,7 +8,7 @@ worker-chatbot, which records bot outcomes) over the same Redis bus are fanned
 out to the browser sockets held by THIS process.
 
 Auth: the browser connects with ``{ auth: { token } }``; the connect handler
-verifies the access JWT via the same ``get_user_from_token`` used by REST,
+verifies the access JWT via the same identity authenticator used by REST,
 refuses on failure, and rooms the connection by user and (on demand) by
 conversation. This replaces the SSE ``?token=`` workaround.
 """
@@ -17,13 +17,15 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import TypeVar
 
 import socketio
 from socketio.exceptions import ConnectionRefusedError
 
-from app.api.auth_dependencies import get_user_from_token
 from app.core.config import get_settings
+from app.identity.infrastructure.authentication import build_access_token_authenticator
 from app.models.user import Role
 from app.services.viewer_scope import (
     viewer_can_access_conversation,
@@ -64,6 +66,15 @@ sio = socketio.AsyncServer(
     async_handlers=True,
 )
 
+_SocketHandler = TypeVar("_SocketHandler", bound=Callable[..., Awaitable[object]])
+
+
+def _socket_event(name: str) -> Callable[[_SocketHandler], _SocketHandler]:
+    """Use the decorator form of Socket.IO's handler-or-decorator API."""
+    decorator = sio.on(name)
+    assert decorator is not None
+    return decorator
+
 
 @dataclass
 class _ConnectionAccess:
@@ -94,7 +105,7 @@ async def authenticate_socket_token(auth, headers, db):
 
     Returns the authenticated User on success; raises ConnectionRefusedError on
     any failure so the client is rejected before joining the namespace. Mirrors
-    REST's ``get_user_from_token`` so verification logic cannot drift.
+    REST's identity authenticator so verification logic cannot drift.
     """
     token = None
     if isinstance(auth, dict):
@@ -106,7 +117,7 @@ async def authenticate_socket_token(auth, headers, db):
     if not token:
         raise ConnectionRefusedError("authentication required")
     try:
-        return await get_user_from_token(token, db)
+        return await build_access_token_authenticator(db).authenticate(token)
     except Exception:
         raise ConnectionRefusedError("invalid token")
 
@@ -174,9 +185,13 @@ async def _authorize_entity(
 
     try:
         async with db_module.async_session() as db:
-            if entity_type == "conv":
+            if entity_type == "conv" and isinstance(entity_id, uuid.UUID):
                 allowed = await viewer_can_access_conversation(db, entity_id, access)
-            elif entity_type == "lead":
+            elif (
+                entity_type == "lead"
+                and isinstance(entity_id, int)
+                and _lead_id(entity_id) is not None
+            ):
                 allowed = await viewer_can_access_lead(db, entity_id, access)
             else:
                 return None
@@ -209,7 +224,7 @@ def _presence_entity(data: object, *, default_type: str) -> tuple[str, uuid.UUID
     return entity_type, entity_id, str(entity_id)
 
 
-@sio.on("join conversation")
+@_socket_event("join conversation")
 async def _join_conversation(sid, data):  # type: ignore[no-untyped-def]
     """Client opens a conversation: join its room so emits target only it.
 
@@ -226,7 +241,7 @@ async def _join_conversation(sid, data):  # type: ignore[no-untyped-def]
     access.rooms.add(room)
 
 
-@sio.on("leave conversation")
+@_socket_event("leave conversation")
 async def _leave_conversation(sid, data):  # type: ignore[no-untyped-def]
     conv_id = _conversation_id(data.get("conversation_id") if isinstance(data, dict) else None)
     access = await _access_for_sid(sid)
@@ -239,7 +254,7 @@ async def _leave_conversation(sid, data):  # type: ignore[no-untyped-def]
     access.rooms.discard(room)
 
 
-@sio.on("join lead")
+@_socket_event("join lead")
 async def _join_lead(sid, data):  # type: ignore[no-untyped-def]
     """Client opens a lead detail: join its room so lead.updated events target it."""
     lead_id = _lead_id(data.get("lead_id") if isinstance(data, dict) else None)
@@ -253,7 +268,7 @@ async def _join_lead(sid, data):  # type: ignore[no-untyped-def]
     access.rooms.add(room)
 
 
-@sio.on("leave lead")
+@_socket_event("leave lead")
 async def _leave_lead(sid, data):  # type: ignore[no-untyped-def]
     lead_id = _lead_id(data.get("lead_id") if isinstance(data, dict) else None)
     access = await _access_for_sid(sid)
@@ -269,7 +284,7 @@ async def _leave_lead(sid, data):  # type: ignore[no-untyped-def]
 # --- presence events (viewing / typing) ---
 
 
-@sio.on("presence join")
+@_socket_event("presence join")
 async def _presence_join(sid, data):  # type: ignore[no-untyped-def]
     """Client enters a lead/conversation view: register presence."""
     from app.services.presence import join_viewing
@@ -285,7 +300,7 @@ async def _presence_join(sid, data):  # type: ignore[no-untyped-def]
     access.presence_entities.add((entity_type, canonical_id))
 
 
-@sio.on("presence leave")
+@_socket_event("presence leave")
 async def _presence_leave(sid, data):  # type: ignore[no-untyped-def]
     """Client leaves a lead/conversation view: clear presence."""
     from app.services.presence import leave_viewing
@@ -302,7 +317,7 @@ async def _presence_leave(sid, data):  # type: ignore[no-untyped-def]
     access.presence_entities.discard(key)
 
 
-@sio.on("presence heartbeat")
+@_socket_event("presence heartbeat")
 async def _presence_heartbeat(sid, data):  # type: ignore[no-untyped-def]
     """Periodic heartbeat to keep presence alive."""
     from app.services.presence import heartbeat_viewing
@@ -318,7 +333,7 @@ async def _presence_heartbeat(sid, data):  # type: ignore[no-untyped-def]
     access.presence_entities.add((entity_type, canonical_id))
 
 
-@sio.on("presence typing")
+@_socket_event("presence typing")
 async def _presence_typing(sid, data):  # type: ignore[no-untyped-def]
     """Client is typing in a conversation."""
     from app.services.presence import start_typing
@@ -334,7 +349,7 @@ async def _presence_typing(sid, data):  # type: ignore[no-untyped-def]
     access.typing_entities.add((entity_type, canonical_id))
 
 
-@sio.on("presence stop typing")
+@_socket_event("presence stop typing")
 async def _presence_stop_typing(sid, data):  # type: ignore[no-untyped-def]
     """Client stopped typing."""
     from app.services.presence import stop_typing

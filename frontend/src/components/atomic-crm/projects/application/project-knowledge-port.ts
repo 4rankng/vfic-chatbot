@@ -16,6 +16,7 @@ import type {
   ProjectFaq,
   ProjectFaqList,
   ProjectFaqPayload,
+  ProjectKnowledgeExport,
   SinglePageExternalSourceCreatePayload,
   SinglePageExternalSourceSyncState,
   SinglePageKnowledge,
@@ -50,6 +51,8 @@ export type ProjectTrainingDocument = Readonly<{
     current: ProjectKnowledgeCategory | null;
     completed: readonly ProjectKnowledgeCategory[];
     error: string | null;
+    /** Reviewed shadow categories still await an explicit authority cutover. */
+    requires_cutover?: boolean;
   }> | null;
 }>;
 
@@ -80,7 +83,14 @@ export type ProjectKnowledgePort = Readonly<{
     projectId: string,
     key: ProjectKnowledgeCategory,
   ) => Promise<KnowledgeCategoryTemplate>;
-  getFullTemplate: (projectId: string) => Promise<KnowledgeCategoryTemplate>;
+  getFullTemplate: (
+    projectId: string,
+    signal?: CancellationSignal,
+  ) => Promise<ProjectKnowledgeExport>;
+  getKnowledgeExport: (
+    projectId: string,
+    signal?: CancellationSignal,
+  ) => Promise<ProjectKnowledgeExport>;
   getCategorySource: (
     projectId: string,
     key: ProjectKnowledgeCategory,

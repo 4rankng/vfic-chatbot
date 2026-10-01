@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useHref, useNavigate } from "react-router";
 import { useHotkeys } from "react-hotkeys-hook";
 import type { FC } from "react";
 import { FolderPlus, UserPlus, UserRound } from "lucide-react";
@@ -28,6 +28,26 @@ type PaletteGroup = {
 };
 
 type PaletteAction = PaletteEntry & { adminsOnly?: boolean };
+
+const PaletteItem = ({
+  entry,
+  onActivate,
+}: {
+  entry: PaletteEntry;
+  onActivate: (target: string) => void;
+}) => {
+  const href = useHref(entry.to);
+  return (
+    <CommandMenu.Item
+      id={entry.id}
+      label={entry.label}
+      type="icon"
+      icon={entry.icon}
+      href={href}
+      onAction={() => onActivate(entry.to)}
+    />
+  );
+};
 
 const ACTIONS: readonly PaletteAction[] = [
   {
@@ -69,6 +89,7 @@ export const CommandPalette = () => {
   // the shortcut does nothing while the dialog is closed.
   useHotkeys("meta+k,ctrl+k", () => setIsOpen(true), {
     enableOnFormTags: true,
+    preventDefault: true,
   });
 
   const groups = useMemo<readonly PaletteGroup[]>(() => {
@@ -105,7 +126,6 @@ export const CommandPalette = () => {
           label: entry.label,
           type: "icon" as const,
           icon: entry.icon,
-          href: entry.to,
         })),
       })),
     [groups],
@@ -118,6 +138,11 @@ export const CommandPalette = () => {
       .find((entry) => entry.id === selected)?.to;
     setIsOpen(false);
     if (target) void navigate(target);
+  };
+
+  const handleActivate = (target: string) => {
+    setIsOpen(false);
+    void navigate(target);
   };
 
   return (
@@ -135,13 +160,10 @@ export const CommandPalette = () => {
         {groups.map((group) => (
           <CommandMenu.Section key={group.id} id={group.id} title={group.title}>
             {group.entries.map((entry) => (
-              <CommandMenu.Item
+              <PaletteItem
                 key={entry.id}
-                id={entry.id}
-                label={entry.label}
-                type="icon"
-                icon={entry.icon}
-                href={entry.to}
+                entry={entry}
+                onActivate={handleActivate}
               />
             ))}
           </CommandMenu.Section>

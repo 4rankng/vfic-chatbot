@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth_dependencies import require_admin
 from app.api.provider_dependencies import get_embedder
 from app.project_knowledge.infrastructure.api_dependencies import get_project_knowledge_db
+from app.project_knowledge.domain.legacy_job_references import strip_legacy_job_reference_source
 from app.schemas.knowledge import (
     ExternalSourceCreate,
     ExternalSourceSyncStateOut,
@@ -300,7 +301,7 @@ async def download_raw_document(
         filename = f"{filename}.md"
     fallback_filename = filename.encode("ascii", "ignore").decode() or "knowledge-source.md"
     return PlainTextResponse(
-        doc.raw_text or "",
+        strip_legacy_job_reference_source(doc.raw_text or ""),
         media_type="text/markdown; charset=utf-8",
         headers={
             "Content-Disposition": (

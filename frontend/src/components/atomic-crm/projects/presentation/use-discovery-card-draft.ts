@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNotify, useRefresh } from "ra-core";
 
 import type { Project } from "../../types";
@@ -21,6 +21,25 @@ export type DiscoveryCardDraft = Readonly<{
   save: () => Promise<void>;
 }>;
 
+const fields: DiscoveryCardField[] = [
+  "summary",
+  "location",
+  "roles",
+  "highlights",
+  "aliases",
+];
+
+const readValues = (project: Project): DiscoveryCardValues => {
+  const card = project.index_card ?? {};
+  return {
+    summary: card.summary ?? project.summary ?? "",
+    location: card.location ?? "",
+    roles: (card.roles ?? card.key_roles ?? []).join(", "),
+    highlights: (card.highlights ?? []).join(", "),
+    aliases: (project.aliases ?? []).join(", "),
+  };
+};
+
 /**
  * Draft state of the discovery card — the fields the agent matches a candidate
  * against — and the single write that publishes them.
@@ -28,15 +47,44 @@ export type DiscoveryCardDraft = Readonly<{
 export const useDiscoveryCardDraft = (project: Project): DiscoveryCardDraft => {
   const notify = useNotify();
   const refresh = useRefresh();
-  const card = project.index_card ?? {};
-  const [values, setValues] = useState<DiscoveryCardValues>(() => ({
-    summary: card.summary ?? project.summary ?? "",
-    location: card.location ?? "",
-    roles: (card.roles ?? card.key_roles ?? []).join(", "),
-    highlights: (card.highlights ?? []).join(", "),
-    aliases: (project.aliases ?? []).join(", "),
-  }));
+  const { summary, location, roles, highlights, aliases } = readValues(project);
+  const incomingValues = useMemo(
+    () => ({ summary, location, roles, highlights, aliases }),
+    [summary, location, roles, highlights, aliases],
+  );
+  const [values, setValues] = useState<DiscoveryCardValues>(incomingValues);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const baselineRef = useRef({ projectId: project.id, values: incomingValues });
+  const contextRef = useRef(0);
+
+  useEffect(() => {
+    const previous = baselineRef.current;
+    if (previous.projectId !== project.id) {
+      savingRef.current = false;
+      setSaving(false);
+    }
+    setValues(
+      (current) =>
+        Object.fromEntries(
+          fields.map((field) => [
+            field,
+            previous.projectId === project.id &&
+            current[field] !== previous.values[field]
+              ? current[field]
+              : incomingValues[field],
+          ]),
+        ) as DiscoveryCardValues,
+    );
+    baselineRef.current = { projectId: project.id, values: incomingValues };
+  }, [incomingValues, project.id]);
+
+  useEffect(
+    () => () => {
+      contextRef.current += 1;
+    },
+    [project.id],
+  );
 
   const setField = useCallback(
     (field: DiscoveryCardField, value: string) =>
@@ -45,6 +93,9 @@ export const useDiscoveryCardDraft = (project: Project): DiscoveryCardDraft => {
   );
 
   const save = useCallback(async () => {
+    if (savingRef.current) return;
+    const context = contextRef.current;
+    savingRef.current = true;
     setSaving(true);
     try {
       await updateProjectDiscoveryCard(project.id, {
@@ -53,10 +104,10 @@ export const useDiscoveryCardDraft = (project: Project): DiscoveryCardDraft => {
           summary: values.summary.trim(),
           location: values.location.trim(),
           roles: parseCommaList(values.roles),
-          eligibility: [],
           highlights: parseCommaList(values.highlights),
         },
       });
+      if (context !== contextRef.current) return;
       notify("Đã cập nhật thẻ giúp ứng viên tìm thấy dự án.", {
         type: "success",
       });
@@ -64,9 +115,13 @@ export const useDiscoveryCardDraft = (project: Project): DiscoveryCardDraft => {
       // the reviewer's record is re-read after this out-of-band write.
       refresh();
     } catch (error) {
-      notify((error as Error).message, { type: "error" });
+      if (context === contextRef.current)
+        notify((error as Error).message, { type: "error" });
     } finally {
-      setSaving(false);
+      if (context === contextRef.current) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   }, [notify, project.id, refresh, values]);
 

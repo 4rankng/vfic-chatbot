@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
 # Type alias for a batch embedder callable.
 BatchEmbedder = Callable[[list[str]], Awaitable[list[list[float]]]]
+
+
+@runtime_checkable
+class BatchEmbeddingProvider(Protocol):
+    """Optional batch operation supported by an injected single-text embedder."""
+
+    async def batch(self, texts: list[str]) -> list[list[float]]: ...
 
 
 async def embed_with_fallback(

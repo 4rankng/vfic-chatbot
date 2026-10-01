@@ -11,8 +11,6 @@ category: transportation
 Ví dụ khối một tuyến xe:
 
 ### record: tuyen-xe-1
-job_ids:
-- "[Áp dụng cho việc nào? Điền id việc; bỏ trống nếu áp dụng cho mọi việc.]"
 name: "[Tên tuyến? Ví dụ: Tuyến số 1]"
 direction: "[Chiều chạy? to_factory | from_factory | round_trip]"
 service_days:
