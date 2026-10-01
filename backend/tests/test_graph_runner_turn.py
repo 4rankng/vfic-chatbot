@@ -4169,3 +4169,17 @@ async def test_the_verification_exhaustion_reply_delivers_without_escalating(mon
     assert reply == TINGTING_VERIFY_EXHAUSTED_REPLY
     assert "914827988" in reply.replace(" ", "")
     assert escalations == []  # the hotline IS the handoff — nobody is queued
+
+
+def test_runtime_rules_carry_the_project_first_sales_directive():
+    """Operator rule 2026-10-01: the project is the recruitment unit.
+
+    The agent sells the project even when the Job catalog has no matching
+    rows — the DANH MỤC entry (location, summary, highlights) is hiring
+    evidence, backed by search_knowledge for details.
+    """
+    from app.graph.context import _RUNTIME_RETRIEVAL_RULES
+
+    assert "ĐƠN VỊ TUYỂN DỤNG" in _RUNTIME_RETRIEVAL_RULES
+    assert "thuyết phục ứng viên ứng tuyển" in _RUNTIME_RETRIEVAL_RULES
+    assert "tra search_knowledge theo dự án" in _RUNTIME_RETRIEVAL_RULES
