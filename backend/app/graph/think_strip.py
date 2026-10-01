@@ -142,3 +142,34 @@ def strip_tool_call_markup(raw: str) -> str:
 def strip_provider_artifacts(raw: str) -> str:
     """The converged boundary: provider thinking and tool-call markup removed."""
     return strip_tool_call_markup(strip_think_reasoning(raw))
+
+
+# Zalo renders plain text: markdown decorations the model wraps around its
+# answer reach the candidate as literal asterisks/ticks (observed 2026-10-01:
+# "- **4P Electronics**: ..."). The operator persona already forbids markdown;
+# this is the deterministic backstop that strips the decorations while keeping
+# the words and list structure.
+_BOLD_RE = re.compile(r"\*\*(?P<text>[^*\n]+)\*\*|__(?P<under>[^_\n]+)__")
+_ITALIC_RE = re.compile(r"(?<![\w*])\*(?P<text>[^*\n]+)\*(?![\w*])")
+_STRIKE_RE = re.compile(r"~~(?P<text>[^~\n]+)~~")
+_FENCE_RE = re.compile(r"```+(?P<lang>[\w+-]*\n?)?(?P<text>[^`]+?)```+", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`(?P<text>[^`\n]+)`")
+_HEADING_RE = re.compile(r"(?m)^\s{0,3}#{1,6}\s+")
+_MD_LINK_RE = re.compile(r"\[(?P<text>[^\]\n]+)\]\((?P<url>[^)\n]+)\)")
+
+
+def strip_markdown_decorations(raw: str) -> str:
+    """Remove markdown emphasis/code/link decorations from plain-text output.
+
+    Pure decoration removal: whitespace is preserved exactly (progressive-send
+    bubble offsets and pinned reply text are whitespace-sensitive), list
+    markers and paragraph structure stay — they read naturally as plain text.
+    Markdown links degrade to ``text (url)`` so the address survives.
+    """
+    text = _BOLD_RE.sub(lambda m: m.group("text") or m.group("under") or "", raw)
+    text = _STRIKE_RE.sub(lambda m: m.group("text"), text)
+    text = _FENCE_RE.sub(lambda m: f"{m.group('lang') or ''}{m.group('text')}", text)
+    text = _INLINE_CODE_RE.sub(lambda m: m.group("text"), text)
+    text = _MD_LINK_RE.sub(lambda m: f"{m.group('text')} ({m.group('url')})", text)
+    text = _HEADING_RE.sub("", text)
+    return _ITALIC_RE.sub(lambda m: m.group("text"), text)

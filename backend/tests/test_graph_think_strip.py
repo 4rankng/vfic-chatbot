@@ -12,6 +12,7 @@ import pytest
 
 from app.graph.think_strip import (
     extract_text_tool_calls,
+    strip_markdown_decorations,
     strip_provider_artifacts,
     strip_think_reasoning,
     strip_tool_call_markup,
@@ -139,3 +140,30 @@ def test_strip_provider_artifacts_handles_thinking_and_markup_together():
 
 def test_strip_provider_artifacts_keeps_a_plain_reply_untouched():
     assert strip_provider_artifacts("Dáº¡ cÃ³ áº¡.") == "Dáº¡ cÃ³ áº¡."
+
+
+def test_strip_markdown_decorations_strips_bold_italics_and_code():
+    raw = "Dạ, **4P Electronics**: làm linh kiện. `KPI` đạt ~~cao~~ *ổn* __đảm bảo__."
+    assert strip_markdown_decorations(raw) == (
+        "Dạ, 4P Electronics: làm linh kiện. KPI đạt cao ổn đảm bảo."
+    )
+
+
+def test_strip_markdown_decorations_downgrades_links_and_headings():
+    raw = "### Cơ hội việc làm\n[Xem trang tuyển dụng](https://vficmanpower.com) nhé ạ."
+    assert strip_markdown_decorations(raw) == (
+        "Cơ hội việc làm\nXem trang tuyển dụng (https://vficmanpower.com) nhé ạ."
+    )
+
+
+def test_strip_markdown_decorations_keeps_plain_list_structure():
+    raw = "- **Rorze**: đứng máy CNC\n\n\n- **Kho**: đóng gói hàng"
+    # Whitespace is preserved exactly (progressive bubble offsets depend on it).
+    assert strip_markdown_decorations(raw) == (
+        "- Rorze: đứng máy CNC\n\n\n- Kho: đóng gói hàng"
+    )
+
+
+def test_strip_markdown_decorations_leaves_plain_text_untouched():
+    plain = "Dạ bên em đang tuyển vị trí kho hàng tại Hải Phòng ạ.\n\nAnh/chị 18-45 tuổi nhé ạ."
+    assert strip_markdown_decorations(plain) == plain

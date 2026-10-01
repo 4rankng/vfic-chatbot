@@ -570,7 +570,7 @@ async def test_project_clarification_is_an_agent_instruction_not_a_canned_reply(
                 state="EXPLORE",
                 clarification=(
                     "<think>internal routing note</think>"
-                    "**Bạn muốn hỏi Rorze hay LG Display?**"
+                    "Bạn muốn hỏi Rorze hay LG Display?"
                 ),
                 clarification_projects=("Rorze", "LG Display"))
 
@@ -579,7 +579,7 @@ async def test_project_clarification_is_an_agent_instruction_not_a_canned_reply(
     class _Agent:
         async def agent(self, user_text, **kwargs):
             captured["user_text"] = user_text
-            return "**Bạn muốn hỏi Rorze hay LG Display?**"
+            return "Bạn muốn hỏi Rorze hay LG Display?"
 
     conv = _FakeConv()
     svc, recorded = _stub_svc(conv=conv)
@@ -595,7 +595,7 @@ async def test_project_clarification_is_an_agent_instruction_not_a_canned_reply(
             user_text="Rorze ở đâu?"),
         deps)
 
-    visible_reply = "**Bạn muốn hỏi Rorze hay LG Display?**"
+    visible_reply = "Bạn muốn hỏi Rorze hay LG Display?"
     assert result == {"outcome": "sent", "reply": visible_reply}
     assert zalo.sent == [("z1", visible_reply)]
     assert recorded[-1]["reply"] == visible_reply
@@ -1192,12 +1192,11 @@ async def test_generated_reply_is_never_retried(
 
 
 @pytest.mark.asyncio
-async def test_stray_code_fence_ships_as_generated(monkeypatch):
-    """A reply containing a stray code fence is sent exactly as generated.
+async def test_stray_code_fence_ships_without_markdown_decorations(monkeypatch):
+    """A stray code fence ships as plain prose: decorations stripped, text kept.
 
-    The removed reply-policy layer used to strip markdown fences before sending.
-    With it gone the converged boundary only drops provider thinking, so a fence
-    reaches the candidate verbatim — no content is rewritten or discarded.
+    The operator rule is that candidates read plain text — the old verbatim
+    fence policy predates the markdown-stripping boundary.
     """
     conv = _FakeConv()
     svc, _ = _stub_svc(conv=conv, owned=True)
@@ -1210,7 +1209,7 @@ async def test_stray_code_fence_ships_as_generated(monkeypatch):
         _deps(zalo, conversation=svc))
 
     assert res["outcome"] == "sent"
-    assert res["reply"] == raw
+    assert res["reply"] == "Bạn cần mang CCCD. print(1) Hẹn gặp lúc 8h nhé."
     assert zalo.sent[0][1] == res["reply"]
 
 

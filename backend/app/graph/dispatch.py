@@ -33,7 +33,7 @@ from app.graph.telemetry import (
     _stamp_end_to_end,
     _stamp_outbound_telemetry,
 )
-from app.graph.think_strip import strip_provider_artifacts
+from app.graph.think_strip import strip_markdown_decorations, strip_provider_artifacts
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
 from app.recruitment.domain.provider import (
     provider_from_conversation,
@@ -86,8 +86,17 @@ def _finalize_user_visible_reply(
 
     ``deps``/``generated``/``user_text`` stay in the signature so the
     progressive-send bubble and the full-answer call site keep one boundary shape.
+
+    Generated answers are LLM prose bound for a plain-text channel (Zalo): any
+    markdown the model wrapped around the answer reaches the candidate as
+    literal asterisks/ticks, so decorations are stripped deterministically
+    (the persona forbids markdown; this is the backstop). Curated replies keep
+    their authored formatting untouched.
     """
-    return strip_provider_artifacts(raw)
+    stripped = strip_provider_artifacts(raw)
+    if generated:
+        return strip_markdown_decorations(stripped)
+    return stripped
 
 
 def _build_outbox_payload(
