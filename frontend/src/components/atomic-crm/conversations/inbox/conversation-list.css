@@ -470,6 +470,19 @@
   color: #5b2fae;
 }
 
+/* Glyph-only channel chip: the brand glyph replaces the text label —
+   recognisable at a glance, and the full name rides the title attribute. */
+.conv-channel.conv-channel-glyph {
+  padding: 1px;
+}
+.conv-channel .conv-channel-glyph {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+  border-radius: 4px;
+}
+
 .conv-channel[data-channel="tingting_oa"] {
   border-color: color-mix(in srgb, #b7358a 30%, transparent);
   background: color-mix(in srgb, #b7358a 10%, var(--uu-inbox-surface));

@@ -22,6 +22,7 @@ import {
   conversationChannelShortLabel,
   type Conversation,
 } from "../../types";
+import { channelIcon } from "../channel-icons";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "../InboxIcons";
 import { EmptyState } from "../../kit";
@@ -225,7 +226,16 @@ const ConversationListItem = memo(
               data-channel={displayChannel ?? "unknown"}
               title={conversationChannelLabel(displayChannel)}
             >
-              {conversationChannelShortLabel(displayChannel)}
+              {channelIcon(displayChannel) ? (
+                <img
+                  className="conv-channel-glyph"
+                  src={channelIcon(displayChannel)}
+                  alt=""
+                  aria-hidden="true"
+                />
+              ) : (
+                conversationChannelShortLabel(displayChannel)
+              )}
             </span>
             <span className="conv-name">{name}</span>
             <span className="conv-time">{time}</span>
