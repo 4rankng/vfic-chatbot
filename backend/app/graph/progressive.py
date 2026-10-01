@@ -52,6 +52,10 @@ PROGRESSIVE_BUBBLE_MIN_CHARS = 250
 PROGRESSIVE_SUBSTANCE_MIN_CHARS = 80
 PROGRESSIVE_MAX_WAIT_CHARS = 700
 _BUBBLE_BOUNDARY_CHARS = frozenset(".!?\n…")
+# Zalo collapses long chat messages behind a "See more" link; a recruiting
+# answer the candidate has to expand does not get read. Soft budget for a
+# generated reply — the compaction cuts at a sentence boundary, never mid-word.
+ZALO_MESSAGE_SOFT_BUDGET_CHARS = 450
 # "Dạ em chào anh/chị ạ." style openers, peeled from the head of a candidate
 # bubble before the substance length test. The lookahead keeps a token from
 # matching inside a longer word ("anh văn" peels "anh", "anhx" does not).
@@ -586,3 +590,41 @@ async def _complete_progressive_prefix(
         # forward an invented contact to the candidate.
         return "", None
     return grounded_remainder, None
+
+
+def compact_for_zalo(text: str, *, budget: int = ZALO_MESSAGE_SOFT_BUDGET_CHARS) -> str:
+    """Keep a generated reply inside Zalo's no-"See more" window.
+
+    Over-budget replies collapse behind "See more" and candidates do not
+    expand them. Cut at the last sentence boundary that fits the budget (same
+    paren/digit-dot boundary rules as the bubble scan), so the message always
+    ends on a complete sentence. A reply with no boundary inside the budget is
+    cut at the first boundary anyway — one long paragraph beats a mid-word
+    cut. Already-short replies pass through untouched.
+    """
+    if len(text) <= budget:
+        return text
+
+    depth = 0
+    boundaries: list[int] = []
+    for index, char in enumerate(text):
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth > 0:
+            depth -= 1
+        if char not in _BUBBLE_BOUNDARY_CHARS:
+            continue
+        if (
+            char == "."
+            and 0 < index < len(text) - 1
+            and text[index - 1].isdigit()
+            and text[index + 1].isdigit()
+        ):
+            continue
+        if depth > 0:
+            continue
+        boundaries.append(index + 1)
+
+    fitting = [offset for offset in boundaries if offset <= budget]
+    cut = fitting[-1] if fitting else (boundaries[0] if boundaries else len(text))
+    return text[:cut].rstrip()

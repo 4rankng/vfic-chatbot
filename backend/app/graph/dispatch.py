@@ -95,7 +95,9 @@ def _finalize_user_visible_reply(
     """
     stripped = strip_provider_artifacts(raw)
     if generated:
-        return strip_markdown_decorations(stripped)
+        from app.graph.progressive import compact_for_zalo
+
+        return compact_for_zalo(strip_markdown_decorations(stripped))
     return stripped
 
 
