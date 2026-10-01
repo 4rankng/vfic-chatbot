@@ -182,7 +182,7 @@ class Settings(BaseSettings):
     # ``small_talk``/``contact``/simple ``faq_detail`` turns use this lighter model.
     minimax_fast_model: str = ""
 
-    OPENROUTER_DEFAULT_MODEL: ClassVar[str] = "deepseek/deepseek-v4-flash"
+    OPENROUTER_DEFAULT_MODEL: ClassVar[str] = "deepseek/deepseek-v4.1-flash"
 
     openrouter_enable: bool = False
     openrouter_api_key: str = ""
