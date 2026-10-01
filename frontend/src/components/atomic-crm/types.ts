@@ -148,6 +148,9 @@ export type Conversation = {
     provider: string;
     account_key: string;
     external_id: string;
+    /** Server-derived badge channel — the TingTing support OA narrowed
+     *  inside zalo_oa (backend schemas/conversation.py `channel_display`). */
+    display_channel?: string | null;
   } | null;
 } & Pick<RaRecord, "id">;
 

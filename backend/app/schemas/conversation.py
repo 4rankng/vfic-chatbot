@@ -76,6 +76,18 @@ class ConversationOut(BaseModel):
 
     @computed_field  # type: ignore[misc]
     @property
+    def channel_display(self) -> str | None:
+        """Badge channel: the TingTing support OA narrowed inside zalo_oa.
+
+        Derived server-side from the raw account_key (see
+        ChannelIdentitySummaryOut) because the masked account_key that reaches
+        a client cannot distinguish the two Zalo OA accounts.
+        """
+        ident = self.channel_identity
+        return ident.display_channel if ident is not None else None
+
+    @computed_field  # type: ignore[misc]
+    @property
     def channel_account_label(self) -> str | None:
         """Safe account display label. Falls back to the provider id."""
         # The full ChannelAccount.label is joined in by the API layer when

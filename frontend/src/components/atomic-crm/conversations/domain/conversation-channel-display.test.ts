@@ -49,6 +49,26 @@ describe("resolveConversationDisplayChannel", () => {
     ).toBe("TingTing OA");
   });
 
+  it("trusts the server-derived display channel over the masked account key", () => {
+    // Production responses mask account_key down to its tail, so the legacy
+    // raw-key comparison can never match; the backend derives the badge
+    // channel before masking (ConversationOut.channel_display).
+    expect(
+      resolveConversationDisplayChannel({
+        provider: "zalo_oa",
+        account_key: "*****ing",
+        display_channel: "tingting_oa",
+      }),
+    ).toBe("tingting_oa");
+    expect(
+      resolveConversationDisplayChannel({
+        provider: "zalo_oa",
+        account_key: "*****ing",
+        display_channel: "zalo_oa",
+      }),
+    ).toBe("zalo_oa");
+  });
+
   it("treats a zalo_oa row without an account_key as the plain provider", () => {
     expect(resolveConversationDisplayChannel({ provider: "zalo_oa" })).toBe(
       "zalo_oa",

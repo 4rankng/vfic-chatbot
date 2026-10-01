@@ -16,6 +16,10 @@ export type ConversationChannelIdentitySource =
   | {
       provider?: string | null;
       account_key?: string | null;
+      /** Server-derived badge channel (schemas/conversation.py
+       * `channel_display`): the raw account_key never reaches the client, so
+       * the backend narrows the TingTing OA before masking. */
+      display_channel?: string | null;
     }
   | null
   | undefined;
@@ -23,18 +27,17 @@ export type ConversationChannelIdentitySource =
 /**
  * The channel a conversation displays as.
  *
- * Both Zalo OA accounts share one provider id (`zalo_oa`), so a raw provider
- * alone renders "Zalo OA" on rows that belong to the TingTing support account
- * — which read as "the filter does nothing" once the TingTing OA filter is
- * active. Narrow by account_key: the TingTing account displays as the
- * dedicated `tingting_oa` channel (labels in CONVERSATION_CHANNEL_*_LABELS,
- * glyph in CHANNEL_ICONS, `[data-channel="tingting_oa"]` styling), and every
- * other row keeps its raw provider. Unknown or absent providers resolve to
- * `null`; callers fall back to their neutral wording via the types.ts helpers.
+ * Prefers the server-derived `display_channel`; the raw `account_key` path
+ * below only serves responses from a backend that predates it (and is inert
+ * in production, where `account_key` arrives masked). Unknown or absent
+ * providers resolve to `null`; callers fall back to their neutral wording via
+ * the types.ts helpers.
  */
 export const resolveConversationDisplayChannel = (
   identity: ConversationChannelIdentitySource,
 ): ConversationChannelProvider | null => {
+  const fromApi = identity?.display_channel ?? null;
+  if (isConversationChannelProvider(fromApi)) return fromApi;
   const provider = identity?.provider ?? null;
   if (!isConversationChannelProvider(provider)) return null;
   if (
