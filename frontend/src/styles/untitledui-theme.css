@@ -585,3 +585,13 @@
   --text-color-primary: var(--color-text-primary);
   --border-color-primary: var(--color-border-primary);
 }
+
+/* Operator rule (2026-10-01): console buttons cap at 40px tall and their
+   labels render at 12px — no oversized call-to-action rows. The
+   .console-button marker comes from the vendored Button root so every size
+   variant, icon-only button and data-input wrapper button is covered. The
+   element+class specificity outranks the text-sm/text-md size utilities. */
+button.console-button {
+  max-height: 40px;
+  font-size: 12px;
+}
