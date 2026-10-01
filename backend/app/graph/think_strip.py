@@ -156,6 +156,10 @@ _FENCE_RE = re.compile(r"```+(?P<lang>[\w+-]*\n?)?(?P<text>[^`]+?)```+", re.DOTA
 _INLINE_CODE_RE = re.compile(r"`(?P<text>[^`\n]+)`")
 _HEADING_RE = re.compile(r"(?m)^\s{0,3}#{1,6}\s+")
 _MD_LINK_RE = re.compile(r"\[(?P<text>[^\]\n]+)\]\((?P<url>[^)\n]+)\)")
+# Provider hiccups emit U+FFFD mid-Vietnamese words (observed 2026-10-01 in two
+# delivered replies: "Thu\uFFFDuyên", "để \uFFFDn điện thoại"). The character is
+# never meaningful in the operator's content — drop the runs.
+_REPLACEMENT_RE = re.compile("\ufffd+")
 
 
 def strip_markdown_decorations(raw: str) -> str:
@@ -172,4 +176,5 @@ def strip_markdown_decorations(raw: str) -> str:
     text = _INLINE_CODE_RE.sub(lambda m: m.group("text"), text)
     text = _MD_LINK_RE.sub(lambda m: f"{m.group('text')} ({m.group('url')})", text)
     text = _HEADING_RE.sub("", text)
+    text = _REPLACEMENT_RE.sub("", text)
     return _ITALIC_RE.sub(lambda m: m.group("text"), text)

@@ -167,3 +167,11 @@ def test_strip_markdown_decorations_keeps_plain_list_structure():
 def test_strip_markdown_decorations_leaves_plain_text_untouched():
     plain = "Dạ bên em đang tuyển vị trí kho hàng tại Hải Phòng ạ.\n\nAnh/chị 18-45 tuổi nhé ạ."
     assert strip_markdown_decorations(plain) == plain
+
+
+def test_strip_markdown_decorations_drops_replacement_characters():
+    """Provider hiccups emit U+FFFD mid-word; the reply must never ship it."""
+    raw = "gần Thuỷ Ng\ufffduyên hơn, để \ufffdn điện thoại nhé ạ"
+    assert strip_markdown_decorations(raw) == (
+        "gần Thuỷ Nguyên hơn, để n điện thoại nhé ạ"
+    )
