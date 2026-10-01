@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,66 @@ async def _run_job_async(doc_id: str, *, _embed=None, _llm=None) -> None:
             embedder=_embed,
             json_extractor=_llm,
         )
+        try:
+            await _extract_features_best_effort(db, doc_id, _embed=_embed, _llm=_llm)
+        except Exception:  # noqa: BLE001 — the ingest already succeeded; extraction is a bonus
+            logger.warning(
+                "post-ingest feature extraction failed for document %s", doc_id, exc_info=True
+            )
+
+
+async def _extract_features_best_effort(
+    db, doc_id: str, *, _embed: Any = None, _llm: Any = None
+) -> None:
+    """Refresh the project's structured feature values after a posting ingest.
+
+    Operator rule: uploading a training template must reach BOTH knowledge
+    layers — the KB categories/chunks AND the structured JobFeatureValue rows
+    that ``compare_income`` reads. The 4P/AMTRAN/SDS onboarding shipped with an
+    empty structured layer because extraction only existed as a manual admin
+    button. This runs the same extraction the manual button runs, restricted to
+    the project's latest text document, and is best-effort: any failure logs
+    and never fails the ingest.
+    """
+    from app.core.config import get_settings
+    from app.models.knowledge import KnowledgeDocument
+    from app.services.knowledge import KnowledgePipeline
+    from app.services.project.repository import ProjectRepository
+
+    doc = await db.get(KnowledgeDocument, uuid.UUID(doc_id))
+    if doc is None or doc.project_id is None:
+        return
+    latest = await ProjectRepository(db).get_latest_document_with_text(doc.project_id)
+    if latest is None or latest.id != doc.id:
+        # Only the latest posting drives the feature profile — older re-ingests
+        # must not overwrite values extracted from a newer file.
+        return
+    embedder, llm_json = _embed, _llm
+    if embedder is None or llm_json is None:
+        # Production path: run_ingest_job does not inject fakes — resolve the
+        # same providers the manual "extract features" button resolves.
+        from app.composition.project_knowledge import (
+            build_knowledge_provider_factory,
+        )
+        from app.services.integration_settings import IntegrationSettingsService
+
+        factory = build_knowledge_provider_factory()
+        settings_service = IntegrationSettingsService(db)
+        minimax_config = await settings_service.resolve_minimax()
+        openrouter_config = await settings_service.resolve_openrouter()
+        embedding_config = await settings_service.resolve_embedding()
+        embedder = factory.embedder(embedding=embedding_config)
+        llm_json = factory.json_extractor(
+            minimax_api_key=minimax_config.api_key,
+            openrouter_api_key=openrouter_config.api_key,
+        )
+    pipeline = KnowledgePipeline(
+        db,
+        embedder,
+        llm_json,
+        call_timeout=get_settings().active_llm_request_timeout,
+    )
+    await pipeline.extract_product_features(doc, [])
 
 
 async def _run_version_job_async(version_id: str, *, _embed=None, _llm=None) -> None:
