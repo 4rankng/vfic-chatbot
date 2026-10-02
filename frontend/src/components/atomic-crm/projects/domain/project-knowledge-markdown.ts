@@ -1554,25 +1554,37 @@ const CATEGORY_BY_LIST_FIELD: Record<string, ProjectKnowledgeCategory> =
  * (what the category parser validates against) while the body stays verbatim.
  */
 const headingOnlyBundlePlan = (source: string): BriefKnowledgePlan | null => {
-  const headings = [...source.matchAll(/^##\s+(\S+)\s*$/gm)].filter(
-    (match) => CATEGORY_BY_LIST_FIELD[match[1]] !== undefined,
-  );
+  // Line scan, not regex: a paste is arbitrary text, and a category heading is
+  // just a line starting with "## " (records start with "### "). No pattern to
+  // break on trailing spaces, tabs, or odd Unicode.
+  const headings: {
+    index: number;
+    line: string;
+    key: ProjectKnowledgeCategory;
+  }[] = [];
+  let offset = 0;
+  for (const line of source.split("\n")) {
+    if (line.startsWith("## ") && !line.startsWith("### ")) {
+      const key = CATEGORY_BY_LIST_FIELD[line.slice(3).trim()];
+      if (key !== undefined) headings.push({ index: offset, line, key });
+    }
+    offset += line.length + 1;
+  }
   if (!headings.length) return null;
   const writes = new Map<
     ProjectKnowledgeCategory,
     BriefKnowledgePlan["writes"][number]
   >();
   for (const [index, heading] of headings.entries()) {
-    const key = CATEGORY_BY_LIST_FIELD[heading[1]];
+    const key = heading.key;
     if (writes.has(key))
       throw new Error(
         "Tệp có danh mục kiến thức bị lặp. Giữ một phần cho mỗi danh mục.",
       );
-    const start = heading.index ?? 0;
     const section = source
-      .slice(start, headings[index + 1]?.index ?? source.length)
+      .slice(heading.index, headings[index + 1]?.index ?? source.length)
       .trim();
-    if (!section.slice(heading[0].length).trim()) continue;
+    if (!section.slice(heading.line.length).trim()) continue;
     writes.set(key, {
       key,
       filename: `${key}.md`,

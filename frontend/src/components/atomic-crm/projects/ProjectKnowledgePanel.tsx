@@ -190,9 +190,13 @@ const BriefIngestSection = ({
       const brief = parseProjectBrief(await file.text());
       const plan = planBriefKnowledge(brief);
       if (plan.writes.length === 0) {
-        setError(
-          "Không đọc được nội dung dự án từ tệp này. Hãy kiểm tra lại tệp văn bản.",
-        );
+        // Neither brief nor category bundle: ANY txt still imports — the
+        // server maps the file into categories with the digest LLM and the
+        // normal training pipeline runs on the result (uploadDocument sends
+        // auto_extract when no plan accompanies the file).
+        setNeedsHuman(null);
+        const result = await ingest(projectId, [], file);
+        if (result.ok) await onIngested?.(plan);
         return;
       }
       setNeedsHuman(

@@ -169,6 +169,9 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
     form.append("project_id", projectId);
     if (writes?.length)
       form.append("category_plan", JSON.stringify({ writes }));
+    // Any-txt import: without a plan the server maps the file into categories
+    // with the digest LLM (same training pipeline as a parsed plan).
+    else form.append("auto_extract", "true");
     const response = await apiRequest(DOCUMENT_UPLOAD_PATH, {
       method: "POST",
       body: form,

@@ -14,8 +14,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.core.config import DIGEST_MAX_SECTIONS, DIGEST_SECTION_CHARS, DIGEST_SECTION_OVERLAP
+
+if TYPE_CHECKING:
+    from app.schemas.knowledge import ProjectTrainingPlan
 
 # Boundary patterns used by ``_snap_boundary``. Paragraph wins over sentence,
 # sentence over word; the hard char cut is the last-resort fallback.
@@ -146,3 +150,91 @@ def _snap_boundary(text: str, ideal_end: int, min_end: int) -> int:
         return boundary if boundary > min_end else ideal_end
     # No boundary found in the window — hard cut. Caller's overlap covers it.
     return ideal_end
+
+
+# --- Any-text category plan extraction ---------------------------------------
+#
+# "Nhập từ tệp văn bản" must accept ANY txt: when a file is neither a brief nor
+# a category bundle, there is no deterministic structure to parse — the content
+# has to be MAPPED into the twelve categories. That mapping is a judgment call,
+# so it runs on the digest LLM through the existing ``json_extractor`` port and
+# the result feeds the SAME training pipeline a parsed plan would.
+
+_MAX_PLAN_EXTRACT_CHARS = 60_000
+
+
+def _category_field_spec() -> str:
+    """Human-readable record fields per category, straight from the models."""
+    from app.project_knowledge.domain.category_catalog import (
+        CATEGORY_DEFINITIONS,
+    )
+    from app.schemas.knowledge_categories import CATEGORY_DOCUMENT_MODELS
+    from app.services.knowledge.category_markdown import _record_model
+
+    lines: list[str] = []
+    for definition in CATEGORY_DEFINITIONS:
+        doc_model = CATEGORY_DOCUMENT_MODELS[definition.key]
+        record_model = _record_model(doc_model, definition.list_field)
+        fields = ", ".join(record_model.model_fields)
+        lines.append(
+            f"- {definition.key.value} ({definition.label_vi}): "
+            f"mỗi record có các trường: {fields}"
+        )
+    return "\n".join(lines)
+
+
+async def extract_category_plan(text: str, llm_json) -> "ProjectTrainingPlan | None":
+    """Map arbitrary prose into category writes via the digest LLM.
+
+    Returns ``None`` when the text carries no usable facts or extraction
+    fails — callers fall back to plain document ingestion rather than erroring.
+    """
+    import json
+
+    from app.project_knowledge.domain.category_catalog import (
+        CATEGORY_DEFINITIONS,
+    )
+    from app.schemas.knowledge import ProjectTrainingPlan, ProjectTrainingWrite
+    from app.services.knowledge.category_contracts import validate_category_payload
+    from app.services.knowledge.category_markdown import build_source_markdown
+
+    system = (
+        "Chia nội dung phiếu thông tin sau vào các danh mục kiến thức tuyển dụng. "
+        "Trả về JSON thuần (không markdown, không giải thích): object; mỗi khóa là "
+        "MỘT tên danh mục tiếng Anh trong danh sách dưới đây (vd: jobs, contacts); "
+        "giá trị là mảng record, mỗi record là object đúng các trường của danh mục đó. "
+        "Chỉ đưa thông tin CÓ THẬT trong văn bản; danh mục không có dữ liệu thì bỏ "
+        "khóa; tuyệt đối không bịa. Giữ nguyên số điện thoại/email/địa chỉ.\n\n"
+        "Danh mục:\n" + _category_field_spec()
+    )
+    try:
+        raw = await llm_json(system, text[:_MAX_PLAN_EXTRACT_CHARS])
+        data = json.loads(raw)
+    except Exception:  # noqa: BLE001 - extraction is best-effort by contract
+        return None
+    if not isinstance(data, dict):
+        return None
+    writes: list[ProjectTrainingWrite] = []
+    for definition in CATEGORY_DEFINITIONS:
+        records = data.get(definition.key.value)
+        if not isinstance(records, list) or not records:
+            continue
+        payload = {
+            "schema_version": "1.0",
+            "category": definition.key.value,
+            definition.list_field: [r for r in records if isinstance(r, dict)],
+        }
+        try:
+            document = validate_category_payload(definition.key, payload)
+        except Exception:  # noqa: BLE001 - one junk category skips, not fails
+            continue
+        writes.append(
+            ProjectTrainingWrite(
+                key=definition.key,
+                filename=f"{definition.key.value}.md",
+                content=build_source_markdown(document.model_dump(mode="json")) + "\n",
+            )
+        )
+    if not writes:
+        return None
+    return ProjectTrainingPlan(writes=writes)

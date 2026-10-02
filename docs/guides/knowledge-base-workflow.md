@@ -53,7 +53,10 @@ Plain Vietnamese headings, FAQ question/answer groups, contact hours, job
 descriptions, decimal salary ranges, and transport pickup times are retained.
 Category Markdown bundles preserve each category's source and pass the same
 backend validators as individual edits. Unknown or repeated category blocks
-fail validation. Conflicting facts and an explicit lack of shuttle service do
+fail validation. Any other plain-text file imports too: when the file is
+neither a brief nor a category bundle, the digest LLM maps its content into
+the twelve categories — facts only, nothing invented — and the result runs
+through the same training pipeline. Conflicting facts and an explicit lack of shuttle service do
 not create a fictional route; the source remains available for review.
 
 Once the backend accepts the upload, the ingest worker owns the batch. It
